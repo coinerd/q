@@ -15,14 +15,14 @@
  ;; Struct
  (struct-out agent-context)
  agent-context?
- 
+
  ;; Accessoren
  agent-context-name
  agent-context-description
  agent-context-instructions
  agent-context-examples
  agent-context-tool-preferences
- 
+
  ;; Parser-Funktionen
  load-agent-context
  parse-agent-file)
@@ -128,7 +128,7 @@
 ;; Parst Beispiele aus dem Text einer Examples-Sektion
 (define (parse-examples section-text)
   (define lines (string-split section-text "\n"))
-  
+
   ;; Finde alle ### Example X Überschriften
   (define example-indices
     (filter-map
@@ -138,7 +138,7 @@
             idx))
      lines
      (range (length lines))))
-  
+
   (if (null? example-indices)
       '()
       (for/list ([start-idx (in-list example-indices)])
@@ -150,13 +150,13 @@
               (length after-heading)))
         (define content-lines (take after-heading end-idx))
         (define content (string-trim (string-join content-lines "\n")))
-        
+
         ;; Parse User: und Agent: Zeilen
         (define user-text
           (extract-role-content content "User"))
         (define agent-text
           (extract-role-content content "Agent"))
-        
+
         (hash 'title title
               'user user-text
               'agent agent-text
@@ -167,7 +167,7 @@
 (define (extract-role-content content role)
   (define lines (string-split content "\n"))
   (define role-pattern (regexp (format "^~a[ \t]*:[ \t]*(.*)$" role)))
-  
+
   (let loop ([ls lines] [inline-text #f] [acc '()])
     (cond
       [(null? ls)
@@ -201,7 +201,7 @@
 ;; Parst Tool-Präferenzen aus dem Text
 (define (parse-tool-preferences section-text)
   (define lines (string-split section-text "\n"))
-  
+
   (let loop ([acc '()] [ls lines] [current-pref #f])
     (cond
       [(null? ls)
@@ -257,7 +257,7 @@
 ;; (parse-agent-file content) → agent-context?
 (define (parse-agent-file content)
   (define lines (string-split content "\n"))
-  
+
   ;; Extrahiere Name aus erster # Überschrift
   (define name
     (cond
@@ -265,7 +265,7 @@
       [(= (or (heading-level (car lines)) 0) 1)
        (heading-text (car lines))]
       [else "Unnamed Agent"]))
-  
+
   ;; Finde Beschreibung (Text nach erster Überschrift bis zur nächsten ##)
   (define description
     (let ([after-header
@@ -279,12 +279,12 @@
         (take-until non-empty-lines
                     (λ (l) (and (heading-level l) (<= (heading-level l) 2)))))
       (string-trim (string-join desc-lines "\n"))))
-  
+
   ;; Extrahiere Sektionen
   (define instructions (extract-section lines "System Instructions"))
   (define examples (extract-examples lines))
   (define tool-preferences (extract-tool-preferences lines))
-  
+
   (agent-context name description instructions examples tool-preferences))
 
 ;; Lädt eine AGENTS.md aus einem Verzeichnis

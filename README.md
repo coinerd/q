@@ -2,9 +2,37 @@
 
 > A local-first, extensible coding agent runtime written in Racket
 
+[![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
+
+---
+
+## Quick Install
+
+```bash
+# One-command install (macOS / Linux)
+curl -fsSL https://raw.githubusercontent.com/coinerd/q/main/scripts/install.sh | bash
+
+# Or manual install
+git clone https://github.com/coinerd/q.git
+cd q
+raco pkg install --auto
+racket main.rkt --version
+```
+
+Add q to your shell:
+
+```bash
+# Option A: add to PATH
+export PATH="$HOME/.q:$PATH"
+
+# Option B: alias
+echo "alias q='racket $HOME/.q/main.rkt'" >> ~/.bashrc
+```
+
+📖 See the full [Install Guide](docs/install.md) for prerequisites, verification, and troubleshooting.
 
 ---
 
@@ -56,9 +84,14 @@ The core agent loop never depends on TUI, CLI, or any interface-specific concern
 git clone https://github.com/coinerd/q.git
 cd q
 
-# 3. (Optional) Enhanced TUI rendering — works without these via built-in fallbacks
+# 3. Install dependencies
+raco pkg install --auto
+
+# 4. (Optional) Enhanced TUI rendering — works without these via built-in fallbacks
 raco pkg install tui-term tui-ubuf
 ```
+
+See [docs/install.md](docs/install.md) for the one-command installer and detailed instructions.
 
 ### First-Time Setup
 

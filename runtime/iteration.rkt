@@ -218,7 +218,7 @@
 
        ;; Get tools from registry for the LLM request
        (define tools (and reg (list-tools reg)))
-       
+
        (define result
          (run-agent-turn ctx-final prov bus
                          #:session-id session-id

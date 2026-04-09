@@ -306,13 +306,13 @@
   (define base-context (build-tiered-context messages
                                               #:tier-b-count tier-b-count
                                               #:tier-c-count tier-c-count))
-  
+
   ;; Create the hook payload (serializable for logging)
   (define payload (tiered-context->payload base-context max-tokens
                                            (hasheq 'tier-b-count tier-b-count
                                                    'tier-c-count tier-c-count
                                                    'total-messages (length messages))))
-  
+
   ;; Dispatch hook if dispatcher provided
   (if hook-dispatcher
       (let ([result (hook-dispatcher 'context-assembly payload)])

@@ -190,14 +190,14 @@
   (define inp (unbox (tui-ctx-input-state-box ctx)))
   (define ubuf (tui-ctx-ubuf ctx))
   (define term (tui-ctx-term ctx))
-  
+
   (define-values (cols rows) (tui-screen-size))
   (define layout (compute-layout cols rows))
-  
+
   ;; Render to ubuf (returns cursor position)
   (define-values (cursor-col cursor-row)
     (renderer:render-frame! ubuf state inp layout))
-  
+
   ;; Display ubuf to terminal
   ;; Use only-dirty=#f for full redraw (all cells written) but NOT linear mode
   ;; — linear mode outputs \r\n between rows which scrolls the terminal,
@@ -206,12 +206,11 @@
   ;;   positioning (\e[row;colH), which avoids scroll artifacts.
   (tui-cursor-hide)
   (render-ubuf-to-terminal! ubuf)
-  
+
   ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
   (tui-cursor-show)
   (tui-flush)
-  
   (set-box! (tui-ctx-needs-redraw-box ctx) #f))
 
 ;; Deprecated: Old draw-frame is now an alias for render-frame!
@@ -520,7 +519,7 @@
   (let loop ()
     ;; Drain all pending events from the channel (non-blocking)
     (drain-events! ctx)
-    
+
     ;; Poll for terminal resize (fallback for stub path where SIGWINCH
     ;; doesn't produce tsizemsg events). When the real tui-term library
     ;; is available, resize events also arrive via tsizemsg in next-message,
@@ -531,16 +530,16 @@
     (when (tui-screen-size-changed?)
       (tui-ctx-resize-ubuf! ctx)
       (mark-dirty! ctx))
-    
+
     ;; Draw the frame only when state changed
     (when (unbox (tui-ctx-needs-redraw-box ctx))
       (render-frame! ctx))
-    
+
     (when (unbox (tui-ctx-running-box ctx))
       ;; Get next message from terminal (adapter pattern)
       ;; This is the ONLY place that touches terminal input details
       (define msg (next-message ctx #:timeout 0.05))
-      
+
       (when msg
         (case (car msg)
           ;; Key press: dispatch to handler
@@ -560,7 +559,7 @@
               (process-slash-command ctx cmd)]
              [else (void)])
            ] ;; (mark-dirty is called inside handle-key)
-          
+
           ;; Resize event: resize ubuf and mark dirty
           [(resize)
            (define cols (cadr msg))
@@ -570,18 +569,18 @@
            ;; Reset screen size cache so next query gets new values
            (tui-screen-size-cache-reset!)
            (mark-dirty! ctx)]
-          
+
           ;; Redraw command: mark dirty
           [(redraw)
            (mark-dirty! ctx)]
-          
+
           ;; Mouse event: dispatch to handler
           [(mouse)
            (handle-mouse ctx (cdr msg))]
-          
+
           ;; Unknown message type - ignore
           [else (void)]))
-      
+
       (when (unbox (tui-ctx-running-box ctx))
         (loop)))))
 

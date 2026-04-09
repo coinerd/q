@@ -26,7 +26,16 @@
            (string-contains? base-url "127.0.0.1")
            (string-contains? base-url "192.168.")
            (string-contains? base-url "10.")
-           (string-contains? base-url "172."))))
+           (rfc1918-172? base-url))))
+
+;; RFC 1918 172.16.0.0/12 check — only 172.16.x.x through 172.31.x.x
+(define (rfc1918-172? url-str)
+  (and (string-contains? url-str "172.")
+       (regexp-match? #rx"172\\.([0-9]+)\\." url-str)
+       (let ([m (regexp-match #rx"172\\.([0-9]+)\\." url-str)])
+         (and m
+              (let ([octet (string->number (cadr m))])
+                (and octet (<= 16 octet 31)))))))
 
 ;; Build the provider from CLI config + settings.
 ;; Resolution:

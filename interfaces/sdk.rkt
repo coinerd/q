@@ -52,14 +52,22 @@
                        #:system-instructions (listof string?)
                        #:token-budget-threshold exact-positive-integer?
                        #:cancellation-token any/c)
-                      runtime?)])
- open-session
- run-prompt!
- subscribe-events!
- interrupt!
- fork-session!
- compact-session!
- session-info
+                      runtime?)]
+  [open-session (->* (runtime?)
+                      ((or/c string? #f))
+                      runtime?)]
+  [run-prompt! (runtime? string? . -> . (values runtime? any/c))]
+  [subscribe-events! (->* (runtime? procedure?)
+                           ((or/c procedure? #f))
+                           exact-nonnegative-integer?)]
+  [interrupt! (runtime? . -> . runtime?)]
+  [fork-session! (->* (runtime?)
+                      ((or/c string? #f))
+                      (or/c runtime? 'no-active-session))]
+  [compact-session! (->* (runtime?)
+                         (#:persist? boolean?)
+                         any)]
+  [session-info (runtime? . -> . (or/c #f hash?))])
 
  ;; Compaction types
  compaction-result?)

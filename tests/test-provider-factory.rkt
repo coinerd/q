@@ -22,8 +22,23 @@
 (test-case "local-provider? recognizes 10.x.x.x"
   (check-true (local-provider? "http://10.0.0.1/v1")))
 
-(test-case "local-provider? recognizes 172.x.x.x"
+(test-case "local-provider? recognizes 172.16.x.x (RFC 1918 start)"
   (check-true (local-provider? "http://172.16.0.1/v1")))
+
+(test-case "local-provider? recognizes 172.31.255.255 (RFC 1918 end)"
+  (check-true (local-provider? "http://172.31.255.255/v1")))
+
+(test-case "local-provider? rejects 172.15.0.1 (below /12 range)"
+  (check-false (local-provider? "http://172.15.0.1/v1")))
+
+(test-case "local-provider? rejects 172.32.0.1 (above /12 range)"
+  (check-false (local-provider? "http://172.32.0.1/v1")))
+
+(test-case "local-provider? rejects 172.1.0.1 (public)"
+  (check-false (local-provider? "http://172.1.0.1/v1")))
+
+(test-case "local-provider? rejects 172.100.0.1 (public)"
+  (check-false (local-provider? "http://172.100.0.1/v1")))
 
 (test-case "local-provider? rejects public URLs"
   (check-false (local-provider? "https://api.openai.com/v1")))

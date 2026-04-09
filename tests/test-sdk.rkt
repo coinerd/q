@@ -710,6 +710,77 @@
     (check-pred runtime? rt2)
     (cleanup-dir tmp)))
 
+;; ============================================================
+;; Test suite: contract-out for SDK public functions (Issue #10)
+;; ============================================================
+
+(test-case "contract: open-session rejects non-runtime first arg"
+  (check-exn exn:fail:contract?
+    (lambda () (open-session "not-a-runtime"))
+    "open-session should enforce runtime? contract on first arg"))
+
+(test-case "contract: open-session rejects non-string session-id"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir tmp) (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (check-exn exn:fail:contract?
+      (lambda () (open-session rt 42))
+      "open-session should enforce (or/c string? #f) on session-id")
+    (cleanup-dir tmp)))
+
+(test-case "contract: run-prompt! rejects non-runtime first arg"
+  (check-exn exn:fail:contract?
+    (lambda () (run-prompt! 'bad "hello"))
+    "run-prompt! should enforce runtime? contract on first arg"))
+
+(test-case "contract: run-prompt! rejects non-string prompt"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir tmp) (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (check-exn exn:fail:contract?
+      (lambda () (run-prompt! rt 123))
+      "run-prompt! should enforce string? on prompt arg")
+    (cleanup-dir tmp)))
+
+(test-case "contract: subscribe-events! rejects non-runtime first arg"
+  (check-exn exn:fail:contract?
+    (lambda () (subscribe-events! 'bad void))
+    "subscribe-events! should enforce runtime? contract on first arg"))
+
+(test-case "contract: subscribe-events! rejects non-procedure handler"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir tmp) (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (check-exn exn:fail:contract?
+      (lambda () (subscribe-events! rt "not-a-proc"))
+      "subscribe-events! should enforce procedure? on handler")
+    (cleanup-dir tmp)))
+
+(test-case "contract: interrupt! rejects non-runtime arg"
+  (check-exn exn:fail:contract?
+    (lambda () (interrupt! "not-a-runtime"))
+    "interrupt! should enforce runtime? contract"))
+
+(test-case "contract: fork-session! rejects non-runtime first arg"
+  (check-exn exn:fail:contract?
+    (lambda () (fork-session! 42))
+    "fork-session! should enforce runtime? contract on first arg"))
+
+(test-case "contract: compact-session! rejects non-runtime arg"
+  (check-exn exn:fail:contract?
+    (lambda () (compact-session! 'bad))
+    "compact-session! should enforce runtime? contract"))
+
+(test-case "contract: session-info rejects non-runtime arg"
+  (check-exn exn:fail:contract?
+    (lambda () (session-info 'bad))
+    "session-info should enforce runtime? contract"))
+
+;; ============================================================
+
 (test-case "compact-session! emits persist? flag in events"
   (define tmp (make-temp-session-dir))
   (with-handlers ([exn:fail? (λ (e) (cleanup-dir tmp) (raise e))])

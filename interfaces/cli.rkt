@@ -83,7 +83,7 @@
 ;; ============================================================
 
 (struct cli-config
-  (command        ; symbol: 'chat | 'prompt | 'resume | 'help | 'version
+  (command        ; symbol: 'chat | 'prompt | 'resume | 'help | 'version | 'doctor
    session-id     ; string or #f
    prompt         ; string or #f
    model          ; string or #f
@@ -246,13 +246,21 @@
        (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f)]
 
       [else
-       ;; First positional = prompt
-       (if prompt
-           ;; Second positional — unexpected, just ignore
-           (loop (add1 i) command session-id prompt model mode
-                 project-dir config-path verbose? max-turns no-tools? tools session-dir)
-           (loop (add1 i) 'prompt session-id (vector-ref vec i) model mode
-                 project-dir config-path verbose? max-turns no-tools? tools session-dir))])))
+       ;; First positional — check for named subcommands
+       (let ([arg (vector-ref vec i)])
+         (cond
+           ;; "doctor" subcommand
+           [(equal? arg "doctor")
+            (loop (add1 i) 'doctor session-id prompt model mode
+                  project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+           ;; Default: treat as prompt
+           [prompt
+            ;; Second positional — unexpected, just ignore
+            (loop (add1 i) command session-id prompt model mode
+                  project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+           [else
+            (loop (add1 i) 'prompt session-id (vector-ref vec i) model mode
+                  project-dir config-path verbose? max-turns no-tools? tools session-dir)]))])))
 
 ;; ============================================================
 ;; Pure: cli-config->runtime-config
@@ -520,6 +528,7 @@
   (displayln "  q --tui                    Terminal UI mode (TUI)" port)
   (displayln "  q --json                   JSON mode (machine-readable output)" port)
   (displayln "  q --rpc                    RPC mode (stdin/stdout JSONL protocol)" port)
+  (displayln "  q doctor                   Run setup and provider diagnostics" port)
   (newline port)
   (displayln "Options:" port)
   (displayln "  --model <name>             Model to use (e.g. gpt-4, claude-3)" port)
@@ -533,6 +542,7 @@
   (displayln "  --tool <name>              Enable specific tool (repeatable)" port)
   (displayln "  --help, -h                 Show this help message" port)
   (displayln "  --version                  Show version" port)
+  (displayln "  doctor                     Run setup and provider diagnostics" port)
   (newline port)
   (displayln "Interactive commands:" port)
   (displayln "  /help                      Show help" port)

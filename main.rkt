@@ -14,6 +14,7 @@
          "interfaces/json-mode.rkt"
          "interfaces/rpc-mode.rkt"
          "interfaces/tui.rkt"
+         "interfaces/doctor.rkt"
          json
          (only-in "runtime/agent-session.rkt"
                   make-agent-session resume-agent-session run-prompt!
@@ -41,17 +42,21 @@
          (only-in "tools/registry-defaults.rkt"
                   register-default-tools!))
 
-(provide
- ;; Main entry
- main
+ (provide
+  ;; Main entry
+  main
 
- ;; Wiring functions (exported for testing)
- build-provider
- register-default-tools!
- build-runtime-from-cli
- mode-for-config
+  ;; Wiring functions (exported for testing)
+  build-provider
+  register-default-tools!
+  build-runtime-from-cli
+  mode-for-config
 
- ;; Re-exported from interfaces/cli.rkt
+  ;; Re-exported from interfaces/doctor.rkt
+  run-doctor
+  check-result
+
+  ;; Re-exported from interfaces/cli.rkt
  parse-cli-args
  cli-config->runtime-config
  cli-config
@@ -280,6 +285,7 @@
   (case cmd
     [(help) 'help]
     [(version) 'version]
+    [(doctor) 'doctor]
     [else (cli-config-mode cfg)]))
 
 ;; ============================================================
@@ -491,6 +497,9 @@
   (case mode
     [(help) (print-usage) (exit 0)]
     [(version) (print-version) (exit 0)]
+    [(doctor)
+     (define code (run-doctor))
+     (exit code)]
     [(interactive)
      (define rt-config (build-runtime-from-cli cfg))
      (if (eq? (cli-config-command cfg) 'resume)

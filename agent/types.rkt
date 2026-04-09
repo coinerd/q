@@ -16,7 +16,10 @@
          (only-in "../tools/tool.rkt"
                   tool-call tool-call?
                   tool-call-id tool-call-name tool-call-arguments
-                  make-tool-call))
+                  make-tool-call
+                  tool-result?
+                  tool-result-content tool-result-details tool-result-is-error?
+                  make-tool-result))
 
 (provide
  ;; Content parts
@@ -51,8 +54,9 @@
  tool-call-id tool-call-name tool-call-arguments
  make-tool-call
 
- ;; Tool-result (standalone)
- (struct-out tool-result)
+ ;; Tool-result (standalone — re-exported from tools/tool.rkt)
+ tool-result?
+ tool-result-content tool-result-details tool-result-is-error?
  make-tool-result
 
  ;; Loop-result
@@ -217,15 +221,6 @@
          (hash-ref h 'sessionId)
          (hash-ref h 'turnId)
          (hash-ref h 'payload)))
-
-;; ============================================================
-;; Tool-result (standalone)
-;; ============================================================
-
-(struct tool-result (content details is-error?) #:transparent)
-
-(define (make-tool-result content details is-error)
-  (tool-result content details is-error))
 
 ;; ============================================================
 ;; Loop-result struct
