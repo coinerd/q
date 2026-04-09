@@ -52,54 +52,129 @@ The core agent loop never depends on TUI, CLI, or any interface-specific concern
 ```bash
 # 1. Install Racket 8.10+ from https://racket-lang.org
 
-# 2. Install TUI dependencies (optional, for terminal UI mode)
-raco pkg install charterm raart
-
-# 3. Clone and install q
+# 2. Clone q
 git clone https://github.com/coinerd/q.git
 cd q
-raco pkg install --link .
+
+# 3. (Optional) Enhanced TUI rendering — works without these via built-in fallbacks
+raco pkg install tui-term tui-ubuf
+```
+
+### First-Time Setup
+
+q needs an LLM provider before it can respond to prompts. Create `~/.q/config.json`:
+
+**Option A — OpenAI (cloud):**
+```json
+{
+  "default-provider": "openai",
+  "default-model": "gpt-4o",
+  "providers": {
+    "openai": {
+      "base-url": "https://api.openai.com/v1",
+      "api-key-env": "OPENAI_API_KEY"
+    }
+  }
+}
+```
+Then set your API key: `export OPENAI_API_KEY=sk-...`
+
+**Option B — Anthropic (cloud):**
+```json
+{
+  "default-provider": "anthropic",
+  "default-model": "claude-sonnet-4-20250514",
+  "providers": {
+    "anthropic": {
+      "base-url": "https://api.anthropic.com/v1",
+      "api-key-env": "ANTHROPIC_API_KEY"
+    }
+  }
+}
+```
+Then set your API key: `export ANTHROPIC_API_KEY=sk-ant-...`
+
+**Option C — Local LLM (no API key needed):**
+```json
+{
+  "default-provider": "local",
+  "default-model": "llama3",
+  "providers": {
+    "local": {
+      "base-url": "http://localhost:8080/v1"
+    }
+  }
+}
+```
+Start your local server (e.g. `llama-server`), then run q.
+
+> **No config?** q starts with a mock provider that returns canned responses — useful for exploring the UI.
+
+**Alternative: store API keys in a file** instead of env vars — see `~/.q/credentials.json`:
+```json
+{
+  "providers": {
+    "openai": { "api-key": "sk-..." },
+    "anthropic": { "api-key": "sk-ant-..." }
+  }
+}
 ```
 
 ### Run
 
 ```bash
 # Terminal UI (interactive)
-raco q --tui
+racket main.rkt --tui
 
 # Single-shot prompt
-raco q "explain what this codebase does"
+racket main.rkt "explain what this codebase does"
 
 # Resume a session
-raco q --session <session-id>
+racket main.rkt --session <session-id>
 
 # JSON mode (machine-readable output)
-raco q --json
+racket main.rkt --json
+
+# Override model for this run
+racket main.rkt --model gpt-4o "write a test"
 ```
 
 ### Verify
 
 ```bash
-raco q --version        # q version 0.1.0
-raco test tests/        # run the full test suite
+racket main.rkt --version   # q version 0.1.0
+raco test tests/            # run the full test suite
 ```
 
 ## Configuration
 
 | Location | Purpose |
-|----------|---------|
-| `~/.q/config.json` | Global settings: default provider, models, session limits |
-| `.q/` | Project-local: instructions, extensions, overrides |
-| `~/.q/credentials.json` | API keys (chmod 600) — or use `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` env vars |
+|----------|----------|
+| `~/.q/config.json` | Global settings: providers, models, session limits, tools |
+| `~/.q/credentials.json` | API keys for providers (chmod 600) |
+| `<project>/.q/config.json` | Project-local overrides |
+| `<project>/.q/instructions.md` | Project-specific system prompt |
 
-Minimal config to get started:
+**Environment variables** (alternative to credentials.json):
 
-```json
-{
-  "default-provider": "openai",
-  "default-model": "gpt-4o"
-}
-```
+| Variable | Provider |
+|----------|----------|
+| `OPENAI_API_KEY` | OpenAI (key must start with `sk-`) |
+| `ANTHROPIC_API_KEY` | Anthropic (key must start with `sk-ant-`) |
+
+**CLI flags** (override config for a single run):
+
+| Flag | Purpose |
+|------|----------|
+| `--model <name>` | Override model (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `--session <id>` | Resume existing session |
+| `--session-dir <path>` | Override session storage directory |
+| `--config <path>` | Explicit config file path |
+| `--max-turns <n>` | Max agent loop iterations (default: 10) |
+| `--verbose` | Enable verbose output |
+| `--no-tools` | Disable all tool use |
+| `--tool <name>` | Enable specific tool(s) only (repeatable) |
+| `--project-dir <path>` | Override project directory |
 
 ## Module Structure
 
