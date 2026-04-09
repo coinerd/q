@@ -62,7 +62,14 @@
       [else
        (define ext-name (car (car remaining)))
        (define handler  (cdr (car remaining)))
-       (define result (handler current-payload))
+       (define result
+         (with-handlers ([exn:fail?
+                          (lambda (e)
+                            (log-warning
+                             (format "Hook handler ~a for ~a threw: ~a"
+                                     ext-name hook-point (exn-message e)))
+                            (hook-pass current-payload))])
+           (handler current-payload)))
        (case (hook-result-action result)
          [(block) result]
          [(amend) (loop (cdr remaining) (hook-result-payload result) #t)]

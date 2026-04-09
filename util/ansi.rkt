@@ -52,13 +52,13 @@
 ;; ============================================================
 
 ;; Cache the result — terminal state doesn't change mid-run
-(define _isatty
+(define ffi-isatty
   (get-ffi-obj "isatty" #f (_fun _int -> _int)
                 (lambda () (lambda (fd) 0))))
 
 (define (tty?)
   "Check if stdout (fd 1) is connected to a terminal."
-  (= (_isatty 1) 1))
+  (= (ffi-isatty 1) 1))
 
 (define (no-color?)
   "Check if NO_COLOR is set or TERM=dumb."

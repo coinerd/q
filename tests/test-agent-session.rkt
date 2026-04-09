@@ -917,9 +917,9 @@
     (check-true (unbox tool-call-called?) "'tool-call hook should have been called")
     (delete-directory/files dir #:must-exist? #f))
 
-  ;; ── GAP-5: hook exception during dispatch propagates (known gap: no isolation) ──
+  ;; ── GAP-5 FIXED: hook exception during dispatch is isolated ──
 
-  (test-case "hook exception during dispatch propagates (no isolation)"
+  (test-case "hook exception during dispatch is isolated and session continues"
     (define dir (make-temp-dir))
     (define bus (make-event-bus))
     (define prov (make-mock-provider
@@ -935,9 +935,9 @@
     (define sess (make-agent-session
                   (hash-set (make-test-config dir bus prov)
                             'extension-registry ext-reg)))
-    (check-exn exn:fail?
-               (lambda () (run-prompt! sess "hello"))
-               "exception in hook should propagate (no isolation)")
+    ;; The crashing handler should be isolated — session should NOT raise
+    (check-not-exn (lambda () (run-prompt! sess "hello"))
+                   "exception in hook should be isolated, not propagate")
     (delete-directory/files dir #:must-exist? #f))
 
   ;; ── WP-35: Cooperative Cancellation Tests ──
