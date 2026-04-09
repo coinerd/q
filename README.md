@@ -68,7 +68,7 @@ q needs an LLM provider before it can respond to prompts. Create `~/.q/config.js
 ```json
 {
   "default-provider": "openai",
-  "default-model": "gpt-4o",
+  "default-model": "o3",
   "providers": {
     "openai": {
       "base-url": "https://api.openai.com/v1",
@@ -136,7 +136,7 @@ racket main.rkt --session <session-id>
 racket main.rkt --json
 
 # Override model for this run
-racket main.rkt --model gpt-4o "write a test"
+racket main.rkt --model o3 "write a test"
 ```
 
 ### Verify
@@ -166,7 +166,7 @@ raco test tests/            # run the full test suite
 
 | Flag | Purpose |
 |------|----------|
-| `--model <name>` | Override model (e.g. `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `--model <name>` | Override model (e.g. `o3`, `claude-sonnet-4-20250514`) |
 | `--session <id>` | Resume existing session |
 | `--session-dir <path>` | Override session storage directory |
 | `--config <path>` | Explicit config file path |
