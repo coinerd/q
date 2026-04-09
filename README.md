@@ -2,7 +2,7 @@
 
 > A local-first, extensible coding agent runtime written in Racket
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -142,7 +142,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version   # q version 0.2.0
+racket main.rkt --version   # q version 0.3.0
 raco test tests/            # run the full test suite
 ```
 
@@ -197,10 +197,10 @@ q/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 60 |
-| Source modules | 67 |
-| Source lines | ~13,771 |
-| Test lines | ~21,362 |
+| Test files | 81 |
+| Source modules | 69 |
+| Source lines | ~13,859 |
+| Test lines | ~22,703 |
 | Total test assertions | ~3,700 |
 | `raco test` results | 2,189 tests passing |
 
@@ -219,7 +219,7 @@ raco test tests/tui/
 
 ## Status
 
-**v0.2.0** — Active development. All core features are implemented and tested:
+**v0.3.0** — Active development. All core features implemented and tested:
 
 - ✅ Canonical types and utilities
 - ✅ JSONL session storage with tree indexing and forking
@@ -228,4 +228,4 @@ raco test tests/tui/
 - ✅ Runtime orchestration with compaction and extensions
 - ✅ 5 interfaces (CLI, TUI, JSON, RPC, SDK)
 - ✅ Sandboxing and hardening
-- ✅ Full test coverage (~2189 tests, 0 failures)
+- ✅ Full test coverage (~2,343 tests, 0 failures)
