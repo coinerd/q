@@ -1,6 +1,10 @@
-#lang racket
+#lang racket/base
 
-(require "clipboard.rkt")
+(require racket/port
+         racket/string
+         racket/list
+         racket/system
+         "clipboard.rkt")
 
 ;; tui/terminal.rkt — Thin terminal I/O adapter using tui-term
 ;;

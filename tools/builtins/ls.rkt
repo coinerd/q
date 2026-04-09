@@ -1,17 +1,8 @@
-#lang racket
-
-;; tools/builtins/ls.rkt — directory listing tool
-;;
-;; Exports:
-;;   tool-ls : (hash) -> hash
-;;   Arguments:
-;;     path    (string, required)  — directory to list
-;;     all?    (boolean, optional) — show hidden files (default: #f)
-;;     long?   (boolean, optional) — long format with type/size (default: #f)
-;;     sort-by (string, optional)  — "name", "size", "date" (default: "name")
-;;   Returns:  {content: (listof string), details: hash, isError: boolean}
+#lang racket/base
 
 (require racket/file
+         racket/format
+         racket/list
          (only-in "../tool.rkt"
                   make-success-result make-error-result))
 

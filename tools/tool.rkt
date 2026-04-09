@@ -1,4 +1,7 @@
-#lang racket
+#lang racket/base
+
+(require racket/contract
+         racket/hash)
 
 ;;; tools/tool.rkt — canonical tool contract, tool result, execution context,
 ;;;                    and tool registry.
@@ -13,24 +16,26 @@
 (provide
  ;; ── Tool struct ──
  (struct-out tool)
- make-tool
  tool?
+ (contract-out
+  [make-tool         (-> string? string? hash? procedure? tool?)]
+  [validate-tool-args (-> tool? hash? any/c)])
  tool-name
  tool-description
  tool-schema
  tool-execute
- validate-tool-args
 
  ;; ── Tool result ──
- make-tool-result
  tool-result?
+ (contract-out
+  [make-tool-result  (-> any/c any/c any/c tool-result?)]
+  [make-error-result (-> string? tool-result?)]
+  [make-success-result (->* (any/c) (any/c) tool-result?)])
  tool-result-content
  tool-result-details
  tool-result-is-error?
  tool-result->jsexpr
  jsexpr->tool-result
- make-error-result
- make-success-result
 
  ;; ── Execution context ──
  make-exec-context

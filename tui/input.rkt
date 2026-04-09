@@ -1,9 +1,12 @@
-#lang racket
+#lang racket/base
 
-;; tui/input.rkt — Input buffer, cursor movement, history, slash commands
+;; q/tui/input.rkt — Input buffer, cursor movement, history, slash commands
 ;;
 ;; Pure functions only. No terminal I/O. No side effects.
 ;; The input-state struct is immutable.
+
+(require racket/string
+         racket/list)
 
 (provide
  ;; Structs

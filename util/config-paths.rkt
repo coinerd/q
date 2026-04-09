@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; util/config-paths.rkt — shared .q/ / .pi/ fallback path resolution
 ;;

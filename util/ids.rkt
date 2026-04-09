@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;;; util/ids.rkt — ULID-like ID generation and parsing
 ;;;
@@ -70,7 +70,7 @@
   ;; Generate a ULID-compatible ID with monotonic guarantee.
   ;; If the timestamp is the same as the previous call, increment the random part.
   ;; Otherwise, generate a fresh random part.
-  (define ts (exact-truncate (current-inexact-milliseconds)))
+  (define ts (inexact->exact (truncate (current-inexact-milliseconds))))
   (define prev-ts (unbox last-ts))
   (define rnd
     (cond

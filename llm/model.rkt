@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; llm/model.rkt — normalized model request/response types
 ;;

@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; skills/types.rkt — gemeinsame Typen und Funktionen für Skills
 ;;
@@ -19,6 +19,7 @@
          racket/port
          racket/string
          racket/hash
+         racket/list
          json
          "../util/config-paths.rkt")
 

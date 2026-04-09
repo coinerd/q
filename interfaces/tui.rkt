@@ -24,82 +24,11 @@
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session-index.rkt"
-         "../tui/scrollback.rkt")
+         "../tui/scrollback.rkt"
+         "../tui/sgr.rkt"
+         (prefix-in commands: "../tui/commands.rkt"))
 
-;; ============================================================
-;; SGR bg=0 → default bg post-processor
-;; ============================================================
-;; tui-ubuf stores bg=0 (ANSI black) in cells.
-;; vt-output emits SGR parameter 40 for bg=0, which can appear in
-;; compound sequences like \e[37;40m or \e[37;40;1m.
-;; We post-process the output to replace parameter 40 with 49
-;; (terminal default background), matching pi's behavior.
-
-;; Replace SGR parameter "40" (bg=black) with "49" (default bg)
-;; in all SGR escape sequences within a string.
-;; Handles compound sequences: \e[37;40m → \e[37;49m
-;; Skips extended color parameters: \e[38;5;40m stays unchanged
-(define sgr-pattern
-  (regexp (format "~a\\[([0-9;]*)m" (integer->char 27))))
-
-;; Parse SGR parameters and replace bg=black (40) with default (49).
-;; Skips extended color sequences (38;5;N, 48;5;N, 38;2;R;G;B, 48;2;R;G;B).
-(define (replace-bg-black-params params)
-  (define parts (string-split params ";"))
-  (define result (list))
-  (define i 0)
-  (define n (length parts))
-  (let loop ()
-    (when (< i n)
-      (define p (list-ref parts i))
-      (cond
-        ;; Extended fg: 38;5;N or 38;2;R;G;B — skip all
-        [(and (equal? p "38") (< (+ i 1) n))
-         (define next (list-ref parts (+ i 1)))
-         (cond
-           [(and (equal? next "5") (< (+ i 2) n))
-            ;; 38;5;N — consume 3 params
-            (set! result (append result (list p next (list-ref parts (+ i 2)))))
-            (set! i (+ i 3))]
-           [(and (equal? next "2") (>= (- n i) 5))
-            ;; 38;2;R;G;B — consume 5 params
-            (set! result (append result (take (drop parts i) 5)))
-            (set! i (+ i 5))]
-           [else
-            (set! result (append result (list p)))
-            (set! i (+ i 1))])]
-        ;; Extended bg: 48;5;N or 48;2;R;G;B — skip all
-        [(and (equal? p "48") (< (+ i 1) n))
-         (define next (list-ref parts (+ i 1)))
-         (cond
-           [(and (equal? next "5") (< (+ i 2) n))
-            ;; 48;5;N — consume 3 params
-            (set! result (append result (list p next (list-ref parts (+ i 2)))))
-            (set! i (+ i 3))]
-           [(and (equal? next "2") (>= (- n i) 5))
-            ;; 48;2;R;G;B — consume 5 params
-            (set! result (append result (take (drop parts i) 5)))
-            (set! i (+ i 5))]
-           [else
-            (set! result (append result (list p)))
-            (set! i (+ i 1))])]
-        ;; bg=black → default
-        [(equal? p "40")
-         (set! result (append result (list "49")))
-         (set! i (+ i 1))]
-        [else
-         (set! result (append result (list p)))
-         (set! i (+ i 1))]))
-    (when (< i n) (loop)))
-  (string-join result ";"))
-
-(define (fix-sgr-bg-black str)
-  (regexp-replace* sgr-pattern str
-    (lambda (whole-match params)
-      (if (or (not params) (equal? params ""))
-          whole-match
-          (string-append (string (integer->char 27)) "["
-                         (replace-bg-black-params params) "m")))))
+;; fix-sgr-bg-black is now imported from ../tui/sgr.rkt
 
 ;; Render ubuf to terminal with bg=0 replaced by terminal default bg.
 ;; Captures display-ubuf! output, post-processes SGR sequences,
@@ -548,210 +477,27 @@
                   [else text]))
               "\n")))))
 
-;; Extract plain text from a styled-line
-(define (styled-line->text sl)
-  (apply string-append (map styled-segment-text (styled-line-segments sl))))
+;; styled-line->text is imported from ../tui/render.rkt (no local shadow)
 
 ;; ============================================================
-;; Slash command processing
+;; Slash command processing (delegated to q/tui/commands.rkt)
 ;; ============================================================
+
+;; Convert tui-ctx to commands:cmd-ctx for the commands module.
+;; This avoids a circular dependency (commands.rkt cannot import
+;; interfaces/tui.rkt where tui-ctx is defined).
+(define (tui-ctx->cmd-ctx ctx)
+  (commands:cmd-ctx (tui-ctx-ui-state-box ctx)
+                    (tui-ctx-running-box ctx)
+                    (tui-ctx-event-bus ctx)
+                    (tui-ctx-session-dir ctx)
+                    (tui-ctx-needs-redraw-box ctx)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
+;; Public API — delegates to commands:process-slash-command.
 (define (process-slash-command ctx cmd)
-  (mark-dirty! ctx) ; defensive: slash commands always change state
-  (define state (unbox (tui-ctx-ui-state-box ctx)))
-  ;; Handle structured commands (lists)
-  (cond
-    [(list? cmd)
-     (case (car cmd)
-       [(switch) (handle-switch-command ctx (cadr cmd))]
-       [(children) (handle-children-command ctx (cadr cmd))]
-       [(switch-error children-error)
-        (define entry (transcript-entry 'error (cadr cmd) 0 (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (add-transcript-entry state entry))
-        'continue]
-       [else 'continue])]
-    ;; Handle simple symbol commands
-    [else
-     (case cmd
-       [(help)
-        (define help-text "Commands: /help /clear /compact /interrupt /quit /branches /leaves /children /switch")
-        (define entry (transcript-entry 'system help-text 0 (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (add-transcript-entry state entry))
-        'continue]
-       [(clear)
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (struct-copy ui-state state [transcript '()]))
-        'continue]
-       [(compact)
-        ;; Compact: add status message and notify runtime
-        (define entry (transcript-entry 'system "[compact requested]" 0 (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (add-transcript-entry state entry))
-        (when (tui-ctx-event-bus ctx)
-          (publish! (tui-ctx-event-bus ctx)
-                    (make-event "compact.requested"
-                                (exact-truncate (/ (current-inexact-milliseconds) 1000))
-                                (or (ui-state-session-id state) "")
-                                #f
-                                (hash))))
-        'continue]
-       [(interrupt)
-        ;; Interrupt: notify runtime
-        (when (tui-ctx-event-bus ctx)
-          (publish! (tui-ctx-event-bus ctx)
-                    (make-event "interrupt.requested"
-                                (exact-truncate (/ (current-inexact-milliseconds) 1000))
-                                (or (ui-state-session-id state) "")
-                                #f
-                                (hash))))
-        (define entry (transcript-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (add-transcript-entry state entry))
-        'continue]
-       [(branches) (handle-branches-command ctx)]
-       [(leaves) (handle-leaves-command ctx)]
-       [(quit)
-        (set-box! (tui-ctx-running-box ctx) #f)
-        'quit]
-       [(unknown)
-        (define entry (transcript-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (add-transcript-entry state entry))
-        'continue]
-       [else 'continue])]))
-
-;; ============================================================
-;; Branch inspection command handlers
-;; ============================================================
-
-;; Build branch-info structs from session index
-(define (build-branch-info-list idx)
-  (if (not idx)
-      '()
-      (let ([leaves (map message-id (leaf-nodes idx))]
-            [entries (vector->list (session-index-entry-order idx))])
-        (for/list ([msg (in-list entries)])
-          (branch-info
-           (message-id msg)
-           (message-parent-id msg)
-           (message-role msg)
-           (member (message-id msg) leaves)
-           #f)))))  ; active? will be set separately
-
-;; Mark active branch in the list
-(define (mark-active-branch branches active-id)
-  (for/list ([b (in-list branches)])
-    (struct-copy branch-info b [active? (equal? (branch-info-id b) active-id)])))
-
-;; Get session index from current session (if available)
-(define (get-session-index ctx)
-  (define dir (tui-ctx-session-dir ctx))
-  (if dir
-      (with-handlers ([exn:fail? (lambda (e) #f)])
-        (load-index dir))
-      #f))
-
-;; Handle /branches command
-(define (handle-branches-command ctx)
-  (define state (unbox (tui-ctx-ui-state-box ctx)))
-  (define idx (get-session-index ctx))
-  (define branches (build-branch-info-list idx))
-  (define active-id (or (ui-state-current-branch state)
-                        (and (not (null? branches))
-                             (branch-info-id (last branches)))))
-  (define branches-with-active (mark-active-branch branches active-id))
-  ;; Render branch list as transcript entries
-  (define-values (cols rows) (tui-screen-size))
-  (define lines (render-branch-list branches-with-active cols))
-  (define new-state
-    (for/fold ([s state])
-              ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system
-                                                  (styled-line->text line)
-                                                  0
-                                                  (hash)))))
-  (set-box! (tui-ctx-ui-state-box ctx)
-            (set-visible-branches new-state branches-with-active))
-  'continue)
-
-;; Handle /leaves command
-(define (handle-leaves-command ctx)
-  (define state (unbox (tui-ctx-ui-state-box ctx)))
-  (define idx (get-session-index ctx))
-  (define branches (build-branch-info-list idx))
-  (define active-id (or (ui-state-current-branch state)
-                        (and (not (null? branches))
-                             (branch-info-id (last branches)))))
-  (define branches-with-active (mark-active-branch branches active-id))
-  ;; Render leaf nodes as transcript entries
-  (define-values (cols rows) (tui-screen-size))
-  (define lines (render-leaf-nodes branches-with-active cols))
-  (define new-state
-    (for/fold ([s state])
-              ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system
-                                                  (styled-line->text line)
-                                                  0
-                                                  (hash)))))
-  (set-box! (tui-ctx-ui-state-box ctx) new-state)
-  'continue)
-
-;; Handle /switch <id> command
-(define (handle-switch-command ctx branch-id)
-  (define state (unbox (tui-ctx-ui-state-box ctx)))
-  (define idx (get-session-index ctx))
-  (define entry (if (and idx (lookup-entry idx branch-id))
-                    (transcript-entry 'system
-                                      (format "[switched to branch: ~a]" branch-id)
-                                      0
-                                      (hash 'branch-id branch-id))
-                    (transcript-entry 'error
-                                      (format "Branch not found: ~a" branch-id)
-                                      0
-                                      (hash))))
-  (define new-state (add-transcript-entry state entry))
-  (when (and idx (lookup-entry idx branch-id))
-    (set-box! (tui-ctx-ui-state-box ctx)
-              (set-current-branch new-state branch-id)))
-  'continue)
-
-;; Handle /children <id> command
-(define (handle-children-command ctx node-id)
-  (define state (unbox (tui-ctx-ui-state-box ctx)))
-  (define idx (get-session-index ctx))
-  (define-values (lines new-state)
-    (if (not idx)
-        (values (list (styled-line (list (styled-segment "  No session index available" '(dim)))))
-                state)
-        (let ([children-msgs (children-of idx node-id)])
-          (if (null? children-msgs)
-              (values (list (styled-line (list (styled-segment (format "  Node ~a has no children" node-id) '(dim)))))
-                      state)
-              (let*-values ([(cols rows) (tui-screen-size)])
-                (let* ([children-info
-                        (for/list ([msg (in-list children-msgs)])
-                          (branch-info
-                           (message-id msg)
-                           node-id
-                           (message-role msg)
-                           (null? (children-of idx (message-id msg)))
-                           #f))]
-                       [rendered (render-children-list node-id children-info cols)])
-                  (values rendered state)))))))
-  ;; Add lines to transcript
-  (define final-state
-    (for/fold ([s new-state])
-              ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system
-                                                  (styled-line->text line)
-                                                  0
-                                                  (hash)))))
-  (set-box! (tui-ctx-ui-state-box ctx) final-state)
-  'continue)
+  (commands:process-slash-command (tui-ctx->cmd-ctx ctx) cmd))
 
 ;; ============================================================
 ;; Runtime event subscription

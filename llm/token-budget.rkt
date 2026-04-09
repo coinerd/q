@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; llm/token-budget.rkt — token budget estimation and thresholds
 ;;
@@ -6,7 +6,8 @@
 ;; The estimation uses a chars/4 heuristic which is reasonable for
 ;; English text with modern tokenizers.
 
-(require racket/contract)
+(require racket/contract
+         racket/string)
 
 (provide
  estimate-context-tokens

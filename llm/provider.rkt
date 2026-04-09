@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; llm/provider.rkt — provider interface contract
 ;;
@@ -18,13 +18,14 @@
 
 (provide
  provider?
- provider-name
- provider-send
- provider-stream
- provider-capabilities
- provider-count-tokens
- make-provider
- make-mock-provider)
+ (contract-out
+  [provider-name         (-> provider? string?)]
+  [provider-send         (-> provider? any/c any/c)]
+  [provider-stream       (-> provider? any/c any/c)]
+  [provider-capabilities (-> provider? hash?)]
+  [provider-count-tokens (-> provider? any/c (or/c #f integer?))]
+  [make-provider         (-> procedure? procedure? procedure? procedure? provider?)]
+  [make-mock-provider    (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
 
 ;; ============================================================
 ;; Provider struct

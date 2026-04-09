@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; agent/types.rkt — canonical runtime structs and enums
 ;;

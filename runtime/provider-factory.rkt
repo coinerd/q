@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; runtime/provider-factory.rkt — Build LLM providers from config + settings
 ;;
@@ -10,7 +10,8 @@
          "model-registry.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../llm/openai-compatible.rkt")
+         "../llm/openai-compatible.rkt"
+         racket/string)
 
 (provide build-provider
          build-mock-provider

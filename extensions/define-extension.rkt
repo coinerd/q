@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; extensions/define-extension.rkt — macro DSL for extension definition
 ;;
@@ -13,7 +13,8 @@
 ;;     #:on hook-point handler
 ;;     ...)
 
-(require "api.rkt")
+(require (for-syntax racket/base)
+         "api.rkt")
 
 (provide define-q-extension)
 

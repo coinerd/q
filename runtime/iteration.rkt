@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; runtime/iteration.rkt — agent iteration loop
 ;;
@@ -10,6 +10,8 @@
 ;;   now-seconds, emit-session-event!, maybe-dispatch-hooks
 
 (require racket/contract
+         racket/list
+         racket/path
          json
          (only-in racket/string string-trim)
          (only-in "../agent/types.rkt"
@@ -48,7 +50,7 @@
 ;; ============================================================
 
 (define (now-seconds)
-  (exact-truncate (/ (current-inexact-milliseconds) 1000)))
+  (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000))))
 
 (define (emit-session-event! bus sid event-name payload)
   (define evt (make-event event-name (now-seconds) sid #f payload))

@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;;; util/jsonl.rkt — JSONL file helpers (append-only, crash-safe)
 ;;;
@@ -17,7 +17,11 @@
          jsonl-line-valid?)
 
 (require json
-         racket/port)
+         racket/port
+         racket/string
+         racket/file
+         racket/list
+         racket/path)
 
 ;; ── Line validation ──
 

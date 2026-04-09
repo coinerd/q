@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; tools/builtins/edit.rkt — exact replacement edits with ambiguity checks
 ;;

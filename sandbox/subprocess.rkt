@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; sandbox/subprocess.rkt — subprocess management under custodians
 ;;

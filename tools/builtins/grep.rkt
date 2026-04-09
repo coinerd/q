@@ -1,17 +1,10 @@
-#lang racket
-
-;; tools/builtins/grep.rkt — bounded text search with regex, glob, and context
-;;
-;; Exports:
-;;   tool-grep : (hash) -> hash
-;;   Arguments: pattern (string, required), path (string, required),
-;;              glob (string, optional, default "*"),
-;;              case-insensitive? (boolean, optional, default #f),
-;;              max-results (integer, optional, default 50),
-;;              context-lines (integer, optional, default 2)
-;;   Returns:  {content: (listof string), details: hash, isError: boolean}
+#lang racket/base
 
 (require racket/port
+         racket/string
+         racket/file
+         racket/list
+         racket/path
          (only-in "../tool.rkt"
                   make-success-result make-error-result))
 

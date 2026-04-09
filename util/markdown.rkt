@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; q/util/markdown.rkt — Token-based markdown parser
 ;;

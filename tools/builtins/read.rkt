@@ -1,13 +1,10 @@
-#lang racket
-
-;; tools/builtins/read.rkt — bounded file reads with line info
-;;
-;; Exports:
-;;   tool-read : (hash) -> hash
-;;   Arguments: path (string), optional offset (1-indexed), optional limit
-;;   Returns:  {content: (listof string), details: hash, isError: boolean}
+#lang racket/base
 
 (require racket/port
+         racket/string
+         racket/file
+         racket/list
+         racket/dict
          (only-in "../tool.rkt"
                   make-success-result make-error-result))
 

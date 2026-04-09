@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; skills/context-files.rkt — Parser für AGENTS.md Dateien
 ;;

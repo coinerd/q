@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; tools/registry-defaults.rkt — Register built-in tools into a tool registry
 ;;

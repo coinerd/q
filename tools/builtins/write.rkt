@@ -1,13 +1,7 @@
-#lang racket
+#lang racket/base
 
-;; tools/builtins/write.rkt — explicit full-file writes
-;;
-;; Exports:
-;;   tool-write : (hash [exec-ctx]) -> tool-result?
-;;   Arguments: path (string), content (string)
-;;   Returns:  tool-result with content lines and details
-
-(require (only-in "../tool.rkt"
+(require racket/file
+         (only-in "../tool.rkt"
                   make-success-result make-error-result))
 
 (provide tool-write)

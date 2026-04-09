@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 ;; runtime/model-registry.rkt — named model resolution and defaults
 ;;
 ;; Responsible for:

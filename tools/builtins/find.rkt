@@ -1,18 +1,8 @@
-#lang racket
-
-;; tools/builtins/find.rkt — file discovery tool
-;;
-;; Exports:
-;;   tool-find : (hash) -> hash
-;;   Arguments: path (string, required)
-;;              name (string, optional) — glob pattern e.g. "*.rkt"
-;;              type (string, optional) — "file", "dir", or "any" (default "any")
-;;              max-depth (integer, optional) — max recursion depth (default 10)
-;;              max-results (integer, optional) — max results to return (default 100)
-;;   Returns:  {content: (listof string), details: hash, isError: boolean}
+#lang racket/base
 
 (require racket/file
          racket/string
+         racket/path
          (only-in "../tool.rkt"
                   make-success-result make-error-result))
 

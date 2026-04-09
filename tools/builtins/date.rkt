@@ -1,15 +1,7 @@
-#lang racket
-
-;; tools/builtins/date.rkt — returns current date/time
-;;
-;; Provides temporal awareness to the agent so it can reason about
-;; "today", "this year", "current season", etc.
-;;
-;; Contract:
-;;   args: (hash 'format [string])  — "iso" (default), "date", "time", "unix", "weekday"
-;;   returns: tool-result with current date/time as text content
+#lang racket/base
 
 (require "../../tools/tool.rkt"
+         racket/format
          racket/date)
 
 (provide tool-date)

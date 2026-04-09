@@ -1,15 +1,7 @@
-#lang racket
+#lang racket/base
 
-;; interfaces/json-mode.rkt — machine-readable event output
-;;
-;; JSON mode is a non-interactive interface that consumes the runtime
-;; event stream and outputs each event as a single JSON line to stdout.
-;; It is an event-to-JSON adapter.
-;;
-;; From ARCHITECTURE 6.2: "All external interfaces observe the system
-;; through the same runtime event stream. This allows JSON mode reuse."
-
-(require json
+(require racket/string
+         json
          "../agent/types.rkt"
          "../agent/event-bus.rkt")
 

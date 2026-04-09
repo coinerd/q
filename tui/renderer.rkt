@@ -1,6 +1,11 @@
-#lang racket
+#lang racket/base
 
-;; tui/renderer.rkt — Ubuf-based renderer for styled-lines
+(require racket/keyword
+         racket/list
+         "render.rkt"
+         "layout.rkt"
+         "state.rkt"
+         "input.rkt")
 ;;
 ;; Renders styled-lines to a tui-ubuf buffer.
 ;; No terminal I/O directly — all output goes through ubuf.

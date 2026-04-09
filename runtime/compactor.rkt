@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; runtime/compactor.rkt — history summarization and compaction
 ;;
@@ -19,7 +19,8 @@
 ;; a NEW message list without modifying or deleting the originals.
 
 (require racket/contract
-         (only-in racket/list partition)
+         racket/string
+         racket/list
          "../agent/types.rkt"
          "../runtime/session-store.rkt"
          (only-in "../extensions/hooks.rkt" hook-result hook-result? hook-result-action hook-result-payload))

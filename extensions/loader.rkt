@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; extensions/loader.rkt — discover and load extension modules
 ;;

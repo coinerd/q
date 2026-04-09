@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; skills/skill-loader.rkt — backward-compatible re-export from types.rkt
 ;;

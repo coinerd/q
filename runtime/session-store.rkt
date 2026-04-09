@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;;; runtime/session-store.rkt — append-only JSONL session storage
 ;;;
@@ -20,6 +20,8 @@
 
 (require racket/contract
          racket/file
+         racket/string
+         racket/sequence
          json
          "../agent/types.rkt"
          "../util/jsonl.rkt")

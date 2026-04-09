@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; tui/layout.rkt — Panel composition and screen geometry
 ;;

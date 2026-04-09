@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; sandbox/limits.rkt — resource ceilings and timeout policy
 ;;

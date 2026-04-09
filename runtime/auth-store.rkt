@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;;; runtime/auth-store.rkt — provider credentials lookup
 ;;;
@@ -8,7 +8,9 @@
 
 (require json
          racket/file
-         racket/generic)
+         racket/string
+         racket/generic
+         racket/path)
 
 (provide
  ;; Structs

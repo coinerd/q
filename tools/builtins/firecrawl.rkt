@@ -1,15 +1,8 @@
-#lang racket
-
-;; Firecrawl tool — web search, scrape, crawl, and map via Firecrawl API.
-;; Returns Markdown (default), HTML, or raw content to the agent.
-;;
-;; Configuration:
-;;   Environment: FIRECRAWL_API_KEY — API key (preferred)
-;;   Config file: ~/.q/config.json → firecrawl.api-key
-;;   Environment: FIRECRAWL_BASE_URL — override base URL (default: https://api.firecrawl.dev/v1)
+#lang racket/base
 
 (require racket/string
          racket/format
+         racket/port
          json
          net/http-client
          net/url

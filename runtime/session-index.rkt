@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;;; runtime/session-index.rkt — sidecar derived indexes for session logs
 ;;;
@@ -16,6 +16,12 @@
 ;;; It must always be rebuildable from the JSONL log.
 
 (require racket/contract
+         racket/string
+         racket/hash
+         racket/file
+         racket/port
+         racket/path
+         racket/list
          json
          "../agent/types.rkt"
          "../util/jsonl.rkt"

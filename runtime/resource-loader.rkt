@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; runtime/resource-loader.rkt — discover and load local/global resources
 ;;

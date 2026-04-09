@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; tools/builtins/bash.rkt — subprocess execution via sandbox/subprocess.rkt
 ;;

@@ -1,6 +1,11 @@
-#lang racket
+#lang racket/base
 
-;; interfaces/rpc-mode.rkt — stdin/stdout JSONL protocol
+(require racket/contract
+         racket/string
+         json
+         racket/port
+         "../agent/types.rkt"
+         "../agent/event-bus.rkt")
 ;;
 ;; RPC mode provides a request-response protocol over stdin/stdout
 ;; using JSONL (one JSON object per line). It follows JSON-RPC 2.0

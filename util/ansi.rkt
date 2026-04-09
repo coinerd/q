@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; ANSI escape sequence utilities for CLI color output.
 ;; Auto-detects TTY and respects NO_COLOR convention.

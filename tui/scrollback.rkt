@@ -1,11 +1,8 @@
-#lang racket
+#lang racket/base
 
-;; tui/scrollback.rkt — Scrollback persistence
-;;
-;; Reads/writes transcript entries to JSONL files.
-;; Extracted from state.rkt to keep state.rkt pure.
-
-(require "state.rkt"
+(require racket/file
+         racket/list
+         "state.rkt"
          "../util/jsonl.rkt"
          json)
 

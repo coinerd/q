@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; llm/anthropic.rkt — Anthropic provider adapter
 ;;
@@ -11,6 +11,7 @@
 
 (require racket/contract
          racket/string
+         racket/port
          json
          net/url
          net/http-client

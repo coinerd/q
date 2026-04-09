@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; llm/openai-compatible.rkt — OpenAI-compatible provider adapter
 ;;
@@ -12,6 +12,7 @@
 (require racket/contract
          racket/string
          racket/generator
+         racket/port
          json
          net/url
          net/http-client

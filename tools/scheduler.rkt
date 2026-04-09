@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;;; tools/scheduler.rkt — preflight, validation, scheduling, ordered result commit.
 ;;;

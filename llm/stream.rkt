@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; llm/stream.rkt — streamed chunk normalization
 ;;
@@ -9,6 +9,7 @@
 (require racket/contract
          racket/string
          racket/generator
+         racket/hash
          json
          "model.rkt")
 

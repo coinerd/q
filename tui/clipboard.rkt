@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; q/tui/clipboard.rkt — Clipboard support for the TUI
 ;;

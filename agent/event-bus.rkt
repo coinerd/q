@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; agent/event-bus.rkt — publish/subscribe event bus
 ;;

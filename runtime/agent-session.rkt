@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; runtime/agent-session.rkt — session lifecycle orchestration
 ;;
@@ -18,6 +18,10 @@
 ;;   agent-session?         — predicate
 
 (require racket/contract
+         racket/string
+         racket/file
+         racket/list
+         racket/path
          (only-in "../agent/types.rkt"
                   message-id message-role message-content
                   make-message make-text-part

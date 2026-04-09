@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; util/cancellation.rkt — cooperative cancellation token
 ;;

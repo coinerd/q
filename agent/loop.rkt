@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; agent/loop.rkt — pure agent turn execution
 ;;
@@ -16,6 +16,7 @@
 
 (require racket/contract
          racket/string
+         racket/list
          racket/date
          "../util/ids.rkt"
          "types.rkt"
@@ -69,7 +70,7 @@
 ;; Current timestamp (seconds)
 (define (now-seconds)
   (define ms (current-inexact-milliseconds))
-  (exact-truncate (/ ms 1000)))
+  (inexact->exact (truncate (/ ms 1000))))
 
 ;; Emit an event on the bus and optionally record in state
 (define (emit! bus session-id turn-id event-name payload #:state [state #f])

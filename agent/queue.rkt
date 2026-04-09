@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; agent/queue.rkt — steering and follow-up queues
 ;;

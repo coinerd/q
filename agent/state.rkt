@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; agent/state.rkt — ephemeral loop state for a single run
 ;;

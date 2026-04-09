@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; extensions/hooks.rkt — hook dispatch and result normalization
 ;;

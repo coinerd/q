@@ -1,11 +1,9 @@
-#lang racket
+#lang racket/base
 
-;; tui/render.rkt — Pure rendering: ui-state → displayable content
-;;
-;; No terminal I/O. All functions return data structures that
-;; can be painted to the terminal by the terminal adapter.
-
-(require "state.rkt"
+(require racket/string
+         racket/list
+         racket/function
+         "state.rkt"
          "input.rkt"
          "../util/markdown.rkt")
 

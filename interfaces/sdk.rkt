@@ -41,7 +41,18 @@
  cancel-token!
 
  ;; API
- make-runtime
+ (contract-out
+  [make-runtime (->* (#:provider any/c)
+                      (#:session-dir (or/c path-string? path? #f)
+                       #:tool-registry any/c
+                       #:extension-registry any/c
+                       #:event-bus any/c
+                       #:model-name (or/c string? #f)
+                       #:max-iterations exact-positive-integer?
+                       #:system-instructions (listof string?)
+                       #:token-budget-threshold exact-positive-integer?
+                       #:cancellation-token any/c)
+                      runtime?)])
  open-session
  run-prompt!
  subscribe-events!

@@ -1,24 +1,18 @@
-#lang racket
+#lang racket/base
 
-;; extensions/api.rkt — stable extension registration API
-;;
-;; Provides:
-;;   - extension struct (name, version, api-version, hooks)
-;;   - extension-registry: mutable registry for extensions
-;;   - register-extension!, unregister-extension!, lookup-extension
-;;   - list-extensions, handlers-for-point
-
-(require racket/contract)
+(require racket/contract
+         racket/hash)
 
 (provide
  (struct-out extension)
- make-extension-registry
  extension-registry?
- register-extension!
- unregister-extension!
- lookup-extension
- list-extensions
- handlers-for-point)
+ (contract-out
+  [make-extension-registry (-> extension-registry?)]
+  [register-extension!     (-> extension-registry? extension? void?)]
+  [unregister-extension!   (-> extension-registry? string? void?)]
+  [lookup-extension        (-> extension-registry? string? (or/c #f extension?))]
+  [list-extensions         (-> extension-registry? (listof extension?))]
+  [handlers-for-point      (-> extension-registry? symbol? (listof pair?))]))
 
 ;; ============================================================
 ;; Extension struct

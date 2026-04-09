@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; skills/prompt-template.rkt — re-export template rendering from types.rkt
 ;;

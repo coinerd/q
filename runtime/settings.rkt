@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; runtime/settings.rkt — global and local runtime settings
 ;;
@@ -16,6 +16,8 @@
 
 (require racket/file
          racket/port
+         racket/hash
+         racket/list
          json
          "../util/config-paths.rkt")
 

@@ -76,13 +76,16 @@
   (check-true (file-exists? full-path)
               (format "Module file missing: ~a" rel)))
 
-;; Test: each module file starts with #lang racket
+;; Test: each module file starts with #lang racket or #lang racket/base
 (for ([rel (in-list planned-module-paths)])
   (define full-path (build-path q-root rel))
   (with-input-from-file full-path
     (lambda ()
-      (check-equal? (read-line) "#lang racket"
-                    (format "Module ~a does not start with #lang racket" rel)))))
+      (define first-line (read-line))
+      (check-true (or (equal? first-line "#lang racket")
+                      (equal? first-line "#lang racket/base"))
+                  (format "Module ~a does not start with #lang racket or #lang racket/base (got: ~a)"
+                          rel first-line)))))
 
 ;; Test: info.rkt exists at project root (one level above q/)
 (define project-root (simplify-path (build-path q-root "..")))
