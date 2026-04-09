@@ -1,0 +1,44 @@
+# Compiled Racket
+compiled/
+*.zo
+*.dep
+*.rktd
+
+# Coverage reports
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor artifacts
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+*.sublime-*
+
+# Temporary/debug files
+*.tmp
+*.bak
+
+# Secrets — NEVER commit these
+.env
+.env.*
+credentials.json
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+secret*
+.token
+.gh-token
+GH_PAT
+
+# User config with potential secrets
+.q/
+
+# Racket docs cache
+doc/

@@ -1,0 +1,280 @@
+#lang racket
+
+;; llm/openai-compatible.rkt — OpenAI-compatible provider adapter
+;;
+;; Translates normalized model-request structs into OpenAI chat
+;; completion API format, and parses responses back into model-response.
+;; Supports both non-streaming and streaming modes.
+;;
+;; HTTP calls use net/http-client from Racket stdlib.
+;; SSE parsing delegates to llm/stream.rkt.
+
+(require racket/contract
+         racket/string
+         racket/generator
+         json
+         net/url
+         net/http-client
+         "model.rkt"
+         "provider.rkt"
+         "stream.rkt")
+
+(provide
+ make-openai-compatible-provider
+ openai-build-request-body
+ openai-parse-response
+ check-http-status!)
+
+;; ============================================================
+;; Request body construction
+;; ============================================================
+
+(define (openai-build-request-body req #:stream? [stream? #f])
+  (define settings (model-request-settings req))
+  (define base
+    (hasheq 'model (hash-ref settings 'model "gpt-4")
+            'messages (model-request-messages req)
+            'stream stream?))
+  ;; Add optional fields
+  (define with-temp
+    (if (hash-has-key? settings 'temperature)
+        (hash-set base 'temperature (hash-ref settings 'temperature))
+        base))
+  (define with-max-tokens
+    (if (hash-has-key? settings 'max-tokens)
+        (hash-set with-temp 'max_tokens (hash-ref settings 'max-tokens))
+        with-temp))
+  ;; Add tools if present
+  (define with-tools
+    (if (model-request-tools req)
+        (hash-set with-max-tokens 'tools (model-request-tools req))
+        with-max-tokens))
+  with-tools)
+
+;; ============================================================
+;; Response parsing
+;; ============================================================
+
+(define (openai-parse-response raw)
+  (define model-name (hash-ref raw 'model "unknown"))
+  (define usage (hash-ref raw 'usage (hash)))
+  (define choices (hash-ref raw 'choices '()))
+  (define choice (if (null? choices) #f (car choices)))
+  (define message (if choice (hash-ref choice 'message #f) #f))
+  (define finish-reason
+    (if choice
+        (let ([fr (hash-ref choice 'finish_reason "stop")])
+          (cond
+            [(string? fr)
+             (string->symbol (string-replace fr "_" "-"))]
+            [else 'stop]))
+        'stop))
+
+  ;; Build content list from response
+  (define content
+    (cond
+      [(not message) '()]
+      [else
+       (define text-content (hash-ref message 'content #f))
+       (define tool-calls (hash-ref message 'tool_calls #f))
+       (append
+        ;; Text content
+        (if (and text-content (string? text-content))
+            (list (hash 'type "text" 'text text-content))
+            '())
+        ;; Tool calls
+        (if tool-calls
+            (for/list ([tc (in-list tool-calls)])
+              (define fn (hash-ref tc 'function (hash)))
+              (define args-str (hash-ref fn 'arguments "{}"))
+              (define args
+                (with-handlers ([exn:fail? (lambda (e) args-str)])
+                  (string->jsexpr args-str)))
+              (hash 'type "tool-call"
+                    'id (hash-ref tc 'id)
+                    'name (hash-ref fn 'name)
+                    'arguments args))
+            '()))]))
+
+  (make-model-response content usage model-name finish-reason))
+
+;; ============================================================
+;; HTTP request execution (non-streaming)
+;; ============================================================
+
+(define (do-http-request base-url api-key path body)
+  (define url-str (string-append (string-trim base-url "/") path))
+  (define uri (string->url url-str))
+  (define host (url-host uri))
+  (define port (url-port uri))
+  (define ssl? (equal? (url-scheme uri) "https"))
+  (define path-str (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
+  (define headers
+    (list (format "Authorization: Bearer ~a" api-key)
+          "Content-Type: application/json"))
+  (define body-bytes (jsexpr->bytes body))
+  (define-values (status-line response-headers response-port)
+    (if port
+        (http-sendrecv host path-str
+                       #:port port
+                       #:ssl? ssl?
+                       #:method "POST"
+                       #:headers headers
+                       #:data body-bytes)
+        (http-sendrecv host path-str
+                       #:ssl? ssl?
+                       #:method "POST"
+                       #:headers headers
+                       #:data body-bytes)))
+  (define response-body (port->bytes response-port))
+  (check-http-status! status-line response-body)
+  (bytes->jsexpr response-body))
+
+;; ============================================================
+;; HTTP status check helper
+;; ============================================================
+
+(define (extract-error-message jsexpr)
+  ;; Extract a readable error message from a JSON error response.
+  ;; Tries error.message, then error.code, then message, falls back to #f.
+  (cond
+    [(not (hash? jsexpr)) #f]
+    [(hash-has-key? jsexpr 'error)
+     (define err (hash-ref jsexpr 'error))
+     (cond
+       [(hash? err)
+        (cond
+          [(hash-has-key? err 'message)
+           (define msg (hash-ref err 'message))
+           (if (string? msg) msg #f)]
+          [(hash-has-key? err 'code)
+           (format "Error code: ~a" (hash-ref err 'code))]
+          [else #f])]
+       [(string? err) err]
+       [else #f])]
+    [(hash-has-key? jsexpr 'message)
+     (define msg (hash-ref jsexpr 'message))
+     (if (string? msg) msg #f)]
+    [else #f]))
+
+(define (check-http-status! status-line response-body)
+  ;; status-line from http-sendrecv is a byte string — convert first
+  (define status-str
+    (if (bytes? status-line)
+        (bytes->string/utf-8 status-line)
+        status-line))
+  (define response-bytes
+    (if (bytes? response-body)
+        response-body
+        (string->bytes/utf-8 response-body)))
+  ;; Extract numeric status code from "HTTP/1.1 200 OK" or similar
+  (define status-code
+    (let ([m (regexp-match #rx"HTTP/[0-9.]+ ([0-9]+)" status-str)])
+      (if m
+          (string->number (cadr m))
+          0)))
+  (cond
+    ;; Redirects — http-sendrecv does not follow them automatically
+    [(and (>= status-code 300) (< status-code 400))
+     (raise (exn:fail
+             (format "API request redirected (~a: ~a). The server returned a redirect — check your base-url in config.json."
+                     status-code status-str)
+             (current-continuation-marks)))]
+    ;; Client/server errors
+    [(>= status-code 400)
+     (define error-text
+       (with-handlers ([exn:fail? (λ (_) (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
+         (define jsexpr (bytes->jsexpr response-bytes))
+         (or (extract-error-message jsexpr)
+             (format "~a" jsexpr))))
+     (raise (exn:fail
+             (format "API request failed (~a): ~a" status-code error-text)
+             (current-continuation-marks)))]))
+
+;; ============================================================
+;; Provider constructor
+;; ============================================================
+
+(define (make-openai-compatible-provider config)
+  (define base-url (hash-ref config 'base-url "https://api.openai.com/v1"))
+  (define api-key (hash-ref config 'api-key ""))
+  (define default-model (hash-ref config 'model "gpt-4"))
+
+  (define (ensure-model-settings req)
+    ;; Merge default-model into request settings if not already set
+    (define settings (model-request-settings req))
+    (if (hash-has-key? settings 'model)
+        req
+        (make-model-request (model-request-messages req)
+                            (model-request-tools req)
+                            (hash-set settings 'model default-model))))
+
+  (define (send req)
+    (define req-with-model (ensure-model-settings req))
+    (define body (openai-build-request-body req-with-model))
+    (define raw (do-http-request base-url api-key "/chat/completions" body))
+    (openai-parse-response raw))
+
+  (define (stream req)
+    (define req-with-model (ensure-model-settings req))
+    (define body (openai-build-request-body req-with-model #:stream? #t))
+    (define url-str (string-append (string-trim base-url "/") "/chat/completions"))
+    (define uri (string->url url-str))
+    (define host (url-host uri))
+    (define req-port (url-port uri))
+    (define ssl? (equal? (url-scheme uri) "https"))
+    (define path-str (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
+    (define headers
+      (list (format "Authorization: Bearer ~a" api-key)
+            "Content-Type: application/json"))
+    (define body-bytes (jsexpr->bytes body))
+    (define-values (status-line response-headers response-port)
+      (if req-port
+          (http-sendrecv host path-str
+                         #:port req-port
+                         #:ssl? ssl?
+                         #:method "POST"
+                         #:headers headers
+                         #:data body-bytes)
+          (http-sendrecv host path-str
+                         #:ssl? ssl?
+                         #:method "POST"
+                         #:headers headers
+                         #:data body-bytes)))
+    ;; Check HTTP status from status-line BEFORE reading body.
+    ;; For error responses (4xx/5xx), read the full body to include in error message.
+    (define status-str
+      (if (bytes? status-line)
+          (bytes->string/utf-8 status-line)
+          status-line))
+    (define status-code
+      (let ([m (regexp-match #rx"HTTP/[0-9.]+ ([0-9]+)" status-str)])
+        (if m (string->number (cadr m)) 0)))
+    (when (>= status-code 300)
+      ;; Error/redirect — read full body, then raise
+      (define err-body (port->bytes response-port))
+      (close-input-port response-port)
+      (check-http-status! status-line err-body))
+    ;; Status OK — return an incremental generator that reads SSE lines
+    ;; from the response port, yielding stream-chunk values as they arrive.
+    (define gen (read-sse-chunks response-port))
+    ;; Simple wrapper: yield chunks until done, then close port.
+    ;; No dynamic-wind — it fires before/after on every yield which
+    ;; causes the port to be closed between yields.
+    (generator ()
+      (let loop ()
+        (define chunk (gen))
+        (cond
+          [(not chunk)
+           ;; Stream done — close port and yield final #f
+           (close-input-port response-port)
+           (yield #f)]
+          [else
+           (yield chunk)
+           (loop)]))))
+
+  (make-provider
+   (lambda () "openai-compatible")
+   (lambda () (hash 'streaming #t 'token-counting #f))
+   send
+   stream))

@@ -1,0 +1,60 @@
+#lang racket
+
+;; llm/token-budget.rkt — token budget estimation and thresholds
+;;
+;; Provides heuristic-based token estimation and budget helpers.
+;; The estimation uses a chars/4 heuristic which is reasonable for
+;; English text with modern tokenizers.
+
+(require racket/contract)
+
+(provide
+ estimate-context-tokens
+ should-compact?
+ remaining-budget)
+
+;; ============================================================
+;; estimate-context-tokens
+;; ============================================================
+
+;; Heuristic: ~4 characters per token.
+;; Extracts text from message content (either a string or list of
+;; content parts with 'text keys).
+(define CHARS-PER-TOKEN 4)
+
+;; Extract text from a single message hash
+(define (extract-message-text msg)
+  (define content (hash-ref msg 'content ""))
+  (cond
+    [(string? content) content]
+    [(list? content)
+     ;; Content parts: extract text from parts with 'text key
+     (string-append*
+      (for/list ([part (in-list content)]
+                 #:when (hash? part))
+        (hash-ref part 'text "")))]
+    [else ""]))
+
+(define (estimate-context-tokens messages)
+  (define total-chars
+    (for/sum ([msg (in-list messages)])
+      (string-length (extract-message-text msg))))
+  (quotient total-chars CHARS-PER-TOKEN))
+
+;; ============================================================
+;; should-compact?
+;; ============================================================
+
+;; Compaction threshold is 80% of the budget.
+(define COMPACT-RATIO 0.8)
+
+(define (should-compact? current-tokens budget-threshold)
+  (define threshold (* budget-threshold COMPACT-RATIO))
+  (>= current-tokens threshold))
+
+;; ============================================================
+;; remaining-budget
+;; ============================================================
+
+(define (remaining-budget current-tokens budget-threshold)
+  (- budget-threshold current-tokens))
