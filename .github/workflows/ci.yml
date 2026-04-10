@@ -29,15 +29,12 @@ jobs:
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           sudo sh /tmp/racket.sh --in-place --create-links /usr/local
-          echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
-      - name: Add Racket to PATH (cached)
-        if: steps.cache-racket.outputs.cache-hit == 'true'
+      - name: Add Racket to PATH
         run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         run: |
-          export PATH="/usr/local/racket/bin:$PATH"
           raco pkg install --auto --batch
           raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
@@ -45,19 +42,13 @@ jobs:
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
 
       - name: Lint tests for portability
-        run: |
-          export PATH="/usr/local/racket/bin:$PATH"
-          racket scripts/lint-tests.rkt
+        run: racket scripts/lint-tests.rkt
 
       - name: Lint version consistency
-        run: |
-          export PATH="/usr/local/racket/bin:$PATH"
-          racket scripts/lint-version.rkt
+        run: racket scripts/lint-version.rkt
 
       - name: Lint metrics consistency
-        run: |
-          export PATH="/usr/local/racket/bin:$PATH"
-          racket scripts/metrics.rkt --lint
+        run: racket scripts/metrics.rkt --lint
 
       - name: Verify project structure
         run: |
@@ -66,9 +57,7 @@ jobs:
           test -f main.rkt && echo "main.rkt found at repo root"
 
       - name: Run tests
-        run: |
-          export PATH="/usr/local/racket/bin:$PATH"
-          raco test tests/
+        run: raco test tests/
 
   smoke:
     runs-on: ubuntu-latest
@@ -89,21 +78,17 @@ jobs:
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           sudo sh /tmp/racket.sh --in-place --create-links /usr/local
-          echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
-      - name: Add Racket to PATH (cached)
-        if: steps.cache-racket.outputs.cache-hit == 'true'
+      - name: Add Racket to PATH
         run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
         run: |
-          export PATH="/usr/local/racket/bin:$PATH"
           raco pkg install --auto --batch
           raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Version smoke check
         run: |
-          export PATH="/usr/local/racket/bin:$PATH"
           output=$(racket main.rkt --version)
           echo "$output"
           echo "$output" | grep -qE '^q version [0-9]+\.[0-9]+\.[0-9]+$'
