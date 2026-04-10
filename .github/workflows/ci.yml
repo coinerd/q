@@ -46,6 +46,9 @@ jobs:
       - name: Lint version consistency
         run: racket scripts/lint-version.rkt
 
+      - name: Lint metrics consistency
+        run: racket scripts/metrics.rkt --lint
+
       - name: Verify project structure
         run: |
           pwd

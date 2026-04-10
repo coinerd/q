@@ -111,10 +111,11 @@ local environment. Follow these rules:
 | **Clean bytecode** | `find . -name '*.zo' -delete` before testing | Trust cached `.zo` after module changes |
 | **Lint before push** | `racket scripts/lint-tests.rkt` | Wait for CI to catch these |
 | **Version consistency** | `racket scripts/lint-version.rkt` after bumping `info.rkt` | Manually update version strings across docs |
+| **Metric consistency** | `racket scripts/metrics.rkt --lint` after changing source files | Manually update README metrics table |
 
-Run both linters locally:
+Run all linters locally:
 ```bash
-cd q/ && racket scripts/lint-tests.rkt && racket scripts/lint-version.rkt
+cd q/ && racket scripts/lint-tests.rkt && racket scripts/lint-version.rkt && racket scripts/metrics.rkt --lint
 ```
 
 ## 7. Comments
