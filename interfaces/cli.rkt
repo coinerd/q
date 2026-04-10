@@ -508,6 +508,10 @@
        [("/quit" "/exit") '(quit)]
        [("/compact") '(compact)]
        [("/history") '(history)]
+       [("/model")
+        (if (null? args)
+            '(model)
+            (list 'model (car args)))]
        [("/fork")
         (if (null? args)
             '(fork)
@@ -549,6 +553,7 @@
   (displayln "  /quit, /exit               Exit session" port)
   (displayln "  /compact                   Trigger compaction now" port)
   (displayln "  /history                   Show session history" port)
+  (displayln "  /model [name]              Show or switch model" port)
   (displayln "  /fork [entry-id]           Fork session at given point" port))
 
 ;; ============================================================
@@ -556,7 +561,7 @@
 ;; ============================================================
 
 (define (print-version [port (current-output-port)])
-  (displayln "q version 0.5.0" port))
+  (displayln "q version 0.5.1" port))
 
 ;; ============================================================
 ;; I/O: run-cli-interactive
@@ -575,6 +580,7 @@
                              #:compact-fn [compact-fn #f]
                              #:history-fn [history-fn #f]
                              #:fork-fn [fork-fn #f]
+                             #:model-fn [model-fn #f]
                              #:in [in (current-input-port)]
                              #:out [out (current-output-port)])
   ;; Don't print prompt here — read-line-with-history handles it
@@ -600,6 +606,9 @@
                  ['history (if history-fn
                                (history-fn out)
                                (displayln "[history not yet connected]" out))]
+                 ['model (if model-fn
+                              (model-fn (and (>= (length cmd) 2) (cadr cmd)))
+                              (displayln "[model command not yet connected]" out))]
                  ['fork (if fork-fn
                             (fork-fn (and (>= (length cmd) 2) (cadr cmd)))
                             (displayln "[fork not yet connected]" out))]

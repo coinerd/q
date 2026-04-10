@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-04-09
+
+### Added
+- Slash-command palette with autocompletion (`q/tui/palette.rkt`) — command registry, filtering, TUI overlay, CLI completion
+- Interactive session tree browser (`q/tui/session-tree.rkt`) — ASCII tree rendering, arrow-key navigation, expand/collapse
+- `/model` command to list and switch models mid-session (#50) — TUI + CLI support
+- `cmd-ctx-model-registry-box` field for model registry access in TUI commands
+
+### Changed
+- `q/tui/commands.rkt` — added model-registry-box field, /model handler, event bus integration
+- `q/interfaces/cli.rkt` — added /model parsing, #:model-fn callback parameter
+
+### Test metrics
+- 2877 tests, 0 failures (+178 new)
+
 ## [0.5.0] — 2026-04-09
 
 ### Added
@@ -109,7 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/coinerd/q/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/coinerd/q/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/coinerd/q/compare/v0.4.0...v0.4.2
 [0.4.0]: https://github.com/coinerd/q/compare/v0.3.1...v0.4.0

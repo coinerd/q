@@ -490,7 +490,8 @@
                     (tui-ctx-running-box ctx)
                     (tui-ctx-event-bus ctx)
                     (tui-ctx-session-dir ctx)
-                    (tui-ctx-needs-redraw-box ctx)))
+                    (tui-ctx-needs-redraw-box ctx)
+                    #f))  ; model-registry-box: not yet wired in TUI
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
