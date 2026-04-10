@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-04-10
+
+### Package Ecosystem Foundation
+- Added `qpm.json` manifest format for q packages (`q/extensions/manifest.rkt`)
+- Manifest validation, serialization (JSON), file I/O, and SHA-256 checksums
+- Added `q/runtime/package.rkt` -- install/remove/list packages from local paths
+- Added `q/util/checksum.rkt` -- SHA-256 utilities (string, file, verify)
+- Added `q/extensions/manifest-audit.rkt` -- package integrity verification and auditing
+- 46 new tests (17 manifest + 14 package + 15 checksum)
+
 ## [0.4.0] - 2026-04-10
 
 ### Packaging & Distribution
