@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Racket installation
+        id: cache-racket
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/racket
+            ~/.cache/racket
+          key: racket-8.10-ubuntu
+
+      - name: Install Racket
+        if: steps.cache-racket.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+
+      - name: Add Racket to PATH (cached)
+        if: steps.cache-racket.outputs.cache-hit == 'true'
+        run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: raco pkg install --auto --batch
+
+      - name: Run tests
+        run: raco test tests/
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Racket installation
+        id: cache-racket
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/racket
+            ~/.cache/racket
+          key: racket-8.10-ubuntu
+
+      - name: Install Racket
+        if: steps.cache-racket.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+
+      - name: Add Racket to PATH (cached)
+        if: steps.cache-racket.outputs.cache-hit == 'true'
+        run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: raco pkg install --auto --batch
+
+      - name: Version smoke check
+        run: |
+          output=$(racket main.rkt --version)
+          echo "$output"
+          echo "$output" | grep -qE '^q version [0-9]+\.[0-9]+\.[0-9]+$'
