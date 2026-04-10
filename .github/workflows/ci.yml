@@ -29,6 +29,7 @@ jobs:
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+          echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
       - name: Add Racket to PATH (cached)
         if: steps.cache-racket.outputs.cache-hit == 'true'
@@ -79,6 +80,7 @@ jobs:
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+          echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
       - name: Add Racket to PATH (cached)
         if: steps.cache-racket.outputs.cache-hit == 'true'
