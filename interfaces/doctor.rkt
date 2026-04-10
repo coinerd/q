@@ -255,23 +255,37 @@
 
 (define (check-tui-packages)
   ;; q uses tui-term and tui-ubuf as optional TUI backends.
-  ;; Both are optional — TUI degrades gracefully without them.
-  (define tui-term?
+  ;; They may be installed but fail to compile on some Racket versions.
+  ;; Use dynamic-require for pkg/lib to avoid hard dependency.
+  (define table
     (with-handlers ([exn:fail? (λ (_) #f)])
-      (dynamic-require 'tui-term #f)
-      #t))
-  (define tui-ubuf?
+      ((dynamic-require 'pkg/lib 'installed-pkg-table))))
+  (define (pkg-installed? name)
+    (and table (hash-has-key? table name)))
+  (define (mod-loadable? mod-path)
     (with-handlers ([exn:fail? (λ (_) #f)])
-      (dynamic-require 'tui-ubuf #f)
+      (dynamic-require mod-path #f)
       #t))
+  (define tui-term-installed? (pkg-installed? "tui-term"))
+  (define tui-ubuf-installed? (pkg-installed? "tui-ubuf"))
+  (define tui-term-loadable? (mod-loadable? 'tui-term))
+  (define tui-ubuf-loadable? (mod-loadable? 'tui-ubuf))
   (cond
-    [(and tui-term? tui-ubuf?)
+    [(and tui-term-loadable? tui-ubuf-loadable?)
      (check-result "TUI" 'ok "tui-term + tui-ubuf available")]
-    [(or tui-term? tui-ubuf?)
+    [(and tui-term-installed? tui-ubuf-installed?
+          (not tui-term-loadable?) (not tui-ubuf-loadable?))
      (check-result "TUI" 'warning
-                   (format "~a available, ~amissing — TUI may be degraded (raco pkg install tui-term tui-ubuf)"
-                           (if tui-term? "tui-term" "")
-                           (if tui-term? "tui-ubuf " "tui-term ")))]
+                   "tui-term + tui-ubuf installed but broken (may need newer Racket)")]
+    [(or tui-term-loadable? tui-ubuf-loadable?)
+     (check-result "TUI" 'warning
+                   (format "~a loadable, ~anot — TUI may be degraded"
+                           (if tui-term-loadable? "tui-term" "")
+                           (if tui-ubuf-loadable? "tui-ubuf " "tui-term ")))]
+    [(or tui-term-installed? tui-ubuf-installed?)
+     (check-result "TUI" 'warning
+                   (format "~a installed but broken (may need newer Racket)"
+                           (if tui-term-installed? "tui-term" "tui-ubuf")))]
     [else
      (check-result "TUI" 'warning "tui-term/tui-ubuf not installed — TUI mode will not work (raco pkg install tui-term tui-ubuf)")]))
 
