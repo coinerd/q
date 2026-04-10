@@ -37,6 +37,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export PATH="/usr/local/racket/bin:$PATH"
           raco pkg install --auto --batch
           raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
@@ -44,13 +45,19 @@ jobs:
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
 
       - name: Lint tests for portability
-        run: racket scripts/lint-tests.rkt
+        run: |
+          export PATH="/usr/local/racket/bin:$PATH"
+          racket scripts/lint-tests.rkt
 
       - name: Lint version consistency
-        run: racket scripts/lint-version.rkt
+        run: |
+          export PATH="/usr/local/racket/bin:$PATH"
+          racket scripts/lint-version.rkt
 
       - name: Lint metrics consistency
-        run: racket scripts/metrics.rkt --lint
+        run: |
+          export PATH="/usr/local/racket/bin:$PATH"
+          racket scripts/metrics.rkt --lint
 
       - name: Verify project structure
         run: |
@@ -59,7 +66,9 @@ jobs:
           test -f main.rkt && echo "main.rkt found at repo root"
 
       - name: Run tests
-        run: raco test tests/
+        run: |
+          export PATH="/usr/local/racket/bin:$PATH"
+          raco test tests/
 
   smoke:
     runs-on: ubuntu-latest
@@ -88,11 +97,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          export PATH="/usr/local/racket/bin:$PATH"
           raco pkg install --auto --batch
           raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Version smoke check
         run: |
+          export PATH="/usr/local/racket/bin:$PATH"
           output=$(racket main.rkt --version)
           echo "$output"
           echo "$output" | grep -qE '^q version [0-9]+\.[0-9]+\.[0-9]+$'
