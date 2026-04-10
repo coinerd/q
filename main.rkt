@@ -148,7 +148,10 @@
  model-resolution-provider-config
  model-resolution-base-url
  model-resolution-model-name
+ model-entry-name
+ model-entry-provider-name
  default-model
+ available-models
 
  ;; Re-exported from llm/openai-compatible.rkt
  make-openai-compatible-provider
@@ -245,10 +248,11 @@
   (hash-set! base-config 'session-dir session-dir)
   (hash-set! base-config 'extension-registry ext-reg)
   ;; Resolve effective model name: CLI flag > settings default
+  ;; Also persist model-registry for /model command
+  (define model-reg (make-model-registry-from-config (q-settings-merged settings)))
+  (hash-set! base-config 'model-registry model-reg)
   (define effective-model-name
-    (or model-name
-        (let ([reg (make-model-registry-from-config (q-settings-merged settings))])
-          (default-model reg))))
+    (or model-name (default-model model-reg)))
   (hash-set! base-config 'model-name effective-model-name)
   (hash-set! base-config 'system-instructions system-instrs)
   (hash-set! base-config 'verbose? (cli-config-verbose? cfg))
@@ -340,7 +344,23 @@
                      (displayln (format "[~a] ~a" role text) out)))
     #:fork-fn (lambda (entry-id)
                 (define new-sess (fork-session sess entry-id))
-                (displayln (format "[forked session: ~a]" (session-id new-sess))))))
+                (displayln (format "[forked session: ~a]" (session-id new-sess))))
+    #:model-fn (lambda (arg)
+                 (define reg (hash-ref rt-config 'model-registry #f))
+                 (cond
+                   [(not reg) (displayln "[model registry not available]")]
+                   [(not arg)
+                    (displayln "Available models:")
+                    (for ([m (in-list (available-models reg))])
+                      (define marker (if (equal? (model-entry-name m) (default-model reg)) " *" "  "))
+                      (displayln (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))))]
+                   [else
+                    (define resolution (resolve-model reg arg))
+                    (if resolution
+                        (displayln (format "[switched to model: ~a (provider: ~a)]"
+                                           (model-resolution-model-name resolution)
+                                           (model-resolution-provider-name resolution)))
+                        (displayln (format "Model not found: ~a. Use /model to list." arg)))]))))
 
 (define (run-single-shot cfg rt-config)
   (define sess (make-agent-session rt-config))
@@ -371,7 +391,23 @@
                      (displayln (format "[~a] ~a" role text) out)))
     #:fork-fn (lambda (entry-id)
                 (define new-sess (fork-session sess entry-id))
-                (displayln (format "[forked session: ~a]" (session-id new-sess))))))
+                (displayln (format "[forked session: ~a]" (session-id new-sess))))
+    #:model-fn (lambda (arg)
+                 (define reg (hash-ref rt-config 'model-registry #f))
+                 (cond
+                   [(not reg) (displayln "[model registry not available]")]
+                   [(not arg)
+                    (displayln "Available models:")
+                    (for ([m (in-list (available-models reg))])
+                      (define marker (if (equal? (model-entry-name m) (default-model reg)) " *" "  "))
+                      (displayln (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))))]
+                   [else
+                    (define resolution (resolve-model reg arg))
+                    (if resolution
+                        (displayln (format "[switched to model: ~a (provider: ~a)]"
+                                           (model-resolution-model-name resolution)
+                                           (model-resolution-provider-name resolution)))
+                        (displayln (format "Model not found: ~a. Use /model to list." arg)))]))))
 
 (define (run-json cfg rt-config)
   (define sess (make-agent-session rt-config))

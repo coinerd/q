@@ -183,6 +183,67 @@
   'continue)
 
 ;; ============================================================
+;; /history command handler
+;; ============================================================
+
+(define (handle-history-command cctx)
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (define idx (get-session-index cctx))
+  (cond
+    [(not idx)
+     (define entry (transcript-entry 'error "No session index available" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    [else
+     (define entries (session-index-entry-order idx))
+     (if (null? entries)
+         (let ([entry (transcript-entry 'system "Session is empty." 0 (hash))])
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           'continue)
+         (let ()
+           (define header (transcript-entry 'system "Session history:" 0 (hash)))
+           (define entries-out
+             (for/list ([msg (in-vector entries)])
+               (transcript-entry 'system
+                                  (format "  [~a]" (message-role msg))
+                                  0
+                                  (hash))))
+           (define all-entries (cons header entries-out))
+           (define new-state
+             (for/fold ([s state])
+                       ([e (in-list all-entries)])
+               (add-transcript-entry s e)))
+           (set-box! (cmd-ctx-state-box cctx) new-state)
+           'continue))]))
+
+;; ============================================================
+;; /fork command handler
+;; ============================================================
+
+(define (handle-fork-command cctx [entry-id #f])
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (cond
+    [(not entry-id)
+     (define entry (transcript-entry 'error "Usage: /fork <entry-id>" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    [else
+     (define entry (transcript-entry 'system
+                                      (format "[fork requested at: ~a]" entry-id)
+                                      0
+                                      (hash 'fork-entry-id entry-id)))
+     ;; Publish fork event for runtime to handle
+     (when (cmd-ctx-event-bus cctx)
+       (publish! (cmd-ctx-event-bus cctx)
+                 (make-event "fork.requested"
+                             (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+                             (or (ui-state-session-id state) "")
+                             #f
+                             (hash 'entry-id entry-id))))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]))
+
+;; ============================================================
 ;; /model command handler
 ;; ============================================================
 
@@ -266,6 +327,7 @@
        [(switch) (handle-switch-command cctx (cadr cmd))]
        [(children) (handle-children-command cctx (cadr cmd))]
        [(model) (handle-model-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
+       [(fork) (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
        [(switch-error children-error)
         (define entry (transcript-entry 'error (cadr cmd) 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx)
@@ -276,8 +338,9 @@
     [else
      (case cmd
        [(model) (handle-model-command cctx)]
+       [(history) (handle-history-command cctx)]
        [(help)
-        (define help-text "Commands: /help /clear /compact /interrupt /quit /branches /leaves /children /switch /model")
+        (define help-text "Commands: /help /clear /compact /interrupt /quit /branches /leaves /children /switch /model /history /fork")
         (define entry (transcript-entry 'system help-text 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx)
                   (add-transcript-entry state entry))

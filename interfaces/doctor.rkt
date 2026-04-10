@@ -197,10 +197,10 @@
   (cond
     [(not (null? env-keys-found))
      (check-result "Credentials" 'ok
-                   (format "env: ~a" (string-join env-keys-found ", ")))]
+                   (format "env: ~a" (string-join (map (lambda (x) (if (symbol? x) (symbol->string x) x)) env-keys-found) ", ")))]
     [(not (null? providers-with-keys))
      (check-result "Credentials" 'ok
-                   (format "configured: ~a" (string-join providers-with-keys ", ")))]
+                   (format "configured: ~a" (string-join (map (lambda (x) (if (symbol? x) (symbol->string x) x)) providers-with-keys) ", ")))]
     [(and cred-file-exists?)
      (check-result "Credentials" 'warning
                    "credentials file exists but no keys resolved")]

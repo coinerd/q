@@ -95,6 +95,7 @@
  tui-ctx-event-ch
  tui-ctx-needs-redraw-box
  tui-ctx-term-box
+ tui-ctx-model-registry-box
  handle-key
  handle-mouse
  decode-mouse-x10
@@ -126,12 +127,14 @@
    needs-redraw-box  ; (boxof boolean) — #t when state changed and frame needs redraw
    term-box          ; (boxof any) — terminal instance for tui-term
    ubuf-box          ; (boxof any) — ubuf buffer for output
+   model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
    )
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
                       #:session-runner [runner (lambda (prompt) (void))]
-                      #:session-dir [sess-dir #f])
+                      #:session-dir [sess-dir #f]
+                      #:model-registry [reg #f])
   (tui-ctx (box (initial-ui-state))
            (box (initial-input-state))
            bus
@@ -141,7 +144,8 @@
            sess-dir
            (box #t)     ; needs-redraw: #t for first frame
            (box #f)     ; term-box - set when terminal opened
-           (box #f)))   ; ubuf-box - set when buffer created
+           (box #f)     ; ubuf-box - set when buffer created
+           (box reg)))  ; model-registry-box
 
 ;; ============================================================
 ;; Terminal/ubuf lifecycle helpers
@@ -491,7 +495,7 @@
                     (tui-ctx-event-bus ctx)
                     (tui-ctx-session-dir ctx)
                     (tui-ctx-needs-redraw-box ctx)
-                    #f))  ; model-registry-box: not yet wired in TUI
+                    (tui-ctx-model-registry-box ctx)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
@@ -617,7 +621,9 @@
                #:event-bus bus
                #:session-runner
                (lambda (prompt)
-                 (run-prompt! sess prompt))))
+                 (run-prompt! sess prompt))
+               #:model-registry
+               (hash-ref rt-config 'model-registry #f)))
 
   ;; Subscribe to events
   (subscribe-runtime-events! ctx)

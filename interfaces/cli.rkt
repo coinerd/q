@@ -516,6 +516,18 @@
         (if (null? args)
             '(fork)
             (list 'fork (car args)))]
+       [("/clear") '(clear)]
+       [("/interrupt") '(interrupt)]
+       [("/branches") '(branches)]
+       [("/leaves") '(leaves)]
+       [("/switch")
+        (if (null? args)
+            '(switch)
+            (list 'switch (car args)))]
+       [("/children")
+        (if (null? args)
+            '(children)
+            (list 'children (car args)))]
        [else #f])]))
 
 ;; ============================================================
@@ -554,7 +566,13 @@
   (displayln "  /compact                   Trigger compaction now" port)
   (displayln "  /history                   Show session history" port)
   (displayln "  /model [name]              Show or switch model" port)
-  (displayln "  /fork [entry-id]           Fork session at given point" port))
+  (displayln "  /fork [entry-id]           Fork session at given point" port)
+  (displayln "  /clear                     Clear transcript" port)
+  (displayln "  /interrupt                 Interrupt current turn" port)
+  (displayln "  /branches                  List session branches" port)
+  (displayln "  /leaves                    List leaf nodes" port)
+  (displayln "  /switch <id>               Switch to branch" port)
+  (displayln "  /children <id>             Show children of node" port))
 
 ;; ============================================================
 ;; I/O: print-version
@@ -612,6 +630,12 @@
                  ['fork (if fork-fn
                             (fork-fn (and (>= (length cmd) 2) (cadr cmd)))
                             (displayln "[fork not yet connected]" out))]
+                 ['clear (displayln "[clear: transcript cleared]" out)]
+                 ['interrupt (displayln "[interrupt requested]" out)]
+                 ['branches (displayln "[branches: not available in CLI]" out)]
+                 ['leaves (displayln "[leaves: not available in CLI]" out)]
+                 ['switch (displayln (format "[switch: ~a]" (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
+                 ['children (displayln (format "[children: ~a]" (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
                  [_ (displayln (format "Unknown command: ~a" cmd) out)]))]
          [else
           ;; Submit prompt to runtime

@@ -102,18 +102,22 @@
 ;;   2. Config file: check provider-config for 'api-key or "api-key"
 ;;   3. Return #f if not found
 (define (lookup-credential provider-name provider-config)
-  ;; Step 1: Check env var
-  (define env-var-name (config-ref provider-config 'api-key-env "api-key-env"))
-  (define env-val (and env-var-name (getenv env-var-name)))
+  ;; Normalize provider-name to string (JSON keys may be symbols)
+  (define norm-name (if (symbol? provider-name) (symbol->string provider-name) provider-name))
+  ;; Guard: if provider-config is #f, no credentials possible
   (cond
-    [(and env-val (non-empty-string? env-val))
-     (credential provider-name env-val 'environment)]
+    [(not provider-config) #f]
     [else
-     ;; Step 2: Check config 'api-key' or "api-key"
-     (define config-key (config-ref provider-config 'api-key "api-key"))
-     (if (and config-key (non-empty-string? config-key))
-         (credential provider-name config-key 'config)
-         #f)]))
+     (let* ([env-var-name (config-ref provider-config 'api-key-env "api-key-env")]
+            [env-val (and env-var-name (getenv env-var-name))])
+       (cond
+         [(and env-val (non-empty-string? env-val))
+          (credential norm-name env-val 'environment)]
+         [else
+          (let ([config-key (config-ref provider-config 'api-key "api-key")])
+            (if (and config-key (non-empty-string? config-key))
+                (credential norm-name config-key 'config)
+                #f))]))]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; credential-present?

@@ -364,4 +364,13 @@
         (if (null? args)
             '(children-error "Usage: /children <node-id>")
             `(children ,(car args)))]
+       [(member cmd '("/model"))
+        (if (null? args)
+            'model
+            `(model ,(car args)))]
+       [(member cmd '("/history")) 'history]
+       [(member cmd '("/fork"))
+        (if (null? args)
+            'history  ; /fork with no arg shows history as fallback
+            `(fork ,(car args)))]
        [else 'unknown])]))
