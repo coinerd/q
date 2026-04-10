@@ -556,7 +556,7 @@
 ;; ============================================================
 
 (define (print-version [port (current-output-port)])
-  (displayln "q version 0.1.0" port))
+  (displayln "q version 0.4.0" port))
 
 ;; ============================================================
 ;; I/O: run-cli-interactive

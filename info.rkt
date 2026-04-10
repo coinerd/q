@@ -2,7 +2,7 @@
 
 (define collection "q")
 (define pkg-name "q")
-(define version "0.3.1")
+(define version "0.4.0")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
 ;; Runtime dependencies — all needed for full TUI + CLI experience.

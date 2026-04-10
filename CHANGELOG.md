@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-10
+
+### Packaging & Distribution
+- Added `pkg-authors` and `pkg-license` to info.rkt for catalog readiness
+- Declared tui-term and tui-ubuf as runtime dependencies
+- Created `scripts/release-tarball.sh` for versioned tarballs
+- Added `.gitattributes` with export-ignore for clean releases
+- Uploaded q-0.3.1.tar.gz to GitHub Release
+- Updated packaging messaging across docs
+
+### CI
+- Added metrics-consistency lint (`scripts/metrics.rkt --lint`)
+
+**Full Changelog**: https://github.com/coinerd/q/compare/v0.3.1...v0.4.0
+
 ## [0.3.1] - 2026-04-09
 
 ### Added
@@ -71,7 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/coinerd/q/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/coinerd/q/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/coinerd/q/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/coinerd/q/compare/v0.1.0...v0.2.0

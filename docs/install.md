@@ -44,7 +44,7 @@ racket main.rkt --version
 After installing, confirm everything works:
 
 ```bash
-racket main.rkt --version   # should print: q version 0.3.1
+racket main.rkt --version   # should print: q version 0.4.0
 racket main.rkt doctor      # checks Racket version, dependencies, config
 ```
 
@@ -85,6 +85,19 @@ raco pkg install --auto   # in case dependencies changed
 ```
 
 Or re-run the install script — it will detect the existing installation and pull the latest changes.
+
+## Install from Tarball
+
+Download the latest release tarball and install manually:
+
+```bash
+VERSION=$(curl -sL https://api.github.com/repos/coinerd/q/releases/latest | grep -oP '"tag_name": "v\K[^"]+')
+curl -fsSL https://github.com/coinerd/q/releases/download/v${VERSION}/q-${VERSION}.tar.gz | tar xz
+cd q-${VERSION}
+raco pkg install --auto
+```
+
+See all releases at [github.com/coinerd/q/releases](https://github.com/coinerd/q/releases).
 
 ## Uninstalling
 

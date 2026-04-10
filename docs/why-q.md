@@ -33,7 +33,7 @@ q doesn't try to be everything. These are deliberate scope boundaries:
 - **Single-user, single-session focus** — No multi-user or concurrent-session architecture.
 - **Racket ecosystem** — Not Python, not Node.js. This is a deliberate choice for a small, coherent language with excellent macro and module systems, but it means fewer existing libraries and a smaller talent pool.
 
-## Current maturity (v0.3.1)
+## Current maturity (v0.4.0)
 
 Be realistic about where things stand:
 
@@ -48,8 +48,8 @@ Be realistic about where things stand:
 | Milestone | Status |
 |-----------|--------|
 | Install script (`curl \| bash`) | ✅ Available |
-| Racket package catalog | Planned for v0.4.0 |
-| GitHub Release tarballs | Planned for v0.4.0 |
+| Racket package catalog | Metadata ready (catalog submission pending) |
+| GitHub Release tarballs | ✅ Available (v0.3.1+) |
 | Homebrew tap | Future |
 | Standalone binary | Future |
 
@@ -75,4 +75,4 @@ Don't pick q if:
 
 ---
 
-*This document reflects q v0.3.1. Maturity and capabilities will evolve. Revisit this page as the project grows.*
+*This document reflects q v0.4.0. Maturity and capabilities will evolve. Revisit this page as the project grows.*

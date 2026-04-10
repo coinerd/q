@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -20,6 +20,10 @@ git clone https://github.com/coinerd/q.git
 cd q
 raco pkg install --auto
 racket main.rkt --version
+
+# Or install from release tarball
+curl -fsSL https://github.com/coinerd/q/releases/latest/download/$(curl -sL https://api.github.com/repos/coinerd/q/releases/latest | grep -oP '"tag_name": "v\K[^"]+' | xargs -I{} echo q-{}.tar.gz) | tar xz
+cd q-* && raco pkg install --auto
 ```
 
 Add q to your shell:
@@ -177,7 +181,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version   # q version 0.3.1
+racket main.rkt --version   # q version 0.4.0
 raco test tests/            # run the full test suite
 ```
 
@@ -256,7 +260,7 @@ raco test tests/tui/
 
 ## Status
 
-**v0.3.1** — Active development. All core features implemented and tested:
+**v0.4.0** — Active development. All core features implemented and tested:
 
 - ✅ Canonical types and utilities
 - ✅ JSONL session storage with tree indexing and forking
