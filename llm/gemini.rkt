@@ -1,0 +1,358 @@
+#lang racket/base
+
+;; llm/gemini.rkt — Google Gemini provider adapter
+;;
+;; Translates normalized model-request structs into Gemini
+;; generateContent/streamGenerateContent API format, and parses
+;; responses back into model-response.
+;; Supports both non-streaming and streaming modes.
+;;
+;; HTTP calls use net/http-client from Racket stdlib.
+;; SSE parsing delegates to llm/stream.rkt.
+
+(require racket/contract
+         racket/string
+         racket/port
+         json
+         net/url
+         net/http-client
+         "model.rkt"
+         "provider.rkt"
+         "stream.rkt")
+
+(provide
+ make-gemini-provider
+ gemini-build-request-body
+ gemini-parse-response
+ gemini-parse-stream-chunks
+ ;; Internal helpers for testing
+ gemini-translate-tool
+ gemini-translate-stop-reason
+ gemini-check-http-status!)
+
+;; ============================================================
+;; Constants
+;; ============================================================
+
+(define GEMINI-DEFAULT-MODEL "gemini-2.5-pro")
+(define GEMINI-DEFAULT-MAX-TOKENS 4096)
+(define GEMINI-DEFAULT-BASE-URL "https://generativelanguage.googleapis.com")
+
+;; ============================================================
+;; Request body construction
+;; ============================================================
+
+;; Convert normalized model-request to Gemini generateContent API body.
+(define (gemini-build-request-body req #:stream? [stream? #f])
+  (define settings (model-request-settings req))
+  (define model-name (hash-ref settings 'model GEMINI-DEFAULT-MODEL))
+  (define max-tokens (hash-ref settings 'max-tokens GEMINI-DEFAULT-MAX-TOKENS))
+
+  ;; Build contents — Gemini uses "contents" with "parts" arrays
+  ;; Role mapping: "assistant" → "model", "user" → "user"
+  (define raw-messages (model-request-messages req))
+  (define contents
+    (for/list ([msg (in-list raw-messages)])
+      (define role (hash-ref msg 'role "user"))
+      (define content (hash-ref msg 'content ""))
+      ;; Map roles
+      (define gemini-role
+        (cond
+          [(equal? role "assistant") "model"]
+          [(equal? role "system") "user"]  ; system goes to systemInstruction, but fallback
+          [else role]))
+      ;; Build parts — string content becomes text part
+      (define parts
+        (if (string? content)
+            (list (hash 'text content))
+            ;; If content is already a list of parts, pass through
+            content))
+      (hash 'role gemini-role
+            'parts parts)))
+
+  ;; Build generationConfig
+  (define gen-config
+    (let ([base-config (hash 'maxOutputTokens max-tokens)])
+      (if (hash-has-key? settings 'temperature)
+          (hash-set base-config 'temperature (hash-ref settings 'temperature))
+          base-config)))
+
+  ;; Base body
+  (define base
+    (hash 'contents contents
+          'generationConfig gen-config))
+
+  ;; Add optional system prompt — goes to systemInstruction, not contents
+  (define with-system
+    (if (hash-has-key? settings 'system)
+        (hash-set base
+                  'systemInstruction
+                  (hash 'parts (list (hash 'text (hash-ref settings 'system)))))
+        base))
+
+  ;; Translate tools to Gemini format if present
+  (define with-tools
+    (if (model-request-tools req)
+        (hash-set with-system
+                  'tools
+                  (list (hash
+                         'functionDeclarations
+                         (for/list ([tool (in-list (model-request-tools req))])
+                           (gemini-translate-tool tool)))))
+        with-system))
+
+  with-tools)
+
+;; Translate a normalized tool definition to Gemini functionDeclaration format.
+;; Input: {"type":"function","function":{"name":"...","description":"...","parameters":{}}}
+;; Output: {"name":"...","description":"...","parameters":{...}}
+(define (gemini-translate-tool tool)
+  (define fn (hash-ref tool 'function tool))
+  (define name (hash-ref fn 'name "unknown"))
+  (define description (hash-ref fn 'description ""))
+  (define parameters (hash-ref fn 'parameters (hash)))
+  (hash 'name name
+        'description description
+        'parameters parameters))
+
+;; ============================================================
+;; Response parsing
+;; ============================================================
+
+;; Convert Gemini generateContent API response to model-response.
+(define (gemini-parse-response raw)
+  (define candidates (hash-ref raw 'candidates '()))
+  (define usage-raw (hash-ref raw 'usageMetadata (hash)))
+  (define model-version (hash-ref raw 'modelVersion GEMINI-DEFAULT-MODEL))
+
+  ;; Extract first candidate
+  (define candidate (if (null? candidates) #f (car candidates)))
+  (define content-obj (if candidate (hash-ref candidate 'content #f) #f))
+  (define parts (if content-obj (hash-ref content-obj 'parts '()) '()))
+  (define finish-reason (if candidate (hash-ref candidate 'finishReason "STOP") "STOP"))
+
+  ;; Translate stop reason
+  (define stop-reason (gemini-translate-stop-reason finish-reason))
+
+  ;; Translate usage
+  (define prompt-tokens (hash-ref usage-raw 'promptTokenCount 0))
+  (define candidates-tokens (hash-ref usage-raw 'candidatesTokenCount 0))
+  (define total-tokens (hash-ref usage-raw 'totalTokenCount
+                                  (+ prompt-tokens candidates-tokens)))
+  (define usage
+    (hash 'prompt_tokens prompt-tokens
+          'completion_tokens candidates-tokens
+          'total_tokens total-tokens))
+
+  ;; Translate content parts
+  (define content
+    (for/list ([part (in-list parts)])
+      (cond
+        [(hash-has-key? part 'text)
+         (hash 'type "text" 'text (hash-ref part 'text ""))]
+        [(hash-has-key? part 'functionCall)
+         (let* ([fc (hash-ref part 'functionCall)])
+           (hash 'type "tool-call"
+                 'id ""    ; Gemini doesn't provide tool call IDs
+                 'name (hash-ref fc 'name "")
+                 'arguments (hash-ref fc 'args (hash))))]
+        [else
+         part])))
+
+  (make-model-response content usage model-version stop-reason))
+
+;; Translate Gemini finish reasons to normalized symbols.
+(define (gemini-translate-stop-reason reason)
+  (cond
+    [(string? reason)
+     (let ([r (string-trim reason)])
+       (cond
+         [(equal? r "STOP") 'stop]
+         [(equal? r "MAX_TOKENS") 'length]
+         [(equal? r "SAFETY") 'stop]
+         [(equal? r "RECITATION") 'stop]
+         [else (string->symbol r)]))]
+    [(symbol? reason) reason]
+    [else 'stop]))
+
+;; ============================================================
+;; Stream chunk parsing
+;; ============================================================
+
+;; Parse Gemini SSE events into canonical stream-chunk structs.
+;; Gemini streaming: each SSE data line is a JSON object similar to
+;; the non-streaming response, with parts accumulated across chunks.
+(define (gemini-parse-stream-chunks raw-events)
+  (define results '())
+
+  (for ([event (in-list raw-events)])
+    (define candidates (hash-ref event 'candidates '()))
+    (define usage-raw (hash-ref event 'usageMetadata #f))
+    (define candidate (if (null? candidates) #f (car candidates)))
+    (define content-obj (if candidate (hash-ref candidate 'content #f) #f))
+    (define parts (if content-obj (hash-ref content-obj 'parts '()) '()))
+    (define finish-reason (if candidate (hash-ref candidate 'finishReason #f) #f))
+
+    ;; Emit text/tool deltas from parts
+    (for ([part (in-list parts)])
+      (cond
+        [(hash-has-key? part 'text)
+         (let* ([text (hash-ref part 'text "")])
+           (when (and (string? text) (> (string-length text) 0))
+             (set! results
+                   (append results
+                           (list (stream-chunk text #f #f #f))))))]
+        [(hash-has-key? part 'functionCall)
+         (let* ([fc (hash-ref part 'functionCall)]
+                [tc-delta (hash 'index 0
+                                'id ""
+                                'function (hash 'name (hash-ref fc 'name "")
+                                                'arguments (hash-ref fc 'args (hash))))])
+           (set! results
+                 (append results
+                         (list (stream-chunk #f tc-delta #f #f)))))]
+        [else (void)]))
+
+    ;; Emit done chunk on finish reason or usage in last event
+    (cond
+      [(and finish-reason
+               (not (eq? finish-reason 'null))
+               (not (null? finish-reason)))
+       (let* ([usage (if usage-raw
+                         (hash 'prompt_tokens (hash-ref usage-raw 'promptTokenCount 0)
+                               'completion_tokens (hash-ref usage-raw 'candidatesTokenCount 0)
+                               'total_tokens (hash-ref usage-raw 'totalTokenCount 0))
+                         (hash))])
+         (set! results
+               (append results
+                       (list (stream-chunk #f #f usage #t)))))]
+      [(and usage-raw (not finish-reason))
+       ;; Usage-only event without finish — emit usage chunk
+       (let* ([prompt-tokens (hash-ref usage-raw 'promptTokenCount 0)])
+         (when (> prompt-tokens 0)
+           (set! results
+                 (append results
+                         (list (stream-chunk #f #f (hash 'prompt_tokens prompt-tokens) #f))))))]))
+
+  results)
+
+;; ============================================================
+;; HTTP status check (exported for tests)
+;; ============================================================
+
+(define (gemini-check-http-status! status-line response-body)
+  (define status-str (if (bytes? status-line)
+                         (bytes->string/utf-8 status-line)
+                         status-line))
+  (define status-code
+    (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
+      (if parts (string->number (cadr parts)) 0)))
+  (when (>= status-code 400)
+    (define error-body (if (bytes? response-body)
+                           (bytes->string/utf-8 response-body)
+                           response-body))
+    (cond
+      [(= status-code 400)
+       (raise (exn:fail (format "Gemini API bad request (400): ~a"
+                                error-body)
+                        (current-continuation-marks)))]
+      [(= status-code 401)
+       (raise (exn:fail (format "Gemini API authentication failed (401): ~a"
+                                error-body)
+                        (current-continuation-marks)))]
+      [(= status-code 403)
+       (raise (exn:fail (format "Gemini API forbidden (403): ~a"
+                                error-body)
+                        (current-continuation-marks)))]
+      [(= status-code 429)
+       (raise (exn:fail (format "Gemini API rate limited (429): ~a"
+                                error-body)
+                        (current-continuation-marks)))]
+      [(>= status-code 500)
+       (raise (exn:fail (format "Gemini API server error (~a): ~a"
+                                status-code
+                                error-body)
+                        (current-continuation-marks)))]
+      [else
+       (raise (exn:fail (format "Gemini API error (~a): ~a"
+                                status-code
+                                error-body)
+                        (current-continuation-marks)))])))
+
+;; ============================================================
+;; HTTP request execution (non-streaming)
+;; ============================================================
+
+(define (gemini-do-http-request base-url api-key model body)
+  (define url-str
+    (string-append
+     (string-trim base-url "/")
+     "/v1beta/models/" model ":generateContent"
+     "?key=" api-key))
+  (define uri (string->url url-str))
+  (define headers
+    (list "Content-Type: application/json"))
+  (define body-bytes (jsexpr->bytes body))
+  (define-values (status-line response-headers response-port)
+    (http-sendrecv uri 'POST
+                   #:headers headers
+                   #:data body-bytes))
+  (define response-body (port->bytes response-port))
+  ;; Check HTTP status
+  (gemini-check-http-status! status-line response-body)
+  (bytes->jsexpr response-body))
+
+;; ============================================================
+;; Provider constructor
+;; ============================================================
+
+(define (make-gemini-provider config)
+  (define base-url (hash-ref config 'base-url GEMINI-DEFAULT-BASE-URL))
+  (define api-key (hash-ref config 'api-key ""))
+  (define default-model (hash-ref config 'model GEMINI-DEFAULT-MODEL))
+
+  (define (send req)
+    (define merged-req
+      (if (hash-has-key? (model-request-settings req) 'model)
+          req
+          (make-model-request
+           (model-request-messages req)
+           (model-request-tools req)
+           (hash-set (model-request-settings req) 'model default-model))))
+    (define body (gemini-build-request-body merged-req))
+    (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
+    (define raw (gemini-do-http-request base-url api-key model-name body))
+    (gemini-parse-response raw))
+
+  (define (stream req)
+    (define merged-req
+      (if (hash-has-key? (model-request-settings req) 'model)
+          req
+          (make-model-request
+           (model-request-messages req)
+           (model-request-tools req)
+           (hash-set (model-request-settings req) 'model default-model))))
+    (define body (gemini-build-request-body merged-req #:stream? #t))
+    (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
+    (define url-str
+      (string-append
+       (string-trim base-url "/")
+       "/v1beta/models/" model-name ":streamGenerateContent"
+       "?key=" api-key "&alt=sse"))
+    (define uri (string->url url-str))
+    (define headers
+      (list "Content-Type: application/json"))
+    (define body-bytes (jsexpr->bytes body))
+    (define-values (status-line response-headers response-port)
+      (http-sendrecv uri 'POST
+                     #:headers headers
+                     #:data body-bytes))
+    (define sse-text (port->string response-port))
+    (define raw-events (parse-sse-lines sse-text))
+    (gemini-parse-stream-chunks raw-events))
+
+  (make-provider
+   (lambda () "gemini")
+   (lambda () (hash 'streaming #t 'token-counting #f))
+   send
+   stream))

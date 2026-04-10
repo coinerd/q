@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-04-09
+
+### Added
+- Google Gemini provider adapter (`q/llm/gemini.rkt`) — REST API, SSE streaming, function calling
+- Provider conformance test suite (`q/tests/test-provider-conformance.rkt`) — validates all 3 providers
+- Provider factory routing — `build-provider` now dispatches to correct adapter based on provider name
+
+### Changed
+- `q/runtime/provider-factory.rkt` — routes "gemini" provider name to `make-gemini-provider`
+
+### Test metrics
+- 2699 tests, 0 failures (187 new: 112 Gemini adapter + 75 conformance suite)
+
 ## [0.4.2] - 2026-04-10
 
 ### Package Ecosystem Foundation
@@ -96,7 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/coinerd/q/compare/v0.4.2...v0.5.0
+[0.4.2]: https://github.com/coinerd/q/compare/v0.4.0...v0.4.2
 [0.4.0]: https://github.com/coinerd/q/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/coinerd/q/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/coinerd/q/compare/v0.2.0...v0.3.0

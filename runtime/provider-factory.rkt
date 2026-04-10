@@ -11,11 +11,23 @@
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "../llm/openai-compatible.rkt"
+         "../llm/gemini.rkt"
          racket/string)
 
 (provide build-provider
          build-mock-provider
          local-provider?)
+
+;; Build the appropriate provider based on provider name.
+(define (create-provider-for-name prov-name base-url api-key model-name)
+  (define config (hash 'base-url base-url
+                        'api-key api-key
+                        'model model-name))
+  (cond
+    [(equal? prov-name "gemini")
+     (make-gemini-provider config)]
+    [else
+     (make-openai-compatible-provider config)]))
 
 ;; Helper: Check if a URL points to a local/self-hosted provider.
 ;; Local providers don't require API keys.
@@ -76,19 +88,13 @@
            (if (local-provider? base-url)
                (begin
                  (fprintf (current-error-port) "Info: Using local provider ~a without authentication~n" prov-name)
-                 (make-openai-compatible-provider
-                  (hash 'base-url base-url
-                        'api-key ""  ; Empty API key for local providers
-                        'model (model-resolution-model-name resolution))))
+                 (create-provider-for-name prov-name base-url "" (model-resolution-model-name resolution)))
                (begin
                  ;; No credentials and not local -> mock
                  (fprintf (current-error-port) "Warning: No API key for provider ~a, using mock provider~n" prov-name)
                  (build-mock-provider)))]
           [else
-           (make-openai-compatible-provider
-            (hash 'base-url base-url
-                  'api-key (credential-api-key cred)
-                  'model (model-resolution-model-name resolution)))])])]))
+           (create-provider-for-name prov-name base-url (credential-api-key cred) (model-resolution-model-name resolution))])])]))
 
 ;; Helper: create a mock provider
 (define (build-mock-provider)
