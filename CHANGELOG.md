@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-04-10
+
+### Added
+- Package audit: pre-install risk scanning for code-executing packages (`q/util/package-audit.rkt`)
+- Safe mode: `--safe` flag, `Q_SAFE_MODE` env var, config-based tool restrictions (`q/runtime/safe-mode.rkt`)
+- Extension quarantine: disable, quarantine, restore workflow (`q/extensions/quarantine.rkt`)
+- Trust model documentation (`q/docs/trust-model.md`)
+
+### Test metrics
+- 3043 tests, 0 failures (+52 new)
+
 ## [0.5.3] — 2026-04-10
 
 ### Added
@@ -147,7 +158,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/coinerd/q/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/coinerd/q/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/coinerd/q/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/coinerd/q/compare/v0.5.0...v0.5.1
