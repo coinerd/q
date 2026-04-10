@@ -51,7 +51,8 @@
   (define fname (path->string (file-name-from-path filename)))
   (define skip-file?
     (or (equal? fname "CHANGELOG.md")
-        (equal? fname "releasing.md")))
+        (equal? fname "releasing.md")
+        (equal? fname "why-q.md")))  ; packaging roadmap mentions future versions
   (append*
    (for/list ([line (in-list lines)]
               [lineno (in-naturals 1)])

@@ -34,6 +34,8 @@ echo "alias q='racket $HOME/.q/main.rkt'" >> ~/.bashrc
 
 📖 See the full [Install Guide](docs/install.md) for prerequisites, verification, and troubleshooting.
 
+> **Note:** q is not yet on a package registry. The install script handles everything in one command. Published packages are planned — see [packaging roadmap](docs/why-q.md#packaging-roadmap).
+
 ---
 
 ## What is q?
@@ -232,7 +234,7 @@ q/
 |--------|-------|
 | Test files | 86 |
 | Source modules | 76 |
-| Source lines | 15110 |
+| Source lines | 15111 |
 | Test lines | 24866 |
 | Test assertions | 4300 |
 | `raco test` results | 2,466 tests passing |

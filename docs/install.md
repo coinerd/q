@@ -93,3 +93,12 @@ rm -rf ~/.q
 ```
 
 Also remove any PATH entries or aliases you added to your shell config.
+
+## Packaging Status
+
+q is not yet published on a package registry. Install options:
+
+- **One-command script** (recommended) — see Quick Install above
+- **Manual clone** — see Manual Install above
+
+Published packages (Racket catalog, Homebrew) are planned. Track progress in the [packaging roadmap](why-q.md#packaging-roadmap).

@@ -41,7 +41,17 @@ Be realistic about where things stand:
 - **Interfaces** — Working CLI, TUI, JSON mode, and SDK interfaces. All functional, all terminal-based.
 - **Provider support** — OpenAI and Anthropic providers are solid. Local model support works via compatible endpoints (Ollama, llama.cpp, etc.).
 - **Extension system** — Functional but young. The hooks and tool registry work; the ecosystem of third-party extensions doesn't exist yet.
-- **Packaging** — No published packages. Install from source. This will change, but for now, `git clone` and `raco pkg install` are the path.
+- **Packaging** — One-command install (`curl | bash`). Not yet on a package registry (planned: Racket package catalog). See [Install Guide](install.md).
+
+### Packaging roadmap
+
+| Milestone | Status |
+|-----------|--------|
+| Install script (`curl \| bash`) | ✅ Available |
+| Racket package catalog | Planned for v0.4.0 |
+| GitHub Release tarballs | Planned for v0.4.0 |
+| Homebrew tap | Future |
+| Standalone binary | Future |
 
 ## When to choose q
 
