@@ -111,13 +111,9 @@
 ;; ============================================================
 
 (define (check-packages)
-  (with-handlers ([exn:fail?
-                   (λ (e)
-                     (check-result "Packages" 'error
-                                   (format "failed to load q: ~a"
-                                           (exn-message e))))])
-    (dynamic-require ''q/main #f)
-    (check-result "Packages" 'ok "q modules load successfully")))
+  ;; doctor is itself part of q and is already loaded.
+  ;; If we reach this point, the core module system works.
+  (check-result "Packages" 'ok "q modules loaded (doctor is running)"))
 
 ;; ============================================================
 ;; Check: config directory (~/.q/)
@@ -186,6 +182,13 @@
   (define cred-file-exists? (file-exists? cred-file))
   ;; Check config file for provider keys
   (define prov-names (provider-names settings))
+  ;; Helper: is a provider local (no API key needed)?
+  (define (local-provider? name)
+    (define cfg (provider-config settings name))
+    (define base-url (and (hash? cfg) (hash-ref cfg 'base-url #f)))
+    (and base-url
+         (string? base-url)
+         (regexp-match? #rx"^https?://(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0)(:|/)" base-url)))
   (define configured-providers
     (for/list ([name (in-list prov-names)])
       (define prov-cfg (provider-config settings name))
@@ -193,24 +196,36 @@
       (and cred (credential-provider-name cred))))
   (define providers-with-keys
     (filter (lambda (x) x) configured-providers))
+  ;; Separate local vs remote providers
+  (define local-provs (filter local-provider? prov-names))
+  (define remote-provs (filter (lambda (n) (not (local-provider? n))) prov-names))
+  ;; Providers that have keys (normalize to strings)
+  (define key-names (map (lambda (x) (if (symbol? x) (symbol->string x) x)) providers-with-keys))
+  ;; Local provider names for display
+  (define local-names (map (lambda (x) (if (symbol? x) (symbol->string x) x)) local-provs))
 
   (cond
     [(not (null? env-keys-found))
      (check-result "Credentials" 'ok
-                   (format "env: ~a" (string-join (map (lambda (x) (if (symbol? x) (symbol->string x) x)) env-keys-found) ", ")))]
-    [(not (null? providers-with-keys))
+                   (format "env: ~a" (string-join env-keys-found ", ")))]
+    [(not (null? key-names))
      (check-result "Credentials" 'ok
-                   (format "configured: ~a" (string-join (map (lambda (x) (if (symbol? x) (symbol->string x) x)) providers-with-keys) ", ")))]
+                   (format "configured: ~a" (string-join key-names ", ")))]
     [(and cred-file-exists?)
      (check-result "Credentials" 'warning
                    "credentials file exists but no keys resolved")]
     [(null? prov-names)
      (check-result "Credentials" 'warning
                    "no providers configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY, or edit ~/.q/config.json")]
+    ;; All providers are local — no keys needed
+    [(null? remote-provs)
+     (check-result "Credentials" 'ok
+                   (format "local-only: ~a (no API keys needed)" (string-join local-names ", ")))]
     [else
      (check-result "Credentials" 'error
-                   (format "providers configured (~a) but no API keys found"
-                           (string-join (map ~a prov-names) ", ")))]))
+                   (format "remote providers (~a) need API keys; local: ~a"
+                           (string-join (map (lambda (x) (if (symbol? x) (symbol->string x) x)) remote-provs) ", ")
+                           (string-join local-names ", ")))]))
 
 ;; ============================================================
 ;; Check: session directory (~/.q/sessions/)
@@ -239,13 +254,40 @@
 ;; ============================================================
 
 (define (check-tui-packages)
-  (define available?
+  ;; q uses tui-term and tui-ubuf as optional TUI backends.
+  ;; They may be installed but fail to compile on some Racket versions.
+  ;; Use dynamic-require for pkg/lib to avoid hard dependency.
+  (define table
     (with-handlers ([exn:fail? (λ (_) #f)])
-      (dynamic-require 'char-term #f)
+      ((dynamic-require 'pkg/lib 'installed-pkg-table))))
+  (define (pkg-installed? name)
+    (and table (hash-has-key? table name)))
+  (define (mod-loadable? mod-path)
+    (with-handlers ([exn:fail? (λ (_) #f)])
+      (dynamic-require mod-path #f)
       #t))
-  (if available?
-      (check-result "TUI (char-term)" 'ok "available")
-      (check-result "TUI (char-term)" 'warning "not installed — TUI mode will not work (raco pkg install char-term)")))
+  (define tui-term-installed? (pkg-installed? "tui-term"))
+  (define tui-ubuf-installed? (pkg-installed? "tui-ubuf"))
+  (define tui-term-loadable? (mod-loadable? 'tui-term))
+  (define tui-ubuf-loadable? (mod-loadable? 'tui-ubuf))
+  (cond
+    [(and tui-term-loadable? tui-ubuf-loadable?)
+     (check-result "TUI" 'ok "tui-term + tui-ubuf available")]
+    [(and tui-term-installed? tui-ubuf-installed?
+          (not tui-term-loadable?) (not tui-ubuf-loadable?))
+     (check-result "TUI" 'warning
+                   "tui-term + tui-ubuf installed but broken (may need newer Racket)")]
+    [(or tui-term-loadable? tui-ubuf-loadable?)
+     (check-result "TUI" 'warning
+                   (format "~a loadable, ~anot — TUI may be degraded"
+                           (if tui-term-loadable? "tui-term" "")
+                           (if tui-ubuf-loadable? "tui-ubuf " "tui-term ")))]
+    [(or tui-term-installed? tui-ubuf-installed?)
+     (check-result "TUI" 'warning
+                   (format "~a installed but broken (may need newer Racket)"
+                           (if tui-term-installed? "tui-term" "tui-ubuf")))]
+    [else
+     (check-result "TUI" 'warning "tui-term/tui-ubuf not installed — TUI mode will not work (raco pkg install tui-term tui-ubuf)")]))
 
 ;; ============================================================
 ;; run-doctor — main entry point

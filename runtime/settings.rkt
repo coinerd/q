@@ -175,7 +175,7 @@
 ;; List configured provider names.
 (define (provider-names settings)
   (define providers-hash (setting-ref settings 'providers (hash)))
-  (map (lambda (k) (if (symbol? k) (symbol->string k) k)) (hash-keys providers-hash)))
+  (hash-keys providers-hash))
 
 ;; ============================================================
 ;; Parallel execution setting

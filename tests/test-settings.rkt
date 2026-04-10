@@ -166,9 +166,8 @@
 (test-case "provider-names: lists configured providers"
   (define settings (q-settings sample-global-config (hash) sample-global-config))
   (define names (provider-names settings))
-  ;; provider-names normalizes JSON symbol keys to strings
-  (check-true (and (member "openai" names) #t))
-  (check-true (and (member "anthropic" names) #t))
+  (check-true (and (member 'openai names) #t))
+  (check-true (and (member 'anthropic names) #t))
   (check-equal? (length names) 2))
 
 (test-case "provider-names: returns empty list when no providers"

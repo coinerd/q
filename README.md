@@ -238,7 +238,7 @@ q/
 |--------|-------|
 | Test files | 94 |
 | Source modules | 83 |
-| Source lines | 16671 |
+| Source lines | 16855 |
 | Test lines | 27706 |
 | Test assertions | 4750 |
 | `raco test` results | 2,877 tests passing |
