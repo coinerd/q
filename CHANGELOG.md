@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-04-09
+
+### Added
+- Extension capability tiers (`q/extensions/tiers.rkt`) — 5-tier model (hooks→commands→session→providers→tui) with API version validation and load-time enforcement
+- Extension integration test harness (`q/extensions/test-harness.rkt`) — `with-extension-test` macro, hook assertions, deterministic event injection
+
+### Changed
+- Extension platform now has formal capability tiers for load-time validation
+- Extension developers can use `with-extension-test` for isolated testing
+
+### Test metrics
+- 2924 tests, 0 failures (+47 new)
+
 ## [0.5.1] — 2026-04-09
 
 ### Added
@@ -124,7 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/coinerd/q/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/coinerd/q/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/coinerd/q/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/coinerd/q/compare/v0.4.0...v0.4.2
