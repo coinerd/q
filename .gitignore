@@ -42,3 +42,6 @@ GH_PAT
 
 # Racket docs cache
 doc/
+
+# Release tarballs
+dist/

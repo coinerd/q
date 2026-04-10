@@ -13,3 +13,6 @@
                "tui-ubuf"))
 
 (define build-deps '("rackunit-lib"))
+
+(define pkg-authors '("coinerd"))
+(define pkg-license "MIT")

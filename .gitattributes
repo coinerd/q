@@ -1,0 +1,5 @@
+# Files excluded from release tarballs (git archive)
+.github/            export-ignore
+benchmarks/         export-ignore
+CONTRIBUTING.md     export-ignore
+dist/               export-ignore
