@@ -30,25 +30,22 @@ jobs:
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           sudo sh /tmp/racket.sh --in-place --create-links /usr/local
 
-      - name: Add Racket to PATH
-        run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
-
       - name: Install dependencies
         run: |
-          raco pkg install --auto --batch
-          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+          /usr/local/racket/bin/raco pkg install --auto --batch
+          /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Clean bytecode cache
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
 
       - name: Lint tests for portability
-        run: racket scripts/lint-tests.rkt
+        run: /usr/local/racket/bin/racket scripts/lint-tests.rkt
 
       - name: Lint version consistency
-        run: racket scripts/lint-version.rkt
+        run: /usr/local/racket/bin/racket scripts/lint-version.rkt
 
       - name: Lint metrics consistency
-        run: racket scripts/metrics.rkt --lint
+        run: /usr/local/racket/bin/racket scripts/metrics.rkt --lint
 
       - name: Verify project structure
         run: |
@@ -57,7 +54,7 @@ jobs:
           test -f main.rkt && echo "main.rkt found at repo root"
 
       - name: Run tests
-        run: raco test tests/
+        run: /usr/local/racket/bin/raco test tests/
 
   smoke:
     runs-on: ubuntu-latest
@@ -79,16 +76,13 @@ jobs:
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           sudo sh /tmp/racket.sh --in-place --create-links /usr/local
 
-      - name: Add Racket to PATH
-        run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
-
       - name: Install dependencies
         run: |
-          raco pkg install --auto --batch
-          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+          /usr/local/racket/bin/raco pkg install --auto --batch
+          /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Version smoke check
         run: |
-          output=$(racket main.rkt --version)
+          output=$(/usr/local/racket/bin/racket main.rkt --version)
           echo "$output"
           echo "$output" | grep -qE '^q version [0-9]+\.[0-9]+\.[0-9]+$'
