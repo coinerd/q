@@ -98,6 +98,24 @@ under 120 characters where practical. If a string is unavoidably long, prefer
   (check-equal? (my-fn input) expected))
 ```
 
+### 6.1 Testing Portability
+
+Tests run on CI (clean Ubuntu runner) and must not depend on the developer's
+local environment. Follow these rules:
+
+| Rule | Do | Don't |
+|------|----|-------|
+| **No absolute paths** | `define-runtime-path` or `/tmp/` test data | `/home/user/...`, `/Users/...` |
+| **No CWD assumptions** | Anchor paths from test file via `define-runtime-path` | `(current-directory)`, relative paths from assumed cwd |
+| **No hash ordering** | Explicit ordered list, or `sort` after `hash-keys` | Assume `hash-keys` returns insertion order |
+| **Clean bytecode** | `find . -name '*.zo' -delete` before testing | Trust cached `.zo` after module changes |
+| **Lint before push** | `racket scripts/lint-tests.rkt` | Wait for CI to catch these |
+
+Run the linter locally:
+```bash
+cd q/ && racket scripts/lint-tests.rkt
+```
+
 ## 7. Comments
 
 - `;;` for normal comments.

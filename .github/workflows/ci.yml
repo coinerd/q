@@ -37,14 +37,11 @@ jobs:
       - name: Install dependencies
         run: raco pkg install --auto --batch
 
-      - name: Verify no hardcoded paths
-        run: |
-          if grep -rn '/home/user/' tests/ --include='*.rkt'; then
-            echo "FAIL: hardcoded paths found"
-            exit 1
-          else
-            echo "OK: no hardcoded paths"
-          fi
+      - name: Clean bytecode cache
+        run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
+
+      - name: Lint tests for portability
+        run: racket scripts/lint-tests.rkt
 
       - name: Verify project structure
         run: |
