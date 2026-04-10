@@ -43,6 +43,9 @@ jobs:
       - name: Lint tests for portability
         run: racket scripts/lint-tests.rkt
 
+      - name: Lint version consistency
+        run: racket scripts/lint-version.rkt
+
       - name: Verify project structure
         run: |
           pwd

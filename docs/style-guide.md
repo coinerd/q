@@ -110,10 +110,11 @@ local environment. Follow these rules:
 | **No hash ordering** | Explicit ordered list, or `sort` after `hash-keys` | Assume `hash-keys` returns insertion order |
 | **Clean bytecode** | `find . -name '*.zo' -delete` before testing | Trust cached `.zo` after module changes |
 | **Lint before push** | `racket scripts/lint-tests.rkt` | Wait for CI to catch these |
+| **Version consistency** | `racket scripts/lint-version.rkt` after bumping `info.rkt` | Manually update version strings across docs |
 
-Run the linter locally:
+Run both linters locally:
 ```bash
-cd q/ && racket scripts/lint-tests.rkt
+cd q/ && racket scripts/lint-tests.rkt && racket scripts/lint-version.rkt
 ```
 
 ## 7. Comments
