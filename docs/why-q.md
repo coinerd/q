@@ -37,7 +37,7 @@ q doesn't try to be everything. These are deliberate scope boundaries:
 
 Be realistic about where things stand:
 
-- **Core architecture** — Stable and tested. 2343+ tests passing. The agent loop, session management, and provider abstraction are production-quality.
+- **Core architecture** — Stable and tested (run `racket scripts/metrics.rkt --tests` for current count). The agent loop, session management, and provider abstraction are production-quality.
 - **Interfaces** — Working CLI, TUI, JSON mode, and SDK interfaces. All functional, all terminal-based.
 - **Provider support** — OpenAI and Anthropic providers are solid. Local model support works via compatible endpoints (Ollama, llama.cpp, etc.).
 - **Extension system** — Functional but young. The hooks and tool registry work; the ecosystem of third-party extensions doesn't exist yet.
