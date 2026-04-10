@@ -33,7 +33,7 @@ q doesn't try to be everything. These are deliberate scope boundaries:
 - **Single-user, single-session focus** — No multi-user or concurrent-session architecture.
 - **Racket ecosystem** — Not Python, not Node.js. This is a deliberate choice for a small, coherent language with excellent macro and module systems, but it means fewer existing libraries and a smaller talent pool.
 
-## Current maturity (v0.3.0)
+## Current maturity (v0.3.1)
 
 Be realistic about where things stand:
 
@@ -65,4 +65,4 @@ Don't pick q if:
 
 ---
 
-*This document reflects q v0.3.0. Maturity and capabilities will evolve. Revisit this page as the project grows.*
+*This document reflects q v0.3.1. Maturity and capabilities will evolve. Revisit this page as the project grows.*
