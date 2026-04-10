@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-04-10
+
+### Security (Critical)
+- **Safe-mode enforcement wired into tool dispatch**: `allowed-tool?` checked in scheduler, blocked tools (bash, edit, write, firecrawl, extension:*) rejected when safe-mode active (SEC-01)
+- **Quarantine enforcement wired into extension loader**: quarantined and disabled extensions blocked from loading (SEC-02)
+- **Path-traversal protection for file I/O tools**: `allowed-path?` enforced in read, write, edit tools; path must be within project root when safe-mode active (SEC-03)
+- **Symlink bypass fixed**: `allowed-path?` uses `resolve-path` instead of `simplify-path` to prevent symlink-based escapes (SEC-04)
+- **Gemini API key moved from URL to header**: `x-goog-api-key` header instead of `?key=` query param, preventing key leakage in logs (SEC-05)
+- **Subprocess environment sanitized**: default env strips `*API_KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*`, `*CREDENTIAL*`, `*AUTH*` patterns (SEC-06)
+- **Credential file permissions enforced**: `0600` permissions on `~/.q/credentials.json` (SEC-07)
+
+### Fixed
+- Test isolation: `test-loop.rkt`, `test-safe-mode.rkt`, `test-token-budget.rkt`, `test-provider.rkt` wrapped in `test-case` forms
+- Shared mutable state eliminated in `test-loop.rkt` (dynamic-wind cleanup)
+- Duplicate `require` merged in `interfaces/rpc-mode.rkt`
+- `tools/builtins/date.rkt` path fixed to `../tool.rkt` for consistency
+- `ensure-hash-args` now logs warning on JSON parse failure
+- `agent/event-bus.rkt` relative path fixed
+- `now-seconds` deduplicated from 3 modules into `util/ids.rkt`
+- Empty stubs `util/diff.rkt` and `util/paths.rkt` given explicit `(provide)`
+
+### Test metrics
+- 2975 tests, 0 failures (−68 from de-duplication, +25 new security/enforcement tests)
+- New test files: `test-safemode-enforcement.rkt`, `test-extension-loader.rkt`
+
 ## [0.6.0] — 2026-04-10
 
 ### Added
@@ -158,7 +183,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/coinerd/q/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/coinerd/q/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/coinerd/q/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/coinerd/q/compare/v0.5.1...v0.5.2

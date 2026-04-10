@@ -67,11 +67,6 @@
       "\n"))
     (else (format "~a" content))))
 
-;; Current timestamp (seconds)
-(define (now-seconds)
-  (define ms (current-inexact-milliseconds))
-  (inexact->exact (truncate (/ ms 1000))))
-
 ;; Emit an event on the bus and optionally record in state
 (define (emit! bus session-id turn-id event-name payload #:state [state #f])
   (define evt (make-event event-name (now-seconds) session-id turn-id payload))

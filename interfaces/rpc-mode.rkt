@@ -16,12 +16,6 @@
 ;;           {"id": "...", "result": null, "error": {"code": ..., "message": "..."}}
 ;; Notification: {"jsonrpc": "2.0", "method": "...", "params": {...}}
 
-(require racket/contract
-         json
-         racket/port
-         "../agent/types.rkt"
-         "../agent/event-bus.rkt")
-
 (provide
  ;; Structs
  (struct-out rpc-request)

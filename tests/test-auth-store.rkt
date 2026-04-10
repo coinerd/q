@@ -479,6 +479,39 @@
     (check-equal? (hash-ref (hash-ref loaded "anthropic") 'api-key) "sk-ant-second-key")
     (delete-directory/files dir #:must-exist? #f))
 
+  ;; ──────────────────────────────
+  ;; SEC-07: File permissions on credential files
+  ;; ──────────────────────────────
+
+  (test-case "save-credential-file! sets file permissions to 0600"
+    (define dir (make-temp-dir))
+    (define path (build-path dir "credentials.json"))
+    (save-credential-file! "openai" "sk-perm-test-key" path)
+    (check-true (file-exists? path))
+    ;; Read the file permissions back
+    (define perms (file-or-directory-permissions path))
+    ;; On Unix, file-or-directory-permissions returns an integer like #o100600
+    ;; or a list like '(read write execute). Check it's restrictive.
+    (when (integer? perms)
+      (define mode (bitwise-and perms #o777))
+    ;; Owner read/write only (0600)
+      (check-equal? mode #o600
+                    (format "credential file should be 0600, got ~o" mode)))
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "atomic-write-json! sets restrictive permissions"
+    (define dir (make-temp-dir))
+    (define path (build-path dir "test-atomic.json"))
+    ;; Use save-credential-file! which calls atomic-write-json! internally
+    (save-credential-file! "test" "sk-atomic-perm" path)
+    (check-true (file-exists? path))
+    (define perms (file-or-directory-permissions path))
+    (when (integer? perms)
+      (define mode (bitwise-and perms #o777))
+      (check-equal? mode #o600
+                    (format "atomic-write file should be 0600, got ~o" mode)))
+    (delete-directory/files dir #:must-exist? #f))
+
   )
 
 ;; ── Run ──

@@ -287,11 +287,11 @@
   (define url-str
     (string-append
      (string-trim base-url "/")
-     "/v1beta/models/" model ":generateContent"
-     "?key=" api-key))
+     "/v1beta/models/" model ":generateContent"))
   (define uri (string->url url-str))
   (define headers
-    (list "Content-Type: application/json"))
+    (list "Content-Type: application/json"
+          (format "x-goog-api-key: ~a" api-key)))
   (define body-bytes (jsexpr->bytes body))
   (define-values (status-line response-headers response-port)
     (http-sendrecv uri 'POST
@@ -338,10 +338,11 @@
       (string-append
        (string-trim base-url "/")
        "/v1beta/models/" model-name ":streamGenerateContent"
-       "?key=" api-key "&alt=sse"))
+       "?alt=sse"))
     (define uri (string->url url-str))
     (define headers
-      (list "Content-Type: application/json"))
+      (list "Content-Type: application/json"
+            (format "x-goog-api-key: ~a" api-key)))
     (define body-bytes (jsexpr->bytes body))
     (define-values (status-line response-headers response-port)
       (http-sendrecv uri 'POST

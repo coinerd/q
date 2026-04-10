@@ -302,4 +302,5 @@
     (call-with-output-file tmp
       (lambda (out) (write-json data out))
       #:exists 'truncate)
-    (rename-file-or-directory tmp path #t)))
+    (rename-file-or-directory tmp path #t)
+    (file-or-directory-permissions path #o600)))

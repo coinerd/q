@@ -72,6 +72,90 @@
   (test-case "kill-subprocess! does not crash"
     (define cust (make-custodian))
     (check-not-exn (lambda () (kill-subprocess! cust))))
+
+  ;; --- SEC-06: Environment sanitization ---
+
+  (test-case "sanitize-env strips API_KEY pattern"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"MY_API_KEY" #"secret123")
+    (environment-variables-set! env #"PATH" #"/usr/bin")
+    (define clean (sanitize-env env))
+    (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")
+    (check-false (environment-variables-ref clean #"MY_API_KEY")))
+
+  (test-case "sanitize-env strips SECRET pattern"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"MY_SECRET" #"hush")
+    (environment-variables-set! env #"HOME" #"/home/user")
+    (define clean (sanitize-env env))
+    (check-equal? (environment-variables-ref clean #"HOME") #"/home/user")
+    (check-false (environment-variables-ref clean #"MY_SECRET")))
+
+  (test-case "sanitize-env strips TOKEN pattern"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"GITHUB_TOKEN" #"ghp_abc")
+    (environment-variables-set! env #"LANG" #"en_US.UTF-8")
+    (define clean (sanitize-env env))
+    (check-equal? (environment-variables-ref clean #"LANG") #"en_US.UTF-8")
+    (check-false (environment-variables-ref clean #"GITHUB_TOKEN")))
+
+  (test-case "sanitize-env strips PASSWORD pattern"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"DB_PASSWORD" #"pass123")
+    (define clean (sanitize-env env))
+    (check-false (environment-variables-ref clean #"DB_PASSWORD")))
+
+  (test-case "sanitize-env strips CREDENTIAL pattern"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"AWS_CREDENTIAL" #"cred")
+    (define clean (sanitize-env env))
+    (check-false (environment-variables-ref clean #"AWS_CREDENTIAL")))
+
+  (test-case "sanitize-env strips AUTH pattern"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"MY_AUTH_TOKEN" #"tok")
+    (define clean (sanitize-env env))
+    (check-false (environment-variables-ref clean #"MY_AUTH_TOKEN")))
+
+  (test-case "sanitize-env is case-insensitive"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"api_key" #"lower")
+    (environment-variables-set! env #"Api_Key" #"mixed")
+    (define clean (sanitize-env env))
+    (check-false (environment-variables-ref clean #"api_key"))
+    (check-false (environment-variables-ref clean #"Api_Key")))
+
+  (test-case "sanitize-env preserves safe vars like PATH and HOME"
+    (define env (make-environment-variables))
+    (environment-variables-set! env #"PATH" #"/usr/bin")
+    (environment-variables-set! env #"HOME" #"/home/user")
+    (environment-variables-set! env #"TERM" #"xterm")
+    (define clean (sanitize-env env))
+    (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")
+    (check-equal? (environment-variables-ref clean #"HOME") #"/home/user")
+    (check-equal? (environment-variables-ref clean #"TERM") #"xterm"))
+
+  (test-case "secret-env-var? detects common secret patterns"
+    (check-true (secret-env-var? "API_KEY"))
+    (check-true (secret-env-var? "MY_APIKEY"))
+    (check-true (secret-env-var? "SECRET_TOKEN"))
+    (check-true (secret-env-var? "PASSWORD"))
+    (check-true (secret-env-var? "AWS_CREDENTIAL"))
+    (check-true (secret-env-var? "AUTH_HEADER"))
+    (check-false (secret-env-var? "PATH"))
+    (check-false (secret-env-var? "HOME"))
+    (check-false (secret-env-var? "TERM")))
+
+  (test-case "run-subprocess default env strips secrets"
+    ;; Set a sensitive env var, run a subprocess that prints env,
+    ;; and verify the secret is NOT present in the subprocess env.
+    (putenv "Q_TEST_SECRET_API_KEY" "should-be-stripped")
+    (define result (run-subprocess "/bin/sh"
+                                    #:args '("-c" "env")))
+    (check-equal? (subprocess-result-exit-code result) 0)
+    (check-false (string-contains? (subprocess-result-stdout result)
+                                    "should-be-stripped")
+                 "secret env var should not appear in subprocess env"))
 )
 
 (run-tests subprocess-tests)

@@ -10,7 +10,7 @@
 ;;   - publish! returns the event for chaining
 
 (require racket/contract
-         "../agent/types.rkt")
+         "types.rkt")
 
 (provide
  make-event-bus

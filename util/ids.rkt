@@ -12,7 +12,8 @@
 (provide generate-id
          id?
          id->string
-         string->id)
+         string->id
+         now-seconds)
 
 ;; ── Crockford Base32 encoding ──
 ;; Characters: 0-9, A-Z excluding I, L, O, U = 32 symbols
@@ -107,3 +108,8 @@
 (define (string->id s)
   ;; Parse a string as an ID; returns #f if invalid
   (and (id? s) s))
+
+;; ── Time helpers ──
+
+(define (now-seconds)
+  (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000))))

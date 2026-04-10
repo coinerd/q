@@ -2,7 +2,9 @@
 
 (require racket/file
          (only-in "../tool.rkt"
-                  make-success-result make-error-result))
+                  make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt"
+                  allowed-path?))
 
 (provide tool-write)
 
@@ -11,7 +13,13 @@
   (define path-str    (hash-ref args 'path))
   (define content-str (hash-ref args 'content ""))
 
-  (with-handlers
+  ;; Path validation (safe-mode)
+  (cond
+    [(not (allowed-path? path-str))
+     (make-error-result
+      (format "Access denied: path outside project root: ~a" path-str))]
+    [else
+     (with-handlers
       ([exn:fail:filesystem?
         (lambda (e)
           (make-error-result
@@ -34,7 +42,7 @@
     (make-success-result
      (list (format "Wrote ~a bytes to ~a" bytes-count path-str))
      (hasheq 'path path-str
-             'bytes-written bytes-count))))
+             'bytes-written bytes-count)))]))
 
 ;; Extract directory portion of a path string
 (define (path-only p)

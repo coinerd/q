@@ -41,16 +41,12 @@
                   hook-result-action hook-result-payload hook-result?))
 
 (provide run-iteration-loop
-         now-seconds
          emit-session-event!
          maybe-dispatch-hooks)
 
 ;; ============================================================
 ;; Shared helpers
 ;; ============================================================
-
-(define (now-seconds)
-  (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000))))
 
 (define (emit-session-event! bus sid event-name payload)
   (define evt (make-event event-name (now-seconds) sid #f payload))
@@ -78,7 +74,11 @@
      (define cleaned (string-trim args))
      (if (or (string=? cleaned "") (string=? cleaned "{}"))
          (hash)
-         (with-handlers ([exn:fail? (lambda (_) (hash))])
+         (with-handlers ([exn:fail? (lambda (_)
+                                       (fprintf (current-error-port)
+                                                "warning: ensure-hash-args: failed to parse JSON args: ~a~n"
+                                                args)
+                                       (hash))])
            (define parsed (string->jsexpr cleaned))
            (if (hash? parsed)
                parsed

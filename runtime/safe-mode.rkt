@@ -7,7 +7,8 @@
 ;; (tool dispatch, extension loader) check these predicates.
 
 (require racket/string
-         racket/list)
+         racket/list
+         racket/path)
 
 (provide
  ;; Parameters
@@ -67,11 +68,16 @@
 
 ;; allowed-path? : path-string? -> boolean?
 ;; In safe mode, path must be under project root.
+;; Uses resolve-path to prevent symlink bypass (SEC-04).
 ;; Outside safe mode, always #t.
 (define (allowed-path? path)
   (if (safe-mode?)
-      (let* ([root-str (path->string (simplify-path (project-root)))]
-             [path-str (path->string (simplify-path path))]
+      (let* ([resolved-root (with-handlers ([exn:fail? (λ (_) (simplify-path (project-root)))])
+                              (resolve-path (project-root)))]
+             [resolved-path (with-handlers ([exn:fail? (λ (_) (simplify-path path))])
+                              (resolve-path path))]
+             [root-str (path->string (if (complete-path? resolved-root) resolved-root (path->complete-path resolved-root)))]
+             [path-str (path->string (if (complete-path? resolved-path) resolved-path (path->complete-path resolved-path)))]
              ;; Ensure root ends with separator for prefix matching
              [root-prefix (if (string-suffix? root-str "/")
                               root-str

@@ -24,7 +24,9 @@
                   tool-call tool-call? make-tool-call
                   tool-call-id tool-call-name tool-call-arguments)
          (only-in "../extensions/hooks.rkt"
-                  hook-result? hook-result-action hook-result-payload))
+                  hook-result? hook-result-action hook-result-payload)
+         (only-in "../runtime/safe-mode.rkt"
+                  safe-mode? allowed-tool?))
 
 (provide
  ;; ── Result struct ──
@@ -102,20 +104,28 @@
                   'error-message (format "unknown tool: '~a'"
                                          (tool-call-name tc-after-hook)))]
          [else
-          ;; Revalidate arguments after potential hook mutation
-          (define validated?
-            (with-handlers ([exn:fail? (lambda (e) #f)])
-              (validate-tool-args t (tool-call-arguments tc-after-hook))
-              #t))
-          (if validated?
-              (hasheq 'status 'ready
-                      'tool-call tc-after-hook
-                      'tool t)
-              (hasheq 'status 'error
-                      'tool-call tc-after-hook
-                      'error-message
-                      (format "post-hook validation failed for tool '~a'"
-                              (tool-call-name tc-after-hook))))])]
+          ;; Check safe-mode tool restrictions (SEC-01)
+          (cond
+            [(and (safe-mode?) (not (allowed-tool? (tool-call-name tc-after-hook))))
+             (hasheq 'status 'blocked
+                     'tool-call tc-after-hook
+                     'error-message (format "tool '~a' blocked by safe-mode"
+                                            (tool-call-name tc-after-hook)))]
+            [else
+             ;; Revalidate arguments after potential hook mutation
+             (define validated?
+               (with-handlers ([exn:fail? (lambda (e) #f)])
+                 (validate-tool-args t (tool-call-arguments tc-after-hook))
+                 #t))
+             (if validated?
+                 (hasheq 'status 'ready
+                         'tool-call tc-after-hook
+                         'tool t)
+                 (hasheq 'status 'error
+                         'tool-call tc-after-hook
+                         'error-message
+                         (format "post-hook validation failed for tool '~a'"
+                                 (tool-call-name tc-after-hook))))])])]
       [else
        ;; Unexpected hook return value — treat as error
        (hasheq 'status 'error

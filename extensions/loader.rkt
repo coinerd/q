@@ -12,11 +12,14 @@
 
 (require racket/contract
          racket/file
-         "api.rkt")
+         racket/path
+         "api.rkt"
+         "quarantine.rkt")
 
 (provide
  discover-extensions
- load-extension!)
+ load-extension!
+ get-extension-name-from-path)
 
 ;; ============================================================
 ;; discover-extensions : path-string? -> (listof extension?)
@@ -44,9 +47,13 @@
 ;; registers it. Silently skips if the module doesn't provide
 ;; a valid extension.
 (define (load-extension! registry path)
-  (define ext (try-load-extension path))
-  (when (and ext (extension? ext))
-    (register-extension! registry ext)))
+  (define ext-name (get-extension-name-from-path path))
+  (define state (extension-state ext-name))
+  (when (and (not (eq? state 'disabled))
+             (not (eq? state 'quarantined)))
+    (define ext (try-load-extension path))
+    (when (and ext (extension? ext))
+      (register-extension! registry ext))))
 
 ;; ============================================================
 ;; Internal helper: try to load a module and extract the-extension
@@ -57,3 +64,22 @@
     (define mod-path (path->complete-path path))
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))
+
+;; ============================================================
+;; get-extension-name-from-path : path-string? -> string?
+;; ============================================================
+
+;; Extracts the extension name from a path:
+;;   - For "foo.rkt" -> "foo"
+;;   - For "dir/foo.rkt" -> "foo"
+;;   - For "dir/foo/" -> "foo"
+(define (get-extension-name-from-path path)
+  (define filename (file-name-from-path path))
+  (define name-str (path->string filename))
+  ;; If it looks like a file with extension, strip the extension
+  (define base (regexp-replace #rx"\\.[^.]+$" name-str ""))
+  ;; If base is empty (path ended in separator), use the directory name
+  (if (string=? base "")
+      (let-values ([(parent dir _) (split-path (path->complete-path path))])
+        (if dir (path->string dir) "unknown"))
+      base))

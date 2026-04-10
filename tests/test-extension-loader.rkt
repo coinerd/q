@@ -1,9 +1,46 @@
 #lang racket
 
 (require rackunit
+         racket/file
+         racket/runtime-path
          "../extensions/loader.rkt"
          "../extensions/api.rkt"
-         racket/file)
+         "../extensions/quarantine.rkt")
+
+;; ============================================================
+;; Helper: create a temp extension module that provides the-extension
+;; ============================================================
+
+(define-runtime-path test-dir ".")
+
+(define api-abs-path
+  (path->string
+   (path->complete-path
+    (build-path test-dir ".." "extensions" "api.rkt"))))
+
+(define (make-temp-ext-module! dir name)
+  (define mod-file (build-path dir (format "~a.rkt" name)))
+  (call-with-output-file mod-file
+    (λ (out)
+      (displayln "#lang racket/base" out)
+      (displayln "(provide the-extension)" out)
+      (displayln (format "(require (file \"~a\"))" api-abs-path) out)
+      (displayln (format "(define the-extension (extension \"~a\" \"1.0\" \"1\" (hasheq)))"
+                         name) out))
+    #:exists 'replace)
+  mod-file)
+
+(define (with-temp-env thunk)
+  (define tmpdir (make-temporary-file "q-test-ext-~a" 'directory))
+  (define qdir (build-path tmpdir "quarantine"))
+  (dynamic-wind
+    void
+    (λ ()
+      (parameterize ([current-quarantine-dir qdir])
+        (thunk tmpdir)))
+    (λ ()
+      (when (directory-exists? tmpdir)
+        (delete-directory/files tmpdir)))))
 
 ;; ============================================================
 ;; discover-extensions — no extensions dir
@@ -29,47 +66,65 @@
 ;; ============================================================
 
 (test-case "load-extension! skips modules without the-extension"
-  (define tmpdir (make-temporary-file "q-test-ext-~a" 'directory))
-  (define ext-dir (build-path tmpdir "extensions"))
-  (make-directory ext-dir)
-  ;; Write a module that does NOT provide the-extension
-  (define mod-file (build-path ext-dir "bad.rkt"))
-  (call-with-output-file mod-file
-    (λ (out) (display "#lang racket/base\n" out))
-    #:exists 'replace)
-  (define reg (make-extension-registry))
-  (load-extension! reg mod-file)
-  (check-equal? (list-extensions reg) '())
-  (delete-file mod-file)
-  (delete-directory ext-dir)
-  (delete-directory tmpdir))
+  (with-temp-env
+   (λ (tmpdir)
+     (define ext-dir (build-path tmpdir "extensions"))
+     (make-directory ext-dir)
+     ;; Write a module that does NOT provide the-extension
+     (define mod-file (build-path ext-dir "bad.rkt"))
+     (call-with-output-file mod-file
+       (λ (out) (display "#lang racket/base\n" out))
+       #:exists 'replace)
+     (define reg (make-extension-registry))
+     (load-extension! reg mod-file)
+     (check-equal? (list-extensions reg) '()))))
 
-(test-case "load-extension! loads valid extension module"
-  (define tmpdir (make-temporary-file "q-test-ext-~a" 'directory))
-  (define ext-dir (build-path tmpdir "extensions"))
-  (make-directory ext-dir)
-  ;; Write a module that provides the-extension
-  (define mod-file (build-path ext-dir "good.rkt"))
-  (call-with-output-file mod-file
-    (λ (out)
-      (display "#lang racket/base\n" out)
-      (display "(require \"../../api.rkt\")\n" out)
-      ;; We need to reference api.rkt correctly — use relative path
-      (display "(provide the-extension)\n" out)
-      (display "(define the-extension (extension \"test-ext\" \"1.0\" \"1\" (hasheq)))\n" out))
-    #:exists 'replace)
-  ;; The module needs to find api.rkt — this is tricky with relative paths
-  ;; Copy api.rkt path approach: use a collection path or absolute
-  ;; Let's write an absolute-path version
-  (define api-path (path->string (path->complete-path
-    (build-path tmpdir ".." ".." (car (use-compiled-file-paths)) ; not reliable
-                                 ))))
-  ;; Instead, let's just test discover-extensions with a proper extension module
-  (define reg (make-extension-registry))
-  (load-extension! reg mod-file)
-  ;; The load may or may not work depending on module resolution,
-  ;; but it should not crash
-  (check-true (extension-registry? reg))
-  (delete-file mod-file)
-  (delete-directory ext-dir)
-  (delete-directory tmpdir))
+(test-case "load-extension! loads valid extension module when state is unknown"
+  (with-temp-env
+   (λ (tmpdir)
+     (define reg (make-extension-registry))
+     (define mod-file (make-temp-ext-module! tmpdir "test-good"))
+     ;; State is 'unknown by default — should load
+     (load-extension! reg mod-file)
+     (define exts (list-extensions reg))
+     (check-equal? (length exts) 1)
+     (check-equal? (extension-name (car exts)) "test-good"))))
+
+(test-case "load-extension! loads valid extension module when state is active"
+  (with-temp-env
+   (λ (tmpdir)
+     (define reg (make-extension-registry))
+     (define mod-file (make-temp-ext-module! tmpdir "test-active"))
+     ;; Mark as active explicitly — should load
+     (restore-extension! "test-active" (build-path tmpdir "dummy"))
+     (check-equal? (extension-state "test-active") 'active)
+     (load-extension! reg mod-file)
+     (define exts (list-extensions reg))
+     (check-equal? (length exts) 1)
+     (check-equal? (extension-name (car exts)) "test-active"))))
+
+(test-case "load-extension! skips loading when extension-state is disabled"
+  (with-temp-env
+   (λ (tmpdir)
+     (define reg (make-extension-registry))
+     (define mod-file (make-temp-ext-module! tmpdir "test-disabled"))
+     ;; Disable it
+     (disable-extension! "test-disabled")
+     (check-equal? (extension-state "test-disabled") 'disabled)
+     (load-extension! reg mod-file)
+     (check-equal? (list-extensions reg) '()))))
+
+(test-case "load-extension! skips loading when extension-state is quarantined"
+  (with-temp-env
+   (λ (tmpdir)
+     (define reg (make-extension-registry))
+     (define mod-file (make-temp-ext-module! tmpdir "test-quarantined"))
+     ;; Create a source dir to quarantine
+     (define src-dir (build-path tmpdir "src-quarantined"))
+     (make-directory* src-dir)
+     (call-with-output-file (build-path src-dir "main.rkt")
+       (λ (p) (displayln "# placeholder" p)))
+     (quarantine-extension! "test-quarantined" src-dir)
+     (check-equal? (extension-state "test-quarantined") 'quarantined)
+     (load-extension! reg mod-file)
+     (check-equal? (list-extensions reg) '()))))

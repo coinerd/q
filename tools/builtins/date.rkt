@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "../../tools/tool.rkt"
+(require "../tool.rkt"
          racket/format
          racket/date)
 

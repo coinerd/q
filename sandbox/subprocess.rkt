@@ -14,7 +14,9 @@
          run-subprocess
          kill-subprocess!
          default-timeout-seconds
-         default-max-output-bytes)
+         default-max-output-bytes
+         sanitize-env
+         secret-env-var?)
 
 ;; --------------------------------------------------
 ;; Result struct
@@ -76,6 +78,28 @@
       (find-executable-path cmd)))
 
 ;; --------------------------------------------------
+;; Environment sanitization — strip sensitive env vars
+;; --------------------------------------------------
+
+;; Patterns that indicate sensitive env vars
+(define secret-patterns
+  (list #rx"(?i:API.?KEY)" #rx"(?i:SECRET)" #rx"(?i:TOKEN)"
+        #rx"(?i:PASSWORD)" #rx"(?i:CREDENTIAL)" #rx"(?i:AUTH)"))
+
+(define (secret-env-var? name)
+  (define name-str (if (bytes? name) (bytes->string/utf-8 name) name))
+  (for/or ([pat (in-list secret-patterns)])
+    (regexp-match? pat name-str)))
+
+(define (sanitize-env [env (current-environment-variables)])
+  (define clean (make-environment-variables))
+  (for ([name (in-list (environment-variables-names env))])
+    (unless (secret-env-var? name)
+      (define val (environment-variables-ref env name))
+      (environment-variables-set! clean name val)))
+  clean)
+
+;; --------------------------------------------------
 ;; Main subprocess runner
 ;; --------------------------------------------------
 
@@ -84,7 +108,7 @@
                          #:limits [limits (default-exec-limits)]
                          #:timeout [timeout-secs #f]
                          #:directory [dir (current-directory)]
-                         #:environment [env (current-environment-variables)]
+                         #:environment [env (sanitize-env)]
                          #:encoding [encoding 'utf-8])
   (define effective-timeout (or timeout-secs
                                  (exec-limits-timeout-seconds limits)))

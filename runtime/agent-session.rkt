@@ -38,7 +38,6 @@
          "../util/ids.rkt"
          (only-in "iteration.rkt"
                   run-iteration-loop
-                  now-seconds
                   emit-session-event!
                   maybe-dispatch-hooks))
 

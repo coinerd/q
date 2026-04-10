@@ -9,7 +9,9 @@
 
 (require racket/file
          (only-in "../tool.rkt"
-                  make-success-result make-error-result))
+                  make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt"
+                  allowed-path?))
 
 (provide tool-edit)
 
@@ -53,8 +55,12 @@
   (define old-text (hash-ref args 'old-text))
   (define new-text (hash-ref args 'new-text))
 
-  ;; 1. File existence check
+  ;; 0. Path validation (safe-mode)
   (cond
+    [(not (allowed-path? path-str))
+     (err (format "Access denied: path outside project root: ~a" path-str))]
+
+    ;; 1. File existence check
     [(not (file-exists? path-str))
      (err (format "File not found: ~a" path-str))]
 
