@@ -32,7 +32,7 @@ jobs:
           ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
 
       - name: Verify Racket Installation
-        run: /usr/local/racket/bin/raco --version
+        run: /usr/local/racket/bin/racket --version
 
       - name: Install dependencies
         run: |
@@ -82,7 +82,7 @@ jobs:
           ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
 
       - name: Verify Racket Installation
-        run: /usr/local/racket/bin/raco --version
+        run: /usr/local/racket/bin/racket --version
 
       - name: Install dependencies
         run: |
