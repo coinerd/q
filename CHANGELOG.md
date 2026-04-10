@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-04-10
+
+### Added
+- `q export` — Session export to Markdown, HTML, and JSON (`q/cli/export.rkt`, `q/util/export-markdown.rkt`, `q/util/export-html.rkt`, `q/util/export-json.rkt`)
+- `q inspect` — Session trace analysis with metadata, tool call stats, branch counts (`q/cli/inspect.rkt`)
+- `q replay` — Deterministic session replay with drift detection (`q/cli/replay.rkt`)
+
+### Test metrics
+- 2991 tests, 0 failures (+67 new)
+
 ## [0.5.2] — 2026-04-09
 
 ### Added
@@ -137,7 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/coinerd/q/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/coinerd/q/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/coinerd/q/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/coinerd/q/compare/v0.4.2...v0.5.0
