@@ -31,7 +31,7 @@
          (only-in "../util/cancellation.rkt"
                   cancellation-token? cancellation-token-cancelled?)
          (only-in "../extensions/hooks.rkt"
-                  hook-result? hook-result-action))
+                  hook-result? hook-result-action hook-result-payload))
 
 (provide
  run-agent-turn)
@@ -216,7 +216,29 @@
   (define all-chunks (box '()))  ;; track all chunks for tool-call accumulation
   (define cancelled-during-stream (box #f))
 
+  ;; Dispatch 'message-start hook — extensions can block before streaming starts
+  (define msg-start-result
+    (and hook-dispatcher
+         (hook-dispatcher 'message-start
+          (hasheq 'session-id session-id
+                  'turn-id turn-id
+                  'model-name (object-name provider)
+                  'message-count (length raw-messages)))))
+
+  (cond
+    [(and (hook-result? msg-start-result)
+          (eq? (hook-result-action msg-start-result) 'block))
+     ;; Hook blocked before streaming — return early
+     (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
+     (loop-result raw-messages
+                  'hook-blocked
+                  (hasheq 'hook 'message-start))]
+    [else
+
   (define stream-gen (provider-stream provider req))
+
+  ;; Mutable flag for message-update block (stop streaming)
+  (define stream-blocked (box #f))
 
   (let stream-loop ()
     (define chunk (stream-gen))
@@ -229,7 +251,18 @@
                                  (stream-chunk-delta-text chunk)))
         (emit! bus session-id turn-id "model.stream.delta"
                (hasheq 'delta (stream-chunk-delta-text chunk))
-               #:state st))
+               #:state st)
+        ;; Dispatch message-update hook for text delta
+        (when hook-dispatcher
+          (define update-result
+            (hook-dispatcher 'message-update
+             (hasheq 'session-id session-id
+                     'turn-id turn-id
+                     'delta-text (stream-chunk-delta-text chunk)
+                     'delta-tool-call #f)))
+          (when (and (hook-result? update-result)
+                     (eq? (hook-result-action update-result) 'block))
+            (set-box! stream-blocked #t))))
       (when (stream-chunk-delta-tool-call chunk)
         ;; Tool call delta
         (define tc-delta (stream-chunk-delta-tool-call chunk))
@@ -237,7 +270,18 @@
                   (append (unbox accumulated-tool-calls) (list tc-delta)))
         (emit! bus session-id turn-id "model.stream.delta"
                (hasheq 'delta-tool-call tc-delta)
-               #:state st))
+               #:state st)
+        ;; Dispatch message-update hook for tool-call delta
+        (when hook-dispatcher
+          (define update-result
+            (hook-dispatcher 'message-update
+             (hasheq 'session-id session-id
+                     'turn-id turn-id
+                     'delta-text #f
+                     'delta-tool-call tc-delta)))
+          (when (and (hook-result? update-result)
+                     (eq? (hook-result-action update-result) 'block))
+            (set-box! stream-blocked #t))))
       (when (stream-chunk-done? chunk)
         ;; 7. Stream completed
         (emit! bus session-id turn-id "model.stream.completed"
@@ -250,6 +294,7 @@
          (emit! bus session-id turn-id "turn.cancelled"
                 (hasheq 'reason "cancellation-token")
                 #:state st)]
+        [(unbox stream-blocked) (void)] ;; message-update hook blocked — stop streaming
         [else
          (stream-loop)])))
 
@@ -296,48 +341,84 @@
                  'tool-call-count (length tool-call-parts)))
        (hook-dispatcher 'model-response-post post-payload))
 
-     ;; Build assistant message
-     (define assistant-msg-id (generate-id))
-     (define assistant-msg
-       (make-message assistant-msg-id #f 'assistant 'message
-                     content-parts
-                     (now-seconds)
-                     (hasheq 'turnId turn-id
-                             'model "streamed")))
+     ;; Dispatch 'message-end hook — extensions can amend content or suppress
+     (define msg-end-payload
+       (hasheq 'session-id session-id
+               'turn-id turn-id
+               'content (unbox accumulated-text)
+               'tool-call-count (length tool-call-parts)
+               'usage (or stream-usage (hasheq))))
+     (define msg-end-result
+       (and hook-dispatcher
+            (hook-dispatcher 'message-end msg-end-payload)))
 
-     ;; 8/9. Check for tool calls
+     ;; Handle message-end result
+     (define final-text
+       (if (and (hook-result? msg-end-result)
+                (eq? (hook-result-action msg-end-result) 'amend))
+           (hash-ref (hook-result-payload msg-end-result) 'content (unbox accumulated-text))
+           (unbox accumulated-text)))
+
      (cond
-       [(null? tool-call-parts)
-        ;; No tool calls — completed turn
-        (emit! bus session-id turn-id "assistant.message.completed"
-               (hasheq 'messageId assistant-msg-id
-                       'content (text-part-text text-part))
-               #:state st)
-        (state-add-message! st assistant-msg)
+       [(and (hook-result? msg-end-result)
+             (eq? (hook-result-action msg-end-result) 'block))
+        ;; message-end blocked — return completed with empty content
         (emit! bus session-id turn-id "turn.completed"
-               (hasheq 'termination 'completed 'turnId turn-id)
+               (hasheq 'termination 'completed 'turnId turn-id
+                       'reason "message-end-blocked")
                #:state st)
         (make-loop-result (loop-state-messages st)
-                          'completed
+                          'hook-blocked
                           (hasheq 'turnId turn-id
-                                  'usage (or stream-usage (hasheq))
-                                  'model "streamed"))]
+                                  'hook 'message-end))]
        [else
-        ;; Tool calls detected — emit tool.call.started for each
-        (for ([tc (in-list tool-call-parts)])
-          (emit! bus session-id turn-id "tool.call.started"
-                 (hasheq 'id (tool-call-part-id tc)
-                         'name (tool-call-part-name tc)
-                         'arguments (tool-call-part-arguments tc))
-                 #:state st))
-        (state-add-message! st assistant-msg)
-        (emit! bus session-id turn-id "turn.completed"
-               (hasheq 'termination 'tool-calls-pending 'turnId turn-id)
-               #:state st)
-        (make-loop-result (loop-state-messages st)
-                          'tool-calls-pending
-                          (hasheq 'turnId turn-id
-                                  'usage (or stream-usage (hasheq))
-                                  'model "streamed"
-                                  'toolCallCount (length tool-call-parts)))])])])
+        ;; Rebuild text-part with potentially amended content
+        (define final-text-part (make-text-part final-text))
+        (define final-content-parts
+          (append (list final-text-part) tool-call-parts))
+
+        ;; Build assistant message
+        (define assistant-msg-id (generate-id))
+        (define assistant-msg
+          (make-message assistant-msg-id #f 'assistant 'message
+                        final-content-parts
+                        (now-seconds)
+                        (hasheq 'turnId turn-id
+                                'model "streamed")))
+
+        ;; 8/9. Check for tool calls
+        (cond
+          [(null? tool-call-parts)
+           ;; No tool calls — completed turn
+           (emit! bus session-id turn-id "assistant.message.completed"
+                  (hasheq 'messageId assistant-msg-id
+                          'content (text-part-text final-text-part))
+                  #:state st)
+           (state-add-message! st assistant-msg)
+           (emit! bus session-id turn-id "turn.completed"
+                  (hasheq 'termination 'completed 'turnId turn-id)
+                  #:state st)
+           (make-loop-result (loop-state-messages st)
+                             'completed
+                             (hasheq 'turnId turn-id
+                                     'usage (or stream-usage (hasheq))
+                                     'model "streamed"))]
+          [else
+           ;; Tool calls detected — emit tool.call.started for each
+           (for ([tc (in-list tool-call-parts)])
+             (emit! bus session-id turn-id "tool.call.started"
+                    (hasheq 'id (tool-call-part-id tc)
+                            'name (tool-call-part-name tc)
+                            'arguments (tool-call-part-arguments tc))
+                    #:state st))
+           (state-add-message! st assistant-msg)
+           (emit! bus session-id turn-id "turn.completed"
+                  (hasheq 'termination 'tool-calls-pending 'turnId turn-id)
+                  #:state st)
+           (make-loop-result (loop-state-messages st)
+                             'tool-calls-pending
+                             (hasheq 'turnId turn-id
+                                     'usage (or stream-usage (hasheq))
+                                     'model "streamed"
+                                     'toolCallCount (length tool-call-parts)))])])])])])
   )

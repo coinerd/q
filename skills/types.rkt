@@ -21,7 +21,9 @@
          racket/hash
          racket/list
          json
-         "../util/config-paths.rkt")
+         "../util/config-paths.rkt"
+         (only-in "../extensions/hooks.rkt"
+                  dispatch-hooks hook-result-action hook-result-payload hook-result?))
 
 (provide
  ;; Structs
@@ -175,32 +177,50 @@
   (or (try-read-json cfg-path) (hash)))
 
 ;; Load all resources from a given directory (the .q or .pi dir itself)
-(define (load-resources-from-dir dir)
-  (resource-set (load-instructions dir)
-                (load-skills dir)
-                (load-templates dir)
-                (load-config dir)))
+(define (load-resources-from-dir dir #:extension-registry [ext-reg #f])
+  ;; Dispatch 'resources-discover hook — extensions can block or amend resource discovery
+  (define discover-payload (hasheq 'base-dir (path->string dir)))
+  (define discover-result
+    (and ext-reg (dispatch-hooks 'resources-discover discover-payload ext-reg)))
+  (cond
+    [(and discover-result
+          (eq? (hook-result-action discover-result) 'block))
+     ;; Block: return empty resource set
+     (empty-resource-set)]
+    [(and discover-result
+          (eq? (hook-result-action discover-result) 'amend)
+          (resource-set? (hook-result-payload discover-result)))
+     ;; Amend: extension provided a custom resource-set
+     (hook-result-payload discover-result)]
+    [else
+     ;; Normal: scan directory
+     (resource-set (load-instructions dir)
+                   (load-skills dir)
+                   (load-templates dir)
+                   (load-config dir))]))
 
 ;; ============================================================
 ;; Public API
 ;; ============================================================
 
-(define (load-global-resources [base-dir (find-system-path 'home-dir)])
+(define (load-global-resources [base-dir (find-system-path 'home-dir)]
+                            #:extension-registry [ext-reg #f])
   ;; Scan <base-dir>/.q/ for global resources.
   (define q-dir (car (project-config-dirs base-dir)))
   (cond
     [(directory-exists? q-dir)
-     (load-resources-from-dir q-dir)]
+     (load-resources-from-dir q-dir #:extension-registry ext-reg)]
     [else (empty-resource-set)]))
 
-(define (load-project-resources [project-dir (current-directory)])
+(define (load-project-resources [project-dir (current-directory)]
+                             #:extension-registry [ext-reg #f])
   ;; Scan <project>/.q/ first, then fall back to <project>/.pi/
   (define dirs (project-config-dirs project-dir))
   (cond
     [(and (pair? dirs) (directory-exists? (car dirs)))
-     (load-resources-from-dir (car dirs))]
+     (load-resources-from-dir (car dirs) #:extension-registry ext-reg)]
     [(and (>= (length dirs) 2) (directory-exists? (cadr dirs)))
-     (load-resources-from-dir (cadr dirs))]
+     (load-resources-from-dir (cadr dirs) #:extension-registry ext-reg)]
     [else (empty-resource-set)]))
 
 ;; ============================================================

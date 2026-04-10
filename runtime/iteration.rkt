@@ -129,7 +129,19 @@
                               #:cancellation-token [token #f]
                               #:config [config (hash)]
                               #:queue [steering-queue #f])
-  (let loop ([ctx context]
+  ;; Dispatch 'before-agent-start hook — extensions can block or modify config
+  (define agent-start-payload
+    (hasheq 'session-id session-id
+            'max-iterations max-iterations
+            'context-message-count (length context)))
+  (define-values (amended-start start-hook-res)
+    (maybe-dispatch-hooks ext-reg 'before-agent-start agent-start-payload))
+  (when (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
+    (emit-session-event! bus session-id "agent.blocked"
+                         (hasheq 'reason "extension-block" 'hook 'before-agent-start)))
+  (if (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
+      (make-loop-result '() 'completed (hasheq 'reason "extension-block"))
+      (let loop ([ctx context]
              [iteration 0])
 
     ;; ── Cooperative cancellation check (between iterations) ──
@@ -337,4 +349,4 @@
          ])
        ])
     )
-  )
+  ))

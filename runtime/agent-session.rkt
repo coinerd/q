@@ -156,6 +156,15 @@
         (build-index! log-path idx-path)
         #f))
 
+  ;; Dispatch 'session-before-switch hook — extensions can block session resume
+  (define switch-payload
+    (hasheq 'session-id session-id 'operation 'resume))
+  (define-values (_amended-switch switch-res)
+    (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
+                          'session-before-switch switch-payload))
+  (when (and switch-res (eq? (hook-result-action switch-res) 'block))
+    (error 'resume-agent-session "session resume blocked by extension"))
+
   (define sess
     (agent-session session-id
                    dir
@@ -314,16 +323,26 @@
               'content (map content-part->jsexpr (message-content msg)))))
   (define token-count (estimate-context-tokens raw-messages))
   (when (should-compact? token-count token-budget-threshold)
-    (emit-session-event! bus sid "compaction.warning"
-                         (hasheq 'tokenCount token-count
-                                 'budgetThreshold token-budget-threshold))
-    ;; R2-6: Auto-compact when threshold exceeded
-    (define compact-result (compact-history context-with-system))
-    (set! context-with-system (compaction-result->message-list compact-result))
-    (emit-session-event! bus sid "compaction.completed"
-                         (hasheq 'removedCount (compaction-result-removed-count compact-result)
-                                 'keptCount (length (compaction-result-kept-messages compact-result))
-                                 'tokenCount token-count)))
+    ;; Dispatch 'session-before-compact hook — extensions can amend or block compaction
+    (define compact-payload
+      (hasheq 'session-id sid
+              'token-count token-count
+              'budget-threshold token-budget-threshold
+              'message-count (length context-with-system)))
+    (define-values (amended-compact compact-hook-res)
+      (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-before-compact compact-payload))
+    ;; Proceed with compaction unless blocked
+    (unless (and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block))
+      (emit-session-event! bus sid "compaction.warning"
+                           (hasheq 'tokenCount token-count
+                                   'budgetThreshold token-budget-threshold))
+      ;; R2-6: Auto-compact when threshold exceeded
+      (define compact-result (compact-history context-with-system))
+      (set! context-with-system (compaction-result->message-list compact-result))
+      (emit-session-event! bus sid "compaction.completed"
+                           (hasheq 'removedCount (compaction-result-removed-count compact-result)
+                                   'keptCount (length (compaction-result-kept-messages compact-result))
+                                   'tokenCount token-count))))
 
   ;; 5. Extract cancellation token from config
   (define cancellation-tok
