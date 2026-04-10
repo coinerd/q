@@ -87,9 +87,8 @@
                   (format "Module ~a does not start with #lang racket or #lang racket/base (got: ~a)"
                           rel first-line)))))
 
-;; Test: info.rkt exists at project root (one level above q/)
-(define project-root (simplify-path (build-path q-root "..")))
-(define info-path (build-path project-root "info.rkt"))
+;; Test: info.rkt exists at project root
+(define info-path (build-path q-root "info.rkt"))
 (check-true (file-exists? info-path) "info.rkt missing at project root")
 
 ;; Test: total module count matches BLUEPRINT plan

@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [main]
@@ -10,11 +13,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache Racket installation
         id: cache-racket
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             /usr/local/racket
@@ -34,17 +37,32 @@ jobs:
       - name: Install dependencies
         run: raco pkg install --auto --batch
 
+      - name: Verify no hardcoded paths
+        run: |
+          if grep -rn '/home/user/' tests/ --include='*.rkt'; then
+            echo "FAIL: hardcoded paths found"
+            exit 1
+          else
+            echo "OK: no hardcoded paths"
+          fi
+
+      - name: Verify project structure
+        run: |
+          pwd
+          test -f info.rkt && echo "info.rkt found at repo root"
+          test -f main.rkt && echo "main.rkt found at repo root"
+
       - name: Run tests
         run: raco test tests/
 
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Cache Racket installation
         id: cache-racket
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             /usr/local/racket

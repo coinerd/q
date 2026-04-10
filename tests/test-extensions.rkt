@@ -12,10 +12,17 @@
          racket/match
          racket/port
          racket/file
+         racket/runtime-path
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
          "../extensions/define-extension.rkt")
+
+(define-runtime-path here ".")
+(define define-extension-path
+  (path->string (simplify-path (build-path here ".." "extensions" "define-extension.rkt"))))
+(define hooks-path
+  (path->string (simplify-path (build-path here ".." "extensions" "hooks.rkt"))))
 
 ;; ============================================================
 ;; 1. hooks.rkt — hook-result struct and constructors
@@ -273,8 +280,8 @@
   (with-output-to-file (build-path ext-dir "my-ext.rkt")
     (λ ()
       (displayln "#lang racket")
-      (displayln "(require (file \"/home/user/src/q-agent/q/extensions/define-extension.rkt\"))")
-      (displayln "(require (file \"/home/user/src/q-agent/q/extensions/hooks.rkt\"))")
+      (printf "(require (file ~s))\n" define-extension-path)
+      (printf "(require (file ~s))\n" hooks-path)
       (displayln "(provide the-extension)")
       (displayln "(define-q-extension my-ext")
       (displayln "  #:version \"1.0.0\"")
@@ -292,8 +299,8 @@
   (with-output-to-file ext-file
     (λ ()
       (displayln "#lang racket")
-      (displayln "(require (file \"/home/user/src/q-agent/q/extensions/define-extension.rkt\"))")
-      (displayln "(require (file \"/home/user/src/q-agent/q/extensions/hooks.rkt\"))")
+      (printf "(require (file ~s))\n" define-extension-path)
+      (printf "(require (file ~s))\n" hooks-path)
       (displayln "(provide the-extension)")
       (displayln "(define-q-extension loadable-ext")
       (displayln "  #:version \"0.5.0\"")
