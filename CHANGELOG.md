@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-09
+
+### Added
+- 7 new extension hook points (20 total): `session-before-compact`, `before-agent-start`, `message-start`, `message-update`, `message-end`, `resources-discover`, `session-before-switch` ([#23])
+- GitHub Actions CI workflow ([#11])
+- `CHANGELOG.md` and `docs/releasing.md` ([#12])
+- 7 Architecture Decision Records in `docs/adr/` ([#14])
+- `CONTRIBUTING.md` and GitHub issue/PR templates ([#20])
+- `docs/why-q.md` positioning page ([#21])
+- `docs/security.md` and sandbox security tests ([#16])
+- 5 demo transcripts in `docs/demos/` ([#22])
+- `scripts/install.sh` and `docs/install.md` ([#19])
+- `q doctor` diagnostic command ([#13])
+- 55 golden-path integration tests ([#15])
+- Benchmark framework with 5 tasks ([#18])
+- Formatting normalization and `docs/style-guide.md` ([#17])
+- Fixed duplicate `tool-result` struct ([#8])
+- Fixed `local-provider?` 172.x over-match ([#9])
+- Added `contract-out` to 7 SDK functions ([#10])
+- 2,465 tests passing, 0 failures
+
+### Changed
+- 62 library modules migrated to `#lang racket/base` ([#1])
+- `contract-out` on 4 public API modules ([#2])
+- 21 new test files ([#3])
+
 ## [0.3.0] - 2026-04-09
 
 ### Added
@@ -45,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/coinerd/q/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/coinerd/q/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/coinerd/q/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/coinerd/q/releases/tag/v0.1.0
@@ -57,3 +84,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#5]: https://github.com/coinerd/q/issues/5
 [#6]: https://github.com/coinerd/q/issues/6
 [#7]: https://github.com/coinerd/q/issues/7
+[#8]: https://github.com/coinerd/q/issues/8
+[#9]: https://github.com/coinerd/q/issues/9
+[#10]: https://github.com/coinerd/q/issues/10
+[#11]: https://github.com/coinerd/q/issues/11
+[#12]: https://github.com/coinerd/q/issues/12
+[#13]: https://github.com/coinerd/q/issues/13
+[#14]: https://github.com/coinerd/q/issues/14
+[#15]: https://github.com/coinerd/q/issues/15
+[#16]: https://github.com/coinerd/q/issues/16
+[#17]: https://github.com/coinerd/q/issues/17
+[#18]: https://github.com/coinerd/q/issues/18
+[#19]: https://github.com/coinerd/q/issues/19
+[#20]: https://github.com/coinerd/q/issues/20
+[#21]: https://github.com/coinerd/q/issues/21
+[#22]: https://github.com/coinerd/q/issues/22
+[#23]: https://github.com/coinerd/q/issues/23

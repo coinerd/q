@@ -220,7 +220,7 @@ q/
 ├── runtime/        Agent session, compaction, resource loading, auth
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
-├── tests/          Full test suite (~2189 tests, 60 files)
+├── tests/          Full test suite (~2,465 tests, 86 files)
 ├── tools/          Tool registry, scheduler, 9 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 └── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
@@ -230,12 +230,12 @@ q/
 
 | Metric | Value |
 |--------|-------|
-| Test files | 81 |
-| Source modules | 69 |
-| Source lines | ~13,859 |
-| Test lines | ~22,703 |
-| Total test assertions | ~3,700 |
-| `raco test` results | 2,189 tests passing |
+| Test files | 86 |
+| Source modules | 74 |
+| Source lines | ~14,730 |
+| Test lines | ~24,852 |
+| Total test assertions | ~4,299 |
+| `raco test` results | 2,465 tests passing |
 
 ```bash
 # Run all tests
@@ -252,7 +252,7 @@ raco test tests/tui/
 
 ## Status
 
-**v0.3.0** — Active development. All core features implemented and tested:
+**v0.3.1** — Active development. All core features implemented and tested:
 
 - ✅ Canonical types and utilities
 - ✅ JSONL session storage with tree indexing and forking
@@ -261,4 +261,4 @@ raco test tests/tui/
 - ✅ Runtime orchestration with compaction and extensions
 - ✅ 5 interfaces (CLI, TUI, JSON, RPC, SDK)
 - ✅ Sandboxing and hardening
-- ✅ Full test coverage (~2,343 tests, 0 failures)
+- ✅ Full test coverage (~2,465 tests, 0 failures)
