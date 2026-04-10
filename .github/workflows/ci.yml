@@ -35,7 +35,9 @@ jobs:
         run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: raco pkg install --auto --batch
+        run: |
+          raco pkg install --auto --batch
+          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Clean bytecode cache
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
@@ -83,7 +85,9 @@ jobs:
         run: echo "/usr/local/racket/bin" >> "$GITHUB_PATH"
 
       - name: Install dependencies
-        run: raco pkg install --auto --batch
+        run: |
+          raco pkg install --auto --batch
+          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Version smoke check
         run: |

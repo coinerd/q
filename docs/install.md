@@ -44,7 +44,7 @@ racket main.rkt --version
 After installing, confirm everything works:
 
 ```bash
-racket main.rkt --version   # should print: q version 0.4.0
+racket main.rkt --version   # should print: q version 0.4.1
 racket main.rkt doctor      # checks Racket version, dependencies, config
 ```
 
@@ -106,6 +106,17 @@ rm -rf ~/.q
 ```
 
 Also remove any PATH entries or aliases you added to your shell config.
+
+## Optional: Full TUI Support
+
+For the enhanced TUI experience, install `tui-term` and `tui-ubuf`:
+
+```bash
+raco pkg install tui-term tui-ubuf
+```
+
+> **Note:** These packages have known compilation issues on Racket 8.10 (upstream bugs).
+> The TUI works without them using built-in fallbacks. This is not required for normal use.
 
 ## Packaging Status
 

@@ -2,15 +2,15 @@
 
 (define collection "q")
 (define pkg-name "q")
-(define version "0.4.0")
+(define version "0.4.1")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
-;; Runtime dependencies — all needed for full TUI + CLI experience.
-;; tui-term and tui-ubuf are dynamically-required with fallback stubs,
-;; but listed as deps so the full TUI works out of the box.
-(define deps '("base"
-               "tui-term"
-               "tui-ubuf"))
+(define deps '("base"))
+
+;; Optional — dynamically-required with fallback stubs.
+;; Install separately for full TUI: raco pkg install tui-term tui-ubuf
+;; These packages do NOT compile on Racket 8.10 (upstream bugs).
+;; The TUI works without them using built-in fallbacks.
 
 (define build-deps '("rackunit-lib"))
 
