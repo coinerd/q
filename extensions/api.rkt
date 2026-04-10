@@ -1,7 +1,15 @@
 #lang racket/base
 
+;; extensions/api.rkt — extension registry with registration-order dispatch
+;;
+;; Provides:
+;;   - extension struct (name, version, api-version, hooks)
+;;   - extension-registry (thread-safe, insertion-ordered)
+;;   - register-extension!, unregister-extension!, lookup-extension
+;;   - list-extensions, handlers-for-point
+
 (require racket/contract
-         racket/hash)
+         racket/list)
 
 (provide
  (struct-out extension)
@@ -25,14 +33,23 @@
 ;; hooks      : (hash/c symbol? procedure?)
 
 ;; ============================================================
-;; Extension registry (thread-safe)
+;; Extension registry (thread-safe, insertion-ordered)
 ;; ============================================================
+;;
+;; Uses two parallel structures:
+;;   - hash for O(1) lookup by name
+;;   - list for ordered iteration (insertion order)
+;; Both are stored in a box and protected by a semaphore.
 
-(struct extension-registry (extensions-box semaphore)
+(struct extension-registry (data-box semaphore)
   #:constructor-name make-extension-registry-internal)
 
+;; Internal: data is (cons ordered-list hash)
+;;   ordered-list : (listof extension?) in registration order
+;;   hash         : (hash/c string? extension?) for O(1) lookup
+
 (define (make-extension-registry)
-  (make-extension-registry-internal (box (hasheq)) (make-semaphore 1)))
+  (make-extension-registry-internal (box (cons '() (hasheq))) (make-semaphore 1)))
 
 ;; ============================================================
 ;; register-extension! : extension-registry? extension? -> void?
@@ -41,10 +58,17 @@
 (define (register-extension! registry ext)
   (call-with-semaphore (extension-registry-semaphore registry)
     (λ ()
-      (set-box! (extension-registry-extensions-box registry)
-                (hash-set (unbox (extension-registry-extensions-box registry))
-                          (extension-name ext)
-                          ext)))))
+      (define data (unbox (extension-registry-data-box registry)))
+      (define old-list (car data))
+      (define old-hash (cdr data))
+      ;; Remove old entry if same name exists (overwrite semantics)
+      (define filtered-list
+        (filter (λ (e) (not (equal? (extension-name e) (extension-name ext))))
+                old-list))
+      ;; Append new extension at end (preserves insertion order)
+      (set-box! (extension-registry-data-box registry)
+                (cons (append filtered-list (list ext))
+                      (hash-set old-hash (extension-name ext) ext))))))
 
 ;; ============================================================
 ;; unregister-extension! : extension-registry? string? -> void?
@@ -53,23 +77,28 @@
 (define (unregister-extension! registry name)
   (call-with-semaphore (extension-registry-semaphore registry)
     (λ ()
-      (set-box! (extension-registry-extensions-box registry)
-                (hash-remove (unbox (extension-registry-extensions-box registry))
-                             name)))))
+      (define data (unbox (extension-registry-data-box registry)))
+      (define old-list (car data))
+      (define old-hash (cdr data))
+      (set-box! (extension-registry-data-box registry)
+                (cons (filter (λ (e) (not (equal? (extension-name e) name)))
+                              old-list)
+                      (hash-remove old-hash name))))))
 
 ;; ============================================================
 ;; lookup-extension : extension-registry? string? -> (or/c extension? #f)
 ;; ============================================================
 
 (define (lookup-extension registry name)
-  (hash-ref (unbox (extension-registry-extensions-box registry)) name #f))
+  (define data (unbox (extension-registry-data-box registry)))
+  (hash-ref (cdr data) name #f))
 
 ;; ============================================================
 ;; list-extensions : extension-registry? -> (listof extension?)
 ;; ============================================================
 
 (define (list-extensions registry)
-  (hash-values (unbox (extension-registry-extensions-box registry))))
+  (car (unbox (extension-registry-data-box registry))))
 
 ;; ============================================================
 ;; handlers-for-point : extension-registry? symbol? -> (listof (cons/c string? procedure?))
@@ -78,10 +107,8 @@
 ;; ============================================================
 
 (define (handlers-for-point registry hook-point)
-  (define exts (unbox (extension-registry-extensions-box registry)))
-  ;; Preserve registration order: hash-keys returns keys in insertion order
-  ;; for mutable hashes. Filter to only extensions with this hook point.
-  (for*/list ([name (hash-keys exts)]
-              [ext (in-value (hash-ref exts name))]
+  (define exts (list-extensions registry))
+  (for*/list ([ext exts]
               #:when (hash-has-key? (extension-hooks ext) hook-point))
-    (cons name (hash-ref (extension-hooks ext) hook-point))))
+    (cons (extension-name ext)
+          (hash-ref (extension-hooks ext) hook-point))))

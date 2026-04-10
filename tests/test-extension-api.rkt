@@ -71,3 +71,11 @@
   (register-extension! reg (extension "dup" "2" "1" (hasheq)))
   (check-equal? (extension-version (lookup-extension reg "dup")) "2")
   (check-equal? (length (list-extensions reg)) 1))
+
+(test-case "register-extension! overwrite preserves insertion order"
+  (define reg (make-extension-registry))
+  (register-extension! reg (extension "x" "1.0" "1" (hasheq)))
+  (register-extension! reg (extension "y" "1.0" "1" (hasheq)))
+  (register-extension! reg (extension "x" "2.0" "1" (hasheq)))
+  (define names (map extension-name (list-extensions reg)))
+  (check-equal? names '("y" "x")))
