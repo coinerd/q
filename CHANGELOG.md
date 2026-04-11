@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.7] — 2026-04-11
+
+### Integration Test Infrastructure
+- **#111**: E2E tool→API serialization pipeline tests — validates full chain `make-tool` → `register!` → `list-tools-jsexpr` → `build-request-body` → `jsexpr->bytes` for OpenAI, Anthropic, and Gemini providers (6 test cases)
+- **#112**: `run-agent-turn` direct test coverage — 6 scenarios: text delta accumulation, tool-call dispatch, mixed text+tool-call, cancellation mid-stream, empty stream, hook dispatcher lifecycle
+- **#113**: CLI interactive mode tests — 34 cases covering prompt submission, slash command dispatch, whitespace handling, error recovery, graceful degradation with string ports
+- **#114**: Meta issue — hot-path integration tests for tool registration→API body, provider factory→LLM request, event bus publish→subscribe chains
+
+### Tests Added (+45)
+- E2E tool serialization pipeline (6 cases)
+- run-agent-turn direct coverage (6 cases)
+- CLI interactive mode (34 cases: 12 parse-slash-command edge cases, 5 prompt submission, 14 slash command dispatch, 3 error handling)
+
+### Metrics
+- Test files: 103 → 104
+- Test assertions: 5,365 → 5,460
+- Test lines: 31,468 → 32,194
+- Tests passing: 3,152 → 3,197
+
 ## [0.6.6] — 2026-04-11
 
 ### Provider Correctness

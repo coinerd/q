@@ -343,6 +343,44 @@
 
    (test-case "whitespace → #f"
      (check-false (parse-slash-command "  ")))
+
+   ;; ── Additional edge cases (Issue #113) ──
+
+   (test-case "/model gpt-4 → model with arg"
+     (check-equal? (parse-slash-command "/model gpt-4") '(model "gpt-4")))
+
+   (test-case "/model → model without arg"
+     (check-equal? (parse-slash-command "/model") '(model)))
+
+   (test-case "/clear → clear"
+     (check-equal? (parse-slash-command "/clear") '(clear)))
+
+   (test-case "/interrupt → interrupt"
+     (check-equal? (parse-slash-command "/interrupt") '(interrupt)))
+
+   (test-case "/branches → branches"
+     (check-equal? (parse-slash-command "/branches") '(branches)))
+
+   (test-case "/leaves → leaves"
+     (check-equal? (parse-slash-command "/leaves") '(leaves)))
+
+   (test-case "/switch abc → switch with arg"
+     (check-equal? (parse-slash-command "/switch abc") '(switch "abc")))
+
+   (test-case "/switch → switch without arg"
+     (check-equal? (parse-slash-command "/switch") '(switch)))
+
+   (test-case "/children xyz → children with arg"
+     (check-equal? (parse-slash-command "/children xyz") '(children "xyz")))
+
+   (test-case "/children → children without arg"
+     (check-equal? (parse-slash-command "/children") '(children)))
+
+   (test-case "/quit with extra → quit (extra args ignored)"
+     (check-equal? (parse-slash-command "/quit with extra") '(quit)))
+
+   (test-case "/exit with extra → quit (extra args ignored)"
+     (check-equal? (parse-slash-command "/exit now") '(quit)))
    )
 
   ;; ═══════════════════════════════════════════
@@ -578,6 +616,246 @@
      (define-values (writer flush!) (make-stream-markdown-writer))
      (flush! out)
      (check-equal? (string-length (get-output-string out)) 0))
+   )
+
+  ;; ═══════════════════════════════════════════
+  ;; run-cli-interactive — prompt submission
+  ;; ═══════════════════════════════════════════
+
+  (test-suite
+   "run-cli-interactive — prompt submission"
+
+     (test-case "basic prompt submission"
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "hello\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("hello")))
+
+   (test-case "multiple lines submitted as separate prompts"
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "line1\nline2\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("line1" "line2")))
+
+   (test-case "whitespace-only lines are skipped"
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "   \nhello\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("hello")))
+
+   (test-case "empty lines are skipped"
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "\nhello\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("hello")))
+
+   (test-case "EOF terminates with Goodbye"
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "hello\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("hello"))
+     (check-true (string-contains? (get-output-string out) "Goodbye.")))
+   )
+
+  ;; ═══════════════════════════════════════════
+  ;; run-cli-interactive — slash commands
+  ;; ═══════════════════════════════════════════
+
+  (test-suite
+   "run-cli-interactive — slash commands"
+
+     (test-case "/quit terminates with Goodbye"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (check-true (string-contains? (get-output-string out) "Goodbye.")))
+
+   (test-case "/exit terminates with Goodbye"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/exit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (check-true (string-contains? (get-output-string out) "Goodbye.")))
+
+   (test-case "/help displays usage"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/help\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "Usage") "output should contain Usage"))
+
+   (test-case "/compact calls compact-fn"
+     (define compact-called (box #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/compact\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:compact-fn (lambda () (set-box! compact-called #t))
+                          #:in in #:out out)
+     (check-true (unbox compact-called) "compact-fn should have been called"))
+
+   (test-case "/compact without compact-fn shows fallback message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/compact\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (check-true (string-contains? (get-output-string out) "compacting")
+                 "output should contain compacting fallback message"))
+
+   (test-case "/history calls history-fn"
+     (define history-called (box #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/history\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:history-fn (lambda (_) (set-box! history-called #t))
+                          #:in in #:out out)
+     (check-true (unbox history-called) "history-fn should have been called"))
+
+   (test-case "/history without history-fn shows fallback message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/history\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (check-true (string-contains? (get-output-string out) "history not yet connected")
+                 "output should contain history fallback message"))
+
+   (test-case "/model gpt-4 calls model-fn with arg"
+     (define model-arg (box #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/model gpt-4\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:model-fn (lambda (name) (set-box! model-arg name))
+                          #:in in #:out out)
+     (check-equal? (unbox model-arg) "gpt-4"))
+
+   (test-case "/model without arg calls model-fn with #f"
+     (define model-arg (box 'not-called))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/model\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:model-fn (lambda (name) (set-box! model-arg name))
+                          #:in in #:out out)
+     (check-equal? (unbox model-arg) #f))
+
+   (test-case "/fork abc123 calls fork-fn with arg"
+     (define fork-arg (box #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/fork abc123\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:fork-fn (lambda (arg) (set-box! fork-arg arg))
+                          #:in in #:out out)
+     (check-equal? (unbox fork-arg) "abc123"))
+
+   (test-case "/fork without arg calls fork-fn with #f"
+     (define fork-arg (box 'not-called))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/fork\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:fork-fn (lambda (arg) (set-box! fork-arg arg))
+                          #:in in #:out out)
+     (check-equal? (unbox fork-arg) #f))
+
+   (test-case "/clear shows clear message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/clear\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (check-true (string-contains? (get-output-string out) "clear")
+                 "output should mention clear"))
+
+   (test-case "/interrupt shows interrupt message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "/interrupt\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (check-true (string-contains? (get-output-string out) "interrupt")
+                 "output should mention interrupt"))
+   )
+
+  ;; ═══════════════════════════════════════════
+  ;; run-cli-interactive — error handling and edge cases
+  ;; ═══════════════════════════════════════════
+
+  (test-suite
+   "run-cli-interactive — error handling"
+
+   (test-case "session-fn error is displayed and loop continues"
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "bad\nok\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p)
+                                         (set-box! prompts (cons p (unbox prompts)))
+                                         (when (equal? p "bad")
+                                           (error "test error")))
+                          #:in in
+                          #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "Error:")
+                "output should contain Error:")
+     ;; Both prompts were submitted (session-fn ran before error for "bad")
+     (check-equal? (reverse (unbox prompts)) '("bad" "ok")))
+
+   (test-case "graceful degradation with string port (no readline)"
+     ;; Using a string port triggers the non-readline fallback path.
+     ;; This test verifies the entire interactive loop works without readline.
+     (define prompts (box '()))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "test prompt\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("test prompt"))
+     (check-true (string-contains? (get-output-string out) "Goodbye.")))
+
+   (test-case "mixed commands and prompts"
+     (define prompts (box '()))
+     (define compact-called (box #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define in (open-input-string "first prompt\n/compact\nsecond prompt\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg
+                          #:session-fn (lambda (p) (set-box! prompts (cons p (unbox prompts))))
+                          #:compact-fn (lambda () (set-box! compact-called #t))
+                          #:in in
+                          #:out out)
+     (check-equal? (reverse (unbox prompts)) '("first prompt" "second prompt"))
+     (check-true (unbox compact-called)))
    )
   )
 

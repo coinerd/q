@@ -3,13 +3,16 @@
 ;; tests/test-loop.rkt — tests for agent/state.rkt, agent/queue.rkt, agent/loop.rkt
 
 (require rackunit
+         racket/generator
          "../agent/types.rkt"
          "../agent/event-bus.rkt"
          "../agent/state.rkt"
          "../agent/queue.rkt"
          "../agent/loop.rkt"
          "../llm/model.rkt"
-         "../llm/provider.rkt")
+         "../llm/provider.rkt"
+         "../extensions/hooks.rkt"
+         "../util/cancellation.rkt")
 
 ;; ============================================================
 ;; 1. Loop state tests
@@ -125,3 +128,176 @@
  (check-equal? (length text-parts) 1)
  (check-equal? (length tc-parts) 1)
  (check-equal? (text-part-text (car text-parts)) "I'll help you"))
+
+;; ============================================================
+;; 5. run-agent-turn direct tests
+;; ============================================================
+
+(test-case
+ "run-agent-turn: 3 text deltas → accumulated text"
+ (define bus (make-event-bus))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk "Hel" #f #f #f)
+            (stream-chunk "lo " #f #f #f)
+            (stream-chunk "world" #f #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"))
+ (check-equal? (loop-result-termination-reason result) 'completed)
+ (define msgs (loop-result-messages result))
+ (check = (length msgs) 1)
+ (define assistant (car msgs))
+ (check-equal? (message-role assistant) 'assistant)
+ (define text-parts (filter text-part? (message-content assistant)))
+ (check = (length text-parts) 1)
+ (check-equal? (text-part-text (car text-parts)) "Hello world"))
+
+(test-case
+ "run-agent-turn: tool-call delta → tool-calls-pending"
+ (define bus (make-event-bus))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk
+             #f
+             (hasheq 'id "tc-1" 'index 0
+                     'function (hasheq 'name "bash"
+                                       'arguments "{\"command\":\"ls\"}"))
+             #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "run bash"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:tools (list (hasheq 'type "function"
+                                                      'function (hasheq 'name "bash"
+                                                                        'parameters (hasheq))))))
+ (check-equal? (loop-result-termination-reason result) 'tool-calls-pending)
+ (define msgs (loop-result-messages result))
+ (check = (length msgs) 1)
+ (define assistant (car msgs))
+ (define tc-parts (filter tool-call-part? (message-content assistant)))
+ (check = (length tc-parts) 1)
+ (check-equal? (tool-call-part-name (car tc-parts)) "bash")
+ (check-equal? (tool-call-part-id (car tc-parts)) "tc-1"))
+
+(test-case
+ "run-agent-turn: mixed text + tool call → both captured"
+ (define bus (make-event-bus))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk "Thinking..." #f #f #f)
+            (stream-chunk
+             #f
+             (hasheq 'id "tc-2" 'index 0
+                     'function (hasheq 'name "read"
+                                       'arguments "{\"path\":\"foo.rkt\"}"))
+             #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "do stuff"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:tools (list (hasheq 'type "function"
+                                                      'function (hasheq 'name "read"
+                                                                        'parameters (hasheq))))))
+ (check-equal? (loop-result-termination-reason result) 'tool-calls-pending)
+ (define msgs (loop-result-messages result))
+ (check = (length msgs) 1)
+ (define assistant (car msgs))
+ (define text-parts (filter text-part? (message-content assistant)))
+ (define tc-parts (filter tool-call-part? (message-content assistant)))
+ (check = (length text-parts) 1)
+ (check-equal? (text-part-text (car text-parts)) "Thinking...")
+ (check = (length tc-parts) 1)
+ (check-equal? (tool-call-part-name (car tc-parts)) "read"))
+
+(test-case
+ "run-agent-turn: pre-cancelled token → 'cancelled termination"
+ (define bus (make-event-bus))
+ (define tok (make-cancellation-token))
+ (cancel-token! tok)
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk "text" #f #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:cancellation-token tok))
+ (check-equal? (loop-result-termination-reason result) 'cancelled))
+
+(test-case
+ "run-agent-turn: empty stream → completed with empty text"
+ (define bus (make-event-bus))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"))
+ (check-equal? (loop-result-termination-reason result) 'completed)
+ (define msgs (loop-result-messages result))
+ (check = (length msgs) 1)
+ (define assistant (car msgs))
+ (define text-parts (filter text-part? (message-content assistant)))
+ (check = (length text-parts) 1)
+ (check-equal? (text-part-text (car text-parts)) ""))
+
+(test-case
+ "run-agent-turn: hook dispatcher receives message-start/update/end"
+ (define bus (make-event-bus))
+ (define received-hooks (box '()))
+ (define (recording-hook-dispatcher hook-point payload)
+   (set-box! received-hooks (append (unbox received-hooks) (list hook-point)))
+   #f)
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk "hi" #f #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hello"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:hook-dispatcher recording-hook-dispatcher))
+ (check-equal? (loop-result-termination-reason result) 'completed)
+ (define hooks (unbox received-hooks))
+ (check-not-false (member 'model-request-pre hooks))
+ (check-not-false (member 'message-start hooks))
+ (check-not-false (member 'message-update hooks))
+ (check-not-false (member 'model-response-post hooks))
+ (check-not-false (member 'message-end hooks)))
