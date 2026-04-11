@@ -342,6 +342,35 @@
      (check-false (tool-result-is-error? echo-result))
      (check-equal? (hash-ref (list-ref (tool-result-content echo-result) 0) 'text)
                    "hello"))
-   ))
+
+   ;; ============================================================
+   ;; 6. Tool serialization (tool->jsexpr / list-tools-jsexpr)
+   ;; ============================================================
+
+   (test-case "tool->jsexpr produces OpenAI normalized format"
+     (define schema
+       (hasheq 'type "object"
+               'properties (hasheq 'path (hasheq 'type "string"))
+               'required '("path")))
+     (define ser-tool (make-tool "read_file" "Read a file" schema void))
+     (define jx (tool->jsexpr ser-tool))
+     (check-equal? (hash-ref jx 'type) "function")
+     (define fn (hash-ref jx 'function))
+     (check-equal? (hash-ref fn 'name) "read_file")
+     (check-equal? (hash-ref fn 'description) "Read a file")
+     (check-equal? (hash-ref fn 'parameters) schema))
+
+   (test-case "list-tools-jsexpr returns serialized tool list"
+     (define reg (make-tool-registry))
+     (register-tool! reg t)
+     (define jtools (list-tools-jsexpr reg))
+     (check-equal? (length jtools) 1)
+     (define jx (car jtools))
+     (check-equal? (hash-ref jx 'type) "function")
+     (check-equal? (hash-ref (hash-ref jx 'function) 'name) "read_file"))
+
+   (test-case "list-tools-jsexpr returns empty list for empty registry"
+     (define reg (make-tool-registry))
+     (check-equal? (list-tools-jsexpr reg) '()))))
 
 (run-tests tool-reg-tests)

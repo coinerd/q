@@ -29,6 +29,7 @@
  tool-description
  tool-schema
  tool-execute
+ tool->jsexpr
 
  ;; ── Tool result (re-exported from agent/types.rkt) ──
  tool-result?
@@ -64,6 +65,7 @@
  unregister-tool!
  lookup-tool
  list-tools
+ list-tools-jsexpr
  tool-names)
 
 ;; ============================================================
@@ -164,6 +166,20 @@
 
 (define (lookup-tool reg name)
   (hash-ref (tool-registry-tools-box reg) name #f))
+
+;; tool->jsexpr : tool? -> hash?
+;; Serialize a tool struct to the OpenAI normalized format.
+;; Output: {"type":"function","function":{"name":"...","description":"...","parameters":{...}}}
+(define (tool->jsexpr t)
+  (hasheq 'type "function"
+          'function (hasheq 'name (tool-name t)
+                            'description (tool-description t)
+                            'parameters (tool-schema t))))
+
+;; list-tools-jsexpr : tool-registry? -> (listof hash?)
+;; Return all registered tools serialized to the OpenAI normalized JSON format.
+(define (list-tools-jsexpr reg)
+  (map tool->jsexpr (hash-values (tool-registry-tools-box reg))))
 
 (define (list-tools reg)
   (hash-values (tool-registry-tools-box reg)))
