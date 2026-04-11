@@ -86,9 +86,9 @@
   (test-case "sanitize-env strips SECRET pattern"
     (define env (make-environment-variables))
     (environment-variables-set! env #"MY_SECRET" #"hush")
-    (environment-variables-set! env #"HOME" #"/home/user")
+    (environment-variables-set! env #"HOME" #"/tmp/testhome")
     (define clean (sanitize-env env))
-    (check-equal? (environment-variables-ref clean #"HOME") #"/home/user")
+    (check-equal? (environment-variables-ref clean #"HOME") #"/tmp/testhome")
     (check-false (environment-variables-ref clean #"MY_SECRET")))
 
   (test-case "sanitize-env strips TOKEN pattern"
@@ -128,11 +128,11 @@
   (test-case "sanitize-env preserves safe vars like PATH and HOME"
     (define env (make-environment-variables))
     (environment-variables-set! env #"PATH" #"/usr/bin")
-    (environment-variables-set! env #"HOME" #"/home/user")
+    (environment-variables-set! env #"HOME" #"/tmp/testhome")
     (environment-variables-set! env #"TERM" #"xterm")
     (define clean (sanitize-env env))
     (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")
-    (check-equal? (environment-variables-ref clean #"HOME") #"/home/user")
+    (check-equal? (environment-variables-ref clean #"HOME") #"/tmp/testhome")
     (check-equal? (environment-variables-ref clean #"TERM") #"xterm"))
 
   (test-case "secret-env-var? detects common secret patterns"

@@ -7,7 +7,10 @@
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/runtime-path
          "../tools/builtins/find.rkt")
+
+(define-runtime-path test-dir ".")
 
 ;; ============================================================
 ;; Helpers

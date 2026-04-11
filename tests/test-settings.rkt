@@ -14,8 +14,11 @@
 (require rackunit
          racket/file
          racket/port
+         racket/runtime-path
          json
          "../runtime/settings.rkt")
+
+(define-runtime-path test-dir ".")
 
 ;; ============================================================
 ;; Helpers

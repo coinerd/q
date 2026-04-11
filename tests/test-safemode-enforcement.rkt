@@ -5,6 +5,7 @@
 
 (require rackunit
          racket/file
+         racket/runtime-path
          "../tools/tool.rkt"
          "../tools/scheduler.rkt"
          "../runtime/safe-mode.rkt"
@@ -12,7 +13,7 @@
          "../tools/builtins/write.rkt"
          "../tools/builtins/edit.rkt")
 
-;; ============================================================
+(define-runtime-path test-dir ".")
 ;; Helpers
 ;; ============================================================
 
@@ -274,10 +275,14 @@
       (safe-delete-dir (build-path (find-system-path 'temp-dir) "safemode-linkdir-")))))
 
 (test-case "SEC-04: allowed-path? works normally with safe-mode off"
-  (parameterize ([current-safe-mode #f]
-                 [project-root "/some/project"])
-    (check-true (allowed-path? "/etc/passwd") "any path allowed when safe-mode off")
-    (check-true (allowed-path? "/some/other/path") "any path allowed when safe-mode off")))
+  (let ([tmp-dir (make-temporary-file "safemode-test-~a")])
+    (delete-file tmp-dir)
+    (make-directory tmp-dir)
+    (parameterize ([current-safe-mode #f]
+                   [project-root tmp-dir])
+      (check-true (allowed-path? (build-path tmp-dir "sub")) "any path allowed when safe-mode off")
+      (check-true (allowed-path? "/tmp/safemode-arbitrary") "any path allowed when safe-mode off"))
+    (delete-directory/files tmp-dir)))
 
 ;; ============================================================
 ;; Summary

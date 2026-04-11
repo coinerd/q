@@ -2,7 +2,10 @@
 
 (require rackunit
          racket/port
+         racket/runtime-path
          "../runtime/safe-mode.rkt")
+
+(define-runtime-path test-dir ".")
 
 ;; ============================================================
 ;; test-safe-mode.rkt — tests for safe-mode and trust model

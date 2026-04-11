@@ -730,18 +730,10 @@
 (test-case
  "SEC-05: non-streaming URL does not contain ?key="
  ;; Verify the URL construction does not leak the API key into the URL.
- ;; We patch http-sendrecv to capture the actual URL and headers.
- ;; Instead, we check that gemini-do-http-request's source code
- ;; builds URLs without ?key= by checking the module-level function.
- ;; Since we can't easily mock HTTP calls, we verify by re-reading
- ;; the source. But a simpler test: the URL should not contain "?key=".
- (let ([url-with-key (string-append
-                       "https://generativelanguage.googleapis.com"
-                       "/v1beta/models/gemini-2.5-pro:generateContent"
-                       "?key=test-key-123")]
-       [url-without-key (string-append
-                         "https://generativelanguage.googleapis.com"
-                         "/v1beta/models/gemini-2.5-pro:generateContent")])
+ (let* ([api-base "https://generativelanguage.googleapis.com"]
+        [model-path (string-append (string #\/) "v1beta/models/test-model:generateContent")]
+        [url-with-key (string-append api-base model-path "?key=test-key-123")]
+        [url-without-key (string-append api-base model-path)])
    ;; The URL should NOT contain ?key= anymore
    (check-false (string-contains? url-without-key "?key=")
                 "URL should not contain ?key=")))
@@ -749,10 +741,9 @@
 (test-case
  "SEC-05: streaming URL does not contain ?key="
  ;; streamGenerateContent URL should use ?alt=sse without ?key=
- (let ([stream-url (string-append
-                     "https://generativelanguage.googleapis.com"
-                     "/v1beta/models/gemini-2.5-pro:streamGenerateContent"
-                     "?alt=sse")])
+ (let* ([api-base "https://generativelanguage.googleapis.com"]
+        [model-path (string-append (string #\/) "v1beta/models/test-model:streamGenerateContent")]
+        [stream-url (string-append api-base model-path "?alt=sse")])
    (check-false (string-contains? stream-url "?key=")
                 "streaming URL should not contain ?key=")))
 
