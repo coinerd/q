@@ -414,20 +414,22 @@
       (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
         (if parts (string->number (cadr parts)) 0)))
     (when (>= status-code 400)
-      (define resp-body (read-response-body response-port))
+      (define resp-body (read-response-body/timeout response-port))
       (gemini-check-http-status! status-line resp-body))
     ;; Incremental SSE parsing (Issue #108)
     (define raw-events
       (if (>= status-code 400)
           '()
           (let loop ([acc '()])
-            (define line (read-line response-port))
-            (if (eof-object? line)
-                (reverse acc)
-                (let ([parsed (parse-sse-line line)])
-                  (if (hash? parsed)
-                      (loop (cons parsed acc))
-                      (loop acc)))))))
+            (define line (read-line/timeout response-port))
+            (cond
+              [(eq? line #f) (reverse acc)]  ; timeout — return what we have
+              [(eof-object? line) (reverse acc)]
+              [else
+               (let ([parsed (parse-sse-line line)])
+                 (if (hash? parsed)
+                     (loop (cons parsed acc))
+                     (loop acc)))]))))
     (gemini-parse-stream-chunks raw-events))
 
   (make-provider

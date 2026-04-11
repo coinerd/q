@@ -127,7 +127,7 @@
                        #:method "POST"
                        #:headers headers
                        #:data body-bytes)))
-  (define response-body (read-response-body response-port))
+  (define response-body (read-response-body/timeout response-port))
   (check-http-status! status-line response-body)
   (bytes->jsexpr response-body))
 
@@ -253,7 +253,7 @@
         (if m (string->number (cadr m)) 0)))
     (when (>= status-code 300)
       ;; Error/redirect — read full body, then raise
-      (define err-body (read-response-body response-port))
+      (define err-body (read-response-body/timeout response-port))
       (close-input-port response-port)
       (check-http-status! status-line err-body))
     ;; Status OK — return an incremental generator that reads SSE lines

@@ -368,18 +368,20 @@
       (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
         (if parts (string->number (cadr parts)) 0)))
     (when (>= status-code 400)
-      (define resp-body (read-response-body response-port))
+      (define resp-body (read-response-body/timeout response-port))
       (anthropic-check-http-status! status-line resp-body))
     ;; Incremental SSE parsing — read line-by-line from port
     (define raw-events
       (let loop ([acc '()])
-        (define line (read-line response-port))
-        (if (eof-object? line)
-            (reverse acc)
-            (let ([parsed (parse-sse-line line)])
-              (if (hash? parsed)
-                  (loop (cons parsed acc))
-                  (loop acc))))))
+        (define line (read-line/timeout response-port))
+        (cond
+          [(eq? line #f) (reverse acc)]  ; timeout — return what we have
+          [(eof-object? line) (reverse acc)]
+          [else
+           (let ([parsed (parse-sse-line line)])
+             (if (hash? parsed)
+                 (loop (cons parsed acc))
+                 (loop acc)))])))
     (anthropic-parse-stream-chunks raw-events))
 
   (make-provider

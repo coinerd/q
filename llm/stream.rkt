@@ -12,7 +12,8 @@
          racket/hash
          json
          "model.rkt"
-         racket/port)
+         racket/port
+         racket/match)
 
 (provide
  parse-sse-lines
@@ -22,7 +23,67 @@
  accumulate-tool-call-deltas
  read-sse-chunks
  read-response-body
- max-response-size)
+ read-line/timeout
+ read-response-body/timeout
+ max-response-size
+ exn:fail:network:timeout
+ exn:fail:network:timeout?
+ http-read-timeout-default)
+
+;; ============================================================
+;; Timeout configuration
+;; ============================================================
+
+;; Default HTTP read timeout in seconds.
+;; When the network drops mid-stream, reads will timeout after this many seconds.
+(define http-read-timeout-default 120)
+
+;; Exception type for network read timeouts.
+(struct exn:fail:network:timeout exn:fail () #:transparent)
+
+;; ============================================================
+;; Timeout-aware read helpers
+;; ============================================================
+
+;; read-line/timeout : input-port? [#:timeout seconds] -> (or/c string? eof?)
+;; Like read-line but with a timeout. Returns #f on timeout (caller should raise).
+(define (read-line/timeout port #:timeout [timeout-secs http-read-timeout-default])
+  (define result
+    (sync/timeout timeout-secs
+      (read-line-evt port 'any)))
+  (cond
+    [(eq? result #f) #f]     ; timeout
+    [else result]))           ; string or eof
+
+;; read-response-body/timeout : input-port? [#:timeout seconds] -> bytes?
+;; Like read-response-body but with a per-chunk read timeout.
+;; Raises exn:fail:network:timeout on timeout.
+(define (read-response-body/timeout port #:timeout [timeout-secs http-read-timeout-default])
+  (define out (open-output-bytes))
+  (define buf (make-bytes 8192))
+  (define deadline (+ (current-inexact-milliseconds)
+                      (* timeout-secs 1000.0)))
+  (let loop ([total 0])
+    (define remaining (/ (- deadline (current-inexact-milliseconds)) 1000.0))
+    (when (< remaining 0)
+      (raise (exn:fail:network:timeout
+              (format "HTTP read timeout (~a seconds) while reading response body" timeout-secs)
+              (current-continuation-marks))))
+    (define n
+      (sync/timeout remaining
+        (read-bytes-avail!-evt buf port)))
+    (cond
+      [(eq? n #f)
+       (raise (exn:fail:network:timeout
+               (format "HTTP read timeout (~a seconds) while reading response body" timeout-secs)
+               (current-continuation-marks)))]
+      [(eof-object? n) (get-output-bytes out)]
+      [(> (+ total n) max-response-size)
+       (raise (exn:fail "LLM response exceeds maximum size limit (10 MB)"
+                        (current-continuation-marks)))]
+      [else
+       (write-bytes buf out 0 n)
+       (loop (+ total n))])))
 
 ;; ============================================================
 ;; Bounded response body reading (SEC-10)
@@ -210,15 +271,21 @@
 ;; read-sse-chunks (incremental generator)
 ;; ============================================================
 
-;; read-sse-chunks : input-port? -> generator?
+;; read-sse-chunks : input-port? [#:timeout seconds] -> generator?
 ;; Returns a generator that yields stream-chunk? values as they arrive from the port.
 ;; Yields #f when the stream is complete ([DONE] received or EOF).
+;; Raises exn:fail:network:timeout on read timeout.
 ;; The port is NOT closed by this function — the caller is responsible.
-(define (read-sse-chunks port)
+(define (read-sse-chunks port #:timeout [timeout-secs http-read-timeout-default])
   (generator ()
     (let loop ()
-      (define line (read-line port))
+      (define line (read-line/timeout port #:timeout timeout-secs))
       (cond
+        [(eq? line #f)
+         ;; Timeout — raise clean error
+         (raise (exn:fail:network:timeout
+                 (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
+                 (current-continuation-marks)))]
         [(eof-object? line) (yield #f)]
         [else
          (define parsed (parse-sse-line line))

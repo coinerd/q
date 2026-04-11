@@ -145,4 +145,53 @@
   (check-equal? (hash-ref (cadr result) 'name) "read")
   (check-equal? (hash-ref (cadr result) 'arguments) "/etc/passwd"))
 
+;; ============================================================
+;; read-line/timeout tests
+;; ============================================================
+
+(test-case "read-line/timeout returns string from ready port"
+  (define p (open-input-string "hello\nworld\n"))
+  (check-equal? (read-line/timeout p #:timeout 1) "hello")
+  (check-equal? (read-line/timeout p #:timeout 1) "world")
+  (check-equal? (read-line/timeout p #:timeout 1) eof))
+
+(test-case "read-line/timeout returns #f on empty port (timeout)"
+  ;; A pipe with no writer will block forever on read
+  (define-values (in out) (make-pipe))
+  (define result (read-line/timeout in #:timeout 0.001))
+  (check-false result))
+
+(test-case "read-response-body/timeout reads full body"
+  (define data (make-bytes 100 65)) ; 100 bytes of 'A'
+  (define p (open-input-bytes data))
+  (define result (read-response-body/timeout p #:timeout 1))
+  (check-equal? (bytes-length result) 100))
+
+(test-case "read-response-body/timeout raises on timeout"
+  ;; Create a port that never produces data
+  (define p (open-input-string ""))
+  ;; A pipe with no writer will block forever on read
+  (define-values (in out) (make-pipe))
+  ;; Don't write anything — read will timeout
+  (check-exn exn:fail:network:timeout?
+    (lambda () (read-response-body/timeout in #:timeout 0.001))))
+
+(test-case "read-sse-chunks respects timeout"
+  (define-values (in out) (make-pipe))
+  ;; Write one chunk but then stop — the second read should timeout
+  (write-bytes #"data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n" out)
+  (define gen (read-sse-chunks in #:timeout 0.001))
+  (define c1 (gen))
+  (check-pred stream-chunk? c1)
+  (check-equal? (stream-chunk-delta-text c1) "Hi")
+  ;; Next read will timeout — should raise exn:fail:network:timeout
+  (check-exn exn:fail:network:timeout?
+    (lambda () (gen))))
+
+(test-case "exn:fail:network:timeout is an exn:fail"
+  (check-true (exn:fail? (exn:fail:network:timeout "test" (current-continuation-marks)))))
+
+(test-case "http-read-timeout-default is a positive number"
+  (check-true (and (number? http-read-timeout-default) (> http-read-timeout-default 0))))
+
 (displayln "All stream incremental tests passed")
