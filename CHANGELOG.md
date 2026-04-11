@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-04-11
+
+### Developer Tooling
+- **DEV-01**: New `scripts/wrap-lines.rkt` — Racket-tokenizer-aware line wrapper that never breaks inside string literals. Supports `--check`, `--dry-run`, and `--all` modes (#89)
+- **DEV-02**: New `scripts/check-protocols.rkt` + `scripts/protocols.rktd` — protocol/contract consistency checker that detects return-type mismatches (e.g., struct vs list access) across callers (#90)
+- **DEV-03**: New `scripts/check-imports.rkt` — import conflict detector that flags identifiers provided by more than one required module (#91)
+- **DEV-04**: New `scripts/pre-commit.rkt` — pre-commit hook that runs format lint and affected tests on staged `.rkt` files. Install with `racket scripts/pre-commit.rkt --install` (#91)
+
+### Protocol Consistency
+- **PROTO-01**: Unified hook-dispatcher protocol to use `hook-result` struct everywhere. `agent/loop.rkt` and `skills/types.rkt` now use `hook-result-action`/`hook-result-payload` instead of `car`/`cadr`. Removed `make-list-hook-dispatcher` from test helpers (#92)
+
+### Quality
+- **QUAL-04**: Removed empty stub modules `util/diff.rkt` and `util/paths.rkt` and their test files (#93)
+
+### Testing
+- **TEST-09**: New `tests/test-sgr.rkt` — 14 tests for SGR post-processing (bg=black replacement, extended color preservation, edge cases) (#94)
+
+### CI
+- Added `check-protocols.rkt` and `check-imports.rkt` to CI pipeline (6 lints total) (#95)
+- Updated CONTRIBUTING.md with pre-commit hook setup and CI lint documentation
+- Updated style guide line limit to 150 characters
+
 ## [0.6.3] — 2026-04-10
 
 ### Architecture

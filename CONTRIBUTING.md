@@ -22,11 +22,38 @@ raco test tests/
 
 ## Development Workflow
 
+### Pre-commit Hook (Recommended)
+
+Install the pre-commit hook to automatically run lints and affected tests before each commit:
+
+```bash
+racket scripts/pre-commit.rkt --install
+```
+
+This will run format lint and relevant tests on your staged `.rkt` files. Use `--all` to run the full suite manually:
+
+```bash
+racket scripts/pre-commit.rkt --all
+```
+
+### CI Lint Checks
+
+CI runs 6 lint checks that must all pass:
+1. `lint-tests.rkt` — test portability (no hardcoded paths, sorted hash-keys)
+2. `lint-version.rkt` — version references consistent across all .md files
+3. `lint-format.rkt` — max 150 chars per line, no tabs, no trailing whitespace
+4. `metrics.rkt --lint` — README metrics match actual codebase
+5. `check-protocols.rkt` — protocol return types used consistently
+6. `check-imports.rkt` — no duplicate identifier imports
+
+### Development Steps
+
 1. Fork the repository
 2. Create a feature branch: `git checkout -b my-feature`
 3. Make changes with tests
 4. Ensure all tests pass: `raco test tests/`
-5. Submit a pull request
+5. Ensure all lints pass: run each script in `scripts/`
+6. Submit a pull request
 
 ## Code Style
 

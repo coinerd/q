@@ -43,7 +43,7 @@ All changes to `q/` source files (excluding `tests/`) should follow these rules.
 |-------------------------------|---------------------------------------------------|
 | Indent                        | 2 spaces                                          |
 | Soft line limit               | 100 characters                                    |
-| Hard line limit               | 120 characters                                    |
+| Hard line limit               | 150 characters                                    |
 | Tabs                          | **None** — spaces only                            |
 | Trailing whitespace           | **None**                                          |
 | Final newline                 | Yes (one `\n` at end of file)                     |
@@ -53,7 +53,7 @@ All changes to `q/` source files (excluding `tests/`) should follow these rules.
 
 Long string literals (tool descriptions, help text, API messages) and deeply
 nested data literals (`hasheq` tables) may exceed 100 characters but must stay
-under 120 characters where practical. If a string is unavoidably long, prefer
+under 150 characters where practical. If a string is unavoidably long, prefer
 `string-append` or `~a` formatting over a single oversized line.
 
 ## 4. Contracts
@@ -142,6 +142,6 @@ cd q && find . -name '*.rkt' -not -path './tests/*' -exec grep -l $'\t' {} +
 # No trailing whitespace in source
 cd q && find . -name '*.rkt' -not -path './tests/*' -exec grep -n ' $' {} +
 
-# No lines over 120 chars (informational)
-cd q && find . -name '*.rkt' -not -path './tests/*' -exec awk 'length > 120 {print FILENAME":"NR":"length}' {} + | sort -t: -k3 -rn | head -20
+# No lines over 150 chars (informational)
+cd q && find . -name '*.rkt' -not -path './tests/*' -exec awk 'length > 150 {print FILENAME":"NR":"length}' {} + | sort -t: -k3 -rn | head -20
 ```

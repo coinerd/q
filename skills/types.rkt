@@ -21,7 +21,9 @@
          racket/hash
          racket/list
          json
-         "../util/config-paths.rkt")
+         "../util/config-paths.rkt"
+         (only-in "../extensions/hooks.rkt"
+                  hook-result? hook-result-action hook-result-payload))
 
 (provide
  ;; Structs
@@ -181,15 +183,15 @@
   (define discover-result
     (and hook-dispatcher (hook-dispatcher 'resources-discover discover-payload)))
   (cond
-    [(and discover-result
-          (eq? (car discover-result) 'block))
+    [(and (hook-result? discover-result)
+          (eq? (hook-result-action discover-result) 'block))
      ;; Block: return empty resource set
      (empty-resource-set)]
-    [(and discover-result
-          (eq? (car discover-result) 'amend)
-          (resource-set? (cadr discover-result)))
+    [(and (hook-result? discover-result)
+          (eq? (hook-result-action discover-result) 'amend)
+          (resource-set? (hook-result-payload discover-result)))
      ;; Amend: extension provided a custom resource-set
-     (cadr discover-result)]
+     (hook-result-payload discover-result)]
     [else
      ;; Normal: scan directory
      (resource-set (load-instructions dir)

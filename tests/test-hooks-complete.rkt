@@ -51,12 +51,6 @@
   (lambda (hook-point payload)
     (dispatch-hooks hook-point payload reg)))
 
-(define (make-list-hook-dispatcher reg)
-  ;; Returns dispatcher that produces (list action payload) for the new protocol
-  (lambda (hook-point payload)
-    (define r (dispatch-hooks hook-point payload reg))
-    (list (hook-result-action r) (hook-result-payload r))))
-
 (define (make-event-collector bus)
   (define collected (box '()))
   (subscribe! bus
@@ -84,7 +78,7 @@
                           (set-box! hook-called? #t)
                           (set-box! captured-payload payload)
                           (hook-pass payload)))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
 
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov (make-mock-provider
@@ -111,7 +105,7 @@
                           (set-box! hook-called? #t)
                           (set-box! captured-payload payload)
                           (hook-pass payload)))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
 
      (define content-parts (list (hasheq 'type "text" 'text "Response text")))
      (define mock-prov (make-mock-provider
@@ -188,7 +182,7 @@
      (define reg (make-test-extension-registry
                   (list 'model-request-pre
                         (lambda (payload) (hook-pass payload)))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
 
      (define content-parts (list (hasheq 'type "text" 'text "OK")))
      (define mock-prov (make-mock-provider
@@ -375,7 +369,7 @@
                           (set-box! hook-called? #t)
                           (set-box! captured-payload payload)
                           (hook-pass payload)))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -392,7 +386,7 @@
                   (list 'message-start
                         (lambda (payload)
                           (hook-block "blocked by test")))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -417,7 +411,7 @@
                                       (append (unbox deltas)
                                               (list (hash-ref payload 'delta-text)))))
                           (hook-pass payload)))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Hello world")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -440,7 +434,7 @@
                         (lambda (payload)
                           (set-box! call-count (+ 1 (unbox call-count)))
                           (hook-block "stop streaming")))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Hello world")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -464,7 +458,7 @@
                           (set-box! hook-called? #t)
                           (set-box! captured-payload payload)
                           (hook-pass payload)))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Response text")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -484,7 +478,7 @@
                   (list 'message-end
                         (lambda (payload)
                           (hook-amend (hash-set payload 'content "AMENDED CONTENT"))))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Original text")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -509,7 +503,7 @@
                   (list 'message-end
                         (lambda (payload)
                           (hook-block "suppressed by test")))))
-     (define hook-dispatcher (make-list-hook-dispatcher reg))
+     (define hook-dispatcher (make-hook-dispatcher reg))
      (define content-parts (list (hasheq 'type "text" 'text "Response text")))
      (define mock-prov (make-mock-provider
                         (make-model-response content-parts (hash) "mock" #f)))
@@ -536,7 +530,7 @@
      (define tmp-dir (make-temporary-file "q-test-resources-~a" 'directory))
      (define q-dir (build-path tmp-dir ".q"))
      (make-directory* q-dir)
-     (define result (load-global-resources tmp-dir #:hook-dispatcher (make-list-hook-dispatcher reg)))
+     (define result (load-global-resources tmp-dir #:hook-dispatcher (make-hook-dispatcher reg)))
      (check-true (unbox hook-called?) "resources-discover hook should be called")
      (check-not-false (hash-ref (unbox captured-payload) 'base-dir #f)
                       "payload should contain base-dir")
@@ -550,7 +544,7 @@
      (define q-dir (build-path tmp-dir ".q"))
      (make-directory* q-dir)
      ;; Even with a real dir, block should return empty
-     (define result (load-global-resources tmp-dir #:hook-dispatcher (make-list-hook-dispatcher reg)))
+     (define result (load-global-resources tmp-dir #:hook-dispatcher (make-hook-dispatcher reg)))
      (check-equal? result (empty-resource-set)
                    "blocked resources-discover should return empty resource-set")
      (delete-directory/files tmp-dir))
@@ -564,7 +558,7 @@
      (define tmp-dir (make-temporary-file "q-test-resources-~a" 'directory))
      (define q-dir (build-path tmp-dir ".q"))
      (make-directory* q-dir)
-     (define result (load-global-resources tmp-dir #:hook-dispatcher (make-list-hook-dispatcher reg)))
+     (define result (load-global-resources tmp-dir #:hook-dispatcher (make-hook-dispatcher reg)))
      (check-equal? result custom-resources
                    "amended resources-discover should return custom resource-set")
      (delete-directory/files tmp-dir))

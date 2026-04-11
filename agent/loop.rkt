@@ -16,7 +16,7 @@
 ;;
 ;; Decoupled from tools/tool.rkt and extensions/hooks.rkt:
 ;;   - #:tools receives pre-formatted OpenAI tool schemas (listof hash?)
-;;   - #:hook-dispatcher receives a function that returns (list action payload)
+;;   - #:hook-dispatcher receives a function that returns hook-result?
 
 (require racket/contract
          racket/string
@@ -31,7 +31,9 @@
          (only-in "../llm/stream.rkt"
                   accumulate-tool-call-deltas)
          (only-in "../util/cancellation.rkt"
-                  cancellation-token? cancellation-token-cancelled?))
+                  cancellation-token? cancellation-token-cancelled?)
+         (only-in "../extensions/hooks.rkt"
+                  hook-result? hook-result-action hook-result-payload))
 
 (provide
  run-agent-turn)
@@ -181,8 +183,8 @@
                   'settings (model-request-settings req)))))
 
   (cond
-    [(and (list? pre-hook-result)
-          (eq? (car pre-hook-result) 'block))
+    [(and (hook-result? pre-hook-result)
+          (eq? (hook-result-action pre-hook-result) 'block))
      ;; Hook blocked the request -- return early
      (emit! bus session-id turn-id "model.request.blocked" (hasheq 'reason "hook"))
      (loop-result raw-messages
@@ -211,8 +213,8 @@
                   'message-count (length raw-messages)))))
 
   (cond
-    [(and (list? msg-start-result)
-          (eq? (car msg-start-result) 'block))
+    [(and (hook-result? msg-start-result)
+          (eq? (hook-result-action msg-start-result) 'block))
      ;; Hook blocked before streaming -- return early
      (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
      (loop-result raw-messages
@@ -245,8 +247,8 @@
                      'turn-id turn-id
                      'delta-text (stream-chunk-delta-text chunk)
                      'delta-tool-call #f)))
-          (when (and (list? update-result)
-                     (eq? (car update-result) 'block))
+          (when (and (hook-result? update-result)
+                     (eq? (hook-result-action update-result) 'block))
             (set-box! stream-blocked #t))))
       (when (stream-chunk-delta-tool-call chunk)
         ;; Tool call delta
@@ -264,8 +266,8 @@
                      'turn-id turn-id
                      'delta-text #f
                      'delta-tool-call tc-delta)))
-          (when (and (list? update-result)
-                     (eq? (car update-result) 'block))
+          (when (and (hook-result? update-result)
+                     (eq? (hook-result-action update-result) 'block))
             (set-box! stream-blocked #t))))
       (when (stream-chunk-done? chunk)
         ;; 7. Stream completed
@@ -339,14 +341,14 @@
 
      ;; Handle message-end result -- hook-dispatcher returns (list action payload) or #f
      (define final-text
-       (if (and (list? msg-end-result)
-                (eq? (car msg-end-result) 'amend))
-           (hash-ref (cadr msg-end-result) 'content (unbox accumulated-text))
+       (if (and (hook-result? msg-end-result)
+                (eq? (hook-result-action msg-end-result) 'amend))
+           (hash-ref (hook-result-payload msg-end-result) 'content (unbox accumulated-text))
            (unbox accumulated-text)))
 
      (cond
-       [(and (list? msg-end-result)
-             (eq? (car msg-end-result) 'block))
+       [(and (hook-result? msg-end-result)
+             (eq? (hook-result-action msg-end-result) 'block))
         ;; message-end blocked -- return completed with empty content
         (emit! bus session-id turn-id "turn.completed"
                (hasheq 'termination 'completed 'turnId turn-id

@@ -54,6 +54,12 @@ jobs:
       - name: Lint metrics consistency
         run: /usr/local/racket/bin/racket scripts/metrics.rkt --lint
 
+      - name: Protocol consistency
+        run: /usr/local/racket/bin/racket scripts/check-protocols.rkt
+
+      - name: Import conflicts
+        run: /usr/local/racket/bin/racket scripts/check-imports.rkt
+
       - name: Verify project structure
         run: |
           pwd

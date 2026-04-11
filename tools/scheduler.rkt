@@ -70,7 +70,9 @@
                            (lambda (e)
                              ;; Hook itself threw → treat as block with error
                              (define msg (format "hook error: ~a" (exn-message e)))
-                             (list 'hook-error tc msg))])
+                             (hasheq 'status 'error
+                                     'tool-call tc
+                                     'error-message msg))])
             (define result (hook-dispatcher 'tool-call tc))
             (cond
               [(hook-result? result)
@@ -88,11 +90,9 @@
                'error-message (format "tool call '~a' blocked by hook"
                                       (tool-call-name tc)))]
       ;; Hook threw an exception (returned as list)
-      [(and (list? tc-after-hook)
-            (eq? (car tc-after-hook) 'hook-error))
-       (hasheq 'status 'error
-               'tool-call (cadr tc-after-hook)
-               'error-message (caddr tc-after-hook))]
+      [(and (hash? tc-after-hook)
+            (eq? (hash-ref tc-after-hook 'status #f) 'error))
+       tc-after-hook]
       ;; Hook returned a (possibly modified) tool-call
       [(tool-call? tc-after-hook)
        (define t (lookup-tool registry (tool-call-name tc-after-hook)))

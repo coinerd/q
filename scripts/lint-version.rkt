@@ -53,13 +53,16 @@
     (or (equal? fname "CHANGELOG.md")
         (equal? fname "releasing.md")
         (equal? fname "why-q.md")))  ; packaging roadmap mentions future versions
+  ;; Skip historical release lines like "**v0.6.3** — ..."
+  (define historical-line? (lambda (line) (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line))))
   (append*
    (for/list ([line (in-list lines)]
               [lineno (in-naturals 1)])
      (define matches (regexp-match* VERSION-PAT line))
      (for/list ([v (in-list matches)]
                 #:when (and (not (equal? v canonical-version))
-                            (not skip-file?)))
+                            (not skip-file?)
+                            (not (historical-line? line))))
        (list lineno v)))))
 
 ;;; --- main ---
