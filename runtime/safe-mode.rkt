@@ -23,6 +23,8 @@
  ;; Actions
  safe-mode-active!
  safe-mode-deactivate!
+ lock-safe-mode!
+ safe-mode-locked?
 
  ;; Introspection
  trust-level
@@ -86,6 +88,9 @@
             (string-prefix? path-str root-prefix)))
       #t))
 
+;; Whether safe-mode deactivation is locked (one-way switch)
+(define safe-mode-locked? (make-parameter #f))
+
 ;; ============================================================
 ;; Actions
 ;; ============================================================
@@ -97,8 +102,17 @@
 
 ;; safe-mode-deactivate! : -> void?
 ;; Explicitly deactivate safe mode.
+;; Raises an error if safe-mode is locked.
 (define (safe-mode-deactivate!)
+  (when (safe-mode-locked?)
+    (error 'safe-mode-deactivate! "safe-mode is locked and cannot be deactivated"))
   (current-safe-mode #f))
+
+;; lock-safe-mode! : -> void?
+;; Lock safe-mode so it cannot be deactivated.
+;; Once locked, only process restart can change the state.
+(define (lock-safe-mode!)
+  (safe-mode-locked? #t))
 
 ;; ============================================================
 ;; Introspection

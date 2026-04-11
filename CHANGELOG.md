@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-04-10
+
+### Testing (Critical)
+- **jsonl-read-last test coverage**: 19 new tests for previously untested `jsonl-read-last` covering basic read, max-lines, partial lines, corrupted entries, empty files, large files (TEST-03)
+- **Sandbox evaluator test expansion**: 28 new tests for timeout enforcement, forbidden operations, syntax errors, output capture, state isolation, escape attempts, network/file blocking (TEST-04, SEC-11)
+
+### Security
+- **SEC-08**: Package audit expanded — 5 new patterns (eval, dynamic-require, FFI, env-modification, unsafe-io) + `.zo` file detection
+- **SEC-10**: Response size limits (10 MB) added to all 3 LLM providers via shared `read-response-body` in `llm/stream.rkt`
+- **SEC-11**: Sandbox evaluator explicitly blocks network access (`sandbox-network-guard #f`) and file access (`sandbox-path-permissions '()`)
+- **SEC-12**: `max-processes` limit enforced via `track-process!`/`untrack-process!` in `sandbox/limits.rkt`
+- **SEC-13**: Safe-mode made one-way switch — `lock-safe-mode!` prevents any extension from deactivating safe-mode
+- **SEC-14**: SSRF protection in Firecrawl tool — blocks private IP ranges, localhost, non-HTTP schemes
+
+### Documentation
+- **DOC-01**: Fixed `--resume` → `--session` in session-resume demo
+- **DOC-02**: Updated `why-q.md` from v0.4.1 to v0.6.1
+- **DOC-03**: Replaced fictional paths in 5 demo files with actual module paths
+- **DOC-04**: Fixed API names in JSON mode demo (`bus-publish` → `publish!`)
+- **DOC-05**: Added `cli/` and `benchmarks/` to README module structure
+
+### Code Quality
+- **QUAL-02**: Converted 4 library modules from `#lang racket` to `#lang racket/base` with explicit requires
+- **QUAL-10**: Added TUI decomposition plan comments to `interfaces/tui.rkt`
+- **QUAL-05**: Error handling review — patterns already consistent, no changes needed
+
+### Test metrics
+- 3059 tests, 0 failures (+84 new from v0.6.1)
+- 104 test files, 5245 assertions
+
 ## [0.6.1] — 2026-04-10
 
 ### Security (Critical)
@@ -183,7 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/coinerd/q/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/coinerd/q/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/coinerd/q/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/coinerd/q/compare/v0.5.2...v0.5.3

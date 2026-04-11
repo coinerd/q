@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; interfaces/tui.rkt — TUI interface entry point
 ;;
@@ -10,6 +10,12 @@
 ;;
 ;; This module is the ONLY TUI module that knows about both
 ;; the runtime and the terminal.
+;;
+;; TODO(v0.7.0): Decompose into:
+;;   tui/selection.rkt — selection math, mouse handling
+;;   tui/key-handler.rkt — key event dispatch
+;;   tui/runtime-sub.rkt — runtime event subscriptions
+;;   interfaces/tui.rkt — thin wiring layer
 
 (require racket/async-channel
          racket/bytes
@@ -269,7 +275,7 @@
     [else #f]))
 
 ;; ============================================================
-;; Key handling
+;; Key handling → tui/key-handler.rkt
 ;; ============================================================
 
 ;; Mark that the frame needs redraw.
@@ -438,6 +444,8 @@
      'continue]
     [else 'continue]))
 
+;; ── Selection math → tui/selection.rkt ──
+;;
 ;; Extract plain text from the current selection.
 ;; Uses rendered lines to map screen coordinates to text.
 (define (selection-text ctx state)
@@ -504,7 +512,7 @@
   (commands:process-slash-command (tui-ctx->cmd-ctx ctx) cmd))
 
 ;; ============================================================
-;; Runtime event subscription
+;; Runtime event subscription → tui/runtime-sub.rkt
 ;; ============================================================
 
 (define (subscribe-runtime-events! ctx)

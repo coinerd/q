@@ -141,3 +141,50 @@
    (check-true (allowed-tool? "firecrawl"))
    (check-true (allowed-tool? "read"))
    (check-true (allowed-tool? "extension:foo"))))
+
+;; ============================================================
+;; 11. SEC-13: safe-mode one-way lock
+;; ============================================================
+
+(test-case
+ "safe-mode-deactivate! works when not locked"
+ (parameterize ([current-safe-mode #f]
+                [safe-mode-locked? #f])
+   (safe-mode-active!)
+   (check-true (safe-mode?))
+   (safe-mode-deactivate!)
+   (check-false (safe-mode?))))
+
+(test-case
+ "safe-mode-deactivate! raises error when locked"
+ (parameterize ([current-safe-mode #t]
+                [safe-mode-locked? #f])
+   (lock-safe-mode!)
+   (check-exn
+    #rx"safe-mode is locked and cannot be deactivated"
+    (lambda () (safe-mode-deactivate!)))
+   ;; Safe mode should still be active
+   (check-true (safe-mode?))))
+
+(test-case
+ "lock-safe-mode! prevents deactivation"
+ (parameterize ([current-safe-mode #t]
+                [safe-mode-locked? #f])
+   (lock-safe-mode!)
+   (check-true (safe-mode-locked?))
+   (check-exn
+    exn:fail?
+    (lambda () (safe-mode-deactivate!)))))
+
+(test-case
+ "safe-mode can still be activated when locked"
+ (parameterize ([current-safe-mode #f]
+                [safe-mode-locked? #t])
+   ;; Activation should still work even when locked
+   (safe-mode-active!)
+   (check-true (safe-mode?))))
+
+(test-case
+ "safe-mode-locked? defaults to #f"
+ (parameterize ([safe-mode-locked? #f])
+   (check-false (safe-mode-locked?))))

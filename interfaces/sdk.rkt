@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; interfaces/sdk.rkt — embeddable library surface
 ;;
@@ -12,7 +12,9 @@
 ;;   - Graceful errors: no-session → return 'no-active-session, not crash
 ;;   - Configurable defaults: make-runtime provides sensible defaults
 
-(require "../llm/provider.rkt"
+(require racket/contract
+         racket/math
+         "../llm/provider.rkt"
          (only-in "../tools/tool.rkt"
                   make-tool-registry
                   tool-registry?)

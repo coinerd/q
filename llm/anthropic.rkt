@@ -287,7 +287,7 @@
     (http-sendrecv uri 'POST
                    #:headers headers
                    #:data body-bytes))
-  (define response-body (port->bytes response-port))
+  (define response-body (read-response-body response-port))
   ;; Check HTTP status
   (anthropic-check-http-status! status-line response-body)
   (bytes->jsexpr response-body))
@@ -333,7 +333,7 @@
       (http-sendrecv uri 'POST
                      #:headers headers
                      #:data body-bytes))
-    (define sse-text (port->string response-port))
+    (define sse-text (bytes->string/utf-8 (read-response-body response-port)))
     (define raw-events (parse-sse-lines sse-text))
     (anthropic-parse-stream-chunks raw-events))
 

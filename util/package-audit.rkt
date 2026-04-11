@@ -58,6 +58,21 @@
 (define file-read-pattern
   #rx"(file->string|call-with-input-file|read-bytes)")
 
+(define eval-pattern
+  #px"\\beval\\b|\\bcompile\\b")
+
+(define dynamic-require-pattern
+  #rx"dynamic-require")
+
+(define ffi-pattern
+  #rx"require.*ffi/")
+
+(define env-modification-pattern
+  #rx"(putenv|setenv|current-environment-variables)")
+
+(define unsafe-io-pattern
+  #rx"(read-byte|read-char|read\\b)")  ;; unchecked deserialization
+
 ;; ============================================================
 ;; scan-rkt-files : path-string? -> (listof finding?)
 ;; ============================================================
@@ -66,20 +81,25 @@
   (define rkt-files
     (find-files (lambda (p)
                   (let ([ext (filename-extension p)])
-                    (and ext (bytes=? ext #"rkt"))))
+                    (and ext (or (bytes=? ext #"rkt")
+                                 (bytes=? ext #"zo")))))
                 dir))
   (append*
    (for/list ([fpath (in-list rkt-files)])
      (scan-one-file fpath dir))))
 
 (define (scan-one-file fpath base-dir)
-  (define content
-    (with-handlers ([exn:fail? (lambda (_) "")])
-      (call-with-input-file fpath port->string #:mode 'text)))
   (define rel (path->string (find-relative-path base-dir fpath)))
   (define findings '())
   (define (add! sev msg)
     (set! findings (cons (finding sev (format "~a in ~a" msg rel)) findings)))
+  ;; Check for .zo files (compiled bytecode)
+  (define ext (filename-extension fpath))
+  (when (and ext (bytes=? ext #"zo"))
+    (add! 'high "compiled bytecode (.zo) — cannot audit"))
+  (define content
+    (with-handlers ([exn:fail? (lambda (_) "")])
+      (call-with-input-file fpath port->string #:mode 'text)))
   (when (regexp-match? network-pattern content)
     (add! 'high "network access"))
   (when (regexp-match? subprocess-pattern content)
@@ -88,6 +108,16 @@
     (add! 'medium "file write operations"))
   (when (regexp-match? file-read-pattern content)
     (add! 'low "file read operations"))
+  (when (regexp-match? eval-pattern content)
+    (add! 'high "eval/compile usage"))
+  (when (regexp-match? dynamic-require-pattern content)
+    (add! 'high "dynamic-require usage"))
+  (when (regexp-match? ffi-pattern content)
+    (add! 'high "FFI usage"))
+  (when (regexp-match? env-modification-pattern content)
+    (add! 'high "environment modification"))
+  (when (regexp-match? unsafe-io-pattern content)
+    (add! 'high "unsafe deserialization (read)"))
   (reverse findings))
 
 ;; ============================================================

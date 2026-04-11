@@ -211,3 +211,110 @@
                          (audit-result-findings result))))
     (lambda ()
       (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
+;; 11. eval pattern detected
+;; ============================================================
+
+(test-case "eval pattern produces high finding"
+  (define dir (make-tmp-dir))
+  (dynamic-wind
+    void
+    (lambda ()
+      (write-qpm-json! dir #:type "extension")
+      (write-rkt-file! dir "evl.rkt"
+                       "#lang racket/base\n(eval \"(+ 1 2)\")\n")
+      (define result (audit-package dir))
+      (define highs (filter (lambda (f) (eq? (finding-severity f) 'high))
+                            (audit-result-findings result)))
+      (check-true (>= (length highs) 1))
+      (check-true (ormap (lambda (f) (string-contains? (finding-message f) "eval/compile"))
+                         highs)))
+    (lambda ()
+      (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
+;; 12. dynamic-require pattern detected
+;; ============================================================
+
+(test-case "dynamic-require pattern produces high finding"
+  (define dir (make-tmp-dir))
+  (dynamic-wind
+    void
+    (lambda ()
+      (write-qpm-json! dir #:type "extension")
+      (write-rkt-file! dir "dyn.rkt"
+                       "#lang racket/base\n(dynamic-require 'racket/list 'first)\n")
+      (define result (audit-package dir))
+      (define highs (filter (lambda (f) (eq? (finding-severity f) 'high))
+                            (audit-result-findings result)))
+      (check-true (>= (length highs) 1))
+      (check-true (ormap (lambda (f) (string-contains? (finding-message f) "dynamic-require"))
+                         highs)))
+    (lambda ()
+      (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
+;; 13. FFI pattern detected
+;; ============================================================
+
+(test-case "ffi pattern produces high finding"
+  (define dir (make-tmp-dir))
+  (dynamic-wind
+    void
+    (lambda ()
+      (write-qpm-json! dir #:type "extension")
+      (write-rkt-file! dir "ffi.rkt"
+                       "#lang racket/base\n(require ffi/unsafe)\n")
+      (define result (audit-package dir))
+      (define highs (filter (lambda (f) (eq? (finding-severity f) 'high))
+                            (audit-result-findings result)))
+      (check-true (>= (length highs) 1))
+      (check-true (ormap (lambda (f) (string-contains? (finding-message f) "FFI"))
+                         highs)))
+    (lambda ()
+      (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
+;; 14. putenv pattern detected
+;; ============================================================
+
+(test-case "env-modification pattern produces high finding"
+  (define dir (make-tmp-dir))
+  (dynamic-wind
+    void
+    (lambda ()
+      (write-qpm-json! dir #:type "extension")
+      (write-rkt-file! dir "env.rkt"
+                       "#lang racket/base\n(putenv \"FOO\" \"bar\")\n")
+      (define result (audit-package dir))
+      (define highs (filter (lambda (f) (eq? (finding-severity f) 'high))
+                            (audit-result-findings result)))
+      (check-true (>= (length highs) 1))
+      (check-true (ormap (lambda (f) (string-contains? (finding-message f) "environment"))
+                         highs)))
+    (lambda ()
+      (delete-directory/files dir #:must-exist? #f))))
+
+;; ============================================================
+;; 15. .zo file flagged as unscannable
+;; ============================================================
+
+(test-case ".zo file flagged as unscannable"
+  (define dir (make-tmp-dir))
+  (dynamic-wind
+    void
+    (lambda ()
+      (write-qpm-json! dir #:type "extension")
+      ;; Write a fake .zo file (binary content)
+      (call-with-output-file (build-path dir "compiled.zo")
+        (lambda (out) (write-bytes #"\0\1\2\3" out))
+        #:exists 'replace)
+      (define result (audit-package dir))
+      (define highs (filter (lambda (f) (eq? (finding-severity f) 'high))
+                            (audit-result-findings result)))
+      (check-true (>= (length highs) 1))
+      (check-true (ormap (lambda (f) (string-contains? (finding-message f) ".zo"))
+                         highs)))
+    (lambda ()
+      (delete-directory/files dir #:must-exist? #f))))

@@ -798,3 +798,35 @@
               "only non-empty text preserved")
 
 (println "All Gemini provider tests passed!")
+
+;; ============================================================
+;; 30. read-response-body — size limit enforcement (SEC-10)
+;; ============================================================
+
+(test-case
+ "read-response-body reads normal-sized responses (gemini context)"
+ (define port (open-input-string "{\"text\":\"hello\"}"))
+ (define result (read-response-body port))
+ (check-equal? result (string->bytes/utf-8 "{\"text\":\"hello\"}")))
+
+(test-case
+ "read-response-body rejects oversized responses (gemini context)"
+ (define overflow-size (+ max-response-size 1))
+ (define buf (make-bytes 8192 65))
+ (define total-read 0)
+ (define port
+   (make-input-port
+    'overflow
+    (lambda (b)
+      (cond
+        [(>= total-read overflow-size) eof]
+        [else
+         (define n (min 8192 (- overflow-size total-read)))
+         (bytes-copy! b 0 buf 0 n)
+         (set! total-read (+ total-read n))
+         n]))
+    #f
+    void))
+ (check-exn
+  #rx"exceeds maximum size limit"
+  (lambda () (read-response-body port))))

@@ -54,7 +54,9 @@
       (parameterize ([sandbox-output 'string]
                      [sandbox-error-output 'string]
                      [sandbox-memory-limit 256]
-                     [sandbox-eval-limits (list timeout 256)])
+                     [sandbox-eval-limits (list timeout 256)]
+                     [sandbox-network-guard #f]
+                     [sandbox-path-permissions '()])
         (make-evaluator lang)))
 
     ;; Try to evaluate

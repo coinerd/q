@@ -4,14 +4,14 @@ Branching a session to explore an alternative approach without losing the origin
 
 ```bash
 $ racket main.rkt --model gpt-5.4
-q version 0.6.1
+q version 0.6.2
 Session: a7f3c2e1
 
 > Refactor the event bus to use channels instead of locks
 
-[tool:read] Reading src/core/event-bus.rkt … (4.7 KB)
-[tool:write] Writing src/core/event-bus.rkt … (5.3 KB)
-[tool:bash] Running: raco test tests/core/event-bus-test.rkt
+[tool:read] Reading agent/event-bus.rkt … (4.7 KB)
+[tool:write] Writing agent/event-bus.rkt … (5.3 KB)
+[tool:bash] Running: raco test tests/test-event-bus.rkt
   3 passed, 2 FAILED
   FAIL: subscribe-and-publish — handler not called
   FAIL: multiple-subscribers — only first subscriber received event
@@ -25,9 +25,9 @@ Switched to session def456
 
 > Actually, keep the lock-based design but add a dispatch queue
 
-[tool:read] Reading src/core/event-bus.rkt … (4.7 KB)
-[tool:edit] Editing src/core/event-bus.rkt — adding dispatch-queue helper
-[tool:bash] Running: raco test tests/core/event-bus-test.rkt
+[tool:read] Reading agent/event-bus.rkt … (4.7 KB)
+[tool:edit] Editing agent/event-bus.rkt — adding dispatch-queue helper
+[tool:bash] Running: raco test tests/test-event-bus.rkt
   5 tests passed in 0.03s
 
 The dispatch queue works. Instead of calling handlers inside the lock,

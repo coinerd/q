@@ -602,3 +602,41 @@
 (check-equal? (anthropic-translate-stop-reason 123) 'stop)
 
 (println "All Anthropic provider tests passed!")
+
+;; ============================================================
+;; 30. read-response-body — size limit enforcement (SEC-10)
+;; ============================================================
+
+(test-case
+ "read-response-body reads normal-sized responses"
+ (define port (open-input-string "Hello World"))
+ (define result (read-response-body port))
+ (check-equal? result (string->bytes/utf-8 "Hello World")))
+
+(test-case
+ "read-response-body rejects oversized responses (>10 MB)"
+ ;; Create a port that returns more than max-response-size bytes
+ (define overflow-size (+ max-response-size 1))
+ (define buf (make-bytes 8192 65)) ; fill with 'A'
+ (define total-read 0)
+ (define port
+   (make-input-port
+    'overflow
+    (lambda (b)
+      ;; read-bytes-avail! callback
+      (cond
+        [(>= total-read overflow-size) eof]
+        [else
+         (define n (min 8192 (- overflow-size total-read)))
+         (bytes-copy! b 0 buf 0 n)
+         (set! total-read (+ total-read n))
+         n]))
+    #f
+    void))
+ (check-exn
+  #rx"exceeds maximum size limit"
+  (lambda () (read-response-body port))))
+
+(test-case
+ "max-response-size is 10 MB"
+ (check-equal? max-response-size (* 10 1024 1024)))

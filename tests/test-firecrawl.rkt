@@ -125,4 +125,95 @@
    (test-case "all valid actions pass validation"
      (for ([a '("search" "scrape" "crawl" "map")])
        (check-not-false (valid-action? a))))))
+
+;; ============================================================
+;; SEC-14: SSRF protection tests
+;; ============================================================
+
+(define ssrf-tests
+  (test-suite
+   "SSRF Protection Tests"
+
+   (test-case "ftp:// URL rejected (bad scheme)"
+     (check-exn
+      #rx"Blocked: URL scheme must be http or https"
+      (lambda () (validate-url "ftp://example.com/file"))))
+
+   (test-case "file:// URL rejected (bad scheme)"
+     (check-exn
+      #rx"Blocked: URL scheme must be http or https"
+      (lambda () (validate-url "file:///etc/passwd"))))
+
+   (test-case "http://localhost rejected (private host)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://localhost:8080/api"))))
+
+   (test-case "http://127.0.0.1 rejected (loopback)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://127.0.0.1/api"))))
+
+   (test-case "http://10.0.0.1 rejected (private class A)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://10.0.0.1/secret"))))
+
+   (test-case "http://192.168.1.1 rejected (private class C)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://192.168.1.1/router"))))
+
+   (test-case "http://172.16.0.1 rejected (private class B)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://172.16.0.1/internal"))))
+
+   (test-case "http://169.254.169.254 rejected (link-local/metadata)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://169.254.169.254/latest/meta-data/"))))
+
+   (test-case "http://0.0.0.0 rejected (wildcard)"
+     (check-exn
+      #rx"Blocked: URL points to private/internal address"
+      (lambda () (validate-url "http://0.0.0.0/api"))))
+
+   (test-case "https://example.com passes validation"
+     (check-not-exn
+      (lambda () (validate-url "https://example.com/page"))))
+
+   (test-case "http://example.com passes validation"
+     (check-not-exn
+      (lambda () (validate-url "http://example.com/page"))))
+
+   (test-case "private-host? detects localhost"
+     (check-not-false (private-host? "localhost")))
+
+   (test-case "private-host? detects 10.x.x.x"
+     (check-not-false (private-host? "10.0.0.1")))
+
+   (test-case "private-host? allows public hosts"
+     (check-false (private-host? "example.com")))
+
+   (test-case "scrape action returns error result for localhost URL"
+     (define r (tool-firecrawl (hasheq 'action "scrape"
+                                        'url "http://localhost:8080/secret")))
+     (check-true (tool-result? r))
+     (check-true (tool-result-is-error? r))
+     (check-true (string-contains? (content-text r) "Blocked")))
+
+   (test-case "map action returns error result for private IP"
+     (define r (tool-firecrawl (hasheq 'action "map"
+                                        'url "http://10.0.0.1/internal")))
+     (check-true (tool-result? r))
+     (check-true (tool-result-is-error? r)))
+
+   (test-case "crawl action returns error result for loopback"
+     (define r (tool-firecrawl (hasheq 'action "crawl"
+                                        'url "http://127.0.0.1/api")))
+     (check-true (tool-result? r))
+     (check-true (tool-result-is-error? r)))))
+
 (run-tests firecrawl-tests)
+(run-tests ssrf-tests)

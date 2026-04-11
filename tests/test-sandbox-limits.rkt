@@ -75,6 +75,37 @@
   (check-false (within-limits? lim #:elapsed 5 #:output-size 500 #:memory 20000)))
 
 ;; ============================================================
+;; SEC-12: max-processes enforcement
+;; ============================================================
+
+(test-case "within-limits? checks process count"
+  (define lim (exec-limits 10 1000 10000 5))
+  (check-true (within-limits? lim #:processes 3))
+  (check-true (within-limits? lim #:processes 5))
+  (check-false (within-limits? lim #:processes 6)))
+
+(test-case "track-process! increments counter"
+  (parameterize ([current-process-count 0])
+    (track-process!)
+    (check-equal? (current-process-count) 1)
+    (track-process!)
+    (check-equal? (current-process-count) 2)))
+
+(test-case "untrack-process! decrements counter"
+  (parameterize ([current-process-count 2])
+    (untrack-process!)
+    (check-equal? (current-process-count) 1)))
+
+(test-case "untrack-process! never goes below zero"
+  (parameterize ([current-process-count 0])
+    (untrack-process!)
+    (check-equal? (current-process-count) 0)))
+
+(test-case "process count over limit fails within-limits?"
+  (define lim (exec-limits 10 1000 10000 3))
+  (check-false (within-limits? lim #:processes 4)))
+
+;; ============================================================
 ;; Standalone defaults
 ;; ============================================================
 

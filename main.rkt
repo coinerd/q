@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; main.rkt — Entry point for q agent
 ;;
@@ -10,7 +10,9 @@
 ;; single-shot, JSON, or RPC). It contains NO business logic —
 ;; only wiring.
 
-(require "interfaces/cli.rkt"
+(require racket/string
+         racket/file
+         "interfaces/cli.rkt"
          "interfaces/json-mode.rkt"
          "interfaces/rpc-mode.rkt"
          "interfaces/tui.rkt"

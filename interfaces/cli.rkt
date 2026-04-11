@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 ;; interfaces/cli.rkt — argument parsing and direct terminal interaction
 ;;

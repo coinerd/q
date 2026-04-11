@@ -6,13 +6,13 @@ The terminal UI provides a rich interactive interface for q with scrolling outpu
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ q v0.6.1 │ gpt-5.4 │ session: a7f3c2e1          [● active] │
+│ q v0.6.2 │ gpt-5.4 │ session: a7f3c2e1          [● active] │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  You: Explain the architecture of this project              │
 │                                                             │
 │  [tool:read] Reading BLUEPRINT/00-overview.md …             │
-│  [tool:read] Reading src/core/agent.rkt …                   │
+│  [tool:read] Reading agent/loop.rkt …                       │
 │                                                             │
 │  Agent: This project is **q**, a coding agent in Racket.    │
 │  The architecture follows a layered design:                 │
@@ -25,8 +25,8 @@ The terminal UI provides a rich interactive interface for q with scrolling outpu
 │                                                             │
 │  You: Add a test for the event bus                          │
 │                                                             │
-│  [tool:write] Writing tests/core/event-bus-test.rkt         │
-│  [tool:bash]  raco test tests/core/event-bus-test.rkt       │
+│  [tool:write] Writing tests/test-event-bus.rkt              │
+│  [tool:bash]  raco test tests/test-event-bus.rkt            │
 │  ✓ 5 tests passed in 0.03s                                  │
 │                                                             │
 │  Agent: Done. Five tests covering subscribe, publish,        │
@@ -70,7 +70,7 @@ The terminal UI provides a rich interactive interface for q with scrolling outpu
 The top bar shows:
 
 ```
-q v0.6.1 │ gpt-5.4 │ session: a7f3c2e1 │ [● active]
+q v0.6.2 │ gpt-5.4 │ session: a7f3c2e1 │ [● active]
 ```
 
 - **Version** — current q version

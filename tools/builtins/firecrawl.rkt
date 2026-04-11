@@ -13,7 +13,35 @@
          firecrawl-request       ;; for testing
          valid-action?           ;; for testing
          valid-formats?          ;; for testing
-         truncate-string)
+         truncate-string
+         validate-url            ;; for testing
+         private-host?)          ;; for testing
+
+;; ============================================================
+;; SSRF Protection (SEC-14)
+;; ============================================================
+
+(define private-ip-ranges
+  (list (regexp "^10\\.")
+        (regexp "^172\\.(1[6-9]|2[0-9]|3[01])\\.")
+        (regexp "^192\\.168\\.")
+        (regexp "^127\\.")
+        (regexp "^169\\.254\\.")
+        (regexp "^0\\.0\\.0\\.0$")))
+
+(define (private-host? host)
+  (or (member host '("localhost" "0.0.0.0" "[::]"))
+      (for/or ([pat (in-list private-ip-ranges)])
+        (regexp-match? pat host))))
+
+(define (validate-url url-str)
+  (define uri (string->url url-str))
+  (define scheme (url-scheme uri))
+  (unless (and scheme (member scheme '("http" "https")))
+    (error 'firecrawl "Blocked: URL scheme must be http or https: ~a" url-str))
+  (define host (url-host uri))
+  (when (or (not host) (private-host? host))
+    (error 'firecrawl "Blocked: URL points to private/internal address: ~a" url-str)))
 
 ;; ============================================================
 ;; Configuration
@@ -151,38 +179,45 @@
        "\n\n---\n\n")))
 
 (define (do-scrape url formats only-main-content)
-  (define body
-    (make-hash
-     (list (cons 'url url)
-           (cons 'formats (or formats '("markdown")))
-           (cons 'onlyMainContent only-main-content))))
-  (define resp (firecrawl-request "POST" "/scrape" body))
-  (define success? (hash-ref resp 'success #t))
-  (if (not success?)
-      (make-error-result
-       (format "Scrape failed: ~a" (hash-ref resp 'error "unknown error")))
-      (let* ([data (hash-ref resp 'data (hasheq))]
-             [markdown (hash-ref data 'markdown "")]
-             [html (hash-ref data 'html "")]
-             [metadata (hash-ref data 'metadata (hasheq))]
-             [title (hash-ref metadata 'title "")]
-             [desc (hash-ref metadata 'description "")]
-             [chosen-content (cond
-                               [(and formats (member "html" formats)) html]
-                               [(and formats (member "rawHtml" formats))
-                                (hash-ref data 'rawHtml "")]
-                               [else markdown])])
-        (make-success-result
-         (list (hasheq 'type "text"
-                       'text (format "Title: ~a\nURL: ~a\nDescription: ~a\n\n~a"
-                                     title url desc
-                                     (truncate-string chosen-content 50000))))
-         (hasheq 'action "scrape"
-                 'url url
-                 'title title)))))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (make-error-result (exn-message e)))])
+    (validate-url url)
+    (define body
+      (make-hash
+       (list (cons 'url url)
+             (cons 'formats (or formats '("markdown")))
+             (cons 'onlyMainContent only-main-content))))
+    (define resp (firecrawl-request "POST" "/scrape" body))
+    (define success? (hash-ref resp 'success #t))
+    (if (not success?)
+        (make-error-result
+         (format "Scrape failed: ~a" (hash-ref resp 'error "unknown error")))
+        (let* ([data (hash-ref resp 'data (hasheq))]
+               [markdown (hash-ref data 'markdown "")]
+               [html (hash-ref data 'html "")]
+               [metadata (hash-ref data 'metadata (hasheq))]
+               [title (hash-ref metadata 'title "")]
+               [desc (hash-ref metadata 'description "")]
+               [chosen-content (cond
+                                 [(and formats (member "html" formats)) html]
+                                 [(and formats (member "rawHtml" formats))
+                                  (hash-ref data 'rawHtml "")]
+                                 [else markdown])])
+          (make-success-result
+           (list (hasheq 'type "text"
+                         'text (format "Title: ~a\nURL: ~a\nDescription: ~a\n\n~a"
+                                       title url desc
+                                       (truncate-string chosen-content 50000))))
+           (hasheq 'action "scrape"
+                   'url url
+                   'title title))))))
 
 (define (do-crawl url formats limit timeout-secs only-main-content)
-  ;; Start crawl job
+  (with-handlers ([exn:fail? (lambda (e)
+                               (make-error-result (exn-message e)))])
+    ;; Validate URL before starting crawl
+    (validate-url url)
+    ;; Start crawl job
   (define body
     (make-hash
      (list (cons 'url url)
@@ -204,7 +239,7 @@
    (hasheq 'action "crawl"
            'url url
            'job-id job-id
-           'result-count (length results))))
+           'result-count (length results)))))
 
 (define (poll-crawl-status job-id deadline)
   (when (> (current-seconds) deadline)
@@ -242,21 +277,24 @@
        "\n\n---\n\n")))
 
 (define (do-map url)
-  (define body (make-hash (list (cons 'url url))))
-  (define resp (firecrawl-request "POST" "/map" body))
-  (define success? (hash-ref resp 'success #t))
-  (if (not success?)
-      (make-error-result
-       (format "Map failed: ~a" (hash-ref resp 'error "unknown error")))
-      (let* ([links (hash-ref resp 'links '())]
-             [formatted (string-join links "\n")])
-        (make-success-result
-         (list (hasheq 'type "text"
-                       'text (format "Found ~a URLs at ~a:\n~a"
-                                     (length links) url formatted)))
-         (hasheq 'action "map"
-                 'url url
-                 'link-count (length links))))))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (make-error-result (exn-message e)))])
+    (validate-url url)
+    (define body (make-hash (list (cons 'url url))))
+    (define resp (firecrawl-request "POST" "/map" body))
+    (define success? (hash-ref resp 'success #t))
+    (if (not success?)
+        (make-error-result
+         (format "Map failed: ~a" (hash-ref resp 'error "unknown error")))
+        (let* ([links (hash-ref resp 'links '())]
+               [formatted (string-join links "\n")])
+          (make-success-result
+           (list (hasheq 'type "text"
+                         'text (format "Found ~a URLs at ~a:\n~a"
+                                       (length links) url formatted)))
+           (hasheq 'action "map"
+                   'url url
+                   'link-count (length links)))))))
 
 ;; ============================================================
 ;; Helpers

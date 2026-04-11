@@ -13,7 +13,10 @@
          within-limits?
          default-timeout-seconds
          default-max-output-bytes
-         with-resource-limits)
+         with-resource-limits
+         current-process-count
+         track-process!
+         untrack-process!)
 
 ;; --------------------------------------------------
 ;; Standalone defaults (convenient constants)
@@ -21,6 +24,18 @@
 
 (define default-timeout-seconds 300)
 (define default-max-output-bytes 10485760) ; 10 MB
+
+;; --------------------------------------------------
+;; Process tracking (SEC-12)
+;; --------------------------------------------------
+
+(define current-process-count (make-parameter 0))
+
+(define (track-process!)
+  (current-process-count (add1 (current-process-count))))
+
+(define (untrack-process!)
+  (current-process-count (max 0 (sub1 (current-process-count)))))
 
 ;; --------------------------------------------------
 ;; exec-limits struct
@@ -76,7 +91,8 @@
 (define (within-limits? limits
                          #:elapsed [elapsed #f]
                          #:output-size [output-size #f]
-                         #:memory [memory #f])
+                         #:memory [memory #f]
+                         #:processes [processes #f])
   (and
    ;; Timeout check
    (or (not elapsed)
@@ -86,7 +102,10 @@
        (<= output-size (exec-limits-max-output-bytes limits)))
    ;; Memory check
    (or (not memory)
-       (<= memory (exec-limits-max-memory-bytes limits)))))
+       (<= memory (exec-limits-max-memory-bytes limits)))
+   ;; Process count check (SEC-12)
+   (or (not processes)
+       (<= processes (exec-limits-max-processes limits)))))
 
 ;; --------------------------------------------------
 ;; with-resource-limits — runs a thunk with timeout, output cap, and

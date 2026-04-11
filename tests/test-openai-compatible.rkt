@@ -8,7 +8,8 @@
          rackunit/text-ui
          net/url
          json
-         "../llm/openai-compatible.rkt")
+         "../llm/openai-compatible.rkt"
+         "../llm/stream.rkt")
 
 ;; ============================================================
 ;; Tests for error message formatting (BUG-34)
@@ -101,4 +102,41 @@
 ;; ============================================================
 
 (module+ main
-  (run-tests error-formatting-tests))
+  (run-tests error-formatting-tests)
+  (run-tests response-size-limit-tests))
+
+;; ============================================================
+;; SEC-10: read-response-body size limit tests
+;; ============================================================
+
+(define-test-suite response-size-limit-tests
+  (test-case "read-response-body reads normal-sized responses"
+    (define port (open-input-string "Hello World"))
+    (define result (read-response-body port))
+    (check-equal? result (string->bytes/utf-8 "Hello World")))
+
+  (test-case "read-response-body rejects oversized responses"
+    (define overflow-size (+ max-response-size 1))
+    (define buf (make-bytes 8192 65))
+    (define total-read 0)
+    (define port
+      (make-input-port
+       'overflow
+       (lambda (b)
+         (cond
+           [(>= total-read overflow-size) eof]
+           [else
+            (define n (min 8192 (- overflow-size total-read)))
+            (bytes-copy! b 0 buf 0 n)
+            (set! total-read (+ total-read n))
+            n]))
+       #f
+       void))
+    (check-exn
+     #rx"exceeds maximum size limit"
+     (lambda () (read-response-body port))))
+
+  (test-case "read-response-body handles empty port"
+    (define port (open-input-string ""))
+    (define result (read-response-body port))
+    (check-equal? result (bytes))))

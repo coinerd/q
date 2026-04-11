@@ -11,7 +11,8 @@
          racket/generator
          racket/hash
          json
-         "model.rkt")
+         "model.rkt"
+         racket/port)
 
 (provide
  parse-sse-lines
@@ -19,7 +20,32 @@
  normalize-openai-chunks
  normalize-openai-chunk
  accumulate-tool-call-deltas
- read-sse-chunks)
+ read-sse-chunks
+ read-response-body
+ max-response-size)
+
+;; ============================================================
+;; Bounded response body reading (SEC-10)
+;; ============================================================
+
+;; Maximum response body size: 10 MB
+(define max-response-size (* 10 1024 1024))
+
+;; Read from port into bytes with a size limit.
+;; Raises exn:fail if the response exceeds max-response-size.
+(define (read-response-body port)
+  (define out (open-output-bytes))
+  (define buf (make-bytes 8192))
+  (let loop ([total 0])
+    (define n (read-bytes-avail! buf port))
+    (cond
+      [(eof-object? n) (get-output-bytes out)]
+      [(> (+ total n) max-response-size)
+       (raise (exn:fail "LLM response exceeds maximum size limit (10 MB)"
+                        (current-continuation-marks)))]
+      [else
+       (write-bytes buf out 0 n)
+       (loop (+ total n))])))
 
 ;; ============================================================
 ;; parse-sse-lines
