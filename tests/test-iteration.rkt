@@ -41,11 +41,12 @@
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
 
-     ;; Should not raise error with queue parameter
-     (check-not-exn
-      (lambda ()
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
-                            #:queue queue))))
+     ;; Run iteration and verify specific return value
+     (define result
+       (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
+                           #:queue queue))
+     (check-pred loop-result? result)
+     (check-equal? (loop-result-termination-reason result) 'completed))
 
    (test-case "steering queue messages are injected into context"
      (define bus (make-event-bus))
@@ -55,9 +56,13 @@
      ;; Enqueue a steering message
      (enqueue-steering! queue steering-msg)
 
-     ;; Track what context was passed to provider
-     ;; Note: We can't easily capture context with mock provider,
-     ;; so we test indirectly by checking behavior works
+     ;; Track what context was passed to provider via event bus
+     (define collected-events (box '()))
+     (subscribe! bus (lambda (evt)
+                       (set-box! collected-events
+                                 (append (unbox collected-events)
+                                         (list (event-event evt))))))
+
      (define ctx (list (make-user-message "Initial")))
 
      ;; Mock provider
@@ -65,15 +70,29 @@
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
 
-     ;; Run iteration with queue - should complete without error
-     (check-not-exn
-      (lambda ()
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
-                            #:queue queue))))
+     ;; Run iteration with queue - should complete with context injection
+     (define result
+       (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
+                           #:queue queue))
+     (check-pred loop-result? result)
+     (check-equal? (loop-result-termination-reason result) 'completed)
+     ;; Verify events were emitted (proving steering was processed)
+     (define events (unbox collected-events))
+     (check-not-false (member "context.assembled" events)
+                      "context.assembled event should be emitted"))
 
    (test-case "multiple steering messages are injected in order"
      (define bus (make-event-bus))
      (define queue (make-queue))
+
+     ;; Track assembled context sizes via events
+     (define ctx-sizes (box '()))
+     (subscribe! bus (lambda (evt)
+                       (when (equal? (event-event evt) "context.assembled")
+                         (define payload (event-payload evt))
+                         (set-box! ctx-sizes
+                                   (append (unbox ctx-sizes)
+                                           (list (hash-ref payload 'total-messages 0)))))))
 
      (enqueue-steering! queue (make-user-message "First steering"))
      (enqueue-steering! queue (make-user-message "Second steering"))
@@ -85,11 +104,17 @@
 
      (define ctx (list (make-user-message "Initial")))
 
-     ;; Should complete without error with multiple steering messages
-     (check-not-exn
-      (lambda ()
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
-                            #:queue queue))))
+     ;; Run iteration and verify completion
+     (define result
+       (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
+                           #:queue queue))
+     (check-pred loop-result? result)
+     (check-equal? (loop-result-termination-reason result) 'completed)
+     ;; Context should have had 3 messages (1 initial + 2 steering)
+     (define sizes (unbox ctx-sizes))
+     (when (not (null? sizes))
+       (check >= (car sizes) 3
+              "total-messages should include initial + 2 steering messages")))
 
    (test-case "empty queue does not affect context"
      (define bus (make-event-bus))
@@ -102,11 +127,13 @@
 
      (define ctx (list (make-user-message "Initial")))
 
-     ;; Should complete without error with empty queue
-     (check-not-exn
-      (lambda ()
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
-                            #:queue queue))))
+     ;; Run with empty queue and verify result is valid
+     (define result
+       (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10
+                           #:queue queue))
+     (check-pred loop-result? result)
+     (check-equal? (loop-result-termination-reason result) 'completed)
+     (check-true (>= (length (loop-result-messages result)) 0)))
 
    (test-case "without queue parameter iteration still works (backward compat)"
      (define bus (make-event-bus))
@@ -118,9 +145,14 @@
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
 
      ;; Should work without queue parameter (backward compatibility)
-     (check-not-exn
-      (lambda ()
-        (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10))))
+     (define result
+       (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10))
+     (check-pred loop-result? result)
+     (check-equal? (loop-result-termination-reason result) 'completed)
+     ;; Verify the result messages contain the assistant response
+     (define msgs (loop-result-messages result))
+     (check-true (>= (length msgs) 1)
+                 "should have at least one message in result"))
    ))
 
 ;; ============================================================

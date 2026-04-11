@@ -238,6 +238,7 @@
                              'models '("gpt-4o")
                              'api-key-env "Q_TEST_PROVIDER_BUILD_KEY")))))
   (putenv "Q_TEST_PROVIDER_BUILD_KEY" "sk-test-key-12345")
+  (define orig-val (getenv "Q_TEST_PROVIDER_BUILD_KEY"))
   (dynamic-wind
     (lambda () (void))
     (lambda ()
@@ -251,7 +252,9 @@
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
-      (putenv "Q_TEST_PROVIDER_BUILD_KEY" ""))))
+      (if orig-val
+          (putenv "Q_TEST_PROVIDER_BUILD_KEY" orig-val)
+          (putenv "Q_TEST_PROVIDER_BUILD_KEY" "")))))
 
 (test-case "build-provider: creates real provider with default model from config"
   (define tmp-dir
@@ -264,6 +267,7 @@
                              'default-model "gpt-4o"
                              'api-key-env "Q_TEST_DEFAULT_MODEL_KEY")))))
   (putenv "Q_TEST_DEFAULT_MODEL_KEY" "sk-test-key-default")
+  (define orig-val (getenv "Q_TEST_DEFAULT_MODEL_KEY"))
   (dynamic-wind
     (lambda () (void))
     (lambda ()
@@ -276,7 +280,9 @@
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
-      (putenv "Q_TEST_DEFAULT_MODEL_KEY" ""))))
+      (if orig-val
+          (putenv "Q_TEST_DEFAULT_MODEL_KEY" orig-val)
+          (putenv "Q_TEST_DEFAULT_MODEL_KEY" "")))))
 
 (test-case "build-provider: uses project-dir from config for settings loading"
   (define tmp-dir
@@ -287,6 +293,7 @@
                              'models '("claude-3")
                              'api-key-env "Q_TEST_PROJECT_DIR_KEY")))))
   (putenv "Q_TEST_PROJECT_DIR_KEY" "sk-test-project-dir")
+  (define orig-val (getenv "Q_TEST_PROJECT_DIR_KEY"))
   (dynamic-wind
     (lambda () (void))
     (lambda ()
@@ -300,7 +307,9 @@
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
-      (putenv "Q_TEST_PROJECT_DIR_KEY" ""))))
+      (if orig-val
+          (putenv "Q_TEST_PROJECT_DIR_KEY" orig-val)
+          (putenv "Q_TEST_PROJECT_DIR_KEY" "")))))
 
 ;; ============================================================
 ;; print helpers
@@ -862,6 +871,7 @@
                              'api-key-env "Q_TEST_CLOUD_NO_KEY")))))
   ;; Ensure env var is NOT set
   (putenv "Q_TEST_CLOUD_NO_KEY" "")
+  (define orig-val (getenv "Q_TEST_CLOUD_NO_KEY"))
   (dynamic-wind
     (lambda () (void))
     (lambda ()
@@ -874,4 +884,8 @@
       ;; Should fall back to mock provider for cloud without API key
       (check-pred provider? p)
       (check-equal? (provider-name p) "mock"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+    (lambda ()
+      (cleanup-temp-dir tmp-dir)
+      (if orig-val
+          (putenv "Q_TEST_CLOUD_NO_KEY" orig-val)
+          (putenv "Q_TEST_CLOUD_NO_KEY" "")))))

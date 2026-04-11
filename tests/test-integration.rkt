@@ -170,9 +170,17 @@
   (check-pred file-exists? log-path)
   (define entries (jsonl-read-all-valid log-path))
   (check >= (length entries) 2)
+  ;; Verify content of entries: should have user then assistant
+  (check-equal? (hash-ref (first entries) 'role) "user"
+                "first entry should be user message")
+  ;; Content in JSONL is a list of content-part hashes, not a raw string
+  (check-true (list? (hash-ref (first entries) 'content #f))
+              "user entry should have content list")
+  (check-equal? (hash-ref (second entries) 'role) "assistant"
+                "second entry should be assistant message")
   (cleanup-dir dir))
 
-(test-case "integ: session info reflects state"
+(test-case "integ: session-info returns correct metadata"
   (define dir (make-temp-dir))
   (define prov (make-simple-mock-provider "hi"))
   (define rt (make-test-runtime prov #:session-dir dir #:max-iterations 5))
@@ -210,6 +218,10 @@
   (define log-path (build-path dir sid "session.jsonl"))
   (define entries (jsonl-read-all-valid log-path))
   (check >= (length entries) 2)
+  ;; Verify content: should contain user, assistant(tool-call), tool-result, assistant(text)
+  (define roles (map (lambda (e) (hash-ref e 'role #f)) entries))
+  (check-not-false (member "user" roles) "entries should include user role")
+  (check-not-false (member "assistant" roles) "entries should include assistant role")
   (cleanup-dir dir))
 
 (test-case "integ: unknown tool → error result"
@@ -342,6 +354,12 @@
   (define log-path (build-path dir sid "session.jsonl"))
   (define entries (jsonl-read-all-valid log-path))
   (check >= (length entries) 4)
+  ;; Verify content: should have multiple user and assistant messages from both prompts
+  (define roles (map (lambda (e) (hash-ref e 'role #f)) entries))
+  (check-equal? (length (filter (lambda (r) (equal? r "user")) roles)) 2
+                "should have 2 user messages from two prompts")
+  (check-equal? (length (filter (lambda (r) (equal? r "assistant")) roles)) 2
+                "should have 2 assistant messages from two prompts")
   (cleanup-dir dir))
 
 (test-case "integ: resume non-existent session → error"

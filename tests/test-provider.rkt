@@ -240,6 +240,19 @@
  (check-equal? (hash-ref oai-body 'model) "gpt-4")
  (check-true (list? (hash-ref oai-body 'messages)))
  (check-true (list? (hash-ref oai-body 'tools)))
+ ;; Verify tools content is JSON-serializable (each element is a hash with expected keys)
+ (define oai-tools (hash-ref oai-body 'tools))
+ (for ([tool-entry (in-list oai-tools)])
+   (check-pred hash? tool-entry "each tool entry should be a hash")
+   (check-equal? (hash-ref tool-entry 'type) "function"
+                 "each tool entry should have type 'function'")
+   (check-true (hash? (hash-ref tool-entry 'function))
+               "each tool entry should have a 'function' hash")
+   (define fn (hash-ref tool-entry 'function))
+   (check-true (string? (hash-ref fn 'name #f))
+               "function hash should have string 'name'")
+   (check-true (string? (hash-ref fn 'description #f))
+               "function hash should have string 'description'"))
  (check-equal? (hash-ref oai-body 'stream) #f))
 
 (test-case

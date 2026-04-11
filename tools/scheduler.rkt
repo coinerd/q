@@ -20,6 +20,7 @@
                   tool-result? tool-result-content
                   tool-result-details tool-result-is-error?
                   make-error-result make-success-result
+                  validate-tool-result
                   exec-context? exec-context-event-publisher
                   tool-call tool-call? make-tool-call
                   tool-call-id tool-call-name tool-call-arguments)
@@ -166,12 +167,16 @@
      (make-error-result (format "tool '~a' blocked by tool-call-pre hook" tc-name))]
     [else
      ;; Determine which tool call to execute (possibly amended args)
+     ;; Validate that hook-amended args is a hash before use
      (define tc-to-execute
        (if (and (hook-result? pre-hook-result)
                 (eq? (hook-result-action pre-hook-result) 'amend)
                 (hash? (hook-result-payload pre-hook-result))
                 (hash-has-key? (hook-result-payload pre-hook-result) 'args))
-           (make-tool-call tc-id tc-name (hash-ref (hook-result-payload pre-hook-result) 'args))
+           (let ([amended-args (hash-ref (hook-result-payload pre-hook-result) 'args)])
+             (if (hash? amended-args)
+                 (make-tool-call tc-id tc-name amended-args)
+                 tc))
            tc))
 
      ;; Execute the tool
@@ -209,8 +214,11 @@
              (eq? (hook-result-action post-hook-result) 'amend)
              (hash? (hook-result-payload post-hook-result))
              (hash-has-key? (hook-result-payload post-hook-result) 'result))
-        ;; Use amended result
-        (hash-ref (hook-result-payload post-hook-result) 'result)]
+        ;; Validate post-hook amended result is a valid tool-result
+        (let ([amended-result (hash-ref (hook-result-payload post-hook-result) 'result)])
+          (if (validate-tool-result amended-result)
+              amended-result
+              exec-result))]
        [else
         ;; Return original result
         exec-result])])

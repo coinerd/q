@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.9] — 2026-04-11
+
+### Test Quality Strengthening
+- **#122**: Strengthen weak assertion patterns — replaced bare `check-true`/`check-false` with specific `check-equal?`/`check-not-false` in integration and iteration tests
+- **#123**: Test isolation — added `test-case` wrappers to orphaned test bodies in test-integration.rkt
+- **#124**: Negative/error path tests — added argument validation tests (`validate-tool-args`, `ensure-hash-args`, `type-matches?`, `json-serializable?`, `validate-tool-result`) in tools/tool.rkt and tools/scheduler.rkt
+- **#125**: Tool argument/result validation — added `ensure-hash-args`, `validate-tool-args`, `validate-tool-result`, `type-matches?`, `json-serializable?` to tool.rkt; integrated into scheduler post-hook revalidation
+
+### Metrics
+- 2,972 tests passing, 0 failures
+- 6/6 lint checks passing
+
 ## [0.6.8] — 2026-04-11
 
 ### Structural Hardening
