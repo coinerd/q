@@ -12,11 +12,13 @@
          "../llm/model.rkt"
          "../llm/openai-compatible.rkt"
          "../llm/gemini.rkt"
+         "../llm/anthropic.rkt"
          racket/string)
 
 (provide build-provider
          build-mock-provider
-         local-provider?)
+         local-provider?
+         create-provider-for-name) ;; for testing
 
 ;; Build the appropriate provider based on provider name.
 (define (create-provider-for-name prov-name base-url api-key model-name)
@@ -26,6 +28,8 @@
   (cond
     [(equal? prov-name "gemini")
      (make-gemini-provider config)]
+    [(equal? prov-name "anthropic")
+     (make-anthropic-provider config)]
     [else
      (make-openai-compatible-provider config)]))
 

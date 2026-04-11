@@ -15,7 +15,8 @@
          valid-formats?          ;; for testing
          truncate-string
          validate-url            ;; for testing
-         private-host?)          ;; for testing
+         private-host?           ;; for testing
+         poll-crawl-status)      ;; for testing
 
 ;; ============================================================
 ;; SSRF Protection (SEC-14)
@@ -242,22 +243,22 @@
            'result-count (length results)))))
 
 (define (poll-crawl-status job-id deadline)
-  (when (> (current-seconds) deadline)
-    '())
-  (sleep 2)
-  (define resp
-    (with-handlers ([exn:fail? (lambda (_) (hasheq))])
-      (firecrawl-request "GET" (format "/crawl/~a" job-id))))
-  (define status (hash-ref resp 'status "unknown"))
-  (cond
-    [(equal? status "completed")
-     (hash-ref resp 'data '())]
-    [(equal? status "failed")
-     '()]
-    [(> (current-seconds) deadline)
-     (hash-ref resp 'data '())]  ;; partial results
-    [else
-     (poll-crawl-status job-id deadline)]))
+  (if (> (current-seconds) deadline)
+      '()
+      (begin
+        (sleep 2)
+        (let* ([resp (with-handlers ([exn:fail? (lambda (_) (hasheq))])
+                       (firecrawl-request "GET" (format "/crawl/~a" job-id)))]
+               [status (hash-ref resp 'status "unknown")])
+          (cond
+            [(equal? status "completed")
+             (hash-ref resp 'data '())]
+            [(equal? status "failed")
+             '()]
+            [(> (current-seconds) deadline)
+             (hash-ref resp 'data '())]
+            [else
+             (poll-crawl-status job-id deadline)])))))
 
 (define (format-crawl-results results)
   (if (null? results)

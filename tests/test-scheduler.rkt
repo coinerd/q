@@ -302,6 +302,65 @@
   (check-equal? (result-text (second (scheduler-result-results sr))) "30"))
 
 ;; ============================================================
+;; 13. FUNC-07 (#105): Parallel tool execution doesn't deadlock on hook exception
+;; ============================================================
+
+(let* ([reg (make-test-registry)]
+       ;; Hook that throws for 'tool-call-pre, passes for everything else
+       [hook (lambda (hook-point data)
+               (cond
+                 [(eq? hook-point 'tool-call-pre)
+                  (error 'test-hook "deliberate pre-hook crash")]
+                 [else data]))]
+       [tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "parallel-resilient")))]
+       [sr (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #t)])
+  (define results (scheduler-result-results sr))
+  (check-equal? (length results) 1 "parallel with throwing pre-hook should return results")
+  ;; Tool should still execute (hook error is caught, treated as #f)
+  (check-false (tool-result-is-error? (car results))
+               "parallel execution should succeed despite pre-hook exception")
+  (check-equal? (result-text (car results)) "parallel-resilient"
+                "result content should be from tool execution"))
+
+;; ============================================================
+;; 13a. FUNC-07 (#105): Serial mode also survives hook exception
+;; ============================================================
+
+(let* ([reg (make-test-registry)]
+       [hook (lambda (hook-point data)
+               (cond
+                 [(eq? hook-point 'tool-call-pre)
+                  (error 'test-hook "deliberate pre-hook crash")]
+                 [else data]))]
+       [tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "serial-resilient")))]
+       [sr (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #f)])
+  (define results (scheduler-result-results sr))
+  (check-equal? (length results) 1 "serial with throwing pre-hook should return results")
+  (check-false (tool-result-is-error? (car results))
+               "serial execution should succeed despite pre-hook exception")
+  (check-equal? (result-text (car results)) "serial-resilient"
+                "result content should be from tool execution"))
+
+;; ============================================================
+;; 13b. FUNC-07 (#105): Parallel with throwing post-hook also survives
+;; ============================================================
+
+(let* ([reg (make-test-registry)]
+       [hook (lambda (hook-point data)
+               (cond
+                 [(eq? hook-point 'tool-result-post)
+                  (error 'test-hook "deliberate post-hook crash")]
+                 [else data]))]
+       [tcs (list (tool-call "tc-1" "echo" (hasheq 'msg "post-resilient")))]
+       [sr (run-tool-batch tcs reg #:hook-dispatcher hook #:parallel? #t)])
+  (define results (scheduler-result-results sr))
+  (check-equal? (length results) 1 "parallel with throwing post-hook should return results")
+  (check-false (tool-result-is-error? (car results))
+               "parallel execution should succeed despite post-hook exception")
+  (check-equal? (result-text (car results)) "post-resilient"
+                "result content should be from tool execution"))
+
+;; ============================================================
 ;; Summary
 ;; ============================================================
 

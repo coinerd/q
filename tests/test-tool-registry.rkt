@@ -14,7 +14,8 @@
 (require rackunit
          rackunit/text-ui
          racket/runtime-path
-         "../tools/tool.rkt")
+         "../tools/tool.rkt"
+         "../tools/registry-defaults.rkt")
 
 (define-runtime-path here ".")
 (define q-root (simplify-path (build-path here "..")))
@@ -374,3 +375,43 @@
      (check-equal? (list-tools-jsexpr reg) '()))))
 
 (run-tests tool-reg-tests)
+
+;; ============================================================
+;; FUNC-02 (#100): date/firecrawl tools nested inside ls guard
+;; ============================================================
+
+(define registry-defaults-tests
+  (test-suite
+   "register-default-tools! #:only guard independence"
+
+   (test-case "#:only '(\"date\") registers date but not ls"
+     (define reg (make-tool-registry))
+     (register-default-tools! reg #:only '("date"))
+     (check-not-false (lookup-tool reg "date")
+                     "date should be registered")
+     (check-false (lookup-tool reg "ls")
+                  "ls should NOT be registered when not in #:only"))
+
+   (test-case "#:only '(\"firecrawl\") registers firecrawl but not ls"
+     (define reg (make-tool-registry))
+     (register-default-tools! reg #:only '("firecrawl"))
+     (check-not-false (lookup-tool reg "firecrawl")
+                     "firecrawl should be registered")
+     (check-false (lookup-tool reg "ls")
+                  "ls should NOT be registered when not in #:only"))
+
+   (test-case "#:only '(\"date\") — lookup-tool returns a tool"
+     (define reg (make-tool-registry))
+     (register-default-tools! reg #:only '("date"))
+     (define t (lookup-tool reg "date"))
+     (check-pred tool? t)
+     (check-equal? (tool-name t) "date"))
+
+   (test-case "#:only '(\"ls\") registers ls but not date or firecrawl"
+     (define reg (make-tool-registry))
+     (register-default-tools! reg #:only '("ls"))
+     (check-not-false (lookup-tool reg "ls"))
+     (check-false (lookup-tool reg "date"))
+     (check-false (lookup-tool reg "firecrawl")))))
+
+(run-tests registry-defaults-tests)

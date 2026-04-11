@@ -215,5 +215,30 @@
      (check-pred tool-result? r)
      (check-true (tool-result-is-error? r)))))
 
+;; ============================================================
+;; FUNC-01 (#99): poll-crawl-status deadline guard
+;; ============================================================
+
+(define poll-deadline-tests
+  (test-suite
+   "poll-crawl-status deadline guard"
+
+   (test-case "poll-crawl-status returns '() immediately when deadline is past (no sleep)"
+     ;; deadline is 10 seconds in the past — should return '() without sleeping
+     ;; If the bug is present (when instead of if), it will sleep 2s before returning
+     (define before (current-inexact-milliseconds))
+     (define result (poll-crawl-status "test-job-id" (- (current-seconds) 10)))
+     (define elapsed (- (current-inexact-milliseconds) before))
+     (check-equal? result '())
+     (check-true (< elapsed 500)
+                (format "Expected <500ms but took ~ams (bug: when falls through to sleep)"
+                        elapsed)))
+
+   (test-case "poll-crawl-status returns '() when deadline is exactly now"
+     ;; deadline exactly now — still past or equal, should return '()
+     (define result (poll-crawl-status "test-job-id" (current-seconds)))
+     (check-equal? result '()))))
+
 (run-tests firecrawl-tests)
 (run-tests ssrf-tests)
+(run-tests poll-deadline-tests)

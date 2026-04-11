@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-04-11
+
+### Critical Bug Fixes
+- **FUNC-01** (#99): Fixed `poll-crawl-status` in firecrawl — replaced `when` with `if` so deadline guard actually returns `'()` instead of falling through to infinite recursion
+- **FUNC-02** (#100): Fixed `date`/`firecrawl` tool registrations nested inside `ls` guard in `registry-defaults.rkt` — each tool now has its own independent `should-register?` check
+- **STRUC-01** (#101): Wired Anthropic provider into `provider-factory.rkt` — added `require` for `llm/anthropic.rkt` and match clause for `"anthropic"` in `create-provider-for-name`
+- **STRUC-02** (#102): Fixed `ensure-hash-args` in `iteration.rkt` — parse failures now include `_parse_failed` key and `_raw_args` for visibility instead of silently falling back to empty hash
+- **STRUC-03** (#103): Wired `fork.requested`/`compact.requested` event bus subscribers in `agent-session.rkt` — TUI `/fork` and `/compact` commands now trigger actual session operations
+- **FUNC-06** (#104): Added return type validation in `dispatch-hooks` — non-`hook-result?` return values are logged and replaced with `(hook-pass)` instead of crashing
+- **FUNC-07** (#105): Wrapped `tool-call-pre`/`tool-result-post` hook calls in `execute-single` with `with-handlers` — prevents parallel execution deadlocks when hooks throw
+
+### Tests Added (+29)
+- Firecrawl poll deadline test (2 cases)
+- Tool registration selectivity test (4 cases)
+- Provider factory routing test (20 cases including Anthropic)
+- `ensure-hash-args` parse error test (5 cases)
+- Hook return type validation test (4 cases)
+- Parallel execution hook exception test (3 cases)
+- Fork/compact event wiring test (2 cases)
+
+### Metrics
+- 3,099 tests passing (+29), 0 failures
+- 19882 source lines, 31123 test lines, 5312 assertions
+- 6/6 lints green
+
 ## [0.6.4] — 2026-04-11
 
 ### Developer Tooling

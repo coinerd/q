@@ -27,7 +27,8 @@
                   tool-result-part? tool-result-part-content tool-result-part-is-error?
                   make-loop-result loop-result? loop-result-termination-reason
                   loop-result-messages loop-result-metadata
-                  event event-event event-payload
+                  event event-event event-payload event-ev
+                  make-event
                   content-part->jsexpr)
          "../agent/event-bus.rkt"
          "../llm/model.rkt"
@@ -39,6 +40,7 @@
                   extension-registry? make-extension-registry register-extension! extension)
          (only-in "../extensions/hooks.rkt" hook-pass hook-amend hook-block)
          "../runtime/agent-session.rkt"
+         (only-in "../runtime/session-store.rkt" append-entry! load-session-log)
          (only-in "../runtime/compactor.rkt"
                   compaction-strategy compaction-result->message-list compact-history
                   build-tiered-context tiered-context tiered-context? tiered-context-tier-a
@@ -1373,8 +1375,88 @@
     (check-equal? (length (tiered-context-tier-c tiered)) 1)))
 
 ;; ============================================================
+;; Fork/compact event wiring tests
+;; ============================================================
+
+(define test-event-wiring-suite
+  (test-suite
+   "event wiring for fork/compact"
+
+   (test-case "fork.requested event triggers fork-session"
+     (define bus (make-event-bus))
+     (define tmpdir (make-temp-dir))
+     (define prov (make-mock-provider
+                   (make-model-response
+                    (list (hash 'type "text" 'text "hi"))
+                    (hash) "mock" 'stop)))
+     (define cfg (hasheq 'provider prov
+                         'tool-registry (make-tool-registry)
+                         'event-bus bus
+                         'session-dir tmpdir))
+     (define sess (make-agent-session cfg))
+     ;; Add a user message to the session via run-prompt!
+     (run-prompt! sess "test message")
+     ;; Collect events from fork
+     (define fork-events (box '()))
+     (subscribe! bus (lambda (evt)
+                       (set-box! fork-events (cons evt (unbox fork-events))))
+       #:filter (lambda (e)
+                  (member (event-ev e)
+                          '("session.fork.completed" "session.fork.failed"))))
+     ;; Publish fork.requested with the first user message ID
+     (define history (session-history sess))
+     (define first-msg-id (and (pair? history) (message-id (car history))))
+     (publish! bus (make-event "fork.requested"
+                               1001
+                               (session-id sess) #f
+                               (hasheq 'entry-id (or first-msg-id "unknown"))))
+     ;; Allow thread to process
+     (sleep 0.2)
+     ;; Verify fork completed event was emitted
+     (check-not-equal? (length (unbox fork-events)) 0
+                       "fork.requested should trigger session.fork.completed or session.forked")
+     (close-session! sess)
+     (delete-directory/files tmpdir))
+
+   (test-case "compact.requested event triggers compaction"
+     (define bus (make-event-bus))
+     (define tmpdir (make-temp-dir))
+     (define prov (make-mock-provider
+                   (make-model-response
+                    (list (hash 'type "text" 'text "hi"))
+                    (hash) "mock" 'stop)))
+     (define cfg (hasheq 'provider prov
+                         'tool-registry (make-tool-registry)
+                         'event-bus bus
+                         'session-dir tmpdir))
+     (define sess (make-agent-session cfg))
+     ;; Add messages via run-prompt!
+     (for ([i (in-range 3)])
+       (run-prompt! sess (format "message ~a" i)))
+     ;; Collect events from compact
+     (define compact-events (box '()))
+     (subscribe! bus (lambda (evt)
+                       (set-box! compact-events (cons evt (unbox compact-events))))
+       #:filter (lambda (e)
+                  (member (event-ev e)
+                          '("session.compact.completed" "session.compact.failed"))))
+     ;; Publish compact.requested
+     (publish! bus (make-event "compact.requested"
+                               1001
+                               (session-id sess) #f
+                               (hasheq)))
+     ;; Allow thread to process
+     (sleep 0.2)
+     ;; Verify compact completed event was emitted
+     (check-not-equal? (length (unbox compact-events)) 0
+                       "compact.requested should trigger session.compact.completed")
+     (close-session! sess)
+     (delete-directory/files tmpdir))))
+
+;; ============================================================
 ;; Run
 ;; ============================================================
 
 (run-tests test-agent-session-suite)
 (run-tests test-tiered-context-suite)
+(run-tests test-event-wiring-suite)

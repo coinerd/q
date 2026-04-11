@@ -123,6 +123,35 @@
         (run-iteration-loop ctx mock-prov bus #f #f "/tmp/test.log" "test-session" 10))))
    ))
 
+;; ============================================================
+;; ensure-hash-args tests (STRUC-02 fix)
+;; ============================================================
+
+(test-case "ensure-hash-args with valid JSON string returns hash"
+  (define result (ensure-hash-args "{\"key\": \"val\"}"))
+  (check-pred hash? result)
+  (check-equal? (hash-ref result 'key #f) "val"))
+
+(test-case "ensure-hash-args with invalid JSON string returns hash with _parse_failed key"
+  (define result (ensure-hash-args "not json"))
+  (check-pred hash? result)
+  (check-true (hash-ref result '_parse_failed #f)))
+
+(test-case "ensure-hash-args with hash returns same hash"
+  (define h (hasheq 'foo 'bar))
+  (define result (ensure-hash-args h))
+  (check-eq? result h))
+
+(test-case "ensure-hash-args with empty JSON object string returns empty hash"
+  (define result (ensure-hash-args "{}"))
+  (check-pred hash? result)
+  (check-equal? (hash-keys result) '()))
+
+(test-case "ensure-hash-args with empty string returns empty hash"
+  (define result (ensure-hash-args ""))
+  (check-pred hash? result)
+  (check-equal? (hash-keys result) '()))
+
 ;; Run tests
 (module+ main
   (run-tests iteration-tests))

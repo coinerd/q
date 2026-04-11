@@ -124,8 +124,9 @@
                                                           'description "Long format with size/type")
                                              'sort-by (hasheq 'type "string"
                                                               'description "\"name\", \"size\", or \"date\"")))
-                 tool-ls))
+                 tool-ls)))
 
+  (when (should-register? "date")
     (register-tool! registry
       (make-tool "date"
                  "Returns the current date and time. Use this tool to learn today's date before answering time-dependent questions."
@@ -133,31 +134,31 @@
                          'required '()
                          'properties (hasheq 'format (hasheq 'type "string"
                                                              'description "Output format: iso (default), date, time, unix, weekday, iso-full")))
-                 tool-date))
+                 tool-date)))
 
-    ;; Firecrawl web search tool (requires FIRECRAWL_API_KEY env var or config)
-    (when (should-register? "firecrawl")
-      (register-tool! registry
-        (make-tool "firecrawl"
-                   "Search the web, scrape/crawl/map websites via Firecrawl. Actions: search (web search with query), scrape (extract
+  ;; Firecrawl web search tool (requires FIRECRAWL_API_KEY env var or config)
+  (when (should-register? "firecrawl")
+    (register-tool! registry
+      (make-tool "firecrawl"
+                 "Search the web, scrape/crawl/map websites via Firecrawl. Actions: search (web search with query), scrape (extract
                        content from URL), crawl (crawl multiple pages from URL), map (list all URLs at a site). Returns markdown by default.
                               Requires FIRECRAWL_API_KEY environment variable."
-                   (hasheq 'type "object"
-                           'required '("action")
-                           'properties (hasheq 'action (hasheq 'type "string"
-                                                                      'description "Action to perform: search, scrape, crawl, or map")
-                                               'query (hasheq 'type "string"
-                                                              'description "Search query (for search action)")
-                                               'url (hasheq 'type "string"
-                                                            'description "URL to scrape, crawl, or map")
-                                               'formats (hasheq 'type "array"
-                                                                          'items (hasheq 'type "string")
-                                                                          'description "Output formats: markdown (default), html, rawHtml")
-                                               'limit (hasheq 'type "integer"
-                                                              'description "Max results for search/crawl (default 5)")
-                                               'onlyMainContent (hasheq 'type "boolean"
-                                                                        'description "Extract main content only (default true)")
-                                               'timeout (hasheq 'type "integer"
-                                                                'description "Timeout in seconds for crawl polling (default 30)")))
-                   tool-firecrawl))))
-)
+                 (hasheq 'type "object"
+                         'required '("action")
+                         'properties (hasheq 'action (hasheq 'type "string"
+                                                                    'description "Action to perform: search, scrape, crawl, or map")
+                                             'query (hasheq 'type "string"
+                                                            'description "Search query (for search action)")
+                                             'url (hasheq 'type "string"
+                                                          'description "URL to scrape, crawl, or map")
+                                             'formats (hasheq 'type "array"
+                                                                      'items (hasheq 'type "string")
+                                                                      'description "Output formats: markdown (default), html, rawHtml")
+                                             'limit (hasheq 'type "integer"
+                                                            'description "Max results for search/crawl (default 5)")
+                                             'onlyMainContent (hasheq 'type "boolean"
+                                                                      'description "Extract main content only (default true)")
+                                             'timeout (hasheq 'type "integer"
+                                                              'description "Timeout in seconds for crawl polling (default 30)")))
+                 tool-firecrawl)))
+  (void))

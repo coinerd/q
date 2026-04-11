@@ -81,3 +81,22 @@
   (define p (build-provider config settings))
   (check-pred provider? p)
   (check-equal? (provider-name p) "mock"))
+
+;; ============================================================
+;; create-provider-for-name tests (STRUC-01 fix)
+;; ============================================================
+
+(test-case "create-provider-for-name returns anthropic provider for anthropic name"
+  (define p (create-provider-for-name "anthropic" "https://api.anthropic.com" "test-key" "claude-sonnet-4-20250514"))
+  (check-pred provider? p)
+  (check-equal? (provider-name p) "anthropic"))
+
+(test-case "create-provider-for-name returns gemini provider for gemini name"
+  (define p (create-provider-for-name "gemini" "https://generativelanguage.googleapis.com" "test-key" "gemini-2.0-flash"))
+  (check-pred provider? p)
+  (check-equal? (provider-name p) "gemini"))
+
+(test-case "create-provider-for-name returns openai-compatible provider for openai name"
+  (define p (create-provider-for-name "openai" "https://api.openai.com/v1" "test-key" "gpt-4o"))
+  (check-pred provider? p)
+  (check-equal? (provider-name p) "openai-compatible"))

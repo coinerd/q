@@ -151,7 +151,12 @@
   ;; Check if tool-call-pre hook blocks or amends
   (define pre-hook-result
     (if hook-dispatcher
-        (hook-dispatcher 'tool-call-pre pre-payload)
+        (with-handlers ([exn:fail?
+                         (lambda (e)
+                           (log-warning
+                            (format "tool-call-pre hook threw: ~a" (exn-message e)))
+                           #f)])
+          (hook-dispatcher 'tool-call-pre pre-payload))
         #f))
 
   (cond
@@ -187,7 +192,12 @@
 
      (define post-hook-result
        (if hook-dispatcher
-           (hook-dispatcher 'tool-result-post post-payload)
+           (with-handlers ([exn:fail?
+                            (lambda (e)
+                              (log-warning
+                               (format "tool-result-post hook threw: ~a" (exn-message e)))
+                              #f)])
+             (hook-dispatcher 'tool-result-post post-payload))
            #f))
 
      (cond

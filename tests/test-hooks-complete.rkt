@@ -631,6 +631,40 @@
                'extension-registry ext-reg)))
       "blocked session-before-switch should raise an error")
      (delete-directory/files dir #:must-exist? #f))
+
+   ;; ---- FUNC-06 (#104): Non-hook-result return values don't crash dispatch ----
+   (test-case "handler returning void does not crash dispatch-hooks"
+     (define reg (make-test-extension-registry
+                  (list 'model-request-pre
+                        (lambda (payload) (void)))))
+     (define result (dispatch-hooks 'model-request-pre (hasheq 'x 1) reg))
+     (check-true (hook-result? result) "void return should produce hook-result")
+     (check-equal? (hook-result-action result) 'pass "void return should default to pass"))
+
+   (test-case "handler returning string does not crash dispatch-hooks"
+     (define reg (make-test-extension-registry
+                  (list 'model-request-pre
+                        (lambda (payload) "bad"))))
+     (define result (dispatch-hooks 'model-request-pre (hasheq 'x 1) reg))
+     (check-true (hook-result? result) "string return should produce hook-result")
+     (check-equal? (hook-result-action result) 'pass "string return should default to pass"))
+
+   (test-case "handler returning #f does not crash dispatch-hooks"
+     (define reg (make-test-extension-registry
+                  (list 'model-request-pre
+                        (lambda (payload) #f))))
+     (define result (dispatch-hooks 'model-request-pre (hasheq 'x 1) reg))
+     (check-true (hook-result? result) "#f return should produce hook-result")
+     (check-equal? (hook-result-action result) 'pass "#f return should default to pass"))
+
+   (test-case "handler returning proper hook-result still works after fix"
+     (define reg (make-test-extension-registry
+                  (list 'model-request-pre
+                        (lambda (payload) (hook-amend (hash-set payload 'ok #t))))))
+     (define result (dispatch-hooks 'model-request-pre (hasheq 'x 1) reg))
+     (check-true (hook-result? result) "proper hook-result should still work")
+     (check-equal? (hook-result-action result) 'amend "action should be amend")
+     (check-equal? (hash-ref (hook-result-payload result) 'ok) #t "payload should contain amendment"))
    ))
 
 ;; Run tests

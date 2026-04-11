@@ -69,7 +69,14 @@
                              (format "Hook handler ~a for ~a threw: ~a"
                                      ext-name hook-point (exn-message e)))
                             (hook-pass current-payload))])
-           (handler current-payload)))
+           (define raw-result (handler current-payload))
+           (if (hook-result? raw-result)
+               raw-result
+               (begin
+                 (log-warning
+                  (format "Hook handler ~a for ~a returned non-hook-result: ~v"
+                          ext-name hook-point raw-result))
+                 (hook-pass current-payload)))))
        (case (hook-result-action result)
          [(block) result]
          [(amend) (loop (cdr remaining) (hook-result-payload result) #t)]

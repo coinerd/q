@@ -42,7 +42,8 @@
 
 (provide run-iteration-loop
          emit-session-event!
-         maybe-dispatch-hooks)
+         maybe-dispatch-hooks
+         ensure-hash-args) ;; for testing
 
 ;; ============================================================
 ;; Shared helpers
@@ -74,16 +75,19 @@
      (define cleaned (string-trim args))
      (if (or (string=? cleaned "") (string=? cleaned "{}"))
          (hash)
-         (with-handlers ([exn:fail? (lambda (_)
+         (with-handlers ([exn:fail? (lambda (e)
                                        (fprintf (current-error-port)
                                                 "warning: ensure-hash-args: failed to parse JSON args: ~a~n"
                                                 args)
-                                       (hash))])
+                                       (hasheq '_parse_failed #t
+                                               '_raw_args args))])
            (define parsed (string->jsexpr cleaned))
            (if (hash? parsed)
                parsed
-               (hash))))]
-    [else (hash)]))
+               (hasheq '_parse_failed #t
+                       '_raw_args args))))]
+    [else (hasheq '_parse_failed #t
+                  '_raw_args (format "~a" args))]))
 
 ;; Extract tool-call structs from assistant messages' tool-call-parts
 (define (extract-tool-calls-from-messages messages)

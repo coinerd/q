@@ -26,9 +26,11 @@
                   message-id message-role message-content
                   make-message make-text-part
                   content-part->jsexpr
+                  event-ev event-payload
                   loop-result-termination-reason
                   make-loop-result)
          "../agent/queue.rkt"
+         "../agent/event-bus.rkt"
          "../llm/token-budget.rkt"
          (only-in "../extensions/hooks.rkt"
                   hook-result-action hook-result-payload)
@@ -133,6 +135,9 @@
   (define-values (_session-start-payload _session-start-res)
     (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start session-start-payload))
 
+  ;; Subscribe to fork.requested and compact.requested events from TUI/CLI
+  (wire-session-event-handlers! sess)
+
   sess)
 
 ;; ============================================================
@@ -183,6 +188,9 @@
   (emit-session-event! (agent-session-event-bus sess)
                        session-id "session.resumed"
                        (hasheq 'sessionId session-id))
+
+  ;; Subscribe to fork/compact events from TUI/CLI
+  (wire-session-event-handlers! sess)
 
   sess)
 
@@ -422,3 +430,48 @@
   (define-values (_shutdown-payload _shutdown-res)
     (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-shutdown shutdown-payload))
   (set-agent-session-active?! sess #f))
+
+;; ============================================================
+;; Event bus wiring — handle fork/compact requests from TUI/CLI
+;; ============================================================
+
+;; Wire event-bus subscribers for fork.requested and compact.requested events.
+;; These events are published by TUI/CLI commands and need runtime handlers.
+(define (wire-session-event-handlers! sess)
+  (define bus (agent-session-event-bus sess))
+  (when bus
+    ;; Subscribe to fork.requested — call fork-session with the entry-id
+    (subscribe! bus
+      (lambda (evt)
+        (define payload (event-payload evt))
+        (define entry-id (and (hash? payload) (hash-ref payload 'entry-id #f)))
+        (with-handlers ([exn:fail?
+                         (lambda (e)
+                           (emit-session-event! bus (agent-session-session-id sess)
+                                                "session.fork.failed"
+                                                (hasheq 'error (exn-message e))))])
+          (define new-sess (fork-session sess entry-id))
+          (emit-session-event! bus (agent-session-session-id sess)
+                               "session.fork.completed"
+                               (hasheq 'newSessionId (agent-session-session-id new-sess)
+                                       'forkPoint (or entry-id "latest")))))
+      #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
+
+    ;; Subscribe to compact.requested — compact the session context
+    (subscribe! bus
+      (lambda (evt)
+        (with-handlers ([exn:fail?
+                         (lambda (e)
+                           (emit-session-event! bus (agent-session-session-id sess)
+                                                "session.compact.failed"
+                                                (hasheq 'error (exn-message e))))])
+          (define log-path (session-log-path (agent-session-session-dir sess)))
+          (when (file-exists? log-path)
+            (define history (load-session-log log-path))
+            (when (not (null? history))
+              (define compact-result (compact-history history))
+              (emit-session-event! bus (agent-session-session-id sess)
+                                   "session.compact.completed"
+                                   (hasheq 'removedCount
+                                           (compaction-result-removed-count compact-result)))))))
+      #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))))
