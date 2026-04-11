@@ -4,7 +4,7 @@ A walkthrough of a typical q CLI session from start to finish.
 
 ```bash
 $ racket main.rkt --model gpt-5.4
-q version 0.6.7
+q version 0.6.8
 Model:   gpt-5.4
 Session: a7f3c2e1
 

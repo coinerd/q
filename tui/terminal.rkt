@@ -188,14 +188,7 @@
  reassemble-utf8-chars
  utf8-accumulate-char
  utf8-accumulator-reset!
- utf8-accumulator-length
-
- ;; CSI fragment detection (compatibility stubs - tui-term handles internally)
- get-csi-fragment-state
- csi-fragment-state-set!
- csi-fragment-reset!
- filter-csi-fragment
- csi-final-byte?)
+ utf8-accumulator-length)
 
 ;; ============================================================
 ;; tui-term stubs (when library not available)
@@ -754,33 +747,3 @@
      #f]))
 
 ;; ============================================================
-;; CSI fragment detection (compatibility stubs)
-;; ============================================================
-;; These were used with charterm which leaked partial escape sequences.
-;; tui-term handles escape sequences internally, so these are stubs.
-
-(define csi-fragment-state 'idle)
-
-(define (csi-fragment-state-set! s)
-  (set! csi-fragment-state s))
-
-(define (csi-fragment-reset!)
-  (set! csi-fragment-state 'idle))
-
-;; Check if a char is a CSI final byte (0x40-0x7E = @ through ~)
-(define (csi-final-byte? ch)
-  (define b (char->integer ch))
-  (and (>= b #x40) (<= b #x7E)))
-
-;; Get current CSI fragment state (for testing)
-(define (get-csi-fragment-state)
-  csi-fragment-state)
-
-;; Process a keycode through the CSI fragment detector.
-;; Returns:
-;;   #f — this keycode is a fragment, should be suppressed
-;;   kc — pass through to caller unchanged
-(define (filter-csi-fragment kc)
-  ;; With tui-term, escape sequences are handled internally.
-  ;; This function is a no-op that passes through all keys.
-  kc)

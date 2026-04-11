@@ -20,8 +20,8 @@
  provider?
  (contract-out
   [provider-name         (-> provider? string?)]
-  [provider-send         (-> provider? any/c any/c)]
-  [provider-stream       (-> provider? any/c any/c)]
+  [provider-send         (-> provider? model-request? any/c)]
+  [provider-stream       (-> provider? model-request? any/c)]
   [provider-capabilities (-> provider? hash?)]
   [provider-count-tokens (-> provider? any/c (or/c #f integer?))]
   [make-provider         (-> procedure? procedure? procedure? procedure? provider?)]

@@ -35,9 +35,9 @@
     [else
      (define files (filter (λ (f) (regexp-match? #rx"\\.rkt$" f))
                            (directory-list ext-dir #:build? #t)))
-     (for/list ([f files]
-                #:when (try-load-extension f))
-       (try-load-extension f))]))
+     (filter values
+       (for/list ([f files])
+         (try-load-extension f)))]))
 
 ;; ============================================================
 ;; load-extension! : extension-registry? path-string? -> void?
@@ -53,14 +53,33 @@
              (not (eq? state 'quarantined)))
     (define ext (try-load-extension path))
     (when (and ext (extension? ext))
-      (register-extension! registry ext))))
+      (register-extension! registry ext)))
+  (void))
+
+;; Cache for try-load-extension results
+(define load-cache (make-hash))
+(define load-cache-sem (make-semaphore 1))
+
+(define (cached-try-load path)
+  (call-with-semaphore load-cache-sem
+    (lambda ()
+      (cond
+        [(hash-has-key? load-cache path)
+         (hash-ref load-cache path)]
+        [else
+         (define result (try-load-extension path))
+         (hash-set! load-cache path result)
+         result]))))
 
 ;; ============================================================
 ;; Internal helper: try to load a module and extract the-extension
 ;; ============================================================
 
 (define (try-load-extension path)
-  (with-handlers ([exn:fail? (λ (e) #f)])
+  (with-handlers ([exn:fail? (λ (e)
+                               (log-warning (format "try-load-extension failed for ~a: ~a"
+                                                    path (exn-message e)))
+                               #f)])
     (define mod-path (path->complete-path path))
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))

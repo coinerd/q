@@ -71,8 +71,7 @@
 ;;   entry-order     — vector of messages in append order
 ;;   bookmarks       — hash: bookmark-id -> bookmark
 ;;   active-leaf-id  — (box (or/c #f string?)) — id of explicitly marked active leaf
-(struct session-index (by-id children entry-order bookmarks active-leaf-id)
-  #:transparent)
+;;   bookmark-sem    — semaphore for thread-safe bookmark mutations (#115)
 
 ;; ============================================================
 ;; build-index!
@@ -94,7 +93,7 @@
     (define pid (message-parent-id msg))
     (when (and pid (hash-has-key? children pid))
       (hash-update! children pid (lambda (lst) (append lst (list msg))))))
-  (define idx (session-index by-id children (list->vector messages) (make-hash) (box #f)))
+  (define idx (session-index by-id children (list->vector messages) (make-hash) (box #f) (make-semaphore 1)))
   ;; Persist index to disk
   (save-index! index-path idx)
   idx)
@@ -135,12 +134,12 @@
   ;; Load a previously saved index from disk.
   ;; Returns an empty index if file does not exist.
   (if (not (file-exists? path))
-      (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f))
+      (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f) (make-semaphore 1))
       (let ()
         (define raw (jsonl-read-all-valid path))
         (cond
           [(null? raw)
-           (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f))]
+           (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f) (make-semaphore 1))]
           [else
            ;; First entry should be the header
            (define header (car raw))
@@ -155,7 +154,7 @@
              (define pid (message-parent-id msg))
              (when (and pid (hash-has-key? children pid))
                (hash-update! children pid (lambda (lst) (append lst (list msg))))))
-           (session-index by-id children (list->vector entries) (make-hash) (box #f))]))))
+           (session-index by-id children (list->vector entries) (make-hash) (box #f) (make-semaphore 1))]))))
 
 ;; ============================================================
 ;; Query operations
@@ -234,6 +233,10 @@
 (define bm-counter 0)
 (define bm-counter-mutex (make-semaphore 1))
 
+;; Per-index semaphore for bookmark mutations (#115)
+(struct session-index (by-id children entry-order bookmarks active-leaf-id bookmark-sem)
+  #:transparent)
+
 (define (make-bookmark id entry-id label timestamp)
   (bookmark id entry-id label timestamp))
 
@@ -248,25 +251,30 @@
 (define (add-bookmark! idx entry-id label)
   ;; Add a new bookmark for the given entry-id with the given label.
   ;; Returns the bookmark id.
-  ;; If a bookmark with the same label exists, it is replaced.
-  (define bookmarks (session-index-bookmarks idx))
-  ;; Remove existing bookmark with same label if present
-  (define existing (find-bookmark-by-label idx label))
-  (when existing
-    (hash-remove! bookmarks (bookmark-id existing)))
-  ;; Create new bookmark
-  (define id (generate-bookmark-id))
-  (define ts (current-seconds))
-  (define bm (make-bookmark id entry-id label ts))
-  (hash-set! bookmarks id bm)
-  id)
+  ;; Thread-safe: mutations protected by per-index semaphore (#115).
+  (call-with-semaphore (session-index-bookmark-sem idx)
+    (lambda ()
+      (define bookmarks (session-index-bookmarks idx))
+      ;; Remove existing bookmark with same label if present
+      (define existing (find-bookmark-by-label idx label))
+      (when existing
+        (hash-remove! bookmarks (bookmark-id existing)))
+      ;; Create new bookmark
+      (define id (generate-bookmark-id))
+      (define ts (current-seconds))
+      (define bm (make-bookmark id entry-id label ts))
+      (hash-set! bookmarks id bm)
+      id)))
 
 (define (remove-bookmark! idx bookmark-id)
   ;; Remove bookmark by id. Returns #t if found and removed, #f otherwise.
-  (define bookmarks (session-index-bookmarks idx))
-  (if (hash-has-key? bookmarks bookmark-id)
-      (begin (hash-remove! bookmarks bookmark-id) #t)
-      #f))
+  ;; Thread-safe: mutations protected by per-index semaphore (#115).
+  (call-with-semaphore (session-index-bookmark-sem idx)
+    (lambda ()
+      (define bookmarks (session-index-bookmarks idx))
+      (if (hash-has-key? bookmarks bookmark-id)
+          (begin (hash-remove! bookmarks bookmark-id) #t)
+          #f))))
 
 (define (list-bookmarks idx)
   ;; Returns list of all bookmarks in arbitrary order.
@@ -357,7 +365,8 @@
                  (session-index-children idx)
                  (session-index-entry-order idx)
                  bm-hash
-                 (box #f)))
+                 (box #f)
+                 (session-index-bookmark-sem idx)))
 
 ;; ============================================================
 ;; Internal helpers

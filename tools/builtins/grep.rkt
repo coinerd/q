@@ -6,7 +6,9 @@
          racket/list
          racket/path
          (only-in "../tool.rkt"
-                  make-success-result make-error-result))
+                  make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt"
+                  allowed-path?))
 
 (provide tool-grep)
 
@@ -158,11 +160,14 @@
 ;; ============================================================
 
 (define (tool-grep args [exec-ctx #f])
-  ;; 1. Validate required arguments
+  ;; 0. Safe-mode path check (#118)
   (define pattern (hash-ref args 'pattern #f))
   (define path-str (hash-ref args 'path #f))
 
   (cond
+    ;; Safe-mode: check path access
+    [(and path-str (not (allowed-path? path-str)))
+     (err (format "Access denied: path outside project root: ~a" path-str))]
     [(not pattern)
      (err "Missing required argument: pattern")]
     [(not path-str)

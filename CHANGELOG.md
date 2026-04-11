@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.8] — 2026-04-11
+
+### Structural Hardening
+- **#115**: Thread safety — added semaphores to ID generator, queue, extension API, session-index, process counter
+- **#116**: Contracts on critical entry points — `provider-send`/`provider-stream` contracts, `run-agent-turn` input validation, immutable config from `build-runtime-from-cli`
+- **#117**: Per-session safe-mode — replaced global parameters with per-session config struct
+- **#118**: Safe-mode path restrictions for grep/find/ls tools
+- **#119**: Extension loader logging on failure, quarantine state preserved on parse errors, cached load results
+- **#120**: Dead code cleanup — removed session-tree.rkt, CSI fragment stubs from terminal.rkt, resource-loader.rkt re-export, duplicate try-read-file
+- **#121**: Guarded tool arguments — read/write/edit/firecrawl use `make-error-result` for missing args
+
+### Tests
+- Thread safety stress tests (concurrent ID generation, queue, extensions)
+- Contract violation tests for providers and agent loop
+- Per-session safe-mode isolation tests
+- Safe-mode path restriction tests for grep/find/ls
+- Extension loader failure logging tests
+- Guarded argument tests for tools
+
+### Metrics
+- 3,083 tests passing, 0 failures
+- 19,734 source lines, 31,522 test lines, 5,271 assertions
+- 96 source modules (-2: session-tree.rkt, resource-loader.rkt removed)
+- 6/6 lints green
+
 ## [0.6.7] — 2026-04-11
 
 ### Integration Test Infrastructure

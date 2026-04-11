@@ -36,7 +36,17 @@
                   hook-result? hook-result-action hook-result-payload))
 
 (provide
- run-agent-turn)
+ (contract-out
+  [run-agent-turn (->i ([ctx (listof message?)]
+                        [prov provider?]
+                        [bus event-bus?])
+                       (#:session-id [session-id string?]
+                        #:turn-id [turn-id string?]
+                        #:state [state (or/c loop-state? #f)]
+                        #:tools [tools (or/c (listof hash?) #f)]
+                        #:cancellation-token [cancellation-token (or/c cancellation-token? #f)]
+                        #:hook-dispatcher [hook-dispatcher (or/c procedure? #f)])
+                       [result loop-result?])]))
 
 ;; ============================================================
 ;; Helpers

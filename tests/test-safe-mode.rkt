@@ -101,14 +101,14 @@
    (check-equal? (trust-level) 'restricted)))
 
 ;; ============================================================
-;; 8. safe-mode-config returns correct hash structure
+;; 8. safe-mode-config-info returns correct hash structure
 ;; ============================================================
 
 (test-case
- "safe-mode-config returns correct hash structure"
+ "safe-mode-config-info returns correct hash structure"
  (parameterize ([current-safe-mode #t])
-   (define cfg (safe-mode-config))
-   (check-pred hash? cfg "safe-mode-config returns a hash")
+   (define cfg (safe-mode-config-info))
+   (check-pred hash? cfg "safe-mode-config-info returns a hash")
    (check-true (hash-has-key? cfg 'active?) "has active? key")
    (check-true (hash-has-key? cfg 'trust-level) "has trust-level key")
    (check-true (hash-has-key? cfg 'blocked-tools) "has blocked-tools key")

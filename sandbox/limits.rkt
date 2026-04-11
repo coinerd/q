@@ -26,16 +26,27 @@
 (define default-max-output-bytes 10485760) ; 10 MB
 
 ;; --------------------------------------------------
-;; Process tracking (SEC-12)
+;; Process tracking (SEC-12, #115 thread-safe)
 ;; --------------------------------------------------
+
+(define process-count-box (box 0))
+(define process-count-sem (make-semaphore 1))
 
 (define current-process-count (make-parameter 0))
 
 (define (track-process!)
-  (current-process-count (add1 (current-process-count))))
+  (call-with-semaphore process-count-sem
+    (lambda ()
+      (define n (add1 (unbox process-count-box)))
+      (set-box! process-count-box n)
+      (current-process-count n))))
 
 (define (untrack-process!)
-  (current-process-count (max 0 (sub1 (current-process-count)))))
+  (call-with-semaphore process-count-sem
+    (lambda ()
+      (define n (max 0 (sub1 (unbox process-count-box))))
+      (set-box! process-count-box n)
+      (current-process-count n))))
 
 ;; --------------------------------------------------
 ;; exec-limits struct

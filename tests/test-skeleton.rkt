@@ -25,7 +25,7 @@
     "runtime/session-store.rkt"
     "runtime/session-index.rkt"
     "runtime/compactor.rkt"
-    "runtime/resource-loader.rkt"
+    "skills/types.rkt"
     "runtime/model-registry.rkt"
     "runtime/auth-store.rkt"
     "runtime/settings.rkt"

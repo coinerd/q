@@ -90,15 +90,19 @@
 ;; ============================================================
 
 (define (lookup-extension registry name)
-  (define data (unbox (extension-registry-data-box registry)))
-  (hash-ref (cdr data) name #f))
+  (call-with-semaphore (extension-registry-semaphore registry)
+    (lambda ()
+      (define data (unbox (extension-registry-data-box registry)))
+      (hash-ref (cdr data) name #f))))
 
 ;; ============================================================
 ;; list-extensions : extension-registry? -> (listof extension?)
 ;; ============================================================
 
 (define (list-extensions registry)
-  (car (unbox (extension-registry-data-box registry))))
+  (call-with-semaphore (extension-registry-semaphore registry)
+    (lambda ()
+      (car (unbox (extension-registry-data-box registry))))))
 
 ;; ============================================================
 ;; handlers-for-point : extension-registry? symbol? -> (listof (cons/c string? procedure?))

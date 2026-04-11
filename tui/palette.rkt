@@ -27,7 +27,6 @@
    summary      ; string — one-line description
    category     ; symbol — 'general | 'session | 'model | 'debug
    args-spec    ; (listof string) — arg names for display, e.g. '("<id>")
-   handler-sym  ; symbol — name of handler function (resolved at dispatch time)
    )
   #:transparent)
 
@@ -39,18 +38,18 @@
 (define (make-command-registry)
   (define built-ins
     (list
-     (cmd-entry "/help"      "Show help"                     'general '()        'cmd/help)
-     (cmd-entry "/quit"      "Exit session"                  'general '()        'cmd/quit)
-     (cmd-entry "/clear"     "Clear transcript"              'general '()        'cmd/clear)
-     (cmd-entry "/compact"   "Trigger compaction"            'session '()        'cmd/compact)
-     (cmd-entry "/interrupt" "Interrupt current turn"        'session '()        'cmd/interrupt)
-     (cmd-entry "/branches"  "List session branches"         'session '()        'cmd/branches)
-     (cmd-entry "/leaves"    "List leaf nodes"               'session '()        'cmd/leaves)
-     (cmd-entry "/switch"    "Switch to branch"              'session '("<id>")  'cmd/switch)
-     (cmd-entry "/children"  "Show children of node"         'session '("<id>")  'cmd/children)
-     (cmd-entry "/model"     "Switch or show model"          'model   '("<name>")'cmd/model)
-     (cmd-entry "/history"   "Show session history"          'session '()        'cmd/history)
-     (cmd-entry "/fork"      "Fork session at point"         'session '("<id>")  'cmd/fork)))
+     (cmd-entry "/help"      "Show help"                     'general '())
+     (cmd-entry "/quit"      "Exit session"                  'general '())
+     (cmd-entry "/clear"     "Clear transcript"              'general '())
+     (cmd-entry "/compact"   "Trigger compaction"            'session '())
+     (cmd-entry "/interrupt" "Interrupt current turn"        'session '())
+     (cmd-entry "/branches"  "List session branches"         'session '())
+     (cmd-entry "/leaves"    "List leaf nodes"               'session '())
+     (cmd-entry "/switch"    "Switch to branch"              'session '("<id>"))
+     (cmd-entry "/children"  "Show children of node"         'session '("<id>"))
+     (cmd-entry "/model"     "Switch or show model"          'model   '("<name>"))
+     (cmd-entry "/history"   "Show session history"          'session '())
+     (cmd-entry "/fork"      "Fork session at point"         'session '("<id>"))))
   (for/fold ([h (hash)])
             ([e (in-list built-ins)])
     (hash-set h (cmd-entry-name e) e)))

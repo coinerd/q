@@ -21,7 +21,7 @@
                   session-id session-history fork-session
                   close-session!)
          "../runtime/settings.rkt"
-         "../runtime/resource-loader.rkt"
+         "../skills/types.rkt"
          "../runtime/model-registry.rkt"
          (only-in "../runtime/provider-factory.rkt"
                   build-provider)

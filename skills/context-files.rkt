@@ -9,7 +9,8 @@
 (require racket/file
          racket/string
          racket/match
-         racket/list)
+         racket/list
+         (only-in "types.rkt" try-read-file))
 
 (provide
  ;; Struct
@@ -45,14 +46,7 @@
 ;; ============================================================
 
 ;; Liest eine Datei als String, gibt #f bei Fehler
-(define (try-read-file path)
-  (with-handlers ([exn:fail:filesystem? (λ (_) #f)]
-                  [exn:fail? (λ (_) #f)])
-    (define bs (file->bytes path))
-    ;; Überspringe Dateien mit Null-Bytes (wahrscheinlich binär)
-    (if (for/or ([b (in-bytes bs)]) (= b 0))
-        #f
-        (bytes->string/utf-8 bs))))
+;; (imported from skills/types.rkt to avoid duplication #120))
 
 ;; Prüft ob eine Zeile eine Überschrift ist
 (define (heading-level line)

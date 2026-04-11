@@ -72,8 +72,7 @@
        (check-equal? (cmd-entry-name e) "/help")
        (check-equal? (cmd-entry-category e) 'general)
        (check-equal? (cmd-entry-summary e) "Show help")
-       (check-equal? (cmd-entry-args-spec e) '())
-       (check-equal? (cmd-entry-handler-sym e) 'cmd/help)))
+       (check-equal? (cmd-entry-args-spec e) '())))
 
    (test-case "lookup-command finds /quit"
      (let ([e (lookup-command (make-command-registry) "/quit")])
@@ -86,12 +85,11 @@
    (test-case "lookup-command returns #f for empty string"
      (check-false (lookup-command (make-command-registry) "")))
 
-   (test-case "lookup-command /switch has args-spec and handler"
+   (test-case "lookup-command /switch has args-spec"
      (let* ([reg (make-command-registry)]
             [e (lookup-command reg "/switch")])
        (check-not-false e)
-       (check-equal? (cmd-entry-args-spec e) '("<id>"))
-       (check-equal? (cmd-entry-handler-sym e) 'cmd/switch)))
+       (check-equal? (cmd-entry-args-spec e) '("<id>"))))
 
    ;; ================================================================
    ;; 3. All commands
@@ -135,7 +133,7 @@
    ;; ================================================================
    (test-case "register-command! adds custom command"
      (let* ([reg (make-command-registry)]
-            [custom (cmd-entry "/custom" "A custom command" 'debug '() 'cmd/custom)]
+            [custom (cmd-entry "/custom" "A custom command" 'debug '())]
             [reg2 (register-command! reg custom)])
        (check-not-false (lookup-command reg2 "/custom"))
        (check-equal? (cmd-entry-summary (lookup-command reg2 "/custom"))
@@ -143,22 +141,20 @@
 
    (test-case "register-command! replaces existing command"
      (let* ([reg (make-command-registry)]
-            [replacement (cmd-entry "/help" "New help text" 'general '() 'cmd/help2)]
+            [replacement (cmd-entry "/help" "New help text" 'general '())]
             [reg2 (register-command! reg replacement)])
        (check-equal? (cmd-entry-summary (lookup-command reg2 "/help"))
-                     "New help text")
-       (check-equal? (cmd-entry-handler-sym (lookup-command reg2 "/help"))
-                     'cmd/help2)))
+                     "New help text")))
 
    (test-case "register-command! increases count for new"
      (let* ([reg (make-command-registry)]
-            [custom (cmd-entry "/test" "Test" 'general '() 'cmd/test)]
+            [custom (cmd-entry "/test" "Test" 'general '())]
             [reg2 (register-command! reg custom)])
        (check-equal? (hash-count reg2) (add1 (hash-count reg)))))
 
    (test-case "register-command! same count for replacement"
      (let* ([reg (make-command-registry)]
-            [replacement (cmd-entry "/quit" "Replaced" 'general '() 'cmd/quit2)]
+            [replacement (cmd-entry "/quit" "Replaced" 'general '())]
             [reg2 (register-command! reg replacement)])
        (check-equal? (hash-count reg2) (hash-count reg))))
 
@@ -282,12 +278,11 @@
        (check-equal? (cmd-entry-name (car result)) "/fork")))
 
    (test-case "cmd-entry struct accessors"
-     (let ([e (cmd-entry "/test" "Test" 'general '() 'cmd/test)])
+     (let ([e (cmd-entry "/test" "Test" 'general '())])
        (check-equal? (cmd-entry-name e) "/test")
        (check-equal? (cmd-entry-summary e) "Test")
        (check-equal? (cmd-entry-category e) 'general)
-       (check-equal? (cmd-entry-args-spec e) '())
-       (check-equal? (cmd-entry-handler-sym e) 'cmd/test)))
+       (check-equal? (cmd-entry-args-spec e) '())))
    ))
 
 (run-tests palette-tests)

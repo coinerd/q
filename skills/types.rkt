@@ -37,7 +37,10 @@
  merge-resources
 
  ;; Template rendering
- render-template)
+ render-template
+
+ ;; File reading
+ try-read-file)
 
 ;; ============================================================
 ;; Structs

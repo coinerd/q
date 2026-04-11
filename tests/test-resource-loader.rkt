@@ -1,6 +1,6 @@
 #lang racket
 
-;; test-resource-loader.rkt — tests for runtime/resource-loader.rkt
+;; test-resource-loader.rkt — tests for skills/types.rkt (resource loading)
 ;;
 ;; Covers:
 ;;   - resource / resource-set structs
@@ -19,7 +19,7 @@
          racket/port
          json
          (only-in racket/string string-join)
-         "../runtime/resource-loader.rkt")
+         "../skills/types.rkt")
 
 ;; ============================================================
 ;; Helpers — temp directory fixtures

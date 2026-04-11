@@ -21,7 +21,7 @@
 ;; Queue struct — two mutable lists (head/tail for FIFO)
 ;; ============================================================
 
-(struct queue (steering-box followup-box)
+(struct queue (steering-box followup-box semaphore)
   #:transparent)
 
 ;; ============================================================
@@ -29,7 +29,7 @@
 ;; ============================================================
 
 (define (make-queue)
-  (queue (box '()) (box '())))
+  (queue (box '()) (box '()) (make-semaphore 1)))
 
 ;; ============================================================
 ;; Internal FIFO helpers
@@ -57,17 +57,23 @@
 ;; ============================================================
 
 (define (enqueue-steering! q input)
-  (box-enqueue! (queue-steering-box q) input))
+  (call-with-semaphore (queue-semaphore q)
+    (lambda () (box-enqueue! (queue-steering-box q) input))))
 
 (define (enqueue-followup! q input)
-  (box-enqueue! (queue-followup-box q) input))
+  (call-with-semaphore (queue-semaphore q)
+    (lambda () (box-enqueue! (queue-followup-box q) input))))
 
 (define (dequeue-steering! q)
-  (box-dequeue! (queue-steering-box q)))
+  (call-with-semaphore (queue-semaphore q)
+    (lambda () (box-dequeue! (queue-steering-box q)))))
 
 (define (dequeue-followup! q)
-  (box-dequeue! (queue-followup-box q)))
+  (call-with-semaphore (queue-semaphore q)
+    (lambda () (box-dequeue! (queue-followup-box q)))))
 
 (define (queue-empty? q)
-  (and (box-empty? (queue-steering-box q))
-       (box-empty? (queue-followup-box q))))
+  (call-with-semaphore (queue-semaphore q)
+    (lambda ()
+      (and (box-empty? (queue-steering-box q))
+           (box-empty? (queue-followup-box q))))))

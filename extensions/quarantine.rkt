@@ -65,7 +65,9 @@
      (hash 'disabled '() 'quarantined (hasheq) 'active '())]
     [else
      (with-handlers ([exn:fail? (lambda (e)
-                                  (hash 'disabled '() 'quarantined (hasheq)))])
+                                  (log-warning (format "quarantine state corrupted, resetting: ~a"
+                                                       (exn-message e)))
+                                  (hash 'disabled '() 'quarantined (hasheq) 'active '()))])
        (define data (call-with-input-file sf read-json))
        (hash 'disabled (hash-ref data 'disabled '())
              'quarantined (hash-ref data 'quarantined (hasheq))

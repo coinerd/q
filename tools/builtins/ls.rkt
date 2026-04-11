@@ -4,7 +4,9 @@
          racket/format
          racket/list
          (only-in "../tool.rkt"
-                  make-success-result make-error-result))
+                  make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt"
+                  allowed-path?))
 
 (provide tool-ls)
 
@@ -83,11 +85,14 @@
 ;; --------------------------------------------------
 
 (define (tool-ls args [exec-ctx #f])
-  ;; 1. Validate required path argument
+  ;; 0. Safe-mode path check (#118)
   (define path-str (hash-ref args 'path #f))
   (cond
     [(not path-str)
      (err "Missing required argument: path")]
+    ;; Safe-mode: check path access
+    [(not (allowed-path? path-str))
+     (err (format "Access denied: path outside project root: ~a" path-str))]
 
     ;; 2. Path must exist
     [(not (directory-exists? path-str))

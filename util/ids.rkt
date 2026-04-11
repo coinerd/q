@@ -50,9 +50,11 @@
 
 ;; ── Monotonic state ──
 ;; Track last timestamp and random component to ensure monotonicity
+;; Protected by semaphore for thread safety (#115)
 
 (define last-ts (box 0))
 (define last-rnd (box 0))
+(define id-semaphore (make-semaphore 1))
 
 (define (generate-random-component)
   ;; Generate an 80-bit random number (16 base32 chars = 80 bits)
@@ -69,26 +71,27 @@
 
 (define (generate-id)
   ;; Generate a ULID-compatible ID with monotonic guarantee.
-  ;; If the timestamp is the same as the previous call, increment the random part.
-  ;; Otherwise, generate a fresh random part.
-  (define ts (inexact->exact (truncate (current-inexact-milliseconds))))
-  (define prev-ts (unbox last-ts))
-  (define rnd
-    (cond
-      [(> ts prev-ts)
-       ;; New millisecond: fresh random
-       (generate-random-component)]
-      [else
-       ;; Same or earlier millisecond: increment previous random
-       (define new-rnd (add1 (unbox last-rnd)))
-       ;; Guard against overflow (80 bits)
-       (if (> new-rnd (sub1 (expt 2 80)))
-           (generate-random-component)
-           new-rnd)]))
-  (set-box! last-ts ts)
-  (set-box! last-rnd rnd)
-  (string-append (encode-base32 ts ts-chars)
-                 (random-component->string rnd)))
+  ;; Thread-safe: read/write of shared state protected by semaphore (#115).
+  (call-with-semaphore id-semaphore
+    (lambda ()
+      (define ts (inexact->exact (truncate (current-inexact-milliseconds))))
+      (define prev-ts (unbox last-ts))
+      (define rnd
+        (cond
+          [(> ts prev-ts)
+           ;; New millisecond: fresh random
+           (generate-random-component)]
+          [else
+           ;; Same or earlier millisecond: increment previous random
+           (define new-rnd (add1 (unbox last-rnd)))
+           ;; Guard against overflow (80 bits)
+           (if (> new-rnd (sub1 (expt 2 80)))
+               (generate-random-component)
+               new-rnd)]))
+      (set-box! last-ts ts)
+      (set-box! last-rnd rnd)
+      (string-append (encode-base32 ts ts-chars)
+                     (random-component->string rnd)))))
 
 ;; ── Predicates and conversions ──
 

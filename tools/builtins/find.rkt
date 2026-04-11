@@ -4,7 +4,9 @@
          racket/string
          racket/path
          (only-in "../tool.rkt"
-                  make-success-result make-error-result))
+                  make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt"
+                  allowed-path?))
 
 (provide tool-find)
 
@@ -112,15 +114,16 @@
 ;; --------------------------------------------------
 
 (define (tool-find args [exec-ctx #f])
-  ;; 1. Extract and validate path argument
+  ;; 0. Safe-mode path check (#118)
   (cond
     [(not (hash-has-key? args 'path))
      (err "Missing required argument: path")]
-
     [else
      (define path-str (hash-ref args 'path))
-
      (cond
+       ;; Safe-mode: check path access
+       [(not (allowed-path? path-str))
+        (err (format "Access denied: path outside project root: ~a" path-str))]
        [(not (string? path-str))
         (err "Argument 'path' must be a string")]
 
