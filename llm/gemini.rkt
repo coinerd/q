@@ -13,6 +13,7 @@
 (require racket/contract
          racket/string
          racket/port
+         racket/format
          json
          net/url
          net/http-client
@@ -28,7 +29,9 @@
  ;; Internal helpers for testing
  gemini-translate-tool
  gemini-translate-stop-reason
- gemini-check-http-status!)
+ gemini-check-http-status!
+ gemini-gen-tool-id
+ gemini-reset-tool-id-counter!)
 
 ;; ============================================================
 ;; Constants
@@ -36,6 +39,16 @@
 
 (define GEMINI-DEFAULT-MODEL "gemini-2.5-pro")
 (define GEMINI-DEFAULT-MAX-TOKENS 4096)
+
+;; Counter-based tool call ID generator (Issue #110)
+(define gemini-tool-id-counter 0)
+
+(define (gemini-gen-tool-id)
+  (set! gemini-tool-id-counter (add1 gemini-tool-id-counter))
+  (format "gemini_~a" gemini-tool-id-counter))
+
+(define (gemini-reset-tool-id-counter!)
+  (set! gemini-tool-id-counter 0))
 (define GEMINI-DEFAULT-BASE-URL "https://generativelanguage.googleapis.com")
 
 ;; ============================================================
@@ -51,6 +64,21 @@
   ;; Build contents — Gemini uses "contents" with "parts" arrays
   ;; Role mapping: "assistant" → "model", "user" → "user"
   (define raw-messages (model-request-messages req))
+
+  ;; Build call-id → name map from assistant tool-call blocks (Issue #107)
+  (define call-id->name
+    (for*/fold ([acc (hash)])
+               ([msg (in-list raw-messages)]
+                #:when (equal? (hash-ref msg 'role "") "assistant")
+                [block (in-list (let ([c (hash-ref msg 'content "")])
+                                  (if (list? c) c '())))])
+      (if (and (hash? block)
+               (equal? (hash-ref block 'type #f) "tool-call"))
+          (hash-set acc
+                    (hash-ref block 'id "")
+                    (hash-ref block 'name ""))
+          acc)))
+
   (define contents
     (for/list ([msg (in-list raw-messages)])
       (define role (hash-ref msg 'role "user"))
@@ -59,14 +87,43 @@
       (define gemini-role
         (cond
           [(equal? role "assistant") "model"]
-          [(equal? role "system") "user"]  ; system goes to systemInstruction, but fallback
+          [(equal? role "system") "user"]
+          [(equal? role "tool") "user"]
           [else role]))
-      ;; Build parts — string content becomes text part
+      ;; Build parts based on content type and role
       (define parts
-        (if (string? content)
-            (list (hash 'text content))
-            ;; If content is already a list of parts, pass through
-            content))
+        (cond
+          ;; Tool role: convert to functionResponse
+          [(equal? role "tool")
+           (define tool-call-id
+             (if (hash? content)
+                 (hash-ref content 'toolCallId "")
+                 ""))
+           (define tool-result-content
+             (if (hash? content)
+                 (hash-ref content 'content "")
+                 (if (string? content) content "")))
+           (define tool-name (hash-ref call-id->name tool-call-id ""))
+           (list (hash 'functionResponse
+                       (hash 'name tool-name
+                             'response (hash 'content tool-result-content))))]
+          ;; Assistant with list content (tool calls + text)
+          [(and (equal? role "assistant") (list? content))
+           (for/list ([block (in-list content)])
+             (define btype (hash-ref block 'type "text"))
+             (cond
+               [(equal? btype "text")
+                (hash 'text (hash-ref block 'text ""))]
+               [(equal? btype "tool-call")
+                (hash 'functionCall
+                      (hash 'name (hash-ref block 'name "")
+                            'args (hash-ref block 'arguments (hash))))]
+               [else block]))]
+          ;; Simple string content: text part
+          [(string? content)
+           (list (hash 'text content))]
+          ;; Fallback
+          [else content]))
       (hash 'role gemini-role
             'parts parts)))
 
@@ -151,9 +208,10 @@
         [(hash-has-key? part 'text)
          (hash 'type "text" 'text (hash-ref part 'text ""))]
         [(hash-has-key? part 'functionCall)
-         (let* ([fc (hash-ref part 'functionCall)])
+         (let* ([fc (hash-ref part 'functionCall)]
+                [tool-id (gemini-gen-tool-id)])
            (hash 'type "tool-call"
-                 'id ""    ; Gemini doesn't provide tool call IDs
+                 'id tool-id
                  'name (hash-ref fc 'name "")
                  'arguments (hash-ref fc 'args (hash))))]
         [else
@@ -200,17 +258,17 @@
          (let* ([text (hash-ref part 'text "")])
            (when (and (string? text) (> (string-length text) 0))
              (set! results
-                   (append results
-                           (list (stream-chunk text #f #f #f))))))]
+                   (cons (stream-chunk text #f #f #f)
+                         results))))]
         [(hash-has-key? part 'functionCall)
          (let* ([fc (hash-ref part 'functionCall)]
                 [tc-delta (hash 'index 0
-                                'id ""
+                                'id (gemini-gen-tool-id)
                                 'function (hash 'name (hash-ref fc 'name "")
                                                 'arguments (hash-ref fc 'args (hash))))])
            (set! results
-                 (append results
-                         (list (stream-chunk #f tc-delta #f #f)))))]
+                 (cons (stream-chunk #f tc-delta #f #f)
+                       results)))]
         [else (void)]))
 
     ;; Emit done chunk on finish reason or usage in last event
@@ -224,17 +282,17 @@
                                'total_tokens (hash-ref usage-raw 'totalTokenCount 0))
                          (hash))])
          (set! results
-               (append results
-                       (list (stream-chunk #f #f usage #t)))))]
+               (cons (stream-chunk #f #f usage #t)
+                     results)))]
       [(and usage-raw (not finish-reason))
        ;; Usage-only event without finish — emit usage chunk
        (let* ([prompt-tokens (hash-ref usage-raw 'promptTokenCount 0)])
          (when (> prompt-tokens 0)
            (set! results
-                 (append results
-                         (list (stream-chunk #f #f (hash 'prompt_tokens prompt-tokens) #f))))))]))
+                 (cons (stream-chunk #f #f (hash 'prompt_tokens prompt-tokens) #f)
+                       results))))]))
 
-  results)
+  (reverse results))
 
 ;; ============================================================
 ;; HTTP status check (exported for tests)
@@ -348,8 +406,28 @@
       (http-sendrecv uri 'POST
                      #:headers headers
                      #:data body-bytes))
-    (define sse-text (bytes->string/utf-8 (read-response-body response-port)))
-    (define raw-events (parse-sse-lines sse-text))
+    ;; Check HTTP status first
+    (define status-str (if (bytes? status-line)
+                           (bytes->string/utf-8 status-line)
+                           status-line))
+    (define status-code
+      (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
+        (if parts (string->number (cadr parts)) 0)))
+    (when (>= status-code 400)
+      (define resp-body (read-response-body response-port))
+      (gemini-check-http-status! status-line resp-body))
+    ;; Incremental SSE parsing (Issue #108)
+    (define raw-events
+      (if (>= status-code 400)
+          '()
+          (let loop ([acc '()])
+            (define line (read-line response-port))
+            (if (eof-object? line)
+                (reverse acc)
+                (let ([parsed (parse-sse-line line)])
+                  (if (hash? parsed)
+                      (loop (cons parsed acc))
+                      (loop acc)))))))
     (gemini-parse-stream-chunks raw-events))
 
   (make-provider

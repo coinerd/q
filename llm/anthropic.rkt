@@ -54,10 +54,44 @@
     (for/list ([msg (in-list raw-messages)])
       (define role (hash-ref msg 'role "user"))
       (define content (hash-ref msg 'content ""))
-      (if (and (string? content) (not (equal? role "system")))
-          (hash 'role role
-                'content (list (hash 'type "text" 'text content)))
-          msg)))
+      (cond
+        ;; System role: pass through unchanged
+        [(equal? role "system") msg]
+        ;; Tool role: convert to Anthropic user+tool_result format
+        [(equal? role "tool")
+         (define tool-call-id
+           (if (hash? content)
+               (hash-ref content 'toolCallId "")
+               ""))
+         (define tool-result-content
+           (if (hash? content)
+               (hash-ref content 'content "")
+               (if (string? content) content "")))
+         (hash 'role "user"
+               'content (list (hash 'type "tool_result"
+                                    'tool_use_id tool-call-id
+                                    'content tool-result-content)))]
+        ;; Assistant with list content (tool calls)
+        [(and (equal? role "assistant") (list? content))
+         (hash 'role "assistant"
+               'content
+               (for/list ([block (in-list content)])
+                 (define btype (hash-ref block 'type "text"))
+                 (cond
+                   [(equal? btype "text")
+                    (hash 'type "text" 'text (hash-ref block 'text ""))]
+                   [(equal? btype "tool-call")
+                    (hash 'type "tool_use"
+                          'id (hash-ref block 'id "")
+                          'name (hash-ref block 'name "")
+                          'input (hash-ref block 'arguments (hash)))]
+                   [else block])))]
+        ;; Simple string content: wrap in text block
+        [(string? content)
+         (hash 'role role
+               'content (list (hash 'type "text" 'text content)))]
+        ;; Fallback: pass through
+        [else msg])))
 
   (define base
     (hasheq 'model model-name
@@ -181,20 +215,18 @@
          [(equal? delta-type "text_delta")
           (define text (hash-ref delta 'text ""))
           (set! results
-                (append results
-                        (list (stream-chunk text #f #f #f))))]
+                (cons (stream-chunk text #f #f #f) results))]
          [(equal? delta-type "input_json_delta")
           ;; Partial JSON for tool input — emit as tool-call delta
           (define partial-json (hash-ref delta 'partial_json ""))
           (set! results
-                (append results
-                        (list (stream-chunk
-                               #f
-                               (hash 'index current-tool-index
-                                     'id current-tool-id
-                                     'function (hash 'name current-tool-name
-                                                     'arguments partial-json))
-                               #f #f))))]
+                (cons (stream-chunk
+                       #f
+                       (hash 'index current-tool-index
+                             'id current-tool-id
+                             'function (hash 'name current-tool-name
+                                             'arguments partial-json))
+                       #f #f) results))]
          [else (void)])]
 
       ;; Tool use block starts
@@ -215,8 +247,7 @@
        (define out-tokens (hash-ref usage-raw 'output_tokens 0))
        (define usage (hash 'completion_tokens out-tokens))
        (set! results
-             (append results
-                     (list (stream-chunk #f #f usage #t))))]
+             (cons (stream-chunk #f #f usage #t) results))]
 
       ;; message_start: extract initial usage
       [(equal? type "message_start")
@@ -225,12 +256,11 @@
        (define in-tokens (hash-ref usage-raw 'input_tokens 0))
        (when (> in-tokens 0)
          (set! results
-               (append results
-                       (list (stream-chunk #f #f (hash 'prompt_tokens in-tokens) #f)))))]
+               (cons (stream-chunk #f #f (hash 'prompt_tokens in-tokens) #f) results)))]
 
       [else (void)]))
 
-  results)
+  (reverse results))
 
 ;; ============================================================
 ;; HTTP status check (exported for tests)
@@ -333,8 +363,23 @@
       (http-sendrecv uri 'POST
                      #:headers headers
                      #:data body-bytes))
-    (define sse-text (bytes->string/utf-8 (read-response-body response-port)))
-    (define raw-events (parse-sse-lines sse-text))
+    ;; Check HTTP status before streaming
+    (define status-code
+      (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
+        (if parts (string->number (cadr parts)) 0)))
+    (when (>= status-code 400)
+      (define resp-body (read-response-body response-port))
+      (anthropic-check-http-status! status-line resp-body))
+    ;; Incremental SSE parsing — read line-by-line from port
+    (define raw-events
+      (let loop ([acc '()])
+        (define line (read-line response-port))
+        (if (eof-object? line)
+            (reverse acc)
+            (let ([parsed (parse-sse-line line)])
+              (if (hash? parsed)
+                  (loop (cons parsed acc))
+                  (loop acc))))))
     (anthropic-parse-stream-chunks raw-events))
 
   (make-provider

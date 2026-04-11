@@ -606,6 +606,140 @@
 (check-equal? (anthropic-translate-stop-reason 'already-symbol) 'already-symbol)
 (check-equal? (anthropic-translate-stop-reason 123) 'stop)
 
+;; ============================================================
+;; 31. Issue #106 — Anthropic multi-turn tool use: assistant tool_calls
+;; ============================================================
+
+;; Simulate a multi-turn conversation with tool use:
+;; user → assistant (with tool call) → tool result → user
+(define req-multiturn-tool
+  (make-model-request
+   (list (hash 'role "user" 'content "What files are here?")
+         (hash 'role "assistant" 'content (list (hash 'type "tool-call"
+                                                          'id "call_abc123"
+                                                          'name "bash"
+                                                          'arguments (hash 'command "ls"))))
+         (hash 'role "tool" 'content (hash 'type "tool-result"
+                                            'toolCallId "call_abc123"
+                                            'content "file1.txt\nfile2.txt"))
+         (hash 'role "user" 'content "Read file1.txt"))
+   #f
+   (hash 'model "claude-sonnet-4-20250514")))
+
+(define body-multiturn-tool (anthropic-build-request-body req-multiturn-tool))
+(define mt-messages (hash-ref body-multiturn-tool 'messages))
+
+(check-equal? (length mt-messages) 4
+              "multi-turn: 4 messages")
+
+;; Message 1: user with string content → standard text block
+(define mt-msg1 (car mt-messages))
+(check-equal? (hash-ref mt-msg1 'role) "user"
+              "multi-turn: first message role is user")
+
+;; Message 2: assistant with tool_calls → Anthropic tool_use format
+(define mt-msg2 (cadr mt-messages))
+(check-equal? (hash-ref mt-msg2 'role) "assistant"
+              "multi-turn: second message role is assistant")
+(define mt-msg2-content (hash-ref mt-msg2 'content))
+(check-pred list? mt-msg2-content
+             "multi-turn: assistant content is a list")
+(define mt-tool-block (car mt-msg2-content))
+(check-equal? (hash-ref mt-tool-block 'type) "tool_use"
+              "multi-turn: assistant tool_call → tool_use type")
+(check-equal? (hash-ref mt-tool-block 'id) "call_abc123"
+              "multi-turn: tool_use id preserved")
+(check-equal? (hash-ref mt-tool-block 'name) "bash"
+              "multi-turn: tool_use name preserved")
+(check-equal? (hash-ref (hash-ref mt-tool-block 'input) 'command) "ls"
+              "multi-turn: tool arguments → input")
+
+;; Message 3: tool role → user role with tool_result
+(define mt-msg3 (caddr mt-messages))
+(check-equal? (hash-ref mt-msg3 'role) "user"
+              "multi-turn: tool role → user role for Anthropic")
+(define mt-msg3-content (hash-ref mt-msg3 'content))
+(check-pred list? mt-msg3-content
+             "multi-turn: tool result content is a list")
+(define mt-result-block (car mt-msg3-content))
+(check-equal? (hash-ref mt-result-block 'type) "tool_result"
+              "multi-turn: tool result has tool_result type")
+(check-equal? (hash-ref mt-result-block 'tool_use_id) "call_abc123"
+              "multi-turn: tool_use_id matches original call id")
+(check-equal? (hash-ref mt-result-block 'content) "file1.txt\nfile2.txt"
+              "multi-turn: tool result content preserved")
+
+;; Message 4: user again
+(define mt-msg4 (cadddr mt-messages))
+(check-equal? (hash-ref mt-msg4 'role) "user"
+              "multi-turn: fourth message role is user")
+
+;; ============================================================
+;; 32. Issue #106 — Anthropic: assistant with mixed text + tool_calls
+;; ============================================================
+
+(define req-mixed-assistant
+  (make-model-request
+   (list (hash 'role "user" 'content "Run it")
+         (hash 'role "assistant" 'content (list
+                                            (hash 'type "text" 'text "Sure, let me run that.")
+                                            (hash 'type "tool-call"
+                                                  'id "call_xyz"
+                                                  'name "bash"
+                                                  'arguments (hash 'command "echo hi")))))
+   #f
+   (hash 'model "claude-sonnet-4-20250514")))
+
+(define body-mixed (anthropic-build-request-body req-mixed-assistant))
+(define mixed-msgs (hash-ref body-mixed 'messages))
+
+(define mixed-assistant (cadr mixed-msgs))
+(check-equal? (hash-ref mixed-assistant 'role) "assistant")
+(define mixed-content (hash-ref mixed-assistant 'content))
+(check-equal? (length mixed-content) 2
+              "mixed: text + tool_use = 2 content blocks")
+
+;; First block: text
+(check-equal? (hash-ref (car mixed-content) 'type) "text"
+              "mixed: first block is text")
+(check-equal? (hash-ref (car mixed-content) 'text) "Sure, let me run that."
+              "mixed: text content preserved")
+
+;; Second block: tool_use
+(check-equal? (hash-ref (cadr mixed-content) 'type) "tool_use"
+              "mixed: second block is tool_use")
+(check-equal? (hash-ref (cadr mixed-content) 'id) "call_xyz"
+              "mixed: tool_use id preserved")
+
+;; ============================================================
+;; 33. Issue #109 — Anthropic stream uses cons+reverse (not append)
+;; ============================================================
+
+;; We can't directly test O(n²) vs O(n), but we can test that
+;; parse-stream-chunks still produces correct results after the fix.
+;; The existing stream tests (sections 10-12) already cover this.
+;; This test verifies large chunk counts work correctly.
+
+(define large-stream-events
+  (for/list ([i (in-range 100)])
+    (hash 'type "content_block_delta"
+          'index 0
+          'delta (hash 'type "text_delta" 'text (format "chunk~a " i)))))
+
+(define large-chunks (anthropic-parse-stream-chunks large-stream-events))
+(check-equal? (length large-chunks) 100
+              "100 stream chunks all preserved (cons+reverse correctness)")
+
+;; Verify order is correct
+(define large-texts
+  (filter (lambda (c) (stream-chunk-delta-text c)) large-chunks))
+(check-equal? (length large-texts) 100
+              "100 text deltas preserved in order")
+(check-equal? (stream-chunk-delta-text (car large-texts)) "chunk0 "
+              "first chunk is chunk0")
+(check-equal? (stream-chunk-delta-text (list-ref large-texts 99)) "chunk99 "
+              "last chunk is chunk99")
+
 (println "All Anthropic provider tests passed!")
 
 ;; ============================================================

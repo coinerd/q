@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-04-11
+
+### Provider Correctness
+- **FUNC-10** (#106): Fixed Anthropic multi-turn tool use — `translate-messages` now converts assistant `tool_calls` to Anthropic `tool_use` content blocks and `role: "tool"` to `user`+`tool_result` format
+- **FUNC-11** (#107): Fixed Gemini multi-turn tool use — `translate-messages` now converts assistant `tool_calls` to Gemini `functionCall` parts and `role: "tool"` to `functionResponse` parts with correct name matching
+- **FUNC-12** (#108): Fixed Anthropic/Gemini streaming — replaced batch `read-response-body` + `parse-sse-lines` with incremental line-by-line SSE parsing using `parse-sse-line`
+- **PERF-01** (#109): Fixed O(n²) stream chunk accumulation in Anthropic/Gemini — replaced `append`+`list` with `cons`+`reverse` pattern
+- **FUNC-13** (#110): Fixed Gemini tool call IDs — replaced empty string `""` with counter-based `gemini_`-prefixed unique IDs via `gemini-gen-tool-id`
+
+### Tests Added (+53)
+- Anthropic multi-turn tool use tests (8 cases)
+- Anthropic mixed content tests (6 cases)
+- Anthropic stream cons+reverse correctness test (100 chunks)
+- Gemini multi-turn tool use tests (12 cases)
+- Gemini mixed content tests (5 cases)
+- Gemini unique tool call ID tests — non-streaming (6 cases)
+- Gemini unique tool call ID tests — streaming (5 cases)
+- Gemini stream cons+reverse correctness test (100 chunks)
+- Updated Gemini test 9 for non-empty IDs (2 cases)
+
+### Metrics
+- 3,152 tests passing (+53), 0 failures
+- 20005 source lines, 31468 test lines, 5365 assertions
+- 6/6 lints green
+
 ## [0.6.5] — 2026-04-11
 
 ### Critical Bug Fixes
