@@ -29,7 +29,7 @@ Before starting a release, verify every item below:
 Edit `define version` to the new release number:
 
 ```racket
-(define version "0.4.0")
+(define version "0.6.2")
 ```
 
 ### 2. Update `CHANGELOG.md`
@@ -42,13 +42,13 @@ Edit `define version` to the new release number:
 
 ```bash
 git add -A
-git commit -m "Release v0.4.0"
+git commit -m "Release v0.6.2"
 ```
 
 ### 4. Tag
 
 ```bash
-git tag -a v0.4.0 -m "Release v0.4.0"
+git tag -a v0.6.2 -m "Release v0.6.2"
 ```
 
 ### 5. Push

@@ -14,7 +14,7 @@
   (delete-file tmp)  ; ensure doesn't exist
   (define result (tool-write (hasheq 'path tmp 'content "hello world")))
   (check-false (tool-result-is-error? result))
-  (check-true (file-exists? tmp))
+  (check-pred file-exists? tmp)
   (check-equal? (file->string tmp) "hello world")
   (delete-file tmp))
 

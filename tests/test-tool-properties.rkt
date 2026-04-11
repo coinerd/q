@@ -161,13 +161,13 @@
      (check-equal? (tool-call-id c1)        (tool-call-id c2))
      (check-equal? (tool-call-name c1)      (tool-call-name c2))
      (check-equal? (tool-call-arguments c1) (tool-call-arguments c2))
-     (check-true (tool-call? c1))
+     (check-pred tool-call? c1)
      (check-true (tool-call? c2)))
 
    ;; 10 ───────────────────────────────────────────────────────
    (test-case "exec-context-default"
      (define ctx (make-exec-context))
-     (check-true (exec-context? ctx))
+     (check-pred exec-context? ctx)
      (check-true (path-string? (exec-context-working-directory ctx)))
      (check-false (exec-context-cancellation-token ctx))
      (check-false (exec-context-event-publisher ctx))

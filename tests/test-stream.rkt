@@ -21,34 +21,39 @@
 
 (define chunk1 (normalize-openai-chunk
   (hash 'id "chatcmpl-1" 'choices (list (hash 'delta (hash 'content "Hello") 'finish_reason 'null)) 'usage (hash))))
-(check-true (stream-chunk? chunk1))
+(check-pred stream-chunk? chunk1)
 (check-equal? (stream-chunk-delta-text chunk1) "Hello")
 (check-false (stream-chunk-delta-tool-call chunk1))
 
 (define chunk2 (normalize-openai-chunk
-  (hash 'id "chatcmpl-2" 'choices (list (hash 'delta (hash 'tool_calls (list (hash 'index 0 'id "call_1" 'function (hash 'name "bash" 'arguments "")))) 'finish_reason 'null)))))
-(check-true (stream-chunk? chunk2))
+  (hash 'id "chatcmpl-2" 'choices (list (hash 'delta (hash 'tool_calls (list (hash 'index 0 'id "call_1" 'function (hash 'name "bash"
+      'arguments "")))) 'finish_reason 'null)))))
+(check-pred stream-chunk? chunk2)
 (check-false (stream-chunk-delta-text chunk2))
 (check-true (hash? (stream-chunk-delta-tool-call chunk2)))
 
 (define chunk3 (normalize-openai-chunk
-  (hash 'id "chatcmpl-3" 'choices (list (hash 'delta (hash) 'finish_reason "stop")) 'usage (hash 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15))))
+  (hash 'id "chatcmpl-3" 'choices (list (hash 'delta (hash) 'finish_reason "stop")) 'usage (hash 'prompt_tokens 10 'completion_tokens 5
+      'total_tokens 15))))
 (check-false (stream-chunk-delta-text chunk3))
-(check-true (stream-chunk-done? chunk3))
+(check-pred stream-chunk-done? chunk3)
 
 ;; ============================================================
 ;; read-sse-chunks generator tests
 ;; ============================================================
 
 ;; Basic: two content chunks then [DONE]
-(define sse-input "data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"content\":\"He\"}}]}\n\ndata: {\"id\":\"c2\",\"choices\":[{\"delta\":{\"content\":\"llo\"}}]}\n\ndata: [DONE]\n\n")
+(define sse-input (string-append
+  "data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"content\":\"He\"}}]}\n\n"
+  "data: {\"id\":\"c2\",\"choices\":[{\"delta\":{\"content\":\"llo\"}}]}\n\n"
+  "data: [DONE]\n\n"))
 (define port (open-input-string sse-input))
 (define gen (read-sse-chunks port))
 (define c1 (gen))
-(check-true (stream-chunk? c1))
+(check-pred stream-chunk? c1)
 (check-equal? (stream-chunk-delta-text c1) "He")
 (define c2 (gen))
-(check-true (stream-chunk? c2))
+(check-pred stream-chunk? c2)
 (check-equal? (stream-chunk-delta-text c2) "llo")
 (define c3 (gen))
 (check-false c3)  ; #f = stream done

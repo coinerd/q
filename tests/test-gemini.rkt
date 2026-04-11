@@ -21,9 +21,9 @@
    (hash 'model "gemini-2.5-pro")))
 
 (define body-basic (gemini-build-request-body req-basic))
-(check-true (hash? body-basic)
+(check-pred hash? body-basic
             "build-request-body returns a hash")
-(check-true (list? (hash-ref body-basic 'contents))
+(check-pred list? (hash-ref body-basic 'contents)
             "contents is a list")
 (check-equal? (length (hash-ref body-basic 'contents)) 1
               "one content entry")
@@ -32,7 +32,7 @@
 (define first-content (car (hash-ref body-basic 'contents)))
 (check-equal? (hash-ref first-content 'role) "user"
               "role is 'user'")
-(check-true (list? (hash-ref first-content 'parts))
+(check-pred list? (hash-ref first-content 'parts)
             "parts is a list")
 (check-equal? (hash-ref (car (hash-ref first-content 'parts)) 'text) "Hello"
               "text content in parts")
@@ -42,7 +42,7 @@
 ;; ============================================================
 
 (define gen-config (hash-ref body-basic 'generationConfig))
-(check-true (hash? gen-config)
+(check-pred hash? gen-config
             "generationConfig is a hash")
 (check-equal? (hash-ref gen-config 'maxOutputTokens) 4096
               "default maxOutputTokens is 4096")
@@ -106,7 +106,7 @@
 (define body-tools (gemini-build-request-body req-with-tools))
 (check-true (hash-has-key? body-tools 'tools)
             "tools key present")
-(check-true (list? (hash-ref body-tools 'tools))
+(check-pred list? (hash-ref body-tools 'tools)
             "tools is a list")
 (check-equal? (length (hash-ref body-tools 'tools)) 1
               "one tool wrapper")
@@ -218,7 +218,7 @@
         'modelVersion "gemini-2.5-pro"))
 
 (define parsed-text (gemini-parse-response fake-text-response))
-(check-true (model-response? parsed-text)
+(check-pred model-response? parsed-text
             "parsed text response is model-response?")
 (check-equal? (model-response-model parsed-text) "gemini-2.5-pro"
               "model version preserved")
@@ -417,7 +417,7 @@
               'totalTokenCount 12))))
 
 (define stream-text-chunks (gemini-parse-stream-chunks stream-text-events))
-(check-true (list? stream-text-chunks)
+(check-pred list? stream-text-chunks
             "stream parsing returns list")
 (check-true (andmap stream-chunk? stream-text-chunks)
             "all results are stream-chunk?")
@@ -456,7 +456,7 @@
               "one done chunk")
 
 (define done-chunk (car done-chunks))
-(check-true (hash? (stream-chunk-usage done-chunk))
+(check-pred hash? (stream-chunk-usage done-chunk)
             "done chunk carries usage")
 
 ;; ============================================================
@@ -479,7 +479,7 @@
                      'finishReason "STOP")))))
 
 (define stream-tool-chunks (gemini-parse-stream-chunks stream-tool-events))
-(check-true (list? stream-tool-chunks))
+(check-pred list? stream-tool-chunks)
 
 ;; Find text delta
 (define tool-stream-text
@@ -512,13 +512,13 @@
         'model "gemini-2.5-pro"))
 
 (define gemini-provider (make-gemini-provider gemini-config))
-(check-true (provider? gemini-provider)
+(check-pred provider? gemini-provider
             "make-gemini-provider returns provider?")
 (check-equal? (provider-name gemini-provider) "gemini"
               "provider name is 'gemini'")
 
 (define gemini-caps (provider-capabilities gemini-provider))
-(check-true (hash? gemini-caps))
+(check-pred hash? gemini-caps)
 (check-true (hash-ref gemini-caps 'streaming)
             "streaming capability is #t")
 (check-false (hash-ref gemini-caps 'token-counting)
@@ -535,7 +535,7 @@
 
 (define gemini-custom-provider
   (make-gemini-provider gemini-custom-config))
-(check-true (provider? gemini-custom-provider)
+(check-pred provider? gemini-custom-provider
             "custom base-url provider is provider?")
 (check-equal? (provider-name gemini-custom-provider) "gemini"
               "custom provider name is still 'gemini'")
@@ -545,7 +545,10 @@
 ;; ============================================================
 
 (define fake-sse-text
-  "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Hello\"}]},\"finishReason\":null}]}\n\ndata: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\" world\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":10,\"candidatesTokenCount\":2,\"totalTokenCount\":12}}\n\n")
+  (string-append
+   "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Hello\"}]},\"finishReason\":null}]}\n\n"
+   "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\" world\"}]},\"finishReason\":\"STOP\"}],"
+   "\"usageMetadata\":{\"promptTokenCount\":10,\"candidatesTokenCount\":2,\"totalTokenCount\":12}}\n\n"))
 
 (define parsed-sse-events (parse-sse-lines fake-sse-text))
 (check-equal? (length parsed-sse-events) 2
@@ -665,7 +668,7 @@
 ;; The #:stream? parameter is accepted for API consistency but doesn't
 ;; appear in the body.
 (define body-stream (gemini-build-request-body req-basic #:stream? #t))
-(check-true (hash? body-stream)
+(check-pred hash? body-stream
             "streaming body is still a valid hash")
 (check-false (hash-has-key? body-stream 'stream)
              "Gemini body does not include 'stream' key")

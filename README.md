@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.6.2-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.6.3-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -181,7 +181,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version   # q version 0.6.2
+racket main.rkt --version   # q version 0.6.3
 raco test tests/            # run the full test suite
 ```
 
@@ -239,9 +239,9 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 104 |
-| Source modules | 94 |
-| Source lines | 18624 |
-| Test lines | 30696 |
+| Source modules | 96 |
+| Source lines | 18722 |
+| Test lines | 30719 |
 | Test assertions | 5245 |
 | `raco test` results | 3,059 tests passing |
 
@@ -262,7 +262,9 @@ raco test tests/tui/
 
 ## Status
 
-**v0.6.2** — Hardening & Quality. Test coverage expansion, sandbox hardening, SSRF protection, response size limits, safe-mode locking, doc drift fixes, code quality:
+**v0.6.3** — Architecture & Test Reliability. Decoupled agent/types ↔ tools/tool, extracted CLI builders from main.rkt, session log backup, RPC handshake tokens, improved test assertions, fixed flaky tests, format lint CI:
+
+**v0.6.3** — Hardening & Quality. Test coverage expansion, sandbox hardening, SSRF protection, response size limits, safe-mode locking, doc drift fixes, code quality:
 
 **Previous** — Security Hardening. Wire safe-mode/quarantine into enforcement, path validation, API key protection, env sanitization, test isolation:
 

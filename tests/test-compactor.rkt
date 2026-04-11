@@ -344,7 +344,7 @@
 
   (test-case "default-strategy returns sensible defaults"
     (define s (default-strategy))
-    (check-true (compaction-strategy? s))
+    (check-pred compaction-strategy? s)
     (check-true (positive? (compaction-strategy-summary-window-size s)))
     (check-true (positive? (compaction-strategy-keep-recent-count s))))
 
@@ -355,7 +355,7 @@
   (test-case "default-summarize produces structured text"
     (define msgs (make-n-messages 5))
     (define summary-text (default-summarize msgs))
-    (check-true (string? summary-text))
+    (check-pred string? summary-text)
     (check-true (> (string-length summary-text) 0)))
 
   ;; ══════════════════════════════════════════════════════════════
@@ -400,7 +400,7 @@
     (define result (compact-and-persist! loaded path
                                           #:strategy strategy
                                           #:summarize-fn test-summarize))
-    (check-true (compaction-result? result))
+    (check-pred compaction-result? result)
     (check-equal? (compaction-result-removed-count result) 20)
     (check-equal? (length (compaction-result-kept-messages result)) 5)
     (check-true (message? (compaction-result-summary-message result)))
@@ -481,13 +481,13 @@
   (test-case "build-tiered-context-with-hooks: no dispatcher returns base context"
     ;; When no hook-dispatcher is provided, should return base tiered context
     (define msgs (make-n-messages 15))
-    (define-values (tc hook-result) 
+    (define-values (tc hook-result)
       (build-tiered-context-with-hooks msgs
                                        #:hook-dispatcher #f
                                        #:tier-b-count 5
                                        #:tier-c-count 3))
     ;; Should return valid tiered-context
-    (check-true (tiered-context? tc))
+    (check-pred tiered-context? tc)
     ;; Tier C should have 3 messages
     (check-equal? (length (tiered-context-tier-c tc)) 3)
     ;; Tier B should have 5 messages
@@ -503,20 +503,20 @@
     (define pass-hook
       (lambda (hook-point payload)
         (check-equal? hook-point 'context-assembly)
-        (check-true (context-assembly-payload? payload))
+        (check-pred context-assembly-payload? payload)
         (hook-pass payload)))
-    
+
     (define-values (tc hook-result)
       (build-tiered-context-with-hooks msgs
                                        #:hook-dispatcher pass-hook
                                        #:tier-b-count 5
                                        #:tier-c-count 3
                                        #:max-tokens 4096))
-    
+
     ;; Should return valid tiered-context
-    (check-true (tiered-context? tc))
+    (check-pred tiered-context? tc)
     ;; Hook result should indicate pass
-    (check-true (hook-result? hook-result))
+    (check-pred hook-result? hook-result)
     (check-equal? (hook-result-action hook-result) 'pass)
     ;; Tiers should be unchanged
     (check-equal? (length (tiered-context-tier-c tc)) 3)
@@ -541,18 +541,18 @@
            (context-assembly-payload-max-tokens payload)
            (context-assembly-payload-metadata payload)))
         (hook-amend modified-payload)))
-    
+
     (define-values (tc hook-result)
       (build-tiered-context-with-hooks msgs
                                        #:hook-dispatcher amend-hook
                                        #:tier-b-count 5
                                        #:tier-c-count 4
                                        #:max-tokens 8192))
-    
+
     ;; Should return amended tiered-context
-    (check-true (tiered-context? tc))
+    (check-pred tiered-context? tc)
     ;; Hook result should indicate amend
-    (check-true (hook-result? hook-result))
+    (check-pred hook-result? hook-result)
     (check-equal? (hook-result-action hook-result) 'amend)
     ;; Tier B should now have 6 messages (5 original + 1 moved from C)
     (check-equal? (length (tiered-context-tier-b tc)) 6)
@@ -566,7 +566,7 @@
       (lambda (hook-point payload)
         (check-equal? hook-point 'context-assembly)
         (hook-block "Context assembly blocked for testing")))
-    
+
     ;; Should raise exn:fail when hook blocks
     (check-exn
      exn:fail?
@@ -575,7 +575,7 @@
                                         #:hook-dispatcher block-hook
                                         #:tier-b-count 5
                                         #:tier-c-count 3)))
-    
+
     ;; Verify the error message contains the block reason
     (check-exn
      (lambda (e)
@@ -592,15 +592,15 @@
     (define msgs (make-n-messages 10))
     (define tc (build-tiered-context msgs #:tier-b-count 5 #:tier-c-count 3))
     (define payload (tiered-context->payload tc 8192 (hasheq 'test-key "test-value")))
-    
+
     ;; Verify payload struct fields
-    (check-true (context-assembly-payload? payload))
+    (check-pred context-assembly-payload? payload)
     (check-equal? (context-assembly-payload-max-tokens payload) 8192)
     (check-equal? (hash-ref (context-assembly-payload-metadata payload) 'test-key) "test-value")
-    
+
     ;; Verify payload can be converted back to tiered-context
     (define tc-from-payload (payload->tiered-context payload))
-    (check-true (tiered-context? tc-from-payload))
+    (check-pred tiered-context? tc-from-payload)
     (check-equal? (length (tiered-context-tier-a tc-from-payload))
                   (length (tiered-context-tier-a tc)))
     (check-equal? (length (tiered-context-tier-b tc-from-payload))
@@ -612,21 +612,21 @@
     ;; Verify payload contains the actual tier message lists
     (define msgs (make-n-messages 12))
     (define received-payload #f)
-    
+
     (define capture-hook
       (lambda (hook-point payload)
         (set! received-payload payload)
         (hook-pass payload)))
-    
+
     (define-values (tc hook-result)
       (build-tiered-context-with-hooks msgs
                                        #:hook-dispatcher capture-hook
                                        #:tier-b-count 5
                                        #:tier-c-count 3
                                        #:max-tokens 4096))
-    
+
     ;; Verify payload was received and contains correct data
-    (check-true (context-assembly-payload? received-payload))
+    (check-pred context-assembly-payload? received-payload)
     ;; Tier C should have 3 messages (the most recent)
     (check-equal? (length (context-assembly-payload-tier-c-messages received-payload)) 3)
     ;; Check that tier-c contains the most recent messages
@@ -642,7 +642,7 @@
     ;; Simulate multiple extensions by having hook that tracks call count
     (define call-count 0)
     (define first-hook-amends #t)
-    
+
     (define chained-hook
       (lambda (hook-point payload)
         (set! call-count (add1 call-count))
@@ -663,14 +663,14 @@
           ;; Second call: pass
           [else
            (hook-pass payload)])))
-    
+
     (define msgs (make-n-messages 10))
     (define-values (tc hook-result)
       (build-tiered-context-with-hooks msgs
                                        #:hook-dispatcher chained-hook
                                        #:tier-b-count 4
                                        #:tier-c-count 3))
-    
+
     ;; Hook should have been called once (single hook simulating chain)
     (check-equal? call-count 1)
     ;; Result should be amend
@@ -691,16 +691,16 @@
            (context-assembly-payload-max-tokens payload)
            (context-assembly-payload-metadata payload)))
         (hook-amend modified-payload)))
-    
+
     (define-values (tc hook-result)
       (build-tiered-context-with-hooks msgs
                                        #:hook-dispatcher amend-hook
                                        #:tier-b-count 4
                                        #:tier-c-count 3))
-    
+
     ;; Convert to message list
     (define msg-list (tiered-context->message-list tc))
-    
+
     ;; Order should be: Tier A (empty) -> Tier B (was 3 msgs) -> Tier C (was 4 msgs)
     (check-equal? (length msg-list) 7)
     ;; First 3 should be what was originally tier-c

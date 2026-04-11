@@ -225,7 +225,7 @@
                              #:license "MIT"))
   (define tmp (make-temporary-file "q-manifest-write-~a"))
   (write-qpm-manifest m tmp)
-  (check-true (file-exists? tmp))
+  (check-pred file-exists? tmp)
   (define m2 (read-qpm-manifest tmp))
   (check-not-false m2)
   (check-true (qpm-manifest=? m m2))

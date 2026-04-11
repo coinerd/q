@@ -133,7 +133,7 @@
 (define json-str (session->json-string basic-session))
 (define parsed (string->jsexpr json-str))
 (check-not-false parsed "json: parses successfully")
-(check-true (hash? parsed) "json: top-level is hash")
+(check-pred hash? parsed "json: top-level is hash")
 (check-true (hash-has-key? parsed 'session) "json: has session key")
 
 ;; ============================================================
@@ -178,7 +178,7 @@
 
 (define out-path (build-path test-session-dir "output.md"))
 (export-session-to-file test-session-path 'markdown out-path)
-(check-true (file-exists? out-path) "file: exists")
+(check-pred file-exists? out-path "file: exists")
 (define file-content (file->string out-path))
 (check-true (string-contains? file-content "### user (message)") "file: correct content")
 

@@ -181,7 +181,7 @@
      (define bus (make-event-bus))
      (define out (open-output-string))
      (define sub-id (start-json-mode! bus #:session-id "test-sess" #:output-port out))
-     (check-true (exact-nonnegative-integer? sub-id))
+     (check-pred exact-nonnegative-integer? sub-id)
      ;; Publish an event
      (define evt (make-event "session.started" 1000 "test-sess" #f (hasheq 'source "test")))
      (publish! bus evt)

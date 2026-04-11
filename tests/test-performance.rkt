@@ -63,7 +63,7 @@
      (define elapsed (- (current-inexact-milliseconds) start))
      (check-true (< elapsed 2000)
                  (format "compact-history 1000 msgs took ~ams (limit 2000ms)" elapsed))
-     (check-true (compaction-result? result))
+     (check-pred compaction-result? result)
      (check-true (>= (compaction-result-removed-count result) 0))
      ;; kept-messages should be <= input count
      (check-true (<= (length (compaction-result-kept-messages result)) 1000))
@@ -81,7 +81,7 @@
      (define elapsed (- (current-inexact-milliseconds) start))
      (check-true (< elapsed 500)
                  (format "build-tiered-context 200 msgs took ~ams (limit 500ms)" elapsed))
-     (check-true (tiered-context? tc))
+     (check-pred tiered-context? tc)
      ;; Flattened output should contain some messages
      (check-true (> (length (tiered-context->message-list tc)) 0)))
 

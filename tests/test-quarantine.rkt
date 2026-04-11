@@ -95,7 +95,7 @@
         (restore-extension! "restore-ext" restore-dir)
         (check-equal? (extension-state "restore-ext") 'active)
         ;; Should exist at restore location
-        (check-true (directory-exists? restore-dir))
+        (check-pred directory-exists? restore-dir)
         ;; Should NOT exist in quarantine anymore
         (check-false (directory-exists? (build-path (current-quarantine-dir) "restore-ext"))))))
 

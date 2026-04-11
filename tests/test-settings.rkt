@@ -327,7 +327,7 @@
 
 (test-case "load-settings: q-settings is transparent"
   (define s (q-settings (hash 'a 1) (hash) (hash 'a 1)))
-  (check-true (q-settings? s))
+  (check-pred q-settings? s)
   (check-equal? (q-settings-global s) (hash 'a 1)))
 
 ;; ============================================================
@@ -336,7 +336,7 @@
 
 (test-case "default-session-dir returns path under ~/.q/sessions"
   (define dir (default-session-dir))
-  (check-true (path? dir))
+  (check-pred path? dir)
   (define parts (explode-path dir))
   (check-equal? (last parts) (string->path "sessions"))
   ;; Should contain .q
@@ -344,7 +344,7 @@
 
 (test-case "default-project-dir returns current-directory"
   (define dir (default-project-dir))
-  (check-true (path? dir))
+  (check-pred path? dir)
   (check-equal? dir (current-directory)))
 
 ;; ============================================================

@@ -64,7 +64,7 @@
 
    (test-case "returns a check-result"
      (define r (check-racket-version))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "Racket"))
 
    (test-case "status is ok or error (depends on env)"
@@ -81,7 +81,7 @@
 
    (test-case "returns a check-result"
      (define r (check-packages))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "Packages"))
 
    (test-case "status is ok or error"
@@ -97,7 +97,7 @@
 
    (test-case "returns a check-result"
      (define r (check-config-dir))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "Config dir"))
 
    (test-case "status is ok, warning, or error"
@@ -113,7 +113,7 @@
 
    (test-case "returns a check-result"
      (define r (check-config-file))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "Config file")))
 
   ;; ═══════════════════════════════════════════
@@ -125,7 +125,7 @@
 
    (test-case "returns a check-result"
      (define r (check-credentials))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "Credentials")))
 
   ;; ═══════════════════════════════════════════
@@ -137,7 +137,7 @@
 
    (test-case "returns a check-result"
      (define r (check-session-dir))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "Session dir")))
 
   ;; ═══════════════════════════════════════════
@@ -149,7 +149,7 @@
 
    (test-case "returns a check-result"
      (define r (check-tui-packages))
-     (check-true (check-result? r))
+     (check-pred check-result? r)
      (check-equal? (check-result-name r) "TUI (char-term)")
      ;; TUI is optional — should always be ok or warning
      (check-true (member (check-result-status r) '(ok warning))

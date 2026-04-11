@@ -88,7 +88,7 @@
     (define results (scheduler-result-results result))
     (check-equal? (length results) 1)
     (define r (first results))
-    (check-true (tool-result-is-error? r) "bash result is error in safe-mode")
+    (check-pred tool-result-is-error? r "bash result is error in safe-mode")
     (define content (tool-result-content r))
     (check-true (ormap (lambda (item)
                          (and (hash? item)
@@ -108,7 +108,7 @@
     (define results (scheduler-result-results result))
     (check-equal? (length results) 1)
     (define r (first results))
-    (check-true (tool-result-is-error? r) "edit result is error in safe-mode")
+    (check-pred tool-result-is-error? r "edit result is error in safe-mode")
     (define content (tool-result-content r))
     (check-true (ormap (lambda (item)
                          (and (hash? item)
@@ -157,7 +157,7 @@
         (check-false (tool-result-is-error? r-ok) "read inside project succeeds")
         ;; Outside project: should fail
         (define r-bad (tool-read (hasheq 'path "/etc/passwd")))
-        (check-true (tool-result-is-error? r-bad) "read outside project fails")
+        (check-pred tool-result-is-error? r-bad "read outside project fails")
         (define content (tool-result-content r-bad))
         (check-true (ormap (lambda (item)
                              (and (hash? item)
@@ -182,7 +182,7 @@
         ;; Outside project: should fail
         (define r-bad (tool-write (hasheq 'path "/tmp/safemode-bypass-write.txt"
                                           'content "evil")))
-        (check-true (tool-result-is-error? r-bad) "write outside project fails")
+        (check-pred tool-result-is-error? r-bad "write outside project fails")
         (define content (tool-result-content r-bad))
         (check-true (ormap (lambda (item)
                              (and (hash? item)
@@ -215,7 +215,7 @@
         (define r-bad (tool-edit (hasheq 'path (path->string outside-file)
                                          'old-text "target"
                                          'new-text "replaced")))
-        (check-true (tool-result-is-error? r-bad) "edit outside project fails")
+        (check-pred tool-result-is-error? r-bad "edit outside project fails")
         (define content (tool-result-content r-bad))
         (check-true (ormap (lambda (item)
                              (and (hash? item)

@@ -44,7 +44,7 @@
     (define result (run-subprocess "/bin/sh"
                                     #:args '("-c" "sleep 30")
                                     #:timeout 1))
-    (check-true (subprocess-result-timed-out? result))
+    (check-pred subprocess-result-timed-out? result)
     (check-true (< (subprocess-result-elapsed-ms result) 5000)))
 
   (test-case "run-subprocess: non-zero exit code"
@@ -65,7 +65,7 @@
     (define result (run-subprocess "/bin/sh"
                                     #:args '("-c" "sleep 60")
                                     #:timeout 1))
-    (check-true (subprocess-result-timed-out? result))
+    (check-pred subprocess-result-timed-out? result)
     (check-equal? (subprocess-result-exit-code result) -1)
     (check-true (< (subprocess-result-elapsed-ms result) 5000)))
 

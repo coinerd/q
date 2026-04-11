@@ -9,7 +9,7 @@
 
 (test-case "make-queue creates an empty queue"
   (define q (make-queue))
-  (check-true (queue? q))
+  (check-pred queue? q)
   (check-true (queue-empty? q)))
 
 ;; ============================================================

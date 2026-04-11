@@ -24,6 +24,6 @@
 
 (test-case "global-config-dir returns ~/.q"
   (define dir (global-config-dir))
-  (check-true (path? dir))
+  (check-pred path? dir)
   (check-true (string? (path->string dir)))
   (check-true (string-contains? (path->string dir) ".q")))

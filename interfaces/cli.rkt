@@ -635,7 +635,8 @@
                  ['branches (displayln "[branches: not available in CLI]" out)]
                  ['leaves (displayln "[leaves: not available in CLI]" out)]
                  ['switch (displayln (format "[switch: ~a]" (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
-                 ['children (displayln (format "[children: ~a]" (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
+                 ['children (displayln (format "[children: ~a]"
+                                                            (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
                  [_ (displayln (format "Unknown command: ~a" cmd) out)]))]
          [else
           ;; Submit prompt to runtime

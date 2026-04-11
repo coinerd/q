@@ -72,7 +72,7 @@
 (test-case
  "fresh queue is empty; enqueue/dequeue round-trip"
  (define q (make-queue))
- (check-true (queue-empty? q))
+ (check-pred queue-empty? q)
  (define msg-1 (make-message "m-1" #f 'user 'message
                               (list (make-text-part "hi"))
                               1000 '#hash()))

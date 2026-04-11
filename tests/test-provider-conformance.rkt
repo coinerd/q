@@ -106,7 +106,7 @@
    (format "~a provider: capabilities hash with 'streaming key" spec-name)
    (define p (make-provider-fn test-config))
    (define caps (provider-capabilities p))
-   (check-true (hash? caps))
+   (check-pred hash? caps)
    (check-true (hash-has-key? caps 'streaming)))
 
   ;; ============================================================
@@ -116,7 +116,7 @@
   (test-case
    (format "~a request body: returns hash with ~a" spec-name body-messages-key)
    (define body (build-request-fn sample-request))
-   (check-true (hash? body))
+   (check-pred hash? body)
    (check-true (hash-has-key? body body-messages-key)))
 
   (test-case
@@ -190,7 +190,7 @@
     (test-case
      (format "~a tool: translate-tool returns hash with 'name" spec-name)
      (define result (translate-tool-fn sample-tool))
-     (check-true (hash? result))
+     (check-pred hash? result)
      (check-true (hash-has-key? result 'name))
      (check-equal? (hash-ref result 'name) "read_file")))
 
@@ -251,7 +251,7 @@
       'stop))
    (define mock-prov (make-mock-provider mock-resp #:name spec-name))
    (define gen (provider-stream mock-prov sample-request))
-   (check-true (procedure? gen))
+   (check-pred procedure? gen)
    ;; Generator yields at least one chunk then #f
    (define first-chunk (gen))
    (check-true (or (stream-chunk? first-chunk) (not first-chunk)))))
@@ -363,7 +363,7 @@
                       make-gemini-provider)])
    (define p (make-fn (hash 'api-key "test" 'model "test" 'base-url "https://example.com")))
    (define caps (provider-capabilities p))
-   (check-true (hash? caps))
+   (check-pred hash? caps)
    (check-true (hash-ref caps 'streaming))))
 
 (test-case
@@ -376,15 +376,15 @@
               (hash 'model "test"))])
    ;; Anthropic
    (let ([body (anthropic-build-request-body req)])
-     (check-true (hash? body))
+     (check-pred hash? body)
      (check-true (hash-has-key? body 'messages)))
    ;; OpenAI
    (let ([body (openai-build-request-body req)])
-     (check-true (hash? body))
+     (check-pred hash? body)
      (check-true (hash-has-key? body 'messages)))
    ;; Gemini
    (let ([body (gemini-build-request-body req)])
-     (check-true (hash? body))
+     (check-pred hash? body)
      (check-true (hash-has-key? body 'contents)))))
 
 (test-case
@@ -395,7 +395,7 @@
                       'content (list (hash 'type "text" 'text "x"))
                       'model "m" 'stop_reason "end_turn"
                       'usage (hash 'input_tokens 1 'output_tokens 1)))])
-   (check-true (model-response? parsed))
+   (check-pred model-response? parsed)
    (check-true (symbol? (model-response-stop-reason parsed))))
  ;; OpenAI
  (let ([parsed (openai-parse-response
@@ -404,7 +404,7 @@
                                            'message (hash 'role "assistant" 'content "x")
                                            'finish_reason "stop"))
                       'usage (hash 'prompt_tokens 1 'completion_tokens 1 'total_tokens 2)))])
-   (check-true (model-response? parsed))
+   (check-pred model-response? parsed)
    (check-true (symbol? (model-response-stop-reason parsed))))
  ;; Gemini
  (let ([parsed (gemini-parse-response
@@ -415,7 +415,7 @@
                       'usageMetadata (hash 'promptTokenCount 1
                                            'candidatesTokenCount 1
                                            'totalTokenCount 2)))])
-   (check-true (model-response? parsed))
+   (check-pred model-response? parsed)
    (check-true (symbol? (model-response-stop-reason parsed)))))
 
 (test-case
@@ -453,9 +453,9 @@
     "test" 'stop))
  (define mock (make-mock-provider resp))
  (define gen (provider-stream mock sample-request))
- (check-true (procedure? gen))
+ (check-pred procedure? gen)
  (define c1 (gen))
- (check-true (stream-chunk? c1))
+ (check-pred stream-chunk? c1)
  ;; Drain until #f
  (let loop ()
    (define v (gen))

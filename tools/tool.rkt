@@ -1,15 +1,20 @@
 #lang racket/base
 
 (require racket/contract
-         racket/hash)
+         racket/hash
+         ;; ARCH-01: tool-call and tool-result structs defined in agent/types.rkt
+         (only-in "../agent/types.rkt"
+                  tool-call tool-call? tool-call-id tool-call-name tool-call-arguments
+                  make-tool-call
+                  tool-result tool-result? tool-result-content tool-result-details tool-result-is-error?))
 
-;;; tools/tool.rkt — canonical tool contract, tool result, execution context,
+;;; tools/tool.rkt — canonical tool contract, execution context,
 ;;;                    and tool registry.
 ;;;
 ;;; Exports:
 ;;;   - tool struct & helpers (make-tool, tool?, accessors, validate-tool-args)
-;;;   - tool-result struct & helpers (make-tool-result, make-error-result,
-;;;                                   make-success-result, serialization)
+;;;   - tool-result struct & helpers (re-exported from agent/types.rkt,
+;;;                                   plus make-error-result, make-success-result, serialization)
 ;;;   - exec-context struct (execution context for tool invocations)
 ;;;   - tool-registry (register, lookup, list, unregister)
 
@@ -25,7 +30,7 @@
  tool-schema
  tool-execute
 
- ;; ── Tool result ──
+ ;; ── Tool result (re-exported from agent/types.rkt) ──
  tool-result?
  (contract-out
   [make-tool-result  (-> any/c any/c any/c tool-result?)]
@@ -47,8 +52,9 @@
  exec-context-call-id
  exec-context-session-metadata
 
- ;; ── Tool-call struct (standalone) ──
- (struct-out tool-call)
+ ;; ── Tool-call struct (re-exported from agent/types.rkt) ──
+ tool-call tool-call?
+ tool-call-id tool-call-name tool-call-arguments
  make-tool-call
 
  ;; ── Tool registry ──
@@ -79,11 +85,8 @@
   (tool name description schema execute))
 
 ;; ============================================================
-;; Tool result struct
+;; Tool result helpers (struct imported from agent/types.rkt)
 ;; ============================================================
-
-(struct tool-result (content details is-error?)
-  #:transparent)
 
 (define (make-tool-result content details is-error)
   (tool-result content details is-error))
@@ -169,15 +172,6 @@
   (hash-keys (tool-registry-tools-box reg)))
 
 ;; ============================================================
-;; Tool-call struct (standalone)
-;; ============================================================
-
-(struct tool-call (id name arguments) #:transparent)
-
-(define (make-tool-call id name arguments)
-  (tool-call id name arguments))
-
-;; ============================================================
 ;; Argument validation
 ;; ============================================================
 
@@ -222,4 +216,4 @@
     [("boolean") (boolean? v)]
     [("object")  (hash? v)]
     [("array")   (list? v)]
-    [else #t]))  ; unknown type spec → pass
+    [else #t]))  ; unknown type spec -> pass

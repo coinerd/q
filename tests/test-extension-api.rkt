@@ -9,7 +9,7 @@
 
 (test-case "extension struct holds fields"
   (define ext (extension "my-ext" "1.0" "1" (hasheq 'before-send (λ (p) p))))
-  (check-true (extension? ext))
+  (check-pred extension? ext)
   (check-equal? (extension-name ext) "my-ext")
   (check-equal? (extension-version ext) "1.0")
   (check-equal? (extension-api-version ext) "1"))
@@ -20,7 +20,7 @@
 
 (test-case "make-extension-registry is empty"
   (define reg (make-extension-registry))
-  (check-true (extension-registry? reg))
+  (check-pred extension-registry? reg)
   (check-equal? (list-extensions reg) '()))
 
 (test-case "register-extension! and lookup-extension"

@@ -108,7 +108,7 @@
  "safe-mode-config returns correct hash structure"
  (parameterize ([current-safe-mode #t])
    (define cfg (safe-mode-config))
-   (check-true (hash? cfg) "safe-mode-config returns a hash")
+   (check-pred hash? cfg "safe-mode-config returns a hash")
    (check-true (hash-has-key? cfg 'active?) "has active? key")
    (check-true (hash-has-key? cfg 'trust-level) "has trust-level key")
    (check-true (hash-has-key? cfg 'blocked-tools) "has blocked-tools key")

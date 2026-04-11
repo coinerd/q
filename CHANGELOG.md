@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-04-10
+
+### Architecture
+- **ARCH-01+02+03**: Decoupled agent/types, agent/loop, and skills/types from tools/extensions. Tool structs defined canonically in `agent/types.rkt`, `tools/tool.rkt` re-exports one-way. Loop accepts pre-formatted tool schemas via `#:tools` and hook dispatcher via `#:hook-dispatcher`. Skills accept `#:hook-dispatcher` instead of importing hooks directly (#80)
+- **ARCH-05**: Extracted mode runners from `main.rkt` (564→121 lines) into new `runtime/cli-builder.rkt` (379 lines) (#81)
+
+### Security
+- **SEC-09**: `repair-session-log!` preserves original file as `.bak` before rewriting (#82)
+- **SEC-15**: RPC handshake token mechanism — `generate-handshake-token`, `rpc-handshake-valid?`, new `run-rpc-loop` with `#:handshake-token` parameter (#83)
+
+### Testing
+- **TEST-06+10**: Improved assertion quality — 327 `check-true (type? x)` → `check-pred type? x`, 6 `check-true` → `check-regexp-match` in test-bash.rkt (#84)
+- **TEST-07**: Fixed timing-dependent test flakiness in 7 files — replaced long sleeps with polling loops (#85)
+- **TEST-08**: Exception-safe temp-dir cleanup via `dynamic-wind` in 5 test files (#86)
+
+### CI & Tooling
+- **MAT-03**: New `scripts/lint-format.rkt` — checks tabs, trailing whitespace, line length, `#lang` consistency; added to CI pipeline (#87)
+- **MAT-09**: Fixed CHANGELOG date inconsistencies — standardized em-dash separators, corrected v0.4.2 date
+
+### Docs & Quality
+- **QUAL-09**: Translated German comments in `skills/types.rkt` to English
+- **DOC-06**: Translated `skills/README.md` to English (#88)
+- **DOC-07**: Updated `docs/releasing.md` version references to current
+
 ## [0.6.2] — 2026-04-10
 
 ### Testing (Critical)
@@ -124,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Test metrics
 - 2699 tests, 0 failures (187 new: 112 Gemini adapter + 75 conformance suite)
 
-## [0.4.2] - 2026-04-10
+## [0.4.2] — 2026-04-09
 
 ### Package Ecosystem Foundation
 - Added `qpm.json` manifest format for q packages (`q/extensions/manifest.rkt`)
@@ -134,7 +158,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `q/extensions/manifest-audit.rkt` -- package integrity verification and auditing
 - 46 new tests (17 manifest + 14 package + 15 checksum)
 
-## [0.4.0] - 2026-04-10
+## [0.4.0] — 2026-04-09
 
 ### Packaging & Distribution
 - Added `pkg-authors` and `pkg-license` to info.rkt for catalog readiness
@@ -149,7 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Full Changelog**: https://github.com/coinerd/q/compare/v0.3.1...v0.4.0
 
-## [0.3.1] - 2026-04-09
+## [0.3.1] — 2026-04-09
 
 ### Added
 - 7 new extension hook points (20 total): `session-before-compact`, `before-agent-start`, `message-start`, `message-update`, `message-end`, `resources-discover`, `session-before-switch` ([#23])
@@ -175,7 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `contract-out` on 4 public API modules ([#2])
 - 21 new test files ([#3])
 
-## [0.3.0] - 2026-04-09
+## [0.3.0] — 2026-04-09
 
 ### Added
 - `contract-out` on 4 public API modules ([#2])
@@ -187,7 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TUI: extracted `tui/sgr.rkt` and `tui/commands.rkt` from `interfaces/tui.rkt` ([#6])
 - `interfaces/tui.rkt` reduced from 938 → 684 lines
 
-## [0.2.0] - 2026-04-08
+## [0.2.0] — 2026-04-08
 
 ### Added
 - `dispatch-hooks` exception isolation with `with-handlers` ([#5])
@@ -200,7 +224,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mouse selection, clipboard copy, resize, and cursor blink bugs
 - TUI truncation of long agent/tool outputs
 
-## [0.1.0] - 2026-04-07
+## [0.1.0] — 2026-04-07
 
 ### Added
 - Full 5-layer architecture: LLM → Agent Core → Runtime → Tools/Extensions → Interfaces
@@ -214,6 +238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 2189 tests, 0 failures
 
 [Unreleased]: https://github.com/coinerd/q/compare/v0.6.2...HEAD
+[0.6.3]: https://github.com/coinerd/q/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/coinerd/q/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/coinerd/q/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/coinerd/q/compare/v0.5.3...v0.6.0
@@ -251,3 +276,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [#21]: https://github.com/coinerd/q/issues/21
 [#22]: https://github.com/coinerd/q/issues/22
 [#23]: https://github.com/coinerd/q/issues/23
+[#80]: https://github.com/coinerd/q/issues/80
+[#81]: https://github.com/coinerd/q/issues/81
+[#82]: https://github.com/coinerd/q/issues/82
+[#83]: https://github.com/coinerd/q/issues/83
+[#84]: https://github.com/coinerd/q/issues/84
+[#85]: https://github.com/coinerd/q/issues/85
+[#86]: https://github.com/coinerd/q/issues/86
+[#87]: https://github.com/coinerd/q/issues/87
+[#88]: https://github.com/coinerd/q/issues/88

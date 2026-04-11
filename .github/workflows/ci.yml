@@ -48,6 +48,9 @@ jobs:
       - name: Lint version consistency
         run: /usr/local/racket/bin/racket scripts/lint-version.rkt
 
+      - name: Format lint
+        run: /usr/local/racket/bin/racket scripts/lint-format.rkt
+
       - name: Lint metrics consistency
         run: /usr/local/racket/bin/racket scripts/metrics.rkt --lint
 

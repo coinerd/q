@@ -35,13 +35,13 @@
   (test-case "skills/types.rkt exports empty-resource-set constructor"
     (define empty-resource-set (dynamic-require "../skills/types.rkt" 'empty-resource-set))
     (define resource-set? (dynamic-require "../skills/types.rkt" 'resource-set?))
-    (check-true (procedure? empty-resource-set))
+    (check-pred procedure? empty-resource-set)
     (define rs (empty-resource-set))
     (check-true (resource-set? rs)))
 
   (test-case "skills/types.rkt exports render-template"
     (define render-template (dynamic-require "../skills/types.rkt" 'render-template))
-    (check-true (procedure? render-template))
+    (check-pred procedure? render-template)
     (check-equal? (render-template "Hello {{name}}!" (hash "name" "World")) "Hello World!")
     (check-equal? (render-template "No vars here" (hash)) "No vars here")
     (check-equal? (render-template "Missing {{var}}" (hash)) "Missing {{var}}"))
@@ -58,7 +58,7 @@
 (module+ test
   (test-case "prompt-template.rkt exports render-template"
     (define render-template (dynamic-require "../skills/prompt-template.rkt" 'render-template))
-    (check-true (procedure? render-template))
+    (check-pred procedure? render-template)
     (check-equal? (render-template "Hello {{name}}!" (hash "name" "World")) "Hello World!")))
 
 ;; ============================================================
@@ -81,7 +81,7 @@
   (test-case "skill-loader.rkt exports work correctly"
     (define empty-rs (dynamic-require "../skills/skill-loader.rkt" 'empty-resource-set))
     (define merge-resources (dynamic-require "../skills/skill-loader.rkt" 'merge-resources))
-    (check-true (procedure? empty-rs))
+    (check-pred procedure? empty-rs)
     (check-true (procedure? merge-resources))))
 
 ;; ============================================================
@@ -124,7 +124,7 @@
     (define resource-set-instructions (dynamic-require "../skills/types.rkt" 'resource-set-instructions))
     (define resource-set-skills (dynamic-require "../skills/types.rkt" 'resource-set-skills))
     (define rs (empty-resource-set))
-    (check-true (resource-set? rs))
+    (check-pred resource-set? rs)
     (check-equal? (length (resource-set-instructions rs)) 0)
     (check-equal? (length (resource-set-skills rs)) 0))
 
@@ -134,10 +134,10 @@
     (define resource-set? (dynamic-require "../skills/types.rkt" 'resource-set?))
     (define resource-set-instructions (dynamic-require "../skills/types.rkt" 'resource-set-instructions))
     (define resource-set-skills (dynamic-require "../skills/types.rkt" 'resource-set-skills))
-    
+
     (define global-rs (empty-resource-set))
     (define project-rs (empty-resource-set))
     (define merged (merge-resources global-rs project-rs))
-    
-    (check-true (resource-set? merged))
+
+    (check-pred resource-set? merged)
     (check-equal? (length (resource-set-instructions merged)) 0)))

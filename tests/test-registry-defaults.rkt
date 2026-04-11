@@ -19,7 +19,7 @@
   (register-default-tools! reg)
   (for ([name '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl")])
     (define t (lookup-tool reg name))
-    (check-true (tool? t) (format "tool ~a should exist" name))
+    (check-pred tool? t (format "tool ~a should exist" name))
     (check-equal? (tool-name t) name)))
 
 (test-case "each registered tool has a non-empty description"
@@ -35,7 +35,7 @@
   (register-default-tools! reg)
   (for ([name '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl")])
     (define t (lookup-tool reg name))
-    (check-true (hash? (tool-schema t))
+    (check-pred hash? (tool-schema t)
                 (format "tool ~a schema should be a hash" name))
     (check-equal? (hash-ref (tool-schema t) 'type #f) "object"
                   (format "tool ~a schema should have type object" name))))
@@ -45,7 +45,7 @@
   (register-default-tools! reg)
   (for ([name '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl")])
     (define t (lookup-tool reg name))
-    (check-true (procedure? (tool-execute t))
+    (check-pred procedure? (tool-execute t)
                 (format "tool ~a execute should be a procedure" name))))
 
 ;; ============================================================

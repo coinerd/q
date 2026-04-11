@@ -383,7 +383,9 @@
      (let* ([tmpdir (make-temporary-file "scrollback-test-~a" 'directory)]
             [path (build-path tmpdir "scrollback.jsonl")]
             ;; Write known JSONL content
-            [content "{\"kind\":\"assistant\",\"text\":\"Hi\",\"timestamp\":42,\"meta\":{}}\n{\"kind\":\"error\",\"text\":\"oops\",\"timestamp\":43,\"meta\":{}}\n"])
+            [content (string-append
+              "{\"kind\":\"assistant\",\"text\":\"Hi\",\"timestamp\":42,\"meta\":{}}\n"
+              "{\"kind\":\"error\",\"text\":\"oops\",\"timestamp\":43,\"meta\":{}}\n")])
        (display-to-file content path #:exists 'replace)
        (define entries (load-scrollback path))
        (check-equal? (length entries) 2 "load-scrollback: two entries")

@@ -201,7 +201,7 @@
     (define sub-id (subscribe-events! rt (λ (evt)
                                             (set-box! received-events
                                                       (cons evt (unbox received-events))))))
-    (check-true (exact-nonnegative-integer? sub-id))
+    (check-pred exact-nonnegative-integer? sub-id)
     ;; Open a session — should trigger session.started event
     (define rt2 (open-session rt))
     (check-true (not (null? (unbox received-events))))
@@ -645,7 +645,7 @@
     ;; Verify compaction-summary entry was written to the JSONL log
     (define sid (hash-ref info 'session-id))
     (define log-file (build-path tmp sid "session.jsonl"))
-    (check-true (file-exists? log-file) "session log file should exist after persist")
+    (check-pred file-exists? log-file "session log file should exist after persist")
     (define log-entries (jsonl-read-all-valid log-file))
     (define has-compaction-summary?
       (for/or ([entry (in-list log-entries)])
@@ -689,10 +689,10 @@
   (define call-count (box 0))
   (define tok (make-cancellation-token #:callback (lambda (_) (set-box! call-count (add1 (unbox call-count))))))
   (cancel-token! tok)
-  (check-true (cancellation-token-cancelled? tok))
+  (check-pred cancellation-token-cancelled? tok)
   (check-equal? (unbox call-count) 1 "callback should fire once after first cancel")
   (cancel-token! tok)
-  (check-true (cancellation-token-cancelled? tok))
+  (check-pred cancellation-token-cancelled? tok)
   (check-equal? (unbox call-count) 2 "callback fires again on second cancel — not idempotent, documented behavior"))
 
 (test-case "interrupt! on runtime with no active session cancels token, no crash"

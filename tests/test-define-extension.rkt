@@ -12,7 +12,7 @@
   (define-q-extension test-ext
     #:version "1.0.0"
     #:api-version "2")
-  (check-true (extension? test-ext))
+  (check-pred extension? test-ext)
   (check-equal? (extension-name test-ext) "test-ext")
   (check-equal? (extension-version test-ext) "1.0.0")
   (check-equal? (extension-api-version test-ext) "2"))

@@ -34,12 +34,12 @@
    ;; ============================================================
 
    (test-case "tui-term-open is a procedure accepting #:tty keyword"
-     (check-true (procedure? tui-term-open))
+     (check-pred procedure? tui-term-open)
      ;; Check arity: should accept at least 0 args, with keyword support
      (check-true (procedure-arity-includes? tui-term-open 0)))
 
    (test-case "tui-term-close is a procedure"
-     (check-true (procedure? tui-term-close))
+     (check-pred procedure? tui-term-close)
      (check-true (procedure-arity-includes? tui-term-close 1)))
 
    (test-case "with-tui-terminal is a macro (syntax transformer)"
@@ -51,19 +51,19 @@
    ;; ============================================================
 
    (test-case "tui-screen-size is a procedure returning two values"
-     (check-true (procedure? tui-screen-size))
+     (check-pred procedure? tui-screen-size)
      ;; In headless environment, may return default values
      (define-values (cols rows) (tui-screen-size))
      (check-true (or (integer? cols) (not cols)))
      (check-true (or (integer? rows) (not rows))))
 
    (test-case "tui-screen-size-changed? returns boolean"
-     (check-true (procedure? tui-screen-size-changed?))
+     (check-pred procedure? tui-screen-size-changed?)
      (define result (tui-screen-size-changed?))
      (check-true (boolean? result)))
 
    (test-case "tui-screen-size-cache-reset! is a procedure"
-     (check-true (procedure? tui-screen-size-cache-reset!))
+     (check-pred procedure? tui-screen-size-cache-reset!)
      ;; Should run without error
      (check-not-exn (lambda () (tui-screen-size-cache-reset!))))
 
@@ -77,8 +77,8 @@
      (check-true (procedure? tui-keycode)))
 
    (test-case "Key helpers work correctly"
-     (check-true (tui-key-char? #\a))
-     (check-true (tui-key-char? #\return))
+     (check-pred tui-key-char? #\a)
+     (check-pred tui-key-char? #\return)
      (check-false (tui-key-char? 'left))
      (check-false (tui-key-char? 'backspace))
 
@@ -92,7 +92,7 @@
      (check-true (procedure? tui-read-key)))
 
    (test-case "tui-byte-ready? returns boolean"
-     (check-true (procedure? tui-byte-ready?))
+     (check-pred procedure? tui-byte-ready?)
      (define result (tui-byte-ready?))
      (check-true (boolean? result)))
 
@@ -101,11 +101,11 @@
    ;; ============================================================
 
    (test-case "Drawing primitives are procedures"
-     (check-true (procedure? tui-clear-screen))
-     (check-true (procedure? tui-cursor))
-     (check-true (procedure? tui-display))
-     (check-true (procedure? tui-newline))
-     (check-true (procedure? tui-clear-line-right))
+     (check-pred procedure? tui-clear-screen)
+     (check-pred procedure? tui-cursor)
+     (check-pred procedure? tui-display)
+     (check-pred procedure? tui-newline)
+     (check-pred procedure? tui-clear-line-right)
      (check-true (procedure? tui-flush)))
 
    ;; ============================================================
@@ -113,7 +113,7 @@
    ;; ============================================================
 
    (test-case "Cursor visibility functions are procedures"
-     (check-true (procedure? tui-cursor-hide))
+     (check-pred procedure? tui-cursor-hide)
      (check-true (procedure? tui-cursor-show)))
 
    ;; ============================================================
@@ -121,11 +121,11 @@
    ;; ============================================================
 
    (test-case "Style functions are procedures"
-     (check-true (procedure? tui-normal))
-     (check-true (procedure? tui-bold))
-     (check-true (procedure? tui-inverse))
-     (check-true (procedure? tui-underline))
-     (check-true (procedure? tui-dim))
+     (check-pred procedure? tui-normal)
+     (check-pred procedure? tui-bold)
+     (check-pred procedure? tui-inverse)
+     (check-pred procedure? tui-underline)
+     (check-pred procedure? tui-dim)
      (check-true (procedure? tui-fg)))
 
    ;; ============================================================
@@ -133,7 +133,7 @@
    ;; ============================================================
 
    (test-case "Mouse tracking functions are procedures"
-     (check-true (procedure? enable-mouse-tracking))
+     (check-pred procedure? enable-mouse-tracking)
      (check-true (procedure? disable-mouse-tracking)))
    ))
 
@@ -239,7 +239,7 @@
 
 (let ()
   ;; clipboard-copy is exported and callable
-  (check-true (procedure? clipboard-copy)
+  (check-pred procedure? clipboard-copy
               "clipboard-copy is a procedure")
   (check-true (procedure? detect-clipboard-tool)
               "detect-clipboard-tool is a procedure"))

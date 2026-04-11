@@ -66,7 +66,8 @@
      ;; so it understands the command produced nothing and can change strategy
      (define combined
        (if (string=? raw-combined "")
-           "(Command produced no output. The command may have completed without producing any output, or the output was empty. Consider checking: the command syntax, file paths, available tools, or try a different approach.)"
+           "(Command produced no output. The command may have completed without producing any output, or the output was empty. Consider
+               checking: the command syntax, file paths, available tools, or try a different approach.)"
            raw-combined))
      (make-success-result
       (list (hasheq 'type "text"

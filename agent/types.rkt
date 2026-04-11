@@ -6,20 +6,16 @@
 ;;   - content parts (text, tool-call, tool-result)
 ;;   - messages
 ;;   - event envelopes
-;;   - tool-call / tool-result (standalone)
+;;   - tool-call / tool-result (standalone — canonical definitions)
 ;;   - loop-result
 ;;
 ;; All structs provide JSON serialization/deserialization via
 ;; message->jsexpr / jsexpr->message and event->jsexpr / jsexpr->event.
+;;
+;; ARCH-01: tool-call and tool-result structs are defined HERE (canonical).
+;; tools/tool.rkt imports and re-exports them.
 
-(require racket/contract
-         (only-in "../tools/tool.rkt"
-                  tool-call tool-call?
-                  tool-call-id tool-call-name tool-call-arguments
-                  make-tool-call
-                  tool-result?
-                  tool-result-content tool-result-details tool-result-is-error?
-                  make-tool-result))
+(require racket/contract)
 
 (provide
  ;; Content parts
@@ -49,15 +45,11 @@
  ;; Versioning
  CURRENT-EVENT-VERSION
 
- ;; Tool-call (standalone — re-exported from tools/tool.rkt)
- tool-call tool-call?
- tool-call-id tool-call-name tool-call-arguments
- make-tool-call
+ ;; Tool-call (standalone — canonical definition)
+ (struct-out tool-call)
 
- ;; Tool-result (standalone — re-exported from tools/tool.rkt)
- tool-result?
- tool-result-content tool-result-details tool-result-is-error?
- make-tool-result
+ ;; Tool-result (standalone — canonical definition)
+ (struct-out tool-result)
 
  ;; Loop-result
  (struct-out loop-result)
@@ -189,25 +181,9 @@
           'payload (event-payload evt)))
 
 ;; Current event schema version produced by this runtime.
-;; Version policy:
-;;   - Version is a positive integer.
-;;   - Bumping the major version means the event shape has changed
-;;     in a backward-incompatible way.
-;;   - Consumers should reject events whose version exceeds
-;;     their known maximum.
-;;   - Producers always emit CURRENT-EVENT-VERSION.
 (define CURRENT-EVENT-VERSION 1)
 
 ;; Deserialize jsexpr (hash) to event.
-;; Performs version compatibility check:
-;;   - If the version field is missing, assumes version 1 (legacy).
-;;   - If the version equals CURRENT-EVENT-VERSION, returns the event normally.
-;;   - If the version is <= CURRENT-EVENT-VERSION, also returns the event
-;;     (forward-compat within same major range).
-;;   - If the version is > CURRENT-EVENT-VERSION, logs a warning and
-;;     returns the event anyway so callers can decide what to do.
-;;     The caller should check (event-version evt) against
-;;     CURRENT-EVENT-VERSION if stricter behavior is needed.
 (define (jsexpr->event h)
   (define ver (hash-ref h 'version 1))
   (when (> ver CURRENT-EVENT-VERSION)
@@ -230,3 +206,17 @@
 
 (define (make-loop-result messages termination-reason metadata)
   (loop-result messages termination-reason metadata))
+
+;; ============================================================
+;; Tool-call struct (standalone — canonical definition)
+;; ============================================================
+
+(struct tool-call (id name arguments) #:transparent
+           #:extra-constructor-name make-tool-call)
+
+;; ============================================================
+;; Tool-result struct (standalone — canonical definition)
+;; ============================================================
+
+(struct tool-result (content details is-error?) #:transparent
+           #:extra-constructor-name make-tool-result)

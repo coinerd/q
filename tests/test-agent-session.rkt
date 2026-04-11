@@ -147,11 +147,11 @@
                    (hash) "mock" 'stop)))
     (define sess (make-agent-session (make-test-config dir bus prov)))
 
-    (check-true (agent-session? sess))
+    (check-pred agent-session? sess)
     (check-true (string? (session-id sess)))
     (check-true (> (string-length (session-id sess)) 0))
     (check-equal? (session-history sess) '())
-    (check-true (session-active? sess))
+    (check-pred session-active? sess)
 
     ;; session.started event emitted
     (check-not-false (member "session.started" (event-names evts)))
@@ -504,7 +504,7 @@
                    (hash) "mock" 'stop)))
 
     (define sess (make-agent-session (make-test-config dir bus prov)))
-    (check-true (session-active? sess))
+    (check-pred session-active? sess)
 
     (close-session! sess)
     (check-false (session-active? sess))
@@ -792,7 +792,7 @@
     (define sess (make-agent-session (make-test-config dir bus prov)))
     ;; Should complete without error even though no registry exists
     (define-values (s result) (run-prompt! sess "hello"))
-    (check-true (loop-result? result))
+    (check-pred loop-result? result)
     (check-equal? (loop-result-termination-reason result) 'completed)
     (delete-directory/files dir #:must-exist? #f))
 
@@ -1131,7 +1131,7 @@
                         'event-bus bus
                         'session-dir (path->string tmpdir)
                         'extension-registry ext-reg)))
-  (check-true (extension-registry? (agent-session-extension-registry sess))
+  (check-pred extension-registry? (agent-session-extension-registry sess)
               "agent-session: extension-registry stored when provided"))
 
 ;; model-name is stored when provided

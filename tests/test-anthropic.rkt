@@ -21,13 +21,13 @@
    (hash 'model "claude-sonnet-4-20250514")))
 
 (define body-basic (anthropic-build-request-body req-basic))
-(check-true (hash? body-basic)
+(check-pred hash? body-basic
             "build-request-body returns a hash")
 (check-equal? (hash-ref body-basic 'model) "claude-sonnet-4-20250514"
               "model from settings")
 (check-equal? (hash-ref body-basic 'stream) #f
               "non-streaming by default")
-(check-true (list? (hash-ref body-basic 'messages))
+(check-pred list? (hash-ref body-basic 'messages)
             "messages is a list")
 (check-equal? (length (hash-ref body-basic 'messages)) 1
               "one message")
@@ -69,7 +69,7 @@
 (define body-tools (anthropic-build-request-body req-with-tools))
 (check-true (hash-has-key? body-tools 'tools)
             "tools key present")
-(check-true (list? (hash-ref body-tools 'tools))
+(check-pred list? (hash-ref body-tools 'tools)
             "tools is a list")
 (check-equal? (length (hash-ref body-tools 'tools)) 1
               "one tool")
@@ -98,7 +98,7 @@
         'usage (hash 'input_tokens 10 'output_tokens 5)))
 
 (define parsed-text (anthropic-parse-response fake-text-response))
-(check-true (model-response? parsed-text)
+(check-pred model-response? parsed-text
             "parsed text response is model-response?")
 (check-equal? (model-response-model parsed-text) "claude-sonnet-4-20250514"
               "model name preserved")
@@ -201,7 +201,7 @@
         'model "claude-sonnet-4-20250514"))
 
 (define anthropic-provider (make-anthropic-provider anthropic-config))
-(check-true (provider? anthropic-provider)
+(check-pred provider? anthropic-provider
             "make-anthropic-provider returns provider?")
 
 ;; ============================================================
@@ -213,7 +213,7 @@
 
 ;; Capabilities
 (define anthropic-caps (provider-capabilities anthropic-provider))
-(check-true (hash? anthropic-caps))
+(check-pred hash? anthropic-caps)
 (check-true (hash-ref anthropic-caps 'streaming)
             "streaming capability is #t")
 (check-false (hash-ref anthropic-caps 'token-counting)
@@ -243,7 +243,7 @@
          'index 0)))
 
 (define stream-text-chunks (anthropic-parse-stream-chunks stream-text-events))
-(check-true (list? stream-text-chunks)
+(check-pred list? stream-text-chunks
             "stream parsing returns list")
 (check-true (andmap stream-chunk? stream-text-chunks)
             "all results are stream-chunk?")
@@ -271,9 +271,9 @@
 
 (define stream-done-chunks (anthropic-parse-stream-chunks stream-done-events))
 (define done-chunk (last stream-done-chunks))
-(check-true (stream-chunk-done? done-chunk)
+(check-pred stream-chunk-done? done-chunk
             "message_delta with stop_reason → done? #t")
-(check-true (hash? (stream-chunk-usage done-chunk))
+(check-pred hash? (stream-chunk-usage done-chunk)
             "message_delta carries usage")
 (check-equal? (hash-ref (stream-chunk-usage done-chunk) 'completion_tokens) 5
               "output_tokens → completion_tokens in stream")
@@ -300,7 +300,7 @@
          'usage (hash 'output_tokens 20))))
 
 (define stream-tool-chunks (anthropic-parse-stream-chunks stream-tool-events))
-(check-true (list? stream-tool-chunks))
+(check-pred list? stream-tool-chunks)
 
 ;; Find tool-call deltas
 (define tool-deltas
@@ -313,7 +313,7 @@
 
 ;; Last chunk is done
 (define tool-done (last stream-tool-chunks))
-(check-true (stream-chunk-done? tool-done)
+(check-pred stream-chunk-done? tool-done
             "tool_use stream ends with done chunk")
 
 ;; ============================================================
@@ -327,7 +327,7 @@
 
 (define anthropic-custom-provider
   (make-anthropic-provider anthropic-custom-config))
-(check-true (provider? anthropic-custom-provider)
+(check-pred provider? anthropic-custom-provider
             "custom base-url provider is provider?")
 (check-equal? (provider-name anthropic-custom-provider) "anthropic"
               "custom provider name is still 'anthropic'")
@@ -444,7 +444,7 @@
 (check-equal? (hash-ref first-msg 'role) "user")
 ;; Content should be a list of typed blocks
 (define msg-content (hash-ref first-msg 'content))
-(check-true (list? msg-content)
+(check-pred list? msg-content
             "message content is a list of typed blocks")
 (check-equal? (hash-ref (car msg-content) 'type) "text"
               "content block type is text")
@@ -484,7 +484,7 @@
 (check-equal? (length stream-usage-chunks) 1
               "message_start with usage → 1 chunk")
 (define usage-start-chunk (car stream-usage-chunks))
-(check-true (hash? (stream-chunk-usage usage-start-chunk))
+(check-pred hash? (stream-chunk-usage usage-start-chunk)
             "message_start chunk has usage")
 (check-equal? (hash-ref (stream-chunk-usage usage-start-chunk) 'prompt_tokens) 42
               "input_tokens → prompt_tokens in stream start")
@@ -550,8 +550,13 @@
 ;; ============================================================
 
 (define fake-sse-text
-  "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_123\",\"role\":\"assistant\",\"model\":\"claude-sonnet\",\"usage\":{\"input_tokens\":10}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" world\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n")
-
+  (string-append
+   "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_123\",\"role\":\"assistant\",\"model\":\"claude-sonnet\","
+   "\"usage\":{\"input_tokens\":10}}}\n\n"
+   "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n"
+   "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" world\"}}\n\n"
+   "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n"
+   "event: message_stop\ndata: {\"type\":\"message_stop\"}\n"))
 (define parsed-sse-events (parse-sse-lines fake-sse-text))
 (check-equal? (length parsed-sse-events) 5
               "SSE parsing extracts 5 data events")

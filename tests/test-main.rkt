@@ -44,7 +44,7 @@
   (register-default-tools! reg)
   (for ([name (in-list '("read" "write" "edit" "bash"))])
     (define t (lookup-tool reg name))
-    (check-true (tool? t))
+    (check-pred tool? t)
     (check-true (procedure? (tool-execute t)))))
 
 (test-case "registry has correct count"
@@ -59,7 +59,7 @@
 (test-case "returns a hash with required keys"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash? rt))
+  (check-pred hash? rt)
   (check-true (hash-has-key? rt 'provider))
   (check-true (hash-has-key? rt 'tool-registry))
   (check-true (hash-has-key? rt 'event-bus))
@@ -150,13 +150,13 @@
 
 (test-case "build-provider: returns valid provider when no config"
   (define p (build-provider (hasheq) (load-settings)))
-  (check-true (provider? p))
+  (check-pred provider? p)
   ;; Provider depends on whether ~/.q/config.json exists
   (check-true (not (false? (member (provider-name p) '("mock" "openai-compatible"))))))
 
 (test-case "build-provider: returns valid provider with empty hash config"
   (define p (build-provider (make-hash) (load-settings)))
-  (check-true (provider? p))
+  (check-pred provider? p)
   ;; Provider depends on whether ~/.q/config.json exists
   (check-true (not (false? (member (provider-name p) '("mock" "openai-compatible"))))))
 
@@ -169,7 +169,7 @@
       (define config (make-hash (list (cons 'project-dir tmp-dir))))
       (define settings (load-settings tmp-dir #:config-path "/nonexistent/config.json"))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "mock"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -183,7 +183,7 @@
       (define config (make-hash (list (cons 'project-dir tmp-dir))))
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "mock"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -204,7 +204,7 @@
                (cons 'model "nonexistent-model"))))
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "mock"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -225,7 +225,7 @@
                (cons 'model "gpt-4o"))))
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "mock"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -247,7 +247,7 @@
                (cons 'model "gpt-4o"))))
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
@@ -272,7 +272,7 @@
          (list (cons 'project-dir tmp-dir))))
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
@@ -296,7 +296,7 @@
                (cons 'model "claude-3"))))
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
@@ -327,7 +327,7 @@
 (test-case "build-runtime-from-cli: extension-registry is an extension-registry?"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (extension-registry? (hash-ref rt 'extension-registry))
+  (check-pred extension-registry? (hash-ref rt 'extension-registry)
               "extension-registry value should satisfy extension-registry?"))
 
 (test-case "build-runtime-from-cli: extension-registry starts empty"
@@ -412,7 +412,7 @@
 
 (test-case "parse-cli-args: --tool with --no-tools"
   (define cfg (parse-cli-args #("--no-tools" "--tool" "read")))
-  (check-true (cli-config-no-tools? cfg))
+  (check-pred cli-config-no-tools? cfg)
   (check-equal? (cli-config-tools cfg) '("read")))
 
 ;; ============================================================
@@ -779,7 +779,7 @@
       (define rt-config (cli-config->runtime-config cfg))
       (define settings (load-settings tmp-dir #:config-path config-path))
       (define p (build-provider rt-config settings))
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda ()
       (cleanup-temp-dir tmp-dir)
@@ -806,7 +806,7 @@
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
       ;; Should NOT fall back to mock provider
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -827,7 +827,7 @@
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
       ;; Should NOT fall back to mock provider
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -848,7 +848,7 @@
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
       ;; Should NOT fall back to mock provider
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "openai-compatible"))
     (lambda () (cleanup-temp-dir tmp-dir))))
 
@@ -872,6 +872,6 @@
       (define settings (load-settings tmp-dir))
       (define p (build-provider config settings))
       ;; Should fall back to mock provider for cloud without API key
-      (check-true (provider? p))
+      (check-pred provider? p)
       (check-equal? (provider-name p) "mock"))
     (lambda () (cleanup-temp-dir tmp-dir))))

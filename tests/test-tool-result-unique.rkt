@@ -6,7 +6,8 @@
 
 (require rackunit
          "../tools/tool.rkt"
-         "../agent/types.rkt")
+         (except-in "../agent/types.rkt"
+           make-tool-call make-tool-result))
 
 ;; ── The struct constructor from tools/tool should produce values
 ;;    accepted by the predicate imported from agent/types ──
@@ -14,7 +15,7 @@
 (define tr (make-tool-result "hello" #f #f))
 
 ;; tools/tool.rkt predicate
-(check-true (tool-result? tr)
+(check-pred tool-result? tr
             "tool-result? from tools/tool.rkt accepts its own constructor")
 
 ;; Accessors from tools/tool.rkt work
@@ -34,7 +35,7 @@
 ;; Since both are the same binding, this is always true — but
 ;; the test documents the intent.
 (let ([tr3 (make-tool-result '("line") (hasheq) #t)])
-  (check-true (tool-result-is-error? tr3))
+  (check-pred tool-result-is-error? tr3)
   (check-equal? (tool-result-content tr3) '("line")))
 
 ;; Verify JSON round-trip uses the canonical serialization

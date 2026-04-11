@@ -54,7 +54,7 @@
     (define ip (index-path dir))
     (append-entry! sp (make-test-message "root" #f 'system 'message))
     (build-index! sp ip)
-    (check-true (file-exists? ip))
+    (check-pred file-exists? ip)
     (delete-directory/files dir #:must-exist? #f))
 
   (test-case "build-index! works on empty/nonexistent log"
@@ -355,7 +355,7 @@
 
   (test-case "bookmark struct creation and accessors"
     (define bm (make-bookmark "bm-1" "entry-1" "my-label" 12345))
-    (check-true (bookmark? bm))
+    (check-pred bookmark? bm)
     (check-equal? (bookmark-id bm) "bm-1")
     (check-equal? (bookmark-entry-id bm) "entry-1")
     (check-equal? (bookmark-label bm) "my-label")
@@ -370,7 +370,7 @@
     (append-entry! sp (make-test-message "root" #f 'system 'message))
     (define idx (build-index! sp ip))
     (define bm-id (add-bookmark! idx "root" "important"))
-    (check-true (string? bm-id))
+    (check-pred string? bm-id)
     (check-true (string-prefix? bm-id "bm-"))
     (define bm (get-bookmark idx bm-id))
     (check-not-false bm)
@@ -507,7 +507,7 @@
     (define idx (build-index! sp ip))
     (add-bookmark! idx "root" "persistent-label")
     (save-bookmarks! sp idx)
-    (check-true (file-exists? bp))
+    (check-pred file-exists? bp)
     (delete-directory/files dir #:must-exist? #f))
 
   (test-case "save-bookmarks! and load-bookmarks roundtrip"

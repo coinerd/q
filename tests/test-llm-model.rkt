@@ -9,7 +9,7 @@
 
 (test-case "make-model-request creates struct"
   (define req (make-model-request '("msg1") #f (hasheq)))
-  (check-true (model-request? req))
+  (check-pred model-request? req)
   (check-equal? (model-request-messages req) '("msg1"))
   (check-false (model-request-tools req))
   (check-equal? (model-request-settings req) (hasheq)))
@@ -40,7 +40,7 @@
                                      (hasheq 'total-tokens 10)
                                      "gpt-4"
                                      'stop))
-  (check-true (model-response? resp))
+  (check-pred model-response? resp)
   (check-equal? (model-response-model resp) "gpt-4")
   (check-eq? (model-response-stop-reason resp) 'stop))
 
@@ -61,11 +61,11 @@
 
 (test-case "stream-chunk struct"
   (define ch (stream-chunk "hello" #f #f #f))
-  (check-true (stream-chunk? ch))
+  (check-pred stream-chunk? ch)
   (check-equal? (stream-chunk-delta-text ch) "hello")
   (check-false (stream-chunk-done? ch)))
 
 (test-case "stream-chunk done sentinel"
   (define ch (stream-chunk #f #f (hasheq) #t))
-  (check-true (stream-chunk-done? ch))
+  (check-pred stream-chunk-done? ch)
   (check-false (stream-chunk-delta-text ch)))

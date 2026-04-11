@@ -175,7 +175,7 @@
         (define r (tool-write (hasheq 'path (path->string f)
                                       'content "nested content")))
         (check-false (result-is-error? r))
-        (check-true (file-exists? f))
+        (check-pred file-exists? f)
         (check-equal? (file->string f) "nested content"))))
 
    (test-case "write overwrites existing file"

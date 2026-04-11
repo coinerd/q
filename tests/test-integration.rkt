@@ -154,7 +154,7 @@
   (check-not-false (sdk:session-info rt2))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "test prompt"))
   (check-true (sdk:runtime? rt3))
-  (check-true (loop-result? result))
+  (check-pred loop-result? result)
   (cleanup-dir dir))
 
 (test-case "integ: session log file exists after prompt"
@@ -167,7 +167,7 @@
   (check-not-false info)
   (define sid (hash-ref info 'session-id))
   (define log-path (build-path dir sid "session.jsonl"))
-  (check-true (file-exists? log-path))
+  (check-pred file-exists? log-path)
   (define entries (jsonl-read-all-valid log-path))
   (check >= (length entries) 2)
   (cleanup-dir dir))
@@ -221,7 +221,7 @@
   (define rt (make-test-runtime prov #:session-dir dir #:tool-registry reg))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "use bad tool"))
-  (check-true (loop-result? result))
+  (check-pred loop-result? result)
   (cleanup-dir dir))
 
 ;; ============================================================
@@ -405,7 +405,7 @@
                                "session.jsonl"))
   (define entries-before (length (jsonl-read-all-valid log-path)))
   (define-values (rt3 comp-result) (sdk:compact-session! rt2 #:persist? #f))
-  (check-true (compaction-result? comp-result))
+  (check-pred compaction-result? comp-result)
   (define entries-after (length (jsonl-read-all-valid log-path)))
   (check-equal? entries-before entries-after)
   (cleanup-dir dir))
@@ -421,7 +421,7 @@
                                "session.jsonl"))
   (define entries-before (length (jsonl-read-all-valid log-path)))
   (define-values (rt3 comp-result) (sdk:compact-session! rt2 #:persist? #t))
-  (check-true (compaction-result? comp-result))
+  (check-pred compaction-result? comp-result)
   (define entries-after (length (jsonl-read-all-valid log-path)))
   (check >= entries-after entries-before)
   (cleanup-dir dir))
@@ -553,7 +553,7 @@
   (define rt (make-test-runtime prov #:session-dir dir #:cancellation-token tok))
   (define rt2 (sdk:open-session rt))
   (sdk:interrupt! rt2)
-  (check-true (cancellation-token-cancelled? tok))
+  (check-pred cancellation-token-cancelled? tok)
   (cleanup-dir dir))
 
 (test-case "integ: run-prompt! without session returns no-active-session"

@@ -227,7 +227,7 @@
     (store-credential! "test-provider" "sk-brand-new"
                        #:provider-config cfg
                        #:config-path config-path)
-    (check-true (file-exists? config-path))
+    (check-pred file-exists? config-path)
     (define file-content (call-with-input-file config-path read-json))
     (check-equal? (hash-ref (hash-ref file-content 'providers (hasheq)) 'test-provider (hasheq))
                   (hasheq 'api-key "sk-brand-new"))
@@ -365,7 +365,7 @@
     (define dir (make-temp-dir))
     (define path (build-path dir "credentials.json"))
     (save-credential-file! "openai" "sk-test-12345" path)
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     (define loaded (load-credential-file path))
     (define openai-cfg (hash-ref loaded "openai" #f))
     (check-not-false openai-cfg)
@@ -429,7 +429,7 @@
     ;; openai is redacted
     (define openai-redacted (hash-ref redacted "openai"))
     (check-not-false openai-redacted)
-    (check-true (redacted-credential? openai-redacted))
+    (check-pred redacted-credential? openai-redacted)
     (check-false (string-contains? (redacted-credential-masked-api-key openai-redacted) "integration-test-key"))
 
     ;; local has no credential
@@ -460,7 +460,7 @@
     (define dir (make-temp-dir))
     (define path (build-path dir "credentials.json"))
     (save-credential-file! "openai" "sk-test-atomic" path)
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     ;; Verify no leftover temp file
     (define files (directory-list dir))
     (check-equal? (length (filter (lambda (f) (string-suffix? (path->string f) ".tmp")) files)) 0)
@@ -487,7 +487,7 @@
     (define dir (make-temp-dir))
     (define path (build-path dir "credentials.json"))
     (save-credential-file! "openai" "sk-perm-test-key" path)
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     ;; Read the file permissions back
     (define perms (file-or-directory-permissions path))
     ;; On Unix, file-or-directory-permissions returns an integer like #o100600
@@ -504,7 +504,7 @@
     (define path (build-path dir "test-atomic.json"))
     ;; Use save-credential-file! which calls atomic-write-json! internally
     (save-credential-file! "test" "sk-atomic-perm" path)
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     (define perms (file-or-directory-permissions path))
     (when (integer? perms)
       (define mode (bitwise-and perms #o777))

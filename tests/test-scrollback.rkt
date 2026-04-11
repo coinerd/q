@@ -18,7 +18,7 @@
 (test-case "jsexpr->transcript-entry deserializes fields"
   (define h (hash 'kind "user" 'text "hi" 'timestamp 99 'meta (hash)))
   (define entry (jsexpr->transcript-entry h))
-  (check-true (transcript-entry? entry))
+  (check-pred transcript-entry? entry)
   (check-eq? (transcript-entry-kind entry) 'user)
   (check-equal? (transcript-entry-text entry) "hi")
   (check-equal? (transcript-entry-timestamp entry) 99))

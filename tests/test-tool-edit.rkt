@@ -21,7 +21,7 @@
   (define result (tool-edit (hasheq 'path "/nonexistent.txt"
                                      'old-text "x"
                                      'new-text "y")))
-  (check-true (tool-result-is-error? result))
+  (check-pred tool-result-is-error? result)
   (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
                                  "not found")))
 
@@ -29,7 +29,7 @@
   (define tmp (make-temporary-file "q-test-edit-~a.txt"))
   (display-to-file "hello world" tmp #:exists 'replace)
   (define result (tool-edit (hasheq 'path tmp 'old-text "missing" 'new-text "x")))
-  (check-true (tool-result-is-error? result))
+  (check-pred tool-result-is-error? result)
   (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
                                  "not found"))
   (delete-file tmp))
@@ -38,7 +38,7 @@
   (define tmp (make-temporary-file "q-test-edit-~a.txt"))
   (display-to-file "abc abc abc" tmp #:exists 'replace)
   (define result (tool-edit (hasheq 'path tmp 'old-text "abc" 'new-text "xyz")))
-  (check-true (tool-result-is-error? result))
+  (check-pred tool-result-is-error? result)
   (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
                                  "appears"))
   (delete-file tmp))

@@ -58,9 +58,9 @@
                        "#lang racket/base\n(define (hello) \"world\")\n")
       (define result (audit-package dir))
       (check-equal? (audit-result-risk-level result) 'low)
-      (check-true (null? (filter (lambda (f)
+      (check-pred null? (filter (lambda (f)
                                    (eq? (finding-severity f) 'high))
-                                 (audit-result-findings result)))))
+                                 (audit-result-findings result))))
     (lambda ()
       (delete-directory/files dir #:must-exist? #f))))
 

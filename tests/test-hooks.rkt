@@ -10,7 +10,7 @@
 
 (test-case "hook-pass creates pass result"
   (define r (hook-pass "data"))
-  (check-true (hook-result? r))
+  (check-pred hook-result? r)
   (check-eq? (hook-result-action r) 'pass)
   (check-equal? (hook-result-payload r) "data"))
 

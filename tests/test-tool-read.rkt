@@ -20,7 +20,7 @@
 
 (test-case "tool-read returns error for missing file"
   (define result (tool-read (hasheq 'path "/nonexistent/file.txt")))
-  (check-true (tool-result-is-error? result))
+  (check-pred tool-result-is-error? result)
   (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
                                  "not found")))
 
@@ -47,7 +47,7 @@
     (λ (out) (write-bytes (bytes 0 1 2 0 4 5) out))
     #:exists 'replace)
   (define result (tool-read (hasheq 'path tmp)))
-  (check-true (tool-result-is-error? result))
+  (check-pred tool-result-is-error? result)
   (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
                                  "binary"))
   (delete-file tmp))

@@ -74,5 +74,6 @@
   (define tool-schema
     (hasheq 'type "object"
             'properties (hasheq 'format (hasheq 'type "string"
-                                                 'description "Output format: 'iso' (default, ISO 8601), 'date' (YYYY-MM-DD), 'time' (HH:MM:SS), 'unix' (epoch), 'weekday' (day name), 'iso-full' (date + weekday + time)"))
+                                                 'description "Output format: 'iso' (default, ISO 8601), 'date' (YYYY-MM-DD), 'time'
+                                                     (HH:MM:SS), 'unix' (epoch), 'weekday' (day name), 'iso-full' (date + weekday + time)"))
             'required '())))

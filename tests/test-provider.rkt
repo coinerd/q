@@ -20,7 +20,7 @@
                 (list (hash 'role "user" 'content "Hello"))
                 #f
                 (hash 'model "gpt-4" 'temperature 0.7 'max-tokens 1024)))
- (check-true (model-request? req-1))
+ (check-pred model-request? req-1)
  (check-equal? (length (model-request-messages req-1)) 1)
  (check-false (model-request-tools req-1))
  (check-equal? (hash-ref (model-request-settings req-1) 'model) "gpt-4"))
@@ -48,7 +48,7 @@
                  (hash 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15)
                  "gpt-4"
                  'stop))
- (check-true (model-response? resp-1))
+ (check-pred model-response? resp-1)
  (check-equal? (length (model-response-content resp-1)) 1)
  (check-equal? (model-response-model resp-1) "gpt-4")
  (check-equal? (model-response-stop-reason resp-1) 'stop)
@@ -61,14 +61,14 @@
 (test-case
  "stream-chunk basic fields"
  (define sc-1 (stream-chunk "Hello" #f #f #f))
- (check-true (stream-chunk? sc-1))
+ (check-pred stream-chunk? sc-1)
  (check-equal? (stream-chunk-delta-text sc-1) "Hello")
  (check-false (stream-chunk-done? sc-1)))
 
 (test-case
  "stream-chunk done with usage"
  (define sc-done (stream-chunk #f #f (hash 'total_tokens 20) #t))
- (check-true (stream-chunk-done? sc-done))
+ (check-pred stream-chunk-done? sc-done)
  (check-true (hash? (stream-chunk-usage sc-done))))
 
 ;; ------------------------------------------------------------
@@ -86,11 +86,11 @@
                 (list tool-def)
                 (hash 'model "gpt-4")))
  (define req-json (model-request->jsexpr req-2))
- (check-true (hash? req-json))
+ (check-pred hash? req-json)
  (check-true (list? (hash-ref req-json 'messages)))
  (check-true (list? (hash-ref req-json 'tools)))
  (define req-rt (jsexpr->model-request req-json))
- (check-true (model-request? req-rt))
+ (check-pred model-request? req-rt)
  (check-equal? (length (model-request-messages req-rt)) 1)
  (check-equal? (length (model-request-tools req-rt)) 1))
 
@@ -106,10 +106,10 @@
                  "gpt-4"
                  'stop))
  (define resp-json (model-response->jsexpr resp-1))
- (check-true (hash? resp-json))
+ (check-pred hash? resp-json)
  (check-equal? (hash-ref resp-json 'stopReason) "stop")
  (define resp-rt (jsexpr->model-response resp-json))
- (check-true (model-response? resp-rt))
+ (check-pred model-response? resp-rt)
  (check-equal? (model-response-stop-reason resp-rt) 'stop)
  (check-equal? (model-response-model resp-rt) "gpt-4"))
 
@@ -126,10 +126,10 @@
     "mock-model"
     'stop))
  (define mock-provider (make-mock-provider mock-resp))
- (check-true (provider? mock-provider))
+ (check-pred provider? mock-provider)
  (check-equal? (provider-name mock-provider) "mock")
  (define caps (provider-capabilities mock-provider))
- (check-true (hash? caps))
+ (check-pred hash? caps)
  (check-true (hash-ref caps 'streaming))
  (check-true (hash-ref caps 'token-counting)))
 
@@ -147,7 +147,7 @@
                 #f
                 (hash 'model "gpt-4" 'temperature 0.7 'max-tokens 1024)))
  (define send-result (provider-send mock-provider req-1))
- (check-true (model-response? send-result))
+ (check-pred model-response? send-result)
  (check-equal? (model-response-model send-result) "mock-model")
  (check-equal? (model-response-stop-reason send-result) 'stop))
 
@@ -165,7 +165,7 @@
                 #f
                 (hash 'model "gpt-4" 'temperature 0.7 'max-tokens 1024)))
  (define stream-result (provider-stream mock-provider req-1))
- (check-true (procedure? stream-result))
+ (check-pred procedure? stream-result)
  (define collected-chunks
    (let loop ()
      (define ch (stream-result))
@@ -214,10 +214,10 @@
          'api-key "test-key-123"
          'model "gpt-4"))
  (define oai-provider (make-openai-compatible-provider oai-config))
- (check-true (provider? oai-provider))
+ (check-pred provider? oai-provider)
  (check-equal? (provider-name oai-provider) "openai-compatible")
  (define oai-caps (provider-capabilities oai-provider))
- (check-true (hash? oai-caps))
+ (check-pred hash? oai-caps)
  (check-true (hash-ref oai-caps 'streaming))
  (check-false (hash-ref oai-caps 'token-counting)))
 
@@ -236,7 +236,7 @@
                 (list tool-def)
                 (hash 'model "gpt-4")))
  (define oai-body (openai-build-request-body req-2))
- (check-true (hash? oai-body))
+ (check-pred hash? oai-body)
  (check-equal? (hash-ref oai-body 'model) "gpt-4")
  (check-true (list? (hash-ref oai-body 'messages)))
  (check-true (list? (hash-ref oai-body 'tools)))
@@ -266,7 +266,7 @@
                               'finish_reason "stop"))
          'usage (hash 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15)))
  (define parsed (openai-parse-response fake-openai-response))
- (check-true (model-response? parsed))
+ (check-pred model-response? parsed)
  (check-equal? (model-response-model parsed) "gpt-4")
  (check-equal? (model-response-stop-reason parsed) 'stop)
  (check-equal? (hash-ref (car (model-response-content parsed)) 'type) "text")

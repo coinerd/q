@@ -135,7 +135,7 @@
     (define result (run-subprocess "/bin/sh"
                                     #:args '("-c" "sleep 30")
                                     #:limits strict))
-    (check-true (subprocess-result-timed-out? result))
+    (check-pred subprocess-result-timed-out? result)
     ;; Elapsed should be roughly the timeout (1s = 1000ms), allow some slack
     (check-true (< (subprocess-result-elapsed-ms result) 5000)))
 

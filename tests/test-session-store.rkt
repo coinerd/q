@@ -42,7 +42,7 @@
     (define path (session-path dir))
     (define m (make-test-message "id1" #f 'user 'message))
     (append-entry! path m)
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     (define entries (load-session-log path))
     (check-equal? (length entries) 1)
     (check-equal? (message-id (car entries)) "id1")
@@ -490,13 +490,13 @@
     (define path (session-path dir))
     ;; Create an empty file
     (close-output-port (open-output-file path))
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     ;; Repair should be a no-op
     (define report (repair-session-log! path))
     (check-equal? (hash-ref report 'entries-kept) 0)
     (check-equal? (hash-ref report 'entries-removed) 0)
     ;; File should still exist and be empty
-    (check-true (file-exists? path))
+    (check-pred file-exists? path)
     (check-equal? (file-size path) 0)
     (delete-directory/files dir #:must-exist? #f))
 

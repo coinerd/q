@@ -35,12 +35,12 @@
      (define bus (make-event-bus))
      (define queue (make-queue))
      (define ctx (list (make-user-message "Initial message")))
-     
+
      ;; Mock provider using make-mock-provider with proper content parts
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
-     
+
      ;; Should not raise error with queue parameter
      (check-not-exn
       (lambda ()
@@ -51,20 +51,20 @@
      (define bus (make-event-bus))
      (define queue (make-queue))
      (define steering-msg (make-user-message "Steering input"))
-     
+
      ;; Enqueue a steering message
      (enqueue-steering! queue steering-msg)
-     
+
      ;; Track what context was passed to provider
      ;; Note: We can't easily capture context with mock provider,
      ;; so we test indirectly by checking behavior works
      (define ctx (list (make-user-message "Initial")))
-     
+
      ;; Mock provider
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
-     
+
      ;; Run iteration with queue - should complete without error
      (check-not-exn
       (lambda ()
@@ -74,17 +74,17 @@
    (test-case "multiple steering messages are injected in order"
      (define bus (make-event-bus))
      (define queue (make-queue))
-     
+
      (enqueue-steering! queue (make-user-message "First steering"))
      (enqueue-steering! queue (make-user-message "Second steering"))
-     
+
      ;; Mock provider
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
-     
+
      (define ctx (list (make-user-message "Initial")))
-     
+
      ;; Should complete without error with multiple steering messages
      (check-not-exn
       (lambda ()
@@ -94,14 +94,14 @@
    (test-case "empty queue does not affect context"
      (define bus (make-event-bus))
      (define queue (make-queue))
-     
+
      ;; Mock provider
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
-     
+
      (define ctx (list (make-user-message "Initial")))
-     
+
      ;; Should complete without error with empty queue
      (check-not-exn
       (lambda ()
@@ -111,12 +111,12 @@
    (test-case "without queue parameter iteration still works (backward compat)"
      (define bus (make-event-bus))
      (define ctx (list (make-user-message "Initial")))
-     
+
      ;; Mock provider
      (define content-parts (list (hasheq 'type "text" 'text "Response")))
      (define mock-prov
        (make-mock-provider (make-model-response content-parts (hash) "mock" #f)))
-     
+
      ;; Should work without queue parameter (backward compatibility)
      (check-not-exn
       (lambda ()

@@ -1,10 +1,10 @@
 #lang racket/base
 
-;; skills/types.rkt — gemeinsame Typen und Funktionen für Skills
+;; skills/types.rkt — shared types and functions for Skills
 ;;
-;; Dieses Modul enthält die Basis-Typen und Funktionen für das Skills-System.
-;; Es wird sowohl von Runtime-Modulen (für das Resource-Loading) als auch
-;; von Skills-Modulen verwendet. Es verhindert Aufwärtsabhängigkeiten.
+;; This module contains the base types and functions for the skills system.
+;; It is used by both runtime modules (for resource loading) and
+;; skills modules. It prevents upward dependencies.
 ;;
 ;; Exports:
 ;;   resource            — struct for a single discovered resource
@@ -21,9 +21,7 @@
          racket/hash
          racket/list
          json
-         "../util/config-paths.rkt"
-         (only-in "../extensions/hooks.rkt"
-                  dispatch-hooks hook-result-action hook-result-payload hook-result?))
+         "../util/config-paths.rkt")
 
 (provide
  ;; Structs
@@ -177,21 +175,21 @@
   (or (try-read-json cfg-path) (hash)))
 
 ;; Load all resources from a given directory (the .q or .pi dir itself)
-(define (load-resources-from-dir dir #:extension-registry [ext-reg #f])
+(define (load-resources-from-dir dir #:hook-dispatcher [hook-dispatcher #f])
   ;; Dispatch 'resources-discover hook — extensions can block or amend resource discovery
   (define discover-payload (hasheq 'base-dir (path->string dir)))
   (define discover-result
-    (and ext-reg (dispatch-hooks 'resources-discover discover-payload ext-reg)))
+    (and hook-dispatcher (hook-dispatcher 'resources-discover discover-payload)))
   (cond
     [(and discover-result
-          (eq? (hook-result-action discover-result) 'block))
+          (eq? (car discover-result) 'block))
      ;; Block: return empty resource set
      (empty-resource-set)]
     [(and discover-result
-          (eq? (hook-result-action discover-result) 'amend)
-          (resource-set? (hook-result-payload discover-result)))
+          (eq? (car discover-result) 'amend)
+          (resource-set? (cadr discover-result)))
      ;; Amend: extension provided a custom resource-set
-     (hook-result-payload discover-result)]
+     (cadr discover-result)]
     [else
      ;; Normal: scan directory
      (resource-set (load-instructions dir)
@@ -204,23 +202,23 @@
 ;; ============================================================
 
 (define (load-global-resources [base-dir (find-system-path 'home-dir)]
-                            #:extension-registry [ext-reg #f])
+                            #:hook-dispatcher [hook-dispatcher #f])
   ;; Scan <base-dir>/.q/ for global resources.
   (define q-dir (car (project-config-dirs base-dir)))
   (cond
     [(directory-exists? q-dir)
-     (load-resources-from-dir q-dir #:extension-registry ext-reg)]
+     (load-resources-from-dir q-dir #:hook-dispatcher hook-dispatcher)]
     [else (empty-resource-set)]))
 
 (define (load-project-resources [project-dir (current-directory)]
-                             #:extension-registry [ext-reg #f])
+                             #:hook-dispatcher [hook-dispatcher #f])
   ;; Scan <project>/.q/ first, then fall back to <project>/.pi/
   (define dirs (project-config-dirs project-dir))
   (cond
     [(and (pair? dirs) (directory-exists? (car dirs)))
-     (load-resources-from-dir (car dirs) #:extension-registry ext-reg)]
+     (load-resources-from-dir (car dirs) #:hook-dispatcher hook-dispatcher)]
     [(and (>= (length dirs) 2) (directory-exists? (cadr dirs)))
-     (load-resources-from-dir (cadr dirs) #:extension-registry ext-reg)]
+     (load-resources-from-dir (cadr dirs) #:hook-dispatcher hook-dispatcher)]
     [else (empty-resource-set)]))
 
 ;; ============================================================

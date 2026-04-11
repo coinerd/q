@@ -62,10 +62,10 @@
     (define call-count (box 0))
     (define tok (make-cancellation-token #:callback (lambda (_) (set-box! call-count (add1 (unbox call-count))))))
     (cancel-token! tok)
-    (check-true (cancellation-token-cancelled? tok))
+    (check-pred cancellation-token-cancelled? tok)
     (check-equal? (unbox call-count) 1 "callback fires once after first cancel")
     (cancel-token! tok)
-    (check-true (cancellation-token-cancelled? tok))
+    (check-pred cancellation-token-cancelled? tok)
     (check-equal? (unbox call-count) 2 "callback fires again on second cancel"))
 
   (test-case "token with no callback works fine"
@@ -82,7 +82,7 @@
     (define tok1 (make-cancellation-token))
     (define tok2 (make-cancellation-token))
     (cancel-token! tok1)
-    (check-true (cancellation-token-cancelled? tok1))
+    (check-pred cancellation-token-cancelled? tok1)
     (check-false (cancellation-token-cancelled? tok2))))
 
 ;; ============================================================

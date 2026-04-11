@@ -12,7 +12,7 @@
                        "A test tool"
                        (hasheq 'type "object")
                        (λ (args) 'ok)))
-  (check-true (tool? t))
+  (check-pred tool? t)
   (check-equal? (tool-name t) "test")
   (check-equal? (tool-description t) "A test tool")
   (check-equal? (tool-schema t) (hasheq 'type "object")))
@@ -45,13 +45,13 @@
 
 (test-case "make-tool-result creates correct struct"
   (define tr (make-tool-result "hello" (hasheq) #f))
-  (check-true (tool-result? tr))
+  (check-pred tool-result? tr)
   (check-equal? (tool-result-content tr) "hello")
   (check-false (tool-result-is-error? tr)))
 
 (test-case "make-error-result has is-error #t"
   (define tr (make-error-result "something broke"))
-  (check-true (tool-result-is-error? tr))
+  (check-pred tool-result-is-error? tr)
   (check-equal? (tool-result-content tr)
                 (list (hasheq 'type "text" 'text "something broke"))))
 
@@ -81,7 +81,7 @@
 
 (test-case "make-exec-context with defaults"
   (define ctx (make-exec-context))
-  (check-true (exec-context? ctx))
+  (check-pred exec-context? ctx)
   (check-equal? (exec-context-call-id ctx) ""))
 
 (test-case "make-exec-context with all keywords"
@@ -96,7 +96,7 @@
 
 (test-case "make-tool-registry is empty"
   (define reg (make-tool-registry))
-  (check-true (tool-registry? reg))
+  (check-pred tool-registry? reg)
   (check-equal? (tool-names reg) '())
   (check-equal? (list-tools reg) '()))
 
@@ -137,7 +137,7 @@
 
 (test-case "make-tool-call creates struct"
   (define tc (make-tool-call "id-1" "read" (hasheq 'path "/tmp")))
-  (check-true (tool-call? tc))
+  (check-pred tool-call? tc)
   (check-equal? (tool-call-id tc) "id-1")
   (check-equal? (tool-call-name tc) "read"))
 

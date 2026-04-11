@@ -148,7 +148,7 @@
                                         'usage (hasheq 'prompt 200 'completion 75)))))
     (define result (inspect-session path))
     (define formatted (format-inspection result))
-    (check-true (string? formatted))
+    (check-pred string? formatted)
     (check-true (> (string-length formatted) 0))
     (check-true (regexp-match? #rx"[Ee]ntry.count" formatted))
     (check-true (regexp-match? #rx"[Dd]uration" formatted))

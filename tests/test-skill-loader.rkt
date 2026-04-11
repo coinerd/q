@@ -34,14 +34,14 @@
 
 (test-case "resource struct fields"
   (define r (resource 'skill "my-skill" 'global "content here"))
-  (check-true (resource? r))
+  (check-pred resource? r)
   (check-eq? (resource-kind r) 'skill)
   (check-equal? (resource-name r) "my-skill")
   (check-eq? (resource-source r) 'global))
 
 (test-case "empty-resource-set has empty collections"
   (define rs (empty-resource-set))
-  (check-true (resource-set? rs))
+  (check-pred resource-set? rs)
   (check-equal? (resource-set-instructions rs) '())
   (check-equal? (resource-set-skills rs) '())
   (check-equal? (resource-set-templates rs) (hash))

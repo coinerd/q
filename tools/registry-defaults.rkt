@@ -139,7 +139,9 @@
     (when (should-register? "firecrawl")
       (register-tool! registry
         (make-tool "firecrawl"
-                   "Search the web, scrape/crawl/map websites via Firecrawl. Actions: search (web search with query), scrape (extract content from URL), crawl (crawl multiple pages from URL), map (list all URLs at a site). Returns markdown by default. Requires FIRECRAWL_API_KEY environment variable."
+                   "Search the web, scrape/crawl/map websites via Firecrawl. Actions: search (web search with query), scrape (extract
+                       content from URL), crawl (crawl multiple pages from URL), map (list all URLs at a site). Returns markdown by default.
+                              Requires FIRECRAWL_API_KEY environment variable."
                    (hasheq 'type "object"
                            'required '("action")
                            'properties (hasheq 'action (hasheq 'type "string"

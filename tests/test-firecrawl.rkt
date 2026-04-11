@@ -20,15 +20,15 @@
 
    (test-case "missing action returns error"
      (define r (tool-firecrawl (hasheq)))
-     (check-true (tool-result? r))
-     (check-true (tool-result-is-error? r))
+     (check-pred tool-result? r)
+     (check-pred tool-result-is-error? r)
      (check-true (string-contains? (content-text r) "Missing required parameter")
                  (format "Expected missing action message, got: ~a" (content-text r))))
 
    (test-case "invalid action returns error"
      (define r (tool-firecrawl (hasheq 'action "foobar")))
-     (check-true (tool-result? r))
-     (check-true (tool-result-is-error? r))
+     (check-pred tool-result? r)
+     (check-pred tool-result-is-error? r)
      (check-true (string-contains? (content-text r) "Invalid action")
                  (format "Expected invalid action message, got: ~a" (content-text r))))
 
@@ -199,20 +199,20 @@
    (test-case "scrape action returns error result for localhost URL"
      (define r (tool-firecrawl (hasheq 'action "scrape"
                                         'url "http://localhost:8080/secret")))
-     (check-true (tool-result? r))
-     (check-true (tool-result-is-error? r))
+     (check-pred tool-result? r)
+     (check-pred tool-result-is-error? r)
      (check-true (string-contains? (content-text r) "Blocked")))
 
    (test-case "map action returns error result for private IP"
      (define r (tool-firecrawl (hasheq 'action "map"
                                         'url "http://10.0.0.1/internal")))
-     (check-true (tool-result? r))
+     (check-pred tool-result? r)
      (check-true (tool-result-is-error? r)))
 
    (test-case "crawl action returns error result for loopback"
      (define r (tool-firecrawl (hasheq 'action "crawl"
                                         'url "http://127.0.0.1/api")))
-     (check-true (tool-result? r))
+     (check-pred tool-result? r)
      (check-true (tool-result-is-error? r)))))
 
 (run-tests firecrawl-tests)

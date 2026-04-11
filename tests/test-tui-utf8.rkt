@@ -68,9 +68,9 @@
      (check-equal? (utf8-lead-byte-count #xBF) 1)) ; continuation byte
 
    (test-case "utf8-continuation-byte? detects continuation bytes"
-     (check-true (utf8-continuation-byte? #x80))
-     (check-true (utf8-continuation-byte? #xBF))
-     (check-true (utf8-continuation-byte? #xA4))
+     (check-pred utf8-continuation-byte? #x80)
+     (check-pred utf8-continuation-byte? #xBF)
+     (check-pred utf8-continuation-byte? #xA4)
      (check-false (utf8-continuation-byte? #x40))
      (check-false (utf8-continuation-byte? #xC0))
      (check-false (utf8-continuation-byte? #x7F)))
@@ -200,8 +200,8 @@
      ;; tui-keycode converts: (integer->char raw) before checking
      (define kc1 (integer->char #xC3))  ; lead byte
      (define kc2 (integer->char #xA4))  ; continuation byte
-     (check-true (utf8-high-byte? kc1))
-     (check-true (utf8-high-byte? kc2))
+     (check-pred utf8-high-byte? kc1)
+     (check-pred utf8-high-byte? kc2)
      ;; Accumulate through the state machine
      (define r1 (utf8-accumulate-char kc1))
      (check-false r1)  ; incomplete
@@ -476,27 +476,27 @@
 
    (test-case "real-stdin-read-msg: 2-byte UTF-8 (ü)"
      (define msg (read-with-bytes #"\xC3\xBC"))
-     (check-true (tkeymsg? msg))
+     (check-pred tkeymsg? msg)
      (check-equal? (tkeymsg-key msg) #\ü))
 
    (test-case "real-stdin-read-msg: 2-byte UTF-8 (ä)"
      (define msg (read-with-bytes #"\xC3\xA4"))
-     (check-true (tkeymsg? msg))
+     (check-pred tkeymsg? msg)
      (check-equal? (tkeymsg-key msg) #\ä))
 
    (test-case "real-stdin-read-msg: 2-byte UTF-8 (ö)"
      (define msg (read-with-bytes #"\xC3\xB6"))
-     (check-true (tkeymsg? msg))
+     (check-pred tkeymsg? msg)
      (check-equal? (tkeymsg-key msg) #\ö))
 
    (test-case "real-stdin-read-msg: 3-byte UTF-8 (日)"
      (define msg (read-with-bytes #"\xE6\x97\xA5"))
-     (check-true (tkeymsg? msg))
+     (check-pred tkeymsg? msg)
      (check-equal? (tkeymsg-key msg) #\日))
 
    (test-case "real-stdin-read-msg: ASCII passthrough"
      (define msg (read-with-bytes #"h"))
-     (check-true (tkeymsg? msg))
+     (check-pred tkeymsg? msg)
      (check-equal? (tkeymsg-key msg) #\h))
 
    (test-case "real-stdin-read-msg: mixed ASCII+UTF-8"
@@ -508,9 +508,9 @@
      (define msg2
        (parameterize ([current-input-port in])
          (tui-read-key #:timeout 0.05)))
-     (check-true (tkeymsg? msg1))
+     (check-pred tkeymsg? msg1)
      (check-equal? (tkeymsg-key msg1) #\h)
-     (check-true (tkeymsg? msg2))
+     (check-pred tkeymsg? msg2)
      (check-equal? (tkeymsg-key msg2) #\ü))
    ))
 
@@ -531,7 +531,7 @@
      (define mouse-bytes (bytes #x1b #x5b #x4d #x40 #x41 #x42))
      (define msg (parameterize ([current-input-port (open-input-bytes mouse-bytes)])
        (tui-read-key #:timeout 0.05)))
-     (check-true (tmousemsg? msg) "mouse: ESC[M decoded as tmousemsg")
+     (check-pred tmousemsg? msg "mouse: ESC[M decoded as tmousemsg")
      (check-equal? (tmousemsg-cb msg) #x40 "mouse: button code preserved")
      (check-equal? (tmousemsg-cx msg) #x41 "mouse: column byte preserved")
      (check-equal? (tmousemsg-cy msg) #x42 "mouse: row byte preserved"))
@@ -540,7 +540,7 @@
      (define mouse-bytes (bytes #x1b #x5b #x4d #x00 #x20 #x21))
      (define msg (parameterize ([current-input-port (open-input-bytes mouse-bytes)])
        (tui-read-key #:timeout 0.05)))
-     (check-true (tmousemsg? msg))
+     (check-pred tmousemsg? msg)
      (check-equal? (tmousemsg-cb msg) #x00 "mouse: button 0")
      (check-equal? (tmousemsg-cx msg) #x20 "mouse: col 0x20")
      (check-equal? (tmousemsg-cy msg) #x21 "mouse: row 0x21"))

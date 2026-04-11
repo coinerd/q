@@ -16,8 +16,8 @@
 (define tc-part-1 (make-tool-call-part "tc-1" "read" '#hash((path . "foo.rkt"))))
 (define tr-part-1 (make-tool-result-part "tc-1" '("file contents here") #f))
 
-(check-true (text-part? text-part-1) "text-part predicate")
-(check-true (tool-call-part? tc-part-1) "tool-call-part predicate")
+(check-pred text-part? text-part-1 "text-part predicate")
+(check-pred tool-call-part? tc-part-1 "tool-call-part predicate")
 (check-true (tool-result-part? tr-part-1) "tool-result-part predicate")
 
 (check-equal? (content-part-type text-part-1) "text")
@@ -47,7 +47,7 @@
                 1775500000
                 '#hash()))
 
-(check-true (message? msg-1) "message predicate")
+(check-pred message? msg-1 "message predicate")
 (check-equal? (message-id msg-1) "msg-1")
 (check-false (message-parent-id msg-1))
 (check-equal? (message-role msg-1) 'user)
@@ -111,7 +111,7 @@
 (define rt-msg-2 (roundtrip-message msg-2))
 (check-equal? (length (message-content rt-msg-2)) 2)
 (define rt-tc (cadr (message-content rt-msg-2)))
-(check-true (tool-call-part? rt-tc))
+(check-pred tool-call-part? rt-tc)
 (check-equal? (tool-call-part-name rt-tc) "read")
 
 ;; Message with tool-result part
@@ -154,7 +154,7 @@
   (make-event "turn.started" 1775500001 "sess-1" "turn-1"
               '#hash((model . "default"))))
 
-(check-true (event? evt-1) "event predicate")
+(check-pred event? evt-1 "event predicate")
 (check-equal? (event-version evt-1) 1)
 (check-equal? (event-event evt-1) "turn.started")
 (check-equal? (event-time evt-1) 1775500001)
@@ -214,7 +214,7 @@
 ;; ------------------------------------------------------------
 
 (define tc-1 (make-tool-call "tc-42" "bash" '#hash((command . "ls -la"))))
-(check-true (tool-call? tc-1))
+(check-pred tool-call? tc-1)
 (check-equal? (tool-call-id tc-1) "tc-42")
 (check-equal? (tool-call-name tc-1) "bash")
 (check-equal? (hash-ref (tool-call-arguments tc-1) 'command) "ls -la")
@@ -224,14 +224,14 @@
 ;; ------------------------------------------------------------
 
 (define tr-1 (make-tool-result '("line 1" "line 2") '#hash((exitCode . 0)) #f))
-(check-true (tool-result? tr-1))
+(check-pred tool-result? tr-1)
 (check-equal? (tool-result-content tr-1) '("line 1" "line 2"))
 (check-equal? (hash-ref (tool-result-details tr-1) 'exitCode) 0)
 (check-false (tool-result-is-error? tr-1))
 
 ;; Error result
 (define tr-err (make-tool-result '("command not found") '#hash((exitCode . 127)) #t))
-(check-true (tool-result-is-error? tr-err))
+(check-pred tool-result-is-error? tr-err)
 
 ;; ------------------------------------------------------------
 ;; 10. Loop-result struct
@@ -241,7 +241,7 @@
                                'turn-completed
                                '#hash((turnId . "turn-1")
                                       (tokensUsed . 1500))))
-(check-true (loop-result? lr-1))
+(check-pred loop-result? lr-1)
 (check-equal? (length (loop-result-messages lr-1)) 3)
 (check-equal? (loop-result-termination-reason lr-1) 'turn-completed)
 (check-equal? (hash-ref (loop-result-metadata lr-1) 'turnId) "turn-1")

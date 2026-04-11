@@ -25,7 +25,7 @@
     (define exn
       (with-handlers ([exn:fail? identity])
         (check-http-status! #"HTTP/1.1 400 Bad Request" error-json)))
-    (check-true (exn? exn))
+    (check-pred exn? exn)
     (define msg (exn-message exn))
     ;; Should contain status code
     (check-true (string-contains? msg "400") "Message should contain status code")
@@ -41,7 +41,7 @@
     (define exn
       (with-handlers ([exn:fail? identity])
         (check-http-status! #"HTTP/1.1 401 Unauthorized" error-json)))
-    (check-true (exn? exn))
+    (check-pred exn? exn)
     (define msg (exn-message exn))
     (check-true (string-contains? msg "401") "Message should contain status code")
     (check-false (string-contains? msg "#hasheq") "Message should NOT contain #hasheq")
@@ -54,7 +54,7 @@
     (define exn
       (with-handlers ([exn:fail? identity])
         (check-http-status! #"HTTP/1.1 500 Internal Server Error" error-json)))
-    (check-true (exn? exn))
+    (check-pred exn? exn)
     (define msg (exn-message exn))
     (check-true (string-contains? msg "500") "Message should contain status code")
     ;; Fallback to raw jsexpr representation (but not #hasheq since it's a hash without 'error or 'message)
@@ -65,7 +65,7 @@
     (define exn
       (with-handlers ([exn:fail? identity])
         (check-http-status! #"HTTP/1.1 502 Bad Gateway" binary-data)))
-    (check-true (exn? exn))
+    (check-pred exn? exn)
     (define msg (exn-message exn))
     (check-true (string-contains? msg "502") "Message should contain status code")
     (check-true (string-contains? msg "binary body") "Message should indicate binary body"))
@@ -78,7 +78,7 @@
     (define exn
       (with-handlers ([exn:fail? identity])
         (check-http-status! #"HTTP/1.1 422 Unprocessable Entity" error-json)))
-    (check-true (exn? exn))
+    (check-pred exn? exn)
     (define msg (exn-message exn))
     (check-true (string-contains? msg "422") "Message should contain status code")
     (check-true (string-contains? msg "1234") "Message should contain error code")
@@ -91,7 +91,7 @@
     (define exn
       (with-handlers ([exn:fail? identity])
         (check-http-status! #"HTTP/1.1 400 Bad Request" error-json)))
-    (check-true (exn? exn))
+    (check-pred exn? exn)
     (define msg (exn-message exn))
     (check-true (string-contains? msg "400") "Message should contain status code")
     (check-true (string-contains? msg "Something went wrong") "Message should contain error string")

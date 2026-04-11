@@ -89,7 +89,7 @@
 
 ;; Test: info.rkt exists at project root
 (define info-path (build-path q-root "info.rkt"))
-(check-true (file-exists? info-path) "info.rkt missing at project root")
+(check-pred file-exists? info-path "info.rkt missing at project root")
 
 ;; Test: total module count matches BLUEPRINT plan
 (check-equal? (length planned-module-paths) 48

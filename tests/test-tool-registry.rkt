@@ -50,7 +50,7 @@
      (check-true (procedure? make-tool)))
 
    (test-case "make-tool produces a tool with correct fields"
-     (check-true (tool? t))
+     (check-pred tool? t)
      (check-equal? (tool-name t) "read_file")
      (check-equal? (tool-description t) "Read a file")
      (check-equal? (tool-schema t) sample-schema)
@@ -84,7 +84,7 @@
                  (list (hasheq 'type "text" 'text "hello"))
                  (hasheq 'bytesRead 42)
                  #f))
-     (check-true (tool-result? tr))
+     (check-pred tool-result? tr)
      (check-equal? (tool-result-content tr)
                    (list (hasheq 'type "text" 'text "hello")))
      (check-equal? (tool-result-details tr) (hasheq 'bytesRead 42))
@@ -96,14 +96,14 @@
 
    (test-case "make-error-result produces an error tool-result"
      (define err (make-error-result "something went wrong"))
-     (check-true (tool-result? err))
-     (check-true (tool-result-is-error? err))
+     (check-pred tool-result? err)
+     (check-pred tool-result-is-error? err)
      (check-true (and (list? (tool-result-content err))
                       (positive? (length (tool-result-content err))))))
 
    (test-case "make-success-result produces a non-error result with empty details"
      (define ok (make-success-result (list (hasheq 'type "text" 'text "done"))))
-     (check-true (tool-result? ok))
+     (check-pred tool-result? ok)
      (check-false (tool-result-is-error? ok))
      (check-equal? (tool-result-details ok) (hasheq)))
 
@@ -122,7 +122,7 @@
                           (hasheq 'path "/tmp/x.txt" 'lines 5)
                           #f))
      (define tr-jsexpr (tool-result->jsexpr tr-for-json))
-     (check-true (hash? tr-jsexpr))
+     (check-pred hash? tr-jsexpr)
      (check-equal? (hash-ref tr-jsexpr 'isError) #f)
      (check-true (list? (hash-ref tr-jsexpr 'content)))
      (check-true (hash? (hash-ref tr-jsexpr 'details))))
@@ -134,7 +134,7 @@
                           #f))
      (define tr-jsexpr (tool-result->jsexpr tr-for-json))
      (define tr-round (jsexpr->tool-result tr-jsexpr))
-     (check-true (tool-result? tr-round))
+     (check-pred tool-result? tr-round)
      (check-equal? (tool-result-is-error? tr-round) (tool-result-is-error? tr-for-json))
      (check-equal? (hash-ref (list-ref (tool-result-content tr-round) 0) 'text)
                    "file contents here")
@@ -157,7 +157,7 @@
      (define ctx (make-exec-context
                   #:working-directory "/tmp/project"
                   #:call-id "call-123"))
-     (check-true (exec-context? ctx))
+     (check-pred exec-context? ctx)
      (check-equal? (exec-context-working-directory ctx) "/tmp/project")
      (check-equal? (exec-context-call-id ctx) "call-123")
      (check-false (exec-context-cancellation-token ctx))
@@ -186,7 +186,7 @@
 
    (test-case "make-tool-registry produces a registry"
      (define reg (make-tool-registry))
-     (check-true (tool-registry? reg))
+     (check-pred tool-registry? reg)
      (check-equal? (list-tools reg) '())
      (check-equal? (tool-names reg) '()))
 
@@ -338,7 +338,7 @@
                           (make-exec-context
                            #:working-directory "/tmp"
                            #:call-id "echo-1")))
-     (check-true (tool-result? echo-result))
+     (check-pred tool-result? echo-result)
      (check-false (tool-result-is-error? echo-result))
      (check-equal? (hash-ref (list-ref (tool-result-content echo-result) 0) 'text)
                    "hello"))

@@ -273,8 +273,11 @@
                        (hash-set seen entry-id #t))])])))
 
      ;; Only rewrite if something was actually removed
+     ;; Preserve original as .bak for forensic recovery (SEC-09)
      (when (> removed 0)
-       (delete-file session-log-path)
+       (define bak-path (string-append (path->string session-log-path) ".bak"))
+       (when (file-exists? bak-path) (delete-file bak-path))
+       (rename-file-or-directory session-log-path bak-path #t)
        (unless (null? valid-entries)
          (jsonl-append-entries! session-log-path valid-entries)))
 

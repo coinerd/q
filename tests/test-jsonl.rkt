@@ -168,7 +168,7 @@
       (lambda (dir)
         (define path (build-path dir "new.jsonl"))
         (jsonl-append-entries! path (list (hasheq 'hello "world")))
-        (check-true (file-exists? path))
+        (check-pred file-exists? path)
         (define result (jsonl-read-all path))
         (check-equal? (length result) 1))))
 

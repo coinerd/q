@@ -55,14 +55,14 @@
 
 (test-case "build-mock-provider returns a provider"
   (define p (build-mock-provider))
-  (check-true (provider? p))
+  (check-pred provider? p)
   (check-equal? (provider-name p) "mock"))
 
 (test-case "build-mock-provider send returns mock response"
   (define p (build-mock-provider))
   (define req (make-model-request '() #f (hasheq)))
   (define resp (provider-send p req))
-  (check-true (model-response? resp))
+  (check-pred model-response? resp)
   (check-equal? (model-response-model resp) "mock-model")
   (check-eq? (model-response-stop-reason resp) 'stop))
 
@@ -79,5 +79,5 @@
   (define settings (q-settings (hash) (hash) (hash)))  ; empty settings
   (define config (hasheq))
   (define p (build-provider config settings))
-  (check-true (provider? p))
+  (check-pred provider? p)
   (check-equal? (provider-name p) "mock"))

@@ -21,7 +21,7 @@
 
 (test-case "tier? accepts all five valid tiers"
   (for ([t '(hooks commands session providers tui)])
-    (check-true (tier? t) (format "tier? should accept ~a" t))))
+    (check-pred tier? t (format "tier? should accept ~a" t))))
 
 (test-case "tier? rejects non-tier symbols"
   (check-false (tier? 'admin))

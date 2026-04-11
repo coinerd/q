@@ -388,7 +388,8 @@
      (check-equal? (format-event-for-terminal (make-event "tool.call.started" 0 #f #f (hasheq 'name "read"))) "[tool: read]"))
 
    (test-case "tool call failed"
-     (check-equal? (format-event-for-terminal (make-event "tool.call.failed" 0 #f #f (hasheq 'name "bash" 'error "exit 1"))) "[tool failed: bash — exit 1]"))
+     (check-equal? (format-event-for-terminal (make-event "tool.call.failed" 0 #f #f (hasheq 'name "bash" 'error "exit 1")))
+                  "[tool failed: bash — exit 1]"))
 
    (test-case "runtime error"
      (check-equal? (format-event-for-terminal (make-event "runtime.error" 0 #f #f (hasheq 'error "boom"))) "Error: boom"))

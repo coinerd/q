@@ -65,7 +65,9 @@
   (cond
     [(hash-empty? merged)
      ;; No config found -> mock
-     (fprintf (current-error-port) "Warning: No config found (~a.q/config.json or .q/config.json), using mock provider~n" (find-system-path 'home-dir))
+     (fprintf (current-error-port)
+             "Warning: No config found (~a.q/config.json or .q/config.json), using mock provider~n"
+             (find-system-path 'home-dir))
      (build-mock-provider)]
     [else
      (define model-name (hash-ref config 'model #f))

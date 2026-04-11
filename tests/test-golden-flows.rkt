@@ -190,7 +190,7 @@
 (test-case "golden-cli: cli-config->runtime-config produces hash"
   (define cfg (parse-cli-args '#("--max-turns" "3" "--model" "test-model" "hi")))
   (define rt-cfg (cli-config->runtime-config cfg))
-  (check-true (hash? rt-cfg))
+  (check-pred hash? rt-cfg)
   (check-equal? (hash-ref rt-cfg 'max-iterations) 3)
   (check-equal? (hash-ref rt-cfg 'model) "test-model"))
 
@@ -211,7 +211,7 @@
 
 (test-case "golden-json: parse prompt intent"
   (define intent-obj (parse-json-intent "{\"intent\":\"prompt\",\"text\":\"Hello\"}"))
-  (check-true (intent? intent-obj))
+  (check-pred intent? intent-obj)
   (check-equal? (intent-type intent-obj) 'prompt)
   (check-equal? (hash-ref (intent-payload intent-obj) 'text) "Hello"))
 
@@ -270,7 +270,7 @@
     ;; Run prompt
     (define-values (rt3 result) (sdk:run-prompt! rt2 "Hello, world!"))
     (check-true (sdk:runtime? rt3))
-    (check-true (loop-result? result))
+    (check-pred loop-result? result)
     (check-equal? (loop-result-termination-reason result) 'completed)
     ;; History grew
     (define info3 (sdk:session-info rt3))
@@ -278,7 +278,7 @@
     ;; Session log file exists and has valid entries
     (define sid (hash-ref info3 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
-    (check-true (file-exists? log-path))
+    (check-pred file-exists? log-path)
     (define entries (jsonl-read-all-valid log-path))
     (check-true (>= (length entries) 2) "log should have at least user + assistant messages")
     ;; Verify entry structure: first is user message
@@ -546,7 +546,7 @@
     (define-values (handler get-events) (make-event-collector))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define sub-id (sdk:subscribe-events! rt handler))
-    (check-true (exact-nonnegative-integer? sub-id))
+    (check-pred exact-nonnegative-integer? sub-id)
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "sdk sub test")
     (define evts (get-events))
@@ -661,7 +661,7 @@
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "use unknown tool"))
-    (check-true (loop-result? result))
+    (check-pred loop-result? result)
     (check-equal? (loop-result-termination-reason result) 'completed)
     (cleanup-dir dir)))
 
@@ -681,7 +681,7 @@
     (define entries-before (length (jsonl-read-all-valid log-path)))
     ;; Advisory compact (default)
     (define-values (rt3 comp-res) (sdk:compact-session! rt2 #:persist? #f))
-    (check-true (compaction-result? comp-res))
+    (check-pred compaction-result? comp-res)
     ;; Log should NOT have changed
     (define entries-after (length (jsonl-read-all-valid log-path)))
     (check-equal? entries-after entries-before
@@ -703,7 +703,7 @@
     (define entries-before (length (jsonl-read-all-valid log-path)))
     ;; Persist compact
     (define-values (rt3 comp-res) (sdk:compact-session! rt2 #:persist? #t))
-    (check-true (compaction-result? comp-res))
+    (check-pred compaction-result? comp-res)
     (check-true (> (compaction-result-removed-count comp-res) 0)
                 "should remove some messages with 25+ entries")
     ;; Log should have a new compaction-summary entry
@@ -767,7 +767,7 @@
     (define rt2 (sdk:open-session rt))
     (check-false (cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2)))
     (sdk:interrupt! rt2)
-    (check-true (cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2))
+    (check-pred cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2)
                 "interrupt! should cancel the token")
     (cleanup-dir dir)))
 
@@ -978,8 +978,8 @@
     (sdk:run-prompt! rt3 "session B message")
     (define log-a (build-path dir sid2 "session.jsonl"))
     (define log-b (build-path dir sid3 "session.jsonl"))
-    (check-true (file-exists? log-a))
-    (check-true (file-exists? log-b))
+    (check-pred file-exists? log-a)
+    (check-pred file-exists? log-b)
     (check-true (>= (length (jsonl-read-all-valid log-a)) 2))
     (check-true (>= (length (jsonl-read-all-valid log-b)) 2))
     (cleanup-dir dir)))

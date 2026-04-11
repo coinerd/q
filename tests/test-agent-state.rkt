@@ -9,7 +9,7 @@
 
 (test-case "make-loop-state creates state with correct fields"
   (define st (make-loop-state "sess-1" "turn-1"))
-  (check-true (loop-state? st))
+  (check-pred loop-state? st)
   (check-equal? (loop-state-session-id st) "sess-1")
   (check-equal? (loop-state-turn-id st) "turn-1")
   (check-equal? (loop-state-messages st) '())

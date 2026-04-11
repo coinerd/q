@@ -1,56 +1,56 @@
-# skills/ Modul-Architektur
+# skills/ Module Architecture
 
-## Übersicht
+## Overview
 
-Die Skills-Module wurden refactored, um eine Aufwärtsabhängigkeit zu runtime/ zu vermeiden.
+The skills modules were refactored to avoid an upward dependency on runtime/.
 
 ## Module
 
 ### types.rkt
 
-**Zweck**: Enthält alle gemeinsamen Typen und Funktionen für Skills.
+**Purpose**: Contains all shared types and functions for skills.
 
-**Exportiert**:
-- `resource` (struct) - Einzelne Ressource
-- `resource-set` (struct) - Sammlung von Ressourcen
-- `empty-resource-set` - Konstruktor für leere Ressource-Sets
-- `load-global-resources` - Lädt globale Ressourcen aus ~/.q/
-- `load-project-resources` - Lädt Projekt-Ressourcen aus .q/ oder .pi/
-- `merge-resources` - Kombiniert globale und Projekt-Ressourcen
-- `render-template` - Ersetzt {{var}}-Platzhalter in Templates
+**Exports**:
+- `resource` (struct) — single resource
+- `resource-set` (struct) — collection of resources
+- `empty-resource-set` — constructor for empty resource sets
+- `load-global-resources` — loads global resources from ~/.q/
+- `load-project-resources` — loads project resources from .q/ or .pi/
+- `merge-resources` — combines global and project resources
+- `render-template` — substitutes {{var}} placeholders in templates
 
-**Abhängigkeiten**: Keine Abhängigkeit zu runtime/*
+**Dependencies**: No dependency on runtime/*
 
 ### prompt-template.rkt
 
-**Zweck**: Re-Export von `render-template` für Abwärtskompatibilität.
+**Purpose**: Re-exports `render-template` for backward compatibility.
 
-**Exportiert**:
+**Exports**:
 - `render-template`
 
-**Abhängigkeiten**: Importiert nur von `types.rkt`
+**Dependencies**: Imports only from `types.rkt`
 
 ### skill-loader.rkt
 
-**Zweck**: Re-Export aller Skills-Funktionen für Abwärtskompatibilität.
+**Purpose**: Re-exports all skills functions for backward compatibility.
 
-**Exportiert**: Alle Bindungen aus `types.rkt`
+**Exports**: All bindings from `types.rkt`
 
-**Abhängigkeiten**: Importiert nur von `types.rkt`
+**Dependencies**: Imports only from `types.rkt`
 
-## Architektur-Verbesserung
+## Architecture Improvement
 
-### Vorher (Anti-Pattern)
+### Before (Anti-Pattern)
 ```
-skills/prompt-template.rkt ──importiert──▶ runtime/resource-loader.rkt
-skills/skill-loader.rkt ────importiert──▶ runtime/resource-loader.rkt
-```
-
-### Nachher (Saubere Architektur)
-```
-runtime/resource-loader.rkt ──importiert──▶ skills/types.rkt
-skills/prompt-template.rkt ───importiert──▶ skills/types.rkt
-skills/skill-loader.rkt ─────importiert──▶ skills/types.rkt
+skills/prompt-template.rkt ──imports──▶ runtime/resource-loader.rkt
+skills/skill-loader.rkt ────imports──▶ runtime/resource-loader.rkt
 ```
 
-Die gemeinsamen Typen und Funktionen sind nun in `skills/types.rkt` zentralisiert, und `runtime/resource-loader.rkt` importiert diese (statt umgekehrt).
+### After (Clean Architecture)
+```
+runtime/resource-loader.rkt ──imports──▶ skills/types.rkt
+skills/prompt-template.rkt ───imports──▶ skills/types.rkt
+skills/skill-loader.rkt ─────imports──▶ skills/types.rkt
+```
+
+The shared types and functions are now centralized in `skills/types.rkt`, and `runtime/resource-loader.rkt` imports from it (instead of the other way around).

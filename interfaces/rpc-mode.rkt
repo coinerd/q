@@ -2,6 +2,7 @@
 
 (require racket/contract
          racket/string
+         racket/math
          json
          racket/port
          "../agent/types.rkt"
@@ -38,6 +39,11 @@
  RPC-ERROR-METHOD-NOT-FOUND
  RPC-ERROR-INVALID-PARAMS
  RPC-ERROR-INTERNAL
+ RPC-ERROR-HANDSHAKE-REQUIRED
+
+ ;; Handshake
+ generate-handshake-token
+ rpc-handshake-valid?
 
  ;; Dispatch
  dispatch-rpc-request
@@ -66,6 +72,26 @@
 (define RPC-ERROR-METHOD-NOT-FOUND -32601)
 (define RPC-ERROR-INVALID-PARAMS -32602)
 (define RPC-ERROR-INTERNAL -32603)
+(define RPC-ERROR-HANDSHAKE-REQUIRED -32001)
+
+;; ============================================================
+;; Handshake token (SEC-15)
+;; ============================================================
+
+(define (generate-handshake-token)
+  ;; Generate a pseudo-random handshake token from timestamp + random
+  (format "~a-~a" (exact-truncate (current-inexact-milliseconds)) (random 1000000000)))
+
+(define (rpc-handshake-valid? line expected-token)
+  ;; Check if line is a valid handshake with the expected token.
+  ;; Accepts: {"method":"handshake","params":{"token":"<TOKEN>"}}
+  (with-handlers ([exn:fail? (λ (_) #f)])
+    (let ([js (read-json (open-input-string (string-trim line)))])
+      (and (hash? js)
+           (equal? (hash-ref js 'method #f) "handshake")
+           (let ([params (hash-ref js 'params #f)])
+             (and (hash? params)
+                  (equal? (hash-ref params 'token #f) expected-token)))))))
 
 ;; ============================================================
 ;; Error helper
@@ -153,32 +179,55 @@
 
 (define (run-rpc-loop handlers
                        #:input-port [in (current-input-port)]
-                       #:output-port [out (current-output-port)])
-  (let loop ()
-    (let ([line (read-line in)])
-      (unless (eof-object? line)
-        (let ([trimmed (string-trim line)])
-          (if (string=? trimmed "")
-              (loop)
-              (let ([req (parse-rpc-request line)])
-                (if req
-                    (let ([resp (dispatch-rpc-request req handlers)])
-                      (write-rpc-line out resp)
-                      (unless (eq? (rpc-request-method req) 'shutdown)
-                        (loop)))
-                    ;; Invalid request — determine error type
-                    (let ([valid-json?
-                           (with-handlers ([exn:fail? (λ (_) #f)])
-                             (read-json (open-input-string trimmed))
-                             #t)])
-                      (if valid-json?
-                          (let* ([parsed (read-json (open-input-string trimmed))]
-                                 [id (hash-ref parsed 'id #f)])
-                            (write-rpc-line out (rpc-error id RPC-ERROR-INVALID-REQUEST
-                                                            "Invalid request")))
-                          (write-rpc-line out (rpc-response #f #f (hasheq 'code RPC-ERROR-PARSE
-                                                                           'message "Parse error"))))
-                      (loop))))))))))
+                       #:output-port [out (current-output-port)]
+                       #:handshake-token [handshake-token #f])
+  ;; SEC-15: If handshake token provided, require it before any commands
+  (when handshake-token
+    (fprintf (current-error-port) "RPC handshake token: ~a\n" handshake-token))
+  (define authenticated? (box (not handshake-token)))
+  ;; Read lines until handshake succeeds (if required)
+  (when handshake-token
+    (let handshake-loop ()
+      (let ([line (read-line in)])
+        (unless (eof-object? line)
+          (let ([trimmed (string-trim line)])
+            (cond
+              [(string=? trimmed "") (handshake-loop)]
+              [(rpc-handshake-valid? line handshake-token)
+               (set-box! authenticated? #t)]
+              [else
+               (write-rpc-line out (rpc-response #f #f (hasheq 'code RPC-ERROR-HANDSHAKE-REQUIRED
+                                                                  'message "Handshake required")))
+               ;; Close connection on failed handshake
+               (close-input-port in)
+               (close-output-port out)]))))))
+  ;; Main command loop — only runs if authenticated
+  (when (unbox authenticated?)
+    (let loop ()
+      (let ([line (read-line in)])
+        (unless (eof-object? line)
+          (let ([trimmed (string-trim line)])
+            (if (string=? trimmed "")
+                (loop)
+                (let ([req (parse-rpc-request line)])
+                  (if req
+                      (let ([resp (dispatch-rpc-request req handlers)])
+                        (write-rpc-line out resp)
+                        (unless (eq? (rpc-request-method req) 'shutdown)
+                          (loop)))
+                      ;; Invalid request — determine error type
+                      (let ([valid-json?
+                             (with-handlers ([exn:fail? (λ (_) #f)])
+                               (read-json (open-input-string trimmed))
+                               #t)])
+                        (if valid-json?
+                            (let* ([parsed (read-json (open-input-string trimmed))]
+                                   [id (hash-ref parsed 'id #f)])
+                              (write-rpc-line out (rpc-error id RPC-ERROR-INVALID-REQUEST
+                                                              "Invalid request")))
+                            (write-rpc-line out (rpc-response #f #f (hasheq 'code RPC-ERROR-PARSE
+                                                                             'message "Parse error"))))
+                        (loop)))))))))))
 
 ;; ============================================================
 ;; Event forwarding
