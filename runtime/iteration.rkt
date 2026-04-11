@@ -27,7 +27,7 @@
          (only-in "../tools/tool.rkt"
                   make-exec-context
                   tool-result-content tool-result-is-error?
-                  list-tools)
+                  list-tools-jsexpr)
          "../tools/scheduler.rkt"
          "../extensions/hooks.rkt"
          "../runtime/session-store.rkt"
@@ -229,7 +229,7 @@
                                    (hasheq 'session-id session-id 'turn-id turn-id)))
 
        ;; Get tools from registry for the LLM request
-       (define tools (and reg (list-tools reg)))
+       (define tools (and reg (list-tools-jsexpr reg)))
 
        (define result
          (run-agent-turn ctx-final prov bus

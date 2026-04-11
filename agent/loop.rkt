@@ -168,8 +168,8 @@
          #:state st)
 
   ;; 4. Build model-request and call provider-stream
-  ;; tools is already a (listof hash?) in OpenAI format,
-  ;; passed in by the caller (iteration.rkt).
+  ;; tools is a (listof hash?) in OpenAI normalized format,
+  ;; passed in by the caller (iteration.rkt) via list-tools-jsexpr.
   (define req (make-model-request raw-messages tools (hasheq)))
 
   ;; R2-7: model-request-pre hook -- dispatch before sending to provider
