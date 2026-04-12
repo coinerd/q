@@ -23,6 +23,7 @@ desktop.ini
 # Temporary/debug files
 *.tmp
 *.bak
+.tmp/
 
 # Secrets — NEVER commit these
 .env
