@@ -1020,5 +1020,9 @@
     (with-handlers ([exn:fail? (lambda (e)
                                  (displayln (format-classified-error e (cli-config-verbose? cfg))
                                             (current-error-port)))])
-      (let-values ([(_sess _result) (session-fn prompt)])
-        (void)))))
+      (call-with-values
+        (lambda () (session-fn prompt))
+        (case-lambda
+          [(sess result) (void)]
+          [(v) (void)]
+          [() (void)])))))

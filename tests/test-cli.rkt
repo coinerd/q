@@ -988,27 +988,46 @@
  (test-suite "Issue #143: run-init-wizard"
 
    (test-case "wizard creates config with valid provider"
-     (define tmp-dir (make-temporary-file "q-init-test-~a" 'directory))
-     ;; Simulate user input: openai, api-key, model, enter
-     (define in (open-input-string "openai\nsk-test-123\ngpt-4o\n"))
-     (define out (open-output-string))
-     ;; Override home dir by parameterizing current-directory isn't enough,
-     ;; so just run the wizard and verify it doesn't crash
-     ;; (full integration test needs mocked home-dir)
-     ;; For now, test with a string port — wizard writes to real ~/.q/
-     ;; but we can at least verify it runs without error on valid input
-     (check-not-exn (lambda ()
-                      (run-init-wizard #:in (open-input-string "openai\nsk-test\n\n")
-                                       #:out (open-output-string)))))
+     ;; Save and restore ~/.q/config.json to avoid polluting other tests
+     (define config-path (build-path (find-system-path 'home-dir) ".q" "config.json"))
+     (define backup-path (make-temporary-file "q-init-backup-~a"))
+     (define had-config? (file-exists? config-path))
+     (when had-config?
+       (copy-file config-path backup-path #t))
+     (dynamic-wind
+       (lambda () (void))
+       (lambda ()
+         (check-not-exn (lambda ()
+                          (run-init-wizard #:in (open-input-string "openai\nsk-test\n\n")
+                                           #:out (open-output-string)))))
+       (lambda ()
+         (if had-config?
+             (copy-file backup-path config-path #t)
+             (when (file-exists? config-path)
+               (delete-file config-path)))
+         (when (file-exists? backup-path)
+           (delete-file backup-path)))))
 
    (test-case "wizard rejects invalid provider"
-     (define out (open-output-string))
-     ;; Invalid provider → should print error and not write config
-     ;; Note: if ~/.q/config.json exists, the first input is consumed by overwrite prompt
-     ;; So we provide enough input for both scenarios
-     (run-init-wizard #:in (open-input-string "y\ninvalid\n") #:out out)
-     (define output (get-output-string out))
-     (check-true (string-contains? output "Invalid provider") "should reject invalid provider"))))
+     (define config-path (build-path (find-system-path 'home-dir) ".q" "config.json"))
+     (define backup-path (make-temporary-file "q-init-backup-~a"))
+     (define had-config? (file-exists? config-path))
+     (when had-config?
+       (copy-file config-path backup-path #t))
+     (dynamic-wind
+       (lambda () (void))
+       (lambda ()
+         (define out (open-output-string))
+         (run-init-wizard #:in (open-input-string "y\ninvalid\n") #:out out)
+         (define output (get-output-string out))
+         (check-true (string-contains? output "Invalid provider") "should reject invalid provider"))
+       (lambda ()
+         (if had-config?
+             (copy-file backup-path config-path #t)
+             (when (file-exists? config-path)
+               (delete-file config-path)))
+         (when (file-exists? backup-path)
+             (delete-file backup-path)))))))
 ;; ═══════════════════════════════════════════
 ;; Issue #160: 'sessions' subcommand parsing
 ;; ═══════════════════════════════════════════
