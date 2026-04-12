@@ -14,7 +14,9 @@
          "../interfaces/tui.rkt"
          "../tui/input.rkt"
          "../tui/state.rkt"
-         "../tui/terminal.rkt")
+         "../tui/terminal.rkt"
+         "../agent/event-bus.rkt"
+         "../agent/types.rkt")
 
 ;; Helper: create a tui-ctx for testing
 (define (make-test-ctx)
@@ -181,6 +183,82 @@
      (check-equal? result 'continue)
      (define new-inp (unbox (tui-ctx-input-state-box ctx)))
      (check-equal? (input-state-cursor new-inp) 5))
+
+   ;; ============================================================
+   ;; Issue #127: Ctrl+C interrupts agent when no selection active
+   ;; ============================================================
+
+   (test-case "handle-key 'ctrl-c with no selection interrupts agent"
+     (define bus (make-event-bus))
+     (define published-events '())
+     ;; Subscribe to capture published events
+     (subscribe! bus (lambda (evt)
+                       (set! published-events (cons evt published-events))))
+     (define ctx (make-tui-ctx #:event-bus bus))
+     ;; Set state to busy with no selection
+     (define busy-state
+       (struct-copy ui-state (initial-ui-state)
+                    [busy? #t]
+                    [streaming-text "partial..."]
+                    [pending-tool-name "bash"]))
+     (set-box! (tui-ctx-ui-state-box ctx) busy-state)
+     ;; Send ctrl-c
+     (define result (handle-key ctx 'ctrl-c))
+     (check-equal? result 'continue)
+     ;; Verify state is no longer busy
+     (define new-state (unbox (tui-ctx-ui-state-box ctx)))
+     (check-false (ui-state-busy? new-state) "ctrl-c clears busy state")
+     (check-false (ui-state-streaming-text new-state) "ctrl-c clears streaming text")
+     (check-false (ui-state-pending-tool-name new-state) "ctrl-c clears pending tool")
+     ;; Verify interrupt event was published
+     (check-equal? (length published-events) 1 "one event published")
+     (check-equal? (event-ev (car published-events))
+                   "interrupt.requested"
+                   "published interrupt.requested event"))
+
+   (test-case "handle-key 'ctrl-c with selection copies instead of interrupting"
+     (define bus (make-event-bus))
+     (define published-events '())
+     (subscribe! bus (lambda (evt)
+                       (set! published-events (cons evt published-events))))
+     (define ctx (make-tui-ctx #:event-bus bus))
+     ;; Set state to busy WITH selection
+     (define busy-state
+       (set-selection-anchor
+        (struct-copy ui-state (initial-ui-state) [busy? #t])
+        0 0))
+     (set-box! (tui-ctx-ui-state-box ctx) busy-state)
+     ;; Send ctrl-c
+     (define result (handle-key ctx 'ctrl-c))
+     (check-equal? result 'continue)
+     ;; State should still be busy (copy, not interrupt)
+     (define new-state (unbox (tui-ctx-ui-state-box ctx)))
+     (check-true (ui-state-busy? new-state) "ctrl-c with selection keeps busy state")
+     ;; No interrupt event published
+     (check-equal? (length published-events) 0 "no interrupt event when selection active"))
+
+   ;; ============================================================
+   ;; Issue #133: Ctrl+J (#\newline) inserts newline
+   ;; ============================================================
+
+   (test-case "handle-key #\\newline inserts newline (multi-line input)"
+     (define ctx (make-test-ctx))
+     (define inp (make-input-with-text "hello" 2))
+     (set-box! (tui-ctx-input-state-box ctx) inp)
+     (define result (handle-key ctx #\newline))
+     (check-equal? result 'continue)
+     (define new-inp (unbox (tui-ctx-input-state-box ctx)))
+     (check-equal? (input-state-buffer new-inp) "he\nllo")
+     (check-equal? (input-state-cursor new-inp) 3))
+
+   (test-case "handle-key #\\return still submits input"
+     (define ctx (make-test-ctx))
+     (define inp (make-input-with-text "hello" 5))
+     (set-box! (tui-ctx-input-state-box ctx) inp)
+     (define result (handle-key ctx #\return))
+     (check-equal? result '(submit "hello"))
+     (define new-inp (unbox (tui-ctx-input-state-box ctx)))
+     (check-equal? (input-state-buffer new-inp) ""))
    ))
 
 (run-tests test-tui-keys)

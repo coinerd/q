@@ -8,62 +8,62 @@
 (require racket/string
          racket/list)
 
-(provide
- ;; Structs
- (struct-out input-state)
- (struct-out mouse-event)
+;; Structs
+(provide (struct-out input-state)
+         (struct-out mouse-event)
 
- ;; Constructors
- initial-input-state
+         ;; Constructors
+         initial-input-state
 
- ;; Editing (all pure, return new input-state)
- input-insert-char
- input-backspace
- input-delete
- input-cursor-left
- input-cursor-right
- input-home
- input-end
- input-clear
+         ;; Editing (all pure, return new input-state)
+         input-insert-char
+         input-insert-newline
+         input-backspace
+         input-delete
+         input-cursor-left
+         input-cursor-right
+         input-home
+         input-end
+         input-clear
 
- ;; History
- input-history-push
- input-history-up
- input-history-down
+         ;; History
+         input-history-push
+         input-history-up
+         input-history-down
 
- ;; Submission
- input-submit
- input-current-text
- input-at-beginning?
- input-at-end?
- input-empty?
+         ;; Submission
+         input-submit
+         input-current-text
+         input-at-beginning?
+         input-at-end?
+         input-empty?
 
- ;; Slash commands
- input-slash-command
- parse-tui-slash-command
+         ;; Slash commands
+         input-slash-command
+         parse-tui-slash-command
 
- ;; Horizontal scroll
- input-visible-window
- INPUT-PROMPT-WIDTH
+         ;; Horizontal scroll
+         input-visible-window
+         INPUT-PROMPT-WIDTH
 
- ;; Mouse events
- parse-mouse-event
+         ;; Mouse events
+         parse-mouse-event
 
- ;; Selection helpers
- normalize-selection-range
+         ;; Selection helpers
+         normalize-selection-range
 
- ;; X10 mouse decoding
- decode-mouse-x10)
+         ;; X10 mouse decoding
+         decode-mouse-x10)
 
 ;; Input state
 (struct input-state
-  (buffer       ; string — current input text
-   cursor       ; integer — cursor position (0 = before first char)
-   history      ; (listof string) — submitted inputs, newest last
-   history-idx  ; integer or #f — current position in history (#f = not browsing)
-   saved-text   ; string or #f — text saved when entering history browsing
-   scroll-offset ; integer — horizontal scroll offset for long inputs
-   )
+        (buffer ; string — current input text
+         cursor ; integer — cursor position (0 = before first char)
+         history ; (listof string) — submitted inputs, newest last
+         history-idx ; integer or #f — current position in history (#f = not browsing)
+         saved-text ; string or #f — text saved when entering history browsing
+         scroll-offset ; integer — horizontal scroll offset for long inputs
+         )
   #:transparent)
 
 (define (initial-input-state)
@@ -73,23 +73,16 @@
 (define (input-insert-char st ch)
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
-  (define new-buf (string-append (substring buf 0 cur)
-                                 (string ch)
-                                 (substring buf cur)))
-  (struct-copy input-state st
-               [buffer new-buf]
-               [cursor (+ cur 1)]))
+  (define new-buf (string-append (substring buf 0 cur) (string ch) (substring buf cur)))
+  (struct-copy input-state st [buffer new-buf] [cursor (+ cur 1)]))
 
 (define (input-backspace st)
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (if (zero? cur)
       st
-      (let ([new-buf (string-append (substring buf 0 (- cur 1))
-                                    (substring buf cur))])
-        (struct-copy input-state st
-                     [buffer new-buf]
-                     [cursor (- cur 1)]))))
+      (let ([new-buf (string-append (substring buf 0 (- cur 1)) (substring buf cur))])
+        (struct-copy input-state st [buffer new-buf] [cursor (- cur 1)]))))
 
 ;; Visible input width helper — prompt takes 4 columns ("q> ")
 (define INPUT-PROMPT-WIDTH 3)
@@ -114,14 +107,21 @@
   (define cursor-display-col (+ INPUT-PROMPT-WIDTH (- cur clamped-offset)))
   (values visible-text clamped-offset cursor-display-col))
 
+;; Insert a literal newline at cursor position (for multi-line input)
+(define (input-insert-newline st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (define new-buf (string-append (substring buf 0 cur) "\n" (substring buf cur)))
+  (struct-copy input-state st [buffer new-buf] [cursor (add1 cur)] [history-idx #f]))
+
 (define (input-delete st)
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (if (>= cur (string-length buf))
       st
-      (struct-copy input-state st
-                   [buffer (string-append (substring buf 0 cur)
-                                          (substring buf (+ cur 1)))]
+      (struct-copy input-state
+                   st
+                   [buffer (string-append (substring buf 0 cur) (substring buf (+ cur 1)))]
                    [cursor cur])))
 
 (define (input-cursor-left st)
@@ -153,7 +153,8 @@
           (and (not (null? (input-state-history st)))
                (string=? text (last (input-state-history st)))))
       st
-      (struct-copy input-state st
+      (struct-copy input-state
+                   st
                    [history (append (input-state-history st) (list text))]
                    [history-idx #f]
                    [saved-text #f])))
@@ -165,13 +166,13 @@
       st
       (let* ([current-idx (input-state-history-idx st)]
              [new-idx (if (not current-idx)
-                          (- (length hist) 1)  ; start at newest
+                          (- (length hist) 1) ; start at newest
                           (- current-idx 1))])
         (if (< new-idx 0)
-            st  ; already at oldest
-            (let ([saved (or (input-state-saved-text st)
-                             (input-state-buffer st))])
-              (struct-copy input-state st
+            st ; already at oldest
+            (let ([saved (or (input-state-saved-text st) (input-state-buffer st))])
+              (struct-copy input-state
+                           st
                            [history-idx new-idx]
                            [buffer (list-ref hist new-idx)]
                            [cursor (string-length (list-ref hist new-idx))]
@@ -187,13 +188,15 @@
         (if (>= new-idx (length hist))
             ;; Exit history browsing — restore saved text
             (let ([saved (or (input-state-saved-text st) "")])
-              (struct-copy input-state st
+              (struct-copy input-state
+                           st
                            [history-idx #f]
                            [buffer saved]
                            [cursor (string-length saved)]
                            [saved-text #f]))
             ;; Move to next entry
-            (struct-copy input-state st
+            (struct-copy input-state
+                         st
                          [history-idx new-idx]
                          [buffer (list-ref hist new-idx)]
                          [cursor (string-length (list-ref hist new-idx))])))))
@@ -206,9 +209,7 @@
   (if (string=? text "")
       (values #f st)
       (let ([pushed (input-history-push st text)])
-        (values text (struct-copy input-state pushed
-                                  [buffer ""]
-                                  [cursor 0])))))
+        (values text (struct-copy input-state pushed [buffer ""] [cursor 0])))))
 
 (define (input-current-text st)
   (input-state-buffer st))
@@ -228,11 +229,11 @@
 
 ;; Mouse event types: 'mouse-click, 'mouse-scroll-up, 'mouse-scroll-down
 (struct mouse-event
-  (type   ; symbol: 'mouse-click | 'mouse-scroll-up | 'mouse-scroll-down
-   button ; integer: button number (0=left, 1=middle, 2=right) for clicks, 0 otherwise
-   x      ; integer: column (0-based)
-   y      ; integer: row (0-based)
-   )
+        (type ; symbol: 'mouse-click | 'mouse-scroll-up | 'mouse-scroll-down
+         button ; integer: button number (0=left, 1=middle, 2=right) for clicks, 0 otherwise
+         x ; integer: column (0-based)
+         y ; integer: row (0-based)
+         )
   #:transparent)
 
 ;; Parse a mouse event from raw bytes.
@@ -266,14 +267,12 @@
             (let* ([button-code (- cb 32)]
                    [button (bitwise-and button-code #x03)]
                    [modifier (bitwise-and button-code #x1c)]
-                   [x (- cx 33)]  ; convert to 0-based
+                   [x (- cx 33)] ; convert to 0-based
                    [y (- cy 33)])
               (cond
                 ;; Scroll wheel: button-code has bit 6 set (64)
                 [(= (bitwise-and button-code 64) 64)
-                 (mouse-event (if (= button 0)
-                                  'mouse-scroll-up
-                                  'mouse-scroll-down)
+                 (mouse-event (if (= button 0) 'mouse-scroll-up 'mouse-scroll-down)
                               0
                               (max 0 x)
                               (max 0 y))]
@@ -292,9 +291,7 @@
 ;; Normalize selection so start <= end (row-major order)
 ;; Returns (values start-col start-row end-col end-row)
 (define (normalize-selection-range anchor end)
-  (if (or (< (cdr anchor) (cdr end))
-          (and (= (cdr anchor) (cdr end))
-               (<= (car anchor) (car end))))
+  (if (or (< (cdr anchor) (cdr end)) (and (= (cdr anchor) (cdr end)) (<= (car anchor) (car end))))
       (values (car anchor) (cdr anchor) (car end) (cdr end))
       (values (car end) (cdr end) (car anchor) (cdr anchor))))
 
@@ -314,25 +311,20 @@
   (define y (- cy 33))
   (cond
     ;; Scroll wheel
-    [scroll?
-     (list 'mouse (if (= button 0) 'scroll-up 'scroll-down) x y)]
+    [scroll? (list 'mouse (if (= button 0) 'scroll-up 'scroll-down) x y)]
     ;; Release: button=3 in X10 mode 1002.
     ;; In mode 1002, release has button bits = 3, motion bit = 0.
-    [(= button 3)
-     (list 'mouse 'release x y)]
+    [(= button 3) (list 'mouse 'release x y)]
     ;; Drag: motion bit set, button still held
-    [(and motion? (<= button 2))
-     (list 'mouse 'drag x y)]
+    [(and motion? (<= button 2)) (list 'mouse 'drag x y)]
     ;; Click (press): no motion, no scroll
-    [(and (<= button 2) (not motion?))
-     (list 'mouse 'click button x y)]
+    [(and (<= button 2) (not motion?)) (list 'mouse 'click button x y)]
     [else #f]))
 
 ;; Slash commands
 (define (input-slash-command text)
   ;; Returns #t if text starts with /
-  (and (> (string-length text) 0)
-       (char=? (string-ref text 0) #\/)))
+  (and (> (string-length text) 0) (char=? (string-ref text 0) #\/)))
 
 ;; Parse slash command from input text
 ;; Returns: symbol | (list symbol arg...) | #f
@@ -371,6 +363,6 @@
        [(member cmd '("/history")) 'history]
        [(member cmd '("/fork"))
         (if (null? args)
-            'history  ; /fork with no arg shows history as fallback
+            'history ; /fork with no arg shows history as fallback
             `(fork ,(car args)))]
        [else 'unknown])]))

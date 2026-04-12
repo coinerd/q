@@ -127,12 +127,22 @@
   (check-equal? (car result) 'submit "submit result starts with 'submit")
   (check-equal? (cadr result) "hi" "submit result contains text"))
 
-;; Submit with newline
+;; Submit with return (was #\newline; now #\newline inserts newline per #133)
+(let ([ctx (make-tui-ctx)])
+  (handle-key ctx #\y)
+  (handle-key ctx #\o)
+  (define result (handle-key ctx #\return))
+  (check-equal? (car result) 'submit "return submits"))
+
+;; #\newline now inserts newline (Issue #133)
 (let ([ctx (make-tui-ctx)])
   (handle-key ctx #\y)
   (handle-key ctx #\o)
   (define result (handle-key ctx #\newline))
-  (check-equal? (car result) 'submit "newline also submits"))
+  (check-equal? result 'continue "newline inserts, does not submit")
+  (define inp (unbox (tui-ctx-input-state-box ctx)))
+  (check-true (string-contains? (input-state-buffer inp) "\n")
+              "newline char in buffer"))
 
 ;; Submit slash command
 (let ([ctx (make-tui-ctx)])

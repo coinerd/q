@@ -28,7 +28,7 @@
 ;; Prefer GNU libreadline over libedit for proper UTF-8 support.
 ;; libedit has known issues with multi-byte UTF-8 characters (äüö → C<C$C6C).
 (void (unless (getenv "PLT_READLINE_LIB")
-       (putenv "PLT_READLINE_LIB" "libreadline.so.8")))
+        (putenv "PLT_READLINE_LIB" "libreadline.so.8")))
 
 (define readline-available?
   (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -39,9 +39,7 @@
     ;; returned line (first few characters get prepended).
     (with-handlers ([exn:fail? void])
       (define librl (ffi-lib "libreadline" '("8.2" "8.1" "8" #f)))
-      (define rl-variable-bind
-        (get-ffi-obj "rl_variable_bind" librl
-                     (_fun _string _string -> _int)))
+      (define rl-variable-bind (get-ffi-obj "rl_variable_bind" librl (_fun _string _string -> _int)))
       (rl-variable-bind "enable-bracketed-paste" "off"))
     #t))
 
@@ -49,20 +47,17 @@
   ;; Use readline when available and stdin is a terminal-like port
   ;; (not a pipe or string port, which would cause readline to fail)
   (cond
-    [(and readline-available?
-          (eq? in (current-input-port)))
+    [(and readline-available? (eq? in (current-input-port)))
      ;; Only use readline for real stdin — not for test ports
      (define rl-readline (dynamic-require 'readline/rktrl 'readline))
      (define rl-add-history (dynamic-require 'readline/rktrl 'add-history))
-     (with-handlers ([exn:fail?
-                      (lambda (_)
-                        ;; readline failed (not a TTY) — fall back
-                        (display prompt out)
-                        (flush-output out)
-                        (read-line in))])
+     (with-handlers ([exn:fail? (lambda (_)
+                                  ;; readline failed (not a TTY) — fall back
+                                  (display prompt out)
+                                  (flush-output out)
+                                  (read-line in))])
        (define line (rl-readline prompt))
-       (when (and (string? line)
-                  (not (string=? (string-trim line) "")))
+       (when (and (string? line) (not (string=? (string-trim line) "")))
          (rl-add-history line))
        line)]
     [else
@@ -71,42 +66,41 @@
      (flush-output out)
      (read-line in)]))
 
-(provide
- ;; Struct
- (struct-out cli-config)
+;; Struct
+(provide (struct-out cli-config)
 
- ;; Pure functions
- parse-cli-args
- cli-config->runtime-config
- format-event-for-terminal
- make-stream-markdown-writer
- render-markdown
- parse-slash-command
+         ;; Pure functions
+         parse-cli-args
+         cli-config->runtime-config
+         format-event-for-terminal
+         make-stream-markdown-writer
+         render-markdown
+         parse-slash-command
 
- ;; I/O functions
- run-cli-interactive
- run-cli-single
- print-usage
- print-version)
+         ;; I/O functions
+         run-cli-interactive
+         run-cli-single
+         print-usage
+         print-version)
 
 ;; ============================================================
 ;; CLI config struct
 ;; ============================================================
 
 (struct cli-config
-  (command        ; symbol: 'chat | 'prompt | 'resume | 'help | 'version | 'doctor
-   session-id     ; string or #f
-   prompt         ; string or #f
-   model          ; string or #f
-   mode           ; symbol: 'interactive | 'single | 'json | 'rpc | 'tui
-   project-dir    ; path-string or #f
-   config-path    ; path-string or #f
-   verbose?       ; boolean
-   max-turns      ; integer (default: 10)
-   no-tools?      ; boolean
-   tools          ; list of string (tool names to enable)
-   session-dir    ; path-string or #f
-   )
+        (command ; symbol: 'chat | 'prompt | 'resume | 'help | 'version | 'doctor
+         session-id ; string or #f
+         prompt ; string or #f
+         model ; string or #f
+         mode ; symbol: 'interactive | 'single | 'json | 'rpc | 'tui
+         project-dir ; path-string or #f
+         config-path ; path-string or #f
+         verbose? ; boolean
+         max-turns ; integer (default: 10)
+         no-tools? ; boolean
+         tools ; list of string (tool names to enable)
+         session-dir ; path-string or #f
+         )
   #:transparent)
 
 ;; ============================================================
@@ -117,7 +111,10 @@
 ;; Returns a cli-config with command='help if parsing fails.
 
 (define (parse-cli-args [args (current-command-line-arguments)])
-  (define vec (if (vector? args) args (list->vector args)))
+  (define vec
+    (if (vector? args)
+        args
+        (list->vector args)))
   (define n (vector-length vec))
 
   (let loop ([i 0]
@@ -151,13 +148,21 @@
            [(eq? mode 'tui) 'tui]
            [(eq? final-command 'prompt) 'single]
            [else 'interactive]))
-       (cli-config final-command session-id prompt model final-mode
-                   project-dir config-path verbose? max-turns no-tools?
-                   (reverse tools) session-dir)]
+       (cli-config final-command
+                   session-id
+                   prompt
+                   model
+                   final-mode
+                   project-dir
+                   config-path
+                   verbose?
+                   max-turns
+                   no-tools?
+                   (reverse tools)
+                   session-dir)]
 
       ;; ── --help / -h ──
-      [(or (equal? (vector-ref vec i) "--help")
-           (equal? (vector-ref vec i) "-h"))
+      [(or (equal? (vector-ref vec i) "--help") (equal? (vector-ref vec i) "-h"))
        (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f)]
 
       ;; ── --version ──
@@ -167,41 +172,90 @@
       ;; ── --session <id> ──
       [(equal? (vector-ref vec i) "--session")
        (if (< (add1 i) n)
-           (loop (+ i 2) 'resume (vector-ref vec (add1 i))
-                 prompt model mode project-dir config-path
-                 verbose? max-turns no-tools? tools session-dir)
+           (loop (+ i 2)
+                 'resume
+                 (vector-ref vec (add1 i))
+                 prompt
+                 model
+                 mode
+                 project-dir
+                 config-path
+                 verbose?
+                 max-turns
+                 no-tools?
+                 tools
+                 session-dir)
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
       ;; ── --model <name> ──
       [(equal? (vector-ref vec i) "--model")
        (if (< (add1 i) n)
-           (loop (+ i 2) command session-id prompt
+           (loop (+ i 2)
+                 command
+                 session-id
+                 prompt
                  (vector-ref vec (add1 i))
-                 mode project-dir config-path
-                 verbose? max-turns no-tools? tools session-dir)
+                 mode
+                 project-dir
+                 config-path
+                 verbose?
+                 max-turns
+                 no-tools?
+                 tools
+                 session-dir)
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
       ;; ── --project-dir <path> ──
       [(equal? (vector-ref vec i) "--project-dir")
        (if (< (add1 i) n)
-           (loop (+ i 2) command session-id prompt model mode
+           (loop (+ i 2)
+                 command
+                 session-id
+                 prompt
+                 model
+                 mode
                  (vector-ref vec (add1 i))
-                 config-path verbose? max-turns no-tools? tools session-dir)
+                 config-path
+                 verbose?
+                 max-turns
+                 no-tools?
+                 tools
+                 session-dir)
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
       ;; ── --config <path> ──
       [(equal? (vector-ref vec i) "--config")
        (if (< (add1 i) n)
-           (loop (+ i 2) command session-id prompt model mode project-dir
+           (loop (+ i 2)
+                 command
+                 session-id
+                 prompt
+                 model
+                 mode
+                 project-dir
                  (vector-ref vec (add1 i))
-                 verbose? max-turns no-tools? tools session-dir)
+                 verbose?
+                 max-turns
+                 no-tools?
+                 tools
+                 session-dir)
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
       ;; ── --verbose / -v ──
-      [(or (equal? (vector-ref vec i) "--verbose")
-           (equal? (vector-ref vec i) "-v"))
-       (loop (add1 i) command session-id prompt model mode
-             project-dir config-path #t max-turns no-tools? tools session-dir)]
+      [(or (equal? (vector-ref vec i) "--verbose") (equal? (vector-ref vec i) "-v"))
+       (loop (add1 i)
+             command
+             session-id
+             prompt
+             model
+             mode
+             project-dir
+             config-path
+             #t
+             max-turns
+             no-tools?
+             tools
+             session-dir)]
 
       ;; ── --max-turns <n> ──
       [(equal? (vector-ref vec i) "--max-turns")
@@ -209,45 +263,120 @@
            (let ([n-str (vector-ref vec (add1 i))])
              (define n-val (string->number n-str))
              (if (and n-val (exact-positive-integer? n-val))
-                 (loop (+ i 2) command session-id prompt model mode
-                       project-dir config-path verbose? n-val no-tools? tools session-dir)
+                 (loop (+ i 2)
+                       command
+                       session-id
+                       prompt
+                       model
+                       mode
+                       project-dir
+                       config-path
+                       verbose?
+                       n-val
+                       no-tools?
+                       tools
+                       session-dir)
                  ;; Non-numeric max-turns → help
                  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f)))
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
       ;; ── --no-tools ──
       [(equal? (vector-ref vec i) "--no-tools")
-       (loop (add1 i) command session-id prompt model mode
-             project-dir config-path verbose? max-turns #t tools session-dir)]
+       (loop (add1 i)
+             command
+             session-id
+             prompt
+             model
+             mode
+             project-dir
+             config-path
+             verbose?
+             max-turns
+             #t
+             tools
+             session-dir)]
 
       ;; ── --tool <name> (repeatable) ──
       [(equal? (vector-ref vec i) "--tool")
        (if (< (add1 i) n)
-           (loop (+ i 2) command session-id prompt model mode
-                 project-dir config-path verbose? max-turns no-tools?
-                 (cons (vector-ref vec (add1 i)) tools) session-dir)
+           (loop (+ i 2)
+                 command
+                 session-id
+                 prompt
+                 model
+                 mode
+                 project-dir
+                 config-path
+                 verbose?
+                 max-turns
+                 no-tools?
+                 (cons (vector-ref vec (add1 i)) tools)
+                 session-dir)
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
       ;; ── --tui ──
       [(equal? (vector-ref vec i) "--tui")
-       (loop (add1 i) command session-id prompt model 'tui
-             project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+       (loop (add1 i)
+             command
+             session-id
+             prompt
+             model
+             'tui
+             project-dir
+             config-path
+             verbose?
+             max-turns
+             no-tools?
+             tools
+             session-dir)]
 
       ;; ── --json ──
       [(equal? (vector-ref vec i) "--json")
-       (loop (add1 i) command session-id prompt model 'json
-             project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+       (loop (add1 i)
+             command
+             session-id
+             prompt
+             model
+             'json
+             project-dir
+             config-path
+             verbose?
+             max-turns
+             no-tools?
+             tools
+             session-dir)]
 
       ;; ── --rpc ──
       [(equal? (vector-ref vec i) "--rpc")
-       (loop (add1 i) command session-id prompt model 'rpc
-             project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+       (loop (add1 i)
+             command
+             session-id
+             prompt
+             model
+             'rpc
+             project-dir
+             config-path
+             verbose?
+             max-turns
+             no-tools?
+             tools
+             session-dir)]
 
       ;; ── --session-dir <path> ──
       [(equal? (vector-ref vec i) "--session-dir")
        (if (< (add1 i) n)
-           (loop (+ i 2) command session-id prompt model mode
-                 project-dir config-path verbose? max-turns no-tools? tools
+           (loop (+ i 2)
+                 command
+                 session-id
+                 prompt
+                 model
+                 mode
+                 project-dir
+                 config-path
+                 verbose?
+                 max-turns
+                 no-tools?
+                 tools
                  (vector-ref vec (add1 i)))
            (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
 
@@ -262,16 +391,49 @@
          (cond
            ;; "doctor" subcommand
            [(equal? arg "doctor")
-            (loop (add1 i) 'doctor session-id prompt model mode
-                  project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+            (loop (add1 i)
+                  'doctor
+                  session-id
+                  prompt
+                  model
+                  mode
+                  project-dir
+                  config-path
+                  verbose?
+                  max-turns
+                  no-tools?
+                  tools
+                  session-dir)]
            ;; Default: treat as prompt
            [prompt
             ;; Second positional — unexpected, just ignore
-            (loop (add1 i) command session-id prompt model mode
-                  project-dir config-path verbose? max-turns no-tools? tools session-dir)]
+            (loop (add1 i)
+                  command
+                  session-id
+                  prompt
+                  model
+                  mode
+                  project-dir
+                  config-path
+                  verbose?
+                  max-turns
+                  no-tools?
+                  tools
+                  session-dir)]
            [else
-            (loop (add1 i) 'prompt session-id (vector-ref vec i) model mode
-                  project-dir config-path verbose? max-turns no-tools? tools session-dir)]))])))
+            (loop (add1 i)
+                  'prompt
+                  session-id
+                  (vector-ref vec i)
+                  model
+                  mode
+                  project-dir
+                  config-path
+                  verbose?
+                  max-turns
+                  no-tools?
+                  tools
+                  session-dir)]))])))
 
 ;; ============================================================
 ;; Pure: cli-config->runtime-config
@@ -283,11 +445,9 @@
 
 (define (cli-config->runtime-config cfg)
   (define base
-    (make-hash
-     (list
-      (cons 'max-iterations (cli-config-max-turns cfg))
-      (cons 'no-tools? (cli-config-no-tools? cfg))
-      (cons 'tools (cli-config-tools cfg)))))
+    (make-hash (list (cons 'max-iterations (cli-config-max-turns cfg))
+                     (cons 'no-tools? (cli-config-no-tools? cfg))
+                     (cons 'tools (cli-config-tools cfg)))))
   ;; Optionally add fields that are set
   (when (cli-config-model cfg)
     (hash-set! base 'model (cli-config-model cfg)))
@@ -313,17 +473,16 @@
 ;; display string. Handles both the structured content-part format and plain strings.
 (define (tool-result-content->string content)
   (cond
-    ((string? content) content)
-    ((list? content)
-     (string-join
-      (for/list ([part (in-list content)])
-        (cond
-          ((string? part) part)
-          ((hash? part) (hash-ref part 'text (format "~a" part)))
-          (else (format "~a" part))))
-      "\n"))
-    ((hash? content) (hash-ref content 'text (format "~a" content)))
-    (else (format "~a" content))))
+    [(string? content) content]
+    [(list? content)
+     (string-join (for/list ([part (in-list content)])
+                    (cond
+                      [(string? part) part]
+                      [(hash? part) (hash-ref part 'text (format "~a" part))]
+                      [else (format "~a" part)]))
+                  "\n")]
+    [(hash? content) (hash-ref content 'text (format "~a" content))]
+    [else (format "~a" content)]))
 
 ;; ============================================================
 ;; Markdown → Terminal renderer
@@ -353,13 +512,11 @@
     [(code-block)
      (define content (md-token-content tok))
      (define code (cdr content))
-     (string-append
-      ANSI-GREEN
-      (string-join
-       (for/list ([line (string-split code "\n" #:trim? #f)])
-         (string-append "  " line))
-       (string-append "\n" ANSI-GREEN))
-      ANSI-RESET)]
+     (string-append ANSI-GREEN
+                    (string-join (for/list ([line (string-split code "\n" #:trim? #f)])
+                                   (string-append "  " line))
+                                 (string-append "\n" ANSI-GREEN))
+                    ANSI-RESET)]
     [(link)
      (define content (md-token-content tok))
      (string-append ANSI-BLUE ANSI-UNDERLINE (cdr content) ANSI-RESET)]
@@ -390,14 +547,13 @@
 ;; Also returns a second value: the flush procedure.
 
 (define (make-stream-markdown-writer)
-  (define line-buffer (box ""))  ;; accumulated text for current line
+  (define line-buffer (box "")) ;; accumulated text for current line
 
   ;; The writer procedure — buffers deltas, renders complete lines
   (define (writer text [port (current-output-port)])
     (when (and (string? text) (> (string-length text) 0))
       ;; Append to line buffer
-      (set-box! line-buffer
-                (string-append (unbox line-buffer) text))
+      (set-box! line-buffer (string-append (unbox line-buffer) text))
       ;; Process any complete lines
       (define buf (unbox line-buffer))
       (when (string-contains? buf "\n")
@@ -432,15 +588,12 @@
   (define ev (event-ev evt))
   (define payload (event-payload evt))
   (case ev
-    [("model.stream.delta")
-     (hash-ref payload 'delta "")]
-    [("model.stream.completed")
-     ;; Emit trailing newline after streaming — puts cursor on fresh line
-     "\n"]
-    [("assistant.message.completed")
-     ;; Suppress — content already displayed via model.stream.delta events.
-     ;; Return empty string so the subscriber prints nothing.
-     ""]
+    [("model.stream.delta") (hash-ref payload 'delta "")]
+    ;; Emit trailing newline after streaming — puts cursor on fresh line
+    [("model.stream.completed") "\n"]
+    ;; Suppress — content already displayed via model.stream.delta events.
+    ;; Return empty string so the subscriber prints nothing.
+    [("assistant.message.completed") ""]
     [("tool.call.started")
      (define name (hash-ref payload 'name "?"))
      (define args-raw (hash-ref payload 'arguments #f))
@@ -454,10 +607,8 @@
      (define detail
        (cond
          [(and args (hash? args))
-          (define cmd (or (hash-ref args 'command #f)
-                          (hash-ref args 'path #f)
-                          (hash-ref args 'pattern #f)
-                          #f))
+          (define cmd
+            (or (hash-ref args 'command #f) (hash-ref args 'path #f) (hash-ref args 'pattern #f) #f))
           (if cmd
               (truncate-string (format "~a" cmd) 100)
               #f)]
@@ -480,21 +631,15 @@
              '(red))]
     [("turn.started") ""]
     [("turn.completed") ""]
-    [("runtime.error")
-     (styled (format "Error: ~a" (hash-ref payload 'error "unknown error"))
-             '(red))]
+    [("runtime.error") (styled (format "Error: ~a" (hash-ref payload 'error "unknown error")) '(red))]
     [("session.started")
-     (styled (format "[session started: ~a]" (hash-ref payload 'sessionId ""))
-             '(dim))]
+     (styled (format "[session started: ~a]" (hash-ref payload 'sessionId "")) '(dim))]
     [("session.resumed")
-     (styled (format "[session resumed: ~a]" (hash-ref payload 'sessionId ""))
-             '(dim))]
+     (styled (format "[session resumed: ~a]" (hash-ref payload 'sessionId "")) '(dim))]
     [("compaction.warning")
-     (styled (format "[compaction warning: ~a tokens]" (hash-ref payload 'tokenCount "?"))
-             '(yellow))]
+     (styled (format "[compaction warning: ~a tokens]" (hash-ref payload 'tokenCount "?")) '(yellow))]
     [("session.forked")
-     (styled (format "[session forked: ~a]" (hash-ref payload 'newSessionId ""))
-             '(dim))]
+     (styled (format "[session forked: ~a]" (hash-ref payload 'newSessionId "")) '(dim))]
     [else ""]))
 
 ;; ============================================================
@@ -612,52 +757,76 @@
                              #:model-fn [model-fn #f]
                              #:in [in (current-input-port)]
                              #:out [out (current-output-port)])
+  ;; First-run welcome detection
+  (define q-config-dir (build-path (find-system-path 'home-dir) ".q"))
+  (define first-run?
+    (not (or (directory-exists? q-config-dir)
+             (file-exists? (build-path q-config-dir "config.json")))))
+
+  (when first-run?
+    (displayln "" out)
+    (displayln "Welcome to q! Your AI coding assistant." out)
+    (displayln "Type a message to start chatting, or /help for commands." out)
+    (displayln "Run 'q config' to set up your API key." out)
+    (displayln "" out))
+
   ;; Don't print prompt here — read-line-with-history handles it
   (let loop ()
     (define line (read-line-with-history (styled-prompt "q> ") in out))
     (cond
-      [(eof-object? line)
-       (displayln "Goodbye." out)]
+      [(eof-object? line) (displayln "Goodbye." out)]
       [else
        (define trimmed (string-trim line))
        (cond
-         [(string=? trimmed "")
-          (void)]  ; empty line, just re-prompt
+         [(string=? trimmed "") (void)] ; empty line, just re-prompt
          [(parse-slash-command trimmed)
-          => (lambda (cmd)
-               (match (car cmd)
-                 ['help (print-usage out)]
-                 ['quit (displayln "Goodbye." out)
-                        (void)]
-                 ['compact (if compact-fn
-                               (compact-fn)
-                               (displayln "[compacting...]" out))]
-                 ['history (if history-fn
-                               (history-fn out)
-                               (displayln "[history not yet connected]" out))]
-                 ['model (if model-fn
-                              (model-fn (and (>= (length cmd) 2) (cadr cmd)))
-                              (displayln "[model command not yet connected]" out))]
-                 ['fork (if fork-fn
-                            (fork-fn (and (>= (length cmd) 2) (cadr cmd)))
-                            (displayln "[fork not yet connected]" out))]
-                 ['clear (displayln "[clear: transcript cleared]" out)]
-                 ['interrupt (displayln "[interrupt requested]" out)]
-                 ['branches (displayln "[branches: not available in CLI]" out)]
-                 ['leaves (displayln "[leaves: not available in CLI]" out)]
-                 ['switch (displayln (format "[switch: ~a]" (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
-                 ['children (displayln (format "[children: ~a]"
-                                                            (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd)) (cadr cmd) "missing entry-id")) out)]
-                 [_ (displayln (format "Unknown command: ~a" cmd) out)]))]
+          =>
+          (lambda (cmd)
+            (match (car cmd)
+              ['help (print-usage out)]
+              ['quit
+               (displayln "Goodbye." out)
+               (void)]
+              ['compact
+               (if compact-fn
+                   (compact-fn)
+                   (displayln "[compacting...]" out))]
+              ['history
+               (if history-fn
+                   (history-fn out)
+                   (displayln "[history not yet connected]" out))]
+              ['model
+               (if model-fn
+                   (model-fn (and (>= (length cmd) 2) (cadr cmd)))
+                   (displayln "[model command not yet connected]" out))]
+              ['fork
+               (if fork-fn
+                   (fork-fn (and (>= (length cmd) 2) (cadr cmd)))
+                   (displayln "[fork not yet connected]" out))]
+              ['clear (displayln "[clear: transcript cleared]" out)]
+              ['interrupt (displayln "[interrupt requested]" out)]
+              ['branches (displayln "[branches: not available in CLI]" out)]
+              ['leaves (displayln "[leaves: not available in CLI]" out)]
+              ['switch
+               (displayln (format "[switch: ~a]"
+                                  (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd))
+                                      (cadr cmd)
+                                      "missing entry-id"))
+                          out)]
+              ['children
+               (displayln (format "[children: ~a]"
+                                  (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd))
+                                      (cadr cmd)
+                                      "missing entry-id"))
+                          out)]
+              [_ (displayln (format "Unknown command: ~a" cmd) out)]))]
          [else
           ;; Submit prompt to runtime
-          (with-handlers ([exn:fail?
-                           (lambda (e)
-                             (displayln (format "Error: ~a" (exn-message e)) out))])
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (displayln (format "Error: ~a" (exn-message e)) out))])
             (session-fn trimmed))])
        ;; Continue loop (unless quit was issued)
-       (when (and (string? line)
-                  (not (member (string-trim line) '("/quit" "/exit"))))
+       (when (and (string? line) (not (member (string-trim line) '("/quit" "/exit"))))
          (loop))])))
 
 ;; ============================================================
@@ -671,8 +840,6 @@
                         #:out [out (current-output-port)])
   (define prompt (cli-config-prompt cfg))
   (when prompt
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       (displayln (format "Error: ~a" (exn-message e)) out))])
+    (with-handlers ([exn:fail? (lambda (e) (displayln (format "Error: ~a" (exn-message e)) out))])
       (let-values ([(_sess _result) (session-fn prompt)])
         (void)))))

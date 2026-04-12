@@ -459,6 +459,41 @@
             [st2 (input-backspace st1)])
        (check-equal? (input-state-buffer st2) "")
        (check-equal? (input-state-cursor st2) 0)))
+
+   ;; ============================================================
+   ;; input-insert-newline (Issue #133)
+   ;; ============================================================
+
+   (test-case "input-insert-newline: inserts newline at cursor position"
+     (let* ([st (struct-copy input-state (initial-input-state)
+                             [buffer "hello"]
+                             [cursor 2])]
+            [st2 (input-insert-newline st)])
+       (check-equal? (input-state-buffer st2) "he\nllo")
+       (check-equal? (input-state-cursor st2) 3)))
+
+   (test-case "input-insert-newline: at end of buffer"
+     (let* ([st (struct-copy input-state (initial-input-state)
+                             [buffer "hello"]
+                             [cursor 5])]
+            [st2 (input-insert-newline st)])
+       (check-equal? (input-state-buffer st2) "hello\n")
+       (check-equal? (input-state-cursor st2) 6)))
+
+   (test-case "input-insert-newline: at beginning of buffer"
+     (let* ([st (struct-copy input-state (initial-input-state)
+                             [buffer "hello"]
+                             [cursor 0])]
+            [st2 (input-insert-newline st)])
+       (check-equal? (input-state-buffer st2) "\nhello")
+       (check-equal? (input-state-cursor st2) 1)))
+
+   (test-case "input-insert-newline: clears history-idx"
+     (let* ([st0 (input-history-push (initial-input-state) "old")]
+            [st1 (input-history-up st0)]
+            [st2 (input-insert-newline st1)])
+       (check-false (input-state-history-idx st2)
+                    "insert-newline clears history browsing")))
    ))
 
 (run-tests input-tests)

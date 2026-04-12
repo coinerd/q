@@ -73,49 +73,52 @@
          (dynamic-require 'tui/ubuf/output 'display-ubuf!))))
 
 ;; Fallback stubs for when tui-ubuf is not available
-(define (stub-make-ubuf cols rows) (make-hash `((cols . ,cols) (rows . ,rows))))
-(define (stub-ubuf-clear! ubuf) (void))
-(define (stub-ubuf-putstring! ubuf col row str . attrs) (void))
-(define (stub-display-ubuf! ubuf port . opts) (void))
+(define (stub-make-ubuf cols rows)
+  (make-hash `((cols . ,cols) (rows . ,rows))))
+(define (stub-ubuf-clear! ubuf)
+  (void))
+(define (stub-ubuf-putstring! ubuf col row str . attrs)
+  (void))
+(define (stub-display-ubuf! ubuf port . opts)
+  (void))
 
 (define make-ubuf (or make-ubuf-fn stub-make-ubuf))
 (define ubuf-clear! (or ubuf-clear!-fn stub-ubuf-clear!))
 (define ubuf-putstring! (or ubuf-putstring!-fn stub-ubuf-putstring!))
 (define display-ubuf! (or display-ubuf!-fn stub-display-ubuf!))
 
-(provide
- ;; Main entry
- run-tui
- run-tui-with-runtime
+;; Main entry
+(provide run-tui
+         run-tui-with-runtime
 
- ;; For testing
- make-tui-ctx
- fix-sgr-bg-black
- render-ubuf-to-terminal!
- tui-ctx?
- tui-ctx-ui-state-box
- tui-ctx-input-state-box
- tui-ctx-event-bus
- tui-ctx-session-runner
- tui-ctx-running-box
- tui-ctx-event-ch
- tui-ctx-needs-redraw-box
- tui-ctx-term-box
- tui-ctx-model-registry-box
- handle-key
- handle-mouse
- decode-mouse-x10
- selection-text
- styled-line->text
- process-slash-command
- render-frame!
- draw-frame
- mark-dirty!
- tui-ctx-resize-ubuf!
- copy-text!
- copy-selection!
- current-clipboard-mode
- clipboard-backend-available?)
+         ;; For testing
+         make-tui-ctx
+         fix-sgr-bg-black
+         render-ubuf-to-terminal!
+         tui-ctx?
+         tui-ctx-ui-state-box
+         tui-ctx-input-state-box
+         tui-ctx-event-bus
+         tui-ctx-session-runner
+         tui-ctx-running-box
+         tui-ctx-event-ch
+         tui-ctx-needs-redraw-box
+         tui-ctx-term-box
+         tui-ctx-model-registry-box
+         handle-key
+         handle-mouse
+         decode-mouse-x10
+         selection-text
+         styled-line->text
+         process-slash-command
+         render-frame!
+         draw-frame
+         mark-dirty!
+         tui-ctx-resize-ubuf!
+         copy-text!
+         copy-selection!
+         current-clipboard-mode
+         clipboard-backend-available?)
 
 ;; ============================================================
 ;; TUI context
@@ -123,18 +126,18 @@
 
 ;; Holds mutable references for the running TUI
 (struct tui-ctx
-  (ui-state-box      ; (boxof ui-state)
-   input-state-box   ; (boxof input-state)
-   event-bus         ; event-bus? or #f
-   session-runner    ; (string -> void) — called with user prompts
-   running-box       ; (boxof boolean) — set to #f to exit
-   event-ch          ; async-channel — serializes runtime events into main loop (unbounded buffer)
-   session-dir       ; (or/c path-string? #f) — session directory for index loading
-   needs-redraw-box  ; (boxof boolean) — #t when state changed and frame needs redraw
-   term-box          ; (boxof any) — terminal instance for tui-term
-   ubuf-box          ; (boxof any) — ubuf buffer for output
-   model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
-   )
+        (ui-state-box ; (boxof ui-state)
+         input-state-box ; (boxof input-state)
+         event-bus ; event-bus? or #f
+         session-runner ; (string -> void) — called with user prompts
+         running-box ; (boxof boolean) — set to #f to exit
+         event-ch ; async-channel — serializes runtime events into main loop (unbounded buffer)
+         session-dir ; (or/c path-string? #f) — session directory for index loading
+         needs-redraw-box ; (boxof boolean) — #t when state changed and frame needs redraw
+         term-box ; (boxof any) — terminal instance for tui-term
+         ubuf-box ; (boxof any) — ubuf buffer for output
+         model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
+         )
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
@@ -148,10 +151,10 @@
            (box #t)
            (make-async-channel)
            sess-dir
-           (box #t)     ; needs-redraw: #t for first frame
-           (box #f)     ; term-box - set when terminal opened
-           (box #f)     ; ubuf-box - set when buffer created
-           (box reg)))  ; model-registry-box
+           (box #t) ; needs-redraw: #t for first frame
+           (box #f) ; term-box - set when terminal opened
+           (box #f) ; ubuf-box - set when buffer created
+           (box reg))) ; model-registry-box
 
 ;; ============================================================
 ;; Terminal/ubuf lifecycle helpers
@@ -205,8 +208,7 @@
   (define layout (compute-layout cols rows))
 
   ;; Render to ubuf (returns cursor position)
-  (define-values (cursor-col cursor-row)
-    (renderer:render-frame! ubuf state inp layout))
+  (define-values (cursor-col cursor-row) (renderer:render-frame! ubuf state inp layout))
 
   ;; Display ubuf to terminal
   ;; Use only-dirty=#f for full redraw (all cells written) but NOT linear mode
@@ -253,8 +255,7 @@
          (list 'key keycode)
          #f)]
     ;; Resize message
-    [(tsizemsg? msg)
-     (list 'resize (tsizemsg-cols msg) (tsizemsg-rows msg))]
+    [(tsizemsg? msg) (list 'resize (tsizemsg-cols msg) (tsizemsg-rows msg))]
     ;; Mouse message — decode from X10 protocol bytes
     ;; In button-event mode (1002), we get press, drag (motion), and release.
     ;; X10 encoding: button-code = cb - 32
@@ -264,8 +265,7 @@
     ;;   bit 4: control
     ;;   bit 5: motion (1=mouse moved while button held)
     ;;   bit 6: scroll wheel (64)
-    [(tmousemsg? msg)
-     (decode-mouse-x10 (tmousemsg-cb msg) (tmousemsg-cx msg) (tmousemsg-cy msg))]
+    [(tmousemsg? msg) (decode-mouse-x10 (tmousemsg-cb msg) (tmousemsg-cx msg) (tmousemsg-cy msg))]
     ;; Command message (redraw, etc.)
     [(tcmdmsg? msg)
      (case (tcmdmsg-cmd msg)
@@ -294,8 +294,8 @@
     ;; Regular character input
     [(char? keycode)
      (case keycode
-       [(#\return #\newline)
-        ;; Submit input
+       [(#\return)
+        ;; Enter → submit input
         (define-values (text new-inp) (input-submit inp))
         (set-box! (tui-ctx-input-state-box ctx) new-inp)
         (cond
@@ -306,19 +306,19 @@
           [else
            ;; Add user message to transcript
            (define user-entry (transcript-entry 'user text (current-inexact-milliseconds) (hash)))
-           (set-box! (tui-ctx-ui-state-box ctx)
-                     (add-transcript-entry state user-entry))
+           (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
            (list 'submit text)])]
+       [(#\newline)
+        ;; Ctrl+J → insert newline (multi-line input)
+        (set-box! (tui-ctx-input-state-box ctx) (input-insert-newline inp))
+        'continue]
        [(#\backspace #\rubout)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-backspace inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
         'continue]
-       [(#\u001b)
-        'continue]
+       [(#\u001b) 'continue]
        [else
         ;; Regular printable character
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-insert-char inp keycode))
+        (set-box! (tui-ctx-input-state-box ctx) (input-insert-char inp keycode))
         'continue])]
 
     ;; Symbol keys (arrows, function keys, etc.)
@@ -337,43 +337,33 @@
           [else
            ;; Add user message to transcript
            (define user-entry (transcript-entry 'user text (current-inexact-milliseconds) (hash)))
-           (set-box! (tui-ctx-ui-state-box ctx)
-                     (add-transcript-entry state user-entry))
+           (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
            (list 'submit text)])]
        [(left kp-left)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-cursor-left inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-left inp))
         'continue]
        [(right kp-right)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-cursor-right inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-right inp))
         'continue]
        [(up kp-up)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-history-up inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp))
         'continue]
        [(down kp-down)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-history-down inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp))
         'continue]
        [(backspace)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-backspace inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
         'continue]
        [(delete kp-delete)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-delete inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-delete inp))
         'continue]
        [(home kp-home)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-home inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-home inp))
         'continue]
        [(end kp-end)
-        (set-box! (tui-ctx-input-state-box ctx)
-                  (input-end inp))
+        (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
         'continue]
-       [(escape)
-        'continue]
+       [(escape) 'continue]
        [(page-up pgup kp-pgup)
         ;; Page up: scroll by one viewport height (page)
         (define-values (_cols rows) (tui-screen-size))
@@ -389,11 +379,25 @@
                   (scroll-down state (max 1 (tui-layout-transcript-height layout2))))
         'continue]
        [(ctrl-c)
-        ;; Ctrl-C: copy selection to clipboard
-        (when (has-selection? state)
-          (define text (selection-text ctx state))
-          (when (and text (not (string=? text "")))
-            (copy-text! text)))
+        (if (has-selection? state)
+            ;; Selection active → copy to clipboard
+            (let ([text (selection-text ctx state)])
+              (when (and text (not (string=? text "")))
+                (copy-text! text)))
+            ;; No selection → interrupt agent
+            (begin
+              (when (tui-ctx-event-bus ctx)
+                (publish! (tui-ctx-event-bus ctx)
+                          (make-event "interrupt.requested"
+                                      (inexact->exact (truncate (/ (current-inexact-milliseconds)
+                                                                   1000)))
+                                      (or (ui-state-session-id state) "")
+                                      #f
+                                      (hash))))
+              ;; Clear any streaming text and busy state
+              (set-box!
+               (tui-ctx-ui-state-box ctx)
+               (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f]))))
         'continue]
        [else 'continue])]
 
@@ -408,29 +412,25 @@
   (mark-dirty! ctx)
   (case mouse-type
     [(scroll-up)
-     (set-box! (tui-ctx-ui-state-box ctx)
-               (scroll-up state 3))
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 3))
      'continue]
     [(scroll-down)
-     (set-box! (tui-ctx-ui-state-box ctx)
-               (scroll-down state 3))
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 3))
      'continue]
     [(click)
      ;; Start selection: set anchor at click position
      (define button (cadr msg-data))
      (define x (caddr msg-data))
      (define y (cadddr msg-data))
-     (when (= button 0)  ;; left click only
-       (set-box! (tui-ctx-ui-state-box ctx)
-                 (set-selection-anchor state x y)))
+     (when (= button 0) ;; left click only
+       (set-box! (tui-ctx-ui-state-box ctx) (set-selection-anchor state x y)))
      'continue]
     [(drag)
      ;; Update selection end during drag
      (define x (cadr msg-data))
      (define y (caddr msg-data))
      (when (has-selection? state)
-       (set-box! (tui-ctx-ui-state-box ctx)
-                 (set-selection-end state x y)))
+       (set-box! (tui-ctx-ui-state-box ctx) (set-selection-end state x y)))
      'continue]
     [(release)
      ;; Copy selection to clipboard (platform tool + OSC 52 fallback).
@@ -451,11 +451,11 @@
 (define (selection-text ctx state)
   (define anchor (ui-state-sel-anchor state))
   (define end (ui-state-sel-end state))
-  (and anchor end
+  (and anchor
+       end
        (let ()
          ;; Normalize so start <= end
-         (define-values (start-col start-row end-col end-row)
-           (normalize-selection-range anchor end))
+         (define-values (start-col start-row end-col end-row) (normalize-selection-range anchor end))
          ;; Get rendered lines for the transcript area
          (define-values (cols rows) (tui-screen-size))
          (define layout (compute-layout cols rows))
@@ -477,14 +477,13 @@
                 (cond
                   [(= i start-idx end-idx)
                    ;; Single line: extract column range
-                   (substring text (min start-col (string-length text))
+                   (substring text
+                              (min start-col (string-length text))
                               (min (add1 end-col) (string-length text)))]
-                  [(= i start-idx)
-                   ;; First line: from start-col to end
-                   (substring text (min start-col (string-length text)))]
-                  [(= i end-idx)
-                   ;; Last line: from 0 to end-col
-                   (substring text 0 (min (add1 end-col) (string-length text)))]
+                  ;; First line: from start-col to end
+                  [(= i start-idx) (substring text (min start-col (string-length text)))]
+                  ;; Last line: from 0 to end-col
+                  [(= i end-idx) (substring text 0 (min (add1 end-col) (string-length text)))]
                   [else text]))
               "\n")))))
 
@@ -520,9 +519,9 @@
   (define ch (tui-ctx-event-ch ctx))
   (when bus
     (subscribe! bus
-      (lambda (evt)
-        ;; async-channel-put is non-blocking (unbounded buffer)
-        (async-channel-put ch evt)))))
+                (lambda (evt)
+                  ;; async-channel-put is non-blocking (unbounded buffer)
+                  (async-channel-put ch evt)))))
 
 ;; ============================================================
 ;; Main TUI loop
@@ -560,8 +559,7 @@
            (define keycode (cadr msg))
            (define result (handle-key ctx keycode))
            (cond
-             [(eq? result 'quit)
-              (set-box! (tui-ctx-running-box ctx) #f)]
+             [(eq? result 'quit) (set-box! (tui-ctx-running-box ctx) #f)]
              [(and (list? result) (eq? (car result) 'submit))
               (define text (cadr result))
               ;; Submit to runtime (non-blocking)
@@ -570,8 +568,7 @@
              [(and (list? result) (eq? (car result) 'command))
               (define cmd (cadr result))
               (process-slash-command ctx cmd)]
-             [else (void)])
-           ] ;; (mark-dirty is called inside handle-key)
+             [else (void)])] ;; (mark-dirty is called inside handle-key)
 
           ;; Resize event: resize ubuf and mark dirty
           [(resize)
@@ -584,12 +581,10 @@
            (mark-dirty! ctx)]
 
           ;; Redraw command: mark dirty
-          [(redraw)
-           (mark-dirty! ctx)]
+          [(redraw) (mark-dirty! ctx)]
 
           ;; Mouse event: dispatch to handler
-          [(mouse)
-           (handle-mouse ctx (cdr msg))]
+          [(mouse) (handle-mouse ctx (cdr msg))]
 
           ;; Unknown message type - ignore
           [else (void)]))
@@ -606,11 +601,9 @@
     (define evt (sync/timeout 0 ch))
     (when evt
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (with-handlers ([exn:fail?
-                       (lambda (e)
-                         (log-warning "TUI: error processing event: ~a" (exn-message e)))])
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (apply-event-to-state state evt)))
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (log-warning "TUI: error processing event: ~a" (exn-message e)))])
+        (set-box! (tui-ctx-ui-state-box ctx) (apply-event-to-state state evt)))
       (set-box! (tui-ctx-needs-redraw-box ctx) #t)
       (loop))))
 
@@ -625,35 +618,53 @@
   (define bus (hash-ref rt-config 'event-bus #f))
   (define sess (make-agent-session rt-config))
 
-  (define ctx (make-tui-ctx
-               #:event-bus bus
-               #:session-runner
-               (lambda (prompt)
-                 (run-prompt! sess prompt))
-               #:model-registry
-               (hash-ref rt-config 'model-registry #f)))
+  (define ctx
+    (make-tui-ctx #:event-bus bus
+                  #:session-runner (lambda (prompt) (run-prompt! sess prompt))
+                  #:model-registry (hash-ref rt-config 'model-registry #f)))
 
   ;; Subscribe to events
   (subscribe-runtime-events! ctx)
 
   ;; Determine scrollback file path from session dir
-  (define sess-dir (or (hash-ref rt-config 'session-dir #f)
-                       (hash-ref rt-config 'store-dir #f)))
-  (define scrollback-path (and sess-dir
-                                (build-path sess-dir "scrollback.jsonl")))
+  (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+  (define scrollback-path (and sess-dir (build-path sess-dir "scrollback.jsonl")))
+
+  ;; First-run welcome detection
+  (define q-config-dir (build-path (find-system-path 'home-dir) ".q"))
+  (define first-run?
+    (not (or (directory-exists? q-config-dir)
+             (file-exists? (build-path q-config-dir "config.json")))))
 
   ;; Set initial session info, loading scrollback if available
   (define base-state
-    (initial-ui-state
-     #:session-id (session-id sess)
-     #:model-name (hash-ref rt-config 'model-name #f)))
+    (initial-ui-state #:session-id (session-id sess)
+                      #:model-name (hash-ref rt-config 'model-name #f)))
+
+  ;; Add welcome message for first-run users
   (define init-state
-    (if scrollback-path
-        (let ([loaded (load-scrollback scrollback-path)])
-          (if (null? loaded)
-              base-state
-              (struct-copy ui-state base-state [transcript loaded])))
-        base-state))
+    (let* ([state (if scrollback-path
+                      (let ([loaded (load-scrollback scrollback-path)])
+                        (if (null? loaded)
+                            base-state
+                            (struct-copy ui-state base-state [transcript loaded])))
+                      base-state)]
+           [welcome-entries
+            (if (and first-run? (null? (ui-state-transcript state)))
+                (list (transcript-entry 'system
+                                        "Welcome to q! Type a message to get started."
+                                        (current-inexact-milliseconds)
+                                        (hash))
+                      (transcript-entry 'system
+                                        "Commands: /help for reference, /quit to exit."
+                                        (current-inexact-milliseconds)
+                                        (hash)))
+                '())])
+      (if (not (null? welcome-entries))
+          (struct-copy ui-state
+                       state
+                       [transcript (append welcome-entries (ui-state-transcript state))])
+          state)))
   (set-box! (tui-ctx-ui-state-box ctx) init-state)
 
   ;; Initialize terminal, run main loop, cleanup on exit
@@ -680,11 +691,8 @@
   (displayln "Goodbye."))
 
 ;; Simple TUI run (for testing without full runtime)
-(define (run-tui #:session-runner [session-runner (lambda (prompt) (void))]
-                 #:event-bus [bus #f])
-  (define ctx (make-tui-ctx
-               #:event-bus bus
-               #:session-runner session-runner))
+(define (run-tui #:session-runner [session-runner (lambda (prompt) (void))] #:event-bus [bus #f])
+  (define ctx (make-tui-ctx #:event-bus bus #:session-runner session-runner))
   (tui-ctx-init-terminal! ctx)
   (with-handlers ([exn:break? (lambda (e) (void))]
                   [exn:fail? (lambda (e)

@@ -7,44 +7,43 @@
          "input.rkt"
          "../util/markdown.rkt")
 
-(provide
- ;; Types
- (struct-out styled-line)
- (struct-out styled-segment)
+;; Types
+(provide (struct-out styled-line)
+         (struct-out styled-segment)
 
- ;; Selection highlighting
- apply-selection-highlight
- highlight-line-range
- style-invert
+         ;; Selection highlighting
+         apply-selection-highlight
+         highlight-line-range
+         style-invert
 
- ;; Frame rendering
- render-transcript
- render-status-bar
- render-input-line
- render-branch-list
- render-leaf-nodes
- render-children-list
+         ;; Frame rendering
+         render-transcript
+         render-status-bar
+         render-input-line
+         render-branch-list
+         render-leaf-nodes
+         render-children-list
 
- ;; Entry formatting
- format-entry
- md-format-assistant
+         ;; Entry formatting
+         format-entry
+         md-format-assistant
 
- ;; Helpers
- styled-line->text
- wrap-styled-line)
+         ;; Helpers
+         styled-line->text
+         wrap-styled-line)
 
 ;; A styled segment (part of a line)
 (struct styled-segment
-  (text    ; string
-   style   ; (listof symbol) — 'bold 'italic 'inverse 'underline 'dim
-           ;   'red 'green 'yellow 'blue 'cyan 'magenta 'white
-   )
+        (text ; string
+         style ; (listof symbol) — 'bold 'italic 'inverse 'underline 'dim
+         ;   'red 'green 'yellow 'blue 'cyan 'magenta 'white
+         )
   #:transparent)
 
 ;; A styled line (one terminal row)
 (struct styled-line
-  (segments  ; (listof styled-segment)
-   )
+        (segments ; (listof styled-segment)
+         )
   #:transparent)
 
 ;; Convenience: make a plain line
@@ -57,25 +56,17 @@
   (define kind (transcript-entry-kind entry))
   (define text (transcript-entry-text entry))
   (case kind
-    [(assistant)
-     ;; Parse markdown and render as styled-lines
-     (md-format-assistant text width)]
-    [(tool-start)
-     (list (styled-line (list (styled-segment text '(cyan)))))]
-    [(tool-end)
-     (list (styled-line (list (styled-segment text '(green)))))]
-    [(tool-fail)
-     (list (styled-line (list (styled-segment text '(red)))))]
-    [(system)
-     (list (styled-line (list (styled-segment text '(dim)))))]
-    [(error)
-     (list (styled-line (list (styled-segment text '(bold red)))))]
+    ;; Parse markdown and render as styled-lines
+    [(assistant) (md-format-assistant text width)]
+    [(tool-start) (list (styled-line (list (styled-segment text '(cyan)))))]
+    [(tool-end) (list (styled-line (list (styled-segment text '(green)))))]
+    [(tool-fail) (list (styled-line (list (styled-segment text '(red)))))]
+    [(system) (list (styled-line (list (styled-segment (string-append "[SYS] " text) '(dim)))))]
+    [(error) (list (styled-line (list (styled-segment (string-append "[ERR] " text) '(bold red)))))]
     [(user)
      ;; Split into cyan prompt + bold text, like pi's user message styling
-     (list (styled-line (list (styled-segment "> " '(bold cyan))
-                              (styled-segment text '(bold)))))]
-    [else
-     (list (plain-line text))]))
+     (list (styled-line (list (styled-segment "> " '(bold cyan)) (styled-segment text '(bold)))))]
+    [else (list (plain-line text))]))
 
 ;; Convert a single md-token to a styled-segment
 ;; Matches pi's dark theme color scheme:
@@ -103,10 +94,9 @@
       (list sl)
       (let* ([segs (styled-line-segments sl)]
              ;; Build char-style table: for each character, which style?
-             [char-styles
-              (for*/vector ([seg (in-list segs)]
-                            [_ (in-string (styled-segment-text seg))])
-                (styled-segment-style seg))]
+             [char-styles (for*/vector ([seg (in-list segs)]
+                                        [_ (in-string (styled-segment-text seg))])
+                            (styled-segment-style seg))]
              ;; Wrap the plain text into string lines
              [wrapped-lines (wrap-text text width)])
         ;; Rebuild styled-lines from wrapped text + char-style table
@@ -119,7 +109,8 @@
                      [line-len (string-length line-text)])
                 ;; Build segments by grouping consecutive chars with same style
                 (define new-segs
-                  (let seg-loop ([i 0] [seg-acc '()])
+                  (let seg-loop ([i 0]
+                                 [seg-acc '()])
                     (cond
                       [(>= i line-len) (reverse seg-acc)]
                       [else
@@ -128,21 +119,15 @@
                          (cond
                            [(>= j line-len)
                             (seg-loop line-len
-                                      (cons (styled-segment
-                                             (substring line-text i line-len)
-                                             style)
+                                      (cons (styled-segment (substring line-text i line-len) style)
                                             seg-acc))]
                            [(equal? (vector-ref char-styles (+ char-pos j)) style)
                             (run-loop (add1 j))]
                            [else
                             (seg-loop j
-                                      (cons (styled-segment
-                                             (substring line-text i j)
-                                             style)
+                                      (cons (styled-segment (substring line-text i j) style)
                                             seg-acc))]))])))
-                (loop (cdr lines)
-                      (+ char-pos line-len)
-                      (cons (styled-line new-segs) acc))))))))
+                (loop (cdr lines) (+ char-pos line-len) (cons (styled-line new-segs) acc))))))))
 
 ;; Format assistant markdown text into styled-lines
 (define (md-format-assistant text width)
@@ -157,12 +142,12 @@
                [wrapped (wrap-styled-line raw-line width)])
           (append lines wrapped))))
   (define-values (lines current-segs)
-    (for/fold ([lines '()] [current-segs '()])
+    (for/fold ([lines '()]
+               [current-segs '()])
               ([tok (in-list tokens)])
       (case (md-token-type tok)
-        [(newline)
-         ;; Flush current line, start a new one
-         (values (flush-current lines current-segs) '())]
+        ;; Flush current line, start a new one
+        [(newline) (values (flush-current lines current-segs) '())]
         [(code-block)
          ;; Flush current inline segments as a line
          (define prev-lines (flush-current lines current-segs))
@@ -198,12 +183,12 @@
 (define (wrap-single-line line max-width)
   (if (<= (string-length line) max-width)
       (list line)
-      (let loop ([remaining line] [acc '()])
+      (let loop ([remaining line]
+                 [acc '()])
         (if (<= (string-length remaining) max-width)
             (reverse (cons remaining acc))
             (let ([break-pos (find-break-pos remaining max-width)])
-              (loop (substring remaining break-pos)
-                    (cons (substring remaining 0 break-pos) acc)))))))
+              (loop (substring remaining break-pos) (cons (substring remaining 0 break-pos) acc)))))))
 
 ;; Find a good break position (prefer space)
 (define (find-break-pos text max-width)
@@ -227,7 +212,7 @@
 ;; Returns new list of styled-lines with 'inverse on selected ranges.
 (define (apply-selection-highlight lines sel-anchor sel-end trans-start)
   (if (not (and sel-anchor sel-end))
-      lines  ;; no selection — pass through
+      lines ;; no selection — pass through
       (let ()
         ;; Normalize: ensure anchor <= end
         (define-values (start-col start-row end-col end-row)
@@ -236,18 +221,25 @@
         (define sel-start-idx (max 0 (- start-row trans-start)))
         (define sel-end-idx (- end-row trans-start))
         (for/list ([line (in-list lines)]
-                   [i   (in-naturals)])
+                   [i (in-naturals)])
           (cond
             [(< i sel-start-idx) line]
             [(> i sel-end-idx) line]
             [else
              ;; This line is in the selection range — apply inverse
-             (define line-text (apply string-append (map styled-segment-text (styled-line-segments line))))
+             (define line-text
+               (apply string-append (map styled-segment-text (styled-line-segments line))))
              (define line-len (string-length line-text))
-             (define col-start (if (= i sel-start-idx) (min start-col line-len) 0))
-             (define col-end   (if (= i sel-end-idx)   (min (add1 end-col) line-len) line-len))
+             (define col-start
+               (if (= i sel-start-idx)
+                   (min start-col line-len)
+                   0))
+             (define col-end
+               (if (= i sel-end-idx)
+                   (min (add1 end-col) line-len)
+                   line-len))
              (if (>= col-start col-end)
-                 line  ;; selection range empty on this line
+                 line ;; selection range empty on this line
                  (highlight-line-range line col-start col-end))])))))
 
 ;; Apply inverse highlight to a column range within a styled-line.
@@ -255,7 +247,9 @@
 (define (highlight-line-range sl col-start col-end)
   (define segments (styled-line-segments sl))
   (styled-line
-   (let loop ([segs segments] [pos 0] [acc '()])
+   (let loop ([segs segments]
+              [pos 0]
+              [acc '()])
      (if (null? segs)
          (reverse acc)
          (let* ([seg (car segs)]
@@ -265,26 +259,24 @@
                 [seg-end (+ pos (string-length text))])
            (cond
              ;; Segment entirely before highlight
-             [(<= seg-end col-start)
-              (loop (cdr segs) seg-end (cons seg acc))]
+             [(<= seg-end col-start) (loop (cdr segs) seg-end (cons seg acc))]
              ;; Segment entirely after highlight
-             [(>= seg-start col-end)
-              (loop (cdr segs) seg-end (cons seg acc))]
+             [(>= seg-start col-end) (loop (cdr segs) seg-end (cons seg acc))]
              [else
               ;; Segment overlaps highlight range — split into up to 3 parts
               (let* ([before-len (max 0 (- col-start seg-start))]
                      [highlight-len (- (min seg-end col-end) (max seg-start col-start))]
                      [after-len (max 0 (- seg-end col-end))]
                      [non-empty
-                      (filter identity
-                              (list
-                               (and (> before-len 0)
-                                    (styled-segment (substring text 0 before-len) style))
-                               (and (> highlight-len 0)
-                                    (styled-segment (substring text before-len (+ before-len highlight-len))
-                                                    (style-invert style)))
-                               (and (> after-len 0)
-                                    (styled-segment (substring text (+ before-len highlight-len)) style))))])
+                      (filter
+                       identity
+                       (list
+                        (and (> before-len 0) (styled-segment (substring text 0 before-len) style))
+                        (and (> highlight-len 0)
+                             (styled-segment (substring text before-len (+ before-len highlight-len))
+                                             (style-invert style)))
+                        (and (> after-len 0)
+                             (styled-segment (substring text (+ before-len highlight-len)) style))))])
                 (loop (cdr segs) seg-end (append (reverse non-empty) acc)))]))))))
 
 ;; Render the visible portion of the transcript
@@ -318,7 +310,7 @@
   (define session (ui-session-label state))
   (define model (ui-model-label state))
   (define status (ui-status-text state))
-  (define busy-marker (if (ui-busy? state) "⏳" " "))
+  (define busy-marker (if (ui-busy? state) "*" " "))
   (define scroll-indicator (if (> (ui-state-scroll-offset state) 0) " ↑" ""))
   (define left (format " ~a q | ~a | ~a " busy-marker session model))
   (define right (format "~a~a " status scroll-indicator))
@@ -331,17 +323,19 @@
 ;; Returns styled-line with cyan prompt + bold text
 ;; Returns styled-line
 (define (render-input-line input-st width)
-  (define-values (visible-text scroll-offset cursor-col)
-    (input-visible-window input-st width))
+  (define-values (visible-text scroll-offset cursor-col) (input-visible-window input-st width))
   (define prompt-str "q> ")
   (define pad-len (max 0 (- width (string-length prompt-str) (string-length visible-text))))
   (styled-line (list (styled-segment prompt-str '(bold cyan))
-                     (styled-segment (string-append visible-text (make-string pad-len #\space)) '(bold)))))
+                     (styled-segment (string-append visible-text (make-string pad-len #\space))
+                                     '(bold)))))
 
 ;; Render a list of branch-info structs
 ;; Returns (listof styled-line)
 (define (render-branch-list branches [width 200])
-  (define header (styled-line (list (styled-segment (format "  Branches (~a):" (length branches)) '(bold underline)))))
+  (define header
+    (styled-line (list (styled-segment (format "  Branches (~a):" (length branches))
+                                       '(bold underline)))))
   (define branch-lines
     (for/list ([b (in-list branches)]
                [i (in-naturals 1)])
@@ -350,7 +344,10 @@
       (define role-str (symbol->string (branch-info-role b)))
       (define leaf-indicator (if (branch-info-leaf? b) " [leaf]" ""))
       (define line-text (format "~a~a. ~a (~a)~a" prefix i id role-str leaf-indicator))
-      (define style (if (branch-info-active? b) '(bold green) '(dim)))
+      (define style
+        (if (branch-info-active? b)
+            '(bold green)
+            '(dim)))
       (styled-line (list (styled-segment line-text style)))))
   (cons header branch-lines))
 
@@ -358,7 +355,9 @@
 ;; Returns (listof styled-line)
 (define (render-leaf-nodes branches [width 200])
   (define leaves (filter branch-info-leaf? branches))
-  (define header (styled-line (list (styled-segment (format "  Leaf Nodes (~a):" (length leaves)) '(bold underline)))))
+  (define header
+    (styled-line (list (styled-segment (format "  Leaf Nodes (~a):" (length leaves))
+                                       '(bold underline)))))
   (define leaf-lines
     (for/list ([b (in-list leaves)]
                [i (in-naturals 1)])
@@ -366,14 +365,19 @@
       (define id (branch-info-id b))
       (define role-str (symbol->string (branch-info-role b)))
       (define line-text (format "~a~a. ~a (~a)" prefix i id role-str))
-      (define style (if (branch-info-active? b) '(bold green) '(dim)))
+      (define style
+        (if (branch-info-active? b)
+            '(bold green)
+            '(dim)))
       (styled-line (list (styled-segment line-text style)))))
   (cons header leaf-lines))
 
 ;; Render children of a specific node
 ;; Returns (listof styled-line)
 (define (render-children-list parent-id children [width 200])
-  (define header (styled-line (list (styled-segment (format "  Children of ~a (~a):" parent-id (length children)) '(bold underline)))))
+  (define header
+    (styled-line (list (styled-segment (format "  Children of ~a (~a):" parent-id (length children))
+                                       '(bold underline)))))
   (if (null? children)
       (list header (styled-line (list (styled-segment "    (no children)" '(dim)))))
       (cons header

@@ -20,19 +20,18 @@
          "../runtime/session-index.rkt"
          "../runtime/model-registry.rkt")
 
-(provide
- ;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
- cmd-ctx
- cmd-ctx?
- cmd-ctx-state-box
- cmd-ctx-running-box
- cmd-ctx-event-bus
- cmd-ctx-session-dir
- cmd-ctx-needs-redraw-box
- cmd-ctx-model-registry-box
+;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
+(provide cmd-ctx
+         cmd-ctx?
+         cmd-ctx-state-box
+         cmd-ctx-running-box
+         cmd-ctx-event-bus
+         cmd-ctx-session-dir
+         cmd-ctx-needs-redraw-box
+         cmd-ctx-model-registry-box
 
- ;; Main command dispatcher
- process-slash-command)
+         ;; Main command dispatcher
+         process-slash-command)
 
 ;; ============================================================
 ;; Command context — lightweight alternative to tui-ctx
@@ -41,12 +40,12 @@
 ;; Holds the mutable references that command handlers need.
 ;; Created by interfaces/tui.rkt from a tui-ctx.
 (struct cmd-ctx
-  (state-box            ; (boxof ui-state)
-   running-box          ; (boxof boolean)
-   event-bus            ; event-bus? or #f
-   session-dir          ; (or/c path-string? #f)
-   needs-redraw-box     ; (boxof boolean)
-   model-registry-box)  ; (or/c (boxof (or/c model-registry? #f)) #f)
+        (state-box ; (boxof ui-state)
+         running-box ; (boxof boolean)
+         event-bus ; event-bus? or #f
+         session-dir ; (or/c path-string? #f)
+         needs-redraw-box ; (boxof boolean)
+         model-registry-box) ; (or/c (boxof (or/c model-registry? #f)) #f)
   #:transparent)
 
 ;; ============================================================
@@ -60,12 +59,11 @@
       (let ([leaves (map message-id (leaf-nodes idx))]
             [entries (vector->list (session-index-entry-order idx))])
         (for/list ([msg (in-list entries)])
-          (branch-info
-           (message-id msg)
-           (message-parent-id msg)
-           (message-role msg)
-           (member (message-id msg) leaves)
-           #f)))))  ; active? will be set separately
+          (branch-info (message-id msg)
+                       (message-parent-id msg)
+                       (message-role msg)
+                       (member (message-id msg) leaves)
+                       #f))))) ; active? will be set separately
 
 ;; Mark active branch in the list
 (define (mark-active-branch branches active-id)
@@ -89,22 +87,17 @@
   (define state (unbox (cmd-ctx-state-box cctx)))
   (define idx (get-session-index cctx))
   (define branches (build-branch-info-list idx))
-  (define active-id (or (ui-state-current-branch state)
-                        (and (not (null? branches))
-                             (branch-info-id (last branches)))))
+  (define active-id
+    (or (ui-state-current-branch state)
+        (and (not (null? branches)) (branch-info-id (last branches)))))
   (define branches-with-active (mark-active-branch branches active-id))
   ;; Render branch list as transcript entries
   (define-values (cols rows) (tui-screen-size))
   (define lines (render-branch-list branches-with-active cols))
   (define new-state
-    (for/fold ([s state])
-              ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system
-                                                  (styled-line->text line)
-                                                  0
-                                                  (hash)))))
-  (set-box! (cmd-ctx-state-box cctx)
-            (set-visible-branches new-state branches-with-active))
+    (for/fold ([s state]) ([line (in-list lines)])
+      (add-transcript-entry s (transcript-entry 'system (styled-line->text line) 0 (hash)))))
+  (set-box! (cmd-ctx-state-box cctx) (set-visible-branches new-state branches-with-active))
   'continue)
 
 ;; Handle /leaves command
@@ -112,20 +105,16 @@
   (define state (unbox (cmd-ctx-state-box cctx)))
   (define idx (get-session-index cctx))
   (define branches (build-branch-info-list idx))
-  (define active-id (or (ui-state-current-branch state)
-                        (and (not (null? branches))
-                             (branch-info-id (last branches)))))
+  (define active-id
+    (or (ui-state-current-branch state)
+        (and (not (null? branches)) (branch-info-id (last branches)))))
   (define branches-with-active (mark-active-branch branches active-id))
   ;; Render leaf nodes as transcript entries
   (define-values (cols rows) (tui-screen-size))
   (define lines (render-leaf-nodes branches-with-active cols))
   (define new-state
-    (for/fold ([s state])
-              ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system
-                                                  (styled-line->text line)
-                                                  0
-                                                  (hash)))))
+    (for/fold ([s state]) ([line (in-list lines)])
+      (add-transcript-entry s (transcript-entry 'system (styled-line->text line) 0 (hash)))))
   (set-box! (cmd-ctx-state-box cctx) new-state)
   'continue)
 
@@ -133,19 +122,16 @@
 (define (handle-switch-command cctx branch-id)
   (define state (unbox (cmd-ctx-state-box cctx)))
   (define idx (get-session-index cctx))
-  (define entry (if (and idx (lookup-entry idx branch-id))
-                    (transcript-entry 'system
-                                      (format "[switched to branch: ~a]" branch-id)
-                                      0
-                                      (hash 'branch-id branch-id))
-                    (transcript-entry 'error
-                                      (format "Branch not found: ~a" branch-id)
-                                      0
-                                      (hash))))
+  (define entry
+    (if (and idx (lookup-entry idx branch-id))
+        (transcript-entry 'system
+                          (format "[switched to branch: ~a]" branch-id)
+                          0
+                          (hash 'branch-id branch-id))
+        (transcript-entry 'error (format "Branch not found: ~a" branch-id) 0 (hash))))
   (define new-state (add-transcript-entry state entry))
   (when (and idx (lookup-entry idx branch-id))
-    (set-box! (cmd-ctx-state-box cctx)
-              (set-current-branch new-state branch-id)))
+    (set-box! (cmd-ctx-state-box cctx) (set-current-branch new-state branch-id)))
   'continue)
 
 ;; Handle /children <id> command
@@ -158,27 +144,23 @@
                 state)
         (let ([children-msgs (children-of idx node-id)])
           (if (null? children-msgs)
-              (values (list (styled-line (list (styled-segment (format "  Node ~a has no children" node-id) '(dim)))))
+              (values (list (styled-line (list (styled-segment (format "  Node ~a has no children"
+                                                                       node-id)
+                                                               '(dim)))))
                       state)
               (let*-values ([(cols rows) (tui-screen-size)])
-                (let* ([children-info
-                        (for/list ([msg (in-list children-msgs)])
-                          (branch-info
-                           (message-id msg)
-                           node-id
-                           (message-role msg)
-                           (null? (children-of idx (message-id msg)))
-                           #f))]
+                (let* ([children-info (for/list ([msg (in-list children-msgs)])
+                                        (branch-info (message-id msg)
+                                                     node-id
+                                                     (message-role msg)
+                                                     (null? (children-of idx (message-id msg)))
+                                                     #f))]
                        [rendered (render-children-list node-id children-info cols)])
                   (values rendered state)))))))
   ;; Add lines to transcript
   (define final-state
-    (for/fold ([s new-state])
-              ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system
-                                                  (styled-line->text line)
-                                                  0
-                                                  (hash)))))
+    (for/fold ([s new-state]) ([line (in-list lines)])
+      (add-transcript-entry s (transcript-entry 'system (styled-line->text line) 0 (hash)))))
   (set-box! (cmd-ctx-state-box cctx) final-state)
   'continue)
 
@@ -204,14 +186,10 @@
            (define header (transcript-entry 'system "Session history:" 0 (hash)))
            (define entries-out
              (for/list ([msg (in-vector entries)])
-               (transcript-entry 'system
-                                  (format "  [~a]" (message-role msg))
-                                  0
-                                  (hash))))
+               (transcript-entry 'system (format "  [~a]" (message-role msg)) 0 (hash))))
            (define all-entries (cons header entries-out))
            (define new-state
-             (for/fold ([s state])
-                       ([e (in-list all-entries)])
+             (for/fold ([s state]) ([e (in-list all-entries)])
                (add-transcript-entry s e)))
            (set-box! (cmd-ctx-state-box cctx) new-state)
            'continue))]))
@@ -228,10 +206,11 @@
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     [else
-     (define entry (transcript-entry 'system
-                                      (format "[fork requested at: ~a]" entry-id)
-                                      0
-                                      (hash 'fork-entry-id entry-id)))
+     (define entry
+       (transcript-entry 'system
+                         (format "[fork requested at: ~a]" entry-id)
+                         0
+                         (hash 'fork-entry-id entry-id)))
      ;; Publish fork event for runtime to handle
      (when (cmd-ctx-event-bus cctx)
        (publish! (cmd-ctx-event-bus cctx)
@@ -256,8 +235,7 @@
     ;; No registry available
     [(not reg)
      (define entry (transcript-entry 'error "[no model registry available]" 0 (hash)))
-     (set-box! (cmd-ctx-state-box cctx)
-               (add-transcript-entry state entry))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     ;; No argument — list available models
     [(not arg)
@@ -267,14 +245,14 @@
      (define model-entries
        (for/list ([m (in-list models)])
          (define marker (if (equal? (model-entry-name m) default) " *" "  "))
-         (transcript-entry 'system
-                           (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))
-                           0
-                           (hash))))
+         (transcript-entry
+          'system
+          (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))
+          0
+          (hash))))
      (define all-entries (cons header model-entries))
      (define new-state
-       (for/fold ([s state])
-                 ([e (in-list all-entries)])
+       (for/fold ([s state]) ([e (in-list all-entries)])
          (add-transcript-entry s e)))
      (set-box! (cmd-ctx-state-box cctx) new-state)
      'continue]
@@ -283,11 +261,12 @@
      (define resolution (resolve-model reg arg))
      (cond
        [(not resolution)
-        (define entry (transcript-entry 'error
-                                         (format "Model not found: ~a. Use /model to list available models." arg)
-                                         0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+        (define entry
+          (transcript-entry 'error
+                            (format "Model not found: ~a. Use /model to list available models." arg)
+                            0
+                            (hash)))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else
         ;; Publish model.switched event
@@ -297,17 +276,21 @@
                                 (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
                                 (or (ui-state-session-id state) "")
                                 #f
-                                (hash 'model (model-resolution-model-name resolution)
-                                      'provider (model-resolution-provider-name resolution)))))
-        (define entry (transcript-entry 'system
-                                         (format "[switched to model: ~a (provider: ~a)]"
-                                                 (model-resolution-model-name resolution)
-                                                 (model-resolution-provider-name resolution))
-                                         0
-                                         (hash 'model (model-resolution-model-name resolution)
-                                               'provider (model-resolution-provider-name resolution))))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+                                (hash 'model
+                                      (model-resolution-model-name resolution)
+                                      'provider
+                                      (model-resolution-provider-name resolution)))))
+        (define entry
+          (transcript-entry 'system
+                            (format "[switched to model: ~a (provider: ~a)]"
+                                    (model-resolution-model-name resolution)
+                                    (model-resolution-provider-name resolution))
+                            0
+                            (hash 'model
+                                  (model-resolution-model-name resolution)
+                                  'provider
+                                  (model-resolution-provider-name resolution))))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue])]))
 
 ;; ============================================================
@@ -330,8 +313,7 @@
        [(fork) (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
        [(switch-error children-error)
         (define entry (transcript-entry 'error (cadr cmd) 0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else 'continue])]
     ;; Handle simple symbol commands
@@ -340,20 +322,32 @@
        [(model) (handle-model-command cctx)]
        [(history) (handle-history-command cctx)]
        [(help)
-        (define help-text "Commands: /help /clear /compact /interrupt /quit /branches /leaves /children /switch /model /history /fork")
-        (define entry (transcript-entry 'system help-text 0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+        (define help-entries
+          (list (transcript-entry 'system "Commands:" 0 (hash))
+                (transcript-entry 'system "  /help        Show this help" 0 (hash))
+                (transcript-entry 'system "  /clear       Clear transcript" 0 (hash))
+                (transcript-entry 'system "  /compact     Compact session context" 0 (hash))
+                (transcript-entry 'system "  /interrupt   Cancel current operation" 0 (hash))
+                (transcript-entry 'system "  /quit        Exit q" 0 (hash))
+                (transcript-entry 'system "  /branches    List session branches" 0 (hash))
+                (transcript-entry 'system "  /leaves      List leaf nodes" 0 (hash))
+                (transcript-entry 'system "  /children    Show children of a node" 0 (hash))
+                (transcript-entry 'system "  /switch      Switch to a branch" 0 (hash))
+                (transcript-entry 'system "  /model       List or switch models" 0 (hash))
+                (transcript-entry 'system "  /history     Show session history" 0 (hash))
+                (transcript-entry 'system "  /fork        Fork session at entry" 0 (hash))))
+        (define new-state
+          (for/fold ([s state]) ([e (in-list help-entries)])
+            (add-transcript-entry s e)))
+        (set-box! (cmd-ctx-state-box cctx) new-state)
         'continue]
        [(clear)
-        (set-box! (cmd-ctx-state-box cctx)
-                  (struct-copy ui-state state [transcript '()]))
+        (set-box! (cmd-ctx-state-box cctx) (struct-copy ui-state state [transcript '()]))
         'continue]
        [(compact)
         ;; Compact: add status message and notify runtime
         (define entry (transcript-entry 'system "[compact requested]" 0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         (when (cmd-ctx-event-bus cctx)
           (publish! (cmd-ctx-event-bus cctx)
                     (make-event "compact.requested"
@@ -371,9 +365,9 @@
                                 (or (ui-state-session-id state) "")
                                 #f
                                 (hash))))
-        (define entry (transcript-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+        (define entry
+          (transcript-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [(branches) (handle-branches-command cctx)]
        [(leaves) (handle-leaves-command cctx)]
@@ -382,7 +376,6 @@
         'quit]
        [(unknown)
         (define entry (transcript-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx)
-                  (add-transcript-entry state entry))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else 'continue])]))

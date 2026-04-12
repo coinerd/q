@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-04-11
+
+### TUI Tool Display Enhancement & UX Polish
+- **#126**: Tool calls/results now show arguments and result summaries in TUI
+- **#127**: Ctrl+C interrupts agent when no text selection is active
+- **#128**: ASCII busy indicator (`*`) replaces emoji `⏳` for SSH/tmux compatibility
+- **#129**: `/help` expanded into full reference table with descriptions
+- **#130**: Welcome message for first-run users (TUI + CLI)
+- **#131**: Text prefixes `[TOOL]`, `[OK]`, `[FAIL]`, `[SYS]`, `[ERR]` for accessibility
+- **#132**: Fixed scroll-to-top for multi-line transcript entries
+- **#133**: Multi-line input via Ctrl+J (Enter submits, Ctrl+J inserts newline)
+
+### Sub-issues
+- **#153**: TUI first-run welcome banner
+- **#154**: CLI first-run onboarding guidance
+
+### Metrics
+- 3,009 tests passing, 6/6 lints green
+- 96 source modules, 104 test files
+
 ## [0.7.0] — 2026-04-11
 
 ### Builder Cookbook and Team Adoption
