@@ -5,10 +5,8 @@
          racket/file
          racket/list
          racket/dict
-         (only-in "../tool.rkt"
-                  make-success-result make-error-result)
-         (only-in "../../runtime/safe-mode.rkt"
-                  allowed-path?))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt" allowed-path?))
 
 (provide tool-read)
 
@@ -44,8 +42,7 @@
 (define (tool-read args [exec-ctx #f])
   (define path-str (hash-ref args 'path #f))
   (cond
-    [(not path-str)
-     (err "Missing required argument: path")]
+    [(not path-str) (err "Missing required argument: path")]
     [else
      (define offset (hash-ref args 'offset 1))
      (define limit (hash-ref args 'limit #f))
@@ -56,16 +53,14 @@
         (err (format "Access denied: path outside project root: ~a" path-str))]
 
        ;; 1. File existence check
-       [(not (file-exists? path-str))
-        (err (format "File not found: ~a" path-str))]
+       [(not (file-exists? path-str)) (err (format "File not found: ~a" path-str))]
 
        [else
         ;; 2. Read bytes and check for binary
         (define raw-bytes (file->bytes path-str))
 
         (cond
-          [(contains-null-bytes? raw-bytes)
-           (err (format "File appears to be binary: ~a" path-str))]
+          [(contains-null-bytes? raw-bytes) (err (format "File appears to be binary: ~a" path-str))]
 
           [else
            ;; 3. Convert to text, split into lines
@@ -77,16 +72,15 @@
              (and (> (string-length text) 0)
                   (char=? (string-ref text (sub1 (string-length text))) #\newline)))
            (define display-lines
-             (if has-trailing-newline (drop-right all-lines 1) all-lines))
+             (if has-trailing-newline
+                 (drop-right all-lines 1)
+                 all-lines))
            (define total-lines (length display-lines))
 
            ;; 4. Empty file
            (cond
              [(zero? total-lines)
-              (ok '() (hasheq 'total-lines 0
-                              'start-line 0
-                              'end-line 0
-                              'path path-str))]
+              (ok '() (hasheq 'total-lines 0 'start-line 0 'end-line 0 'path path-str))]
 
              [else
               ;; 5. Apply offset/limit
@@ -100,10 +94,7 @@
 
               (cond
                 [(null? sliced)
-                 (ok '() (hasheq 'total-lines total-lines
-                                 'start-line 0
-                                 'end-line 0
-                                 'path path-str))]
+                 (ok '() (hasheq 'total-lines total-lines 'start-line 0 'end-line 0 'path path-str))]
 
                 [else
                  (define formatted
@@ -113,11 +104,18 @@
                  (define joined (string-join formatted "\n"))
                  (define result-text
                    (if (> (string-length joined) DEFAULT-MAX-BYTES)
-                       (substring joined 0 DEFAULT-MAX-BYTES)
+                       (string-append (substring joined 0 DEFAULT-MAX-BYTES)
+                                      "\n[SYS] Output truncated at "
+                                      (number->string DEFAULT-MAX-BYTES)
+                                      " bytes]")
                        joined))
 
                  (ok (list (string-append result-text "\n"))
-                     (hasheq 'total-lines total-lines
-                             'start-line (car (first sliced))
-                             'end-line (car (last sliced))
-                             'path path-str))])])])])]))
+                     (hasheq 'total-lines
+                             total-lines
+                             'start-line
+                             (car (first sliced))
+                             'end-line
+                             (car (last sliced))
+                             'path
+                             path-str))])])])])]))

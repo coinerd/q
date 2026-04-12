@@ -12,6 +12,7 @@
 (require racket/contract
          racket/string
          racket/port
+         racket/generator
          json
          net/url
          net/http-client
@@ -19,15 +20,15 @@
          "provider.rkt"
          "stream.rkt")
 
-(provide
- make-anthropic-provider
- anthropic-build-request-body
- anthropic-parse-response
- anthropic-parse-stream-chunks
- ;; Internal helpers for testing
- anthropic-translate-tool
- anthropic-translate-stop-reason
- anthropic-check-http-status!)
+(provide make-anthropic-provider
+         anthropic-build-request-body
+         anthropic-parse-response
+         anthropic-parse-stream-chunks
+         anthropic-parse-single-event
+         ;; Internal helpers for testing
+         anthropic-translate-tool
+         anthropic-translate-stop-reason
+         anthropic-check-http-status!)
 
 ;; ============================================================
 ;; Constants
@@ -67,37 +68,36 @@
            (if (hash? content)
                (hash-ref content 'content "")
                (if (string? content) content "")))
-         (hash 'role "user"
-               'content (list (hash 'type "tool_result"
-                                    'tool_use_id tool-call-id
-                                    'content tool-result-content)))]
+         (hash
+          'role
+          "user"
+          'content
+          (list (hash 'type "tool_result" 'tool_use_id tool-call-id 'content tool-result-content)))]
         ;; Assistant with list content (tool calls)
         [(and (equal? role "assistant") (list? content))
-         (hash 'role "assistant"
+         (hash 'role
+               "assistant"
                'content
                (for/list ([block (in-list content)])
                  (define btype (hash-ref block 'type "text"))
                  (cond
-                   [(equal? btype "text")
-                    (hash 'type "text" 'text (hash-ref block 'text ""))]
+                   [(equal? btype "text") (hash 'type "text" 'text (hash-ref block 'text ""))]
                    [(equal? btype "tool-call")
-                    (hash 'type "tool_use"
-                          'id (hash-ref block 'id "")
-                          'name (hash-ref block 'name "")
-                          'input (hash-ref block 'arguments (hash)))]
+                    (hash 'type
+                          "tool_use"
+                          'id
+                          (hash-ref block 'id "")
+                          'name
+                          (hash-ref block 'name "")
+                          'input
+                          (hash-ref block 'arguments (hash)))]
                    [else block])))]
         ;; Simple string content: wrap in text block
-        [(string? content)
-         (hash 'role role
-               'content (list (hash 'type "text" 'text content)))]
+        [(string? content) (hash 'role role 'content (list (hash 'type "text" 'text content)))]
         ;; Fallback: pass through
         [else msg])))
 
-  (define base
-    (hasheq 'model model-name
-            'max_tokens max-tokens
-            'messages messages
-            'stream stream?))
+  (define base (hasheq 'model model-name 'max_tokens max-tokens 'messages messages 'stream stream?))
 
   ;; Add optional temperature
   (define with-temp
@@ -130,9 +130,7 @@
   (define name (hash-ref fn 'name "unknown"))
   (define description (hash-ref fn 'description ""))
   (define parameters (hash-ref fn 'parameters (hash)))
-  (hash 'name name
-        'description description
-        'input_schema parameters))
+  (hash 'name name 'description description 'input_schema parameters))
 
 ;; ============================================================
 ;; Response parsing
@@ -150,25 +148,29 @@
 
   ;; Translate usage: input_tokens → prompt_tokens, output_tokens → completion_tokens
   (define usage
-    (hash 'prompt_tokens (hash-ref usage-raw 'input_tokens 0)
-          'completion_tokens (hash-ref usage-raw 'output_tokens 0)
-          'total_tokens (+ (hash-ref usage-raw 'input_tokens 0)
-                           (hash-ref usage-raw 'output_tokens 0))))
+    (hash 'prompt_tokens
+          (hash-ref usage-raw 'input_tokens 0)
+          'completion_tokens
+          (hash-ref usage-raw 'output_tokens 0)
+          'total_tokens
+          (+ (hash-ref usage-raw 'input_tokens 0) (hash-ref usage-raw 'output_tokens 0))))
 
   ;; Translate content blocks
   (define content
     (for/list ([block (in-list content-blocks)])
       (define type (hash-ref block 'type "text"))
       (cond
-        [(equal? type "text")
-         (hash 'type "text" 'text (hash-ref block 'text ""))]
+        [(equal? type "text") (hash 'type "text" 'text (hash-ref block 'text ""))]
         [(equal? type "tool_use")
-         (hash 'type "tool-call"
-               'id (hash-ref block 'id "")
-               'name (hash-ref block 'name "")
-               'arguments (hash-ref block 'input (hash)))]
-        [else
-         block])))
+         (hash 'type
+               "tool-call"
+               'id
+               (hash-ref block 'id "")
+               'name
+               (hash-ref block 'name "")
+               'arguments
+               (hash-ref block 'input (hash)))]
+        [else block])))
 
   (make-model-response content usage model-name stop-reason))
 
@@ -199,67 +201,80 @@
 ;;   - message_delta: usage + stop_reason
 ;;   - message_stop: stream complete
 (define (anthropic-parse-stream-chunks raw-events)
+  (define current-tool-id (box #f))
+  (define current-tool-name (box #f))
+  (define current-tool-index (box 0))
   (define results '())
-  (define current-tool-id #f)
-  (define current-tool-name #f)
-  (define current-tool-index 0)
-
   (for ([event (in-list raw-events)])
-    (define type (hash-ref event 'type #f))
-    (cond
-      ;; Text delta
-      [(equal? type "content_block_delta")
-       (define delta (hash-ref event 'delta (hash)))
-       (define delta-type (hash-ref delta 'type #f))
-       (cond
-         [(equal? delta-type "text_delta")
-          (define text (hash-ref delta 'text ""))
-          (set! results
-                (cons (stream-chunk text #f #f #f) results))]
-         [(equal? delta-type "input_json_delta")
-          ;; Partial JSON for tool input — emit as tool-call delta
-          (define partial-json (hash-ref delta 'partial_json ""))
-          (set! results
-                (cons (stream-chunk
-                       #f
-                       (hash 'index current-tool-index
-                             'id current-tool-id
-                             'function (hash 'name current-tool-name
-                                             'arguments partial-json))
-                       #f #f) results))]
-         [else (void)])]
+    (set!
+     results
+     (append
+      results
+      (anthropic-parse-single-event event current-tool-id current-tool-name current-tool-index))))
+  results)
 
-      ;; Tool use block starts
-      [(equal? type "content_block_start")
-       (define content-block (hash-ref event 'content_block (hash)))
-       (define cb-type (hash-ref content-block 'type #f))
-       (define idx (hash-ref event 'index 0))
-       (when (equal? cb-type "tool_use")
-         (set! current-tool-id (hash-ref content-block 'id ""))
-         (set! current-tool-name (hash-ref content-block 'name ""))
-         (set! current-tool-index idx))]
+;; ============================================================
+;; Per-event stream parsing (for incremental generator)
+;; ============================================================
 
-      ;; Message delta: usage + stop reason → done chunk
-      [(equal? type "message_delta")
-       (define delta (hash-ref event 'delta (hash)))
-       (define usage-raw (hash-ref event 'usage (hash)))
-       (define stop-reason (hash-ref delta 'stop_reason #f))
-       (define out-tokens (hash-ref usage-raw 'output_tokens 0))
-       (define usage (hash 'completion_tokens out-tokens))
-       (set! results
-             (cons (stream-chunk #f #f usage #t) results))]
+;; Parse a single Anthropic SSE event into a list of stream-chunks.
+;; Mutates tool-id-box, tool-name-box, tool-index-box to track tool state.
+(define (anthropic-parse-single-event event tool-id-box tool-name-box tool-index-box)
+  (define type (hash-ref event 'type #f))
+  (define results '())
+  (cond
+    ;; Text delta
+    [(equal? type "content_block_delta")
+     (define delta (hash-ref event 'delta (hash)))
+     (define delta-type (hash-ref delta 'type #f))
+     (cond
+       [(equal? delta-type "text_delta")
+        (define text (hash-ref delta 'text ""))
+        (set! results (cons (stream-chunk text #f #f #f) results))]
+       [(equal? delta-type "input_json_delta")
+        ;; Partial JSON for tool input — emit as tool-call delta
+        (define partial-json (hash-ref delta 'partial_json ""))
+        (set! results
+              (cons (stream-chunk #f
+                                  (hash 'index
+                                        (unbox tool-index-box)
+                                        'id
+                                        (unbox tool-id-box)
+                                        'function
+                                        (hash 'name (unbox tool-name-box) 'arguments partial-json))
+                                  #f
+                                  #f)
+                    results))]
+       [else (void)])]
 
-      ;; message_start: extract initial usage
-      [(equal? type "message_start")
-       (define message (hash-ref event 'message (hash)))
-       (define usage-raw (hash-ref message 'usage (hash)))
-       (define in-tokens (hash-ref usage-raw 'input_tokens 0))
-       (when (> in-tokens 0)
-         (set! results
-               (cons (stream-chunk #f #f (hash 'prompt_tokens in-tokens) #f) results)))]
+    ;; Tool use block starts
+    [(equal? type "content_block_start")
+     (define content-block (hash-ref event 'content_block (hash)))
+     (define cb-type (hash-ref content-block 'type #f))
+     (define idx (hash-ref event 'index 0))
+     (when (equal? cb-type "tool_use")
+       (set-box! tool-id-box (hash-ref content-block 'id ""))
+       (set-box! tool-name-box (hash-ref content-block 'name ""))
+       (set-box! tool-index-box idx))]
 
-      [else (void)]))
+    ;; Message delta: usage + stop reason → done chunk
+    [(equal? type "message_delta")
+     (define delta (hash-ref event 'delta (hash)))
+     (define usage-raw (hash-ref event 'usage (hash)))
+     (define stop-reason (hash-ref delta 'stop_reason #f))
+     (define out-tokens (hash-ref usage-raw 'output_tokens 0))
+     (define usage (hash 'completion_tokens out-tokens))
+     (set! results (cons (stream-chunk #f #f usage #t) results))]
 
+    ;; message_start: extract initial usage
+    [(equal? type "message_start")
+     (define message (hash-ref event 'message (hash)))
+     (define usage-raw (hash-ref message 'usage (hash)))
+     (define in-tokens (hash-ref usage-raw 'input_tokens 0))
+     (when (> in-tokens 0)
+       (set! results (cons (stream-chunk #f #f (hash 'prompt_tokens in-tokens) #f) results)))]
+
+    [else (void)])
   (reverse results))
 
 ;; ============================================================
@@ -267,38 +282,42 @@
 ;; ============================================================
 
 (define (anthropic-check-http-status! status-line response-body)
-  (define status-str (if (bytes? status-line)
-                         (bytes->string/utf-8 status-line)
-                         status-line))
+  (define status-str
+    (if (bytes? status-line)
+        (bytes->string/utf-8 status-line)
+        status-line))
   (define status-code
     (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
-      (if parts (string->number (cadr parts)) 0)))
+      (if parts
+          (string->number (cadr parts))
+          0)))
   (when (>= status-code 400)
-    (define error-body (if (bytes? response-body)
-                           (bytes->string/utf-8 response-body)
-                           response-body))
+    (define error-body
+      (if (bytes? response-body)
+          (bytes->string/utf-8 response-body)
+          response-body))
     (cond
       [(= status-code 401)
-       (raise (exn:fail (format "Anthropic API authentication failed (401): ~a"
-                                error-body)
+       (raise (exn:fail (format "Anthropic API authentication failed (401): ~a" error-body)
                         (current-continuation-marks)))]
       [(= status-code 403)
-       (raise (exn:fail (format "Anthropic API forbidden (403): ~a"
-                                error-body)
+       (raise (exn:fail (format "Anthropic API forbidden (403): ~a" error-body)
                         (current-continuation-marks)))]
       [(= status-code 429)
-       (raise (exn:fail (format "Anthropic API rate limited (429): ~a"
-                                error-body)
+       (define retry-hint
+         (with-handlers ([exn:fail? (lambda (_) "")])
+           (define err-json (string->jsexpr error-body))
+           (define retry-ms (hash-ref (hash-ref err-json 'error (hash)) 'retry_after_ms #f))
+           (if retry-ms
+               (format " Retry after ~a seconds." (quotient retry-ms 1000))
+               " Please wait and try again.")))
+       (raise (exn:fail (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body)
                         (current-continuation-marks)))]
       [(>= status-code 500)
-       (raise (exn:fail (format "Anthropic API server error (~a): ~a"
-                                status-code
-                                error-body)
+       (raise (exn:fail (format "Anthropic API server error (~a): ~a" status-code error-body)
                         (current-continuation-marks)))]
       [else
-       (raise (exn:fail (format "Anthropic API error (~a): ~a"
-                                status-code
-                                error-body)
+       (raise (exn:fail (format "Anthropic API error (~a): ~a" status-code error-body)
                         (current-continuation-marks)))])))
 
 ;; ============================================================
@@ -314,9 +333,7 @@
           "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   (define-values (status-line response-headers response-port)
-    (http-sendrecv uri 'POST
-                   #:headers headers
-                   #:data body-bytes))
+    (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
   (define response-body (read-response-body response-port))
   ;; Check HTTP status
   (anthropic-check-http-status! status-line response-body)
@@ -327,6 +344,7 @@
 ;; ============================================================
 
 (define (make-anthropic-provider config)
+  (validate-api-key! "Anthropic" "ANTHROPIC_API_KEY" config)
   (define base-url (hash-ref config 'base-url ANTHROPIC-DEFAULT-BASE-URL))
   (define api-key (hash-ref config 'api-key ""))
   (define default-model (hash-ref config 'model ANTHROPIC-DEFAULT-MODEL))
@@ -335,10 +353,9 @@
     (define merged-req
       (if (hash-has-key? (model-request-settings req) 'model)
           req
-          (make-model-request
-           (model-request-messages req)
-           (model-request-tools req)
-           (hash-set (model-request-settings req) 'model default-model))))
+          (make-model-request (model-request-messages req)
+                              (model-request-tools req)
+                              (hash-set (model-request-settings req) 'model default-model))))
     (define body (anthropic-build-request-body merged-req))
     (define raw (anthropic-do-http-request base-url api-key "/v1/messages" body))
     (anthropic-parse-response raw))
@@ -347,10 +364,9 @@
     (define merged-req
       (if (hash-has-key? (model-request-settings req) 'model)
           req
-          (make-model-request
-           (model-request-messages req)
-           (model-request-tools req)
-           (hash-set (model-request-settings req) 'model default-model))))
+          (make-model-request (model-request-messages req)
+                              (model-request-tools req)
+                              (hash-set (model-request-settings req) 'model default-model))))
     (define body (anthropic-build-request-body merged-req #:stream? #t))
     (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
     (define uri (string->url url-str))
@@ -360,32 +376,47 @@
             "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
     (define-values (status-line response-headers response-port)
-      (http-sendrecv uri 'POST
-                     #:headers headers
-                     #:data body-bytes))
+      (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
     ;; Check HTTP status before streaming
     (define status-code
       (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])
-        (if parts (string->number (cadr parts)) 0)))
+        (if parts
+            (string->number (cadr parts))
+            0)))
     (when (>= status-code 400)
       (define resp-body (read-response-body/timeout response-port))
       (anthropic-check-http-status! status-line resp-body))
-    ;; Incremental SSE parsing — read line-by-line from port
-    (define raw-events
-      (let loop ([acc '()])
-        (define line (read-line/timeout response-port))
-        (cond
-          [(eq? line #f) (reverse acc)]  ; timeout — return what we have
-          [(eof-object? line) (reverse acc)]
-          [else
-           (let ([parsed (parse-sse-line line)])
-             (if (hash? parsed)
-                 (loop (cons parsed acc))
-                 (loop acc)))])))
-    (anthropic-parse-stream-chunks raw-events))
+    ;; Incremental SSE parsing — generator yields chunks one at a time
+    (define raw-port response-port)
+    (define current-tool-id (box #f))
+    (define current-tool-name (box #f))
+    (define current-tool-index (box 0))
+    (generator ()
+               (let loop ()
+                 (define line (read-line/timeout raw-port))
+                 (cond
+                   [(or (eq? line #f) (eof-object? line))
+                    (close-input-port raw-port)
+                    (yield #f)]
+                   [else
+                    (define parsed (parse-sse-line line))
+                    (cond
+                      [(eq? parsed 'done)
+                       (close-input-port raw-port)
+                       (yield #f)]
+                      [(hash? parsed)
+                       ;; Parse the Anthropic event into stream-chunks
+                       (define chunks
+                         (anthropic-parse-single-event parsed
+                                                       current-tool-id
+                                                       current-tool-name
+                                                       current-tool-index))
+                       (for ([ch (in-list chunks)])
+                         (yield ch))
+                       (loop)]
+                      [else (loop)])]))))
 
-  (make-provider
-   (lambda () "anthropic")
-   (lambda () (hash 'streaming #t 'token-counting #f))
-   send
-   stream))
+  (make-provider (lambda () "anthropic")
+                 (lambda () (hash 'streaming #t 'token-counting #f))
+                 send
+                 stream))

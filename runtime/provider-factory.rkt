@@ -22,16 +22,17 @@
 
 ;; Build the appropriate provider based on provider name.
 (define (create-provider-for-name prov-name base-url api-key model-name)
-  (define config (hash 'base-url base-url
-                        'api-key api-key
-                        'model model-name))
+  ;; Local providers don't need real API keys — use a sentinel to
+  ;; pass validation when no credential is available.
+  (define effective-key
+    (if (and (or (not api-key) (string=? (string-trim api-key) "")) (local-provider? base-url))
+        "local-no-auth"
+        api-key))
+  (define config (hash 'base-url base-url 'api-key effective-key 'model model-name))
   (cond
-    [(equal? prov-name "gemini")
-     (make-gemini-provider config)]
-    [(equal? prov-name "anthropic")
-     (make-anthropic-provider config)]
-    [else
-     (make-openai-compatible-provider config)]))
+    [(equal? prov-name "gemini") (make-gemini-provider config)]
+    [(equal? prov-name "anthropic") (make-anthropic-provider config)]
+    [else (make-openai-compatible-provider config)]))
 
 ;; Helper: Check if a URL points to a local/self-hosted provider.
 ;; Local providers don't require API keys.
@@ -49,9 +50,7 @@
   (and (string-contains? url-str "172.")
        (regexp-match? #rx"172\\.([0-9]+)\\." url-str)
        (let ([m (regexp-match #rx"172\\.([0-9]+)\\." url-str)])
-         (and m
-              (let ([octet (string->number (cadr m))])
-                (and octet (<= 16 octet 31)))))))
+         (and m (let ([octet (string->number (cadr m))]) (and octet (<= 16 octet 31)))))))
 
 ;; Build the provider from CLI config + settings.
 ;; Resolution:
@@ -62,16 +61,14 @@
 ;;   5. If no credential -> warn and use mock provider
 ;;   6. Create make-openai-compatible-provider with config hash
 (define (build-provider config settings)
-  (define project-dir
-    (or (hash-ref config 'project-dir #f)
-        (current-directory)))
+  (define project-dir (or (hash-ref config 'project-dir #f) (current-directory)))
   (define merged (q-settings-merged settings))
   (cond
     [(hash-empty? merged)
      ;; No config found -> mock
      (fprintf (current-error-port)
-             "Warning: No config found (~a.q/config.json or .q/config.json), using mock provider~n"
-             (find-system-path 'home-dir))
+              "Warning: No config found (~a.q/config.json or .q/config.json), using mock provider~n"
+              (find-system-path 'home-dir))
      (build-mock-provider)]
     [else
      (define model-name (hash-ref config 'model #f))
@@ -80,7 +77,8 @@
      (cond
        [(not resolution)
         ;; Model not found -> mock
-        (fprintf (current-error-port) "Warning: Model ~a not found in registry, using mock provider~n"
+        (fprintf (current-error-port)
+                 "Warning: Model ~a not found in registry, using mock provider~n"
                  (or model-name "(default)"))
         (build-mock-provider)]
        [else
@@ -93,21 +91,30 @@
            ;; No credentials - check if local provider (no auth needed)
            (if (local-provider? base-url)
                (begin
-                 (fprintf (current-error-port) "Info: Using local provider ~a without authentication~n" prov-name)
-                 (create-provider-for-name prov-name base-url "" (model-resolution-model-name resolution)))
+                 (fprintf (current-error-port)
+                          "Info: Using local provider ~a without authentication~n"
+                          prov-name)
+                 (create-provider-for-name prov-name
+                                           base-url
+                                           ""
+                                           (model-resolution-model-name resolution)))
                (begin
                  ;; No credentials and not local -> mock
-                 (fprintf (current-error-port) "Warning: No API key for provider ~a, using mock provider~n" prov-name)
+                 (fprintf (current-error-port)
+                          "Warning: No API key for provider ~a, using mock provider~n"
+                          prov-name)
                  (build-mock-provider)))]
           [else
-           (create-provider-for-name prov-name base-url (credential-api-key cred) (model-resolution-model-name resolution))])])]))
+           (create-provider-for-name prov-name
+                                     base-url
+                                     (credential-api-key cred)
+                                     (model-resolution-model-name resolution))])])]))
 
 ;; Helper: create a mock provider
 (define (build-mock-provider)
   (define mock-response
-    (make-model-response
-     (list (hasheq 'type "text" 'text "Mock response from q."))
-     (hasheq 'prompt-tokens 0 'completion-tokens 0 'total-tokens 0)
-     "mock-model"
-     'stop))
+    (make-model-response (list (hasheq 'type "text" 'text "Mock response from q."))
+                         (hasheq 'prompt-tokens 0 'completion-tokens 0 'total-tokens 0)
+                         "mock-model"
+                         'stop))
   (make-mock-provider mock-response #:name "mock"))

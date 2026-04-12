@@ -20,11 +20,10 @@
          "provider.rkt"
          "stream.rkt")
 
-(provide
- make-openai-compatible-provider
- openai-build-request-body
- openai-parse-response
- check-http-status!)
+(provide make-openai-compatible-provider
+         openai-build-request-body
+         openai-parse-response
+         check-http-status!)
 
 ;; ============================================================
 ;; Request body construction
@@ -33,9 +32,12 @@
 (define (openai-build-request-body req #:stream? [stream? #f])
   (define settings (model-request-settings req))
   (define base
-    (hasheq 'model (hash-ref settings 'model "gpt-4")
-            'messages (model-request-messages req)
-            'stream stream?))
+    (hasheq 'model
+            (hash-ref settings 'model "gpt-4")
+            'messages
+            (model-request-messages req)
+            'stream
+            stream?))
   ;; Add optional fields
   (define with-temp
     (if (hash-has-key? settings 'temperature)
@@ -60,14 +62,19 @@
   (define model-name (hash-ref raw 'model "unknown"))
   (define usage (hash-ref raw 'usage (hash)))
   (define choices (hash-ref raw 'choices '()))
-  (define choice (if (null? choices) #f (car choices)))
-  (define message (if choice (hash-ref choice 'message #f) #f))
+  (define choice
+    (if (null? choices)
+        #f
+        (car choices)))
+  (define message
+    (if choice
+        (hash-ref choice 'message #f)
+        #f))
   (define finish-reason
     (if choice
         (let ([fr (hash-ref choice 'finish_reason "stop")])
           (cond
-            [(string? fr)
-             (string->symbol (string-replace fr "_" "-"))]
+            [(string? fr) (string->symbol (string-replace fr "_" "-"))]
             [else 'stop]))
         'stop))
 
@@ -78,24 +85,27 @@
       [else
        (define text-content (hash-ref message 'content #f))
        (define tool-calls (hash-ref message 'tool_calls #f))
-       (append
-        ;; Text content
-        (if (and text-content (string? text-content))
-            (list (hash 'type "text" 'text text-content))
-            '())
-        ;; Tool calls
-        (if tool-calls
-            (for/list ([tc (in-list tool-calls)])
-              (define fn (hash-ref tc 'function (hash)))
-              (define args-str (hash-ref fn 'arguments "{}"))
-              (define args
-                (with-handlers ([exn:fail? (lambda (e) args-str)])
-                  (string->jsexpr args-str)))
-              (hash 'type "tool-call"
-                    'id (hash-ref tc 'id)
-                    'name (hash-ref fn 'name)
-                    'arguments args))
-            '()))]))
+       ;; Text content
+       (append (if (and text-content (string? text-content))
+                   (list (hash 'type "text" 'text text-content))
+                   '())
+               ;; Tool calls
+               (if tool-calls
+                   (for/list ([tc (in-list tool-calls)])
+                     (define fn (hash-ref tc 'function (hash)))
+                     (define args-str (hash-ref fn 'arguments "{}"))
+                     (define args
+                       (with-handlers ([exn:fail? (lambda (e) args-str)])
+                         (string->jsexpr args-str)))
+                     (hash 'type
+                           "tool-call"
+                           'id
+                           (hash-ref tc 'id)
+                           'name
+                           (hash-ref fn 'name)
+                           'arguments
+                           args))
+                   '()))]))
 
   (make-model-response content usage model-name finish-reason))
 
@@ -109,20 +119,21 @@
   (define host (url-host uri))
   (define port (url-port uri))
   (define ssl? (equal? (url-scheme uri) "https"))
-  (define path-str (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
-  (define headers
-    (list (format "Authorization: Bearer ~a" api-key)
-          "Content-Type: application/json"))
+  (define path-str
+    (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
+  (define headers (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   (define-values (status-line response-headers response-port)
     (if port
-        (http-sendrecv host path-str
+        (http-sendrecv host
+                       path-str
                        #:port port
                        #:ssl? ssl?
                        #:method "POST"
                        #:headers headers
                        #:data body-bytes)
-        (http-sendrecv host path-str
+        (http-sendrecv host
+                       path-str
                        #:ssl? ssl?
                        #:method "POST"
                        #:headers headers
@@ -148,8 +159,7 @@
           [(hash-has-key? err 'message)
            (define msg (hash-ref err 'message))
            (if (string? msg) msg #f)]
-          [(hash-has-key? err 'code)
-           (format "Error code: ~a" (hash-ref err 'code))]
+          [(hash-has-key? err 'code) (format "Error code: ~a" (hash-ref err 'code))]
           [else #f])]
        [(string? err) err]
        [else #f])]
@@ -177,26 +187,37 @@
   (cond
     ;; Redirects — http-sendrecv does not follow them automatically
     [(and (>= status-code 300) (< status-code 400))
-     (raise (exn:fail
-             (format "API request redirected (~a: ~a). The server returned a redirect — check your base-url in config.json."
-                     status-code status-str)
-             (current-continuation-marks)))]
+     (raise
+      (exn:fail
+       (format
+        "API request redirected (~a: ~a). The server returned a redirect — check your base-url in config.json."
+        status-code
+        status-str)
+       (current-continuation-marks)))]
     ;; Client/server errors
+    [(= status-code 429)
+     (define error-text-429
+       (with-handlers ([exn:fail? (λ (_)
+                                    (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
+         (define jsexpr (bytes->jsexpr response-bytes))
+         (or (extract-error-message jsexpr) (format "~a" jsexpr))))
+     (raise (exn:fail (format "API rate limited (429). Please wait and try again.\n~a" error-text-429)
+                      (current-continuation-marks)))]
     [(>= status-code 400)
      (define error-text
-       (with-handlers ([exn:fail? (λ (_) (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
+       (with-handlers ([exn:fail? (λ (_)
+                                    (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
          (define jsexpr (bytes->jsexpr response-bytes))
-         (or (extract-error-message jsexpr)
-             (format "~a" jsexpr))))
-     (raise (exn:fail
-             (format "API request failed (~a): ~a" status-code error-text)
-             (current-continuation-marks)))]))
+         (or (extract-error-message jsexpr) (format "~a" jsexpr))))
+     (raise (exn:fail (format "API request failed (~a): ~a" status-code error-text)
+                      (current-continuation-marks)))]))
 
 ;; ============================================================
 ;; Provider constructor
 ;; ============================================================
 
 (define (make-openai-compatible-provider config)
+  (validate-api-key! "OpenAI" "OPENAI_API_KEY" config)
   (define base-url (hash-ref config 'base-url "https://api.openai.com/v1"))
   (define api-key (hash-ref config 'api-key ""))
   (define default-model (hash-ref config 'model "gpt-4"))
@@ -224,20 +245,22 @@
     (define host (url-host uri))
     (define req-port (url-port uri))
     (define ssl? (equal? (url-scheme uri) "https"))
-    (define path-str (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
+    (define path-str
+      (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
     (define headers
-      (list (format "Authorization: Bearer ~a" api-key)
-            "Content-Type: application/json"))
+      (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
     (define-values (status-line response-headers response-port)
       (if req-port
-          (http-sendrecv host path-str
+          (http-sendrecv host
+                         path-str
                          #:port req-port
                          #:ssl? ssl?
                          #:method "POST"
                          #:headers headers
                          #:data body-bytes)
-          (http-sendrecv host path-str
+          (http-sendrecv host
+                         path-str
                          #:ssl? ssl?
                          #:method "POST"
                          #:headers headers
@@ -250,7 +273,9 @@
           status-line))
     (define status-code
       (let ([m (regexp-match #rx"HTTP/[0-9.]+ ([0-9]+)" status-str)])
-        (if m (string->number (cadr m)) 0)))
+        (if m
+            (string->number (cadr m))
+            0)))
     (when (>= status-code 300)
       ;; Error/redirect — read full body, then raise
       (define err-body (read-response-body/timeout response-port))
@@ -263,19 +288,18 @@
     ;; No dynamic-wind — it fires before/after on every yield which
     ;; causes the port to be closed between yields.
     (generator ()
-      (let loop ()
-        (define chunk (gen))
-        (cond
-          [(not chunk)
-           ;; Stream done — close port and yield final #f
-           (close-input-port response-port)
-           (yield #f)]
-          [else
-           (yield chunk)
-           (loop)]))))
+               (let loop ()
+                 (define chunk (gen))
+                 (cond
+                   [(not chunk)
+                    ;; Stream done — close port and yield final #f
+                    (close-input-port response-port)
+                    (yield #f)]
+                   [else
+                    (yield chunk)
+                    (loop)]))))
 
-  (make-provider
-   (lambda () "openai-compatible")
-   (lambda () (hash 'streaming #t 'token-counting #f))
-   send
-   stream))
+  (make-provider (lambda () "openai-compatible")
+                 (lambda () (hash 'streaming #t 'token-counting #f))
+                 send
+                 stream))

@@ -531,3 +531,36 @@
       (check-true (string-contains? all-text "columns of width")))))
 
 (run-tests wrapping-tests)
+
+;; Thinking indicator tests (#136)
+(define thinking-tests
+  (test-suite "Thinking indicator"
+
+    (test-case "render-status-bar shows [thinking...] when busy with no streaming text"
+      (let ([state (struct-copy ui-state
+                                (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
+                                [busy? #t]
+                                [streaming-text #f])])
+        (define line (render-status-bar state 80))
+        (define text (styled-segment-text (first (styled-line-segments line))))
+        (check-true (string-contains? text "[thinking...]")
+                    "status bar shows [thinking...] when busy and no streaming text")))
+
+    (test-case "render-status-bar does NOT show [thinking...] when idle"
+      (let ([state (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")])
+        (define line (render-status-bar state 80))
+        (define text (styled-segment-text (first (styled-line-segments line))))
+        (check-false (string-contains? text "[thinking...]")
+                     "no [thinking...] when not busy")))
+
+    (test-case "render-status-bar does NOT show [thinking...] when streaming text present"
+      (let ([state (struct-copy ui-state
+                                (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
+                                [busy? #t]
+                                [streaming-text "Partial response..."])])
+        (define line (render-status-bar state 80))
+        (define text (styled-segment-text (first (styled-line-segments line))))
+        (check-false (string-contains? text "[thinking...]")
+                     "no [thinking...] when streaming text is present")))))
+
+(run-tests thinking-tests)

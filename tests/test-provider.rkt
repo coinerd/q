@@ -377,7 +377,7 @@
 (test-case
  "BUG-16: HTTP 429 raises error with JSON body"
  (check-exn
-  #rx"API request failed [(]429[)]"
+  #rx"API rate limited [(]429[)]"
   (λ () (check-http-status! #"HTTP/1.1 429 Too Many Requests"
                               #"{\"error\":{\"message\":\"Rate limited\"}}"))))
 

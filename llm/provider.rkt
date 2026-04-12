@@ -14,18 +14,36 @@
 
 (require racket/contract
          racket/generator
+         racket/string
          "model.rkt")
 
-(provide
- provider?
- (contract-out
-  [provider-name         (-> provider? string?)]
-  [provider-send         (-> provider? model-request? any/c)]
-  [provider-stream       (-> provider? model-request? any/c)]
-  [provider-capabilities (-> provider? hash?)]
-  [provider-count-tokens (-> provider? any/c (or/c #f integer?))]
-  [make-provider         (-> procedure? procedure? procedure? procedure? provider?)]
-  [make-mock-provider    (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
+(provide provider?
+         validate-api-key!
+         (contract-out [provider-name (-> provider? string?)]
+                       [provider-send (-> provider? model-request? any/c)]
+                       [provider-stream (-> provider? model-request? any/c)]
+                       [provider-capabilities (-> provider? hash?)]
+                       [provider-count-tokens (-> provider? any/c (or/c #f integer?))]
+                       [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
+                       [make-mock-provider
+                        (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
+
+;; ============================================================
+;; API key validation helper
+;; ============================================================
+
+;; Validates that the API key is present and non-empty.
+;; Raises exn:fail with a provider-specific message if missing.
+(define (validate-api-key! provider-name env-var config)
+  (define api-key (hash-ref config 'api-key ""))
+  (when (or (not api-key) (not (string? api-key)) (string=? (string-trim api-key) ""))
+    (raise
+     (exn:fail
+      (format
+       "~a API key not set. Set ~a environment variable or add 'api-key' to config.json. Run 'q config' for setup."
+       provider-name
+       env-var)
+      (current-continuation-marks)))))
 
 ;; ============================================================
 ;; Provider struct
@@ -33,8 +51,7 @@
 
 ;; A provider wraps a dispatch function that takes a symbol and returns
 ;; the corresponding implementation.
-(struct provider (dispatch)
-  #:transparent)
+(struct provider (dispatch) #:transparent)
 
 ;; ============================================================
 ;; Generic interface
@@ -67,28 +84,27 @@
 ;;     or a list of stream-chunk? values (automatically wrapped in a generator).
 (define (stream-result->generator result)
   (cond
-    [(procedure? result)
-     ;; Already a generator (generators are procedures)
-     result]
+    ;; Already a generator (generators are procedures)
+    [(procedure? result) result]
     [(list? result)
      (generator ()
-       (for ([ch (in-list result)]) (yield ch))
-       (yield #f))]
+                (for ([ch (in-list result)])
+                  (yield ch))
+                (yield #f))]
     [else
      (error 'stream-result->generator
-            "expected generator or list of stream-chunks, got: ~a" result)]))
+            "expected generator or list of stream-chunks, got: ~a"
+            result)]))
 
 (define (make-provider name-proc caps-proc send-proc stream-proc)
-  (provider
-   (lambda (op)
-     (case op
-       [(name) (name-proc)]         ; name-proc is a thunk, call it
-       [(capabilities) (caps-proc)] ; caps-proc is a thunk, call it
-       [(send) send-proc]
-       [(stream) (lambda (req)
-                   (stream-result->generator (stream-proc req)))]
-       [(count-tokens) (lambda (req) #f)]  ; not supported by default
-       [else (error 'provider "unknown operation: ~a" op)]))))
+  (provider (lambda (op)
+              (case op
+                [(name) (name-proc)] ; name-proc is a thunk, call it
+                [(capabilities) (caps-proc)] ; caps-proc is a thunk, call it
+                [(send) send-proc]
+                [(stream) (lambda (req) (stream-result->generator (stream-proc req)))]
+                [(count-tokens) (lambda (req) #f)] ; not supported by default
+                [else (error 'provider "unknown operation: ~a" op)]))))
 
 ;; ============================================================
 ;; count-tokens protocol method
@@ -104,26 +120,21 @@
 ;; Mock provider (for testing)
 ;; ============================================================
 
-(define (make-mock-provider response
-                            #:name [name "mock"]
-                            #:stream-chunks [stream-chunks #f])
+(define (make-mock-provider response #:name [name "mock"] #:stream-chunks [stream-chunks #f])
   (define chunks
     (or stream-chunks
         (let ([content-parts (model-response-content response)])
           (define text-parts
-            (filter (lambda (c) (equal? (hash-ref c 'type #f) "text"))
-                    content-parts))
-          (append
-           (for/list ([tp (in-list text-parts)])
-             (stream-chunk (hash-ref tp 'text "") #f #f #f))
-           (list (stream-chunk #f #f (model-response-usage response) #t))))))
-  (make-provider
-   (lambda () name)
-   (lambda () (hash 'streaming #t 'token-counting #t))
-   (lambda (req) response)
-   (lambda (req)
-     ;; Return a generator that yields each chunk then #f
-     (generator ()
-       (for ([ch (in-list chunks)])
-         (yield ch))
-       (yield #f)))))
+            (filter (lambda (c) (equal? (hash-ref c 'type #f) "text")) content-parts))
+          (append (for/list ([tp (in-list text-parts)])
+                    (stream-chunk (hash-ref tp 'text "") #f #f #f))
+                  (list (stream-chunk #f #f (model-response-usage response) #t))))))
+  (make-provider (lambda () name)
+                 (lambda () (hash 'streaming #t 'token-counting #t))
+                 (lambda (req) response)
+                 (lambda (req)
+                   ;; Return a generator that yields each chunk then #f
+                   (generator ()
+                              (for ([ch (in-list chunks)])
+                                (yield ch))
+                              (yield #f)))))

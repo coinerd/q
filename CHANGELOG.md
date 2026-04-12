@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-04-12
+
+### Provider & UX Hardening
+- **#134/#155/#156**: Fixed Anthropic/Gemini streaming — now returns incremental generators instead of fully-buffered lists
+- **#135/#157/#158/#159**: Early API key validation with clear setup guidance at provider construction
+- **#136**: Added `[thinking...]` indicator in TUI status bar during LLM network latency
+- **#137**: Rate-limit (429) errors now include retry guidance and parsed retry-after hints
+- **#138**: Gemini SAFETY/RECITATION content filtering now produces visible warnings
+- **#139**: Tool output truncation now appends `[SYS] Output truncated` notice
+- **#140**: Token usage fallback estimation when provider returns empty usage
+
+### Metrics
+- 3,040 tests passing, 6/6 lints green
+- 96 source modules, 104 test files
+
 ## [0.7.1] — 2026-04-11
 
 ### TUI Tool Display Enhancement & UX Polish
