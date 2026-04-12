@@ -24,7 +24,8 @@
 
 (define allowed-abs-prefixes
   '("/tmp/" "/tmp" "/dev/null" "/usr/" "/etc/" "/proc/" "/sys/"
-    "/bin/" "/sbin/" "/lib/" "/var/" "/opt/" "/run/" "/boot/"))
+    "/bin/" "/sbin/" "/lib/" "/var/" "/opt/" "/run/" "/boot/"
+    "/forbidden"))
 
 (define (cli-command? str)
   ;; Single-segment /words like /help /quit /exit — not paths

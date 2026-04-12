@@ -816,7 +816,7 @@
 ;; ============================================================
 
 ;; Single source of truth for q version — also update info.rkt
-(define q-version "0.7.4")
+(define q-version "0.7.5")
 
 (define (print-version [port (current-output-port)])
   (displayln (format "q version ~a" q-version) port))

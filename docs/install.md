@@ -44,7 +44,7 @@ racket main.rkt --version
 After installing, confirm everything works:
 
 ```bash
-racket main.rkt --version   # should print: q version 0.7.4
+racket main.rkt --version   # should print: q version 0.7.5
 racket main.rkt doctor      # checks Racket version, dependencies, config
 ```
 

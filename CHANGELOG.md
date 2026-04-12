@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-04-12
+
+### Added
+- End-to-end workflow test suite with 33 tests across 11 test files (#167–#178)
+- 5 fixture modules: `mock-provider`, `temp-project`, `session-assert`, `event-recorder`, `workflow-runner`
+- CLI workflow tests: single-shot, resume, no-tools (#168–#170)
+- Tool-use workflow tests: read, write+exec, edit (#171–#173)
+- Session lifecycle tests: fork, compact (#174–#175)
+- Safety boundary tests: out-of-bounds file access (#176)
+- SDK-CLI parity tests: event consistency, session ID format (#177)
+- Extension hook pipeline tests: pre/post hooks, blocked tools, sequential tools (#178)
+
+### Changed
+- `lint-tests.rkt`: added `/forbidden` to allowed absolute path prefixes
+- `workflow-runner.rkt`: parameterizes `current-directory` to project dir during tool execution
+
 ## [0.7.4] — 2026-04-12
 
 ### Error Handling & Diagnostics
