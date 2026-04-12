@@ -13,6 +13,7 @@
 (require racket/contract
          racket/file
          racket/path
+         racket/list
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "api.rkt"
@@ -88,18 +89,48 @@
       [(and result (extension? result)) (register-extension! registry result)]))
   (void))
 
-;; Cache for try-load-extension results
-(define load-cache (make-hash))
+;; Cache for try-load-extension results with LRU eviction (Issue #201)
+;; Max 64 entries, TTL 30 minutes
+(define max-cache-entries 64)
+(define cache-ttl-seconds (* 30 60))
+
+;; Cache is a list of (key . (value . timestamp)) pairs, most-recently-used first
+(define load-cache (box '()))
 (define load-cache-sem (make-semaphore 1))
+
+(define (cache-entry-expired? entry)
+  (> (- (current-seconds) (cddr entry)) cache-ttl-seconds))
+
+(define (evict-cache!)
+  (define now (current-seconds))
+  (define entries (unbox load-cache))
+  ;; Remove expired entries
+  (define live (filter (lambda (e) (not (cache-entry-expired? e))) entries))
+  ;; If still over limit, remove oldest (last in list = least recently used)
+  (define trimmed
+    (if (> (length live) max-cache-entries)
+        (take live max-cache-entries)
+        live))
+  (set-box! load-cache trimmed))
 
 (define (cached-try-load path)
   (call-with-semaphore load-cache-sem
                        (lambda ()
+                         (evict-cache!)
+                         (define entries (unbox load-cache))
+                         (define found (assoc path entries))
                          (cond
-                           [(hash-has-key? load-cache path) (hash-ref load-cache path)]
+                           [(and found (not (cache-entry-expired? found)))
+                            ;; Move to front (most recently used)
+                            (define rest (filter (lambda (e) (not (equal? (car e) path))) entries))
+                            (set-box! load-cache (cons found rest))
+                            (cdr found)]
                            [else
+                            ;; Remove stale entry if present
+                            (define clean (filter (lambda (e) (not (equal? (car e) path))) entries))
                             (define result (try-load-extension path))
-                            (hash-set! load-cache path result)
+                            (define entry (cons path (cons result (current-seconds))))
+                            (set-box! load-cache (cons entry clean))
                             result]))))
 
 ;; ============================================================

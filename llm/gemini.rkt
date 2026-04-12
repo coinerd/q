@@ -41,15 +41,20 @@
 (define GEMINI-DEFAULT-MODEL "gemini-2.5-pro")
 (define GEMINI-DEFAULT-MAX-TOKENS 4096)
 
-;; Counter-based tool call ID generator (Issue #110)
-(define gemini-tool-id-counter 0)
+;; Per-request tool call ID counter (Issue #200)
+;; Uses a parameter so concurrent requests don't share/collide on IDs.
+;; The parameter is bound fresh in each send/stream call.
+(define gemini-tool-id-counter-param (make-parameter 0))
 
+;; Generate a unique tool call ID within the current request.
 (define (gemini-gen-tool-id)
-  (set! gemini-tool-id-counter (add1 gemini-tool-id-counter))
-  (format "gemini_~a" gemini-tool-id-counter))
+  (define next (add1 (gemini-tool-id-counter-param)))
+  (gemini-tool-id-counter-param next)
+  (format "gemini_~a" next))
 
+;; Reset the parameter for a fresh request.
 (define (gemini-reset-tool-id-counter!)
-  (set! gemini-tool-id-counter 0))
+  (gemini-tool-id-counter-param 0))
 (define GEMINI-DEFAULT-BASE-URL "https://generativelanguage.googleapis.com")
 
 ;; ============================================================
@@ -408,8 +413,10 @@
                               (hash-set (model-request-settings req) 'model default-model))))
     (define body (gemini-build-request-body merged-req))
     (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
-    (define raw (gemini-do-http-request base-url api-key model-name body))
-    (gemini-parse-response raw))
+    ;; Bind per-request counter (Issue #200)
+    (parameterize ([gemini-tool-id-counter-param 0])
+      (define raw (gemini-do-http-request base-url api-key model-name body))
+      (gemini-parse-response raw)))
 
   (define (stream req)
     (define merged-req
@@ -444,27 +451,29 @@
     (when (>= status-code 400)
       (define resp-body (read-response-body/timeout response-port))
       (gemini-check-http-status! status-line resp-body))
-    ;; Incremental SSE parsing — generator yields chunks one at a time
-    (define raw-port response-port)
-    (generator ()
-               (let loop ()
-                 (define line (read-line/timeout raw-port))
-                 (cond
-                   [(or (eq? line #f) (eof-object? line))
-                    (close-input-port raw-port)
-                    (yield #f)]
-                   [else
-                    (define parsed (parse-sse-line line))
-                    (cond
-                      [(eq? parsed 'done)
-                       (close-input-port raw-port)
-                       (yield #f)]
-                      [(hash? parsed)
-                       (define chunks (gemini-parse-single-event parsed))
-                       (for ([ch (in-list chunks)])
-                         (yield ch))
-                       (loop)]
-                      [else (loop)])]))))
+    ;; Bind per-request counter (Issue #200)
+    (parameterize ([gemini-tool-id-counter-param 0])
+      ;; Incremental SSE parsing — generator yields chunks one at a time
+      (define raw-port response-port)
+      (generator ()
+                 (let loop ()
+                   (define line (read-line/timeout raw-port))
+                   (cond
+                     [(or (eq? line #f) (eof-object? line))
+                      (close-input-port raw-port)
+                      (yield #f)]
+                     [else
+                      (define parsed (parse-sse-line line))
+                      (cond
+                        [(eq? parsed 'done)
+                         (close-input-port raw-port)
+                         (yield #f)]
+                        [(hash? parsed)
+                         (define chunks (gemini-parse-single-event parsed))
+                         (for ([ch (in-list chunks)])
+                           (yield ch))
+                         (loop)]
+                        [else (loop)])])))))
 
   (make-provider (lambda () "gemini")
                  (lambda () (hash 'streaming #t 'token-counting #f))

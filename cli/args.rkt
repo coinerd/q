@@ -13,13 +13,15 @@
 ;;   q-version           — version constant
 
 (require racket/string
-         racket/format)
+         racket/format
+         "../util/version.rkt")
 
 (provide (struct-out cli-config)
          parse-cli-args
          cli-config->runtime-config
          print-usage
          print-version
+         ;; q-version imported from util/version.rkt (Issue #203)
          q-version)
 
 ;; ============================================================
@@ -509,8 +511,8 @@
 ;; I/O: print-version
 ;; ============================================================
 
-;; Single source of truth for q version — also update info.rkt
-(define q-version "0.7.6")
+;; q-version imported from util/version.rkt (Issue #203)
+;; Single source of truth — do not redefine here.
 
 (define (print-version [port (current-output-port)])
   (displayln (format "q version ~a" q-version) port))
