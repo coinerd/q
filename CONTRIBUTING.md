@@ -62,7 +62,7 @@ See [docs/style-guide.md](docs/style-guide.md) for detailed conventions.
 Key points:
 - `#lang racket/base` for library modules, `#lang racket` for entry points
 - Hyphenated names, `?` for predicates, `!` for mutators
-- 2-space indentation, max 120 chars per line
+- 2-space indentation, soft limit 100 chars, hard limit 150 chars per line (see style-guide.md)
 - `contract-out` at module boundaries only
 
 ## Testing Expectations
@@ -85,7 +85,7 @@ Key points:
 ## Reporting Issues
 
 Use GitHub Issues. Please include:
-- q version (`racket main.rkt --version`)
+- q version (`raco q --version` or `racket main.rkt --version`)
 - Racket version (`racket --version`)
 - Steps to reproduce
 - Expected vs actual behavior

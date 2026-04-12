@@ -214,16 +214,19 @@
   (define openai-body (openai-build-request-body req))
   (check-not-exn (lambda () (jsexpr->bytes openai-body))
                  "OpenAI nested-schema body serializes")
+  (check-true (bytes? (jsexpr->bytes openai-body)) "OpenAI body produces bytes")
 
   ;; Anthropic
   (define anthropic-body (anthropic-build-request-body req))
   (check-not-exn (lambda () (jsexpr->bytes anthropic-body))
                  "Anthropic nested-schema body serializes")
+  (check-true (bytes? (jsexpr->bytes anthropic-body)) "Anthropic body produces bytes")
 
   ;; Gemini
   (define gemini-body (gemini-build-request-body req))
   (check-not-exn (lambda () (jsexpr->bytes gemini-body))
                  "Gemini nested-schema body serializes")
+  (check-true (bytes? (jsexpr->bytes gemini-body)) "Gemini body produces bytes")
 
   ;; Verify nested structure survived in OpenAI output
   (define openai-tools (hash-ref openai-body 'tools))
@@ -258,15 +261,18 @@
   (check-true (hash-has-key? openai-body 'tools))
   (check-not-exn (lambda () (jsexpr->bytes openai-body))
                  "OpenAI empty-schema body serializes")
+  (check-true (positive? (bytes-length (jsexpr->bytes openai-body))) "OpenAI body non-empty")
 
   ;; Anthropic
   (define anthropic-body (anthropic-build-request-body req))
   (check-true (hash-has-key? anthropic-body 'tools))
   (check-not-exn (lambda () (jsexpr->bytes anthropic-body))
                  "Anthropic empty-schema body serializes")
+  (check-true (positive? (bytes-length (jsexpr->bytes anthropic-body))) "Anthropic body non-empty")
 
   ;; Gemini
   (define gemini-body (gemini-build-request-body req))
   (check-true (hash-has-key? gemini-body 'tools))
   (check-not-exn (lambda () (jsexpr->bytes gemini-body))
-                 "Gemini empty-schema body serializes"))
+                 "Gemini empty-schema body serializes")
+  (check-true (positive? (bytes-length (jsexpr->bytes gemini-body))) "Gemini body non-empty"))

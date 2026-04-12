@@ -3,7 +3,7 @@
 Machine-readable newline-delimited JSON protocol for editor and CMS integration.
 
 ```bash
-$ racket main.rkt --json --model gpt-5.4
+$ raco q --json --model gpt-5.4
 {"type":"ready","session":"b9d4e8a2","model":"gpt-5.4"}
 {"type":"prompt","content":"Explain event-bus.rkt"}
 {"type":"tool_call","id":"tc_01","tool":"read","args":{"path":"agent/event-bus.rkt"}}
@@ -40,7 +40,7 @@ Every line is a complete JSON object. There are no multi-line payloads — newli
 ```bash
 # Pipe a prompt and capture the response
 echo '{"type":"prompt","content":"What does loop.rkt do?"}' \
-  | racket main.rkt --json --model gpt-5.4 \
+  | raco q --json --model gpt-5.4 \
   | jq -c 'select(.type=="response")'
 
 # Drive q from an editor plugin over stdio

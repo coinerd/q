@@ -3,7 +3,7 @@
 Resuming a previous session with full conversation context.
 
 ```bash
-$ racket main.rkt --session a7f3c2e1
+$ raco q --session a7f3c2e1
 Resuming session a7f3c2e1 …
 Replay: 7 events loaded (3 tool calls, 2 responses)
 Model:   gpt-5.4

@@ -36,7 +36,7 @@ cd q
 raco pkg install --auto
 
 # 3. Verify
-racket main.rkt --version
+raco q --version   # or: racket main.rkt --version
 ```
 
 ## First-Run Verification
@@ -44,8 +44,8 @@ racket main.rkt --version
 After installing, confirm everything works:
 
 ```bash
-racket main.rkt --version   # should print: q version 0.7.5
-racket main.rkt doctor      # checks Racket version, dependencies, config
+raco q --version            # should print: q version 0.7.6
+raco q doctor               # checks Racket version, dependencies, config
 ```
 
 ## Shell Setup

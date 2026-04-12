@@ -898,7 +898,9 @@
   (check-true (string-contains? msg "API key not set") "error message contains 'API key not set'"))
 
 (test-case "valid API key does not raise"
-  (check-not-exn (lambda () (make-anthropic-provider (hash 'api-key "sk-ant-valid-key-456")))))
+  (check-not-exn (lambda () (make-anthropic-provider (hash 'api-key "sk-ant-valid-key-456"))))
+  (define prov (make-anthropic-provider (hash 'api-key "sk-ant-valid-key-456")))
+  (check-equal? (provider-name prov) "anthropic"))
 
 ;; ============================================================
 ;; Issue #137 — 429 rate-limit error includes retry guidance

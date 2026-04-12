@@ -3,8 +3,8 @@
 Branching a session to explore an alternative approach without losing the original history.
 
 ```bash
-$ racket main.rkt --model gpt-5.4
-q version 0.7.5
+$ raco q --model gpt-5.4
+q version 0.7.6
 Session: a7f3c2e1
 
 > Refactor the event bus to use channels instead of locks

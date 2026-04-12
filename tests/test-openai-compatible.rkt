@@ -8,6 +8,7 @@
          rackunit/text-ui
          net/url
          json
+         "../llm/provider.rkt"
          "../llm/openai-compatible.rkt"
          "../llm/stream.rkt")
 
@@ -124,7 +125,10 @@
  (test-case "valid API key does not raise"
    (check-not-exn (lambda ()
                     (make-openai-compatible-provider
-                     (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost"))))))
+                     (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost"))))
+   (define prov (make-openai-compatible-provider
+                 (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost")))
+   (check-equal? (provider-name prov) "openai-compatible")))
 
 ;; ============================================================
 ;; SEC-10: read-response-body size limit tests

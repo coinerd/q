@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-04-12
+
+### Changed
+- Documentation metrics bulk refresh (docs/ subtree) (#180)
+- Documentation conventions standardization (#181)
+- Test coverage gap closure (#182)
+
+### Fixed
+- HEAD version bump for post-v0.7.5 commits
+
 ## [0.7.5] — 2026-04-12
 
 ### Added
@@ -463,7 +473,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/coinerd/q/compare/v0.7.5...v0.7.6
+[0.7.5]: https://github.com/coinerd/q/compare/v0.7.4...v0.7.5
+[0.7.4]: https://github.com/coinerd/q/compare/v0.7.3...v0.7.4
+[0.7.3]: https://github.com/coinerd/q/compare/v0.7.2...v0.7.3
+[0.7.2]: https://github.com/coinerd/q/compare/v0.7.1...v0.7.2
+[0.7.1]: https://github.com/coinerd/q/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/coinerd/q/compare/v0.6.9...v0.7.0
+[0.6.9]: https://github.com/coinerd/q/compare/v0.6.8...v0.6.9
+[0.6.8]: https://github.com/coinerd/q/compare/v0.6.7...v0.6.8
+[0.6.7]: https://github.com/coinerd/q/compare/v0.6.6...v0.6.7
+[0.6.6]: https://github.com/coinerd/q/compare/v0.6.5...v0.6.6
+[0.6.5]: https://github.com/coinerd/q/compare/v0.6.4...v0.6.5
+[0.6.4]: https://github.com/coinerd/q/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/coinerd/q/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/coinerd/q/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/coinerd/q/compare/v0.6.0...v0.6.1

@@ -19,15 +19,17 @@ Realistic transcripts showing q in action across its different interfaces.
 
 ## Running Demos Yourself
 
+All commands work with `raco q` (installed) or `racket main.rkt` (from source tree).
+
 ```bash
 # Basic CLI
-racket main.rkt --model gpt-5.4
+raco q --model gpt-5.4
 
 # JSON mode (pipe-friendly)
-racket main.rkt --json
+raco q --json
 
 # Resume a session
-racket main.rkt --resume <session-id>
+raco q --resume <session-id>
 ```
 
 See the [main README](../../README.md) for installation and configuration.

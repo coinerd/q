@@ -12,7 +12,7 @@ A clear description of what the bug is.
 
 ## Environment
 
-- **q version**: (`racket main.rkt --version`)
+- **q version**: (`raco q --version` or `racket main.rkt --version`)
 - **Racket version**: (`racket --version`)
 - **OS**:
 

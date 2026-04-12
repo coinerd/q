@@ -990,7 +990,9 @@
   (check-true (string-contains? msg "API key not set") "error message contains 'API key not set'"))
 
 (test-case "valid API key does not raise"
-  (check-not-exn (lambda () (make-gemini-provider (hash 'api-key "AIzaSyValidKey-789")))))
+  (check-not-exn (lambda () (make-gemini-provider (hash 'api-key "AIzaSyValidKey-789"))))
+  (define prov (make-gemini-provider (hash 'api-key "AIzaSyValidKey-789")))
+  (check-equal? (provider-name prov) "gemini"))
 
 ;; ============================================================
 ;; Issue #137 — Gemini 429 rate-limit error includes retry guidance
