@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-04-12
+
+### Architecture
+- Extract shared types to util/ — hook-types.rkt, protocol-types.rkt (#183-#187)
+- Centralize safe-mode enforcement at scheduler level (#188-#191)
+- Decompose interfaces/cli.rkt into cli/args, render, interactive, init-wizard (#192-#195)
+- Decompose interfaces/tui.rkt into tui/tui-keybindings, tui-render-loop, tui-init (#192-#195)
+- Reorganize runtime/cli-builder → wiring/run-modes, run-interactive, run-json-rpc (#196-#199)
+
+### Hardening
+- Gemini: per-request tool-ID counter replaces global mutable (#200)
+- Extension loader: LRU cache with 64-entry max, 30-min TTL (#201)
+- Readline FFI extracted to util/readline.rkt (#202)
+- Version single-sourced in util/version.rkt (#203-#204)
+
+### Code Quality
+- Split skills/types.rkt into resource-loader.rkt + template.rkt (#205)
+- 19 new scheduler-level safe-mode tests
+
+### Metrics
+- Source modules: 98 → 114 | Test files: 122 → 123
+- Source lines: 21,139 → 21,486 | Test assertions: 5,861 → 5,904
+- 3,201 tests passing, 6/6 lints green
+
 ## [0.7.6] — 2026-04-12
 
 ### Changed
@@ -473,7 +497,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.7.7...HEAD
+[0.7.7]: https://github.com/coinerd/q/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/coinerd/q/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/coinerd/q/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/coinerd/q/compare/v0.7.3...v0.7.4

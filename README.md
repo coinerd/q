@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.7.6-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.7.7-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ raco q --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-raco q --version            # q version 0.7.6
+raco q --version            # q version 0.7.7
 raco test tests/            # run the full test suite
 ```
 
@@ -290,7 +290,7 @@ raco test tests/tui/
 
 ## Status
 
-**v0.7.6** — Documentation metrics bulk refresh, conventions standardization, and test coverage gap closure. 33 workflow tests across 11 files with 5 fixture modules (mock-provider, temp-project, session-assert, event-recorder, workflow-runner), covering CLI workflows, tool-use flows, session lifecycle, safety boundaries, SDK-CLI parity, and extension hooks:
+**v0.7.7** — Documentation metrics bulk refresh, conventions standardization, and test coverage gap closure. 33 workflow tests across 11 files with 5 fixture modules (mock-provider, temp-project, session-assert, event-recorder, workflow-runner), covering CLI workflows, tool-use flows, session lifecycle, safety boundaries, SDK-CLI parity, and extension hooks:
 
 **v0.7.4** — Error Handling & Diagnostics. Extension structured error reporting, error classification with remediation hints, verbose diagnostics mode, provider error surfacing, replay error recovery:
 
