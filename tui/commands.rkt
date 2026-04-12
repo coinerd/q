@@ -18,6 +18,8 @@
          "../agent/types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/session-index.rkt"
+         "../runtime/settings.rkt"
+         "../interfaces/sessions.rkt"
          "../runtime/model-registry.rkt")
 
 ;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
@@ -294,6 +296,45 @@
         'continue])]))
 
 ;; ============================================================
+;; /sessions command handler
+;; ============================================================
+
+(define (handle-sessions-tui-command cctx cmd)
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (define session-dir (or (cmd-ctx-session-dir cctx) (default-session-dir)))
+  (define-values (entries)
+    (cond
+      ;; /sessions or /sessions list
+      [(or (not cmd) (eq? cmd 'sessions) (equal? cmd '(sessions)) (equal? cmd '(sessions list)))
+       (define sess-list (sessions-list session-dir #:limit 10))
+       (define strings (sessions-list->strings sess-list))
+       (if (null? sess-list)
+           (list (transcript-entry 'system "No sessions found." 0 (hash)))
+           (for/list ([s (in-list strings)])
+             (transcript-entry 'system s 0 (hash))))]
+      ;; /sessions info <id>
+      [(and (list? cmd) (>= (length cmd) 3) (eq? (cadr cmd) 'info))
+       (define sid (caddr cmd))
+       (define info (sessions-info session-dir sid))
+       (list (transcript-entry 'system (sessions-info->string info) 0 (hash)))]
+      ;; /sessions delete <id>
+      [(and (list? cmd) (>= (length cmd) 3) (eq? (cadr cmd) 'delete))
+       (define sid (caddr cmd))
+       (define result (sessions-delete session-dir sid))
+       (list (case result
+               [(ok) (transcript-entry 'system (format "Session ~a deleted." sid) 0 (hash))]
+               [(not-found) (transcript-entry 'error (format "Session not found: ~a" sid) 0 (hash))]
+               [(cancelled) (transcript-entry 'system "Cancelled." 0 (hash))]))]
+      ;; Fallback
+      [else
+       (list (transcript-entry 'system "Usage: /sessions [list|info <id>|delete <id>]" 0 (hash)))]))
+  (define new-state
+    (for/fold ([s state]) ([e (in-list entries)])
+      (add-transcript-entry s e)))
+  (set-box! (cmd-ctx-state-box cctx) new-state)
+  'continue)
+
+;; ============================================================
 ;; Main command dispatcher
 ;; ============================================================
 
@@ -311,6 +352,7 @@
        [(children) (handle-children-command cctx (cadr cmd))]
        [(model) (handle-model-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
        [(fork) (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
+       [(sessions) (handle-sessions-tui-command cctx cmd)]
        [(switch-error children-error)
         (define entry (transcript-entry 'error (cadr cmd) 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
@@ -335,7 +377,8 @@
                 (transcript-entry 'system "  /switch      Switch to a branch" 0 (hash))
                 (transcript-entry 'system "  /model       List or switch models" 0 (hash))
                 (transcript-entry 'system "  /history     Show session history" 0 (hash))
-                (transcript-entry 'system "  /fork        Fork session at entry" 0 (hash))))
+                (transcript-entry 'system "  /fork        Fork session at entry" 0 (hash))
+                (transcript-entry 'system "  /sessions    List and manage sessions" 0 (hash))))
         (define new-state
           (for/fold ([s state]) ([e (in-list help-entries)])
             (add-transcript-entry s e)))
@@ -371,6 +414,7 @@
         'continue]
        [(branches) (handle-branches-command cctx)]
        [(leaves) (handle-leaves-command cctx)]
+       [(sessions) (handle-sessions-tui-command cctx #f)]
        [(quit)
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]

@@ -17,11 +17,13 @@
 (require "../agent/types.rkt"
          "../util/ansi.rkt"
          "../util/markdown.rkt"
+         "../interfaces/sessions.rkt"
          json
          racket/match
          racket/string
          racket/format
          racket/list
+         racket/file
          (only-in ffi/unsafe ffi-lib get-ffi-obj _fun _string _int))
 
 ;; readline support: try to load, fall back to plain read-line
@@ -81,14 +83,15 @@
          run-cli-interactive
          run-cli-single
          print-usage
-         print-version)
+         print-version
+         run-init-wizard)
 
 ;; ============================================================
 ;; CLI config struct
 ;; ============================================================
 
 (struct cli-config
-        (command ; symbol: 'chat | 'prompt | 'resume | 'help | 'version | 'doctor
+        (command ; symbol: 'chat | 'prompt | 'resume | 'help | 'version | 'doctor | 'sessions
          session-id ; string or #f
          prompt ; string or #f
          model ; string or #f
@@ -100,6 +103,8 @@
          no-tools? ; boolean
          tools ; list of string (tool names to enable)
          session-dir ; path-string or #f
+         sessions-subcommand ; symbol: 'list | 'info | 'delete | #f
+         sessions-args ; list of string (subcommand args)
          )
   #:transparent)
 
@@ -138,6 +143,8 @@
          (cond
            [(eq? command 'help) 'help]
            [(eq? command 'version) 'version]
+           [(eq? command 'init) 'init]
+           [(eq? command 'sessions) 'sessions]
            [(and session-id (eq? command 'chat)) 'resume]
            [prompt 'prompt]
            [else command]))
@@ -159,15 +166,18 @@
                    max-turns
                    no-tools?
                    (reverse tools)
-                   session-dir)]
+                   session-dir
+                   #f ; sessions-subcommand
+                   '() ; sessions-args
+                   )]
 
       ;; ── --help / -h ──
       [(or (equal? (vector-ref vec i) "--help") (equal? (vector-ref vec i) "-h"))
-       (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f)]
+       (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
 
       ;; ── --version ──
       [(equal? (vector-ref vec i) "--version")
-       (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f)]
+       (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
 
       ;; ── --session <id> ──
       [(equal? (vector-ref vec i) "--session")
@@ -185,7 +195,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── --model <name> ──
       [(equal? (vector-ref vec i) "--model")
@@ -203,7 +213,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── --project-dir <path> ──
       [(equal? (vector-ref vec i) "--project-dir")
@@ -221,7 +231,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── --config <path> ──
       [(equal? (vector-ref vec i) "--config")
@@ -239,7 +249,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── --verbose / -v ──
       [(or (equal? (vector-ref vec i) "--verbose") (equal? (vector-ref vec i) "-v"))
@@ -277,8 +287,8 @@
                        tools
                        session-dir)
                  ;; Non-numeric max-turns → help
-                 (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f)))
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+                 (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())))
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── --no-tools ──
       [(equal? (vector-ref vec i) "--no-tools")
@@ -312,7 +322,7 @@
                  no-tools?
                  (cons (vector-ref vec (add1 i)) tools)
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── --tui ──
       [(equal? (vector-ref vec i) "--tui")
@@ -378,12 +388,12 @@
                  no-tools?
                  tools
                  (vector-ref vec (add1 i)))
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f))]
+           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
 
       ;; ── Positional argument (prompt) ──
       [(string-prefix? (vector-ref vec i) "--")
        ;; Unknown flag → help
-       (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f)]
+       (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
 
       [else
        ;; First positional — check for named subcommands
@@ -404,6 +414,53 @@
                   no-tools?
                   tools
                   session-dir)]
+           ;; "init" subcommand
+           [(equal? arg "init")
+            (loop (add1 i)
+                  'init
+                  session-id
+                  prompt
+                  model
+                  mode
+                  project-dir
+                  config-path
+                  verbose?
+                  max-turns
+                  no-tools?
+                  tools
+                  session-dir)]
+           ;; "sessions" subcommand — q sessions <list|info|delete> [args...]
+           [(equal? arg "sessions")
+            (if (< (add1 i) n)
+                (let ([sub (vector-ref vec (add1 i))])
+                  (define sub-sym
+                    (cond
+                      [(equal? sub "list") 'list]
+                      [(equal? sub "info") 'info]
+                      [(equal? sub "delete") 'delete]
+                      [else #f]))
+                  (if sub-sym
+                      ;; Collect remaining args after subcommand
+                      (let ([rest (for/list ([j (in-range (+ i 2) n)])
+                                    (vector-ref vec j))])
+                        (cli-config 'sessions
+                                    #f
+                                    #f
+                                    #f
+                                    'interactive
+                                    #f
+                                    #f
+                                    #f
+                                    10
+                                    #f
+                                    '()
+                                    #f
+                                    sub-sym
+                                    rest))
+                      ;; Bad subcommand → help
+                      (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())))
+                ;; No subcommand → show help
+                (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
            ;; Default: treat as prompt
            [prompt
             ;; Second positional — unexpected, just ignore
@@ -684,6 +741,19 @@
         (if (null? args)
             '(children)
             (list 'children (car args)))]
+       [("/sessions")
+        (cond
+          [(null? args) '(sessions)]
+          [(equal? (car args) "list") '(sessions list)]
+          [(equal? (car args) "info")
+           (if (>= (length args) 2)
+               (list 'sessions 'info (cadr args))
+               '(sessions info))]
+          [(equal? (car args) "delete")
+           (if (>= (length args) 2)
+               (list 'sessions 'delete (cadr args))
+               '(sessions delete))]
+          [else '(sessions)])]
        [else #f])]))
 
 ;; ============================================================
@@ -701,6 +771,10 @@
   (displayln "  q --json                   JSON mode (machine-readable output)" port)
   (displayln "  q --rpc                    RPC mode (stdin/stdout JSONL protocol)" port)
   (displayln "  q doctor                   Run setup and provider diagnostics" port)
+  (displayln "  q init                     Guided setup wizard" port)
+  (displayln "  q sessions list            List sessions" port)
+  (displayln "  q sessions info <id>       Show session details" port)
+  (displayln "  q sessions delete <id>     Delete a session" port)
   (newline port)
   (displayln "Options:" port)
   (displayln "  --model <name>             Model to use (e.g. gpt-4, claude-3)" port)
@@ -723,19 +797,25 @@
   (displayln "  /history                   Show session history" port)
   (displayln "  /model [name]              Show or switch model" port)
   (displayln "  /fork [entry-id]           Fork session at given point" port)
-  (displayln "  /clear                     Clear transcript" port)
-  (displayln "  /interrupt                 Interrupt current turn" port)
-  (displayln "  /branches                  List session branches" port)
-  (displayln "  /leaves                    List leaf nodes" port)
-  (displayln "  /switch <id>               Switch to branch" port)
-  (displayln "  /children <id>             Show children of node" port))
+  (displayln "  /clear                     Clear transcript (TUI only)" port)
+  (displayln "  /interrupt                 Interrupt current turn (TUI only)" port)
+  (displayln "  /branches                  List session branches (TUI only)" port)
+  (displayln "  /leaves                    List leaf nodes (TUI only)" port)
+  (displayln "  /switch <id>               Switch to branch (TUI only)" port)
+  (displayln "  /children <id>             Show children of node (TUI only)" port)
+  (displayln "  /sessions                  List recent sessions" port)
+  (displayln "  /sessions info <id>        Show session details" port)
+  (displayln "  /sessions delete <id>      Delete a session" port))
 
 ;; ============================================================
 ;; I/O: print-version
 ;; ============================================================
 
+;; Single source of truth for q version — also update info.rkt
+(define q-version "0.7.3")
+
 (define (print-version [port (current-output-port)])
-  (displayln "q version 0.5.1" port))
+  (displayln (format "q version ~a" q-version) port))
 
 ;; ============================================================
 ;; I/O: run-cli-interactive
@@ -755,6 +835,8 @@
                              #:history-fn [history-fn #f]
                              #:fork-fn [fork-fn #f]
                              #:model-fn [model-fn #f]
+                             #:sessions-fn [sessions-fn #f]
+                             #:provider-name [provider-name #f]
                              #:in [in (current-input-port)]
                              #:out [out (current-output-port)])
   ;; First-run welcome detection
@@ -768,6 +850,14 @@
     (displayln "Welcome to q! Your AI coding assistant." out)
     (displayln "Type a message to start chatting, or /help for commands." out)
     (displayln "Run 'q config' to set up your API key." out)
+    (displayln "" out))
+
+  ;; Mock provider warning (Issue #141)
+  (when (and provider-name (string? provider-name) (string-contains? provider-name "mock"))
+    (displayln "" out)
+    (displayln "\u26A0 [SYS] No LLM provider configured. Using mock provider (canned responses)." out)
+    (displayln "  Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY environment variable," out)
+    (displayln "  or run 'q init' to set up your configuration." out)
     (displayln "" out))
 
   ;; Don't print prompt here — read-line-with-history handles it
@@ -803,22 +893,16 @@
                (if fork-fn
                    (fork-fn (and (>= (length cmd) 2) (cadr cmd)))
                    (displayln "[fork not yet connected]" out))]
-              ['clear (displayln "[clear: transcript cleared]" out)]
-              ['interrupt (displayln "[interrupt requested]" out)]
-              ['branches (displayln "[branches: not available in CLI]" out)]
-              ['leaves (displayln "[leaves: not available in CLI]" out)]
-              ['switch
-               (displayln (format "[switch: ~a]"
-                                  (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd))
-                                      (cadr cmd)
-                                      "missing entry-id"))
-                          out)]
-              ['children
-               (displayln (format "[children: ~a]"
-                                  (if (and (list? cmd) (>= (length cmd) 2) (cadr cmd))
-                                      (cadr cmd)
-                                      "missing entry-id"))
-                          out)]
+              ['clear (displayln "[clear: available in TUI mode (--tui)]" out)]
+              ['interrupt (displayln "[interrupt: available in TUI mode (--tui)]" out)]
+              ['branches (displayln "[branches: available in TUI mode (--tui)]" out)]
+              ['leaves (displayln "[leaves: available in TUI mode (--tui)]" out)]
+              ['switch (displayln "[switch: available in TUI mode (--tui)]" out)]
+              ['children (displayln "[children: available in TUI mode (--tui)]" out)]
+              ['sessions
+               (if sessions-fn
+                   (sessions-fn cmd out)
+                   (displayln "[sessions command not yet connected]" out))]
               [_ (displayln (format "Unknown command: ~a" cmd) out)]))]
          [else
           ;; Submit prompt to runtime
@@ -828,6 +912,72 @@
        ;; Continue loop (unless quit was issued)
        (when (and (string? line) (not (member (string-trim line) '("/quit" "/exit"))))
          (loop))])))
+
+;; ============================================================
+;; I/O: run-init-wizard (Issue #143)
+;; ============================================================
+
+;; Guided setup wizard that creates ~/.q/config.json.
+;; For testability, accepts optional input/output ports.
+(define (run-init-wizard #:in [in (current-input-port)] #:out [out (current-output-port)])
+  (define config-dir (build-path (find-system-path 'home-dir) ".q"))
+  (define config-path (build-path config-dir "config.json"))
+
+  ;; Helper: read a line, handling EOF
+  (define (read-input)
+    (define line (read-line in))
+    (if (eof-object? line)
+        ""
+        (string-trim line)))
+
+  ;; Use aborted? flag for early exit
+  (define aborted? (box #f))
+
+  ;; Check if config already exists
+  (when (file-exists? config-path)
+    (display "Config already exists at ~/.q/config.json. Overwrite? (y/N): " out)
+    (flush-output out)
+    (define answer (read-input))
+    (unless (or (string=? answer "y") (string=? answer "Y"))
+      (displayln "Aborted." out)
+      (set-box! aborted? #t)))
+
+  (unless (unbox aborted?)
+    ;; Ask for provider
+    (display "Choose provider (openai/anthropic/gemini): " out)
+    (flush-output out)
+    (define provider (read-input))
+    (cond
+      [(not (member provider '("openai" "anthropic" "gemini")))
+       (displayln "Invalid provider. Choose openai, anthropic, or gemini." out)
+       (set-box! aborted? #t)]
+      [else
+       ;; Ask for API key
+       (display "API key (will be visible): " out)
+       (flush-output out)
+       (define api-key (read-input))
+
+       ;; Ask for default model
+       (display "Default model (press Enter for default): " out)
+       (flush-output out)
+       (define model (read-input))
+
+       ;; Build config hash
+       (define provider-hash (make-hash (list (cons 'api-key (if (string=? api-key "") "" api-key)))))
+       (when (and model (not (string=? model "")))
+         (hash-set! provider-hash 'default-model model))
+
+       (define config
+         (make-hash (list (cons 'default-provider provider)
+                          (cons 'providers
+                                (make-hash (list (cons (string->symbol provider) provider-hash)))))))
+
+       ;; Write config
+       (make-directory* config-dir)
+       (call-with-output-file config-path (lambda (port) (write-json config port)) #:exists 'replace)
+
+       (displayln "Configuration saved to ~/.q/config.json." out)
+       (displayln "Run 'q' to start chatting." out)])))
 
 ;; ============================================================
 ;; I/O: run-cli-single

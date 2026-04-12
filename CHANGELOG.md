@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-04-12
+
+### CLI & Configuration Hardening
+- **#141**: Mock provider now shows prominent warning banner on startup
+- **#142**: `q --version` reads from shared constant instead of hardcoded 0.5.1
+- **#143**: Added `q init` guided setup wizard (provider, API key, model)
+- **#144/#160/#161**: Added `q sessions list`, `q sessions info <id>`, `q sessions delete <id>` CLI subcommands
+- **#145**: CLI `/help` marks TUI-only commands clearly
+- **#146**: Config parse errors now show WARNING with error details
+- **#162**: Added `/sessions` interactive command for TUI and CLI modes
+
+### Metrics
+- 3,059 tests passing, 6/6 lints green
+- 97 source modules, 104 test files
+
 ## [0.7.2] — 2026-04-12
 
 ### Provider & UX Hardening
