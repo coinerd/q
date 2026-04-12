@@ -2,7 +2,7 @@
 
 ;; main.rkt — Entry point for q agent
 ;; Thin facade: CLI parsing → runtime construction → mode dispatch.
-;; All business logic lives in runtime/cli-builder.rkt and interface modules.
+;; All business logic lives in wiring/ and interface modules.
 
 (require "interfaces/cli.rkt"
          "interfaces/json-mode.rkt"
@@ -29,7 +29,7 @@
          "extensions/api.rkt"
          (only-in "runtime/provider-factory.rkt" build-provider build-mock-provider local-provider?)
          (only-in "tools/registry-defaults.rkt" register-default-tools!)
-         (only-in "runtime/cli-builder.rkt"
+         (only-in "wiring/run-modes.rkt"
                   build-runtime-from-cli
                   mode-for-config
                   run-interactive

@@ -1,6 +1,6 @@
 #lang racket
 
-;; tests/test-cli-builder.rkt — tests for runtime/cli-builder.rkt
+;; tests/test-cli-builder.rkt — tests for wiring/run-modes.rkt
 ;;
 ;; Covers mode-for-config (pure function), load-extensions-from-dir!,
 ;; and make-terminal-subscriber construction.
@@ -14,7 +14,7 @@
          "../interfaces/cli.rkt"
          "../util/protocol-types.rkt"
          "../extensions/api.rkt"
-         "../runtime/cli-builder.rkt")
+         "../wiring/run-modes.rkt")
 
 ;; ── Helpers ──
 
