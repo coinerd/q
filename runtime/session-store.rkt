@@ -23,7 +23,7 @@
          racket/string
          racket/sequence
          json
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/jsonl.rkt")
 
 (provide append-entry!

@@ -14,7 +14,7 @@
          racket/path
          json
          (only-in racket/string string-trim)
-         (only-in "../agent/types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   message? message-id message-role message-content
                   make-message make-tool-result-part
                   tool-call-part? tool-call-part-id tool-call-part-name tool-call-part-arguments
@@ -37,7 +37,7 @@
          (only-in "../util/cancellation.rkt"
                   cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
-         (only-in "../extensions/hooks.rkt"
+         (only-in "../util/hook-types.rkt"
                   hook-result-action hook-result-payload hook-result?))
 
 (provide run-iteration-loop

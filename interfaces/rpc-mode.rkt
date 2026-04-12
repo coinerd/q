@@ -5,7 +5,7 @@
          racket/math
          json
          racket/port
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt")
 ;;
 ;; RPC mode provides a request-response protocol over stdin/stdout

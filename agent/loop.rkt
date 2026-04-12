@@ -23,14 +23,14 @@
          racket/list
          racket/date
          "../util/ids.rkt"
-         "types.rkt"
+         "../util/protocol-types.rkt"
          "event-bus.rkt"
          "state.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../llm/stream.rkt" accumulate-tool-call-deltas)
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
-         (only-in "../extensions/hooks.rkt" hook-result? hook-result-action hook-result-payload))
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])

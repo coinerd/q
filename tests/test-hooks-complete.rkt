@@ -5,7 +5,7 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../agent/loop.rkt"
          "../agent/state.rkt"

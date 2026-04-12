@@ -22,7 +22,7 @@
          racket/file
          racket/list
          racket/path
-         (only-in "../agent/types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   message-id
                   message-role
                   message-content
@@ -36,7 +36,7 @@
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          "../llm/token-budget.rkt"
-         (only-in "../extensions/hooks.rkt" hook-result-action hook-result-payload)
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"

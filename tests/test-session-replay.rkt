@@ -16,7 +16,7 @@
          rackunit/text-ui
          racket/file
          racket/list
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../cli/replay.rkt")
 

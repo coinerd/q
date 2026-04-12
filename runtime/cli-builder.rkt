@@ -32,7 +32,7 @@
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
-         (only-in "../agent/types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   event-ev
                   event-payload
                   message-role

@@ -9,7 +9,7 @@
          racket/file
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../benchmarks/metrics.rkt"
          "../benchmarks/tasks.rkt"
          "../benchmarks/run.rkt")

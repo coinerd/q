@@ -26,7 +26,7 @@
          "../tui/render.rkt"
          (prefix-in renderer: "../tui/renderer.rkt")
          "../tui/layout.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session-index.rkt"

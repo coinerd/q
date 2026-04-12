@@ -9,7 +9,7 @@
          racket/format
          racket/list
          json
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 (provide session->json-string)
 

@@ -8,7 +8,7 @@
          "../runtime/compactor.rkt"
          "../runtime/session-index.rkt"
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/ids.rkt")
 
 ;; ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@
                   render-branch-list render-leaf-nodes render-children-list
                   format-entry md-format-assistant wrap-styled-line)
          "../../../q/tui/layout.rkt"
-         "../../../q/agent/types.rkt"
+         "../../../q/util/protocol-types.rkt"
          "../../../q/agent/event-bus.rkt"
          "../../../q/interfaces/tui.rkt")
 

@@ -2,7 +2,7 @@
 
 (require rackunit
          racket/match
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt")
 
 ;; ============================================================

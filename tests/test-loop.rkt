@@ -4,7 +4,7 @@
 
 (require rackunit
          racket/generator
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../agent/state.rkt"
          "../agent/queue.rkt"

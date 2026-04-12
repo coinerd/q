@@ -13,7 +13,7 @@
 (require racket/contract
          racket/file
          racket/path
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "api.rkt"
          "quarantine.rkt")

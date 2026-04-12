@@ -19,7 +19,7 @@
          rackunit/text-ui
          racket/file
          racket/string
-         (only-in "../agent/types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   message message? message-id message-role message-content message-parent-id
                   message-kind make-message make-text-part make-tool-result-part
                   text-part? text-part-text

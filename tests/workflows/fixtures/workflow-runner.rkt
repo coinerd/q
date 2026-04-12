@@ -8,7 +8,7 @@
 (require racket/file
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt"
-         (only-in "../../../agent/types.rkt"
+         (only-in "../../../util/protocol-types.rkt"
                   message? message-role message-content message-id message-parent-id
                   message-timestamp
                   text-part? text-part-text

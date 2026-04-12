@@ -25,7 +25,7 @@
          (only-in "../tools/scheduler.rkt"
                   run-tool-batch scheduler-result
                   scheduler-result-results scheduler-result-metadata)
-         (only-in "../agent/types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   tool-call tool-call?
                   tool-call-id tool-call-name tool-call-arguments))
 

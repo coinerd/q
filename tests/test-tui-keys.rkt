@@ -16,7 +16,7 @@
          "../tui/state.rkt"
          "../tui/terminal.rkt"
          "../agent/event-bus.rkt"
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 ;; Helper: create a tui-ctx for testing
 (define (make-test-ctx)

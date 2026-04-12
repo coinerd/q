@@ -15,11 +15,11 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../runtime/compactor.rkt"
          "../runtime/session-store.rkt"
          ;; R2-6: Import hooks for context-assembly testing
-         "../extensions/hooks.rkt")
+         "../util/hook-types.rkt")
 
 ;; ── Helpers ──
 

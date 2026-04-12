@@ -22,7 +22,7 @@
          racket/list
          json
          "../util/config-paths.rkt"
-         (only-in "../extensions/hooks.rkt"
+         (only-in "../util/hook-types.rkt"
                   hook-result? hook-result-action hook-result-payload))
 
 (provide

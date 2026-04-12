@@ -6,7 +6,7 @@
 
 (require rackunit
          "../tools/tool.rkt"
-         (except-in "../agent/types.rkt"
+         (except-in "../util/protocol-types.rkt"
            make-tool-call make-tool-result))
 
 ;; ── The struct constructor from tools/tool should produce values

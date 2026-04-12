@@ -13,7 +13,7 @@
          "../fixtures/session-assert.rkt"
          "../fixtures/event-recorder.rkt"
          "../fixtures/workflow-runner.rkt"
-         "../../../agent/types.rkt"
+         "../../../util/protocol-types.rkt"
          "../../../extensions/hooks.rkt"
          (only-in "../../../tools/tool.rkt"
                   make-tool-registry

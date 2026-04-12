@@ -19,7 +19,7 @@
                   make-tool-registry
                   tool-registry?)
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          (prefix-in session: "../runtime/agent-session.rkt")
          (only-in "../runtime/compactor.rkt"
                   compact-history compact-and-persist!

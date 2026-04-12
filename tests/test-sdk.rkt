@@ -15,7 +15,7 @@
                   tool-registry?
                   register-tool!)
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          (only-in "../extensions/api.rkt"
                   make-extension-registry
                   extension-registry?

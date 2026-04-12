@@ -19,7 +19,7 @@
          (only-in "../agent/event-bus.rkt"
                   make-event-bus event-bus?
                   subscribe! unsubscribe! publish!)
-         (only-in "../agent/types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   make-event event-event event?
                   message? message-id message-role message-content
                   make-message make-text-part

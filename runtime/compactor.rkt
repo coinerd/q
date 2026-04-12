@@ -21,9 +21,9 @@
 (require racket/contract
          racket/string
          racket/list
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
-         (only-in "../extensions/hooks.rkt" hook-result hook-result? hook-result-action hook-result-payload))
+         (only-in "../util/hook-types.rkt" hook-result hook-result? hook-result-action hook-result-payload))
 
 (provide
  (struct-out compaction-strategy)

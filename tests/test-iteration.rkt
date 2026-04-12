@@ -4,7 +4,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          "../util/ids.rkt"

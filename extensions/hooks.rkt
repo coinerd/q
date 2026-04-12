@@ -12,37 +12,17 @@
 ;;   - 'pass: continue with unchanged payload
 ;;   - 'amend: replace payload for next handler
 ;;   - 'block: stop dispatch immediately, return block result
+;;
+;; ARCH-01: hook-result struct and constructors moved to util/hook-types.rkt.
+;; Re-exported here for backward compatibility.
 
 (require racket/contract
-         "api.rkt")
+         "api.rkt"
+         "../util/hook-types.rkt")
 
 (provide
- (struct-out hook-result)
- hook-pass
- hook-amend
- hook-block
+ (all-from-out "../util/hook-types.rkt")
  dispatch-hooks)
-
-;; ============================================================
-;; Hook result struct
-;; ============================================================
-
-(struct hook-result (action payload) #:transparent)
-;; action  : (or/c 'pass 'amend 'block)
-;; payload : any/c
-
-;; ============================================================
-;; Convenience constructors
-;; ============================================================
-
-(define (hook-pass [payload #f])
-  (hook-result 'pass payload))
-
-(define (hook-amend payload)
-  (hook-result 'amend payload))
-
-(define (hook-block [reason #f])
-  (hook-result 'block reason))
 
 ;; ============================================================
 ;; Dispatch hooks

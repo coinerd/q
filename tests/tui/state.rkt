@@ -7,7 +7,7 @@
          racket/port
          "../../../q/tui/state.rkt"
          "../../../q/tui/scrollback.rkt"
-         "../../../q/agent/types.rkt")
+         "../../../q/util/protocol-types.rkt")
 
 ;; Helper to make a simple event
 (define (make-test-event ev-type

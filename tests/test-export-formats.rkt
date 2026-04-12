@@ -14,7 +14,7 @@
          racket/file
          racket/string
          json
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/export-markdown.rkt"
          "../util/export-html.rkt"
          "../util/export-json.rkt"

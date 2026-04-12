@@ -12,7 +12,7 @@
          rackunit/text-ui
          racket/file
          "../interfaces/cli.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../extensions/api.rkt"
          "../runtime/cli-builder.rkt")
 

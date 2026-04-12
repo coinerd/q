@@ -14,7 +14,7 @@
 ;;   - Never bypasses runtime APIs
 ;;   - All pure functions are independently testable
 
-(require "../agent/types.rkt"
+(require "../util/protocol-types.rkt"
          "../util/ansi.rkt"
          "../util/markdown.rkt"
          "../util/error-classify.rkt"

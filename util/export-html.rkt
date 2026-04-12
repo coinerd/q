@@ -8,7 +8,7 @@
 (require racket/string
          racket/format
          racket/list
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 (provide session->html)
 

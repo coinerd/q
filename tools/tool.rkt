@@ -4,8 +4,8 @@
          racket/hash
          (only-in racket/string string-trim)
          json
-         ;; ARCH-01: tool-call and tool-result structs defined in agent/types.rkt
-         (only-in "../agent/types.rkt"
+         ;; ARCH-01: tool-call and tool-result structs from util/protocol-types.rkt
+         (only-in "../util/protocol-types.rkt"
                   tool-call
                   tool-call?
                   tool-call-id

@@ -9,7 +9,7 @@
          "../../../q/tui/commands.rkt"
          "../../../q/tui/state.rkt"
          "../../../q/tui/render.rkt"
-         "../../../q/agent/types.rkt")
+         "../../../q/util/protocol-types.rkt")
 
 ;; Helper to make a simple cmd-ctx with a fresh state
 (define (make-test-cctx)

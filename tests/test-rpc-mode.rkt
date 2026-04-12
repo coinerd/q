@@ -17,7 +17,7 @@
          racket/port
          racket/string
          json
-         "../../q/agent/types.rkt"
+         "../../q/util/protocol-types.rkt"
          "../../q/agent/event-bus.rkt"
          "../../q/interfaces/rpc-mode.rkt")
 

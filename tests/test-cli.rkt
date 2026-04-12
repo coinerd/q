@@ -10,7 +10,7 @@
 (require rackunit
          rackunit/text-ui
          json
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/markdown.rkt"
          "../util/error-classify.rkt"
          "../interfaces/cli.rkt")

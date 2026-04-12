@@ -22,7 +22,7 @@
          (only-in "../tools/tool.rkt"
                   make-tool-registry)
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../interfaces/sdk.rkt")
 
 (provide run-benchmarks)

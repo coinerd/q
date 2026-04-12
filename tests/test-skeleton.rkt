@@ -15,7 +15,7 @@
     "llm/stream.rkt"
     "llm/token-budget.rkt"
     ;; agent/
-    "agent/types.rkt"
+    "util/protocol-types.rkt"
     "agent/state.rkt"
     "agent/event-bus.rkt"
     "agent/queue.rkt"

@@ -8,7 +8,7 @@
 (require racket/file
          racket/list
          "../../../util/jsonl.rkt"
-         "../../../agent/types.rkt"
+         "../../../util/protocol-types.rkt"
          "../../../runtime/session-store.rkt")
 
 (provide check-session-jsonl-valid

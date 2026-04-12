@@ -258,8 +258,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 122 |
-| Source modules | 98 |
-| Source lines | 21139 |
+| Source modules | 100 |
+| Source lines | 21153 |
 | Test lines | 36154 |
 | Test assertions | 5861 |
 | `raco test` results | 3,131 tests passing |

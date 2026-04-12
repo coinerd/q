@@ -17,7 +17,7 @@
          rackunit/text-ui
          racket/file
          json
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../cli/inspect.rkt")
 

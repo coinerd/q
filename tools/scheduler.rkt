@@ -24,7 +24,7 @@
                   exec-context? exec-context-event-publisher
                   tool-call tool-call? make-tool-call
                   tool-call-id tool-call-name tool-call-arguments)
-         (only-in "../extensions/hooks.rkt"
+         (only-in "../util/hook-types.rkt"
                   hook-result? hook-result-action hook-result-payload)
          (only-in "../runtime/safe-mode.rkt"
                   safe-mode? allowed-tool?))

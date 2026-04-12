@@ -18,7 +18,7 @@
          racket/list
          racket/string
          racket/hash
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/session-index.rkt"

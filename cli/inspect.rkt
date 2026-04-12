@@ -12,7 +12,7 @@
          racket/list
          racket/string
          racket/format
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../runtime/session-store.rkt")
 
 (provide inspect-session

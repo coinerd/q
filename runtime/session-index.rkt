@@ -23,7 +23,7 @@
          racket/path
          racket/list
          json
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          "../runtime/session-store.rkt")
 

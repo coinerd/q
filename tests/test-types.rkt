@@ -2,7 +2,7 @@
 
 (require rackunit
          racket/date
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 ;; ============================================================
 ;; Test suite: agent/types.rkt — canonical runtime structs

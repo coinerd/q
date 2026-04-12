@@ -2,7 +2,7 @@
 
 (require racket/string
          json
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt")
 
 (provide

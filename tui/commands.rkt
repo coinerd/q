@@ -15,7 +15,7 @@
          "state.rkt"
          "render.rkt"
          "terminal.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/session-index.rkt"
          "../runtime/settings.rkt"

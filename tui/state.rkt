@@ -7,7 +7,7 @@
 
 (require racket/string
          json
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 ;; Structs
 (provide (struct-out transcript-entry)
