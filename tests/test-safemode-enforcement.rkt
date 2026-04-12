@@ -143,7 +143,7 @@
     (for ([r results])
       (check-false (tool-result-is-error? r) "no errors when safe-mode off"))))
 
-(test-case "SEC-04: tool-read rejects path outside project root in safe-mode"
+(test-case "SEC-04: tool-read rejects path outside project root in safe-mode (via scheduler)"
   (define tmp-dir (make-temporary-file "safemode-read-~a" 'directory))
   (dynamic-wind
     void
@@ -152,11 +152,24 @@
       (call-with-output-file test-file (lambda (out) (display "hello" out)))
       (parameterize ([current-safe-mode #t]
                      [project-root tmp-dir])
+        ;; Build a fresh registry with read tool that delegates to tool-read
+        (define reg (make-tool-registry))
+        (register-tool! reg
+                        (make-tool "read" "Read"
+                                   (hasheq 'type "object"
+                                           'properties (hasheq 'path (hasheq 'type "string"))
+                                           'required '("path"))
+                                   (lambda (args ctx)
+                                     (tool-read args ctx))))
         ;; Inside project: should work
-        (define r-ok (tool-read (hasheq 'path (path->string test-file))))
+        (define tc-ok (make-tool-call "t1" "read" (hasheq 'path (path->string test-file))))
+        (define sr-ok (run-tool-batch (list tc-ok) reg))
+        (define r-ok (first (scheduler-result-results sr-ok)))
         (check-false (tool-result-is-error? r-ok) "read inside project succeeds")
-        ;; Outside project: should fail
-        (define r-bad (tool-read (hasheq 'path "/etc/passwd")))
+        ;; Outside project: should fail (via scheduler path check)
+        (define tc-bad (make-tool-call "t2" "read" (hasheq 'path "/etc/passwd")))
+        (define sr-bad (run-tool-batch (list tc-bad) reg))
+        (define r-bad (first (scheduler-result-results sr-bad)))
         (check-pred tool-result-is-error? r-bad "read outside project fails")
         (define content (tool-result-content r-bad))
         (check-true (ormap (lambda (item)
@@ -167,21 +180,35 @@
     (lambda ()
       (safe-delete-dir tmp-dir))))
 
-(test-case "SEC-04: tool-write rejects path outside project root in safe-mode"
+(test-case "SEC-04: tool-write rejects path outside project root in safe-mode (via scheduler)"
   (define tmp-dir (make-temporary-file "safemode-write-~a" 'directory))
   (dynamic-wind
     void
     (lambda ()
       (parameterize ([current-safe-mode #t]
                      [project-root tmp-dir])
+        ;; Build a fresh registry with a non-blocked tool name that delegates to tool-write
+        ;; ("write" is blocked in safe mode, so we use "file-write" to test path-level check)
+        (define reg (make-tool-registry))
+        (register-tool! reg
+                        (make-tool "file-write" "File Write"
+                                   (hasheq 'type "object"
+                                           'properties (hasheq 'path (hasheq 'type "string"))
+                                           'required '("path"))
+                                   (lambda (args ctx)
+                                     (tool-write args ctx))))
         ;; Inside project: should work
         (define inside-path (build-path tmp-dir "output.txt"))
-        (define r-ok (tool-write (hasheq 'path (path->string inside-path)
-                                         'content "hello")))
+        (define tc-ok (make-tool-call "t1" "file-write" (hasheq 'path (path->string inside-path)
+                                                                       'content "hello")))
+        (define sr-ok (run-tool-batch (list tc-ok) reg))
+        (define r-ok (first (scheduler-result-results sr-ok)))
         (check-false (tool-result-is-error? r-ok) "write inside project succeeds")
-        ;; Outside project: should fail
-        (define r-bad (tool-write (hasheq 'path "/tmp/safemode-bypass-write.txt"
-                                          'content "evil")))
+        ;; Outside project: should fail (via scheduler path check)
+        (define tc-bad (make-tool-call "t2" "file-write" (hasheq 'path "/tmp/safemode-bypass-write.txt"
+                                                                        'content "evil")))
+        (define sr-bad (run-tool-batch (list tc-bad) reg))
+        (define r-bad (first (scheduler-result-results sr-bad)))
         (check-pred tool-result-is-error? r-bad "write outside project fails")
         (define content (tool-result-content r-bad))
         (check-true (ormap (lambda (item)
@@ -192,7 +219,7 @@
     (lambda ()
       (safe-delete-dir tmp-dir))))
 
-(test-case "SEC-04: tool-edit rejects path outside project root in safe-mode"
+(test-case "SEC-04: tool-edit rejects path outside project root in safe-mode (via scheduler)"
   (define tmp-dir (make-temporary-file "safemode-edit-~a" 'directory))
   (dynamic-wind
     void
@@ -206,15 +233,29 @@
         #:exists 'replace)
       (parameterize ([current-safe-mode #t]
                      [project-root tmp-dir])
+        ;; Build a fresh registry with a non-blocked tool name that delegates to tool-edit
+        ;; ("edit" is blocked in safe mode, so we use "file-edit" to test path-level check)
+        (define reg (make-tool-registry))
+        (register-tool! reg
+                        (make-tool "file-edit" "File Edit"
+                                   (hasheq 'type "object"
+                                           'properties (hasheq 'path (hasheq 'type "string"))
+                                           'required '("path"))
+                                   (lambda (args ctx)
+                                     (tool-edit args ctx))))
         ;; Inside project: should work
-        (define r-ok (tool-edit (hasheq 'path (path->string test-file)
-                                        'old-text "hello"
-                                        'new-text "goodbye")))
+        (define tc-ok (make-tool-call "t1" "file-edit" (hasheq 'path (path->string test-file)
+                                                                     'old-text "hello"
+                                                                     'new-text "goodbye")))
+        (define sr-ok (run-tool-batch (list tc-ok) reg))
+        (define r-ok (first (scheduler-result-results sr-ok)))
         (check-false (tool-result-is-error? r-ok) "edit inside project succeeds")
-        ;; Outside project: should fail
-        (define r-bad (tool-edit (hasheq 'path (path->string outside-file)
-                                         'old-text "target"
-                                         'new-text "replaced")))
+        ;; Outside project: should fail (via scheduler path check)
+        (define tc-bad (make-tool-call "t2" "file-edit" (hasheq 'path (path->string outside-file)
+                                                                      'old-text "target"
+                                                                      'new-text "replaced")))
+        (define sr-bad (run-tool-batch (list tc-bad) reg))
+        (define r-bad (first (scheduler-result-results sr-bad)))
         (check-pred tool-result-is-error? r-bad "edit outside project fails")
         (define content (tool-result-content r-bad))
         (check-true (ormap (lambda (item)

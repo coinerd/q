@@ -8,8 +8,7 @@
 ;;   Returns:  tool-result with success or error details
 
 (require racket/file
-         (only-in "../tool.rkt" make-success-result make-error-result)
-         (only-in "../../runtime/safe-mode.rkt" allowed-path? safe-mode-project-root))
+         (only-in "../tool.rkt" make-success-result make-error-result))
 
 (provide tool-edit)
 
@@ -62,16 +61,9 @@
         (cond
           [(not new-text) (err "Missing required argument: new-text")]
           [else
-           ;; 0. Path validation (safe-mode)
+           ;; 1. File existence check
+           ;; (safe-mode path check is done by scheduler, not here)
            (cond
-             [(not (allowed-path? path-str))
-              (err
-               (format
-                "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
-                path-str
-                (safe-mode-project-root)))]
-
-             ;; 1. File existence check
              [(not (file-exists? path-str)) (err (format "File not found: ~a" path-str))]
 
              [else

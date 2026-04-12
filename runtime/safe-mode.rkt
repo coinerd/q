@@ -5,6 +5,9 @@
 ;; Provides query functions for safe mode state, tool restrictions,
 ;; and path restrictions.  Does NOT enforce anything itself — callers
 ;; (tool dispatch, extension loader) check these predicates.
+;;
+;; Predicates are also re-exported via util/safe-mode-predicates.rkt
+;; for backward-compatible imports from tools/scheduler (ARCH-02/QUAL-07).
 
 (require racket/string
          racket/list
@@ -22,6 +25,7 @@
          safe-mode-config-allowed-tools
          safe-mode-config-allowed-paths
          safe-mode-config-locked
+         safe-mode-config-project-root-path
          make-safe-mode-config
 
          ;; Predicates
@@ -38,7 +42,10 @@
          ;; Introspection
          trust-level
          safe-mode-config-info
-         safe-mode-project-root)
+         safe-mode-project-root
+
+         ;; Constants
+         blocked-tools)
 
 ;; ============================================================
 ;; Parameters

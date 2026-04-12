@@ -26,8 +26,8 @@
                   tool-call-id tool-call-name tool-call-arguments)
          (only-in "../util/hook-types.rkt"
                   hook-result? hook-result-action hook-result-payload)
-         (only-in "../runtime/safe-mode.rkt"
-                  safe-mode? allowed-tool?))
+         (only-in "../util/safe-mode-predicates.rkt"
+                  safe-mode? allowed-tool? allowed-path? safe-mode-project-root))
 
 (provide
  ;; ── Result struct ──
@@ -57,6 +57,15 @@
 ;;          'tool-call <tool-call>
 ;;          'tool <tool|#f>        (only for 'ready)
 ;;          'error-message <str>   (only for 'blocked/'error)
+
+;; ============================================================
+;; Internal: extract path argument from tool call args
+;; ============================================================
+
+(define (extract-path-arg args)
+  (or (hash-ref args 'path #f)
+      (hash-ref args 'root #f)
+      (hash-ref args 'directory #f)))
 
 ;; ============================================================
 ;; Preflight stage (serial)
@@ -112,6 +121,17 @@
                      'tool-call tc-after-hook
                      'error-message (format "tool '~a' blocked by safe-mode"
                                             (tool-call-name tc-after-hook)))]
+            ;; Check safe-mode path restrictions (ARCH-02)
+            [(and (safe-mode?)
+                  (let ([path-arg (extract-path-arg (tool-call-arguments tc-after-hook))])
+                    (and path-arg (not (allowed-path? path-arg)))))
+             (define path-arg (extract-path-arg (tool-call-arguments tc-after-hook)))
+             (hasheq 'status 'blocked
+                     'tool-call tc-after-hook
+                     'error-message
+                     (format "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
+                             path-arg
+                             (safe-mode-project-root)))]
             [else
              ;; Revalidate arguments after potential hook mutation
              (define validated?
