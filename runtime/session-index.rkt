@@ -27,43 +27,41 @@
          "../util/jsonl.rkt"
          "../runtime/session-store.rkt")
 
-(provide
- session-index?
- session-index-by-id
- session-index-entry-order
- session-index-bookmarks
- build-index!
- load-index
- lookup-entry
- children-of
- leaf-nodes
- resolve-active-leaf
- ;; Active Leaf API
- active-leaf
- switch-leaf!
- mark-active-leaf!
- ;; Bookmark API
- bookmark?
- bookmark-id
- bookmark-entry-id
- bookmark-label
- bookmark-timestamp
- make-bookmark
- add-bookmark!
- remove-bookmark!
- list-bookmarks
- find-bookmark-by-label
- get-bookmark
- load-bookmarks
- save-bookmarks!)
+(provide session-index?
+         session-index-by-id
+         session-index-entry-order
+         session-index-bookmarks
+         build-index!
+         load-index
+         lookup-entry
+         children-of
+         leaf-nodes
+         resolve-active-leaf
+         ;; Active Leaf API
+         active-leaf
+         switch-leaf!
+         mark-active-leaf!
+         ;; Bookmark API
+         bookmark?
+         bookmark-id
+         bookmark-entry-id
+         bookmark-label
+         bookmark-timestamp
+         make-bookmark
+         add-bookmark!
+         remove-bookmark!
+         list-bookmarks
+         find-bookmark-by-label
+         get-bookmark
+         load-bookmarks
+         save-bookmarks!)
 
 ;; ============================================================
 ;; Index struct
 ;; ============================================================
 
 ;; A bookmark holds user-defined labels for quick navigation
-(struct bookmark (id entry-id label timestamp)
-  #:transparent)
+(struct bookmark (id entry-id label timestamp) #:transparent)
 
 ;; A session-index holds:
 ;;   by-id          — hash: id-string -> message
@@ -93,7 +91,8 @@
     (define pid (message-parent-id msg))
     (when (and pid (hash-has-key? children pid))
       (hash-update! children pid (lambda (lst) (append lst (list msg))))))
-  (define idx (session-index by-id children (list->vector messages) (make-hash) (box #f) (make-semaphore 1)))
+  (define idx
+    (session-index by-id children (list->vector messages) (make-hash) (box #f) (make-semaphore 1)))
   ;; Persist index to disk
   (save-index! index-path idx)
   idx)
@@ -108,23 +107,16 @@
   ;; First line: {"type":"index-header","count":N}
   ;; Subsequent lines: serialized message entries
   (define entries (vector->list (session-index-entry-order idx)))
-  (define header (hasheq 'type "index-header"
-                         'count (length entries)))
-  (define lines
-    (cons header
-          (map message->jsexpr entries)))
+  (define header (hasheq 'type "index-header" 'count (length entries)))
+  (define lines (cons header (map message->jsexpr entries)))
   (ensure-parent-dirs! path)
   ;; Write atomically: build blob then overwrite
   (define blob
-    (with-output-to-string
-      (lambda ()
-        (for ([entry (in-list lines)])
-          (write-json entry)
-          (newline)))))
-  (call-with-output-file path
-    (lambda (out) (display blob out))
-    #:mode 'text
-    #:exists 'truncate))
+    (with-output-to-string (lambda ()
+                             (for ([entry (in-list lines)])
+                               (write-json entry)
+                               (newline)))))
+  (call-with-output-file path (lambda (out) (display blob out)) #:mode 'text #:exists 'truncate))
 
 ;; ============================================================
 ;; load-index
@@ -133,12 +125,16 @@
 (define (load-index path)
   ;; Load a previously saved index from disk.
   ;; Returns an empty index if file does not exist.
+  ;; Warns on stderr if the index is corrupted.
   (if (not (file-exists? path))
       (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f) (make-semaphore 1))
       (let ()
         (define raw (jsonl-read-all-valid path))
         (cond
           [(null? raw)
+           (fprintf
+            (current-error-port)
+            "WARNING: Session index corrupted and could not be loaded. Starting with empty index. Previous session list may be unavailable.\n")
            (session-index (make-hash) (make-hash) (vector) (make-hash) (box #f) (make-semaphore 1))]
           [else
            ;; First entry should be the header
@@ -154,7 +150,12 @@
              (define pid (message-parent-id msg))
              (when (and pid (hash-has-key? children pid))
                (hash-update! children pid (lambda (lst) (append lst (list msg))))))
-           (session-index by-id children (list->vector entries) (make-hash) (box #f) (make-semaphore 1))]))))
+           (session-index by-id
+                          children
+                          (list->vector entries)
+                          (make-hash)
+                          (box #f)
+                          (make-semaphore 1))]))))
 
 ;; ============================================================
 ;; Query operations
@@ -197,8 +198,7 @@
   ;; Returns #f if no entries exist or if the marked id is not found.
   (define marked-id (unbox (session-index-active-leaf-id idx)))
   (cond
-    [marked-id
-     (lookup-entry idx marked-id)]
+    [marked-id (lookup-entry idx marked-id)]
     [else
      ;; Default: last entry in append order
      (define order (session-index-entry-order idx))
@@ -253,28 +253,30 @@
   ;; Returns the bookmark id.
   ;; Thread-safe: mutations protected by per-index semaphore (#115).
   (call-with-semaphore (session-index-bookmark-sem idx)
-    (lambda ()
-      (define bookmarks (session-index-bookmarks idx))
-      ;; Remove existing bookmark with same label if present
-      (define existing (find-bookmark-by-label idx label))
-      (when existing
-        (hash-remove! bookmarks (bookmark-id existing)))
-      ;; Create new bookmark
-      (define id (generate-bookmark-id))
-      (define ts (current-seconds))
-      (define bm (make-bookmark id entry-id label ts))
-      (hash-set! bookmarks id bm)
-      id)))
+                       (lambda ()
+                         (define bookmarks (session-index-bookmarks idx))
+                         ;; Remove existing bookmark with same label if present
+                         (define existing (find-bookmark-by-label idx label))
+                         (when existing
+                           (hash-remove! bookmarks (bookmark-id existing)))
+                         ;; Create new bookmark
+                         (define id (generate-bookmark-id))
+                         (define ts (current-seconds))
+                         (define bm (make-bookmark id entry-id label ts))
+                         (hash-set! bookmarks id bm)
+                         id)))
 
 (define (remove-bookmark! idx bookmark-id)
   ;; Remove bookmark by id. Returns #t if found and removed, #f otherwise.
   ;; Thread-safe: mutations protected by per-index semaphore (#115).
   (call-with-semaphore (session-index-bookmark-sem idx)
-    (lambda ()
-      (define bookmarks (session-index-bookmarks idx))
-      (if (hash-has-key? bookmarks bookmark-id)
-          (begin (hash-remove! bookmarks bookmark-id) #t)
-          #f))))
+                       (lambda ()
+                         (define bookmarks (session-index-bookmarks idx))
+                         (if (hash-has-key? bookmarks bookmark-id)
+                             (begin
+                               (hash-remove! bookmarks bookmark-id)
+                               #t)
+                             #f))))
 
 (define (list-bookmarks idx)
   ;; Returns list of all bookmarks in arbitrary order.
@@ -301,22 +303,24 @@
   (define dir (path-only session-path))
   (define base (file-name-from-path session-path))
   (define base-str (path->string base))
-  (define name (if (string-suffix? base-str ".jsonl")
-                   (substring base-str 0 (- (string-length base-str) 6))
-                   base-str))
+  (define name
+    (if (string-suffix? base-str ".jsonl")
+        (substring base-str 0 (- (string-length base-str) 6))
+        base-str))
   (build-path dir (format "~a-bookmarks.json" name)))
 
 (define (bookmark->jsexpr bm)
-  (hasheq 'id (bookmark-id bm)
-          'entryId (bookmark-entry-id bm)
-          'label (bookmark-label bm)
-          'timestamp (bookmark-timestamp bm)))
+  (hasheq 'id
+          (bookmark-id bm)
+          'entryId
+          (bookmark-entry-id bm)
+          'label
+          (bookmark-label bm)
+          'timestamp
+          (bookmark-timestamp bm)))
 
 (define (jsexpr->bookmark h)
-  (make-bookmark (hash-ref h 'id)
-                 (hash-ref h 'entryId)
-                 (hash-ref h 'label)
-                 (hash-ref h 'timestamp)))
+  (make-bookmark (hash-ref h 'id) (hash-ref h 'entryId) (hash-ref h 'label) (hash-ref h 'timestamp)))
 
 (define (save-bookmarks! session-path idx)
   ;; Save bookmarks to sidecar file.
@@ -328,10 +332,9 @@
   ;; Atomic write: write to temp, then rename
   (define temp-path (format "~a.tmp" bpath))
   (call-with-output-file temp-path
-    (lambda (out)
-      (write-json data out))
-    #:mode 'text
-    #:exists 'truncate)
+                         (lambda (out) (write-json data out))
+                         #:mode 'text
+                         #:exists 'truncate)
   (when (file-exists? bpath)
     (delete-file bpath))
   (rename-file-or-directory temp-path bpath))
@@ -341,13 +344,10 @@
   ;; Returns list of bookmarks (empty if file doesn't exist or is invalid).
   (define bpath (bookmarks-path session-path))
   (cond
-    [(not (file-exists? bpath))
-     '()]
+    [(not (file-exists? bpath)) '()]
     [else
      (with-handlers ([exn:fail? (lambda (e) '())])
-       (define data (call-with-input-file bpath
-                      (lambda (in) (read-json in))
-                      #:mode 'text))
+       (define data (call-with-input-file bpath (lambda (in) (read-json in)) #:mode 'text))
        (if (list? data)
            (map jsexpr->bookmark data)
            '()))]))
@@ -373,7 +373,6 @@
 ;; ============================================================
 
 (define (ensure-parent-dirs! path)
-  (define dir (let ([p (path-only path)])
-                (if p p #f)))
+  (define dir (let ([p (path-only path)]) (if p p #f)))
   (when (and dir (not (directory-exists? dir)))
     (make-directory* dir)))

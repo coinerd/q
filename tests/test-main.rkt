@@ -695,11 +695,12 @@
 
 (test-case "run-cli-single: handles session-fn errors gracefully"
   (define cfg (parse-cli-args #("hello")))
-  (define out (open-output-string))
-  (run-cli-single cfg
-    #:session-fn (lambda (prompt) (error 'test "intentional error"))
-    #:out out)
-  (check-true (string-contains? (get-output-string out) "Error:")))
+  (define err (open-output-string))
+  (parameterize ([current-error-port err])
+    (run-cli-single cfg
+      #:session-fn (lambda (prompt) (error 'test "intentional error"))
+      #:out (open-output-string)))
+  (check-true (string-contains? (get-output-string err) "Error:")))
 
 ;; ============================================================
 ;; build-runtime-from-cli: session-dir with --project-dir

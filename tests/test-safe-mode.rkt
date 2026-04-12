@@ -113,6 +113,8 @@
    (check-true (hash-has-key? cfg 'trust-level) "has trust-level key")
    (check-true (hash-has-key? cfg 'blocked-tools) "has blocked-tools key")
    (check-true (hash-has-key? cfg 'reason) "has reason key")
+   (check-true (hash-has-key? cfg 'source) "has source key")
+   (check-true (hash-has-key? cfg 'project-root) "has project-root key")
    (check-true (hash-ref cfg 'active?) "active? is #t")
    (check-equal? (hash-ref cfg 'trust-level) 'restricted)
    (for ([expected '("bash" "edit" "write" "firecrawl")])
@@ -164,7 +166,7 @@
                 [safe-mode-locked? #f])
    (lock-safe-mode!)
    (check-exn
-    #rx"safe-mode is locked and cannot be deactivated"
+    #rx"Safe mode is locked and cannot be changed"
     (lambda () (safe-mode-deactivate!)))
    ;; Safe mode should still be active
    (check-true (safe-mode?))))

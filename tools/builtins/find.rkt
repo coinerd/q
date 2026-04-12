@@ -3,10 +3,8 @@
 (require racket/file
          racket/string
          racket/path
-         (only-in "../tool.rkt"
-                  make-success-result make-error-result)
-         (only-in "../../runtime/safe-mode.rkt"
-                  allowed-path?))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt" allowed-path? safe-mode-project-root))
 
 (provide tool-find)
 
@@ -30,8 +28,7 @@
       (case ch
         [(#\*) ".*"]
         [(#\?) "."]
-        [(#\. #\+ #\( #\) #\[ #\] #\{ #\} #\\ #\^ #\$ #\|)
-         (string #\\ ch)]
+        [(#\. #\+ #\( #\) #\[ #\] #\{ #\} #\\ #\^ #\$ #\|) (string #\\ ch)]
         [else (string ch)])))
   (regexp (string-append "^" (string-join escaped "") "$")))
 
@@ -45,8 +42,7 @@
   (member name VCS-DIRS))
 
 (define (hidden-name? name)
-  (and (> (string-length name) 0)
-       (char=? (string-ref name 0) #\.)))
+  (and (> (string-length name) 0) (char=? (string-ref name 0) #\.)))
 
 (define (path-component-hidden? abs-path)
   ;; Check if any component of the path is hidden
@@ -69,13 +65,12 @@
       (set-box! results (append (unbox results) (list rel)))))
 
   (define (matches-name? filename)
-    (or (not name-re)
-        (regexp-match? name-re filename)))
+    (or (not name-re) (regexp-match? name-re filename)))
 
   (define (matches-type? full-path)
     (case type-filter
       [("file") (file-exists? full-path)]
-      [("dir")  (directory-exists? full-path)]
+      [("dir") (directory-exists? full-path)]
       [else #t]))
 
   (define (should-skip-entry? name)
@@ -102,8 +97,7 @@
           (when (matches-name? entry-str)
             (add-result! (path->string rel-path))))
         ;; Recurse into subdirectories if depth allows
-        (when (and (directory-exists? full-path)
-                   (< depth max-depth))
+        (when (and (directory-exists? full-path) (< depth max-depth))
           (walk full-path (add1 depth))))))
 
   (walk root-path 0)
@@ -116,32 +110,32 @@
 (define (tool-find args [exec-ctx #f])
   ;; 0. Safe-mode path check (#118)
   (cond
-    [(not (hash-has-key? args 'path))
-     (err "Missing required argument: path")]
+    [(not (hash-has-key? args 'path)) (err "Missing required argument: path")]
     [else
      (define path-str (hash-ref args 'path))
      (cond
        ;; Safe-mode: check path access
        [(not (allowed-path? path-str))
-        (err (format "Access denied: path outside project root: ~a" path-str))]
-       [(not (string? path-str))
-        (err "Argument 'path' must be a string")]
+        (err
+         (format
+          "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
+          path-str
+          (safe-mode-project-root)))]
+       [(not (string? path-str)) (err "Argument 'path' must be a string")]
 
        ;; 2. Path must exist
-       [(not (or (directory-exists? path-str)
-                 (file-exists? path-str)))
+       [(not (or (directory-exists? path-str) (file-exists? path-str)))
         (err (format "Path not found: ~a" path-str))]
 
        ;; 3. Path must be a directory
-       [(not (directory-exists? path-str))
-        (err (format "Path is not a directory: ~a" path-str))]
+       [(not (directory-exists? path-str)) (err (format "Path is not a directory: ~a" path-str))]
 
        [else
         ;; 4. Parse optional arguments
         (define name-pattern (hash-ref args 'name #f))
-        (define type-filter  (hash-ref args 'type "any"))
-        (define max-depth    (hash-ref args 'max-depth 10))
-        (define max-results  (hash-ref args 'max-results 100))
+        (define type-filter (hash-ref args 'type "any"))
+        (define max-depth (hash-ref args 'max-depth 10))
+        (define max-results (hash-ref args 'max-results 100))
 
         ;; Compile glob pattern if provided
         (define name-re
@@ -160,6 +154,4 @@
         (define truncated? (> total-found max-results))
 
         (ok results
-            (hasheq 'total-found total-found
-                    'truncated? truncated?
-                    'search-root path-str))])]))
+            (hasheq 'total-found total-found 'truncated? truncated? 'search-root path-str))])]))

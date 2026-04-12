@@ -6,7 +6,7 @@
          racket/list
          racket/dict
          (only-in "../tool.rkt" make-success-result make-error-result)
-         (only-in "../../runtime/safe-mode.rkt" allowed-path?))
+         (only-in "../../runtime/safe-mode.rkt" allowed-path? safe-mode-project-root))
 
 (provide tool-read)
 
@@ -50,7 +50,11 @@
      ;; 0. Path validation (safe-mode)
      (cond
        [(not (allowed-path? path-str))
-        (err (format "Access denied: path outside project root: ~a" path-str))]
+        (err
+         (format
+          "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
+          path-str
+          (safe-mode-project-root)))]
 
        ;; 1. File existence check
        [(not (file-exists? path-str)) (err (format "File not found: ~a" path-str))]

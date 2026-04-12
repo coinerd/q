@@ -14,28 +14,34 @@
          racket/file
          json
          "../interfaces/cli.rkt"
+         "../interfaces/sessions.rkt"
          "../interfaces/json-mode.rkt"
          "../interfaces/rpc-mode.rkt"
          (only-in "../runtime/agent-session.rkt"
-                  make-agent-session resume-agent-session run-prompt!
-                  session-id session-history fork-session
+                  make-agent-session
+                  resume-agent-session
+                  run-prompt!
+                  session-id
+                  session-history
+                  fork-session
                   close-session!)
          "../runtime/settings.rkt"
          "../skills/types.rkt"
          "../runtime/model-registry.rkt"
-         (only-in "../runtime/provider-factory.rkt"
-                  build-provider)
+         (only-in "../runtime/provider-factory.rkt" build-provider)
          "../tools/tool.rkt"
-         (only-in "../tools/registry-defaults.rkt"
-                  register-default-tools!)
+         (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
-         (only-in "../agent/types.rkt" event-ev event-payload
-                  message-role message-content text-part? text-part-text)
+         (only-in "../agent/types.rkt"
+                  event-ev
+                  event-payload
+                  message-role
+                  message-content
+                  text-part?
+                  text-part-text)
          "../extensions/api.rkt"
-         (only-in "../extensions/loader.rkt"
-                  load-extension!)
-         (only-in "../util/cancellation.rkt"
-                  cancellation-token? cancel-token!))
+         (only-in "../extensions/loader.rkt" load-extension!)
+         (only-in "../util/cancellation.rkt" cancellation-token? cancel-token!))
 
 (provide build-runtime-from-cli
          load-extensions-from-dir!
@@ -68,8 +74,7 @@
     (register-default-tools! reg #:only (if (null? only-tools) #f only-tools)))
 
   ;; Load settings ONCE — for both provider building and session-dir
-  (define project-dir (or (hash-ref base-config 'project-dir #f)
-                          (current-directory)))
+  (define project-dir (or (hash-ref base-config 'project-dir #f) (current-directory)))
   (define config-path (hash-ref base-config 'config-path #f))
   (define settings (load-settings project-dir #:config-path config-path))
 
@@ -86,13 +91,15 @@
   (define session-dir
     (or (hash-ref base-config 'session-dir #f)
         (let ([sd (session-dir-from-settings settings)])
-          (if (path? sd) (path->string sd) sd))))
+          (if (path? sd)
+              (path->string sd)
+              sd))))
   (make-directory* session-dir)
 
   ;; Extension registry — discover from project dir
   (define ext-reg (make-extension-registry))
-  (load-extensions-from-dir! ext-reg (build-path project-dir ".q" "extensions"))
-  (load-extensions-from-dir! ext-reg (build-path project-dir ".pi" "extensions"))
+  (load-extensions-from-dir! ext-reg (build-path project-dir ".q" "extensions") #:event-bus bus)
+  (load-extensions-from-dir! ext-reg (build-path project-dir ".pi" "extensions") #:event-bus bus)
 
   ;; Model name from CLI --model flag
   (define model-name (hash-ref base-config 'model #f))
@@ -107,8 +114,7 @@
   ;; Also persist model-registry for /model command
   (define model-reg (make-model-registry-from-config (q-settings-merged settings)))
   (hash-set! base-config 'model-registry model-reg)
-  (define effective-model-name
-    (or model-name (default-model model-reg)))
+  (define effective-model-name (or model-name (default-model model-reg)))
   (hash-set! base-config 'model-name effective-model-name)
   (hash-set! base-config 'system-instructions system-instrs)
   (hash-set! base-config 'verbose? (cli-config-verbose? cfg))
@@ -121,17 +127,17 @@
 ;; Load all .rkt extension files from a directory into the registry.
 ;; Silently skips if directory doesn't exist or individual loads fail.
 
-(define (load-extensions-from-dir! ext-reg dir)
+(define (load-extensions-from-dir! ext-reg dir #:event-bus [event-bus #f])
   (when (directory-exists? dir)
     (define files
-      (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f)))
-              (directory-list dir #:build? #t)))
+      (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f))) (directory-list dir #:build? #t)))
     (for ([f (in-list files)])
       (with-handlers ([exn:fail? (λ (e)
                                    (fprintf (current-error-port)
                                             "Warning: failed to load extension ~a: ~a\n"
-                                            f (exn-message e)))])
-        (load-extension! ext-reg f)))))
+                                            f
+                                            (exn-message e)))])
+        (load-extension! ext-reg f #:event-bus event-bus)))))
 
 ;; ============================================================
 ;; mode-for-config
@@ -146,6 +152,7 @@
     [(help) 'help]
     [(version) 'version]
     [(doctor) 'doctor]
+    [(sessions) 'sessions]
     [else (cli-config-mode cfg)]))
 
 ;; ============================================================
@@ -181,90 +188,113 @@
        (unless (string=? text "")
          (displayln text))])))
 
-(define (run-interactive cfg rt-config)
+;; Handle /sessions interactive command
+(define (handle-sessions-interactive-command cmd out session-dir)
+  (define sdir (or session-dir (default-session-dir)))
+  (cond
+    [(or (equal? cmd '(sessions)) (equal? cmd '(sessions list)))
+     (define sess-list (sessions-list sdir #:limit 10))
+     (for-each displayln (sessions-list->strings sess-list))]
+    [(and (list? cmd) (>= (length cmd) 3) (equal? (cadr cmd) 'info))
+     (define sid (caddr cmd))
+     (define info (sessions-info sdir sid))
+     (displayln (sessions-info->string info))]
+    [(and (list? cmd) (>= (length cmd) 3) (equal? (cadr cmd) 'delete))
+     (define sid (caddr cmd))
+     (define result (sessions-delete sdir sid #:confirm? #t #:out out))
+     (case result
+       [(ok) (displayln (format "Session ~a deleted." sid))]
+       [(not-found) (displayln (format "Session not found: ~a" sid))]
+       [(cancelled) (displayln "Cancelled.")])]
+    [else (displayln "Usage: /sessions [list|info <id>|delete <id>]")]))
+
+(define (run-interactive cfg rt-config #:provider-name [prov-name #f])
   (define sess (make-agent-session rt-config))
   (define bus (hash-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
-  (run-cli-interactive cfg
-    #:session-fn (lambda (prompt)
-                   (run-prompt! sess prompt))
-    #:compact-fn (lambda ()
-                   (displayln "[compaction requested]"))
-    #:history-fn (lambda ([out (current-output-port)])
-                   (define hist (session-history sess))
-                   (for ([msg (in-list hist)])
-                     (define role (message-role msg))
-                     (define text-parts
-                       (filter text-part? (message-content msg)))
-                     (define text
-                       (string-join (map text-part-text text-parts) " "))
-                     (displayln (format "[~a] ~a" role text) out)))
-    #:fork-fn (lambda (entry-id)
-                (define new-sess (fork-session sess entry-id))
-                (displayln (format "[forked session: ~a]" (session-id new-sess))))
-    #:model-fn (lambda (arg)
-                 (define reg (hash-ref rt-config 'model-registry #f))
-                 (cond
-                   [(not reg) (displayln "[model registry not available]")]
-                   [(not arg)
-                    (displayln "Available models:")
-                    (for ([m (in-list (available-models reg))])
-                      (define marker (if (equal? (model-entry-name m) (default-model reg)) " *" "  "))
-                      (displayln (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))))]
-                   [else
-                    (define resolution (resolve-model reg arg))
-                    (if resolution
-                        (displayln (format "[switched to model: ~a (provider: ~a)]"
-                                           (model-resolution-model-name resolution)
-                                           (model-resolution-provider-name resolution)))
-                        (displayln (format "Model not found: ~a. Use /model to list." arg)))]))))
+  (run-cli-interactive
+   cfg
+   #:session-fn (lambda (prompt) (run-prompt! sess prompt))
+   #:compact-fn (lambda () (displayln "[compaction requested]"))
+   #:history-fn (lambda ([out (current-output-port)])
+                  (define hist (session-history sess))
+                  (for ([msg (in-list hist)])
+                    (define role (message-role msg))
+                    (define text-parts (filter text-part? (message-content msg)))
+                    (define text (string-join (map text-part-text text-parts) " "))
+                    (displayln (format "[~a] ~a" role text) out)))
+   #:fork-fn (lambda (entry-id)
+               (define new-sess (fork-session sess entry-id))
+               (displayln (format "[forked session: ~a]" (session-id new-sess))))
+   #:model-fn
+   (lambda (arg)
+     (define reg (hash-ref rt-config 'model-registry #f))
+     (cond
+       [(not reg) (displayln "[model registry not available]")]
+       [(not arg)
+        (displayln "Available models:")
+        (for ([m (in-list (available-models reg))])
+          (define marker (if (equal? (model-entry-name m) (default-model reg)) " *" "  "))
+          (displayln
+           (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))))]
+       [else
+        (define resolution (resolve-model reg arg))
+        (if resolution
+            (displayln (format "[switched to model: ~a (provider: ~a)]"
+                               (model-resolution-model-name resolution)
+                               (model-resolution-provider-name resolution)))
+            (displayln (format "Model not found: ~a. Use /model to list." arg)))]))
+   #:sessions-fn (lambda (cmd out)
+                   (define sdir (hash-ref rt-config 'session-dir #f))
+                   (handle-sessions-interactive-command cmd out sdir))
+   #:provider-name prov-name))
 
 (define (run-single-shot cfg rt-config)
   (define sess (make-agent-session rt-config))
   (define bus (hash-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
-  (run-cli-single cfg
-    #:session-fn (lambda (prompt)
-                   (run-prompt! sess prompt))))
+  (run-cli-single cfg #:session-fn (lambda (prompt) (run-prompt! sess prompt))))
 
 (define (run-resume cfg rt-config)
   (define sid (cli-config-session-id cfg))
   (define sess (resume-agent-session sid rt-config))
   (define bus (hash-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
-  (run-cli-interactive cfg
-    #:session-fn (lambda (prompt)
-                   (run-prompt! sess prompt))
-    #:compact-fn (lambda ()
-                   (displayln "[compaction requested]"))
-    #:history-fn (lambda ([out (current-output-port)])
-                   (define hist (session-history sess))
-                   (for ([msg (in-list hist)])
-                     (define role (message-role msg))
-                     (define text-parts
-                       (filter text-part? (message-content msg)))
-                     (define text
-                       (string-join (map text-part-text text-parts) " "))
-                     (displayln (format "[~a] ~a" role text) out)))
-    #:fork-fn (lambda (entry-id)
-                (define new-sess (fork-session sess entry-id))
-                (displayln (format "[forked session: ~a]" (session-id new-sess))))
-    #:model-fn (lambda (arg)
-                 (define reg (hash-ref rt-config 'model-registry #f))
-                 (cond
-                   [(not reg) (displayln "[model registry not available]")]
-                   [(not arg)
-                    (displayln "Available models:")
-                    (for ([m (in-list (available-models reg))])
-                      (define marker (if (equal? (model-entry-name m) (default-model reg)) " *" "  "))
-                      (displayln (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))))]
-                   [else
-                    (define resolution (resolve-model reg arg))
-                    (if resolution
-                        (displayln (format "[switched to model: ~a (provider: ~a)]"
-                                           (model-resolution-model-name resolution)
-                                           (model-resolution-provider-name resolution)))
-                        (displayln (format "Model not found: ~a. Use /model to list." arg)))]))))
+  (run-cli-interactive
+   cfg
+   #:session-fn (lambda (prompt) (run-prompt! sess prompt))
+   #:compact-fn (lambda () (displayln "[compaction requested]"))
+   #:history-fn (lambda ([out (current-output-port)])
+                  (define hist (session-history sess))
+                  (for ([msg (in-list hist)])
+                    (define role (message-role msg))
+                    (define text-parts (filter text-part? (message-content msg)))
+                    (define text (string-join (map text-part-text text-parts) " "))
+                    (displayln (format "[~a] ~a" role text) out)))
+   #:fork-fn (lambda (entry-id)
+               (define new-sess (fork-session sess entry-id))
+               (displayln (format "[forked session: ~a]" (session-id new-sess))))
+   #:model-fn
+   (lambda (arg)
+     (define reg (hash-ref rt-config 'model-registry #f))
+     (cond
+       [(not reg) (displayln "[model registry not available]")]
+       [(not arg)
+        (displayln "Available models:")
+        (for ([m (in-list (available-models reg))])
+          (define marker (if (equal? (model-entry-name m) (default-model reg)) " *" "  "))
+          (displayln
+           (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))))]
+       [else
+        (define resolution (resolve-model reg arg))
+        (if resolution
+            (displayln (format "[switched to model: ~a (provider: ~a)]"
+                               (model-resolution-model-name resolution)
+                               (model-resolution-provider-name resolution)))
+            (displayln (format "Model not found: ~a. Use /model to list." arg)))]))
+   #:sessions-fn (lambda (cmd out)
+                   (define sdir (hash-ref rt-config 'session-dir #f))
+                   (handle-sessions-interactive-command cmd out sdir))))
 
 (define (run-json cfg rt-config)
   (define sess (make-agent-session rt-config))
@@ -280,27 +310,26 @@
         (case (intent-type intent-obj)
           [(prompt)
            (define text (hash-ref (intent-payload intent-obj) 'text #f))
-           (when text (run-prompt! sess text))]
+           (when text
+             (run-prompt! sess text))]
           [(interrupt)
            ;; R2-4: Cancel the cancellation token if available
            (define cancel-tok (hash-ref rt-config 'cancellation-token #f))
            (when (and cancel-tok (cancellation-token? cancel-tok))
              (cancel-token! cancel-tok))
            (displayln (jsexpr->string (hasheq 'type "interrupt" 'status "acknowledged")))]
-          [(compact)
-           ;; R2-4: Compact session
-           (displayln (jsexpr->string (hasheq 'type "compact" 'status "requested")))]
+          ;; R2-4: Compact session
+          [(compact) (displayln (jsexpr->string (hasheq 'type "compact" 'status "requested")))]
           [(fork)
            ;; R2-4: Fork session
            (define entry-id
-             (and (intent-payload intent-obj)
-                  (hash-ref (intent-payload intent-obj) 'entryId #f)))
+             (and (intent-payload intent-obj) (hash-ref (intent-payload intent-obj) 'entryId #f)))
            (define new-sess (fork-session sess entry-id))
-           (displayln (jsexpr->string (hasheq 'type "fork"
-                                              'status "ok"
-                                              'newSessionId (session-id new-sess))))]
-          [(quit) (stop-json-mode! bus sub-id)
-                  (void)]
+           (displayln (jsexpr->string
+                       (hasheq 'type "fork" 'status "ok" 'newSessionId (session-id new-sess))))]
+          [(quit)
+           (stop-json-mode! bus sub-id)
+           (void)]
           [else (void)]))
       (unless (and intent-obj (eq? (intent-type intent-obj) 'quit))
         (loop)))))
@@ -316,64 +345,56 @@
   (hash-set! sessions (session-id default-sess) default-sess)
   ;; Build handlers
   (define handlers
-    (make-hash
-     (list
-      ;; ---- Prompt ----
-      (cons 'prompt
-            (lambda (params)
-              (define text (hash-ref params 'text ""))
-              (define sid (hash-ref params 'sessionId #f))
-              (define sess (if sid
-                               (hash-ref sessions sid #f)
-                               default-sess))
-              (unless sess
-                (error 'prompt "session not found: ~a" sid))
-              (run-prompt! sess text)
-              (hasheq 'status "ok")))
-      ;; ---- Ping ----
-      (cons 'ping
-            (lambda (params)
-              (hasheq 'pong #t)))
-      ;; ---- Shutdown ----
-      (cons 'shutdown
-            (lambda (params)
-              (hasheq 'status "shutting-down")))
-      ;; ---- Session management ----
-      (cons 'session.open
-            (lambda (params)
-              (define sess (make-agent-session rt-config))
-              (hash-set! sessions (session-id sess) sess)
-              (hasheq 'sessionId (session-id sess))))
-      (cons 'session.list
-            (lambda (params)
-              (define session-dir (hash-ref rt-config 'session-dir))
-              (define session-ids
-                (if (directory-exists? session-dir)
-                    (for/list ([e (in-list (directory-list session-dir))]
-                               #:when (directory-exists?
-                                       (build-path session-dir e)))
-                      (path->string e))
-                    '()))
-              (hasheq 'sessions session-ids)))
-      (cons 'session.resume
-            (lambda (params)
-              (define sid (hash-ref params 'sessionId #f))
-              (unless sid
-                (error 'session.resume "sessionId parameter required"))
-              (define sess (resume-agent-session sid rt-config))
-              (hash-set! sessions (session-id sess) sess)
-              (hasheq 'sessionId (session-id sess)
-                      'status "resumed")))
-      (cons 'session.close
-            (lambda (params)
-              (define sid (hash-ref params 'sessionId #f))
-              (unless sid
-                (error 'session.close "sessionId parameter required"))
-              (define sess (hash-ref sessions sid #f))
-              (unless sess
-                (error 'session.close "session not found: ~a" sid))
-              (close-session! sess)
-              (hash-remove! sessions sid)
-              (hasheq 'sessionId sid
-                      'status "closed"))))))
+    (make-hash ;; ---- Prompt ----
+     (list (cons 'prompt
+                 (lambda (params)
+                   (define text (hash-ref params 'text ""))
+                   (define sid (hash-ref params 'sessionId #f))
+                   (define sess
+                     (if sid
+                         (hash-ref sessions sid #f)
+                         default-sess))
+                   (unless sess
+                     (error 'prompt "session not found: ~a" sid))
+                   (run-prompt! sess text)
+                   (hasheq 'status "ok")))
+           ;; ---- Ping ----
+           (cons 'ping (lambda (params) (hasheq 'pong #t)))
+           ;; ---- Shutdown ----
+           (cons 'shutdown (lambda (params) (hasheq 'status "shutting-down")))
+           ;; ---- Session management ----
+           (cons 'session.open
+                 (lambda (params)
+                   (define sess (make-agent-session rt-config))
+                   (hash-set! sessions (session-id sess) sess)
+                   (hasheq 'sessionId (session-id sess))))
+           (cons 'session.list
+                 (lambda (params)
+                   (define session-dir (hash-ref rt-config 'session-dir))
+                   (define session-ids
+                     (if (directory-exists? session-dir)
+                         (for/list ([e (in-list (directory-list session-dir))]
+                                    #:when (directory-exists? (build-path session-dir e)))
+                           (path->string e))
+                         '()))
+                   (hasheq 'sessions session-ids)))
+           (cons 'session.resume
+                 (lambda (params)
+                   (define sid (hash-ref params 'sessionId #f))
+                   (unless sid
+                     (error 'session.resume "sessionId parameter required"))
+                   (define sess (resume-agent-session sid rt-config))
+                   (hash-set! sessions (session-id sess) sess)
+                   (hasheq 'sessionId (session-id sess) 'status "resumed")))
+           (cons 'session.close
+                 (lambda (params)
+                   (define sid (hash-ref params 'sessionId #f))
+                   (unless sid
+                     (error 'session.close "sessionId parameter required"))
+                   (define sess (hash-ref sessions sid #f))
+                   (unless sess
+                     (error 'session.close "session not found: ~a" sid))
+                   (close-session! sess)
+                   (hash-remove! sessions sid)
+                   (hasheq 'sessionId sid 'status "closed"))))))
   (run-rpc-loop handlers))

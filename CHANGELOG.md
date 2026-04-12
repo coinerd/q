@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-04-12
+
+### Error Handling & Diagnostics
+- **#147/#163**: Extension load failures return structured `extension-load-error` (path, message, category) instead of silently returning `#f`
+- **#148**: Max-iterations-exceeded now classified as `'max-iterations-exceeded` instead of `'provider-error`
+- **#149**: Error messages classified into user-friendly text with suggestions (hash-ref, read-json, connection, SSL, file-not-found, permission, API auth, rate-limit)
+- **#150**: Safe mode errors now show project root path and activation source
+- **#151**: Sandbox timeout preserves partial output, uses exit code -9 for timeout (vs -1 for failure)
+- **#152**: Session/index corruption now logs warnings with repair guidance
+- **#164**: Extension load failures emit `extension.load.failed` event on the event bus
+- **#165**: Common Racket exceptions classified into friendly messages via `util/error-classify.rkt`
+- **#166**: `--verbose` flag shows stack traces and internal details on errors
+
+### Metrics
+- 3,098 tests passing, 6/6 lints green
+- 98 source modules, 104 test files
+
+## [0.7.3] — 2026-04-12
+
+### CLI & Configuration Hardening
+- **#141**: Mock provider now shows prominent warning banner on startup
+- **#142**: `q --version` reads from shared constant instead of hardcoded 0.5.1
+- **#143**: Added `q init` guided setup wizard (provider, API key, model)
+- **#144/#160/#161**: Added `q sessions list`, `q sessions info <id>`, `q sessions delete <id>` CLI subcommands
+- **#145**: CLI `/help` marks TUI-only commands clearly
+- **#146**: Config parse errors now show WARNING with error details
+- **#162**: Added `/sessions` interactive command for TUI and CLI modes
+
+### Metrics
+- 3,059 tests passing, 6/6 lints green
+- 97 source modules, 104 test files
+
 ## [0.7.2] — 2026-04-12
 
 ### Provider & UX Hardening

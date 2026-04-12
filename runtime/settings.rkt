@@ -21,42 +21,41 @@
          json
          "../util/config-paths.rkt")
 
-(provide
- ;; Structs
- (struct-out q-settings)
+;; Structs
+(provide (struct-out q-settings)
 
- ;; Loading
- load-settings
- load-global-settings
- load-project-settings
+         ;; Loading
+         load-settings
+         load-global-settings
+         load-project-settings
 
- ;; Merging
- merge-settings
+         ;; Merging
+         merge-settings
 
- ;; Query
- setting-ref
- setting-ref*
- provider-config
- provider-names
+         ;; Query
+         setting-ref
+         setting-ref*
+         provider-config
+         provider-names
 
- ;; Parallel execution
- parallel-tools-enabled?
+         ;; Parallel execution
+         parallel-tools-enabled?
 
- ;; Defaults and derived paths
- default-session-dir
- default-project-dir
- session-dir-from-settings
- project-dir-from-settings)
+         ;; Defaults and derived paths
+         default-session-dir
+         default-project-dir
+         session-dir-from-settings
+         project-dir-from-settings)
 
 ;; ============================================================
 ;; Struct
 ;; ============================================================
 
 (struct q-settings
-  (global    ; hash — parsed from ~/.q/config.json (or (hash) if missing)
-   project   ; hash — parsed from .q/config.json (or (hash) if missing)
-   merged    ; hash — deep-merged with project overriding global
-   )
+        (global ; hash — parsed from ~/.q/config.json (or (hash) if missing)
+         project ; hash — parsed from .q/config.json (or (hash) if missing)
+         merged ; hash — deep-merged with project overriding global
+         )
   #:transparent)
 
 ;; ============================================================
@@ -65,34 +64,39 @@
 
 ;; Safely parse a JSON file, returning #f on any failure
 ;; or if the top-level value is not a JSON object (hash).
+;; Logs a warning to stderr if the file exists but has invalid JSON.
 (define (try-read-json-file path)
-  (with-handlers ([exn:fail? (λ (_) #f)])
-    (call-with-input-file path
-      (λ (in)
-        (define result (read-json in))
-        (if (hash? result) result #f)))))
+  (with-handlers ([exn:fail? (λ (e)
+                               (when (file-exists? path)
+                                 (fprintf (current-error-port)
+                                          "WARNING: Config file ~a has invalid JSON: ~a\n"
+                                          path
+                                          (exn-message e)))
+                               #f)])
+    (if (file-exists? path)
+        (call-with-input-file path
+                              (λ (in)
+                                (define result (read-json in))
+                                (if (hash? result) result #f)))
+        #f)))
 
 ;; Deep merge two hashes; right side (project) wins on conflicts.
 ;; Only hashes are merged recursively — scalars, lists, etc. are
 ;; replaced outright by the right-hand value.
 (define (deep-merge-hash left right)
-  (for/fold ([acc left])
-            ([(k v) (in-hash right)])
+  (for/fold ([acc left]) ([(k v) (in-hash right)])
     (define left-v (hash-ref acc k #f))
     (cond
-      [(and (hash? left-v) (hash? v))
-       (hash-set acc k (deep-merge-hash left-v v))]
-      [else
-       (hash-set acc k v)])))
+      [(and (hash? left-v) (hash? v)) (hash-set acc k (deep-merge-hash left-v v))]
+      [else (hash-set acc k v)])))
 
 ;; Walk a nested hash using a list of keys.
 ;; Returns #f if any intermediate step fails.
 (define (hash-nested-ref h key-path)
   (cond
     [(null? key-path) #f]
-    [(null? (cdr key-path))
-     ;; last key — look up directly
-     (hash-ref h (car key-path) #f)]
+    ;; last key — look up directly
+    [(null? (cdr key-path)) (hash-ref h (car key-path) #f)]
     [else
      (define next (hash-ref h (car key-path) #f))
      (if (hash? next)
@@ -116,11 +120,8 @@
   (define dirs (project-config-dirs project-dir))
   (define (try-load-from-dir dir)
     (define cfg-path (build-path dir "config.json"))
-    (and (file-exists? cfg-path)
-         (try-read-json-file cfg-path)))
-  (or (try-load-from-dir (first dirs))
-      (try-load-from-dir (second dirs))
-      (hash)))
+    (and (file-exists? cfg-path) (try-read-json-file cfg-path)))
+  (or (try-load-from-dir (first dirs)) (try-load-from-dir (second dirs)) (hash)))
 
 ;; Load and merge both global and project settings.
 ;; Returns a q-settings struct.
@@ -131,8 +132,7 @@
     (if config-path
         (if (file-exists? config-path)
             (with-handlers ([exn:fail? (λ (_) (hash))])
-              (call-with-input-file config-path
-                (λ (in) (read-json in))))
+              (call-with-input-file config-path (λ (in) (read-json in))))
             (hash))
         (load-global-settings home-dir)))
   (define project-hash (load-project-settings project-dir))
@@ -200,10 +200,8 @@
 
 ;; Get session-dir from merged settings, falling back to default
 (define (session-dir-from-settings settings)
-  (or (setting-ref settings 'session-dir #f)
-      (default-session-dir)))
+  (or (setting-ref settings 'session-dir #f) (default-session-dir)))
 
 ;; Get project-dir from merged settings, falling back to default
 (define (project-dir-from-settings settings)
-  (or (setting-ref settings 'project-dir #f)
-      (default-project-dir)))
+  (or (setting-ref settings 'project-dir #f) (default-project-dir)))

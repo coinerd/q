@@ -5,10 +5,8 @@
          racket/file
          racket/list
          racket/path
-         (only-in "../tool.rkt"
-                  make-success-result make-error-result)
-         (only-in "../../runtime/safe-mode.rkt"
-                  allowed-path?))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt" allowed-path? safe-mode-project-root))
 
 (provide tool-grep)
 
@@ -35,19 +33,18 @@
 
 ;; Check if a path component is hidden (starts with .)
 (define (hidden-element? path-str)
-  (define elem (if (path? path-str)
-                   (path->string (file-name-from-path path-str))
-                   path-str))
-  (and elem (> (string-length elem) 0)
-       (char=? (string-ref elem 0) #\.)))
+  (define elem
+    (if (path? path-str)
+        (path->string (file-name-from-path path-str))
+        path-str))
+  (and elem (> (string-length elem) 0) (char=? (string-ref elem 0) #\.)))
 
 ;; Check if any component of the path is hidden or a VCS dir
 (define (should-skip-path? p)
   (define parts (explode-path p))
   (for/or ([part (in-list parts)])
     (define s (path->string part))
-    (or (hidden-element? s)
-        (member s SKIP-DIRS))))
+    (or (hidden-element? s) (member s SKIP-DIRS))))
 
 ;; Compile the regex pattern
 (define (compile-pattern pattern case-insensitive?)
@@ -74,8 +71,7 @@
 ;; file-error? : #t if binary or unreadable (skip silently)
 (define (search-file file-path pattern-rx)
   (cond
-    [(not (file-exists? file-path))
-     (values '() #f)]
+    [(not (file-exists? file-path)) (values '() #f)]
     [else
      (define raw-bytes
        (with-handlers ([exn:fail? (lambda (e) #f)])
@@ -91,7 +87,9 @@
           (and (> (string-length text) 0)
                (char=? (string-ref text (sub1 (string-length text))) #\newline)))
         (define display-lines
-          (if has-trailing-newline (drop-right all-lines 1) all-lines))
+          (if has-trailing-newline
+              (drop-right all-lines 1)
+              all-lines))
         (define matches
           (for/list ([i (in-naturals 1)]
                      [line (in-list display-lines)]
@@ -109,12 +107,14 @@
 ;; match-line-text : the matched line text
 ;; all-file-lines : vector of all lines in the file (0-indexed)
 ;; context-lines : number of context lines before/after
-(define (format-match-with-context file-str match-line-num match-line-text
-                                   all-file-lines-vec context-lines)
+(define (format-match-with-context file-str
+                                   match-line-num
+                                   match-line-text
+                                   all-file-lines-vec
+                                   context-lines)
   (define zero-idx (sub1 match-line-num))
   (define start-idx (max 0 (- zero-idx context-lines)))
-  (define end-idx (min (sub1 (vector-length all-file-lines-vec))
-                       (+ zero-idx context-lines)))
+  (define end-idx (min (sub1 (vector-length all-file-lines-vec)) (+ zero-idx context-lines)))
   (for/list ([i (in-range start-idx (add1 end-idx))])
     (define line-num (add1 i))
     (define line-text (vector-ref all-file-lines-vec i))
@@ -132,8 +132,7 @@
       (cond
         [(char=? ch #\*) "[^/]*"]
         [(char=? ch #\?) "[^/]"]
-        [(regexp-match? #rx"[.+^${}()|\\[\\]\\\\]" (string ch))
-         (string-append "\\" (string ch))]
+        [(regexp-match? #rx"[.+^${}()|\\[\\]\\\\]" (string ch)) (string-append "\\" (string ch))]
         [else (string ch)])))
   (regexp (string-append "^" (string-join escaped "") "$")))
 
@@ -150,8 +149,7 @@
   ;; Filter by glob and skip hidden/VCS
   (define rx (simple-glob->regexp glob-pattern))
   (for/list ([p (in-list all-paths)]
-             #:when (let ([fname (path->string (file-name-from-path p))])
-                      (regexp-match? rx fname))
+             #:when (let ([fname (path->string (file-name-from-path p))]) (regexp-match? rx fname))
              #:unless (should-skip-path? p))
     p))
 
@@ -167,11 +165,13 @@
   (cond
     ;; Safe-mode: check path access
     [(and path-str (not (allowed-path? path-str)))
-     (err (format "Access denied: path outside project root: ~a" path-str))]
-    [(not pattern)
-     (err "Missing required argument: pattern")]
-    [(not path-str)
-     (err "Missing required argument: path")]
+     (err
+      (format
+       "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
+       path-str
+       (safe-mode-project-root)))]
+    [(not pattern) (err "Missing required argument: pattern")]
+    [(not path-str) (err "Missing required argument: path")]
     [else
      (define glob-pattern (hash-ref args 'glob DEFAULT-GLOB))
      (define case-insensitive? (hash-ref args 'case-insensitive? DEFAULT-CASE-INSENSITIVE))
@@ -189,37 +189,31 @@
         (err (format "Path not found: ~a" path-str))]
        [(file-exists? the-path)
         ;; Single file search
-        (search-single-file the-path path-str pattern-rx
-                            context-lines max-results 1)]
+        (search-single-file the-path path-str pattern-rx context-lines max-results 1)]
        [(directory-exists? the-path)
         ;; Directory search
-        (search-directory the-path path-str pattern-rx glob-pattern
-                          context-lines max-results)]
-       [else
-        (err (format "Path not found: ~a" path-str))])]))
+        (search-directory the-path path-str pattern-rx glob-pattern context-lines max-results)]
+       [else (err (format "Path not found: ~a" path-str))])]))
 
 ;; ============================================================
 ;; Single file search
 ;; ============================================================
 
-(define (search-single-file the-path path-str pattern-rx
-                            context-lines max-results files-searched)
+(define (search-single-file the-path path-str pattern-rx context-lines max-results files-searched)
   (define raw-bytes
     (with-handlers ([exn:fail? (lambda (e) #f)])
       (file->bytes the-path)))
   (cond
     [(not raw-bytes)
      ;; Unreadable file → treat as empty success
-     (ok '() (hasheq 'total-matches 0
-                      'files-searched files-searched
-                      'files-with-matches 0
-                      'truncated? #f))]
+     (ok
+      '()
+      (hasheq 'total-matches 0 'files-searched files-searched 'files-with-matches 0 'truncated? #f))]
     [(contains-null-bytes? raw-bytes)
      ;; Binary → skip silently, return empty success
-     (ok '() (hasheq 'total-matches 0
-                      'files-searched files-searched
-                      'files-with-matches 0
-                      'truncated? #f))]
+     (ok
+      '()
+      (hasheq 'total-matches 0 'files-searched files-searched 'files-with-matches 0 'truncated? #f))]
     [else
      (define text (bytes->string/utf-8 raw-bytes #\?))
      (define all-lines (string-split text "\n" #:trim? #f))
@@ -227,7 +221,9 @@
        (and (> (string-length text) 0)
             (char=? (string-ref text (sub1 (string-length text))) #\newline)))
      (define display-lines
-       (if has-trailing-newline (drop-right all-lines 1) all-lines))
+       (if has-trailing-newline
+           (drop-right all-lines 1)
+           all-lines))
      (define lines-vec (list->vector display-lines))
 
      (define matches
@@ -244,28 +240,26 @@
      (define content-lines
        (apply append
               (for/list ([m (in-list capped-matches)])
-                (format-match-with-context path-str
-                                           (first m)
-                                           (second m)
-                                           lines-vec
-                                           context-lines))))
+                (format-match-with-context path-str (first m) (second m) lines-vec context-lines))))
 
      ;; Deduplicate and sort content lines (context may overlap)
-     (define unique-lines
-       (remove-duplicates content-lines string=?))
+     (define unique-lines (remove-duplicates content-lines string=?))
 
      (ok unique-lines
-         (hasheq 'total-matches total-matches
-                 'files-searched files-searched
-                 'files-with-matches files-with-matches
-                 'truncated? truncated?))]))
+         (hasheq 'total-matches
+                 total-matches
+                 'files-searched
+                 files-searched
+                 'files-with-matches
+                 files-with-matches
+                 'truncated?
+                 truncated?))]))
 
 ;; ============================================================
 ;; Directory search
 ;; ============================================================
 
-(define (search-directory the-path path-str pattern-rx glob-pattern
-                          context-lines max-results)
+(define (search-directory the-path path-str pattern-rx glob-pattern context-lines max-results)
   (define files (collect-files path-str glob-pattern))
 
   (define all-results
@@ -287,7 +281,9 @@
            (and (> (string-length text) 0)
                 (char=? (string-ref text (sub1 (string-length text))) #\newline)))
          (define display-lines
-           (if has-trailing-newline (drop-right all-lines 1) all-lines))
+           (if has-trailing-newline
+               (drop-right all-lines 1)
+               all-lines))
          (define matches
            (for/list ([i (in-naturals 1)]
                       [line (in-list display-lines)]
@@ -303,8 +299,7 @@
   ;; Group by file to format with context
   ;; We need to load each file's lines for context
   (define content-lines
-    (for/fold ([acc '()])
-              ([entry (in-list capped)])
+    (for/fold ([acc '()]) ([entry (in-list capped)])
       (define f-str (first entry))
       (define match-info (second entry))
       (define match-line-num (first match-info))
@@ -317,20 +312,27 @@
                  [all-lines (string-split text "\n" #:trim? #f)]
                  [has-tnl (and (> (string-length text) 0)
                                (char=? (string-ref text (sub1 (string-length text))) #\newline))]
-                 [display-lines (if has-tnl (drop-right all-lines 1) all-lines)]
+                 [display-lines (if has-tnl
+                                    (drop-right all-lines 1)
+                                    all-lines)]
                  [lines-vec (list->vector display-lines)]
-                 [ctx (format-match-with-context f-str match-line-num
+                 [ctx (format-match-with-context f-str
+                                                 match-line-num
                                                  (second match-info)
-                                                 lines-vec context-lines)])
+                                                 lines-vec
+                                                 context-lines)])
             (append acc ctx)))))
 
   (define unique-lines (remove-duplicates content-lines string=?))
 
-  (define files-with-matches
-    (length (remove-duplicates (map first all-results) string=?)))
+  (define files-with-matches (length (remove-duplicates (map first all-results) string=?)))
 
   (ok unique-lines
-      (hasheq 'total-matches total-matches
-              'files-searched (length files)
-              'files-with-matches files-with-matches
-              'truncated? truncated?)))
+      (hasheq 'total-matches
+              total-matches
+              'files-searched
+              (length files)
+              'files-with-matches
+              files-with-matches
+              'truncated?
+              truncated?)))

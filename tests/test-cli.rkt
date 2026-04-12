@@ -12,6 +12,7 @@
          json
          "../agent/types.rkt"
          "../util/markdown.rkt"
+         "../util/error-classify.rkt"
          "../interfaces/cli.rkt")
 
 (define/provide-test-suite
@@ -159,7 +160,20 @@
 
    (test-case "basic conversion"
      (define cfg
-       (cli-config 'prompt #f "hello" "gpt-4" 'single "/tmp/proj" "/tmp/config.yaml" #f 5 #t '() #f))
+       (cli-config 'prompt
+                   #f
+                   "hello"
+                   "gpt-4"
+                   'single
+                   "/tmp/proj"
+                   "/tmp/config.yaml"
+                   #f
+                   5
+                   #t
+                   '()
+                   #f
+                   #f
+                   '()))
      (define rt (cli-config->runtime-config cfg))
      (check-equal? (hash-ref rt 'model) "gpt-4")
      (check-equal? (hash-ref rt 'max-iterations) 5)
@@ -169,14 +183,14 @@
      (check-equal? (hash-ref rt 'tools) '()))
 
    (test-case "defaults filled in"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define rt (cli-config->runtime-config cfg))
      (check-equal? (hash-ref rt 'max-iterations) 10)
      (check-false (hash-ref rt 'no-tools?))
      (check-equal? (hash-ref rt 'tools) '()))
 
    (test-case "session-id present for resume"
-     (define cfg (cli-config 'resume "sess-123" #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'resume "sess-123" #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define rt (cli-config->runtime-config cfg))
      (check-equal? (hash-ref rt 'session-id) "sess-123")))
  ;; ═══════════════════════════════════════════
@@ -460,7 +474,7 @@
  (test-suite "run-cli-single"
 
    (test-case "returns void regardless of session-fn return value"
-     (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #f 10 #f '() #f #f '()))
      (define result
        (run-cli-single cfg
                        #:session-fn (lambda (prompt) (values 'session-struct 'loop-result-struct))
@@ -615,7 +629,7 @@
 
    (test-case "basic prompt submission"
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "hello\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -626,7 +640,7 @@
 
    (test-case "multiple lines submitted as separate prompts"
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "line1\nline2\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -637,7 +651,7 @@
 
    (test-case "whitespace-only lines are skipped"
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "   \nhello\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -648,7 +662,7 @@
 
    (test-case "empty lines are skipped"
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "\nhello\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -659,7 +673,7 @@
 
    (test-case "EOF terminates with Goodbye"
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "hello\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -674,21 +688,21 @@
  (test-suite "run-cli-interactive — slash commands"
 
    (test-case "/quit terminates with Goodbye"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
      (check-true (string-contains? (get-output-string out) "Goodbye.")))
 
    (test-case "/exit terminates with Goodbye"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/exit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
      (check-true (string-contains? (get-output-string out) "Goodbye.")))
 
    (test-case "/help displays usage"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/help\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
@@ -697,14 +711,14 @@
 
    (test-case "/compact calls compact-fn"
      (define compact-called (box #f))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/compact\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:compact-fn (lambda () (set-box! compact-called #t)) #:in in #:out out)
      (check-true (unbox compact-called) "compact-fn should have been called"))
 
    (test-case "/compact without compact-fn shows fallback message"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/compact\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
@@ -713,7 +727,7 @@
 
    (test-case "/history calls history-fn"
      (define history-called (box #f))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/history\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -723,7 +737,7 @@
      (check-true (unbox history-called) "history-fn should have been called"))
 
    (test-case "/history without history-fn shows fallback message"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/history\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
@@ -732,7 +746,7 @@
 
    (test-case "/model gpt-4 calls model-fn with arg"
      (define model-arg (box #f))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/model gpt-4\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:model-fn (lambda (name) (set-box! model-arg name)) #:in in #:out out)
@@ -740,7 +754,7 @@
 
    (test-case "/model without arg calls model-fn with #f"
      (define model-arg (box 'not-called))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/model\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:model-fn (lambda (name) (set-box! model-arg name)) #:in in #:out out)
@@ -748,7 +762,7 @@
 
    (test-case "/fork abc123 calls fork-fn with arg"
      (define fork-arg (box #f))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/fork abc123\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:fork-fn (lambda (arg) (set-box! fork-arg arg)) #:in in #:out out)
@@ -756,21 +770,21 @@
 
    (test-case "/fork without arg calls fork-fn with #f"
      (define fork-arg (box 'not-called))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/fork\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:fork-fn (lambda (arg) (set-box! fork-arg arg)) #:in in #:out out)
      (check-equal? (unbox fork-arg) #f))
 
    (test-case "/clear shows clear message"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/clear\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
      (check-true (string-contains? (get-output-string out) "clear") "output should mention clear"))
 
    (test-case "/interrupt shows interrupt message"
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/interrupt\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg #:in in #:out out)
@@ -793,7 +807,7 @@
    (test-case "first-run welcome appears before first prompt when config dir missing"
      ;; Test with a temp home directory (guaranteed no ~/.q)
      (define tmp-home (make-temporary-file "q-test-home-~a" 'directory))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "/quit\n"))
      (define out (open-output-string))
      (parameterize ([current-directory tmp-home])
@@ -808,7 +822,7 @@
 
    (test-case "session-fn error is displayed and loop continues"
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "bad\nok\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -827,7 +841,7 @@
      ;; Using a string port triggers the non-readline fallback path.
      ;; This test verifies the entire interactive loop works without readline.
      (define prompts (box '()))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "test prompt\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -840,7 +854,7 @@
    (test-case "mixed commands and prompts"
      (define prompts (box '()))
      (define compact-called (box #f))
-     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f))
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
      (define in (open-input-string "first prompt\n/compact\nsecond prompt\n/quit\n"))
      (define out (open-output-string))
      (run-cli-interactive cfg
@@ -849,7 +863,334 @@
                           #:in in
                           #:out out)
      (check-equal? (reverse (unbox prompts)) '("first prompt" "second prompt"))
-     (check-true (unbox compact-called)))))
+     (check-true (unbox compact-called))))
+ ;; ═══════════════════════════════════════════
+ ;; Issue #142: print-version reads from q-version constant
+ ;; ═══════════════════════════════════════════
+ (test-suite "Issue #142: print-version uses q-version"
 
-;; Run
+   (test-case "print-version contains 'q version' and version number"
+     (define port (open-output-string))
+     (print-version port)
+     (define output (get-output-string port))
+     (check-true (string-contains? output "q version") "should contain 'q version'")
+     (check-true (regexp-match? #rx"q version [0-9]+\\.[0-9]+\\.[0-9]+" output)
+                 "should match version pattern"))
+
+   (test-case "print-version is NOT hardcoded 0.5.1"
+     (define port (open-output-string))
+     (print-version port)
+     (define output (get-output-string port))
+     (check-false (string-contains? output "0.5.1") "version should not be the old 0.5.1")))
+ ;; ═══════════════════════════════════════════
+ ;; Issue #141: Mock provider warning
+ ;; ═══════════════════════════════════════════
+ (test-suite "Issue #141: Mock provider warning"
+
+   (test-case "mock provider name triggers warning banner"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:provider-name "mock" #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "mock provider") "should warn about mock provider"))
+
+   (test-case "real provider name does NOT trigger warning"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:provider-name "openai" #:in in #:out out)
+     (define output (get-output-string out))
+     (check-false (string-contains? output "mock provider") "should not warn for real provider"))
+
+   (test-case "no provider-name does NOT trigger warning"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-false (string-contains? output "mock provider") "should not warn when no provider name")))
+ ;; ═══════════════════════════════════════════
+ ;; Issue #145: TUI-only commands show TUI-only message
+ ;; ═══════════════════════════════════════════
+ (test-suite "Issue #145: TUI-only commands in CLI"
+
+   (test-case "/clear shows TUI-only message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/clear\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "TUI") "/clear should mention TUI"))
+
+   (test-case "/interrupt shows TUI-only message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/interrupt\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "TUI") "/interrupt should mention TUI"))
+
+   (test-case "/branches shows TUI-only message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/branches\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "TUI") "/branches should mention TUI"))
+
+   (test-case "/leaves shows TUI-only message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/leaves\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "TUI") "/leaves should mention TUI"))
+
+   (test-case "/switch shows TUI-only message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/switch abc\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "TUI") "/switch should mention TUI"))
+
+   (test-case "/children shows TUI-only message"
+     (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+     (define in (open-input-string "/children abc\n/quit\n"))
+     (define out (open-output-string))
+     (run-cli-interactive cfg #:in in #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "TUI") "/children should mention TUI"))
+
+   (test-case "/help shows TUI only labels"
+     (define port (open-output-string))
+     (print-usage port)
+     (define output (get-output-string port))
+     (check-true (string-contains? output "TUI only") "help should show TUI only labels")))
+ ;; ═══════════════════════════════════════════
+ ;; Issue #143: 'init' subcommand parsing
+ ;; ═══════════════════════════════════════════
+ (test-suite "Issue #143: 'init' subcommand"
+
+   (test-case "init subcommand → init command"
+     (define cfg (parse-cli-args #("init")))
+     (check-equal? (cli-config-command cfg) 'init))
+
+   (test-case "init appears in usage"
+     (define port (open-output-string))
+     (print-usage port)
+     (define output (get-output-string port))
+     (check-true (string-contains? output "init") "usage should mention init command")))
+ ;; ═══════════════════════════════════════════
+ ;; Issue #143: run-init-wizard
+ ;; ═══════════════════════════════════════════
+ (test-suite "Issue #143: run-init-wizard"
+
+   (test-case "wizard creates config with valid provider"
+     (define tmp-dir (make-temporary-file "q-init-test-~a" 'directory))
+     ;; Simulate user input: openai, api-key, model, enter
+     (define in (open-input-string "openai\nsk-test-123\ngpt-4o\n"))
+     (define out (open-output-string))
+     ;; Override home dir by parameterizing current-directory isn't enough,
+     ;; so just run the wizard and verify it doesn't crash
+     ;; (full integration test needs mocked home-dir)
+     ;; For now, test with a string port — wizard writes to real ~/.q/
+     ;; but we can at least verify it runs without error on valid input
+     (check-not-exn (lambda ()
+                      (run-init-wizard #:in (open-input-string "openai\nsk-test\n\n")
+                                       #:out (open-output-string)))))
+
+   (test-case "wizard rejects invalid provider"
+     (define out (open-output-string))
+     ;; Invalid provider → should print error and not write config
+     ;; Note: if ~/.q/config.json exists, the first input is consumed by overwrite prompt
+     ;; So we provide enough input for both scenarios
+     (run-init-wizard #:in (open-input-string "y\ninvalid\n") #:out out)
+     (define output (get-output-string out))
+     (check-true (string-contains? output "Invalid provider") "should reject invalid provider"))))
+;; ═══════════════════════════════════════════
+;; Issue #160: 'sessions' subcommand parsing
+;; ═══════════════════════════════════════════
+(define suite-160
+  (test-suite "Issue #160: 'sessions' subcommand"
+    (test-case "sessions list subcommand"
+      (define cfg (parse-cli-args #("sessions" "list")))
+      (check-equal? (cli-config-command cfg) 'sessions)
+      (check-equal? (cli-config-sessions-subcommand cfg) 'list))
+    (test-case "sessions info subcommand"
+      (define cfg (parse-cli-args #("sessions" "info" "abc123")))
+      (check-equal? (cli-config-command cfg) 'sessions)
+      (check-equal? (cli-config-sessions-subcommand cfg) 'info)
+      (check-equal? (cli-config-sessions-args cfg) '("abc123")))
+    (test-case "sessions delete subcommand"
+      (define cfg (parse-cli-args #("sessions" "delete" "def456")))
+      (check-equal? (cli-config-command cfg) 'sessions)
+      (check-equal? (cli-config-sessions-subcommand cfg) 'delete)
+      (check-equal? (cli-config-sessions-args cfg) '("def456")))
+    (test-case "sessions without subcommand"
+      (define cfg (parse-cli-args #("sessions")))
+      (check-equal? (cli-config-command cfg) 'help))
+    (test-case "sessions with invalid subcommand"
+      (define cfg (parse-cli-args #("sessions" "bogus")))
+      (check-equal? (cli-config-command cfg) 'help))
+    (test-case "sessions appears in usage"
+      (define port (open-output-string))
+      (print-usage port)
+      (define output (get-output-string port))
+      (check-true (string-contains? output "sessions") "usage should mention sessions"))))
+;; ═══════════════════════════════════════════
+;; Issue #162: /sessions slash command
+;; ═══════════════════════════════════════════
+(define suite-162
+  (test-suite "Issue #162: /sessions slash command"
+    (test-case "/sessions"
+      (check-equal? (parse-slash-command "/sessions") '(sessions)))
+    (test-case "/sessions list"
+      (check-equal? (parse-slash-command "/sessions list") '(sessions list)))
+    (test-case "/sessions info abc123"
+      (check-equal? (parse-slash-command "/sessions info abc123") '(sessions info "abc123")))
+    (test-case "/sessions delete abc123"
+      (check-equal? (parse-slash-command "/sessions delete abc123") '(sessions delete "abc123")))
+    (test-case "/sessions info without id"
+      (check-equal? (parse-slash-command "/sessions info") '(sessions info)))
+    (test-case "/sessions delete without id"
+      (check-equal? (parse-slash-command "/sessions delete") '(sessions delete)))
+    (test-case "/sessions with unknown subcommand"
+      (check-equal? (parse-slash-command "/sessions foo") '(sessions)))))
+;; ═══════════════════════════════════════════
+;; Issue #165: classify-error
+;; ═══════════════════════════════════════════
+(define suite-165
+  (test-suite "Issue #165: classify-error"
+    (test-case "hash-ref"
+      (define e (exn:fail "hash-ref: contract violation" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "missing")))
+    (test-case "read-json"
+      (define e (exn:fail "read-json: expected" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "JSON")))
+    (test-case "connection refused"
+      (define e (exn:fail "connection refused" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "connect")))
+    (test-case "SSL"
+      (define e
+        (exn:fail "SSL handshake failed: certificate verify failed" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "SSL")))
+    (test-case "file not found"
+      (define e (exn:fail "file not found: /tmp/missing.rkt" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "file")))
+    (test-case "permission denied"
+      (define e (exn:fail "permission denied: /root/secret" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "Permission")))
+    (test-case "unauthorized/401"
+      (define e (exn:fail "HTTP 401 unauthorized" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "authentication")))
+    (test-case "API key"
+      (define e (exn:fail "API key is invalid" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "authentication")))
+    (test-case "403"
+      (define e (exn:fail "HTTP 403 forbidden" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "authentication")))
+    (test-case "rate limit"
+      (define e (exn:fail "rate.limit exceeded" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-not-false result)
+      (check-true (string-contains? (car result) "rate limit")))
+    (test-case "unknown error"
+      (define e (exn:fail "something completely unexpected" (current-continuation-marks)))
+      (check-false (classify-error e)))
+    (test-case "classified result has suggestions"
+      (define e (exn:fail "hash-ref: contract violation" (current-continuation-marks)))
+      (define result (classify-error e))
+      (check-true (and (pair? result) (list? (cdr result)) (>= (length (cdr result)) 1))))))
+;; ═══════════════════════════════════════════
+;; Issue #149: format-classified-error
+;; ═══════════════════════════════════════════
+(define suite-149
+  (test-suite "Issue #149: format-classified-error"
+    (test-case "classified error includes message and suggestions"
+      (define e (exn:fail "hash-ref: contract violation" (current-continuation-marks)))
+      (define output (format-classified-error e #f))
+      (check-true (string-contains? output "Error: hash-ref:"))
+      (check-true (string-contains? output "missing"))
+      (check-true (string-contains? output "\u2192")))
+    (test-case "unclassified error shows raw message only"
+      (define e (exn:fail "something weird happened" (current-continuation-marks)))
+      (define output (format-classified-error e #f))
+      (check-true (string-contains? output "Error: something weird happened"))
+      (check-false (string-contains? output "\u2192")))
+    (test-case "verbose mode includes stack trace"
+      (define e (exn:fail "test error" (current-continuation-marks)))
+      (define output (format-classified-error e #t))
+      (check-true (string-contains? output "Stack trace:")))
+    (test-case "non-verbose mode omits stack trace"
+      (define e (exn:fail "test error" (current-continuation-marks)))
+      (define output (format-classified-error e #f))
+      (check-false (string-contains? output "Stack trace:")))))
+;; ═══════════════════════════════════════════
+;; Issue #166: --verbose flag
+;; ═══════════════════════════════════════════
+(define suite-166
+  (test-suite "Issue #166: --verbose flag"
+    (test-case "verbose error in interactive mode shows classified error"
+      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #t 10 #f '() #f #f '()))
+      (define in (open-input-string "bad\n/quit\n"))
+      (define out (open-output-string))
+      (run-cli-interactive cfg
+                           #:session-fn (lambda (p)
+                                          (when (equal? p "bad")
+                                            (error "hash-ref: contract violation")))
+                           #:in in
+                           #:out out)
+      (define output (get-output-string out))
+      (check-true (string-contains? output "Error:"))
+      (check-true (string-contains? output "missing"))
+      (check-true (string-contains? output "Stack trace:")))
+    (test-case "non-verbose error in interactive mode omits stack trace"
+      (define cfg (cli-config 'chat #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+      (define in (open-input-string "bad\n/quit\n"))
+      (define out (open-output-string))
+      (run-cli-interactive cfg
+                           #:session-fn (lambda (p)
+                                          (when (equal? p "bad")
+                                            (error "hash-ref: contract violation")))
+                           #:in in
+                           #:out out)
+      (define output (get-output-string out))
+      (check-true (string-contains? output "Error:"))
+      (check-true (string-contains? output "missing"))
+      (check-false (string-contains? output "Stack trace:")))
+    (test-case "verbose error in single-shot mode outputs to stderr"
+      (define cfg (cli-config 'prompt #f "test" #f 'single #f #f #t 10 #f '() #f #f '()))
+      (define err (open-output-string))
+      (parameterize ([current-error-port err])
+        (run-cli-single cfg #:session-fn (lambda (prompt) (error "hash-ref: missing key"))))
+      (define output (get-output-string err))
+      (check-true (string-contains? output "Error:"))
+      (check-true (string-contains? output "Stack trace:")))))
+
+;; Run all suites
 (run-tests test-cli)
+(run-tests suite-160)
+(run-tests suite-162)
+(run-tests suite-165)
+(run-tests suite-149)
+(run-tests suite-166)

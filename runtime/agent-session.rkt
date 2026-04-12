@@ -23,58 +23,58 @@
          racket/list
          racket/path
          (only-in "../agent/types.rkt"
-                  message-id message-role message-content
-                  make-message make-text-part
+                  message-id
+                  message-role
+                  message-content
+                  make-message
+                  make-text-part
                   content-part->jsexpr
-                  event-ev event-payload
+                  event-ev
+                  event-payload
                   loop-result-termination-reason
                   make-loop-result)
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          "../llm/token-budget.rkt"
-         (only-in "../extensions/hooks.rkt"
-                  hook-result-action hook-result-payload)
+         (only-in "../extensions/hooks.rkt" hook-result-action hook-result-payload)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"
          "../util/ids.rkt"
-         (only-in "iteration.rkt"
-                  run-iteration-loop
-                  emit-session-event!
-                  maybe-dispatch-hooks))
+         (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks))
 
-(provide
- agent-session?
- agent-session-session-dir
- agent-session-extension-registry
- agent-session-model-name
- agent-session-system-instructions
- make-agent-session
- resume-agent-session
- fork-session
- run-prompt!
- session-id
- session-history
- session-active?
- close-session!)
+(provide agent-session?
+         agent-session-session-dir
+         agent-session-extension-registry
+         agent-session-model-name
+         agent-session-system-instructions
+         make-agent-session
+         resume-agent-session
+         fork-session
+         run-prompt!
+         session-id
+         session-history
+         session-active?
+         close-session!)
 
 ;; ============================================================
 ;; Internal struct
 ;; ============================================================
 
-(struct agent-session (session-id       ; string
-                       session-dir      ; path
-                       provider         ; provider?
-                       tool-registry    ; tool-registry?
-                       event-bus        ; event-bus?
-                       extension-registry ; extension-registry? or #f
-                       [model-name #:mutable] ; string or #f
-                       system-instructions ; (listof string)
-                       [index #:mutable] ; session-index? or #f
-                       queue            ; queue?
-                       config           ; hash (runtime settings)
-                       [active? #:mutable] ; boolean
-                       [start-time #:mutable]) ; integer (seconds since epoch)
+(struct agent-session
+        (session-id ; string
+         session-dir ; path
+         provider ; provider?
+         tool-registry ; tool-registry?
+         event-bus ; event-bus?
+         extension-registry ; extension-registry? or #f
+         [model-name #:mutable] ; string or #f
+         system-instructions ; (listof string)
+         [index #:mutable] ; session-index? or #f
+         queue ; queue?
+         config ; hash (runtime settings)
+         [active? #:mutable] ; boolean
+         [start-time #:mutable]) ; integer (seconds since epoch)
   #:transparent)
 
 ;; ============================================================
@@ -117,23 +117,21 @@
                    (hash-ref config 'extension-registry #f)
                    (hash-ref config 'model-name #f)
                    (hash-ref config 'system-instructions '())
-                   #f   ; index — built on first use
+                   #f ; index — built on first use
                    (make-queue)
                    config
-                   #t    ; active
+                   #t ; active
                    session-created-at))
 
   ;; Emit session.started
-  (emit-session-event! (agent-session-event-bus sess)
-                       sid "session.started"
-                       (hasheq 'sessionId sid))
+  (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
 
   ;; Dispatch 'session-start hook (R2-7: payload with session-id and config)
-  (define session-start-payload
-    (hasheq 'session-id sid
-            'config config))
+  (define session-start-payload (hasheq 'session-id sid 'config config))
   (define-values (_session-start-payload _session-start-res)
-    (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start session-start-payload))
+    (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
+                          'session-start
+                          session-start-payload))
 
   ;; Subscribe to fork.requested and compact.requested events from TUI/CLI
   (wire-session-event-handlers! sess)
@@ -161,11 +159,11 @@
         #f))
 
   ;; Dispatch 'session-before-switch hook — extensions can block session resume
-  (define switch-payload
-    (hasheq 'session-id session-id 'operation 'resume))
+  (define switch-payload (hasheq 'session-id session-id 'operation 'resume))
   (define-values (_amended-switch switch-res)
     (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
-                          'session-before-switch switch-payload))
+                          'session-before-switch
+                          switch-payload))
   (when (and switch-res (eq? (hook-result-action switch-res) 'block))
     (error 'resume-agent-session "session resume blocked by extension"))
 
@@ -186,7 +184,8 @@
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
-                       session-id "session.resumed"
+                       session-id
+                       "session.resumed"
                        (hasheq 'sessionId session-id))
 
   ;; Subscribe to fork/compact events from TUI/CLI
@@ -220,12 +219,12 @@
             (for/or ([e (in-list entries)])
               (equal? (message-id e) parent-entry-id)))
           (cond
-            [(not id-exists?)
-             ;; Entry not found — emit warning and copy all entries instead
-             entries]
+            ;; Entry not found — emit warning and copy all entries instead
+            [(not id-exists?) entries]
             [else
              ;; Copy entries up to and including parent-entry-id
-             (let loop ([remaining entries] [acc '()])
+             (let loop ([remaining entries]
+                        [acc '()])
                (cond
                  [(null? remaining) (reverse acc)]
                  [(equal? (message-id (car remaining)) parent-entry-id)
@@ -264,9 +263,12 @@
   (emit-session-event! (agent-session-event-bus sess)
                        (agent-session-session-id sess)
                        "session.forked"
-                       (hasheq 'newSessionId new-id
-                               'parentSessionId (agent-session-session-id sess)
-                               'forkPoint (or parent-entry-id "latest")))
+                       (hasheq 'newSessionId
+                               new-id
+                               'parentSessionId
+                               (agent-session-session-id sess)
+                               'forkPoint
+                               (or parent-entry-id "latest")))
 
   new-sess)
 
@@ -274,8 +276,7 @@
 ;; run-prompt!
 ;; ============================================================
 
-(define (run-prompt! sess user-message
-                     #:max-iterations [max-iter-override #f])
+(define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
   (define bus (agent-session-event-bus sess))
   (define prov (agent-session-provider sess))
   (define reg (agent-session-tool-registry sess))
@@ -283,11 +284,8 @@
   (define idx-path (session-index-path (agent-session-session-dir sess)))
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
-  (define max-iterations
-    (or max-iter-override
-        (hash-ref cfg 'max-iterations 10)))
-  (define token-budget-threshold
-    (hash-ref cfg 'token-budget-threshold 100000))
+  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 10)))
+  (define token-budget-threshold (hash-ref cfg 'token-budget-threshold 100000))
 
   ;; Convert string to message struct if needed
   (define user-msg
@@ -299,8 +297,13 @@
                 (load-session-log log-path)
                 '()))
           (define parent-id
-            (if (null? existing) #f (message-id (last existing))))
-          (make-message (generate-id) parent-id 'user 'message
+            (if (null? existing)
+                #f
+                (message-id (last existing))))
+          (make-message (generate-id)
+                        parent-id
+                        'user
+                        'message
                         (list (make-text-part user-message))
                         (now-seconds)
                         (hasheq)))
@@ -317,7 +320,10 @@
   (define context-with-system
     (if (null? system-instrs)
         history
-        (cons (make-message (generate-id) #f 'system 'system-instruction
+        (cons (make-message (generate-id)
+                            #f
+                            'system
+                            'system-instruction
                             (list (make-text-part (string-join system-instrs "\n\n")))
                             (now-seconds)
                             (hasheq))
@@ -326,38 +332,52 @@
   ;; 4. Check token budget (on full context including system message)
   (define raw-messages
     (for/list ([msg (in-list context-with-system)])
-      (hasheq 'role (symbol->string (message-role msg))
-              'content (map content-part->jsexpr (message-content msg)))))
+      (hasheq 'role
+              (symbol->string (message-role msg))
+              'content
+              (map content-part->jsexpr (message-content msg)))))
   (define token-count (estimate-context-tokens raw-messages))
   (when (should-compact? token-count token-budget-threshold)
     ;; Dispatch 'session-before-compact hook — extensions can amend or block compaction
     (define compact-payload
-      (hasheq 'session-id sid
-              'token-count token-count
-              'budget-threshold token-budget-threshold
-              'message-count (length context-with-system)))
+      (hasheq 'session-id
+              sid
+              'token-count
+              token-count
+              'budget-threshold
+              token-budget-threshold
+              'message-count
+              (length context-with-system)))
     (define-values (amended-compact compact-hook-res)
-      (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-before-compact compact-payload))
+      (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                            'session-before-compact
+                            compact-payload))
     ;; Proceed with compaction unless blocked
     (unless (and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block))
-      (emit-session-event! bus sid "compaction.warning"
-                           (hasheq 'tokenCount token-count
-                                   'budgetThreshold token-budget-threshold))
+      (emit-session-event! bus
+                           sid
+                           "compaction.warning"
+                           (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
       ;; R2-6: Auto-compact when threshold exceeded
       (define compact-result (compact-history context-with-system))
       (set! context-with-system (compaction-result->message-list compact-result))
-      (emit-session-event! bus sid "compaction.completed"
-                           (hasheq 'removedCount (compaction-result-removed-count compact-result)
-                                   'keptCount (length (compaction-result-kept-messages compact-result))
-                                   'tokenCount token-count))))
+      (emit-session-event! bus
+                           sid
+                           "compaction.completed"
+                           (hasheq 'removedCount
+                                   (compaction-result-removed-count compact-result)
+                                   'keptCount
+                                   (length (compaction-result-kept-messages compact-result))
+                                   'tokenCount
+                                   token-count))))
 
   ;; 5. Extract cancellation token from config
-  (define cancellation-tok
-    (hash-ref cfg 'cancellation-token #f))
+  (define cancellation-tok (hash-ref cfg 'cancellation-token #f))
 
   ;; 5b. Dispatch 'model-select hook — extensions can override model
   (define-values (_model-hook-res model-hook-res)
-    (maybe-dispatch-hooks (agent-session-extension-registry sess) 'model-select
+    (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                          'model-select
                           (hasheq 'current-model (or (agent-session-model-name sess) "default"))))
   (when (and model-hook-res
              (eq? (hook-result-action model-hook-res) 'amend)
@@ -371,16 +391,23 @@
     (with-handlers ([exn:fail?
                      (lambda (e)
                        ;; Emit runtime.error event
-                       (emit-session-event! bus sid "runtime.error"
-                                            (hasheq 'error (exn-message e)))
-                       ;; Return error result instead of crashing
+                       (emit-session-event! bus sid "runtime.error" (hasheq 'error (exn-message e)))
+                       ;; Classify error: distinguish iteration limits from provider failures
+                       (define error-type
+                         (if (regexp-match? #rx"max.iterations" (exn-message e))
+                             'max-iterations-exceeded
+                             'provider-error))
                        (make-loop-result context-with-system
                                          'error
-                                         (hasheq 'error (exn-message e)
-                                                 'errorType 'provider-error)))])
-      (run-iteration-loop context-with-system prov bus reg
+                                         (hasheq 'error (exn-message e) 'errorType error-type)))])
+      (run-iteration-loop context-with-system
+                          prov
+                          bus
+                          reg
                           (agent-session-extension-registry sess)
-                          log-path sid max-iterations
+                          log-path
+                          sid
+                          max-iterations
                           #:cancellation-token cancellation-tok
                           #:config cfg)))
 
@@ -388,10 +415,11 @@
   (set-agent-session-index! sess (build-index! log-path idx-path))
 
   ;; 8. Emit session.updated
-  (emit-session-event! bus sid "session.updated"
-                       (hasheq 'sessionId sid
-                               'lastTurnTermination
-                               (loop-result-termination-reason final-result)))
+  (emit-session-event!
+   bus
+   sid
+   "session.updated"
+   (hasheq 'sessionId sid 'lastTurnTermination (loop-result-termination-reason final-result)))
 
   (values sess final-result))
 
@@ -422,11 +450,9 @@
                        "session.closed"
                        (hasheq 'sessionId (agent-session-session-id sess)))
   ;; Dispatch 'session-shutdown hook (R2-7: payload with session-id and duration)
-  (define session-duration
-    (- (now-seconds) (agent-session-start-time sess)))
+  (define session-duration (- (now-seconds) (agent-session-start-time sess)))
   (define shutdown-payload
-    (hasheq 'session-id (agent-session-session-id sess)
-            'duration session-duration))
+    (hasheq 'session-id (agent-session-session-id sess) 'duration session-duration))
   (define-values (_shutdown-payload _shutdown-res)
     (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-shutdown shutdown-payload))
   (set-agent-session-active?! sess #f))
@@ -442,36 +468,42 @@
   (when bus
     ;; Subscribe to fork.requested — call fork-session with the entry-id
     (subscribe! bus
-      (lambda (evt)
-        (define payload (event-payload evt))
-        (define entry-id (and (hash? payload) (hash-ref payload 'entry-id #f)))
-        (with-handlers ([exn:fail?
-                         (lambda (e)
-                           (emit-session-event! bus (agent-session-session-id sess)
-                                                "session.fork.failed"
-                                                (hasheq 'error (exn-message e))))])
-          (define new-sess (fork-session sess entry-id))
-          (emit-session-event! bus (agent-session-session-id sess)
-                               "session.fork.completed"
-                               (hasheq 'newSessionId (agent-session-session-id new-sess)
-                                       'forkPoint (or entry-id "latest")))))
-      #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
+                (lambda (evt)
+                  (define payload (event-payload evt))
+                  (define entry-id (and (hash? payload) (hash-ref payload 'entry-id #f)))
+                  (with-handlers ([exn:fail? (lambda (e)
+                                               (emit-session-event! bus
+                                                                    (agent-session-session-id sess)
+                                                                    "session.fork.failed"
+                                                                    (hasheq 'error
+                                                                            (exn-message e))))])
+                    (define new-sess (fork-session sess entry-id))
+                    (emit-session-event! bus
+                                         (agent-session-session-id sess)
+                                         "session.fork.completed"
+                                         (hasheq 'newSessionId
+                                                 (agent-session-session-id new-sess)
+                                                 'forkPoint
+                                                 (or entry-id "latest")))))
+                #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
 
     ;; Subscribe to compact.requested — compact the session context
-    (subscribe! bus
-      (lambda (evt)
-        (with-handlers ([exn:fail?
-                         (lambda (e)
-                           (emit-session-event! bus (agent-session-session-id sess)
-                                                "session.compact.failed"
-                                                (hasheq 'error (exn-message e))))])
-          (define log-path (session-log-path (agent-session-session-dir sess)))
-          (when (file-exists? log-path)
-            (define history (load-session-log log-path))
-            (when (not (null? history))
-              (define compact-result (compact-history history))
-              (emit-session-event! bus (agent-session-session-id sess)
-                                   "session.compact.completed"
-                                   (hasheq 'removedCount
-                                           (compaction-result-removed-count compact-result)))))))
-      #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))))
+    (subscribe!
+     bus
+     (lambda (evt)
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (emit-session-event! bus
+                                                         (agent-session-session-id sess)
+                                                         "session.compact.failed"
+                                                         (hasheq 'error (exn-message e))))])
+         (define log-path (session-log-path (agent-session-session-dir sess)))
+         (when (file-exists? log-path)
+           (define history (load-session-log log-path))
+           (when (not (null? history))
+             (define compact-result (compact-history history))
+             (emit-session-event! bus
+                                  (agent-session-session-id sess)
+                                  "session.compact.completed"
+                                  (hasheq 'removedCount
+                                          (compaction-result-removed-count compact-result)))))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))))

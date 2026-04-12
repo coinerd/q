@@ -66,7 +66,7 @@
                                     #:args '("-c" "sleep 60")
                                     #:timeout 1))
     (check-pred subprocess-result-timed-out? result)
-    (check-equal? (subprocess-result-exit-code result) -1)
+    (check-equal? (subprocess-result-exit-code result) -9)
     (check-true (< (subprocess-result-elapsed-ms result) 5000)))
 
   (test-case "kill-subprocess! does not crash"

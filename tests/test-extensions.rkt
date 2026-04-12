@@ -16,13 +16,14 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../extensions/loader.rkt"
-         "../extensions/define-extension.rkt")
+         "../extensions/define-extension.rkt"
+         "../agent/event-bus.rkt"
+         "../agent/types.rkt")
 
 (define-runtime-path here ".")
 (define define-extension-path
   (path->string (simplify-path (build-path here ".." "extensions" "define-extension.rkt"))))
-(define hooks-path
-  (path->string (simplify-path (build-path here ".." "extensions" "hooks.rkt"))))
+(define hooks-path (path->string (simplify-path (build-path here ".." "extensions" "hooks.rkt"))))
 
 ;; ============================================================
 ;; 1. hooks.rkt — hook-result struct and constructors
@@ -69,8 +70,7 @@
 
 (test-case "dispatch-hooks passes through when handler returns pass"
   (define reg (make-extension-registry))
-  (define ext (extension "test-ext" "1.0" "1"
-                          (hasheq 'tool-call (λ (payload) (hook-pass payload)))))
+  (define ext (extension "test-ext" "1.0" "1" (hasheq 'tool-call (λ (payload) (hook-pass payload)))))
   (register-extension! reg ext)
   (define result (dispatch-hooks 'tool-call "original" reg))
   (check-equal? (hook-result-action result) 'pass)
@@ -79,11 +79,13 @@
 (test-case "dispatch-hooks amends payload for next handler"
   (define reg (make-extension-registry))
   ;; First handler amends
-  (define ext1 (extension "amender" "1.0" "1"
-                           (hasheq 'context (λ (payload) (hook-amend (string-append payload " +amended"))))))
+  (define ext1
+    (extension "amender"
+               "1.0"
+               "1"
+               (hasheq 'context (λ (payload) (hook-amend (string-append payload " +amended"))))))
   ;; Second handler passes through
-  (define ext2 (extension "passer" "1.0" "1"
-                           (hasheq 'context (λ (payload) (hook-pass payload)))))
+  (define ext2 (extension "passer" "1.0" "1" (hasheq 'context (λ (payload) (hook-pass payload)))))
   (register-extension! reg ext1)
   (register-extension! reg ext2)
   (define result (dispatch-hooks 'context "start" reg))
@@ -92,10 +94,10 @@
 
 (test-case "dispatch-hooks chains amendments across multiple handlers"
   (define reg (make-extension-registry))
-  (define ext1 (extension "add-a" "1.0" "1"
-                           (hasheq 'context (λ (p) (hook-amend (string-append p " A"))))))
-  (define ext2 (extension "add-b" "1.0" "1"
-                           (hasheq 'context (λ (p) (hook-amend (string-append p " B"))))))
+  (define ext1
+    (extension "add-a" "1.0" "1" (hasheq 'context (λ (p) (hook-amend (string-append p " A"))))))
+  (define ext2
+    (extension "add-b" "1.0" "1" (hasheq 'context (λ (p) (hook-amend (string-append p " B"))))))
   (register-extension! reg ext1)
   (register-extension! reg ext2)
   (define result (dispatch-hooks 'context "start" reg))
@@ -105,16 +107,22 @@
   (define reg (make-extension-registry))
   (define blocker-called (box #f))
   (define after-blocker-called (box #f))
-  (define ext1 (extension "blocker" "1.0" "1"
-                           (hasheq 'tool-call
-                                   (λ (p)
-                                     (set-box! blocker-called #t)
-                                     (hook-block "denied")))))
-  (define ext2 (extension "after-blocker" "1.0" "1"
-                           (hasheq 'tool-call
-                                   (λ (p)
-                                     (set-box! after-blocker-called #t)
-                                     (hook-pass p)))))
+  (define ext1
+    (extension "blocker"
+               "1.0"
+               "1"
+               (hasheq 'tool-call
+                       (λ (p)
+                         (set-box! blocker-called #t)
+                         (hook-block "denied")))))
+  (define ext2
+    (extension "after-blocker"
+               "1.0"
+               "1"
+               (hasheq 'tool-call
+                       (λ (p)
+                         (set-box! after-blocker-called #t)
+                         (hook-pass p)))))
   (register-extension! reg ext1)
   (register-extension! reg ext2)
   (define result (dispatch-hooks 'tool-call "payload" reg))
@@ -127,9 +135,18 @@
   (define reg (make-extension-registry))
   (define context-called (box #f))
   (define tool-called (box #f))
-  (define ext (extension "mixed" "1.0" "1"
-                          (hasheq 'context (λ (p) (set-box! context-called #t) (hook-pass p))
-                                  'tool-call (λ (p) (set-box! tool-called #t) (hook-pass p)))))
+  (define ext
+    (extension "mixed"
+               "1.0"
+               "1"
+               (hasheq 'context
+                       (λ (p)
+                         (set-box! context-called #t)
+                         (hook-pass p))
+                       'tool-call
+                       (λ (p)
+                         (set-box! tool-called #t)
+                         (hook-pass p)))))
   (register-extension! reg ext)
   (dispatch-hooks 'context "payload" reg)
   (check-true (unbox context-called))
@@ -137,10 +154,8 @@
 
 (test-case "dispatch-hooks with multiple extensions on same point"
   (define reg (make-extension-registry))
-  (define ext1 (extension "e1" "1.0" "1"
-                           (hasheq 'turn-start (λ (p) (hook-amend (cons 'e1 p))))))
-  (define ext2 (extension "e2" "1.0" "1"
-                           (hasheq 'turn-start (λ (p) (hook-amend (cons 'e2 p))))))
+  (define ext1 (extension "e1" "1.0" "1" (hasheq 'turn-start (λ (p) (hook-amend (cons 'e1 p))))))
+  (define ext2 (extension "e2" "1.0" "1" (hasheq 'turn-start (λ (p) (hook-amend (cons 'e2 p))))))
   (register-extension! reg ext1)
   (register-extension! reg ext2)
   (define result (dispatch-hooks 'turn-start '() reg))
@@ -190,10 +205,8 @@
   (define reg (make-extension-registry))
   (define h1 (λ (p) (hook-pass p)))
   (define h2 (λ (p) (hook-amend p)))
-  (register-extension! reg (extension "ext-a" "1.0" "1"
-                                        (hasheq 'tool-call h1 'context h2)))
-  (register-extension! reg (extension "ext-b" "1.0" "1"
-                                        (hasheq 'tool-call h2)))
+  (register-extension! reg (extension "ext-a" "1.0" "1" (hasheq 'tool-call h1 'context h2)))
+  (register-extension! reg (extension "ext-b" "1.0" "1" (hasheq 'tool-call h2)))
   (define handlers (handlers-for-point reg 'tool-call))
   (check-equal? (length handlers) 2)
   (define names (map car handlers))
@@ -228,18 +241,18 @@
   (check-equal? (extension-hooks simple-ext) (hasheq)))
 
 (test-case "define-q-extension with version and api-version"
-  (define-q-extension versioned-ext
-    #:version "2.3.1"
-    #:api-version "2")
+  (define-q-extension versioned-ext #:version "2.3.1" #:api-version "2")
   (check-equal? (extension-name versioned-ext) "versioned-ext")
   (check-equal? (extension-version versioned-ext) "2.3.1")
   (check-equal? (extension-api-version versioned-ext) "2"))
 
 (test-case "define-q-extension with hook handlers"
   (define-q-extension hooking-ext
-    #:version "1.0"
-    #:on tool-call (λ (p) (hook-block "blocked"))
-    #:on context (λ (p) (hook-amend (string-append p " modified"))))
+                      #:version "1.0"
+                      #:on tool-call
+                      (λ (p) (hook-block "blocked"))
+                      #:on context
+                      (λ (p) (hook-amend (string-append p " modified"))))
   (check-equal? (extension-name hooking-ext) "hooking-ext")
   (define hooks (extension-hooks hooking-ext))
   (check-equal? (hash-count hooks) 2)
@@ -252,8 +265,7 @@
   (check-equal? (hook-result-payload ctx-result) "start modified"))
 
 (test-case "define-q-extension can be registered and dispatched"
-  (define-q-extension dispatchable-ext
-    #:on turn-start (λ (p) (hook-amend (cons 'dispatchable p))))
+  (define-q-extension dispatchable-ext #:on turn-start (λ (p) (hook-amend (cons 'dispatchable p))))
   (define reg (make-extension-registry))
   (register-extension! reg dispatchable-ext)
   (define result (dispatch-hooks 'turn-start '() reg))
@@ -277,16 +289,17 @@
   (define ext-dir (build-path tmp-dir "extensions"))
   (make-directory ext-dir)
   ;; Write a simple extension module using absolute paths
-  (with-output-to-file (build-path ext-dir "my-ext.rkt")
-    (λ ()
-      (displayln "#lang racket")
-      (printf "(require (file ~s))\n" define-extension-path)
-      (printf "(require (file ~s))\n" hooks-path)
-      (displayln "(provide the-extension)")
-      (displayln "(define-q-extension my-ext")
-      (displayln "  #:version \"1.0.0\"")
-      (displayln "  #:on context (λ (p) (hook-amend (string-append p \" +my-ext\"))))")
-      (displayln "(define the-extension my-ext)")))
+  (with-output-to-file
+   (build-path ext-dir "my-ext.rkt")
+   (λ ()
+     (displayln "#lang racket")
+     (printf "(require (file ~s))\n" define-extension-path)
+     (printf "(require (file ~s))\n" hooks-path)
+     (displayln "(provide the-extension)")
+     (displayln "(define-q-extension my-ext")
+     (displayln "  #:version \"1.0.0\"")
+     (displayln "  #:on context (λ (p) (hook-amend (string-append p \" +my-ext\"))))")
+     (displayln "(define the-extension my-ext)")))
   (define exts (discover-extensions tmp-dir))
   (check-true (>= (length exts) 1) "should find at least one extension")
   ;; Cleanup
@@ -297,15 +310,15 @@
   (define tmp-dir (make-temporary-file "q-ext-load-~a" 'directory))
   (define ext-file (build-path tmp-dir "loadable-ext.rkt"))
   (with-output-to-file ext-file
-    (λ ()
-      (displayln "#lang racket")
-      (printf "(require (file ~s))\n" define-extension-path)
-      (printf "(require (file ~s))\n" hooks-path)
-      (displayln "(provide the-extension)")
-      (displayln "(define-q-extension loadable-ext")
-      (displayln "  #:version \"0.5.0\"")
-      (displayln "  #:on session-start (λ (p) (hook-amend (cons 'loaded p))))")
-      (displayln "(define the-extension loadable-ext)")))
+                       (λ ()
+                         (displayln "#lang racket")
+                         (printf "(require (file ~s))\n" define-extension-path)
+                         (printf "(require (file ~s))\n" hooks-path)
+                         (displayln "(provide the-extension)")
+                         (displayln "(define-q-extension loadable-ext")
+                         (displayln "  #:version \"0.5.0\"")
+                         (displayln "  #:on session-start (λ (p) (hook-amend (cons 'loaded p))))")
+                         (displayln "(define the-extension loadable-ext)")))
   (define reg (make-extension-registry))
   (load-extension! reg ext-file)
   (define found (lookup-extension reg "loadable-ext"))
@@ -319,16 +332,16 @@
   (define tmp-dir (make-temporary-file "q-ext-bad-~a" 'directory))
   (define ext-file (build-path tmp-dir "bad-ext.rkt"))
   (with-output-to-file ext-file
-    (λ ()
-      (displayln "#lang racket")
-      (displayln "(provide the-extension)")
-      (displayln "(define the-extension 42)")))  ;; Not an extension struct
+                       (λ ()
+                         (displayln "#lang racket")
+                         (displayln "(provide the-extension)")
+                         (displayln "(define the-extension 42)"))) ;; Not an extension struct
   (define reg (make-extension-registry))
   (register-extension! reg (extension "safe" "1.0" "1" (hasheq)))
   ;; Should not raise, but the bad extension should not be registered
   (with-check-info (['msg "loading invalid extension should not crash"])
-    (with-handlers ([exn:fail? (λ (e) (void))])
-      (load-extension! reg ext-file)))
+                   (with-handlers ([exn:fail? (λ (e) (void))])
+                     (load-extension! reg ext-file)))
   ;; Safe extension should still be there
   (check-not-false (lookup-extension reg "safe"))
   (cleanup-dir tmp-dir))
@@ -340,8 +353,9 @@
 (test-case "full lifecycle: register, dispatch, unregister"
   (define reg (make-extension-registry))
   (define-q-extension lifecycle-ext
-    #:version "1.0"
-    #:on tool-call (λ (p) (hook-amend (string-append p " [logged]"))))
+                      #:version "1.0"
+                      #:on tool-call
+                      (λ (p) (hook-amend (string-append p " [logged]"))))
 
   (register-extension! reg lifecycle-ext)
   (define r1 (dispatch-hooks 'tool-call "read file.txt" reg))
@@ -354,19 +368,122 @@
 
 (test-case "multiple extensions: one amends, one blocks"
   (define reg (make-extension-registry))
-  (register-extension! reg (extension "logger" "1.0" "1"
-                                           (hasheq 'tool-call (λ (p) (hook-amend (string-append p " [logged]"))))))
-  (register-extension! reg (extension "blocker" "1.0" "1"
-                                           (hasheq 'tool-call (λ (p) (hook-block "denied")))))
+  (register-extension! reg
+                       (extension "logger"
+                                  "1.0"
+                                  "1"
+                                  (hasheq 'tool-call
+                                          (λ (p) (hook-amend (string-append p " [logged]"))))))
+  (register-extension!
+   reg
+   (extension "blocker" "1.0" "1" (hasheq 'tool-call (λ (p) (hook-block "denied")))))
   ;; Logger is first, so it amends; then blocker blocks
   (define result (dispatch-hooks 'tool-call "read file.txt" reg))
   (check-equal? (hook-result-action result) 'block)
   (check-equal? (hook-result-payload result) "denied"))
 
+;; ============================================================
+;; 7. loader.rkt — extension-load-error struct
+;; ============================================================
+
+(test-case "extension-load-error is transparent and has correct fields"
+  (define test-ext-path (build-path (current-directory) "ext.rkt"))
+  (define err (extension-load-error test-ext-path "some error" 'unknown))
+  (check-true (extension-load-error? err))
+  (check-equal? (extension-load-error-path err) test-ext-path)
+  (check-equal? (extension-load-error-message err) "some error")
+  (check-equal? (extension-load-error-category err) 'unknown))
+
+(test-case "try-load-extension returns extension-load-error for non-existent file"
+  (define result (try-load-extension "/nonexistent/path/ext.rkt"))
+  (check-true (extension-load-error? result))
+  (check-equal? (extension-load-error-category result) 'not-found)
+  (check-true (string-contains? (extension-load-error-message result) "not found")))
+
+(test-case "try-load-extension returns extension-load-error for syntax error"
+  (define tmp-dir (make-temporary-file "q-ext-syntax-~a" 'directory))
+  (define ext-file (build-path tmp-dir "bad-syntax.rkt"))
+  (with-output-to-file ext-file
+                       (λ ()
+                         (displayln "#lang racket")
+                         (displayln "(define (broken")))
+  (define result (try-load-extension ext-file))
+  (check-true (extension-load-error? result))
+  (check-equal? (extension-load-error-category result) 'syntax-error)
+  (cleanup-dir tmp-dir))
+
+(test-case "try-load-extension returns extension-load-error for module without the-extension"
+  (define tmp-dir (make-temporary-file "q-ext-noext-~a" 'directory))
+  (define ext-file (build-path tmp-dir "no-ext.rkt"))
+  (with-output-to-file ext-file
+                       (λ ()
+                         (displayln "#lang racket/base")
+                         (displayln "(provide something-else)")
+                         (displayln "(define something-else 42)")))
+  (define result (try-load-extension ext-file))
+  (check-true (extension-load-error? result))
+  ;; dynamic-require of missing export raises exn:fail
+  (check-equal? (extension-load-error-category result) 'unknown)
+  (cleanup-dir tmp-dir))
+
+(test-case "load-extension! with event-bus publishes extension.load.failed on error"
+  (define bus (make-event-bus))
+  (define events-received (box '()))
+  (subscribe! bus
+              (λ (evt)
+                (set-box! events-received
+                          (cons (list (event-ev evt) (event-payload evt)) (unbox events-received)))))
+  (define reg (make-extension-registry))
+  (load-extension! reg "/nonexistent/ext.rkt" #:event-bus bus)
+  (define events (reverse (unbox events-received)))
+  (check-equal? (length events) 1)
+  (define evt (car events))
+  (check-equal? (car evt) "extension.load.failed")
+  (define payload (cadr evt))
+  (check-equal? (hash-ref payload 'path) "/nonexistent/ext.rkt")
+  (check-equal? (hash-ref payload 'category) 'not-found)
+  (check-true (string? (hash-ref payload 'error))))
+
+(test-case "load-extension! without event-bus does not crash on error"
+  (define reg (make-extension-registry))
+  ;; Should not raise
+  (load-extension! reg "/nonexistent/ext.rkt")
+  (check-equal? (list-extensions reg) '()))
+
+(test-case "load-extension! with event-bus does not publish on success"
+  (define tmp-dir (make-temporary-file "q-ext-success-~a" 'directory))
+  (define ext-file (build-path tmp-dir "good-ext.rkt"))
+  (with-output-to-file ext-file
+                       (λ ()
+                         (displayln "#lang racket")
+                         (printf "(require (file ~s))\n" define-extension-path)
+                         (printf "(require (file ~s))\n" hooks-path)
+                         (displayln "(provide the-extension)")
+                         (displayln "(define-q-extension good-ext)")
+                         (displayln "(define the-extension good-ext)")))
+  (define bus (make-event-bus))
+  (define events-received (box '()))
+  (subscribe! bus (λ (evt) (set-box! events-received (cons (event-ev evt) (unbox events-received)))))
+  (define reg (make-extension-registry))
+  (load-extension! reg ext-file #:event-bus bus)
+  (check-equal? (unbox events-received) '())
+  (check-not-false (lookup-extension reg "good-ext"))
+  (cleanup-dir tmp-dir))
+
 (test-case "all core hook points are valid symbols"
-  (for ([point '(resources-discover session-start session-before-switch
-                   session-before-compact before-agent-start context
-                   before-provider-request tool-call tool-result
-                   message-start message-update message-end
-                   turn-start turn-end model-select session-shutdown)])
+  (for ([point '(resources-discover session-start
+                                    session-before-switch
+                                    session-before-compact
+                                    before-agent-start
+                                    context
+                                    before-provider-request
+                                    tool-call
+                                    tool-result
+                                    message-start
+                                    message-update
+                                    message-end
+                                    turn-start
+                                    turn-end
+                                    model-select
+                                    session-shutdown)])
     (check-true (symbol? point))))

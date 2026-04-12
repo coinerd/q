@@ -33,7 +33,7 @@
       (define state (unbox (cmd-ctx-state-box cctx)))
       (define transcript (ui-state-transcript state))
       ;; Should have 13 entries: header + 12 commands
-      (check-equal? (length transcript) 13 "/help produces 13 entries (header + 12 commands)")
+      (check-equal? (length transcript) 14 "/help produces 14 entries (header + 13 commands)")
       ;; First entry is the header
       (check-true (string-contains? (transcript-entry-text (first transcript)) "Commands:")
                   "first entry is the Commands: header")

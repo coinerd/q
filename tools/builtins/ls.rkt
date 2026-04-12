@@ -3,10 +3,8 @@
 (require racket/file
          racket/format
          racket/list
-         (only-in "../tool.rkt"
-                  make-success-result make-error-result)
-         (only-in "../../runtime/safe-mode.rkt"
-                  allowed-path?))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../runtime/safe-mode.rkt" allowed-path? safe-mode-project-root))
 
 (provide tool-ls)
 
@@ -25,8 +23,7 @@
 ;; --------------------------------------------------
 
 (define (hidden? name)
-  (and (> (string-length name) 0)
-       (char=? (string-ref name 0) #\.)))
+  (and (> (string-length name) 0) (char=? (string-ref name 0) #\.)))
 
 (define (entry-type base-path name)
   (define full (build-path base-path name))
@@ -37,9 +34,9 @@
 
 (define (type-indicator t)
   (case t
-    [(dir)  #\d]
+    [(dir) #\d]
     [(link) #\l]
-    [else   #\-]))
+    [else #\-]))
 
 (define (entry-size base-path name type)
   (if (eq? type 'file)
@@ -57,13 +54,13 @@
   (case sort-by
     [("size")
      (sort entries > #:key (λ (e) (or (entry-size base-path (entry-name e) (entry-type-e e)) -1)))]
-    [("date")
-     (sort entries > #:key (λ (e) (entry-mtime base-path (entry-name e))))]
+    [("date") (sort entries > #:key (λ (e) (entry-mtime base-path (entry-name e))))]
     [else ; "name"
      ;; Directories first, then alphabetical
-     (define dirs  (filter (λ (e) (memq (entry-type-e e) '(dir link))) entries))
+     (define dirs (filter (λ (e) (memq (entry-type-e e) '(dir link))) entries))
      (define files (filter (λ (e) (eq? (entry-type-e e) 'file)) entries))
-     (define (name<? a b) (string-ci<? (entry-name a) (entry-name b)))
+     (define (name<? a b)
+       (string-ci<? (entry-name a) (entry-name b)))
      (append (sort dirs name<?) (sort files name<?))]))
 
 ;; Lightweight entry struct for sorting
@@ -77,7 +74,10 @@
   name)
 
 (define (format-long name type size)
-  (define size-str (if size (~a size) "-"))
+  (define size-str
+    (if size
+        (~a size)
+        "-"))
   (format "~a ~a ~a" (type-indicator type) size-str name))
 
 ;; --------------------------------------------------
@@ -88,25 +88,26 @@
   ;; 0. Safe-mode path check (#118)
   (define path-str (hash-ref args 'path #f))
   (cond
-    [(not path-str)
-     (err "Missing required argument: path")]
+    [(not path-str) (err "Missing required argument: path")]
     ;; Safe-mode: check path access
     [(not (allowed-path? path-str))
-     (err (format "Access denied: path outside project root: ~a" path-str))]
+     (err
+      (format
+       "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
+       path-str
+       (safe-mode-project-root)))]
 
     ;; 2. Path must exist
     [(not (directory-exists? path-str))
      (cond
-       [(file-exists? path-str)
-        (err (format "Not a directory: ~a" path-str))]
-       [else
-        (err (format "Path not found: ~a" path-str))])]
+       [(file-exists? path-str) (err (format "Not a directory: ~a" path-str))]
+       [else (err (format "Path not found: ~a" path-str))])]
 
     [else
      ;; 3. Read directory entries
      (define show-hidden? (hash-ref args 'all? #f))
-     (define long?        (hash-ref args 'long? #f))
-     (define sort-by      (hash-ref args 'sort-by "name"))
+     (define long? (hash-ref args 'long? #f))
+     (define sort-by (hash-ref args 'sort-by "name"))
 
      (define raw-names (directory-list path-str))
      (define filtered
@@ -132,11 +133,15 @@
              (format-short name))))
 
      ;; 7. Count dirs and files
-     (define dir-count  (count (λ (e) (memq (entry-type-e e) '(dir link))) sorted))
+     (define dir-count (count (λ (e) (memq (entry-type-e e) '(dir link))) sorted))
      (define file-count (count (λ (e) (eq? (entry-type-e e) 'file)) sorted))
 
      (ok content-lines
-         (hasheq 'total-entries (length sorted)
-                 'path path-str
-                 'directories dir-count
-                 'files file-count))]))
+         (hasheq 'total-entries
+                 (length sorted)
+                 'path
+                 path-str
+                 'directories
+                 dir-count
+                 'files
+                 file-count))]))
