@@ -1,11 +1,11 @@
 #lang racket/base
 
-;; skills/skill-loader.rkt — backward-compatible re-export from types.rkt
+;; skills/skill-loader.rkt — backward-compatible re-export
 ;;
-;; Skill loading functions are defined in skills/types.rkt.
-;; This module re-exports the relevant bindings so that any existing code
-;; requiring "skills/skill-loader.rkt" continues to work.
+;; Skill loading functions are defined in skills/resource-loader.rkt.
+;; This module re-exports all resource-loader bindings so that any existing
+;; code requiring "skills/skill-loader.rkt" continues to work.
 
-(require "types.rkt")
+(require "resource-loader.rkt")
 
-(provide (all-from-out "types.rkt"))
+(provide (all-from-out "resource-loader.rkt"))

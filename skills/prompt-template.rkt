@@ -1,11 +1,10 @@
 #lang racket/base
 
-;; skills/prompt-template.rkt — re-export template rendering from types.rkt
+;; skills/prompt-template.rkt — re-export template rendering
 ;;
-;; Prompt template rendering is defined in skills/types.rkt.
+;; Prompt template rendering is defined in skills/template.rkt.
 ;; This module re-exports the binding for backward compatibility.
 
-(require (only-in "types.rkt"
-                  render-template))
+(require "template.rkt")
 
-(provide render-template)
+(provide (all-from-out "template.rkt"))

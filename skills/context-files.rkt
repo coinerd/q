@@ -10,7 +10,7 @@
          racket/string
          racket/match
          racket/list
-         (only-in "types.rkt" try-read-file))
+         (only-in "resource-loader.rkt" try-read-file))
 
 (provide
  ;; Struct
