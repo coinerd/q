@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-04-11
+
+### Builder Cookbook and Team Adoption
+- **#57**: Create team setup and onboarding guide (`docs/tutorials/team-setup.md`)
+- **#58**: Create builder tutorials: tools, providers, extensions (`docs/tutorials/builder-tutorials.md`)
+
+### What's New
+- **Team Setup Guide**: Full onboarding guide covering global vs project config, shared credentials, team extensions, CI/CD integration, and a new-member checklist
+- **Builder Tutorials**: Step-by-step guides for building custom tools, provider adapters, and extensions with complete Racket code examples
+- **Tutorials Index**: New `docs/tutorials/` section with README index
+
+### Metrics
+- 2,972 tests passing, 0 failures
+- 6/6 lint checks passing
+
 ## [0.6.9] — 2026-04-11
 
 ### Test Quality Strengthening

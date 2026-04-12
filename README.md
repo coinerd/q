@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.6.9-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -181,7 +181,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version   # q version 0.6.9
+racket main.rkt --version   # q version 0.7.0
 raco test tests/            # run the full test suite
 ```
 
@@ -240,7 +240,7 @@ q/
 |--------|-------|
 | Test files | 103 |
 | Source modules | 96 |
-| Source lines | 19878 |
+| Source lines | 19879 |
 | Test lines | 31720 |
 | Test assertions | 5303 |
 | `raco test` results | 3,197 tests passing |
@@ -260,9 +260,18 @@ raco test tests/tui/
 
 [MIT](LICENSE)
 
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [Install Guide](docs/install.md) | Full setup instructions |
+| [Tutorials](docs/tutorials/) | Team setup and builder cookbook |
+| [Demos](docs/demos/) | Example session transcripts |
+| [Architecture](docs/architecture/) | System design deep dives |
+
 ## Status
 
-**v0.6.9** — Test Quality Strengthening. Strengthened weak assertions, fixed test isolation (orphaned test bodies), added negative/error path tests, added tool argument/result validation functions (`ensure-hash-args`, `validate-tool-args`, `validate-tool-result`, `type-matches?`, `json-serializable?`):
+**v0.7.0** — Builder Cookbook and Team Adoption. Team setup guide, builder tutorials for custom tools/providers/extensions:
 
 **v0.6.8** — Structural Hardening. Thread safety (semaphores), contracts on critical entry points, per-session safe-mode, safe-mode path checks for grep/find/ls, extension loader logging, dead code cleanup (session-tree, CSI stubs, resource-loader, duplicate try-read-file), guarded tool arguments:
 
