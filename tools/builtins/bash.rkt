@@ -21,6 +21,7 @@
 
 (provide tool-bash
          current-warn-on-destructive
+         current-block-destructive
          destructive-command?
          destructive-patterns)
 
@@ -56,6 +57,12 @@
 ;; Can be set to #f to suppress warnings.
 (define current-warn-on-destructive (make-parameter #t))
 
+;; Optional settings parameter for destructive command blocking (SEC-01).
+;; When #t, destructive commands return an error result instead of executing.
+;; When #f (default), commands execute (with optional warning).
+;; Blocking takes priority over warning.
+(define current-block-destructive (make-parameter #f))
+
 ;; --------------------------------------------------
 ;; Main tool function
 ;; --------------------------------------------------
@@ -66,9 +73,15 @@
     [(not command) (make-error-result "Missing required argument: command")]
     [(not (non-empty-string? command)) (make-error-result "command must be a non-empty string")]
     [else
-     ;; Optional destructive command warning (SEC-03)
-     (when (and (current-warn-on-destructive) (destructive-command? command))
-       (fprintf (current-error-port) "WARNING: Destructive command detected: ~a~n" command))
+     ;; Destructive command handling (SEC-01 / SEC-03)
+     (cond
+       ;; Block takes priority
+       [(and (current-block-destructive) (destructive-command? command))
+        (make-error-result (format "Blocked destructive command: ~a" command))]
+       [else
+        ;; Optional warning
+        (when (and (current-warn-on-destructive) (destructive-command? command))
+          (fprintf (current-error-port) "WARNING: Destructive command detected: ~a~n" command))
      (define timeout-secs (hash-ref args 'timeout DEFAULT-TIMEOUT-SECONDS))
      (define work-dir (hash-ref args 'working-directory #f))
 
@@ -103,4 +116,4 @@
                                   'duration-ms
                                   (subprocess-result-elapsed-ms result)
                                   'command
-                                  command))]))
+                                  command))])]))
