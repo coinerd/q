@@ -17,8 +17,12 @@
                   exec-context?
                   exec-context-working-directory)
          "../../sandbox/subprocess.rkt"
-         "../../sandbox/limits.rkt"
-         "../../runtime/settings.rkt")
+         "../../sandbox/limits.rkt")
+
+(provide tool-bash
+         current-warn-on-destructive
+         destructive-command?
+         destructive-patterns)
 
 ;; Default timeout in seconds
 (define DEFAULT-TIMEOUT-SECONDS 120)
@@ -51,11 +55,6 @@
 ;; When #t (default), emit a warning to stderr before executing.
 ;; Can be set to #f to suppress warnings.
 (define current-warn-on-destructive (make-parameter #t))
-
-(provide tool-bash
-         current-warn-on-destructive
-         destructive-command?
-         destructive-patterns)
 
 ;; --------------------------------------------------
 ;; Main tool function

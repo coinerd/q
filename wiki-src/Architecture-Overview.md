@@ -35,7 +35,7 @@ User input → Interface (CLI/TUI/RPC)
     → Events emitted to bus
 ```
 
-## Metrics (v0.8.0)
+## Metrics (v0.8.1)
 
 - 119 source modules, 138 test files
 - 22,032 source lines, 38,032 test lines
