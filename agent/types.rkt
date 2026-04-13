@@ -1,13 +1,16 @@
 #lang racket/base
 
-;; agent/types.rkt — canonical runtime structs and enums
+;; agent/types.rkt — BACKWARD-COMPAT RE-EXPORT SHELL
 ;;
-;; ARCH-01/04/05: all struct definitions moved to util/protocol-types.rkt
-;; to eliminate layer violations. This module re-exports everything
-;; for backward compatibility.
+;; DEPRECATED: re-export of util/protocol-types.rkt; new code should import
+;; directly from util/protocol-types.rkt. This module exists only for
+;; backward compatibility and will be removed in a future version.
 ;;
-;; All structs provide JSON serialization/deserialization via
-;; message->jsexpr / jsexpr->message and event->jsexpr / jsexpr->event.
+;; Re-exports: message, event, loop-result, text-part, tool-result-part,
+;;   tool-call-part structs and their accessors/constructors.
+;;   Also: message->jsexpr, jsexpr->message, event->jsexpr, jsexpr->event,
+;;   make-event, make-message, make-text-part, make-tool-call-part,
+;;   make-tool-result-part, make-loop-result, and all struct predicates.
 
 (require "../util/protocol-types.rkt")
 

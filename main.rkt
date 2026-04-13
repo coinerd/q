@@ -45,24 +45,42 @@
          register-default-tools!
          build-runtime-from-cli
          mode-for-config
-         ;; Re-exported from interfaces (all-from-out for fully-required modules)
+
+         ;; ── Interface layer (re-exported for SDK consumers) ──
+         ;; interfaces/cli.rkt: cli-config, parse-cli-args, run-cli-interactive, print-usage, etc.
          (all-from-out "interfaces/cli.rkt")
+         ;; interfaces/json-mode.rkt: start-json-mode!, stop-json-mode!, intent parsing
          (all-from-out "interfaces/json-mode.rkt")
+         ;; interfaces/rpc-mode.rkt: rpc-request/response/notification structs, parse-rpc-request
          (all-from-out "interfaces/rpc-mode.rkt")
+         ;; interfaces/tui.rkt: run-tui, tui-ctx, handle-key/mouse, clipboard ops
          (all-from-out "interfaces/tui.rkt")
+         ;; interfaces/doctor.rkt: run-doctor, check-result, individual check functions
          (all-from-out "interfaces/doctor.rkt")
+         ;; interfaces/sessions.rkt: sessions-list/info/delete, scan-session-dirs
          (all-from-out "interfaces/sessions.rkt")
-         ;; Runtime / core modules
+
+         ;; ── Runtime / core layer (re-exported for SDK consumers) ──
+         ;; runtime/settings.rkt: q-settings struct, load-settings, merge-config
          (all-from-out "runtime/settings.rkt")
+         ;; skills/types.rkt: skill-def struct, prompt-template types
          (all-from-out "skills/types.rkt")
+         ;; runtime/auth-store.rkt: credential stores, load/save credentials
          (all-from-out "runtime/auth-store.rkt")
+         ;; runtime/model-registry.rkt: model-registry, register/list models
          (all-from-out "runtime/model-registry.rkt")
+         ;; llm/provider.rkt: provider struct, make-provider, make-model-request/response
          (all-from-out "llm/provider.rkt")
+         ;; llm/openai-compatible.rkt: make-openai-compatible-provider
          (all-from-out "llm/openai-compatible.rkt")
+         ;; tools/tool.rkt: tool struct, make-tool, tool-registry, make-success-result, etc.
          (all-from-out "tools/tool.rkt")
+         ;; agent/event-bus.rkt: make-event-bus, subscribe!, publish!
          (all-from-out "agent/event-bus.rkt")
+         ;; extensions/api.rkt: extension-registry, register-extension!
          (all-from-out "extensions/api.rkt")
-         ;; From only-in requires — explicit provides
+
+         ;; ── Explicit exports from only-in requires ──
          build-mock-provider
          local-provider?
          make-agent-session
