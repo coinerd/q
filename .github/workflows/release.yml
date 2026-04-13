@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache Racket installation
+        id: cache-racket
+        uses: actions/cache@v5
+        with:
+          path: |
+            /usr/local/racket
+            ~/.cache/racket
+          key: racket-8.10-ubuntu-${{ runner.os }}
+
+      - name: Install Racket
+        if: steps.cache-racket.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+
+      - name: Install dependencies
+        run: |
+          /usr/local/racket/bin/raco pkg install --auto --batch
+          /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+
+      - name: Run tests
+        run: /usr/local/racket/bin/raco test tests/
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build tarball
+        run: |
+          mkdir -p /tmp/q-${{ steps.version.outputs.VERSION }}
+          cp -r . /tmp/q-${{ steps.version.outputs.VERSION }}/
+          cd /tmp
+          tar czf /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz \
+            --exclude='.git' \
+            --exclude='compiled' \
+            --exclude='*.zo' \
+            q-${{ steps.version.outputs.VERSION }}/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
+          body: |
+            ## q v${{ steps.version.outputs.VERSION }}
+
+            See [CHANGELOG.md](https://github.com/coinerd/q/blob/main/CHANGELOG.md) for details.
+
+            ### Installation
+            ```bash
+            tar xzf q-${{ steps.version.outputs.VERSION }}.tar.gz
+            cd q-${{ steps.version.outputs.VERSION }}
+            raco pkg install
+            ```

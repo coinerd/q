@@ -11,7 +11,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
 
@@ -22,43 +25,53 @@ jobs:
           path: |
             /usr/local/racket
             ~/.cache/racket
-          key: racket-8.10-ubuntu-${{ runner.os }}
+          key: racket-8.10-${{ matrix.os }}
 
-      - name: Install Racket
-        if: steps.cache-racket.outputs.cache-hit != 'true'
+      - name: Install Racket (Linux)
+        if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
           ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
 
+      - name: Install Racket (macOS)
+        if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
+          hdiutil attach /tmp/racket.dmg
+          sudo installer -pkg /Volumes/Racket*/Racket*.pkg -target /
+          hdiutil detach /Volumes/Racket*
+          ls -la /usr/local/bin/raco || (echo "Racket installation failed" && exit 1)
+
       - name: Verify Racket Installation
-        run: /usr/local/racket/bin/racket --version
+        run: /usr/local/racket/bin/racket --version || racket --version
 
       - name: Install dependencies
         run: |
-          /usr/local/racket/bin/raco pkg install --auto --batch
-          /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+          RACO="$(which raco || echo /usr/local/racket/bin/raco)"
+          $RACO pkg install --auto --batch
+          $RACO pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Clean bytecode cache
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
 
       - name: Lint tests for portability
-        run: /usr/local/racket/bin/racket scripts/lint-tests.rkt
+        run: racket scripts/lint-tests.rkt
 
       - name: Lint version consistency
-        run: /usr/local/racket/bin/racket scripts/lint-version.rkt
+        run: racket scripts/lint-version.rkt
 
       - name: Format lint
-        run: /usr/local/racket/bin/racket scripts/lint-format.rkt
+        run: racket scripts/lint-format.rkt
 
       - name: Lint metrics consistency
-        run: /usr/local/racket/bin/racket scripts/metrics.rkt --lint
+        run: racket scripts/metrics.rkt --lint
 
       - name: Protocol consistency
-        run: /usr/local/racket/bin/racket scripts/check-protocols.rkt
+        run: racket scripts/check-protocols.rkt
 
       - name: Import conflicts
-        run: /usr/local/racket/bin/racket scripts/check-imports.rkt
+        run: racket scripts/check-imports.rkt
 
       - name: Verify project structure
         run: |
@@ -67,10 +80,13 @@ jobs:
           test -f main.rkt && echo "main.rkt found at repo root"
 
       - name: Run tests
-        run: /usr/local/racket/bin/raco test tests/
+        run: raco test tests/
 
   smoke:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
 
@@ -81,25 +97,34 @@ jobs:
           path: |
             /usr/local/racket
             ~/.cache/racket
-          key: racket-8.10-ubuntu-${{ runner.os }}
+          key: racket-8.10-${{ matrix.os }}
 
-      - name: Install Racket
-        if: steps.cache-racket.outputs.cache-hit != 'true'
+      - name: Install Racket (Linux)
+        if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
           echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
           ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
 
+      - name: Install Racket (macOS)
+        if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
+          hdiutil attach /tmp/racket.dmg
+          sudo installer -pkg /Volumes/Racket*/Racket*.pkg -target /
+          hdiutil detach /Volumes/Racket*
+          ls -la /usr/local/bin/raco || (echo "Racket installation failed" && exit 1)
+
       - name: Verify Racket Installation
-        run: /usr/local/racket/bin/racket --version
+        run: racket --version
 
       - name: Install dependencies
         run: |
-          /usr/local/racket/bin/raco pkg install --auto --batch
-          /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+          raco pkg install --auto --batch
+          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Version smoke check
         run: |
-          output=$(/usr/local/racket/bin/racket main.rkt --version)
+          output=$(racket main.rkt --version)
           echo "$output"
           echo "$output" | grep -qE '^q version [0-9]+\.[0-9]+\.[0-9]+$'
