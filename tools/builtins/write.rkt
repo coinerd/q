@@ -3,7 +3,9 @@
 (require racket/file
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/path-helpers.rkt" path-only)
-         (only-in "../../util/errors.rkt" raise-tool-error tool-error?))
+         (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
+         (only-in "../../util/safe-mode-predicates.rkt"
+                  safe-mode? allowed-path? safe-mode-project-root))
 
 (provide tool-write
          current-max-write-bytes)
@@ -12,11 +14,15 @@
 (define current-max-write-bytes (make-parameter 1048576))
 
 ;; Main tool function
-;; (safe-mode path check is done by scheduler, not here)
 (define (tool-write args [exec-ctx #f])
   (define path-str (hash-ref args 'path #f))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
+    [(and (safe-mode?) (not (allowed-path? path-str)))
+     ;; Defense-in-depth: verify path even if scheduler already checked (SEC-09)
+     (make-error-result
+      (format "write: path '~a' outside project root (~a)"
+              path-str (safe-mode-project-root)))]
     [else
      (define content-str (hash-ref args 'content ""))
      (with-handlers ([exn:fail:filesystem?

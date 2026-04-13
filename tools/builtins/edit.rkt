@@ -8,7 +8,9 @@
 ;;   Returns:  tool-result with success or error details
 
 (require racket/file
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/safe-mode-predicates.rkt"
+                  safe-mode? allowed-path? safe-mode-project-root))
 
 (provide tool-edit)
 
@@ -51,9 +53,12 @@
         (cond
           [(not new-text) (make-error-result "Missing required argument: new-text")]
           [else
-           ;; 1. File existence check
-           ;; (safe-mode path check is done by scheduler, not here)
+           ;; Defense-in-depth: verify path even if scheduler already checked (SEC-09)
            (cond
+             [(and (safe-mode?) (not (allowed-path? path-str)))
+              (make-error-result
+               (format "edit: path '~a' outside project root (~a)"
+                       path-str (safe-mode-project-root)))]
              [(not (file-exists? path-str))
               (make-error-result (format "File not found: ~a" path-str))]
 
