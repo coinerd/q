@@ -244,7 +244,10 @@
 ;; ── Repair ──
 
 (define (repair-session-log! session-log-path)
-  ;; Remove truncated/invalid entries and rewrite the log cleanly.
+  ;; [ADMIN-ONLY] Remove truncated/invalid entries and rewrite the log cleanly.
+  ;; This function modifies the append-only session log. It MUST only be called
+  ;; by admin tooling or manual recovery procedures, never automatically.
+  ;; A .bak backup is created before any rewrite (SEC-09).
   ;; Preserves order of valid entries. Deduplicates by entry ID (keeps first).
   ;; Returns (hasheq 'entries-kept N 'entries-removed M).
   ;; If no entries need removal, the file is left unchanged (no-op).
