@@ -48,6 +48,36 @@
   (build-path (current-quarantine-dir) "state.json"))
 
 ;; ============================================================
+;; File locking for TOCTOU race prevention (SEC-11)
+;; ============================================================
+
+(define (quarantine-lock-file)
+  (build-path (current-quarantine-dir) ".state.json.lock"))
+
+(define (with-quarantine-lock thunk)
+  (define qdir (current-quarantine-dir))
+  (unless (directory-exists? qdir)
+    (make-directory* qdir))
+  (define lock-path (quarantine-lock-file))
+  (define got-lock #f)
+  (with-handlers ([exn:fail:filesystem?
+                   (lambda (e)
+                     (when got-lock (delete-file lock-path))
+                     (raise e))]
+                  [exn:fail?
+                   (lambda (e)
+                     (when got-lock (delete-file lock-path))
+                     (raise e))])
+    ;; Try to create lock file exclusively (atomic on POSIX)
+    (with-output-to-file lock-path #:exists 'error
+      (lambda () (write (current-inexact-milliseconds))))
+    (set! got-lock #t)
+    (begin0
+      (thunk)
+      (delete-file lock-path)
+      (set! got-lock #f))))
+
+;; ============================================================
 ;; Internal: read/write state file atomically
 ;; ============================================================
 ;; State structure (JSON):
@@ -97,102 +127,112 @@
 ;; ============================================================
 
 (define (extension-state name)
-  (define state (read-state))
-  (define disabled (hash-ref state 'disabled '()))
-  (define quarantined (hash-ref state 'quarantined (hasheq)))
-  (cond
-    [(member name (if (list? disabled) disabled '())) 'disabled]
-    [(hash-has-key? quarantined (name->sym name)) 'quarantined]
-    [(member name (hash-ref state 'active '())) 'active]
-    [else 'unknown]))
+  (with-quarantine-lock
+    (lambda ()
+      (define state (read-state))
+      (define disabled (hash-ref state 'disabled '()))
+      (define quarantined (hash-ref state 'quarantined (hasheq)))
+      (cond
+        [(member name (if (list? disabled) disabled '())) 'disabled]
+        [(hash-has-key? quarantined (name->sym name)) 'quarantined]
+        [(member name (hash-ref state 'active '())) 'active]
+        [else 'unknown]))))
 
 ;; ============================================================
 ;; disable-extension! : string? -> void?
 ;; ============================================================
 
 (define (disable-extension! name)
-  (define state (read-state))
-  (define disabled (hash-ref state 'disabled '()))
-  (define quarantined (hash-ref state 'quarantined (hasheq)))
-  (define new-disabled
-    (if (member name disabled)
-        disabled
-        (append disabled (list name))))
-  (define new-quarantined (hash-remove quarantined (name->sym name)))
-  (define new-active
-    (filter (lambda (n) (not (equal? n name)))
-            (hash-ref state 'active '())))
-  (write-state! (hasheq 'disabled new-disabled
-                       'quarantined new-quarantined
-                       'active new-active)))
+  (with-quarantine-lock
+    (lambda ()
+      (define state (read-state))
+      (define disabled (hash-ref state 'disabled '()))
+      (define quarantined (hash-ref state 'quarantined (hasheq)))
+      (define new-disabled
+        (if (member name disabled)
+            disabled
+            (append disabled (list name))))
+      (define new-quarantined (hash-remove quarantined (name->sym name)))
+      (define new-active
+        (filter (lambda (n) (not (equal? n name)))
+                (hash-ref state 'active '())))
+      (write-state! (hasheq 'disabled new-disabled
+                            'quarantined new-quarantined
+                            'active new-active)))))
 
 ;; ============================================================
 ;; quarantine-extension! : string? path-string? -> void?
 ;; ============================================================
 
 (define (quarantine-extension! name src-path)
-  (define state (read-state))
-  (define disabled (hash-ref state 'disabled '()))
-  (define quarantined (hash-ref state 'quarantined (hasheq)))
-  (define qdir (current-quarantine-dir))
-  (unless (directory-exists? qdir)
-    (make-directory* qdir))
-  (define dest (build-path qdir name))
-  (when (directory-exists? src-path)
-    (rename-file-or-directory src-path dest #t))
-  (define new-disabled (filter (lambda (n) (not (equal? n name))) disabled))
-  (define new-quarantined
-    (hash-set quarantined (name->sym name)
-              (hasheq 'original-path (path->string (path->complete-path src-path))
-                    'quarantined-at (seconds->iso8601 (current-seconds)))))
-  (define new-active
-    (filter (lambda (n) (not (equal? n name)))
-            (hash-ref state 'active '())))
-  (write-state! (hasheq 'disabled new-disabled
-                       'quarantined new-quarantined
-                       'active new-active)))
+  (with-quarantine-lock
+    (lambda ()
+      (define state (read-state))
+      (define disabled (hash-ref state 'disabled '()))
+      (define quarantined (hash-ref state 'quarantined (hasheq)))
+      (define qdir (current-quarantine-dir))
+      (unless (directory-exists? qdir)
+        (make-directory* qdir))
+      (define dest (build-path qdir name))
+      (when (directory-exists? src-path)
+        (rename-file-or-directory src-path dest #t))
+      (define new-disabled (filter (lambda (n) (not (equal? n name))) disabled))
+      (define new-quarantined
+        (hash-set quarantined (name->sym name)
+                  (hasheq 'original-path (path->string (path->complete-path src-path))
+                          'quarantined-at (seconds->iso8601 (current-seconds)))))
+      (define new-active
+        (filter (lambda (n) (not (equal? n name)))
+                (hash-ref state 'active '())))
+      (write-state! (hasheq 'disabled new-disabled
+                            'quarantined new-quarantined
+                            'active new-active)))))
 
 ;; ============================================================
 ;; restore-extension! : string? path-string? -> void?
 ;; ============================================================
 
 (define (restore-extension! name dest-path)
-  (define state (read-state))
-  (define disabled (hash-ref state 'disabled '()))
-  (define quarantined (hash-ref state 'quarantined (hasheq)))
-  (define qdir (current-quarantine-dir))
-  (define src (build-path qdir name))
-  ;; If quarantined dir exists, move it back
-  (when (directory-exists? src)
-    (define dest-parent
-      (let-values ([(base _name _must-be-dir?) (split-path dest-path)])
-        base))
-    (when (and dest-parent (not (directory-exists? dest-parent)))
-      (make-directory* dest-parent))
-    (rename-file-or-directory src dest-path #t))
-  (define new-disabled (filter (lambda (n) (not (equal? n name))) disabled))
-  (define new-quarantined (hash-remove quarantined (name->sym name)))
-  (define active (hash-ref state 'active '()))
-  (define new-active
-    (if (member name active)
-        active
-        (append active (list name))))
-  (write-state! (hasheq 'disabled new-disabled
-                       'quarantined new-quarantined
-                       'active new-active)))
+  (with-quarantine-lock
+    (lambda ()
+      (define state (read-state))
+      (define disabled (hash-ref state 'disabled '()))
+      (define quarantined (hash-ref state 'quarantined (hasheq)))
+      (define qdir (current-quarantine-dir))
+      (define src (build-path qdir name))
+      ;; If quarantined dir exists, move it back
+      (when (directory-exists? src)
+        (define dest-parent
+          (let-values ([(base _name _must-be-dir?) (split-path dest-path)])
+            base))
+        (when (and dest-parent (not (directory-exists? dest-parent)))
+          (make-directory* dest-parent))
+        (rename-file-or-directory src dest-path #t))
+      (define new-disabled (filter (lambda (n) (not (equal? n name))) disabled))
+      (define new-quarantined (hash-remove quarantined (name->sym name)))
+      (define active (hash-ref state 'active '()))
+      (define new-active
+        (if (member name active)
+            active
+            (append active (list name))))
+      (write-state! (hasheq 'disabled new-disabled
+                            'quarantined new-quarantined
+                            'active new-active)))))
 
 ;; ============================================================
 ;; list-quarantined : -> (listof hash?)
 ;; ============================================================
 
 (define (list-quarantined)
-  (define state (read-state))
-  (define quarantined (hash-ref state 'quarantined (hasheq)))
-  (for/list ([(sym-key meta) (in-hash quarantined)])
-    (make-hash (list (cons 'name (sym->name sym-key))
-                     (cons 'state "quarantined")
-                     (cons 'original-path (hash-ref meta 'original-path ""))
-                     (cons 'quarantined-at (hash-ref meta 'quarantined-at ""))))))
+  (with-quarantine-lock
+    (lambda ()
+      (define state (read-state))
+      (define quarantined (hash-ref state 'quarantined (hasheq)))
+      (for/list ([(sym-key meta) (in-hash quarantined)])
+        (make-hash (list (cons 'name (sym->name sym-key))
+                         (cons 'state "quarantined")
+                         (cons 'original-path (hash-ref meta 'original-path ""))
+                         (cons 'quarantined-at (hash-ref meta 'quarantined-at ""))))))))
 
 ;; ============================================================
 ;; format-extension-status : string? -> string?
@@ -204,13 +244,15 @@
     ['active   (format "~a: active" name)]
     ['disabled (format "~a: disabled" name)]
     ['quarantined
-     (define state (read-state))
-     (define quarantined (hash-ref state 'quarantined (hasheq)))
-     (define meta (hash-ref quarantined (name->sym name) (hash)))
-     (format "~a: quarantined (from ~a at ~a)"
-             name
-             (hash-ref meta 'original-path "?")
-             (hash-ref meta 'quarantined-at "?"))]
+     (with-quarantine-lock
+       (lambda ()
+         (define state (read-state))
+         (define quarantined (hash-ref state 'quarantined (hasheq)))
+         (define meta (hash-ref quarantined (name->sym name) (hash)))
+         (format "~a: quarantined (from ~a at ~a)"
+                 name
+                 (hash-ref meta 'original-path "?")
+                 (hash-ref meta 'quarantined-at "?"))))]
     ['unknown  (format "~a: unknown" name)]))
 
 ;; ============================================================

@@ -26,7 +26,20 @@
 ;; Destructive command patterns (SEC-03)
 ;; Each pattern is a string that is checked case-insensitively
 ;; against the command string.
-(define destructive-patterns '("rm -rf" "rmdir" "mkfs" "dd if=" "format" "del /" "shutdown" "reboot"))
+(define destructive-patterns
+  '("rm -rf" "rmdir" "mkfs" "dd if=" "format" "del /" "shutdown" "reboot"
+    "chmod -R 777 /"       ;; recursive permission destruction
+    "curl " "| sh"         ;; pipe-to-shell patterns
+    "wget " "| bash"       ;; pipe-to-shell patterns
+    "> /etc/passwd"        ;; critical system file override
+    "> /etc/shadow"        ;; critical system file override
+    "dd of=/dev/"          ;; disk destruction
+    "git push --force"     ;; force push
+    ":(){:|:&};:"          ;; fork bomb
+    "chmod 000 /"          ;; recursive permission lockout
+    "> /dev/sd"            ;; device file write
+    "mv / "                ;; root directory move
+    ))
 
 ;; Check if a command matches any destructive pattern.
 (define (destructive-command? command)

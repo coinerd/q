@@ -220,6 +220,10 @@
                (values (if (symbol? k) (symbol->string k) k) v)))))]))
 
 ;; Save a credential to the dedicated credential file.
+;; SECURITY NOTE: API keys are stored as plaintext on disk.
+;; The credential file has #o600 (owner-only) permissions, but keys
+;; are not encrypted at rest. On shared systems, consider using
+;; environment variables or a dedicated secrets manager instead.
 (define (save-credential-file! provider-name api-key [path (credential-file-path)])
   (with-handlers ([exn:fail? (λ (e) (void))])
     (define dir (path-only path))
@@ -256,6 +260,10 @@
 ;; Read existing JSON config, update the provider's api-key, write back.
 ;; If the file doesn't exist, create a new config structure.
 ;; Handles errors gracefully — does not propagate exceptions.
+;; SECURITY NOTE: API keys are stored as plaintext on disk.
+;; The credential file has #o600 (owner-only) permissions, but keys
+;; are not encrypted at rest. On shared systems, consider using
+;; environment variables or a dedicated secrets manager instead.
 (define (write-credential-to-config! config-path provider-name api-key)
   (with-handlers ([exn:fail? (lambda (e) (void))])
     (internal-write-credential-to-config! config-path provider-name api-key)))
