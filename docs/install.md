@@ -124,6 +124,20 @@ raco pkg install tui-term tui-ubuf
 > **Note:** These packages have known compilation issues on Racket 8.10 (upstream bugs).
 > The TUI works without them using built-in fallbacks. This is not required for normal use.
 
+## Security Note
+
+API keys stored in `~/.q/credentials.json` are saved in **plaintext** with owner-only permissions (`0600`). For production or CI environments, **use environment variables** instead of the credentials file:
+
+```bash
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=AIza...
+```
+
+This avoids writing secrets to disk and integrates with secret managers (Vault, AWS Secrets Manager, etc.). See the [Security section in README.md](../README.md#security) for details.
+
+---
+
 ## Packaging Status
 
 q is not yet published on a package registry. Install options:
