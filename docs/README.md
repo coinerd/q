@@ -28,10 +28,13 @@ q/docs/
 ├── why-q.md           ← motivation and packaging roadmap
 ├── adr/               ← architecture decision records
 │   ├── README.md
-│   ├── 0001-event-first-architecture.md
-│   ├── 0002-provider-dispatch-pattern.md
-│   ├── 0003-safe-mode-design.md
-│   └── 0004-session-journal-append-only.md
+│   ├── 0001-small-trusted-core.md
+│   ├── 0002-append-only-jsonl-session-log.md
+│   ├── 0003-event-bus-architecture.md
+│   ├── 0004-provider-abstraction.md
+│   ├── 0005-interface-separation.md
+│   ├── 0006-extension-hook-model.md
+│   └── 0007-sandboxing-boundary.md
 ├── demos/             ← demo scripts and walkthroughs
 └── tutorials/         ← builder and team setup guides
     ├── builder-tutorials.md

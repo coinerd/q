@@ -16,7 +16,7 @@ q follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (**MAJOR.MI
 
 Before starting a release, verify every item below:
 
-- [ ] All tests pass: `raco test .` from the `q/` root
+- [ ] All tests pass: `raco test tests/` from the `q/` root
 - [ ] Version bumped in `info.rkt` **and** `util/version.rkt` (both must match)
 - [ ] `CHANGELOG.md` updated with the new version entry
 - [ ] `README.md` metrics (test count, module count) updated

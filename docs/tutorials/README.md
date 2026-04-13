@@ -18,4 +18,4 @@ Hands-on guides for extending and adopting q.
 
 - [Installation Guide](../install.md) — Full setup instructions
 - [Demos](../demos/) — Example session transcripts
-- [Architecture](../../docs/architecture/overview.md) — How q works internally
+- [Architecture](../adr/) — Architecture decision records

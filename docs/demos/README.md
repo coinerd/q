@@ -29,7 +29,7 @@ raco q --model gpt-5.4
 raco q --json
 
 # Resume a session
-raco q --resume <session-id>
+raco q --session <session-id>
 ```
 
 See the [main README](../../README.md) for installation and configuration.

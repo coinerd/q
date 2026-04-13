@@ -234,6 +234,16 @@ raco test tests/           # run the full test suite
 | `--tool <name>` | Enable specific tool(s) only (repeatable) |
 | `--project-dir <path>` | Override project directory |
 
+**Subcommands:**
+
+| Command | Purpose |
+|---------|----------|
+| `q init` | Guided setup wizard (config, provider, API key) |
+| `q doctor` | Run setup and provider diagnostics |
+| `q sessions list` | List sessions |
+| `q sessions info <id>` | Show session details |
+| `q sessions delete <id>` | Delete a session |
+
 ## Module Structure
 
 ```
@@ -250,7 +260,8 @@ q/
 ├── tests/          Full test suite (120 files)
 ├── tools/          Tool registry, scheduler, 9 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
-└── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
+├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
+└── wiring/         Run modes: interactive, JSON-RPC, mode dispatch
 ```
 
 ## Test Suite
@@ -279,6 +290,8 @@ raco test tests/tui/
 
 [MIT](LICENSE)
 
+> **Contributors:** `CONTRIBUTING.md` is excluded from release tarballs. Clone the repo for the full contributor guidelines.
+
 ## Documentation
 
 | Doc | Description |
@@ -286,7 +299,7 @@ raco test tests/tui/
 | [Install Guide](docs/install.md) | Full setup instructions |
 | [Tutorials](docs/tutorials/) | Team setup and builder cookbook |
 | [Demos](docs/demos/) | Example session transcripts |
-| [Architecture](docs/architecture/) | System design deep dives |
+| [Architecture](docs/adr/) | Architecture decision records |
 
 ## Status
 

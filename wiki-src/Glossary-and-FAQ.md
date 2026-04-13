@@ -31,7 +31,7 @@ raco pkg install
 Requires Racket 8.10+. See the [installation guide](https://github.com/coinerd/q/blob/main/q/docs/install.md).
 
 ### How do I configure a provider?
-Run `q --init` for the interactive wizard, or edit `~/.q/config.json` directly:
+Run `q init` for the guided setup wizard, or edit `~/.q/config.json` directly:
 ```json
 {
   "default-model": "gpt-4o",
