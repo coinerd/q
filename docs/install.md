@@ -38,7 +38,8 @@ cd q
 raco pkg install --auto
 
 # 3. Verify
-raco q --version   # or: racket main.rkt --version
+raco q --version              # installed package
+# From source tree instead: racket main.rkt --version
 ```
 
 ## First-Run Verification
@@ -46,8 +47,8 @@ raco q --version   # or: racket main.rkt --version
 After installing, confirm everything works:
 
 ```bash
-raco q --version            # should print: q version 0.8.1
-raco q doctor               # checks Racket version, dependencies, config
+raco q --version            # installed package; or: racket main.rkt --version
+raco q doctor               # installed package; or: racket main.rkt doctor
 ```
 
 ## Shell Setup
@@ -77,6 +78,9 @@ After setup you can run:
 q --tui          # launch the terminal UI
 q "hello"        # single-shot prompt
 ```
+
+> **From source tree** (without `raco pkg install`): prefix all commands with `racket main.rkt`.
+> For example: `racket main.rkt --tui`, `racket main.rkt "hello"`.
 
 ## Upgrading
 

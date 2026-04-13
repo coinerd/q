@@ -37,9 +37,11 @@ User input → Interface (CLI/TUI/RPC)
 
 ## Metrics (v0.8.1)
 
-- 119 source modules, 138 test files
-- 22,032 source lines, 38,032 test lines
-- 3,352 tests, 6,133 assertions (test:source ratio 1.86:1)
+> _See `racket scripts/metrics.rkt` for current numbers._
+
+- 124 source modules, 140 test files
+- 22,171 source lines, 38,076 test lines
+- 3,275 tests, 6,133 assertions (test:source ratio 1.72:1)
 - 6/6 lint checks enforced in CI
 
-For the canonical architecture description, see the [repository README](https://github.com/coinerd/q/blob/main/README.md) and [docs/architecture/overview.md](https://github.com/coinerd/q/blob/main/docs/architecture/overview.md).
+For the canonical architecture description, see the [repository README](https://github.com/coinerd/q/blob/main/README.md) and [docs/adr/README.md](https://github.com/coinerd/q/blob/main/q/docs/adr/README.md).
