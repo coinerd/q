@@ -5,7 +5,8 @@
          racket/file
          racket/list
          racket/dict
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines))
 
 (provide tool-read)
 
@@ -15,24 +16,9 @@
 ;; Maximum total bytes for output content
 (define DEFAULT-MAX-BYTES 50000)
 
-;; Check if a byte string contains null bytes (binary indicator)
-(define (contains-null-bytes? bs)
-  (for/or ([b (in-bytes bs)])
-    (= b 0)))
-
 ;; Format a single numbered line
 (define (format-line n text)
   (format "~a| ~a" n text))
-
-;; --------------------------------------------------
-;; Result helpers (local) - return tool-result structs
-;; --------------------------------------------------
-
-(define (ok content details)
-  (make-success-result content details))
-
-(define (err msg)
-  (make-error-result msg))
 
 ;; --------------------------------------------------
 ;; Main tool function
@@ -41,7 +27,7 @@
 (define (tool-read args [exec-ctx #f])
   (define path-str (hash-ref args 'path #f))
   (cond
-    [(not path-str) (err "Missing required argument: path")]
+    [(not path-str) (make-error-result "Missing required argument: path")]
     [else
      (define offset (hash-ref args 'offset 1))
      (define limit (hash-ref args 'limit #f))
@@ -49,34 +35,25 @@
      ;; 1. File existence check
      ;; (safe-mode path check is done by scheduler, not here)
      (cond
-       [(not (file-exists? path-str)) (err (format "File not found: ~a" path-str))]
+       [(not (file-exists? path-str)) (make-error-result (format "File not found: ~a" path-str))]
 
        [else
         ;; 2. Read bytes and check for binary
         (define raw-bytes (file->bytes path-str))
 
         (cond
-          [(contains-null-bytes? raw-bytes) (err (format "File appears to be binary: ~a" path-str))]
+          [(contains-null-bytes? raw-bytes)
+           (make-error-result (format "File appears to be binary: ~a" path-str))]
 
           [else
            ;; 3. Convert to text, split into lines
-           (define text (bytes->string/utf-8 raw-bytes #\?))
-           (define all-lines (string-split text "\n" #:trim? #f))
-
-           ;; Trim trailing empty element from trailing newline
-           (define has-trailing-newline
-             (and (> (string-length text) 0)
-                  (char=? (string-ref text (sub1 (string-length text))) #\newline)))
-           (define display-lines
-             (if has-trailing-newline
-                 (drop-right all-lines 1)
-                 all-lines))
-           (define total-lines (length display-lines))
+           (define-values (display-lines total-lines) (bytes->display-lines raw-bytes))
 
            ;; 4. Empty file
            (cond
              [(zero? total-lines)
-              (ok '() (hasheq 'total-lines 0 'start-line 0 'end-line 0 'path path-str))]
+              (make-success-result '()
+                                   (hasheq 'total-lines 0 'start-line 0 'end-line 0 'path path-str))]
 
              [else
               ;; 5. Apply offset/limit
@@ -90,7 +67,9 @@
 
               (cond
                 [(null? sliced)
-                 (ok '() (hasheq 'total-lines total-lines 'start-line 0 'end-line 0 'path path-str))]
+                 (make-success-result
+                  '()
+                  (hasheq 'total-lines total-lines 'start-line 0 'end-line 0 'path path-str))]
 
                 [else
                  (define formatted
@@ -106,12 +85,12 @@
                                       " bytes]")
                        joined))
 
-                 (ok (list (string-append result-text "\n"))
-                     (hasheq 'total-lines
-                             total-lines
-                             'start-line
-                             (car (first sliced))
-                             'end-line
-                             (car (last sliced))
-                             'path
-                             path-str))])])])])]))
+                 (make-success-result (list (string-append result-text "\n"))
+                                      (hasheq 'total-lines
+                                              total-lines
+                                              'start-line
+                                              (car (first sliced))
+                                              'end-line
+                                              (car (last sliced))
+                                              'path
+                                              path-str))])])])])]))
