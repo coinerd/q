@@ -10,11 +10,16 @@
 
 (require racket/date
          racket/port
-         racket/file)
+         racket/file
+         racket/path)
 
 (provide audit-log!
          with-audit-log
-         audit-log-path)
+         audit-log-path
+         current-audit-log-max-bytes)
+
+;; Maximum log size before rotation (default 10MB) — SEC-04
+(define current-audit-log-max-bytes (make-parameter 10485760))
 
 ;; ============================================================
 ;; Log path
@@ -57,6 +62,13 @@
   ;; Ensure file exists
   (unless (file-exists? log-path)
     (close-output-port (open-output-file log-path #:exists 'truncate)))
+  ;; SEC-04: Rotate log if it exceeds max size
+  (when (and (file-exists? log-path)
+             (> (file-size log-path) (current-audit-log-max-bytes)))
+    (with-handlers ([exn:fail? void])
+      (rename-file-or-directory log-path
+                                (path-replace-suffix log-path ".1")
+                                #t)))
   (call-with-output-file log-path
     (lambda (out)
       (fprintf out "~a ~a ~a ~a\n" (iso8601-now) session-id action path))

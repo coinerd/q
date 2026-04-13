@@ -15,10 +15,12 @@
          (only-in racket/path file-name-from-path)
          (only-in "../util/path-helpers.rkt" path-only)
          racket/list
+         racket/port
          racket/string
          json
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
+         "../util/checksum.rkt"
          "api.rkt"
          "manifest.rkt"
          "quarantine.rkt")
@@ -165,7 +167,23 @@
         (unless valid?
           (raise (extension-load-error (path->string path)
                                        (format "manifest validation failed: ~a" (string-join errors ", "))
-                                       'api-mismatch)))))
+                                       'api-mismatch)))
+        ;; SEC-05: Integrity hash verification
+        (define ext-dir (path-only-with-default mod-path))
+        (define current-hash (compute-extension-directory-hash ext-dir raw))
+        (define stored-hash (hash-ref raw 'integrity #f))
+        (cond
+          [(not stored-hash)
+           ;; First load: store the integrity hash
+           (hash-set! raw 'integrity current-hash)
+           (call-with-output-file manifest-path
+             (lambda (out) (write-json raw out) (newline out))
+             #:exists 'replace)]
+          [(not (equal? stored-hash current-hash))
+           (raise (extension-load-error (path->string path)
+                                        (format "integrity hash mismatch: expected ~a, got ~a"
+                                                stored-hash current-hash)
+                                        'api-mismatch))])))
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))
 
@@ -183,6 +201,21 @@
    #:type (string->symbol (hash-ref h 'type "extension"))
    #:description (hash-ref h 'description "")
    #:author (hash-ref h 'author "unknown")))
+
+;; SEC-05: Compute SHA256 hash of all files listed in the manifest
+(define (compute-extension-directory-hash ext-dir manifest-hash)
+  (define files (hash-ref manifest-hash 'files '()))
+  (if (null? files)
+      ""
+      (let ([sorted (sort files string<?)])
+        (sha256-string
+         (call-with-output-string
+          (lambda (out)
+            (for ([f (in-list sorted)])
+              (define full-path (build-path ext-dir f))
+              (when (file-exists? full-path)
+                (call-with-input-file full-path
+                  (lambda (in) (display (port->string in) out)))))))))))
 
 ;; Classify an exception into a category symbol.
 (define (classify-exception e)
