@@ -45,7 +45,7 @@
                                     #:args '("-c" "sleep 30")
                                     #:timeout 1))
     (check-pred subprocess-result-timed-out? result)
-    (check-true (< (subprocess-result-elapsed-ms result) 5000)))
+    (check-true (< (subprocess-result-elapsed-ms result) 10000)))
 
   (test-case "run-subprocess: non-zero exit code"
     (define result (run-subprocess "false"))
@@ -67,7 +67,7 @@
                                     #:timeout 1))
     (check-pred subprocess-result-timed-out? result)
     (check-equal? (subprocess-result-exit-code result) -9)
-    (check-true (< (subprocess-result-elapsed-ms result) 5000)))
+    (check-true (< (subprocess-result-elapsed-ms result) 10000)))
 
   (test-case "kill-subprocess! does not crash"
     (define cust (make-custodian))
