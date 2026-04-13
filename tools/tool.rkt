@@ -48,8 +48,8 @@
          tool-result-content
          tool-result-details
          tool-result-is-error?
-         tool-result->jsexpr
-         jsexpr->tool-result
+         tool-result->jsexpr          ; reserved for SDK consumers
+         jsexpr->tool-result           ; reserved for SDK consumers
 
          ;; ── Execution context ──
          make-exec-context
@@ -78,7 +78,7 @@
          make-tool-registry
          tool-registry?
          register-tool!
-         unregister-tool!
+         unregister-tool!             ; reserved for SDK consumers
          lookup-tool
          list-tools
          list-tools-jsexpr

@@ -26,14 +26,16 @@
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt")
 
-(provide append-entry!
-         append-entries!
-         load-session-log
-         replay-session
-         verify-session-integrity
-         repair-session-log!
-         has-pending-marker?
-         pending-marker-path)
+(provide
+ (contract-out
+  [append-entry!            (path-string? message? . -> . void?)]
+  [append-entries!          (path-string? (listof message?) . -> . void?)]
+  [load-session-log         (->* (path-string?) ((or/c #f string?)) (listof message?))]
+  [replay-session           (path-string? . -> . (listof message?))]
+  [verify-session-integrity (path-string? . -> . hash?)]
+  [repair-session-log!      (path-string? . -> . hash?)]
+  [has-pending-marker?      (path-string? . -> . boolean?)]
+  [pending-marker-path      (path-string? . -> . path?)]))
 
 ;; ── Write-ahead marker ──
 

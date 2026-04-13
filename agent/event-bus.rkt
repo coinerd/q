@@ -14,11 +14,13 @@
 
 (provide
  ;; Pub/sub event bus
- make-event-bus
+ (contract-out
+  [make-event-bus  (-> event-bus?)]
+  [subscribe!      (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) any/c)]
+  [unsubscribe!    (-> event-bus? any/c void?)]
+  [publish!        (-> event-bus? any/c any/c)])
  event-bus?
- subscribe!
- unsubscribe!
- publish!
+ ;; Error handler parameter — reserved for SDK consumers
  current-event-bus-error-handler)
 
 ;; ============================================================

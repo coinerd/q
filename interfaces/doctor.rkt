@@ -51,7 +51,7 @@
 ;; Run a shell command and capture its stdout as a string.
 ;; Returns #f if the command fails or is not found.
 (define (shell-command-output cmd)
-  (with-handlers ([exn:fail? (λ (_) #f)])
+  (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: shell command failed: ~a" (exn-message e)) #f)])
     (define port (open-output-string))
     (define result
       (parameterize ([current-output-port port]
@@ -63,14 +63,14 @@
 
 ;; Try to write a small file to a directory to verify writability.
 (define (directory-writable? dir)
-  (with-handlers ([exn:fail? (λ (_) #f)])
+  (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: directory not writable ~a: ~a" dir (exn-message e)) #f)])
     (define tmp (make-temporary-file "q-doctor-~a.tmp" #f dir))
     (delete-file tmp)
     #t))
 
 ;; Parse a version string like "8.12.0.4" into a list of integers.
 (define (parse-version-string s)
-  (with-handlers ([exn:fail? (λ (_) '())])
+  (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: failed to parse version ~a: ~a" s (exn-message e)) '())])
     (map string->number (string-split (or s "") "."))))
 
 ;; Compare two version lists lexicographically.
@@ -144,7 +144,9 @@
                    (format "~a not found (run q once to create)" cfg-path))]
     [else
      (define content
-       (with-handlers ([exn:fail? (λ (e) #f)])
+       (with-handlers ([exn:fail? (λ (e)
+                                    (log-warning "doctor: failed to read config ~a: ~a" cfg-path (exn-message e))
+                                    #f)])
          (call-with-input-file cfg-path
            (λ (in) (read-json in)))))
      (cond
@@ -258,12 +260,14 @@
   ;; They may be installed but fail to compile on some Racket versions.
   ;; Use dynamic-require for pkg/lib to avoid hard dependency.
   (define table
-    (with-handlers ([exn:fail? (λ (_) #f)])
+    (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: failed to load pkg-table: ~a" (exn-message e)) #f)])
       ((dynamic-require 'pkg/lib 'installed-pkg-table))))
   (define (pkg-installed? name)
     (and table (hash-has-key? table name)))
   (define (mod-loadable? mod-path)
-    (with-handlers ([exn:fail? (λ (_) #f)])
+    (with-handlers ([exn:fail? (λ (e)
+                                 (log-warning "doctor: module ~a not loadable: ~a" mod-path (exn-message e))
+                                 #f)])
       (dynamic-require mod-path #f)
       #t))
   (define tui-term-installed? (pkg-installed? "tui-term"))

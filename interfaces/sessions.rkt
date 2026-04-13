@@ -56,7 +56,10 @@
           (for/list ([p (in-list session-paths)])
             (define jsonl (build-path p "session.jsonl"))
             (define mtime
-              (with-handlers ([exn:fail? (lambda (_) 0)])
+              (with-handlers ([exn:fail? (lambda (e)
+                              (log-warning "sessions: failed to get mtime for ~a: ~a"
+                                           jsonl (exn-message e))
+                              0)])
                 (file-or-directory-modify-seconds jsonl)))
             (list (path->string (file-name-from-path p)) p mtime)))
         (map (lambda (t) (list (car t) (cadr t))) (sort with-time > #:key caddr)))))
@@ -71,11 +74,17 @@
         (file-size jsonl-path)
         0))
   (define mtime
-    (with-handlers ([exn:fail? (lambda (_) 0)])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "sessions: failed to get mtime for ~a: ~a"
+                                              jsonl-path (exn-message e))
+                                 0)])
       (file-or-directory-modify-seconds jsonl-path)))
   ;; Count entries and extract model from first few messages
   (define entries
-    (with-handlers ([exn:fail? (lambda (_) '())])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "sessions: failed to read ~a: ~a"
+                                              jsonl-path (exn-message e))
+                                 '())])
       (jsonl-read-all-valid jsonl-path)))
   (define message-count (length entries))
   ;; Try to find model from first assistant message
@@ -175,7 +184,10 @@
      ;; Count tool calls from messages
      (define jsonl-path (build-path session-path "session.jsonl"))
      (define entries
-       (with-handlers ([exn:fail? (lambda (_) '())])
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning "sessions: failed to read ~a: ~a"
+                                                 jsonl-path (exn-message e))
+                                    '())])
          (jsonl-read-all-valid jsonl-path)))
      (define tool-call-count
        (for/sum ([e (in-list entries)])
