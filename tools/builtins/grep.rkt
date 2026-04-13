@@ -5,7 +5,10 @@
          racket/file
          racket/list
          racket/path
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/glob.rkt" glob->regexp)
+         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines)
+         (only-in "../../util/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
 (provide tool-grep)
 
@@ -18,48 +21,22 @@
 (define DEFAULT-MAX-RESULTS 50)
 (define DEFAULT-CONTEXT-LINES 2)
 
-;; VCS / skip directory names
-(define SKIP-DIRS '(".git" ".hg" ".svn" "node_modules"))
-
 ;; ============================================================
 ;; Internal helpers
 ;; ============================================================
-
-;; Check if a byte string contains null bytes (binary indicator)
-(define (contains-null-bytes? bs)
-  (for/or ([b (in-bytes bs)])
-    (= b 0)))
-
-;; Check if a path component is hidden (starts with .)
-(define (hidden-element? path-str)
-  (define elem
-    (if (path? path-str)
-        (path->string (file-name-from-path path-str))
-        path-str))
-  (and elem (> (string-length elem) 0) (char=? (string-ref elem 0) #\.)))
 
 ;; Check if any component of the path is hidden or a VCS dir
 (define (should-skip-path? p)
   (define parts (explode-path p))
   (for/or ([part (in-list parts)])
     (define s (path->string part))
-    (or (hidden-element? s) (member s SKIP-DIRS))))
+    (or (hidden-name? s) (member s skip-dirs))))
 
 ;; Compile the regex pattern
 (define (compile-pattern pattern case-insensitive?)
   (if case-insensitive?
       (regexp (string-append "(?i:" pattern ")"))
       (regexp pattern)))
-
-;; ============================================================
-;; Result helpers - return tool-result structs
-;; ============================================================
-
-(define (ok content details)
-  (make-success-result content details))
-
-(define (err msg)
-  (make-error-result msg))
 
 ;; ============================================================
 ;; Core search in a single file
@@ -123,17 +100,7 @@
 ;; Collect files to search
 ;; ============================================================
 
-;; Simple glob pattern → regexp converter
-;; Supports * (any chars) and ? (single char)
-(define (simple-glob->regexp glob-str)
-  (define escaped
-    (for/list ([ch (in-string glob-str)])
-      (cond
-        [(char=? ch #\*) "[^/]*"]
-        [(char=? ch #\?) "[^/]"]
-        [(regexp-match? #rx"[.+^${}()|\\[\\]\\\\]" (string ch)) (string-append "\\" (string ch))]
-        [else (string ch)])))
-  (regexp (string-append "^" (string-join escaped "") "$")))
+;; Glob conversion now lives in util/glob.rkt (glob->regexp)
 
 ;; Recursively collect files under dir matching glob-pattern,
 ;; skipping hidden and VCS dirs.
@@ -146,7 +113,7 @@
                  #:when (file-exists? p))
         p)))
   ;; Filter by glob and skip hidden/VCS
-  (define rx (simple-glob->regexp glob-pattern))
+  (define rx (glob->regexp glob-pattern #:allow-slash? #f))
   (for/list ([p (in-list all-paths)]
              #:when (let ([fname (path->string (file-name-from-path p))]) (regexp-match? rx fname))
              #:unless (should-skip-path? p))
@@ -162,8 +129,8 @@
   (define path-str (hash-ref args 'path #f))
 
   (cond
-    [(not pattern) (err "Missing required argument: pattern")]
-    [(not path-str) (err "Missing required argument: path")]
+    [(not pattern) (make-error-result "Missing required argument: pattern")]
+    [(not path-str) (make-error-result "Missing required argument: path")]
     [else
      (define glob-pattern (hash-ref args 'glob DEFAULT-GLOB))
      (define case-insensitive? (hash-ref args 'case-insensitive? DEFAULT-CASE-INSENSITIVE))
@@ -178,14 +145,14 @@
 
      (cond
        [(not (or (file-exists? the-path) (directory-exists? the-path)))
-        (err (format "Path not found: ~a" path-str))]
+        (make-error-result (format "Path not found: ~a" path-str))]
        [(file-exists? the-path)
         ;; Single file search
         (search-single-file the-path path-str pattern-rx context-lines max-results 1)]
        [(directory-exists? the-path)
         ;; Directory search
         (search-directory the-path path-str pattern-rx glob-pattern context-lines max-results)]
-       [else (err (format "Path not found: ~a" path-str))])]))
+       [else (make-error-result (format "Path not found: ~a" path-str))])]))
 
 ;; ============================================================
 ;; Single file search
@@ -198,12 +165,12 @@
   (cond
     [(not raw-bytes)
      ;; Unreadable file → treat as empty success
-     (ok
+     (make-success-result
       '()
       (hasheq 'total-matches 0 'files-searched files-searched 'files-with-matches 0 'truncated? #f))]
     [(contains-null-bytes? raw-bytes)
      ;; Binary → skip silently, return empty success
-     (ok
+     (make-success-result
       '()
       (hasheq 'total-matches 0 'files-searched files-searched 'files-with-matches 0 'truncated? #f))]
     [else
@@ -237,15 +204,15 @@
      ;; Deduplicate and sort content lines (context may overlap)
      (define unique-lines (remove-duplicates content-lines string=?))
 
-     (ok unique-lines
-         (hasheq 'total-matches
-                 total-matches
-                 'files-searched
-                 files-searched
-                 'files-with-matches
-                 files-with-matches
-                 'truncated?
-                 truncated?))]))
+     (make-success-result unique-lines
+                          (hasheq 'total-matches
+                                  total-matches
+                                  'files-searched
+                                  files-searched
+                                  'files-with-matches
+                                  files-with-matches
+                                  'truncated?
+                                  truncated?))]))
 
 ;; ============================================================
 ;; Directory search
@@ -319,12 +286,12 @@
 
   (define files-with-matches (length (remove-duplicates (map first all-results) string=?)))
 
-  (ok unique-lines
-      (hasheq 'total-matches
-              total-matches
-              'files-searched
-              (length files)
-              'files-with-matches
-              files-with-matches
-              'truncated?
-              truncated?)))
+  (make-success-result unique-lines
+                       (hasheq 'total-matches
+                               total-matches
+                               'files-searched
+                               (length files)
+                               'files-with-matches
+                               files-with-matches
+                               'truncated?
+                               truncated?)))

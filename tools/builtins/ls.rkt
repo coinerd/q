@@ -3,26 +3,14 @@
 (require racket/file
          racket/format
          racket/list
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/path-filters.rkt" hidden-name?))
 
 (provide tool-ls)
 
 ;; --------------------------------------------------
-;; Result helpers (local) - return tool-result structs
-;; --------------------------------------------------
-
-(define (ok content details)
-  (make-success-result content details))
-
-(define (err msg)
-  (make-error-result msg))
-
-;; --------------------------------------------------
 ;; Entry classification
 ;; --------------------------------------------------
-
-(define (hidden? name)
-  (and (> (string-length name) 0) (char=? (string-ref name 0) #\.)))
 
 (define (entry-type base-path name)
   (define full (build-path base-path name))
@@ -87,13 +75,13 @@
   ;; (safe-mode path check is done by scheduler, not here)
   (define path-str (hash-ref args 'path #f))
   (cond
-    [(not path-str) (err "Missing required argument: path")]
+    [(not path-str) (make-error-result "Missing required argument: path")]
 
     ;; 2. Path must exist
     [(not (directory-exists? path-str))
      (cond
-       [(file-exists? path-str) (err (format "Not a directory: ~a" path-str))]
-       [else (err (format "Path not found: ~a" path-str))])]
+       [(file-exists? path-str) (make-error-result (format "Not a directory: ~a" path-str))]
+       [else (make-error-result (format "Path not found: ~a" path-str))])]
 
     [else
      ;; 3. Read directory entries
@@ -105,7 +93,7 @@
      (define filtered
        (if show-hidden?
            (map path->string raw-names)
-           (filter (λ (n) (not (hidden? n))) (map path->string raw-names))))
+           (filter (λ (n) (not (hidden-name? n))) (map path->string raw-names))))
 
      ;; 4. Build entry structs
      (define entries
@@ -128,12 +116,12 @@
      (define dir-count (count (λ (e) (memq (entry-type-e e) '(dir link))) sorted))
      (define file-count (count (λ (e) (eq? (entry-type-e e) 'file)) sorted))
 
-     (ok content-lines
-         (hasheq 'total-entries
-                 (length sorted)
-                 'path
-                 path-str
-                 'directories
-                 dir-count
-                 'files
-                 file-count))]))
+     (make-success-result content-lines
+                          (hasheq 'total-entries
+                                  (length sorted)
+                                  'path
+                                  path-str
+                                  'directories
+                                  dir-count
+                                  'files
+                                  file-count))]))

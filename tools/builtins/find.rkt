@@ -3,51 +3,12 @@
 (require racket/file
          racket/string
          racket/path
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/glob.rkt" glob->regexp)
+         (only-in "../../util/path-filters.rkt"
+                  hidden-name? vcs-dir? skip-dirs path-component-hidden?))
 
 (provide tool-find)
-
-;; --------------------------------------------------
-;; Result helpers - return tool-result structs
-;; --------------------------------------------------
-
-(define (ok content details)
-  (make-success-result content details))
-
-(define (err msg)
-  (make-error-result msg))
-
-;; --------------------------------------------------
-;; Glob pattern → regexp
-;; --------------------------------------------------
-
-(define (glob->regexp pattern)
-  (define escaped
-    (for/list ([ch (in-string pattern)])
-      (case ch
-        [(#\*) ".*"]
-        [(#\?) "."]
-        [(#\. #\+ #\( #\) #\[ #\] #\{ #\} #\\ #\^ #\$ #\|) (string #\\ ch)]
-        [else (string ch)])))
-  (regexp (string-append "^" (string-join escaped "") "$")))
-
-;; --------------------------------------------------
-;; VCS / skip predicates
-;; --------------------------------------------------
-
-(define VCS-DIRS '(".git" ".hg" ".svn" "node_modules"))
-
-(define (vcs-dir? name)
-  (member name VCS-DIRS))
-
-(define (hidden-name? name)
-  (and (> (string-length name) 0) (char=? (string-ref name 0) #\.)))
-
-(define (path-component-hidden? abs-path)
-  ;; Check if any component of the path is hidden
-  (for/or ([part (in-list (explode-path abs-path))])
-    (define s (path->string part))
-    (hidden-name? s)))
 
 ;; --------------------------------------------------
 ;; Core recursive walk
@@ -109,18 +70,19 @@
 (define (tool-find args [exec-ctx #f])
   ;; (safe-mode path check is done by scheduler, not here)
   (cond
-    [(not (hash-has-key? args 'path)) (err "Missing required argument: path")]
+    [(not (hash-has-key? args 'path)) (make-error-result "Missing required argument: path")]
     [else
      (define path-str (hash-ref args 'path))
      (cond
-       [(not (string? path-str)) (err "Argument 'path' must be a string")]
+       [(not (string? path-str)) (make-error-result "Argument 'path' must be a string")]
 
        ;; 2. Path must exist
        [(not (or (directory-exists? path-str) (file-exists? path-str)))
-        (err (format "Path not found: ~a" path-str))]
+        (make-error-result (format "Path not found: ~a" path-str))]
 
        ;; 3. Path must be a directory
-       [(not (directory-exists? path-str)) (err (format "Path is not a directory: ~a" path-str))]
+       [(not (directory-exists? path-str))
+        (make-error-result (format "Path is not a directory: ~a" path-str))]
 
        [else
         ;; 4. Parse optional arguments
@@ -132,7 +94,7 @@
         ;; Compile glob pattern if provided
         (define name-re
           (if name-pattern
-              (glob->regexp name-pattern)
+              (glob->regexp name-pattern #:allow-slash? #t)
               #f))
 
         ;; Check if root path itself is under a hidden directory
@@ -145,5 +107,6 @@
 
         (define truncated? (> total-found max-results))
 
-        (ok results
-            (hasheq 'total-found total-found 'truncated? truncated? 'search-root path-str))])]))
+        (make-success-result
+         results
+         (hasheq 'total-found total-found 'truncated? truncated? 'search-root path-str))])]))

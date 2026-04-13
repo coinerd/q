@@ -12,8 +12,10 @@
 
 (require racket/string
          (only-in "../tool.rkt"
-                  make-success-result make-error-result
-                  exec-context? exec-context-working-directory)
+                  make-success-result
+                  make-error-result
+                  exec-context?
+                  exec-context-working-directory)
          "../../sandbox/subprocess.rkt"
          "../../sandbox/limits.rkt"
          "../../runtime/settings.rkt")
@@ -24,15 +26,7 @@
 ;; Destructive command patterns (SEC-03)
 ;; Each pattern is a string that is checked case-insensitively
 ;; against the command string.
-(define destructive-patterns
-  '("rm -rf"
-    "rmdir"
-    "mkfs"
-    "dd if="
-    "format"
-    "del /"
-    "shutdown"
-    "reboot"))
+(define destructive-patterns '("rm -rf" "rmdir" "mkfs" "dd if=" "format" "del /" "shutdown" "reboot"))
 
 ;; Check if a command matches any destructive pattern.
 (define (destructive-command? command)
@@ -51,51 +45,37 @@
          destructive-patterns)
 
 ;; --------------------------------------------------
-;; Result helpers
-;; --------------------------------------------------
-
-(define (err msg)
-  (make-error-result msg))
-
-;; --------------------------------------------------
 ;; Main tool function
 ;; --------------------------------------------------
 
 (define (tool-bash args [exec-ctx #f])
   (define command (hash-ref args 'command #f))
   (cond
-    [(not command)
-     (err "Missing required argument: command")]
-    [(not (non-empty-string? command))
-     (err "command must be a non-empty string")]
+    [(not command) (make-error-result "Missing required argument: command")]
+    [(not (non-empty-string? command)) (make-error-result "command must be a non-empty string")]
     [else
      ;; Optional destructive command warning (SEC-03)
-     (when (and (current-warn-on-destructive)
-                (destructive-command? command))
-       (fprintf (current-error-port)
-                "WARNING: Destructive command detected: ~a~n"
-                command))
+     (when (and (current-warn-on-destructive) (destructive-command? command))
+       (fprintf (current-error-port) "WARNING: Destructive command detected: ~a~n" command))
      (define timeout-secs (hash-ref args 'timeout DEFAULT-TIMEOUT-SECONDS))
      (define work-dir (hash-ref args 'working-directory #f))
 
      (define result
-       (run-subprocess
-        "/bin/sh"
-        #:args (list "-c" command)
-        #:limits (exec-limits timeout-secs 1048576 536870912 10)
-        #:directory (or work-dir
-                        (and exec-ctx (exec-context-working-directory exec-ctx))
-                        (current-directory))))
+       (run-subprocess "/bin/sh"
+                       #:args (list "-c" command)
+                       #:limits (exec-limits timeout-secs 1048576 536870912 10)
+                       #:directory (or work-dir
+                                       (and exec-ctx (exec-context-working-directory exec-ctx))
+                                       (current-directory))))
 
      (define stdout (subprocess-result-stdout result))
      (define stderr-out (subprocess-result-stderr result))
      ;; Combine stdout and stderr; include stderr if non-empty
      (define raw-combined
-       (string-trim
-        (string-append stdout
-                       (if (string=? stderr-out "")
-                           ""
-                           (string-append "\n" stderr-out)))))
+       (string-trim (string-append stdout
+                                   (if (string=? stderr-out "")
+                                       ""
+                                       (string-append "\n" stderr-out)))))
      ;; When output is empty, provide diagnostic feedback to the LLM
      ;; so it understands the command produced nothing and can change strategy
      (define combined
@@ -103,10 +83,12 @@
            "(Command produced no output. The command may have completed without producing any output, or the output was empty. Consider
                checking: the command syntax, file paths, available tools, or try a different approach.)"
            raw-combined))
-     (make-success-result
-      (list (hasheq 'type "text"
-                    'text combined))
-      (hasheq 'exit-code (subprocess-result-exit-code result)
-              'timed-out? (subprocess-result-timed-out? result)
-              'duration-ms (subprocess-result-elapsed-ms result)
-              'command command))]))
+     (make-success-result (list (hasheq 'type "text" 'text combined))
+                          (hasheq 'exit-code
+                                  (subprocess-result-exit-code result)
+                                  'timed-out?
+                                  (subprocess-result-timed-out? result)
+                                  'duration-ms
+                                  (subprocess-result-elapsed-ms result)
+                                  'command
+                                  command))]))

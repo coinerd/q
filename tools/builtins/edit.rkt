@@ -13,16 +13,6 @@
 (provide tool-edit)
 
 ;; --------------------------------------------------
-;; Result helpers (local) - return tool-result structs
-;; --------------------------------------------------
-
-(define (ok content details)
-  (make-success-result content details))
-
-(define (err msg)
-  (make-error-result msg))
-
-;; --------------------------------------------------
 ;; String helpers
 ;; --------------------------------------------------
 
@@ -51,20 +41,21 @@
 (define (tool-edit args [exec-ctx #f])
   (define path-str (hash-ref args 'path #f))
   (cond
-    [(not path-str) (err "Missing required argument: path")]
+    [(not path-str) (make-error-result "Missing required argument: path")]
     [else
      (define old-text (hash-ref args 'old-text #f))
      (cond
-       [(not old-text) (err "Missing required argument: old-text")]
+       [(not old-text) (make-error-result "Missing required argument: old-text")]
        [else
         (define new-text (hash-ref args 'new-text #f))
         (cond
-          [(not new-text) (err "Missing required argument: new-text")]
+          [(not new-text) (make-error-result "Missing required argument: new-text")]
           [else
            ;; 1. File existence check
            ;; (safe-mode path check is done by scheduler, not here)
            (cond
-             [(not (file-exists? path-str)) (err (format "File not found: ~a" path-str))]
+             [(not (file-exists? path-str))
+              (make-error-result (format "File not found: ~a" path-str))]
 
              [else
               ;; 2. Read file content
@@ -74,10 +65,10 @@
               (define occurrences (count-occurrences content old-text))
 
               (cond
-                [(zero? occurrences) (err (format "old-text not found in ~a" path-str))]
+                [(zero? occurrences) (make-error-result (format "old-text not found in ~a" path-str))]
 
                 [(> occurrences 1)
-                 (err
+                 (make-error-result
                   (format "old-text appears ~a times in ~a; be more specific" occurrences path-str))]
 
                 [else
@@ -86,17 +77,19 @@
 
                  ;; 5. Write back
                  (with-handlers ([exn:fail:filesystem?
-                                  (lambda (e) (err (format "Write error: ~a" (exn-message e))))])
+                                  (lambda (e)
+                                    (make-error-result (format "Write error: ~a" (exn-message e))))])
                    (call-with-output-file path-str
                                           (lambda (out) (display new-content out))
                                           #:exists 'replace)
 
-                   (ok (list (format "Edited ~a (replaced ~a occurrence)" path-str occurrences))
-                       (hasheq 'path
-                               path-str
-                               'replacements
-                               1
-                               'old-length
-                               (string-length old-text)
-                               'new-length
-                               (string-length new-text))))])])])])]))
+                   (make-success-result
+                    (list (format "Edited ~a (replaced ~a occurrence)" path-str occurrences))
+                    (hasheq 'path
+                            path-str
+                            'replacements
+                            1
+                            'old-length
+                            (string-length old-text)
+                            'new-length
+                            (string-length new-text))))])])])])]))
