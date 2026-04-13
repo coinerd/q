@@ -154,6 +154,7 @@
          session-id
          session-history
          fork-session
+         close-session!
          ;; Re-exported from interfaces/sessions.rkt
          sessions-list
          sessions-list->strings
@@ -165,42 +166,6 @@
 ;; ============================================================
 ;; main — entry point
 ;; ============================================================
-
-;; Run a `q sessions` CLI command.
-;; Dispatches to sessions list/info/delete based on cli-config.
-(define (run-sessions-command cfg)
-  (define subcmd (cli-config-sessions-subcommand cfg))
-  (define args (cli-config-sessions-args cfg))
-  (define session-dir
-    (or (cli-config-session-dir cfg)
-        (let ([s (load-settings)]) (path->string (session-dir-from-settings s)))))
-  (case subcmd
-    [(list)
-     (define limit
-       (or (and (>= (length args) 1) (let ([n (string->number (car args))]) (and n n))) 20))
-     (define sess-list (sessions-list session-dir #:limit limit))
-     (for-each displayln (sessions-list->strings sess-list))]
-    [(info)
-     (define sid
-       (if (>= (length args) 1)
-           (car args)
-           #f))
-     (if sid
-         (displayln (sessions-info->string (sessions-info session-dir sid)))
-         (displayln "Usage: q sessions info <id>"))]
-    [(delete)
-     (define sid
-       (if (>= (length args) 1)
-           (car args)
-           #f))
-     (if sid
-         (let ([result (sessions-delete session-dir sid #:confirm? #t)])
-           (case result
-             [(ok) (displayln (format "Session ~a deleted." sid))]
-             [(not-found) (displayln (format "Session not found: ~a" sid))]
-             [(cancelled) (displayln "Cancelled.")]))
-         (displayln "Usage: q sessions delete <id>"))]
-    [else (displayln "Usage: q sessions <list|info|delete> [args]")]))
 
 (define (main)
   (define cfg (parse-cli-args))

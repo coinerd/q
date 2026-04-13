@@ -40,10 +40,33 @@
                               #:tools [tools (or/c (listof hash?) #f)]
                               #:cancellation-token [cancellation-token (or/c cancellation-token? #f)]
                               #:hook-dispatcher [hook-dispatcher (or/c procedure? #f)])
-                             [result loop-result?])]))
+                             [result loop-result?])]
+                       [build-raw-messages (-> (listof message?) (listof hash?))]
+                       [stream-from-provider
+                        (-> provider?
+                            model-request?
+                            event-bus?
+                            string?
+                            string?
+                            loop-state?
+                            (or/c procedure? #f)
+                            (or/c cancellation-token? #f)
+                            hash?)]
+                       [handle-cancellation (-> event-bus? string? string? loop-state? loop-result?)]
+                       [build-stream-result
+                        (-> hash?
+                            (listof hash?)
+                            event-bus?
+                            string?
+                            string?
+                            loop-state?
+                            (or/c (listof hash?) #f)
+                            provider?
+                            (or/c procedure? #f)
+                            loop-result?)]))
 
 ;; ============================================================
-;; Helpers
+;; Helpers (shared utilities)
 ;; ============================================================
 
 ;; Estimate token count from message/response text as fallback.
@@ -94,7 +117,365 @@
   evt)
 
 ;; ============================================================
-;; Main entry point
+;; Extracted helper: build-raw-messages
+;; ============================================================
+
+;; build-raw-messages : (listof message?) -> (listof hash?)
+;; PURE function — converts a list of message? structs into raw OpenAI-format
+;; hash messages. No side effects, no bus/state needed.
+(define (build-raw-messages context)
+  (append*
+   (for/list ([msg (in-list context)])
+     (define role (message-role msg))
+     (define parts (message-content msg))
+     (cond
+       ;; user -> simple text message
+       [(eq? role 'user) (list (hasheq 'role "user" 'content (parts->text-string parts)))]
+
+       ;; assistant -> text + optional tool_calls
+       [(eq? role 'assistant)
+        (define text-parts (filter text-part? parts))
+        (define tc-parts (filter tool-call-part? parts))
+        (define text-content (parts->text-string text-parts))
+        (if (null? tc-parts)
+            ;; text-only assistant message
+            (list (hasheq 'role "assistant" 'content text-content))
+            ;; assistant with tool calls -- OpenAI format
+            ;; Note: GLM rejects 'null for content, so we omit the field when empty
+            (let* ([tool-calls-list (for/list ([tc (in-list tc-parts)])
+                                      (hasheq 'id
+                                              (tool-call-part-id tc)
+                                              'type
+                                              "function"
+                                              'function
+                                              (hasheq 'name
+                                                      (tool-call-part-name tc)
+                                                      'arguments
+                                                      (tool-call-part-arguments tc))))]
+                   [assistant-msg (if (string=? text-content "")
+                                      ;; No text content: omit content field (GLM compatible)
+                                      (hasheq 'role "assistant" 'tool_calls tool-calls-list)
+                                      ;; Has text content: include content field
+                                      (hasheq 'role
+                                              "assistant"
+                                              'content
+                                              text-content
+                                              'tool_calls
+                                              tool-calls-list))])
+              (list assistant-msg)))]
+
+       ;; tool -> one OpenAI message per tool-result-part
+       [(eq? role 'tool)
+        (for/list ([p (in-list parts)]
+                   #:when (tool-result-part? p))
+          (hasheq 'role
+                  "tool"
+                  'tool_call_id
+                  (tool-result-part-tool-call-id p)
+                  'content
+                  (result-content->string (tool-result-part-content p))))]
+
+       ;; fallback -- unknown role
+       [else (list (hasheq 'role (symbol->string role) 'content (parts->text-string parts)))]))))
+
+;; ============================================================
+;; Extracted helper: stream-from-provider
+;; ============================================================
+
+;; stream-from-provider : provider model-request event-bus string string loop-state
+;;                        (or/c procedure? #f) (or/c cancellation-token? #f) -> hash
+;; Wraps the streaming loop. Returns a hash with keys:
+;;   'text            — accumulated text string
+;;   'tool-calls      — list of accumulated tool-call deltas
+;;   'all-chunks      — list of all stream chunks
+;;   'cancelled?      — boolean
+;;   'stream-blocked? — boolean (from message-update hook block)
+(define (stream-from-provider provider
+                              req
+                              bus
+                              session-id
+                              turn-id
+                              state
+                              hook-dispatcher
+                              cancellation-token)
+  (define accumulated-text (box ""))
+  (define accumulated-tool-calls (box '()))
+  (define all-chunks (box '()))
+  (define cancelled-during-stream (box #f))
+  (define stream-blocked (box #f))
+
+  (define stream-gen (provider-stream provider req))
+
+  (let stream-loop ()
+    (define chunk (stream-gen))
+    (when (and chunk (not (eq? chunk #f)))
+      (set-box! all-chunks (cons chunk (unbox all-chunks)))
+      (when (stream-chunk-delta-text chunk)
+        ;; Text delta
+        (set-box! accumulated-text
+                  (string-append (unbox accumulated-text) (stream-chunk-delta-text chunk)))
+        (emit! bus
+               session-id
+               turn-id
+               "model.stream.delta"
+               (hasheq 'delta (stream-chunk-delta-text chunk))
+               #:state state)
+        ;; Dispatch message-update hook for text delta
+        (when hook-dispatcher
+          (define update-result
+            (hook-dispatcher 'message-update
+                             (hasheq 'session-id
+                                     session-id
+                                     'turn-id
+                                     turn-id
+                                     'delta-text
+                                     (stream-chunk-delta-text chunk)
+                                     'delta-tool-call
+                                     #f)))
+          (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
+            (set-box! stream-blocked #t))))
+      (when (stream-chunk-delta-tool-call chunk)
+        ;; Tool call delta
+        (define tc-delta (stream-chunk-delta-tool-call chunk))
+        (set-box! accumulated-tool-calls (append (unbox accumulated-tool-calls) (list tc-delta)))
+        (emit! bus
+               session-id
+               turn-id
+               "model.stream.delta"
+               (hasheq 'delta-tool-call tc-delta)
+               #:state state)
+        ;; Dispatch message-update hook for tool-call delta
+        (when hook-dispatcher
+          (define update-result
+            (hook-dispatcher 'message-update
+                             (hasheq 'session-id
+                                     session-id
+                                     'turn-id
+                                     turn-id
+                                     'delta-text
+                                     #f
+                                     'delta-tool-call
+                                     tc-delta)))
+          (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
+            (set-box! stream-blocked #t))))
+      (when (stream-chunk-done? chunk)
+        ;; Stream completed
+        (emit! bus
+               session-id
+               turn-id
+               "model.stream.completed"
+               (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
+               #:state state))
+      ;; Check cancellation after processing chunk
+      (cond
+        [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
+         (set-box! cancelled-during-stream #t)
+         (emit! bus
+                session-id
+                turn-id
+                "turn.cancelled"
+                (hasheq 'reason "cancellation-token")
+                #:state state)]
+        [(unbox stream-blocked) (void)] ;; message-update hook blocked -- stop streaming
+        [else (stream-loop)])))
+
+  (hasheq 'text
+          (unbox accumulated-text)
+          'tool-calls
+          (unbox accumulated-tool-calls)
+          'all-chunks
+          (unbox all-chunks)
+          'cancelled?
+          (unbox cancelled-during-stream)
+          'stream-blocked?
+          (unbox stream-blocked)))
+
+;; ============================================================
+;; Extracted helper: handle-cancellation
+;; ============================================================
+
+;; handle-cancellation : event-bus string string loop-state -> loop-result?
+;; Emits turn.cancelled and turn.completed events, returns a cancelled loop-result.
+(define (handle-cancellation bus session-id turn-id state)
+  (emit! bus
+         session-id
+         turn-id
+         "turn.completed"
+         (hasheq 'termination 'cancelled 'turnId turn-id 'reason "cancellation-token")
+         #:state state)
+  (make-loop-result (loop-state-messages state)
+                    'cancelled
+                    (hasheq 'turnId turn-id 'reason "cancellation-token")))
+
+;; ============================================================
+;; Extracted helper: build-stream-result
+;; ============================================================
+
+;; build-stream-result : hash (listof hash) event-bus string string loop-state
+;;                       (or/c (listof hash?) #f) provider (or/c procedure? #f) -> loop-result?
+;; Takes accumulated stream data and builds the final loop-result, handling:
+;;   - Tool call accumulation via accumulate-tool-call-deltas
+;;   - Usage estimation
+;;   - model-response-post hook
+;;   - message-end hook (amend/block)
+;;   - Building the final assistant message
+;;   - Checking for tool calls → completed vs tool-calls-pending
+(define (build-stream-result stream-data
+                             raw-messages
+                             bus
+                             session-id
+                             turn-id
+                             state
+                             tools
+                             provider
+                             hook-dispatcher)
+  (define accumulated-text (hash-ref stream-data 'text))
+  (define all-chunks (hash-ref stream-data 'all-chunks))
+
+  ;; Build content parts from accumulated stream data
+  (define text-part (make-text-part accumulated-text))
+
+  ;; Tool calls from accumulated deltas using the tested accumulation logic
+  (define accumulated-tcs (accumulate-tool-call-deltas (reverse all-chunks)))
+
+  (define tool-call-parts
+    (for/list ([tc (in-list accumulated-tcs)])
+      (make-tool-call-part (hash-ref tc 'id "")
+                           (hash-ref tc 'name "")
+                           (hash-ref tc 'arguments "{}"))))
+
+  (define content-parts (append (list text-part) tool-call-parts))
+
+  ;; Usage from the last stream chunk that has usage data
+  (define stream-usage
+    (for/first ([c (in-list all-chunks)]
+                #:when (stream-chunk-usage c))
+      (stream-chunk-usage c)))
+
+  ;; When provider returns no usage, estimate from message lengths
+  (define effective-usage
+    (if (usage-empty? stream-usage)
+        (let ([est (estimate-tokens raw-messages accumulated-text)])
+          (hash 'prompt_tokens est 'completion_tokens 0 'total_tokens est 'estimated? #t))
+        stream-usage))
+
+  ;; R2-7: model-response-post hook -- dispatch after response received
+  ;; Supports pass/amend semantics (block not meaningful for completed response).
+  (when hook-dispatcher
+    (define post-payload
+      (hasheq 'model-name
+              (object-name provider)
+              'response-content
+              accumulated-text
+              'usage
+              (or stream-usage (hasheq))
+              'tool-call-count
+              (length tool-call-parts)))
+    (hook-dispatcher 'model-response-post post-payload))
+
+  ;; Dispatch 'message-end hook -- extensions can amend content or suppress
+  (define msg-end-payload
+    (hasheq 'session-id
+            session-id
+            'turn-id
+            turn-id
+            'content
+            accumulated-text
+            'tool-call-count
+            (length tool-call-parts)
+            'usage
+            (or effective-usage (hasheq))))
+  (define msg-end-result (and hook-dispatcher (hook-dispatcher 'message-end msg-end-payload)))
+
+  ;; Handle message-end result -- hook-dispatcher returns (list action payload) or #f
+  (define final-text
+    (if (and (hook-result? msg-end-result) (eq? (hook-result-action msg-end-result) 'amend))
+        (hash-ref (hook-result-payload msg-end-result) 'content accumulated-text)
+        accumulated-text))
+
+  (cond
+    [(and (hook-result? msg-end-result) (eq? (hook-result-action msg-end-result) 'block))
+     ;; message-end blocked -- return completed with empty content
+     (emit! bus
+            session-id
+            turn-id
+            "turn.completed"
+            (hasheq 'termination 'completed 'turnId turn-id 'reason "message-end-blocked")
+            #:state state)
+     (make-loop-result (loop-state-messages state)
+                       'hook-blocked
+                       (hasheq 'turnId turn-id 'hook 'message-end))]
+    [else
+     ;; Rebuild text-part with potentially amended content
+     (define final-text-part (make-text-part final-text))
+     (define final-content-parts (append (list final-text-part) tool-call-parts))
+
+     ;; Build assistant message
+     (define assistant-msg-id (generate-id))
+     (define assistant-msg
+       (make-message assistant-msg-id
+                     #f
+                     'assistant
+                     'message
+                     final-content-parts
+                     (now-seconds)
+                     (hasheq 'turnId turn-id 'model "streamed")))
+
+     ;; Check for tool calls
+     (cond
+       [(null? tool-call-parts)
+        ;; No tool calls -- completed turn
+        (emit! bus
+               session-id
+               turn-id
+               "assistant.message.completed"
+               (hasheq 'messageId assistant-msg-id 'content (text-part-text final-text-part))
+               #:state state)
+        (state-add-message! state assistant-msg)
+        (emit! bus
+               session-id
+               turn-id
+               "turn.completed"
+               (hasheq 'termination 'completed 'turnId turn-id)
+               #:state state)
+        (make-loop-result
+         (loop-state-messages state)
+         'completed
+         (hasheq 'turnId turn-id 'usage (or effective-usage (hasheq)) 'model "streamed"))]
+       [else
+        ;; Tool calls detected -- emit tool.call.started for each
+        (for ([tc (in-list tool-call-parts)])
+          (emit! bus
+                 session-id
+                 turn-id
+                 "tool.call.started"
+                 (hasheq 'id
+                         (tool-call-part-id tc)
+                         'name
+                         (tool-call-part-name tc)
+                         'arguments
+                         (tool-call-part-arguments tc))
+                 #:state state))
+        (state-add-message! state assistant-msg)
+        (emit! bus
+               session-id
+               turn-id
+               "turn.completed"
+               (hasheq 'termination 'tool-calls-pending 'turnId turn-id)
+               #:state state)
+        (make-loop-result (loop-state-messages state)
+                          'tool-calls-pending
+                          (hasheq 'turnId
+                                  turn-id
+                                  'usage
+                                  (or effective-usage (hasheq))
+                                  'model
+                                  "streamed"
+                                  'toolCallCount
+                                  (length tool-call-parts)))])]))
+
+;; ============================================================
+;; Main entry point — thin orchestrator
 ;; ============================================================
 
 ;; run-agent-turn : (listof message?) provider? event-bus?
@@ -125,65 +506,8 @@
          (hasheq 'turnId turn-id 'sessionId session-id)
          #:state st)
 
-  ;; 2. Build normalized model context -- convert messages to raw hash form
-  ;;    following OpenAI Chat Completions API conventions:
-  ;;    - user:        { role: "user", content: "string" }
-  ;;    - assistant:   { role: "assistant", content: "string", tool_calls: [...] }
-  ;;    - tool:        { role: "tool", tool_call_id: "...", content: "string" }
-  (define raw-messages
-    (append*
-     (for/list ([msg (in-list context)])
-       (define role (message-role msg))
-       (define parts (message-content msg))
-       (cond
-         ;; user -> simple text message
-         [(eq? role 'user) (list (hasheq 'role "user" 'content (parts->text-string parts)))]
-
-         ;; assistant -> text + optional tool_calls
-         [(eq? role 'assistant)
-          (define text-parts (filter text-part? parts))
-          (define tc-parts (filter tool-call-part? parts))
-          (define text-content (parts->text-string text-parts))
-          (if (null? tc-parts)
-              ;; text-only assistant message
-              (list (hasheq 'role "assistant" 'content text-content))
-              ;; assistant with tool calls -- OpenAI format
-              ;; Note: GLM rejects 'null for content, so we omit the field when empty
-              (let* ([tool-calls-list (for/list ([tc (in-list tc-parts)])
-                                        (hasheq 'id
-                                                (tool-call-part-id tc)
-                                                'type
-                                                "function"
-                                                'function
-                                                (hasheq 'name
-                                                        (tool-call-part-name tc)
-                                                        'arguments
-                                                        (tool-call-part-arguments tc))))]
-                     [assistant-msg (if (string=? text-content "")
-                                        ;; No text content: omit content field (GLM compatible)
-                                        (hasheq 'role "assistant" 'tool_calls tool-calls-list)
-                                        ;; Has text content: include content field
-                                        (hasheq 'role
-                                                "assistant"
-                                                'content
-                                                text-content
-                                                'tool_calls
-                                                tool-calls-list))])
-                (list assistant-msg)))]
-
-         ;; tool -> one OpenAI message per tool-result-part
-         [(eq? role 'tool)
-          (for/list ([p (in-list parts)]
-                     #:when (tool-result-part? p))
-            (hasheq 'role
-                    "tool"
-                    'tool_call_id
-                    (tool-result-part-tool-call-id p)
-                    'content
-                    (result-content->string (tool-result-part-content p))))]
-
-         ;; fallback -- unknown role
-         [else (list (hasheq 'role (symbol->string role) 'content (parts->text-string parts)))]))))
+  ;; 2. Build normalized model context (pure function)
+  (define raw-messages (build-raw-messages context))
 
   ;; 3. Emit context.built
   (emit! bus
@@ -193,13 +517,10 @@
          (hasheq 'messageCount (length raw-messages))
          #:state st)
 
-  ;; 4. Build model-request and call provider-stream
-  ;; tools is a (listof hash?) in OpenAI normalized format,
-  ;; passed in by the caller (iteration.rkt) via list-tools-jsexpr.
+  ;; 4. Build model-request
   (define req (make-model-request raw-messages tools (hasheq)))
 
-  ;; R2-7: model-request-pre hook -- dispatch before sending to provider
-  ;; hook-dispatcher returns (list action payload) or #f.
+  ;; R2-7: model-request-pre hook
   (define pre-hook-result
     (and hook-dispatcher
          (hook-dispatcher 'model-request-pre
@@ -230,14 +551,7 @@
                         0))
             #:state st)
 
-     ;; 5. Accumulate streamed output -- emit delta events LIVE as they arrive
-     (define accumulated-text (box ""))
-     (define accumulated-tool-calls (box '()))
-     (define all-chunks (box '())) ;; track all chunks for tool-call accumulation
-     (define cancelled-during-stream (box #f))
-
-     ;; Dispatch 'message-start hook -- extensions can block before streaming starts
-     ;; hook-dispatcher returns (list action payload) or #f.
+     ;; Dispatch 'message-start hook
      (define msg-start-result
        (and hook-dispatcher
             (hook-dispatcher 'message-start
@@ -252,245 +566,31 @@
 
      (cond
        [(and (hook-result? msg-start-result) (eq? (hook-result-action msg-start-result) 'block))
-        ;; Hook blocked before streaming -- return early
         (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
         (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
        [else
+        ;; 5-7. Stream from provider
+        (define stream-data
+          (stream-from-provider provider
+                                req
+                                bus
+                                session-id
+                                turn-id
+                                st
+                                hook-dispatcher
+                                cancellation-token))
 
-        (define stream-gen (provider-stream provider req))
-
-        ;; Mutable flag for message-update block (stop streaming)
-        (define stream-blocked (box #f))
-
-        (let stream-loop ()
-          (define chunk (stream-gen))
-          (when (and chunk (not (eq? chunk #f)))
-            (set-box! all-chunks (cons chunk (unbox all-chunks)))
-            (when (stream-chunk-delta-text chunk)
-              ;; Text delta
-              (set-box! accumulated-text
-                        (string-append (unbox accumulated-text) (stream-chunk-delta-text chunk)))
-              (emit! bus
-                     session-id
-                     turn-id
-                     "model.stream.delta"
-                     (hasheq 'delta (stream-chunk-delta-text chunk))
-                     #:state st)
-              ;; Dispatch message-update hook for text delta
-              (when hook-dispatcher
-                (define update-result
-                  (hook-dispatcher 'message-update
-                                   (hasheq 'session-id
-                                           session-id
-                                           'turn-id
-                                           turn-id
-                                           'delta-text
-                                           (stream-chunk-delta-text chunk)
-                                           'delta-tool-call
-                                           #f)))
-                (when (and (hook-result? update-result)
-                           (eq? (hook-result-action update-result) 'block))
-                  (set-box! stream-blocked #t))))
-            (when (stream-chunk-delta-tool-call chunk)
-              ;; Tool call delta
-              (define tc-delta (stream-chunk-delta-tool-call chunk))
-              (set-box! accumulated-tool-calls
-                        (append (unbox accumulated-tool-calls) (list tc-delta)))
-              (emit! bus
-                     session-id
-                     turn-id
-                     "model.stream.delta"
-                     (hasheq 'delta-tool-call tc-delta)
-                     #:state st)
-              ;; Dispatch message-update hook for tool-call delta
-              (when hook-dispatcher
-                (define update-result
-                  (hook-dispatcher 'message-update
-                                   (hasheq 'session-id
-                                           session-id
-                                           'turn-id
-                                           turn-id
-                                           'delta-text
-                                           #f
-                                           'delta-tool-call
-                                           tc-delta)))
-                (when (and (hook-result? update-result)
-                           (eq? (hook-result-action update-result) 'block))
-                  (set-box! stream-blocked #t))))
-            (when (stream-chunk-done? chunk)
-              ;; 7. Stream completed
-              (emit! bus
-                     session-id
-                     turn-id
-                     "model.stream.completed"
-                     (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
-                     #:state st))
-            ;; Check cancellation after processing chunk
-            (cond
-              [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
-               (set-box! cancelled-during-stream #t)
-               (emit! bus
-                      session-id
-                      turn-id
-                      "turn.cancelled"
-                      (hasheq 'reason "cancellation-token")
-                      #:state st)]
-              [(unbox stream-blocked) (void)] ;; message-update hook blocked -- stop streaming
-              [else (stream-loop)])))
-
-        ;; -- Cancellation fast-path: if cancelled during streaming, return early --
+        ;; -- Cancellation fast-path --
         (cond
-          [(unbox cancelled-during-stream)
-           (emit! bus
-                  session-id
-                  turn-id
-                  "turn.completed"
-                  (hasheq 'termination 'cancelled 'turnId turn-id 'reason "cancellation-token")
-                  #:state st)
-           (make-loop-result (loop-state-messages st)
-                             'cancelled
-                             (hasheq 'turnId turn-id 'reason "cancellation-token"))]
-
+          [(hash-ref stream-data 'cancelled?) (handle-cancellation bus session-id turn-id st)]
           [else
-           ;; Build content parts from accumulated stream data (no provider-send)
-           (define text-part (make-text-part (unbox accumulated-text)))
-
-           ;; Tool calls from accumulated deltas using the tested accumulation logic
-           (define accumulated-tcs (accumulate-tool-call-deltas (reverse (unbox all-chunks))))
-
-           (define tool-call-parts
-             (for/list ([tc (in-list accumulated-tcs)])
-               (make-tool-call-part (hash-ref tc 'id "")
-                                    (hash-ref tc 'name "")
-                                    (hash-ref tc 'arguments "{}"))))
-
-           (define content-parts (append (list text-part) tool-call-parts))
-
-           ;; Usage from the last stream chunk that has usage data
-           (define stream-usage
-             (for/first ([c (in-list (unbox all-chunks))]
-                         #:when (stream-chunk-usage c))
-               (stream-chunk-usage c)))
-
-           ;; When provider returns no usage, estimate from message lengths
-           (define effective-usage
-             (if (usage-empty? stream-usage)
-                 (let ([est (estimate-tokens raw-messages (unbox accumulated-text))])
-                   (hash 'prompt_tokens est 'completion_tokens 0 'total_tokens est 'estimated? #t))
-                 stream-usage))
-
-           ;; R2-7: model-response-post hook -- dispatch after response received
-           ;; Supports pass/amend semantics (block not meaningful for completed response).
-           (when hook-dispatcher
-             (define post-payload
-               (hasheq 'model-name
-                       (object-name provider)
-                       'response-content
-                       (unbox accumulated-text)
-                       'usage
-                       (or stream-usage (hasheq))
-                       'tool-call-count
-                       (length tool-call-parts)))
-             (hook-dispatcher 'model-response-post post-payload))
-
-           ;; Dispatch 'message-end hook -- extensions can amend content or suppress
-           (define msg-end-payload
-             (hasheq 'session-id
-                     session-id
-                     'turn-id
-                     turn-id
-                     'content
-                     (unbox accumulated-text)
-                     'tool-call-count
-                     (length tool-call-parts)
-                     'usage
-                     (or effective-usage (hasheq))))
-           (define msg-end-result
-             (and hook-dispatcher (hook-dispatcher 'message-end msg-end-payload)))
-
-           ;; Handle message-end result -- hook-dispatcher returns (list action payload) or #f
-           (define final-text
-             (if (and (hook-result? msg-end-result) (eq? (hook-result-action msg-end-result) 'amend))
-                 (hash-ref (hook-result-payload msg-end-result) 'content (unbox accumulated-text))
-                 (unbox accumulated-text)))
-
-           (cond
-             [(and (hook-result? msg-end-result) (eq? (hook-result-action msg-end-result) 'block))
-              ;; message-end blocked -- return completed with empty content
-              (emit! bus
-                     session-id
-                     turn-id
-                     "turn.completed"
-                     (hasheq 'termination 'completed 'turnId turn-id 'reason "message-end-blocked")
-                     #:state st)
-              (make-loop-result (loop-state-messages st)
-                                'hook-blocked
-                                (hasheq 'turnId turn-id 'hook 'message-end))]
-             [else
-              ;; Rebuild text-part with potentially amended content
-              (define final-text-part (make-text-part final-text))
-              (define final-content-parts (append (list final-text-part) tool-call-parts))
-
-              ;; Build assistant message
-              (define assistant-msg-id (generate-id))
-              (define assistant-msg
-                (make-message assistant-msg-id
-                              #f
-                              'assistant
-                              'message
-                              final-content-parts
-                              (now-seconds)
-                              (hasheq 'turnId turn-id 'model "streamed")))
-
-              ;; 8/9. Check for tool calls
-              (cond
-                [(null? tool-call-parts)
-                 ;; No tool calls -- completed turn
-                 (emit! bus
-                        session-id
-                        turn-id
-                        "assistant.message.completed"
-                        (hasheq 'messageId assistant-msg-id 'content (text-part-text final-text-part))
-                        #:state st)
-                 (state-add-message! st assistant-msg)
-                 (emit! bus
-                        session-id
-                        turn-id
-                        "turn.completed"
-                        (hasheq 'termination 'completed 'turnId turn-id)
-                        #:state st)
-                 (make-loop-result
-                  (loop-state-messages st)
-                  'completed
-                  (hasheq 'turnId turn-id 'usage (or effective-usage (hasheq)) 'model "streamed"))]
-                [else
-                 ;; Tool calls detected -- emit tool.call.started for each
-                 (for ([tc (in-list tool-call-parts)])
-                   (emit! bus
-                          session-id
-                          turn-id
-                          "tool.call.started"
-                          (hasheq 'id
-                                  (tool-call-part-id tc)
-                                  'name
-                                  (tool-call-part-name tc)
-                                  'arguments
-                                  (tool-call-part-arguments tc))
-                          #:state st))
-                 (state-add-message! st assistant-msg)
-                 (emit! bus
-                        session-id
-                        turn-id
-                        "turn.completed"
-                        (hasheq 'termination 'tool-calls-pending 'turnId turn-id)
-                        #:state st)
-                 (make-loop-result (loop-state-messages st)
-                                   'tool-calls-pending
-                                   (hasheq 'turnId
-                                           turn-id
-                                           'usage
-                                           (or effective-usage (hasheq))
-                                           'model
-                                           "streamed"
-                                           'toolCallCount
-                                           (length tool-call-parts)))])])])])]))
+           ;; 8-9. Build final result from stream data
+           (build-stream-result stream-data
+                                raw-messages
+                                bus
+                                session-id
+                                turn-id
+                                st
+                                tools
+                                provider
+                                hook-dispatcher)])])]))

@@ -14,9 +14,12 @@
          racket/file
          racket/path
          racket/list
+         racket/string
+         json
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "api.rkt"
+         "manifest.rkt"
          "quarantine.rkt")
 
 (provide extension-load-error
@@ -149,8 +152,34 @@
     (define mod-path (path->complete-path path))
     (unless (file-exists? mod-path)
       (raise (make-not-found-error path)))
+    ;; Validate manifest if present (SEC-04)
+    (define manifest-path (build-path (path-only mod-path) "qpm.json"))
+    (when (file-exists? manifest-path)
+      (define raw (with-input-from-file manifest-path read-json))
+      (when (hash? raw)
+        (define-values (valid? errors)
+          (validate-manifest (qpm-manifest-from-hash raw)))
+        (unless valid?
+          (raise (extension-load-error (path->string path)
+                                       (format "manifest validation failed: ~a" (string-join errors ", "))
+                                       'api-mismatch)))))
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))
+
+;; Helper: extract directory from path
+(define (path-only p)
+  (define-values (parent name must-be-dir?) (split-path p))
+  (if parent parent (current-directory)))
+
+;; Helper: construct qpm-manifest from a raw JSON hash
+(define (qpm-manifest-from-hash h)
+  (make-qpm-manifest
+   #:name (hash-ref h 'name "unknown")
+   #:version (hash-ref h 'version "0.0.0")
+   #:api-version (hash-ref h 'api-version "1")
+   #:type (string->symbol (hash-ref h 'type "extension"))
+   #:description (hash-ref h 'description "")
+   #:author (hash-ref h 'author "unknown")))
 
 ;; Classify an exception into a category symbol.
 (define (classify-exception e)

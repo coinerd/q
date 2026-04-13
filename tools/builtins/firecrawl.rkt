@@ -6,7 +6,8 @@
          json
          net/http-client
          net/url
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/errors.rkt" raise-tool-error))
 
 (provide tool-firecrawl
          firecrawl-api-key       ;; for testing
@@ -39,10 +40,10 @@
   (define uri (string->url url-str))
   (define scheme (url-scheme uri))
   (unless (and scheme (member scheme '("http" "https")))
-    (error 'firecrawl "Blocked: URL scheme must be http or https: ~a" url-str))
+    (raise-tool-error (format "Blocked: URL scheme must be http or https: ~a" url-str) "firecrawl"))
   (define host (url-host uri))
   (when (or (not host) (private-host? host))
-    (error 'firecrawl "Blocked: URL points to private/internal address: ~a" url-str)))
+    (raise-tool-error (format "Blocked: URL points to private/internal address: ~a" url-str) "firecrawl")))
 
 ;; ============================================================
 ;; Configuration
@@ -88,19 +89,21 @@
       (define body-str
         (with-handlers ([exn:fail? (lambda (_) "<non-utf-8 body>")])
           (bytes->string/utf-8 body-bytes)))
-      (error 'firecrawl
-             "API request failed (~a): ~a"
-             code
-             (if (> (string-length body-str) 500)
-                 (string-append (substring body-str 0 500) "...")
-                 body-str)))))
+      (raise-tool-error
+             (format "API request failed (~a): ~a"
+                     code
+                     (if (> (string-length body-str) 500)
+                         (string-append (substring body-str 0 500) "...")
+                         body-str))
+             "firecrawl"))))
 
 (define (firecrawl-request method path [body #f])
   ;; Make an HTTP request to the Firecrawl API. Returns parsed JSON response.
   (define api-key (firecrawl-api-key))
   (unless (and api-key (> (string-length api-key) 0))
-    (error 'firecrawl
-           "No API key found. Set FIRECRAWL_API_KEY environment variable or add firecrawl.api-key to $HOME/.q/config.json"))
+    (raise-tool-error
+           "No API key found. Set FIRECRAWL_API_KEY environment variable or add firecrawl.api-key to $HOME/.q/config.json"
+           "firecrawl"))
   (define url-str (string-append (string-trim (firecrawl-base-url) "/") path))
   (define uri (string->url url-str))
   (define host (url-host uri))
@@ -230,7 +233,7 @@
   (define start-resp (firecrawl-request "POST" "/crawl" body))
   (define job-id (hash-ref start-resp 'id #f))
   (unless job-id
-    (error 'firecrawl "Crawl did not return a job ID: ~a" start-resp))
+    (raise-tool-error (format "Crawl did not return a job ID: ~a" start-resp) "firecrawl"))
   ;; Poll for completion
   (define deadline (+ (current-seconds) timeout-secs))
   (define results (poll-crawl-status job-id deadline))
@@ -333,43 +336,43 @@
     [(string=? action "search")
      (define query (hash-ref args 'query #f))
      (unless query
-       (error 'firecrawl "search requires 'query' parameter"))
+       (raise-tool-error "search requires 'query' parameter" "firecrawl"))
      (define formats (hash-ref args 'formats #f))
      (define limit (hash-ref args 'limit DEFAULT-LIMIT))
      (define only-main (hash-ref args 'onlyMainContent #t))
      (when (and formats (not (valid-formats? formats)))
-       (error 'firecrawl "formats must be a list of: markdown, html, rawHtml"))
+       (raise-tool-error "formats must be a list of: markdown, html, rawHtml" "firecrawl"))
      (do-search query formats limit only-main)]
 
     ;; ---- SCRAPE ----
     [(string=? action "scrape")
      (define url (hash-ref args 'url #f))
      (unless url
-       (error 'firecrawl "scrape requires 'url' parameter"))
+       (raise-tool-error "scrape requires 'url' parameter" "firecrawl"))
      (define formats (hash-ref args 'formats #f))
      (define only-main (hash-ref args 'onlyMainContent #t))
      (when (and formats (not (valid-formats? formats)))
-       (error 'firecrawl "formats must be a list of: markdown, html, rawHtml"))
+       (raise-tool-error "formats must be a list of: markdown, html, rawHtml" "firecrawl"))
      (do-scrape url formats only-main)]
 
     ;; ---- CRAWL ----
     [(string=? action "crawl")
      (define url (hash-ref args 'url #f))
      (unless url
-       (error 'firecrawl "crawl requires 'url' parameter"))
+       (raise-tool-error "crawl requires 'url' parameter" "firecrawl"))
      (define formats (hash-ref args 'formats #f))
      (define limit (hash-ref args 'limit DEFAULT-LIMIT))
      (define timeout (hash-ref args 'timeout DEFAULT-CRAWL-TIMEOUT))
      (define only-main (hash-ref args 'onlyMainContent #t))
      (when (and formats (not (valid-formats? formats)))
-       (error 'firecrawl "formats must be a list of: markdown, html, rawHtml"))
+       (raise-tool-error "formats must be a list of: markdown, html, rawHtml" "firecrawl"))
      (do-crawl url formats limit timeout only-main)]
 
     ;; ---- MAP ----
     [(string=? action "map")
      (define url (hash-ref args 'url #f))
      (unless url
-       (error 'firecrawl "map requires 'url' parameter"))
+       (raise-tool-error "map requires 'url' parameter" "firecrawl"))
      (do-map url)]
 
     [else

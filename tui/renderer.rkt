@@ -21,11 +21,6 @@
 ;;   dim     = fg=8 (dark gray)
 ;;   reset   = fg=7, bg=0, bold=#f (default values)
 
-(require "render.rkt"
-         "layout.rkt"
-         "state.rkt"
-         "input.rkt")
-
 (provide
  ;; Main rendering function
  render-frame!

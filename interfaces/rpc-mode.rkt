@@ -79,8 +79,20 @@
 ;; ============================================================
 
 (define (generate-handshake-token)
-  ;; Generate a pseudo-random handshake token from timestamp + random
-  (format "~a-~a" (exact-truncate (current-inexact-milliseconds)) (random 1000000000)))
+  ;; Generate a cryptographically secure 128-bit handshake token (SEC-12)
+  ;; Falls back to timestamp+random if crypto module unavailable
+  (with-handlers ([exn:fail? (λ (_)
+                               (format "~a-~a" (exact-truncate (current-inexact-milliseconds))
+                                       (random 1000000000)))])
+    (define bytes ((dynamic-require 'racket/crypto 'crypto-random-bytes) 16))
+    (format "~a" (bytes->hex-string bytes))))
+
+;; Helper: convert bytes to hex string
+(define (bytes->hex-string bs)
+  (apply string-append
+         (for/list ([b (in-bytes bs)])
+           (let ([s (number->string b 16)])
+             (if (< b 16) (string-append "0" s) s)))))
 
 (define (rpc-handshake-valid? line expected-token)
   ;; Check if line is a valid handshake with the expected token.
