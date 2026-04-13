@@ -12,7 +12,10 @@
 (provide
  estimate-context-tokens
  should-compact?
- remaining-budget)
+ remaining-budget
+
+ ;; Constants (for reuse in SDK and agent-session defaults)
+ DEFAULT-TOKEN-BUDGET-THRESHOLD)
 
 ;; ============================================================
 ;; estimate-context-tokens
@@ -45,6 +48,11 @@
 ;; ============================================================
 ;; should-compact?
 ;; ============================================================
+
+;; Default token budget threshold (100k tokens).
+;; Used by the SDK and agent-session as the default value
+;; when no explicit threshold is configured.
+(define DEFAULT-TOKEN-BUDGET-THRESHOLD 100000)
 
 ;; Compaction threshold is 80% of the budget.
 (define COMPACT-RATIO 0.8)

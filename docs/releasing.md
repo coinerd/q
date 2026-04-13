@@ -17,20 +17,28 @@ q follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (**MAJOR.MI
 Before starting a release, verify every item below:
 
 - [ ] All tests pass: `raco test .` from the `q/` root
-- [ ] Version bumped in `info.rkt`
+- [ ] Version bumped in `info.rkt` **and** `util/version.rkt` (both must match)
 - [ ] `CHANGELOG.md` updated with the new version entry
 - [ ] `README.md` metrics (test count, module count) updated
 - [ ] Clean git status (`git status` shows no uncommitted changes)
 
 ## Release Steps
 
-### 1. Update version in `info.rkt`
+### 1. Update version in `info.rkt` and `util/version.rkt`
 
-Edit `define version` to the new release number:
+Both files must contain the same version string. Edit them together:
 
+**`info.rkt`**:
 ```racket
 (define version "0.6.2")
 ```
+
+**`util/version.rkt`**:
+```racket
+(define q-version "0.6.2")
+```
+
+> **Tip:** Run `racket scripts/lint-version.rkt` to verify both files match.
 
 ### 2. Update `CHANGELOG.md`
 

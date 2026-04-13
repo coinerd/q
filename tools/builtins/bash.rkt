@@ -15,12 +15,40 @@
                   make-success-result make-error-result
                   exec-context? exec-context-working-directory)
          "../../sandbox/subprocess.rkt"
-         "../../sandbox/limits.rkt")
+         "../../sandbox/limits.rkt"
+         "../../runtime/settings.rkt")
 
 ;; Default timeout in seconds
 (define DEFAULT-TIMEOUT-SECONDS 120)
 
-(provide tool-bash)
+;; Destructive command patterns (SEC-03)
+;; Each pattern is a string that is checked case-insensitively
+;; against the command string.
+(define destructive-patterns
+  '("rm -rf"
+    "rmdir"
+    "mkfs"
+    "dd if="
+    "format"
+    "del /"
+    "shutdown"
+    "reboot"))
+
+;; Check if a command matches any destructive pattern.
+(define (destructive-command? command)
+  (define lower (string-downcase command))
+  (for/or ([pattern (in-list destructive-patterns)])
+    (string-contains? lower (string-downcase pattern))))
+
+;; Optional settings parameter for destructive command warning.
+;; When #t, emit a warning to stderr before executing.
+;; Defaults to #f (no warning).
+(define current-warn-on-destructive (make-parameter #f))
+
+(provide tool-bash
+         current-warn-on-destructive
+         destructive-command?
+         destructive-patterns)
 
 ;; --------------------------------------------------
 ;; Result helpers
@@ -41,6 +69,12 @@
     [(not (non-empty-string? command))
      (err "command must be a non-empty string")]
     [else
+     ;; Optional destructive command warning (SEC-03)
+     (when (and (current-warn-on-destructive)
+                (destructive-command? command))
+       (fprintf (current-error-port)
+                "WARNING: Destructive command detected: ~a~n"
+                command))
      (define timeout-secs (hash-ref args 'timeout DEFAULT-TIMEOUT-SECONDS))
      (define work-dir (hash-ref args 'working-directory #f))
 

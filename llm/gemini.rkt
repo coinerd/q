@@ -387,12 +387,15 @@
   (define uri (string->url url-str))
   (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
   (define body-bytes (jsexpr->bytes body))
-  (define-values (status-line response-headers response-port)
-    (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-  (define response-body (read-response-body response-port))
-  ;; Check HTTP status
-  (gemini-check-http-status! status-line response-body)
-  (bytes->jsexpr response-body))
+  ;; Wrap entire request in overall timeout (SEC-11)
+  (call-with-request-timeout
+   (lambda ()
+     (define-values (status-line response-headers response-port)
+       (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+     (define response-body (read-response-body response-port))
+     ;; Check HTTP status
+     (gemini-check-http-status! status-line response-body)
+     (bytes->jsexpr response-body))))
 
 ;; ============================================================
 ;; Provider constructor
@@ -436,8 +439,16 @@
     (define uri (string->url url-str))
     (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
     (define body-bytes (jsexpr->bytes body))
-    (define-values (status-line response-headers response-port)
-      (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+    ;; Wrap initial HTTP request in overall timeout (SEC-11)
+    (define result-vec
+      (call-with-request-timeout
+       (lambda ()
+         (define-values (sl rh rp)
+           (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+         (vector sl rh rp))))
+    (define status-line (vector-ref result-vec 0))
+    (define response-headers (vector-ref result-vec 1))
+    (define response-port (vector-ref result-vec 2))
     ;; Check HTTP status first
     (define status-str
       (if (bytes? status-line)

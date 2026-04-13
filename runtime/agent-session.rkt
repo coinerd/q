@@ -285,7 +285,7 @@
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
   (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 10)))
-  (define token-budget-threshold (hash-ref cfg 'token-budget-threshold 100000))
+  (define token-budget-threshold (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
 
   ;; Convert string to message struct if needed
   (define user-msg

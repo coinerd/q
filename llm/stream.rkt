@@ -28,7 +28,10 @@
  max-response-size
  exn:fail:network:timeout
  exn:fail:network:timeout?
- http-read-timeout-default)
+ http-read-timeout-default
+ http-request-timeout-default
+ current-http-request-timeout
+ call-with-request-timeout)
 
 ;; ============================================================
 ;; Timeout configuration
@@ -37,6 +40,41 @@
 ;; Default HTTP read timeout in seconds.
 ;; When the network drops mid-stream, reads will timeout after this many seconds.
 (define http-read-timeout-default 120)
+
+;; Default overall HTTP request timeout in seconds.
+;; Covers connection + full response reading.  Settable via settings.
+(define http-request-timeout-default 300)
+
+;; Parameter: overall HTTP request timeout for the current session.
+;; Set by the runtime from settings; read by LLM providers.
+(define current-http-request-timeout (make-parameter http-request-timeout-default))
+
+;; call-with-request-timeout : thunk [#:timeout seconds] -> any
+;; Runs thunk in a separate thread with a channel for results;
+;; kills the thread and raises exn:fail:network:timeout if the
+;; overall timeout is exceeded.  Used by LLM providers to wrap
+;; blocking http-sendrecv + body reads.
+(define (call-with-request-timeout thunk #:timeout [timeout-secs (current-http-request-timeout)])
+  (define ch (make-channel))
+  (define th
+    (thread
+     (lambda ()
+       (with-handlers ([exn:fail?
+                        (lambda (e) (channel-put ch (cons 'exn e)))])
+         (channel-put ch (cons 'val (thunk)))))))
+  (define result (sync/timeout timeout-secs ch))
+  (cond
+    [(eq? result #f)
+     (kill-thread th)
+     (raise (exn:fail:network:timeout
+             (format "HTTP request timeout (~a seconds)" timeout-secs)
+             (current-continuation-marks)))]
+    [else
+     (define tag (car result))
+     (define payload (cdr result))
+     (cond
+       [(eq? tag 'exn) (raise payload)]
+       [else payload])]))
 
 ;; Exception type for network read timeouts.
 (struct exn:fail:network:timeout exn:fail () #:transparent)

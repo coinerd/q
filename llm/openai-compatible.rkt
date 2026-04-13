@@ -123,24 +123,27 @@
     (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
   (define headers (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
-  (define-values (status-line response-headers response-port)
-    (if port
-        (http-sendrecv host
-                       path-str
-                       #:port port
-                       #:ssl? ssl?
-                       #:method "POST"
-                       #:headers headers
-                       #:data body-bytes)
-        (http-sendrecv host
-                       path-str
-                       #:ssl? ssl?
-                       #:method "POST"
-                       #:headers headers
-                       #:data body-bytes)))
-  (define response-body (read-response-body/timeout response-port))
-  (check-http-status! status-line response-body)
-  (bytes->jsexpr response-body))
+  ;; Wrap entire request in overall timeout (SEC-11)
+  (call-with-request-timeout
+   (lambda ()
+     (define-values (status-line response-headers response-port)
+       (if port
+           (http-sendrecv host
+                          path-str
+                          #:port port
+                          #:ssl? ssl?
+                          #:method "POST"
+                          #:headers headers
+                          #:data body-bytes)
+           (http-sendrecv host
+                          path-str
+                          #:ssl? ssl?
+                          #:method "POST"
+                          #:headers headers
+                          #:data body-bytes)))
+     (define response-body (read-response-body/timeout response-port))
+     (check-http-status! status-line response-body)
+     (bytes->jsexpr response-body))))
 
 ;; ============================================================
 ;; HTTP status check helper
@@ -250,21 +253,31 @@
     (define headers
       (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
-    (define-values (status-line response-headers response-port)
-      (if req-port
-          (http-sendrecv host
-                         path-str
-                         #:port req-port
-                         #:ssl? ssl?
-                         #:method "POST"
-                         #:headers headers
-                         #:data body-bytes)
-          (http-sendrecv host
-                         path-str
-                         #:ssl? ssl?
-                         #:method "POST"
-                         #:headers headers
-                         #:data body-bytes)))
+    ;; Wrap initial HTTP request in overall timeout (SEC-11)
+    ;; call-with-request-timeout returns a single value,
+    ;; so we capture the 3 http-sendrecv values in a vector.
+    (define result-vec
+      (call-with-request-timeout
+       (lambda ()
+         (define-values (sl rh rp)
+           (if req-port
+               (http-sendrecv host
+                              path-str
+                              #:port req-port
+                              #:ssl? ssl?
+                              #:method "POST"
+                              #:headers headers
+                              #:data body-bytes)
+               (http-sendrecv host
+                              path-str
+                              #:ssl? ssl?
+                              #:method "POST"
+                              #:headers headers
+                              #:data body-bytes)))
+         (vector sl rh rp))))
+    (define status-line (vector-ref result-vec 0))
+    (define response-headers (vector-ref result-vec 1))
+    (define response-port (vector-ref result-vec 2))
     ;; Check HTTP status from status-line BEFORE reading body.
     ;; For error responses (4xx/5xx), read the full body to include in error message.
     (define status-str

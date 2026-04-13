@@ -332,12 +332,15 @@
           (format "anthropic-version: ~a" ANTHROPIC-VERSION)
           "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
-  (define-values (status-line response-headers response-port)
-    (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-  (define response-body (read-response-body response-port))
-  ;; Check HTTP status
-  (anthropic-check-http-status! status-line response-body)
-  (bytes->jsexpr response-body))
+  ;; Wrap entire request in overall timeout (SEC-11)
+  (call-with-request-timeout
+   (lambda ()
+     (define-values (status-line response-headers response-port)
+       (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+     (define response-body (read-response-body response-port))
+     ;; Check HTTP status
+     (anthropic-check-http-status! status-line response-body)
+     (bytes->jsexpr response-body))))
 
 ;; ============================================================
 ;; Provider constructor
@@ -375,8 +378,16 @@
             (format "anthropic-version: ~a" ANTHROPIC-VERSION)
             "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
-    (define-values (status-line response-headers response-port)
-      (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+    ;; Wrap initial HTTP request in overall timeout (SEC-11)
+    (define result-vec
+      (call-with-request-timeout
+       (lambda ()
+         (define-values (sl rh rp)
+           (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+         (vector sl rh rp))))
+    (define status-line (vector-ref result-vec 0))
+    (define response-headers (vector-ref result-vec 1))
+    (define response-port (vector-ref result-vec 2))
     ;; Check HTTP status before streaming
     (define status-code
       (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" (bytes->string/utf-8 status-line))])

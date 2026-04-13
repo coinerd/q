@@ -8,7 +8,8 @@
          racket/port)
 
 ;; ---------------------------------------------------------------------------
-;; Version-consistency linter — cross-checks info.rkt version against all .md files.
+;; Version-consistency linter — cross-checks info.rkt and util/version.rkt
+;; versions against each other and against all .md files.
 ;; Exit 0 if clean, 1 if any version mismatch found.
 ;; ---------------------------------------------------------------------------
 
@@ -66,6 +67,18 @@
                             (not (historical-line? line))))
        (list lineno v)))))
 
+;; Parse `(define q-version "X.Y.Z")` from util/version.rkt content.
+(define (parse-util-version content)
+  (define lines (string-split content "\n"))
+  (for/or ([line (in-list lines)])
+    (define trimmed (string-trim line))
+    (cond
+      [(and (string-prefix? trimmed "(define q-version")
+            (string-suffix? trimmed ")"))
+       (define m (regexp-match #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"" trimmed))
+       (and m (cadr m))]
+      [else #f])))
+
 ;;; --- main ---
 
 (define (main)
@@ -80,14 +93,30 @@
     (displayln "ERROR: could not parse version from info.rkt")
     (exit 1))
 
+  ;; --- Cross-check util/version.rkt ---
+  (define util-version-path (build-path (current-directory) "util" "version.rkt"))
+  (define util-version-errors
+    (if (file-exists? util-version-path)
+        (let ([util-v (parse-util-version (file->string util-version-path))])
+          (cond
+            [(not util-v)
+             (list (list util-version-path 0 "<unparseable>" canonical))]
+            [(not (equal? util-v canonical))
+             (list (list util-version-path 0 util-v canonical))]
+            [else '()]))
+        '()))
+
+  ;; --- Cross-check .md files ---
   (define md-files (collect-md-files (current-directory)))
-  (define errors
+  (define md-errors
     (append*
      (for/list ([f (in-list md-files)])
        (define lines (string-split (file->string f) "\n"))
        (define mismatches (find-mismatched-versions lines canonical f))
        (for/list ([m (in-list mismatches)])
          (list f (first m) (second m))))))
+
+  (define errors (append util-version-errors md-errors))
 
   ;; Report errors
   (for ([e (in-list errors)])
@@ -100,6 +129,8 @@
   ;; Summary
   (displayln "---")
   (printf "Version: ~a (from info.rkt)~n" canonical)
+  (when (file-exists? util-version-path)
+    (printf "util/version.rkt: ~a~n" (or (parse-util-version (file->string util-version-path)) "<unparseable>")))
   (printf "Scanned: ~a .md files~n" (length md-files))
   (printf "Errors: ~a~n" (length errors))
   (if (null? errors)

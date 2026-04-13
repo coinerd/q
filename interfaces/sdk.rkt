@@ -26,6 +26,8 @@
                   compaction-result-removed-count compaction-result?)
          (only-in "../runtime/settings.rkt"
                   default-session-dir)
+         (only-in "../llm/token-budget.rkt"
+                  DEFAULT-TOKEN-BUDGET-THRESHOLD)
          (only-in "../extensions/api.rkt"
                   list-extensions)
          "../util/cancellation.rkt")
@@ -124,7 +126,7 @@
                        #:model-name [model-name #f]
                        #:max-iterations [max-iterations 10]
                        #:system-instructions [system-instructions '()]
-                       #:token-budget-threshold [token-budget-threshold 100000]
+                       #:token-budget-threshold [token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD]
                        #:cancellation-token [cancellation-token #f])
   (make-runtime-internal
    (runtime-config provider

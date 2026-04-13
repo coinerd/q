@@ -41,6 +41,12 @@
          ;; Parallel execution
          parallel-tools-enabled?
 
+         ;; HTTP request timeout
+         http-request-timeout
+
+         ;; Destructive command warning
+         warn-on-destructive?
+
          ;; Defaults and derived paths
          default-session-dir
          default-project-dir
@@ -185,6 +191,24 @@
 ;; Reads 'parallel-tools from merged settings, defaults to #f.
 (define (parallel-tools-enabled? settings)
   (setting-ref settings 'parallel-tools #f))
+
+;; ============================================================
+;; HTTP request timeout setting
+;; ============================================================
+
+;; Overall HTTP request timeout in seconds (covers connection + response reading).
+;; Defaults to 300 seconds (5 minutes).
+(define (http-request-timeout settings)
+  (setting-ref settings 'http-request-timeout 300))
+
+;; ============================================================
+;; Destructive command warning setting
+;; ============================================================
+
+;; Whether to emit a warning to stderr when destructive commands are detected.
+;; Defaults to #f (no warning).
+(define (warn-on-destructive? settings)
+  (setting-ref settings 'warn-on-destructive #f))
 
 ;; ============================================================
 ;; Defaults and derived paths
