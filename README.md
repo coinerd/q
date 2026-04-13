@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/coinerd/q/main/scripts/install.sh |
 git clone https://github.com/coinerd/q.git
 cd q
 raco pkg install --auto
-raco q --version   # or: racket main.rkt --version
+racket main.rkt --version
 
 # Or install from release tarball
 curl -fsSL https://github.com/coinerd/q/releases/latest/download/$(curl -sL https://api.github.com/repos/coinerd/q/releases/latest | grep -oP '"tag_name": "v\K[^"]+' | xargs -I{} echo q-{}.tar.gz) | tar xz
@@ -179,28 +179,28 @@ Start your local server (e.g. `llama-server`), then run q.
 
 ```bash
 # Terminal UI (interactive)
-raco q --tui
+racket main.rkt --tui
 
 # Single-shot prompt
-raco q "explain what this codebase does"
+racket main.rkt "explain what this codebase does"
 
 # Resume a session
-raco q --session <session-id>
+racket main.rkt --session <session-id>
 
 # JSON mode (machine-readable output)
-raco q --json
+racket main.rkt --json
 
 # Override model for this run
-raco q --model gpt-5.4 "write a test"
+racket main.rkt --model gpt-5.4 "write a test"
 ```
 
-> **Development:** `racket main.rkt` works as a drop-in replacement for `raco q` when running from the source tree.
+> **Tip:** Create a shell alias for convenience: `alias q='racket /path/to/q/main.rkt'`
 
 ### Verify
 
 ```bash
-raco q --version            # q version 0.8.0
-raco test tests/            # run the full test suite
+racket main.rkt --version  # q version 0.8.0
+raco test tests/           # run the full test suite
 ```
 
 ## Configuration
@@ -290,31 +290,43 @@ raco test tests/tui/
 
 ## Status
 
-**v0.8.0** — Documentation metrics bulk refresh, conventions standardization, and test coverage gap closure. 33 workflow tests across 11 files with 5 fixture modules (mock-provider, temp-project, session-assert, event-recorder, workflow-runner), covering CLI workflows, tool-use flows, session lifecycle, safety boundaries, SDK-CLI parity, and extension hooks:
+**v0.8.1** — Quality Remediation. 34 issues across 8 waves: test-case conversion (105 bare `let` blocks), test infrastructure standardization, tool utility extraction, provider dedup, module decomposition, architecture polish, security hardening (path checks, destructive patterns, file locking, credential docstrings), documentation cleanup. 10 PRs merged (#317–#326).
 
-**v0.7.4** — Error Handling & Diagnostics. Extension structured error reporting, error classification with remediation hints, verbose diagnostics mode, provider error surfacing, replay error recovery:
+**v0.8.0** — Critical Security & Architecture. Destructive-command warnings default on, shared type extraction (hook-types, protocol-types), CLI/TUI decomposition into submodules, agent turn refactor, manifest validation, crypto-random RPC tokens, structured error types, 50 new tests across 5 modules, HTTP request timeouts.
 
-**v0.7.3** — CLI & Configuration Hardening. `q sessions` command suite (list/info/delete), sessions TUI command, mock-provider detection warning, Bash shebang handling fix:
+**v0.7.9** — Hardening & Developer Tooling. 50 new tests (evaluator, cli-args, run-modes, audit-log, token-budget), HTTP request timeouts (300s), destructive-command warning in bash, audit logging utility, version cross-check linter.
 
-**v0.7.2** — Provider & UX Hardening. Anthropic/Gemini streaming (generator-based incremental SSE), API key validation with provider-specific checks, streaming indicator in TUI, improved error messages:
+**v0.7.8** — Agent Loop Decomposition & Security. Refactored 389-line `run-agent-turn` into 4 helpers, manifest validation before `dynamic-require`, crypto-random RPC handshake tokens, structured error types, Firecrawl error migration.
 
-**v0.7.1** — TUI Tool Display & UX Polish. Tool result rendering with truncation, scroll-to-top sentinel, Ctrl+J/Ctrl+Enter multi-line input, Enter-to-submit:
+**v0.7.7** — Architecture Refactor. Extracted shared types to util/, centralized safe-mode at scheduler, decomposed CLI/TUI interfaces into submodules, reorganized runtime run-modes, LRU extension loader cache.
 
-**v0.7.0** — Builder Cookbook and Team Adoption. Team setup guide, builder tutorials for custom tools/providers/extensions:
+**v0.7.6** — Documentation & Coverage. Documentation metrics bulk refresh, conventions standardization, test coverage gap closure.
 
-**v0.6.8** — Structural Hardening. Thread safety (semaphores), contracts on critical entry points, per-session safe-mode, safe-mode path checks, dead code cleanup:
+**v0.7.5** — Workflow Test Suite. 33 workflow tests across 11 files with 5 fixture modules, covering CLI workflows, tool-use flows, session lifecycle, safety boundaries, SDK-CLI parity, and extension hooks.
 
-**v0.6.7** — Integration Test Infrastructure. E2E tool→API serialization pipeline tests (OpenAI/Anthropic/Gemini), CLI interactive mode tests (34 cases):
+**v0.7.4** — Error Handling & Diagnostics. Extension structured error reporting, error classification with remediation hints, verbose diagnostics mode, provider error surfacing, replay error recovery.
 
-**v0.6.6** — Provider Correctness. Anthropic/Gemini multi-turn tool use message translation, incremental SSE streaming, Gemini tool call unique IDs:
+**v0.7.3** — CLI & Configuration Hardening. `q sessions` command suite (list/info/delete), sessions TUI command, mock-provider detection warning, Bash shebang handling fix.
 
-**v0.6.5** — Critical Bug Fixes. Firecrawl poll deadline, tool registration nesting, Anthropic wiring, TUI event subscribers, hook validation:
+**v0.7.2** — Provider & UX Hardening. Anthropic/Gemini streaming (generator-based incremental SSE), API key validation with provider-specific checks, streaming indicator in TUI, improved error messages.
 
-**v0.6.4** — Developer Tooling & Protocol Consistency. Racket-aware line wrapper, protocol checker, import conflict detector, pre-commit hook:
+**v0.7.1** — TUI Tool Display & UX Polish. Tool result rendering with truncation, scroll-to-top sentinel, Ctrl+J/Ctrl+Enter multi-line input, Enter-to-submit.
 
-**v0.6.3** — Architecture & Test Reliability. Decoupled agent/types ↔ tools/tool, extracted CLI builders, session log backup, RPC handshake tokens:
+**v0.7.0** — Builder Cookbook and Team Adoption. Team setup guide, builder tutorials for custom tools/providers/extensions.
 
-**v0.6.2** — Hardening & Quality. Test coverage expansion, sandbox hardening, SSRF protection, response size limits:
+**v0.6.8** — Structural Hardening. Thread safety (semaphores), contracts on critical entry points, per-session safe-mode, safe-mode path checks, dead code cleanup.
+
+**v0.6.7** — Integration Test Infrastructure. E2E tool→API serialization pipeline tests (OpenAI/Anthropic/Gemini), CLI interactive mode tests (34 cases).
+
+**v0.6.6** — Provider Correctness. Anthropic/Gemini multi-turn tool use message translation, incremental SSE streaming, Gemini tool call unique IDs.
+
+**v0.6.5** — Critical Bug Fixes. Firecrawl poll deadline, tool registration nesting, Anthropic wiring, TUI event subscribers, hook validation.
+
+**v0.6.4** — Developer Tooling & Protocol Consistency. Racket-aware line wrapper, protocol checker, import conflict detector, pre-commit hook.
+
+**v0.6.3** — Architecture & Test Reliability. Decoupled agent/types ↔ tools/tool, extracted CLI builders, session log backup, RPC handshake tokens.
+
+**v0.6.2** — Hardening & Quality. Test coverage expansion, sandbox hardening, SSRF protection, response size limits.
 
 **Previous** — Security Hardening through Foundation:
 
