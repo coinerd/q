@@ -8,7 +8,16 @@
 (require racket/sandbox)
 
 (provide (struct-out eval-result)
-         eval-in-sandbox)
+         eval-in-sandbox
+         current-sandbox-memory-limit
+         current-sandbox-path-limit)
+
+;; --------------------------------------------------
+;; Configurable limits (SEC-09)
+;; --------------------------------------------------
+
+(define current-sandbox-memory-limit (make-parameter 256))   ;; MB
+(define current-sandbox-path-limit  (make-parameter #f))     ;; #f = no path permission changes
 
 ;; --------------------------------------------------
 ;; Result struct
@@ -53,10 +62,10 @@
     (define evaluator
       (parameterize ([sandbox-output 'string]
                      [sandbox-error-output 'string]
-                     [sandbox-memory-limit 256]
-                     [sandbox-eval-limits (list timeout 256)]
+                     [sandbox-memory-limit (current-sandbox-memory-limit)]
+                     [sandbox-eval-limits (list timeout (current-sandbox-memory-limit))]
                      [sandbox-network-guard #f]
-                     [sandbox-path-permissions '()])
+                     [sandbox-path-permissions (or (current-sandbox-path-limit) '())])
         (make-evaluator lang)))
 
     ;; Try to evaluate

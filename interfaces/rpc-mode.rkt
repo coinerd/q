@@ -79,13 +79,15 @@
 ;; ============================================================
 
 (define (generate-handshake-token)
-  ;; Generate a cryptographically secure 128-bit handshake token (SEC-12)
-  ;; Falls back to timestamp+random if crypto module unavailable
-  (with-handlers ([exn:fail? (λ (_)
-                               (format "~a-~a" (exact-truncate (current-inexact-milliseconds))
-                                       (random 1000000000)))])
-    (define bytes ((dynamic-require 'racket/crypto 'crypto-random-bytes) 16))
-    (format "~a" (bytes->hex-string bytes))))
+  ;; Generate a cryptographically secure 128-bit handshake token (SEC-08)
+  ;; No fallback — raises explicit error if crypto unavailable
+  (define crypto-random-bytes
+    (with-handlers ([exn:fail? (λ (_)
+                                 (error 'generate-handshake-token
+                                        "crypto-random-bytes unavailable: cannot generate secure token"))])
+      (dynamic-require 'racket/crypto 'crypto-random-bytes)))
+  (define bytes (crypto-random-bytes 16))
+  (format "~a" (bytes->hex-string bytes)))
 
 ;; Helper: convert bytes to hex string
 (define (bytes->hex-string bs)

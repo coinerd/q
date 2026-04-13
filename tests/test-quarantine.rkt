@@ -170,6 +170,19 @@
         (restore-extension! "reenable-ext" "/dev/null")
         (check-equal? (extension-state "reenable-ext") 'active))))
 
+   ;; Test 10: SEC-06 — write-state! uses atomic write (tmp + rename)
+   (test-case "SEC-06: write-state! writes atomically"
+     (with-temp-quarantine-dir
+      (lambda ()
+        (disable-extension! "atomic-test")
+        ;; State file should exist and be valid JSON
+        (check-true (file-exists? (quarantine-state-file)))
+        ;; No temp file should be left behind
+        (define tmp-file (build-path (current-quarantine-dir) ".state.json.tmp"))
+        (check-false (file-exists? tmp-file) "temp file should not remain after atomic write")
+        ;; Verify the state is correctly persisted
+        (check-equal? (extension-state "atomic-test") 'disabled))))
+
    ))
 
 (run-tests quarantine-tests)

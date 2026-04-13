@@ -4,7 +4,9 @@
 
 (require rackunit
          racket/file
+         racket/path
          racket/port
+         racket/string
          "../util/audit-log.rkt")
 
 ;; ============================================================
@@ -98,5 +100,41 @@
 ;; ============================================================
 ;; Run all tests
 ;; ============================================================
+
+;; ============================================================
+;; SEC-04: Audit log rotation tests
+;; ============================================================
+
+(test-case
+ "SEC-04: rotation happens when file exceeds max size"
+ (let* ([tmpdir (make-temporary-file "audit-rot-~a" 'directory)]
+        [tmp-path (build-path tmpdir "audit.log")])
+   ;; Write initial content larger than 100 bytes
+   (call-with-output-file tmp-path
+     (lambda (out)
+       (display (make-string 200 #\X) out))
+     #:exists 'replace)
+   ;; Set a small max size to trigger rotation
+   (parameterize ([current-audit-log-max-bytes 100])
+     (audit-log! "sess-rot" 'file-read (build-path "test" "path") #:log-path tmp-path))
+   ;; The .1 backup should exist
+   (define backup-path (path-replace-suffix tmp-path ".1"))
+   (check-true (file-exists? backup-path) "rotated backup should exist")
+   ;; The main log should have been recreated with the new entry
+   (check-true (file-exists? tmp-path) "main log should still exist")
+   (check-true (string-contains? (file->string tmp-path) "sess-rot") "new entry should be in log")
+   (delete-directory/files tmpdir)))
+
+(test-case
+ "SEC-04: small entries don't trigger rotation"
+ (let* ([tmpdir (make-temporary-file "audit-norot-~a" 'directory)]
+        [tmp-path (build-path tmpdir "audit.log")])
+   ;; Write a small entry
+   (parameterize ([current-audit-log-max-bytes 10485760])
+     (audit-log! "sess-small" 'file-write "/small" #:log-path tmp-path))
+   ;; No .1 backup should exist
+   (define backup-path (path-replace-suffix tmp-path ".1"))
+   (check-false (file-exists? backup-path) "no rotation should happen")
+   (delete-directory/files tmpdir)))
 
 (void)
