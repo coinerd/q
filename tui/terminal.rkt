@@ -2,11 +2,24 @@
 
 ;; tui/terminal.rkt — Thin terminal I/O facade
 ;;
-;; Facade that re-exports everything from terminal-bridge and terminal-input,
-;; plus provides drawing primitives, style helpers, screen-size caching,
-;; lifecycle management, and key helpers.
+;; This module is the terminal abstraction layer for the TUI. It dynamically
+;; loads the `tui-term` package when available and falls back to pure-stub
+;; implementations in headless environments (CI, containers, Emacs batch)
+;; where terminal control is unavailable.
 ;;
-;; The public API (provide) is identical to the original monolithic module.
+;; Architecture: This facade re-exports the full public API from
+;;   - terminal-bridge.rkt  (raw terminal I/O, screen-size queries)
+;;   - terminal-input.rkt   (key reading, escape-sequence parsing)
+;; and adds drawing primitives, style helpers, screen-size caching,
+;; lifecycle management, and key helpers on top.
+;;
+;; The stub pattern: when tui-term is not installed, terminal-bridge.rkt
+;; provides no-op stubs so the TUI module tree compiles and loads without
+;; error. Runtime callers should check `tui-term-available?` before using
+;; drawing functions.
+;;
+;; The public API (provide) is identical to the original monolithic module
+;; before the refactor into bridge + input + facade.
 
 (require racket/port
          racket/string
