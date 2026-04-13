@@ -34,21 +34,20 @@ jobs:
           echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
           ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
 
+      # macOS: no .sh installer available for aarch64, use Homebrew
       - name: Install Racket (macOS)
         if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.sh -o /tmp/racket.sh
-          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
-          ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
+          brew install minimal-racket
+          raco --version
 
       - name: Verify Racket Installation
-        run: /usr/local/racket/bin/racket --version || racket --version
+        run: racket --version
 
       - name: Install dependencies
         run: |
-          RACO="$(which raco || echo /usr/local/racket/bin/raco)"
-          $RACO pkg install --auto --batch
-          $RACO pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+          raco pkg install --auto --batch
+          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
       - name: Clean bytecode cache
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
@@ -107,9 +106,8 @@ jobs:
       - name: Install Racket (macOS)
         if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.sh -o /tmp/racket.sh
-          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
-          ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
+          brew install minimal-racket
+          raco --version
 
       - name: Verify Racket Installation
         run: racket --version
