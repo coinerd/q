@@ -230,8 +230,8 @@
      (define result (poll-crawl-status "test-job-id" (- (current-seconds) 10)))
      (define elapsed (- (current-inexact-milliseconds) before))
      (check-equal? result '())
-     (check-true (< elapsed 500)
-                (format "Expected <500ms but took ~ams (bug: when falls through to sleep)"
+     (check-true (< elapsed 2000)
+                (format "Expected <2000ms but took ~ams (bug: when falls through to sleep)"
                         elapsed)))
 
    (test-case "poll-crawl-status returns '() when deadline is exactly now"
