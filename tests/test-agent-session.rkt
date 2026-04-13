@@ -45,6 +45,9 @@
                   compaction-strategy compaction-result->message-list compact-history
                   build-tiered-context tiered-context tiered-context? tiered-context-tier-a
                   tiered-context-tier-b tiered-context-tier-c tiered-context->message-list)
+         (only-in "helpers/mock-provider.rkt"
+                  make-multi-mock-provider make-test-config
+                  make-simple-mock-provider make-tool-call-mock-provider)
          (only-in "../util/cancellation.rkt"
                   make-cancellation-token cancellation-token? cancellation-token-cancelled? cancel-token!))
 
@@ -65,53 +68,6 @@
 
 (define (event-names collected-box)
   (map event-event (unbox collected-box)))
-
-;; Multi-response mock provider: returns different responses for successive turns.
-;; stream is called first (no advance), then send (advances index).
-(define (make-multi-mock-provider responses)
-  (define idx (box 0))
-  (define (current-response)
-    (if (< (unbox idx) (length responses))
-        (list-ref responses (unbox idx))
-        (last responses)))
-  (make-provider
-   (lambda () "multi-mock")
-   (lambda () (hash 'streaming #t 'token-counting #t))
-   ;; send: return current response and advance
-   (lambda (req)
-     (define resp (current-response))
-     (set-box! idx (add1 (unbox idx)))
-     resp)
-   ;; stream: generate chunks from current response and advance (matches provider-stream usage)
-   (lambda (req)
-     (define resp (current-response))
-     (set-box! idx (add1 (unbox idx)))
-     (define content-parts (model-response-content resp))
-     (append
-      (for/list ([part (in-list content-parts)])
-        (cond
-          [(equal? (hash-ref part 'type #f) "text")
-           (stream-chunk (hash-ref part 'text "") #f #f #f)]
-          [(equal? (hash-ref part 'type #f) "tool-call")
-           (stream-chunk #f
-                          (hasheq 'index 0
-                                  'id (hash-ref part 'id "")
-                                  'function (hasheq 'name (hash-ref part 'name "")
-                                                    'arguments (let ([args (hash-ref part 'arguments (hash))])
-                                                                 (if (string? args) args
-                                                                     (format "{~a}" (string-join
-                                                                                      (for/list ([(k v) (in-hash args)])
-                                                                                        (format "\"~a\":\"~a\"" k v))
-                                                                                      ","))))))
-                          #f #f)]
-          [else (stream-chunk #f #f #f #f)]))
-      (list (stream-chunk #f #f (model-response-usage resp) #t))))))
-
-(define (make-test-config dir bus prov [reg #f])
-  (hash 'provider prov
-        'tool-registry (or reg (make-tool-registry))
-        'event-bus bus
-        'session-dir dir))
 
 (define (text-of msg)
   (text-part-text (first (message-content msg))))
@@ -1100,154 +1056,154 @@
 ;; extension-registry and model-name wiring
 ;; ============================================================
 
-;; extension-registry and model-name default to #f
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))])
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir))))
-  (check-false (agent-session-extension-registry sess)
-               "agent-session: extension-registry defaults to #f")
-  (check-false (agent-session-model-name sess)
-               "agent-session: model-name defaults to #f"))
+(test-case "extension-registry and model-name default to #f"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))])
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir))))
+    (check-false (agent-session-extension-registry sess)
+                 "agent-session: extension-registry defaults to #f")
+    (check-false (agent-session-model-name sess)
+                 "agent-session: model-name defaults to #f")))
 
-;; extension-registry is stored when provided
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))]
-      [ext-reg (make-extension-registry)])
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir)
-                        'extension-registry ext-reg)))
-  (check-pred extension-registry? (agent-session-extension-registry sess)
-              "agent-session: extension-registry stored when provided"))
+(test-case "extension-registry is stored when provided"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))]
+        [ext-reg (make-extension-registry)])
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir)
+                          'extension-registry ext-reg)))
+    (check-pred extension-registry? (agent-session-extension-registry sess)
+                "agent-session: extension-registry stored when provided")))
 
-;; model-name is stored when provided
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))])
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir)
-                        'model-name "gpt-4o")))
-  (check-equal? (agent-session-model-name sess) "gpt-4o"
-                "agent-session: model-name stored when provided"))
+(test-case "model-name is stored when provided"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))])
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir)
+                          'model-name "gpt-4o")))
+    (check-equal? (agent-session-model-name sess) "gpt-4o"
+                  "agent-session: model-name stored when provided")))
 
-;; Both extension-registry and model-name together
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))]
-      [ext-reg (make-extension-registry)])
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir)
-                        'extension-registry ext-reg
-                        'model-name "claude-3")))
-  (check-true (extension-registry? (agent-session-extension-registry sess)))
-  (check-equal? (agent-session-model-name sess) "claude-3"))
+(test-case "Both extension-registry and model-name together"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))]
+        [ext-reg (make-extension-registry)])
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir)
+                          'extension-registry ext-reg
+                          'model-name "claude-3")))
+    (check-true (extension-registry? (agent-session-extension-registry sess)))
+    (check-equal? (agent-session-model-name sess) "claude-3")))
 
-;; resume-agent-session preserves extension-registry and model-name
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))]
-      [ext-reg (make-extension-registry)])
-  ;; Create a session first
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir)
-                        'extension-registry ext-reg
-                        'model-name "test-model")))
-  (define sid (session-id sess))
-  ;; Resume it
-  (define resumed (resume-agent-session
-                   sid
-                   (hasheq 'provider prov
-                           'tool-registry reg
-                           'event-bus bus
-                           'session-dir (path->string tmpdir)
-                           'extension-registry ext-reg
-                           'model-name "test-model")))
-  (check-true (extension-registry? (agent-session-extension-registry resumed)))
-  (check-equal? (agent-session-model-name resumed) "test-model"))
+(test-case "resume-agent-session preserves extension-registry and model-name"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))]
+        [ext-reg (make-extension-registry)])
+    ;; Create a session first
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir)
+                          'extension-registry ext-reg
+                          'model-name "test-model")))
+    (define sid (session-id sess))
+    ;; Resume it
+    (define resumed (resume-agent-session
+                     sid
+                     (hasheq 'provider prov
+                             'tool-registry reg
+                             'event-bus bus
+                             'session-dir (path->string tmpdir)
+                             'extension-registry ext-reg
+                             'model-name "test-model")))
+    (check-true (extension-registry? (agent-session-extension-registry resumed)))
+    (check-equal? (agent-session-model-name resumed) "test-model")))
 
-;; resume-agent-session preserves system-instructions
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))]
-      [instrs '("System instruction A")])
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir)
-                        'system-instructions instrs)))
-  (define sid (session-id sess))
-  ;; Resume it
-  (define resumed (resume-agent-session
-                   sid
-                   (hasheq 'provider prov
-                           'tool-registry reg
-                           'event-bus bus
-                           'session-dir (path->string tmpdir)
-                           'system-instructions instrs)))
-  (check-equal? (agent-session-system-instructions resumed) instrs
-                "resume-agent-session preserves system-instructions"))
+(test-case "resume-agent-session preserves system-instructions"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))]
+        [instrs '("System instruction A")])
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir)
+                          'system-instructions instrs)))
+    (define sid (session-id sess))
+    ;; Resume it
+    (define resumed (resume-agent-session
+                     sid
+                     (hasheq 'provider prov
+                             'tool-registry reg
+                             'event-bus bus
+                             'session-dir (path->string tmpdir)
+                             'system-instructions instrs)))
+    (check-equal? (agent-session-system-instructions resumed) instrs
+                  "resume-agent-session preserves system-instructions")))
 
-;; fork-session copies extension-registry and model-name
-(let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
-      [bus (make-event-bus)]
-      [reg (make-tool-registry)]
-      [prov (make-mock-provider
-             (make-model-response
-              (list (hash 'type "text" 'text "hi"))
-              (hash) "mock" 'stop))]
-      [ext-reg (make-extension-registry)])
-  (define sess (make-agent-session
-                (hasheq 'provider prov
-                        'tool-registry reg
-                        'event-bus bus
-                        'session-dir (path->string tmpdir)
-                        'extension-registry ext-reg
-                        'model-name "fork-model")))
-  (define forked (fork-session sess))
-  (check-true (extension-registry? (agent-session-extension-registry forked)))
-  (check-equal? (agent-session-model-name forked) "fork-model"))
+(test-case "fork-session copies extension-registry and model-name"
+  (let ([tmpdir (make-temporary-file "q-session-~a" 'directory)]
+        [bus (make-event-bus)]
+        [reg (make-tool-registry)]
+        [prov (make-mock-provider
+               (make-model-response
+                (list (hash 'type "text" 'text "hi"))
+                (hash) "mock" 'stop))]
+        [ext-reg (make-extension-registry)])
+    (define sess (make-agent-session
+                  (hasheq 'provider prov
+                          'tool-registry reg
+                          'event-bus bus
+                          'session-dir (path->string tmpdir)
+                          'extension-registry ext-reg
+                          'model-name "fork-model")))
+    (define forked (fork-session sess))
+    (check-true (extension-registry? (agent-session-extension-registry forked)))
+    (check-equal? (agent-session-model-name forked) "fork-model")))
 
 ;; ============================================================
 ;; Tiered Context Assembly Tests (WP-37)
@@ -1410,8 +1366,8 @@
                                1001
                                (session-id sess) #f
                                (hasheq 'entry-id (or first-msg-id "unknown"))))
-     ;; Allow thread to process
-     (sleep 0.2)
+     ;; Allow thread to process (publish! is synchronous but yield for safety)
+     (sync/timeout 0.5 never-evt)
      ;; Verify fork completed event was emitted
      (check-not-equal? (length (unbox fork-events)) 0
                        "fork.requested should trigger session.fork.completed or session.forked")
@@ -1445,8 +1401,8 @@
                                1001
                                (session-id sess) #f
                                (hasheq)))
-     ;; Allow thread to process
-     (sleep 0.2)
+     ;; Allow thread to process (publish! is synchronous but yield for safety)
+     (sync/timeout 0.5 never-evt)
      ;; Verify compact completed event was emitted
      (check-not-equal? (length (unbox compact-events)) 0
                        "compact.requested should trigger session.compact.completed")

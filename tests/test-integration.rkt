@@ -45,9 +45,13 @@
                   register-default-tools!
                   make-event-bus))
 
+(require (only-in "helpers/mock-provider.rkt"
+                  make-simple-mock-provider
+                  make-tool-call-mock-provider))
+
 ;; ============================================================
 ;; Helpers
-;; ============================================================
+ ;; ============================================================
 
 (define (make-temp-dir)
   (make-temporary-file "q-integ-~a" 'directory))
@@ -55,76 +59,6 @@
 (define (cleanup-dir dir)
   (when (directory-exists? dir)
     (delete-directory/files dir)))
-
-;; Mock provider that returns fixed text responses in sequence
-(define (make-simple-mock-provider . texts)
-  (define idx (box 0))
-  (make-provider
-   (lambda () "mock-integ")
-   (lambda () (hash 'streaming #t 'token-counting #t))
-   (lambda (req)
-     (define i (unbox idx))
-     (set-box! idx (add1 i))
-     (define text (if (< i (length texts)) (list-ref texts i) "done"))
-     (make-model-response
-      (list (hash 'type "text" 'text text))
-      (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-      "mock-model"
-      'stop))
-   (lambda (req)
-     (define i (unbox idx))
-     (set-box! idx (add1 i))
-     (define text (if (< i (length texts)) (list-ref texts i) "done"))
-     (list (stream-chunk text #f #f #f)
-           (stream-chunk #f #f
-                         (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-                         #t)))))
-
-;; Mock provider: first call returns a tool-call via stream, second returns text
-(define (make-tool-call-mock-provider tool-name tool-args response-text)
-  (define call-count (box 0))
-  (make-provider
-   (lambda () "mock-tool-call")
-   (lambda () (hash 'streaming #t 'token-counting #t))
-   ;; Non-streaming send (not used by loop, but required by make-provider)
-   (lambda (req)
-     (set-box! call-count (add1 (unbox call-count)))
-     (cond
-       [(= (unbox call-count) 1)
-        (make-model-response
-         (list (hash 'type "tool-call"
-                     'id "tc-mock-1"
-                     'name tool-name
-                     'arguments tool-args))
-         (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-         "mock-model"
-         'tool-calls)]
-       [else
-        (make-model-response
-         (list (hash 'type "text" 'text response-text))
-         (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
-         "mock-model"
-         'stop)]))
-   ;; Streaming (used by loop.rkt)
-   (lambda (req)
-     (set-box! call-count (add1 (unbox call-count)))
-     (cond
-       [(<= (unbox call-count) 1)
-        ;; First call: return tool-call delta via stream
-        (list (stream-chunk #f
-                            (hasheq 'id "tc-mock-1"
-                                    'name tool-name
-                                    'arguments (jsexpr->string tool-args))
-                            #f #f)
-              (stream-chunk #f #f
-                            (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-                            #t))]
-       [else
-        ;; Subsequent calls: return text via stream
-        (list (stream-chunk response-text #f #f #f)
-              (stream-chunk #f #f
-                            (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
-                            #t))]))))
 
 ;; Build a minimal SDK runtime for testing
 (define (make-test-runtime prov
