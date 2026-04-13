@@ -20,7 +20,7 @@
 
 ;; Serialize a transcript-entry to a JSON-compatible hash.
 (define (transcript-entry->jsexpr entry)
-  (hash 'kind  (symbol->string (transcript-entry-kind entry))
+  (hasheq 'kind  (symbol->string (transcript-entry-kind entry))
         'text  (transcript-entry-text entry)
         'timestamp (transcript-entry-timestamp entry)
         'meta (hash->jsexpr-deep (transcript-entry-meta entry))))

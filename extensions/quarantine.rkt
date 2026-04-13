@@ -22,8 +22,10 @@
          json)
 
 (provide
+ ;; Quarantine state
  current-quarantine-dir
  quarantine-state-file
+ ;; Extension state queries and mutations
  extension-state
  disable-extension!
  quarantine-extension!
@@ -62,14 +64,14 @@
   (define sf (quarantine-state-file))
   (cond
     [(not (file-exists? sf))
-     (hash 'disabled '() 'quarantined (hasheq) 'active '())]
+     (hasheq 'disabled '() 'quarantined (hasheq) 'active '())]
     [else
      (with-handlers ([exn:fail? (lambda (e)
                                   (log-warning (format "quarantine state corrupted, resetting: ~a"
                                                        (exn-message e)))
-                                  (hash 'disabled '() 'quarantined (hasheq) 'active '()))])
+                                  (hasheq 'disabled '() 'quarantined (hasheq) 'active '()))])
        (define data (call-with-input-file sf read-json))
-       (hash 'disabled (hash-ref data 'disabled '())
+       (hasheq 'disabled (hash-ref data 'disabled '())
              'quarantined (hash-ref data 'quarantined (hasheq))
              'active (hash-ref data 'active '())))]))
 
@@ -120,7 +122,7 @@
   (define new-active
     (filter (lambda (n) (not (equal? n name)))
             (hash-ref state 'active '())))
-  (write-state! (hash 'disabled new-disabled
+  (write-state! (hasheq 'disabled new-disabled
                        'quarantined new-quarantined
                        'active new-active)))
 
@@ -141,12 +143,12 @@
   (define new-disabled (filter (lambda (n) (not (equal? n name))) disabled))
   (define new-quarantined
     (hash-set quarantined (name->sym name)
-              (hash 'original-path (path->string (path->complete-path src-path))
+              (hasheq 'original-path (path->string (path->complete-path src-path))
                     'quarantined-at (seconds->iso8601 (current-seconds)))))
   (define new-active
     (filter (lambda (n) (not (equal? n name)))
             (hash-ref state 'active '())))
-  (write-state! (hash 'disabled new-disabled
+  (write-state! (hasheq 'disabled new-disabled
                        'quarantined new-quarantined
                        'active new-active)))
 
@@ -175,7 +177,7 @@
     (if (member name active)
         active
         (append active (list name))))
-  (write-state! (hash 'disabled new-disabled
+  (write-state! (hasheq 'disabled new-disabled
                        'quarantined new-quarantined
                        'active new-active)))
 

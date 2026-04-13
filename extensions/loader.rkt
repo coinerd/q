@@ -12,7 +12,8 @@
 
 (require racket/contract
          racket/file
-         racket/path
+         (only-in racket/path file-name-from-path)
+         (only-in "../util/path-helpers.rkt" path-only)
          racket/list
          racket/string
          json
@@ -22,11 +23,13 @@
          "manifest.rkt"
          "quarantine.rkt")
 
-(provide extension-load-error
+(provide ;; Extension loading errors
+         extension-load-error
          extension-load-error?
          extension-load-error-path
          extension-load-error-message
          extension-load-error-category
+         ;; Discovery and loading
          discover-extensions
          load-extension!
          try-load-extension
@@ -81,7 +84,7 @@
                                (current-seconds)
                                ""
                                #f
-                               (hash 'path
+                               (hasheq 'path
                                      (if (path? path)
                                          (path->string path)
                                          path)
@@ -153,7 +156,7 @@
     (unless (file-exists? mod-path)
       (raise (make-not-found-error path)))
     ;; Validate manifest if present (SEC-04)
-    (define manifest-path (build-path (path-only mod-path) "qpm.json"))
+    (define manifest-path (build-path (path-only-with-default mod-path) "qpm.json"))
     (when (file-exists? manifest-path)
       (define raw (with-input-from-file manifest-path read-json))
       (when (hash? raw)
@@ -166,10 +169,10 @@
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))
 
-;; Helper: extract directory from path
-(define (path-only p)
-  (define-values (parent name must-be-dir?) (split-path p))
-  (if parent parent (current-directory)))
+;; path-only imported from util/path-helpers.rkt
+;; (local wrapper preserves (current-directory) fallback for relative paths)
+(define (path-only-with-default p)
+  (or (path-only p) (current-directory)))
 
 ;; Helper: construct qpm-manifest from a raw JSON hash
 (define (qpm-manifest-from-hash h)

@@ -129,8 +129,8 @@
         (transcript-entry 'system
                           (format "[switched to branch: ~a]" branch-id)
                           0
-                          (hash 'branch-id branch-id))
-        (transcript-entry 'error (format "Branch not found: ~a" branch-id) 0 (hash))))
+                          (hasheq 'branch-id branch-id))
+        (transcript-entry 'error (format "Branch not found: ~a" branch-id) 0 (hasheq))))
   (define new-state (add-transcript-entry state entry))
   (when (and idx (lookup-entry idx branch-id))
     (set-box! (cmd-ctx-state-box cctx) (set-current-branch new-state branch-id)))
@@ -212,7 +212,7 @@
        (transcript-entry 'system
                          (format "[fork requested at: ~a]" entry-id)
                          0
-                         (hash 'fork-entry-id entry-id)))
+                         (hasheq 'fork-entry-id entry-id)))
      ;; Publish fork event for runtime to handle
      (when (cmd-ctx-event-bus cctx)
        (publish! (cmd-ctx-event-bus cctx)
@@ -220,7 +220,7 @@
                              (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
                              (or (ui-state-session-id state) "")
                              #f
-                             (hash 'entry-id entry-id))))
+                             (hasheq 'entry-id entry-id))))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]))
 
@@ -278,7 +278,7 @@
                                 (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
                                 (or (ui-state-session-id state) "")
                                 #f
-                                (hash 'model
+                                (hasheq 'model
                                       (model-resolution-model-name resolution)
                                       'provider
                                       (model-resolution-provider-name resolution)))))
@@ -288,7 +288,7 @@
                                     (model-resolution-model-name resolution)
                                     (model-resolution-provider-name resolution))
                             0
-                            (hash 'model
+                            (hasheq 'model
                                   (model-resolution-model-name resolution)
                                   'provider
                                   (model-resolution-provider-name resolution))))

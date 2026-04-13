@@ -242,7 +242,7 @@
         [(and (safe-mode-config? cfg) (safe-mode-config-project-root-path cfg))
          (safe-mode-config-project-root-path cfg)]
         [else (project-root)])))
-  (hash 'active?
+  (hasheq 'active?
         active
         'trust-level
         (trust-level)

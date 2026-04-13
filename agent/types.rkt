@@ -11,4 +11,5 @@
 
 (require "../util/protocol-types.rkt")
 
-(provide (all-from-out "../util/protocol-types.rkt"))
+(provide ;; Re-export canonical protocol types
+ (all-from-out "../util/protocol-types.rkt"))

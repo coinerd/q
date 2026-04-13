@@ -12,6 +12,7 @@
          racket/list)
 
 (provide
+ ;; Extension struct and registry
  (struct-out extension)
  extension-registry?
  (contract-out

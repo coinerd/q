@@ -20,7 +20,9 @@
          "provider.rkt"
          "stream.rkt")
 
-(provide make-anthropic-provider
+(provide ;; Provider constructor
+ make-anthropic-provider
+         ;; Request/response helpers (exported for testing)
          anthropic-build-request-body
          anthropic-parse-response
          anthropic-parse-stream-chunks
@@ -68,32 +70,32 @@
            (if (hash? content)
                (hash-ref content 'content "")
                (if (string? content) content "")))
-         (hash
+         (hasheq
           'role
           "user"
           'content
-          (list (hash 'type "tool_result" 'tool_use_id tool-call-id 'content tool-result-content)))]
+          (list (hasheq 'type "tool_result" 'tool_use_id tool-call-id 'content tool-result-content)))]
         ;; Assistant with list content (tool calls)
         [(and (equal? role "assistant") (list? content))
-         (hash 'role
+         (hasheq 'role
                "assistant"
                'content
                (for/list ([block (in-list content)])
                  (define btype (hash-ref block 'type "text"))
                  (cond
-                   [(equal? btype "text") (hash 'type "text" 'text (hash-ref block 'text ""))]
+                   [(equal? btype "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
                    [(equal? btype "tool-call")
-                    (hash 'type
+                    (hasheq 'type
                           "tool_use"
                           'id
                           (hash-ref block 'id "")
                           'name
                           (hash-ref block 'name "")
                           'input
-                          (hash-ref block 'arguments (hash)))]
+                          (hash-ref block 'arguments (hasheq)))]
                    [else block])))]
         ;; Simple string content: wrap in text block
-        [(string? content) (hash 'role role 'content (list (hash 'type "text" 'text content)))]
+        [(string? content) (hasheq 'role role 'content (list (hasheq 'type "text" 'text content)))]
         ;; Fallback: pass through
         [else msg])))
 
@@ -129,8 +131,8 @@
   (define fn (hash-ref tool 'function tool))
   (define name (hash-ref fn 'name "unknown"))
   (define description (hash-ref fn 'description ""))
-  (define parameters (hash-ref fn 'parameters (hash)))
-  (hash 'name name 'description description 'input_schema parameters))
+  (define parameters (hash-ref fn 'parameters (hasheq)))
+  (hasheq 'name name 'description description 'input_schema parameters))
 
 ;; ============================================================
 ;; Response parsing
@@ -139,7 +141,7 @@
 ;; Convert Anthropic Messages API response to model-response.
 (define (anthropic-parse-response raw)
   (define model-name (hash-ref raw 'model "unknown"))
-  (define usage-raw (hash-ref raw 'usage (hash)))
+  (define usage-raw (hash-ref raw 'usage (hasheq)))
   (define stop-reason-raw (hash-ref raw 'stop_reason "end_turn"))
   (define content-blocks (hash-ref raw 'content '()))
 
@@ -148,7 +150,7 @@
 
   ;; Translate usage: input_tokens → prompt_tokens, output_tokens → completion_tokens
   (define usage
-    (hash 'prompt_tokens
+    (hasheq 'prompt_tokens
           (hash-ref usage-raw 'input_tokens 0)
           'completion_tokens
           (hash-ref usage-raw 'output_tokens 0)
@@ -160,16 +162,16 @@
     (for/list ([block (in-list content-blocks)])
       (define type (hash-ref block 'type "text"))
       (cond
-        [(equal? type "text") (hash 'type "text" 'text (hash-ref block 'text ""))]
+        [(equal? type "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
         [(equal? type "tool_use")
-         (hash 'type
+         (hasheq 'type
                "tool-call"
                'id
                (hash-ref block 'id "")
                'name
                (hash-ref block 'name "")
                'arguments
-               (hash-ref block 'input (hash)))]
+               (hash-ref block 'input (hasheq)))]
         [else block])))
 
   (make-model-response content usage model-name stop-reason))
@@ -225,7 +227,7 @@
   (cond
     ;; Text delta
     [(equal? type "content_block_delta")
-     (define delta (hash-ref event 'delta (hash)))
+     (define delta (hash-ref event 'delta (hasheq)))
      (define delta-type (hash-ref delta 'type #f))
      (cond
        [(equal? delta-type "text_delta")
@@ -236,12 +238,12 @@
         (define partial-json (hash-ref delta 'partial_json ""))
         (set! results
               (cons (stream-chunk #f
-                                  (hash 'index
+                                  (hasheq 'index
                                         (unbox tool-index-box)
                                         'id
                                         (unbox tool-id-box)
                                         'function
-                                        (hash 'name (unbox tool-name-box) 'arguments partial-json))
+                                        (hasheq 'name (unbox tool-name-box) 'arguments partial-json))
                                   #f
                                   #f)
                     results))]
@@ -249,7 +251,7 @@
 
     ;; Tool use block starts
     [(equal? type "content_block_start")
-     (define content-block (hash-ref event 'content_block (hash)))
+     (define content-block (hash-ref event 'content_block (hasheq)))
      (define cb-type (hash-ref content-block 'type #f))
      (define idx (hash-ref event 'index 0))
      (when (equal? cb-type "tool_use")
@@ -259,20 +261,20 @@
 
     ;; Message delta: usage + stop reason → done chunk
     [(equal? type "message_delta")
-     (define delta (hash-ref event 'delta (hash)))
-     (define usage-raw (hash-ref event 'usage (hash)))
+     (define delta (hash-ref event 'delta (hasheq)))
+     (define usage-raw (hash-ref event 'usage (hasheq)))
      (define stop-reason (hash-ref delta 'stop_reason #f))
      (define out-tokens (hash-ref usage-raw 'output_tokens 0))
-     (define usage (hash 'completion_tokens out-tokens))
+     (define usage (hasheq 'completion_tokens out-tokens))
      (set! results (cons (stream-chunk #f #f usage #t) results))]
 
     ;; message_start: extract initial usage
     [(equal? type "message_start")
-     (define message (hash-ref event 'message (hash)))
-     (define usage-raw (hash-ref message 'usage (hash)))
+     (define message (hash-ref event 'message (hasheq)))
+     (define usage-raw (hash-ref message 'usage (hasheq)))
      (define in-tokens (hash-ref usage-raw 'input_tokens 0))
      (when (> in-tokens 0)
-       (set! results (cons (stream-chunk #f #f (hash 'prompt_tokens in-tokens) #f) results)))]
+       (set! results (cons (stream-chunk #f #f (hasheq 'prompt_tokens in-tokens) #f) results)))]
 
     [else (void)])
   (reverse results))
@@ -428,6 +430,6 @@
                       [else (loop)])]))))
 
   (make-provider (lambda () "anthropic")
-                 (lambda () (hash 'streaming #t 'token-counting #f))
+                 (lambda () (hasheq 'streaming #t 'token-counting #f))
                  send
                  stream))

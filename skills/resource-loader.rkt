@@ -121,7 +121,7 @@
                                (λ (l) (string=? (string-trim l) ""))))
      (cond
        [(null? rest-lines)
-        (hash 'name name 'description "" 'content "")]
+        (hasheq 'name name 'description "" 'content "")]
        [else
         ;; Find first blank line — everything before is description,
         ;; everything after is content
@@ -129,7 +129,7 @@
           (split-at-blank-line rest-lines))
         (define description (string-trim (string-join desc-part "\n")))
         (define content (string-trim (string-join content-part "\n")))
-        (hash 'name name
+        (hasheq 'name name
               'description (if (non-empty-string? description) description "")
               'content content)])]))
 

@@ -5,6 +5,7 @@
 ;; ARCH-01: extracted from extensions/hooks.rkt to eliminate layer violations.
 
 (provide
+ ;; Hook result struct and action constructors
  (struct-out hook-result)
  hook-pass hook-amend hook-block)
 

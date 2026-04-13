@@ -12,5 +12,6 @@
 (require "resource-loader.rkt"
          "template.rkt")
 
-(provide (all-from-out "resource-loader.rkt")
+(provide ;; Re-export resource loader and template types
+ (all-from-out "resource-loader.rkt")
          (all-from-out "template.rkt"))

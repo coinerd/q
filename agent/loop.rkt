@@ -29,8 +29,10 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../llm/stream.rkt" accumulate-tool-call-deltas)
+         (only-in "../llm/token-budget.rkt" estimate-turn-tokens)
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
+         (only-in "../util/content-helpers.rkt" result-content->string))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -69,13 +71,8 @@
 ;; Helpers (shared utilities)
 ;; ============================================================
 
-;; Estimate token count from message/response text as fallback.
-;; Rough estimate: ~4 chars per token for English text.
-(define (estimate-tokens messages response-text)
-  (define total-chars
-    (+ (for/sum ([m (in-list messages)]) (string-length (format "~a" (hash-ref m 'content ""))))
-       (string-length (or response-text ""))))
-  (quotient total-chars 4))
+;; estimate-tokens replaced by estimate-turn-tokens from llm/token-budget.rkt
+;; result-content->string imported from util/content-helpers.rkt
 
 ;; Check whether usage hash is empty/zero (provider didn't return real usage).
 (define (usage-empty? u)
@@ -94,19 +91,7 @@
                   "")]
     [else (format "~a" parts)]))
 
-;; Convert tool-result content to a string for the API.
-;; Content may be a list of content-part hashes, plain strings, or nested data.
-(define (result-content->string content)
-  (cond
-    [(string? content) content]
-    [(list? content)
-     (string-join (for/list ([part (in-list content)])
-                    (cond
-                      [(string? part) part]
-                      [(hash? part) (hash-ref part 'text (format "~a" part))]
-                      [else (format "~a" part)]))
-                  "\n")]
-    [else (format "~a" content)]))
+;; result-content->string imported from util/content-helpers.rkt
 
 ;; Emit an event on the bus and optionally record in state
 (define (emit! bus session-id turn-id event-name payload #:state [state #f])
@@ -355,8 +340,8 @@
   ;; When provider returns no usage, estimate from message lengths
   (define effective-usage
     (if (usage-empty? stream-usage)
-        (let ([est (estimate-tokens raw-messages accumulated-text)])
-          (hash 'prompt_tokens est 'completion_tokens 0 'total_tokens est 'estimated? #t))
+        (let ([est (estimate-turn-tokens raw-messages accumulated-text)])
+          (hasheq 'prompt_tokens est 'completion_tokens 0 'total_tokens est 'estimated? #t))
         stream-usage))
 
   ;; R2-7: model-response-post hook -- dispatch after response received

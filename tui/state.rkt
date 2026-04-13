@@ -141,7 +141,7 @@
            (format "[TOOL: ~a]" name)
            (format "[TOOL: ~a] ~a" name arg-summary)))
      (define ts (event-time evt))
-     (define meta (hash 'name name 'arguments (or args-raw "")))
+     (define meta (hasheq 'name name 'arguments (or args-raw "")))
      (struct-copy ui-state
                   state
                   [transcript
@@ -163,7 +163,7 @@
            (format "[OK: ~a]" name)
            (format "[OK: ~a] ~a" name result-summary)))
      (define ts (event-time evt))
-     (define meta (hash 'name name 'result (or result-raw "")))
+     (define meta (hasheq 'name name 'result (or result-raw "")))
      (struct-copy ui-state
                   state
                   [transcript
@@ -183,7 +183,7 @@
                            (list (transcript-entry 'tool-fail
                                                    (format "[FAIL: ~a] ~a" name err)
                                                    ts
-                                                   (hash 'name name 'error err))))]
+                                                   (hasheq 'name name 'error err))))]
                   [pending-tool-name #f])]
 
     [("runtime.error")
@@ -279,7 +279,7 @@
                            (list (transcript-entry 'system
                                                    (format "[tool blocked: ~a — ~a]" name reason)
                                                    (event-time evt)
-                                                   (hash 'name name))))]
+                                                   (hasheq 'name name))))]
                   [pending-tool-name #f])]
 
     [else state])) ;; Ignore unknown events

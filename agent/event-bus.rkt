@@ -13,6 +13,7 @@
          "types.rkt")
 
 (provide
+ ;; Pub/sub event bus
  make-event-bus
  event-bus?
  subscribe!

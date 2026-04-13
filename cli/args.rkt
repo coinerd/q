@@ -46,6 +46,10 @@
          )
   #:transparent)
 
+;; Helper: construct a "help" config (used for parse errors and --help)
+(define (make-help-config)
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+
 ;; ============================================================
 ;; Pure: parse-cli-args
 ;; ============================================================
@@ -111,7 +115,7 @@
 
       ;; ── --help / -h ──
       [(or (equal? (vector-ref vec i) "--help") (equal? (vector-ref vec i) "-h"))
-       (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
+       (make-help-config)]
 
       ;; ── --version ──
       [(equal? (vector-ref vec i) "--version")
@@ -133,7 +137,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+           (make-help-config))]
 
       ;; ── --model <name> ──
       [(equal? (vector-ref vec i) "--model")
@@ -151,7 +155,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+           (make-help-config))]
 
       ;; ── --project-dir <path> ──
       [(equal? (vector-ref vec i) "--project-dir")
@@ -169,7 +173,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+           (make-help-config))]
 
       ;; ── --config <path> ──
       [(equal? (vector-ref vec i) "--config")
@@ -187,7 +191,7 @@
                  no-tools?
                  tools
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+           (make-help-config))]
 
       ;; ── --verbose / -v ──
       [(or (equal? (vector-ref vec i) "--verbose") (equal? (vector-ref vec i) "-v"))
@@ -225,8 +229,8 @@
                        tools
                        session-dir)
                  ;; Non-numeric max-turns → help
-                 (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())))
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+                 (make-help-config)))
+           (make-help-config))]
 
       ;; ── --no-tools ──
       [(equal? (vector-ref vec i) "--no-tools")
@@ -260,7 +264,7 @@
                  no-tools?
                  (cons (vector-ref vec (add1 i)) tools)
                  session-dir)
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+           (make-help-config))]
 
       ;; ── --tui ──
       [(equal? (vector-ref vec i) "--tui")
@@ -326,12 +330,12 @@
                  no-tools?
                  tools
                  (vector-ref vec (add1 i)))
-           (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+           (make-help-config))]
 
       ;; ── Positional argument (prompt) ──
       [(string-prefix? (vector-ref vec i) "--")
        ;; Unknown flag → help
-       (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
+       (make-help-config)]
 
       [else
        ;; First positional — check for named subcommands
@@ -396,9 +400,9 @@
                                     sub-sym
                                     rest))
                       ;; Bad subcommand → help
-                      (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())))
+                      (make-help-config)))
                 ;; No subcommand → show help
-                (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))]
+                (make-help-config))]
            ;; Default: treat as prompt
            [prompt
             ;; Second positional — unexpected, just ignore

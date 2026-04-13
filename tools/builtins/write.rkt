@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require racket/file
-         (only-in "../tool.rkt" make-success-result make-error-result))
+         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../util/path-helpers.rkt" path-only))
 
 (provide tool-write)
 
@@ -29,7 +30,4 @@
        (make-success-result (list (format "Wrote ~a bytes to ~a" bytes-count path-str))
                             (hasheq 'path path-str 'bytes-written bytes-count)))]))
 
-;; Extract directory portion of a path string
-(define (path-only p)
-  (define-values (dir _base _must-be-dir?) (split-path p))
-  (if (eq? dir 'relative) #f dir))
+;; path-only imported from util/path-helpers.rkt

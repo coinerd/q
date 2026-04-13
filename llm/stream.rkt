@@ -16,16 +16,23 @@
          racket/match)
 
 (provide
+ ;; — SSE line-level helpers —
  parse-sse-lines
  parse-sse-line
+ parse-sse-data-line
+ sse-done?
+ ;; — OpenAI chunk normalization —
  normalize-openai-chunks
  normalize-openai-chunk
  accumulate-tool-call-deltas
+ ;; — Incremental SSE reading —
  read-sse-chunks
+ ;; — Response body reading (bounded) —
  read-response-body
- read-line/timeout
  read-response-body/timeout
  max-response-size
+ ;; — Timeout infrastructure —
+ read-line/timeout
  exn:fail:network:timeout
  exn:fail:network:timeout?
  http-read-timeout-default
@@ -161,19 +168,14 @@
   (define results
     (for/fold ([acc '()])
               ([line (in-list lines)])
-      (define trimmed (string-trim line))
+      (define data-str (parse-sse-data-line line))
       (cond
-        [(string=? trimmed "") acc]                          ; empty line
-        [(string-prefix? trimmed ":") acc]                   ; comment
-        [(string-prefix? trimmed "data: ")
-         (define data-str (substring trimmed 6))              ; after "data: "
-         (cond
-           [(string=? data-str "[DONE]") acc]                ; termination
-           [else
-            (with-handlers ([exn:fail? (lambda (e) acc)])    ; skip malformed
-              (define parsed (string->jsexpr data-str))
-              (cons parsed acc))])]
-        [else acc])))
+        [(not data-str) acc]                                  ; non-data line
+        [(sse-done? data-str) acc]                            ; termination
+        [else
+         (with-handlers ([exn:fail? (lambda (e) acc)])        ; skip malformed
+           (define parsed (string->jsexpr data-str))
+           (cons parsed acc))])))
   (reverse results))
 
 ;; ============================================================
@@ -260,9 +262,9 @@
   (define sorted-indices (sort (hash-keys groups) <))
   (for/list ([idx (in-list sorted-indices)])
     (define val (hash-ref groups idx))
-    (hash 'id (car val)
-          'name (cadr val)
-          'arguments (caddr val))))
+    (hasheq 'id (car val)
+            'name (cadr val)
+            'arguments (caddr val))))
 
 ;; ============================================================
 ;; parse-sse-line (incremental)
@@ -272,17 +274,34 @@
 ;; Parse one SSE line. Returns jsexpr hash for "data: ..." lines,
 ;; 'done for [DONE], #f for empty lines, comments, or malformed data.
 (define (parse-sse-line line)
+  (define data-str (parse-sse-data-line line))
+  (cond
+    [(not data-str) #f]
+    [(sse-done? data-str) 'done]
+    [else
+     (with-handlers ([exn:fail? (lambda (e) #f)])
+       (string->jsexpr data-str))]))
+
+;; ============================================================
+;; parse-sse-data-line / sse-done?
+;; ============================================================
+
+;; parse-sse-data-line : string? -> (or/c string? #f)
+;; Extract the data payload from an SSE `data: ...` line.
+;; Returns the data string (after `data: `) for data lines,
+;; or #f for non-data lines (empty lines, comments, event: lines, etc.).
+(define (parse-sse-data-line line)
   (define trimmed (string-trim line))
   (cond
     [(string=? trimmed "") #f]
     [(string-prefix? trimmed ":") #f]
-    [(string-prefix? trimmed "data: ")
-     (define data-str (substring trimmed 6))
-     (if (string=? data-str "[DONE]")
-         'done
-         (with-handlers ([exn:fail? (lambda (e) #f)])
-           (string->jsexpr data-str)))]
+    [(string-prefix? trimmed "data: ") (substring trimmed 6)]
     [else #f]))
+
+;; sse-done? : string? -> boolean?
+;; Returns #t when the SSE data payload is the `[DONE]` termination signal.
+(define (sse-done? data-str)
+  (string=? data-str "[DONE]"))
 
 ;; ============================================================
 ;; normalize-openai-chunk (singular)
