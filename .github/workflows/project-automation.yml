@@ -2,32 +2,46 @@ name: Project automation
 
 on:
   pull_request:
-    types: [opened, converted_to_draft, ready_for_review, review_requested, closed]
+    types: [opened, converted_to_draft, ready_for_review, closed]
   pull_request_review:
     types: [submitted]
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
+
+# NOTE: This workflow requires a PROJECT_PAT repository secret with
+# `project` scope to update the "q Roadmap & Delivery" project board.
+# If PROJECT_PAT is not set, the job runs with GITHUB_TOKEN (read-only)
+# and will gracefully skip project updates.
+# To set up: Settings → Secrets → New secret → Name: PROJECT_PAT,
+# Value: a PAT with `project` and `repo` scopes.
 
 jobs:
   update-project-status:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Update issue status on linked project
         uses: actions/github-script@v9
         with:
-          github-token: ${{ secrets.PROJECT_PAT }}
+          github-token: ${{ secrets.PROJECT_PAT || github.token }}
           script: |
             const pr = context.payload.pull_request;
             const body = pr.body || '';
 
-            // Extract linked issue numbers from PR body (Fixes #N, Closes #N, Resolves #N)
+            // Extract linked issue numbers from PR body
+            // (Fixes #N, Closes #N, Resolves #N)
             const linkedIssues = [];
             const matches = body.matchAll(/(?:fixes|closes|resolves)\s+#(\d+)/gi);
             for (const m of matches) {
               linkedIssues.push(parseInt(m[1]));
             }
-            if (linkedIssues.length === 0) return;
+            if (linkedIssues.length === 0) {
+              console.log('No linked issues found in PR body');
+              return;
+            }
 
             // Map PR events to project status
             let targetStatus;
@@ -45,9 +59,38 @@ jobs:
               if (review.state === 'changes_requested') targetStatus = 'Blocked';
               else if (review.state === 'approved') targetStatus = 'In review';
             }
-            if (!targetStatus) return;
+            if (!targetStatus) {
+              console.log(`No status mapping for ${event}.${action}`);
+              return;
+            }
 
-            // Find the project and update status
+            // Find "q Roadmap & Delivery" project
+            const owner = context.repo.owner;
+            const listQuery = `
+              query($owner: String!, $first: Int!) {
+                user(login: $owner) {
+                  projectsV2(first: $first) {
+                    nodes { id title number }
+                  }
+                }
+              }
+            `;
+            let listResult;
+            try {
+              listResult = await github.graphql(listQuery, { owner, first: 10 });
+            } catch (e) {
+              console.log(`Cannot list projects (token may lack project scope): ${e.message}`);
+              return;
+            }
+            const project = listResult.user.projectsV2.nodes.find(
+              p => p.title === 'q Roadmap & Delivery'
+            );
+            if (!project) {
+              console.log('Project "q Roadmap & Delivery" not found');
+              return;
+            }
+
+            // Get project fields
             const query = `
               query($owner: String!, $number: Int!) {
                 user(login: $owner) {
@@ -66,59 +109,29 @@ jobs:
                 }
               }
             `;
-
-            // Try to find "q Roadmap & Delivery" project
-            // You may need to adjust the project number
-            const owner = context.repo.owner;
-            let projectNum = 1;
-
-            // List projects to find the right one
-            const listQuery = `
-              query($owner: String!, $first: Int!) {
-                user(login: $owner) {
-                  projectsV2(first: $first) {
-                    nodes { id title number }
-                  }
-                }
-              }
-            `;
-            const listResult = await github.graphql(listQuery, { owner, first: 10 });
-            const project = listResult.user.projectsV2.nodes.find(p => p.title === 'q Roadmap & Delivery');
-            if (!project) {
-              console.log('Project "q Roadmap & Delivery" not found');
-              return;
-            }
-
-            const projectData = await github.graphql(query, { owner, number: project.number });
+            const projectData = await github.graphql(query, {
+              owner,
+              number: project.number
+            });
             const projectId = projectData.user.projectV2.id;
-            const statusField = projectData.user.projectV2.fields.nodes.find(f => f.name === 'Status');
+            const statusField = projectData.user.projectV2.fields.nodes.find(
+              f => f.name === 'Status'
+            );
             if (!statusField) {
               console.log('Status field not found');
               return;
             }
-            const statusOption = statusField.options.find(o => o.name === targetStatus);
+            const statusOption = statusField.options.find(
+              o => o.name === targetStatus
+            );
             if (!statusOption) {
               console.log(`Status option "${targetStatus}" not found`);
               return;
             }
 
-            // For each linked issue, find it in the project and update its status
+            // Update each linked issue in the project
             for (const issueNum of linkedIssues) {
-              const issueQuery = `
-                query($owner: String!, $repo: String!, $number: Int!) {
-                  repository(owner: $owner, name: $repo) {
-                    issue(number: $number) { id }
-                  }
-                }
-              `;
-              const issueResult = await github.graphql(issueQuery, {
-                owner,
-                repo: context.repo.repo,
-                number: issueNum
-              });
-              const issueNodeId = issueResult.repository.issue.id;
-
-              // Find the item in the project
+              // Find the issue's project item
               const itemsQuery = `
                 query($projectId: ID!, $first: Int!) {
                   node(id: $projectId) {
@@ -135,7 +148,10 @@ jobs:
                   }
                 }
               `;
-              const itemsResult = await github.graphql(itemsQuery, { projectId, first: 100 });
+              const itemsResult = await github.graphql(itemsQuery, {
+                projectId,
+                first: 100
+              });
               const item = itemsResult.node.items.nodes.find(
                 i => i.content && i.content.number === issueNum
               );
@@ -146,7 +162,12 @@ jobs:
 
               // Update the status field
               const updateMutation = `
-                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                mutation(
+                  $projectId: ID!,
+                  $itemId: ID!,
+                  $fieldId: ID!,
+                  $optionId: String!
+                ) {
                   updateProjectV2ItemFieldValue(input: {
                     projectId: $projectId,
                     itemId: $itemId,
@@ -157,11 +178,15 @@ jobs:
                   }
                 }
               `;
-              await github.graphql(updateMutation, {
-                projectId,
-                itemId: item.id,
-                fieldId: statusField.id,
-                optionId: statusOption.id
-              });
-              console.log(`Updated #${issueNum} → ${targetStatus}`);
+              try {
+                await github.graphql(updateMutation, {
+                  projectId,
+                  itemId: item.id,
+                  fieldId: statusField.id,
+                  optionId: statusOption.id
+                });
+                console.log(`Updated #${issueNum} → ${targetStatus}`);
+              } catch (e) {
+                console.log(`Failed to update #${issueNum}: ${e.message}`);
+              }
             }
