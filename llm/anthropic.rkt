@@ -18,10 +18,11 @@
          net/http-client
          "model.rkt"
          "provider.rkt"
-         "stream.rkt")
+         "stream.rkt"
+         "http-helpers.rkt")
 
-(provide ;; Provider constructor
- make-anthropic-provider
+;; Provider constructor
+(provide make-anthropic-provider
          ;; Request/response helpers (exported for testing)
          anthropic-build-request-body
          anthropic-parse-response
@@ -78,22 +79,22 @@
         ;; Assistant with list content (tool calls)
         [(and (equal? role "assistant") (list? content))
          (hasheq 'role
-               "assistant"
-               'content
-               (for/list ([block (in-list content)])
-                 (define btype (hash-ref block 'type "text"))
-                 (cond
-                   [(equal? btype "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
-                   [(equal? btype "tool-call")
-                    (hasheq 'type
-                          "tool_use"
-                          'id
-                          (hash-ref block 'id "")
-                          'name
-                          (hash-ref block 'name "")
-                          'input
-                          (hash-ref block 'arguments (hasheq)))]
-                   [else block])))]
+                 "assistant"
+                 'content
+                 (for/list ([block (in-list content)])
+                   (define btype (hash-ref block 'type "text"))
+                   (cond
+                     [(equal? btype "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
+                     [(equal? btype "tool-call")
+                      (hasheq 'type
+                              "tool_use"
+                              'id
+                              (hash-ref block 'id "")
+                              'name
+                              (hash-ref block 'name "")
+                              'input
+                              (hash-ref block 'arguments (hasheq)))]
+                     [else block])))]
         ;; Simple string content: wrap in text block
         [(string? content) (hasheq 'role role 'content (list (hasheq 'type "text" 'text content)))]
         ;; Fallback: pass through
@@ -151,11 +152,11 @@
   ;; Translate usage: input_tokens → prompt_tokens, output_tokens → completion_tokens
   (define usage
     (hasheq 'prompt_tokens
-          (hash-ref usage-raw 'input_tokens 0)
-          'completion_tokens
-          (hash-ref usage-raw 'output_tokens 0)
-          'total_tokens
-          (+ (hash-ref usage-raw 'input_tokens 0) (hash-ref usage-raw 'output_tokens 0))))
+            (hash-ref usage-raw 'input_tokens 0)
+            'completion_tokens
+            (hash-ref usage-raw 'output_tokens 0)
+            'total_tokens
+            (+ (hash-ref usage-raw 'input_tokens 0) (hash-ref usage-raw 'output_tokens 0))))
 
   ;; Translate content blocks
   (define content
@@ -165,13 +166,13 @@
         [(equal? type "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
         [(equal? type "tool_use")
          (hasheq 'type
-               "tool-call"
-               'id
-               (hash-ref block 'id "")
-               'name
-               (hash-ref block 'name "")
-               'arguments
-               (hash-ref block 'input (hasheq)))]
+                 "tool-call"
+                 'id
+                 (hash-ref block 'id "")
+                 'name
+                 (hash-ref block 'name "")
+                 'arguments
+                 (hash-ref block 'input (hasheq)))]
         [else block])))
 
   (make-model-response content usage model-name stop-reason))
@@ -236,17 +237,18 @@
        [(equal? delta-type "input_json_delta")
         ;; Partial JSON for tool input — emit as tool-call delta
         (define partial-json (hash-ref delta 'partial_json ""))
-        (set! results
-              (cons (stream-chunk #f
-                                  (hasheq 'index
-                                        (unbox tool-index-box)
-                                        'id
-                                        (unbox tool-id-box)
-                                        'function
-                                        (hasheq 'name (unbox tool-name-box) 'arguments partial-json))
-                                  #f
-                                  #f)
-                    results))]
+        (set!
+         results
+         (cons (stream-chunk #f
+                             (hasheq 'index
+                                     (unbox tool-index-box)
+                                     'id
+                                     (unbox tool-id-box)
+                                     'function
+                                     (hasheq 'name (unbox tool-name-box) 'arguments partial-json))
+                             #f
+                             #f)
+               results))]
        [else (void)])]
 
     ;; Tool use block starts
@@ -284,27 +286,17 @@
 ;; ============================================================
 
 (define (anthropic-check-http-status! status-line response-body)
-  (define status-str
-    (if (bytes? status-line)
-        (bytes->string/utf-8 status-line)
-        status-line))
-  (define status-code
-    (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
-      (if parts
-          (string->number (cadr parts))
-          0)))
-  (when (>= status-code 400)
+  (define status-code (extract-status-code status-line))
+  (when (http-error? status-code)
     (define error-body
       (if (bytes? response-body)
           (bytes->string/utf-8 response-body)
           response-body))
     (cond
       [(= status-code 401)
-       (raise (exn:fail (format "Anthropic API authentication failed (401): ~a" error-body)
-                        (current-continuation-marks)))]
+       (raise-http-error! (format "Anthropic API authentication failed (401): ~a" error-body))]
       [(= status-code 403)
-       (raise (exn:fail (format "Anthropic API forbidden (403): ~a" error-body)
-                        (current-continuation-marks)))]
+       (raise-http-error! (format "Anthropic API forbidden (403): ~a" error-body))]
       [(= status-code 429)
        (define retry-hint
          (with-handlers ([exn:fail? (lambda (_) "")])
@@ -313,14 +305,10 @@
            (if retry-ms
                (format " Retry after ~a seconds." (quotient retry-ms 1000))
                " Please wait and try again.")))
-       (raise (exn:fail (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body)
-                        (current-continuation-marks)))]
+       (raise-http-error! (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body))]
       [(>= status-code 500)
-       (raise (exn:fail (format "Anthropic API server error (~a): ~a" status-code error-body)
-                        (current-continuation-marks)))]
-      [else
-       (raise (exn:fail (format "Anthropic API error (~a): ~a" status-code error-body)
-                        (current-continuation-marks)))])))
+       (raise-http-error! (format "Anthropic API server error (~a): ~a" status-code error-body))]
+      [else (raise-http-error! (format "Anthropic API error (~a): ~a" status-code error-body))])))
 
 ;; ============================================================
 ;; HTTP request execution (non-streaming)
@@ -335,14 +323,13 @@
           "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   ;; Wrap entire request in overall timeout (SEC-11)
-  (call-with-request-timeout
-   (lambda ()
-     (define-values (status-line response-headers response-port)
-       (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-     (define response-body (read-response-body response-port))
-     ;; Check HTTP status
-     (anthropic-check-http-status! status-line response-body)
-     (bytes->jsexpr response-body))))
+  (call-with-request-timeout (lambda ()
+                               (define-values (status-line response-headers response-port)
+                                 (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+                               (define response-body (read-response-body response-port))
+                               ;; Check HTTP status
+                               (anthropic-check-http-status! status-line response-body)
+                               (bytes->jsexpr response-body))))
 
 ;; ============================================================
 ;; Provider constructor
@@ -355,23 +342,13 @@
   (define default-model (hash-ref config 'model ANTHROPIC-DEFAULT-MODEL))
 
   (define (send req)
-    (define merged-req
-      (if (hash-has-key? (model-request-settings req) 'model)
-          req
-          (make-model-request (model-request-messages req)
-                              (model-request-tools req)
-                              (hash-set (model-request-settings req) 'model default-model))))
+    (define merged-req (ensure-model-setting req default-model))
     (define body (anthropic-build-request-body merged-req))
     (define raw (anthropic-do-http-request base-url api-key "/v1/messages" body))
     (anthropic-parse-response raw))
 
   (define (stream req)
-    (define merged-req
-      (if (hash-has-key? (model-request-settings req) 'model)
-          req
-          (make-model-request (model-request-messages req)
-                              (model-request-tools req)
-                              (hash-set (model-request-settings req) 'model default-model))))
+    (define merged-req (ensure-model-setting req default-model))
     (define body (anthropic-build-request-body merged-req #:stream? #t))
     (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
     (define uri (string->url url-str))
@@ -382,11 +359,10 @@
     (define body-bytes (jsexpr->bytes body))
     ;; Wrap initial HTTP request in overall timeout (SEC-11)
     (define result-vec
-      (call-with-request-timeout
-       (lambda ()
-         (define-values (sl rh rp)
-           (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-         (vector sl rh rp))))
+      (call-with-request-timeout (lambda ()
+                                   (define-values (sl rh rp)
+                                     (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+                                   (vector sl rh rp))))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
