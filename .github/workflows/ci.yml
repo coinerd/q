@@ -30,7 +30,7 @@ jobs:
         if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
-          sh /tmp/racket.sh --in-place --create-links $HOME/racket-install
+          sh /tmp/racket.sh --in-place --dest $HOME/racket-install
           ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
 
       - name: Install Racket (macOS)
@@ -111,7 +111,7 @@ jobs:
         if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
           curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
-          sh /tmp/racket.sh --in-place --create-links $HOME/racket-install
+          sh /tmp/racket.sh --in-place --dest $HOME/racket-install
           ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
 
       - name: Install Racket (macOS)
