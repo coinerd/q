@@ -53,6 +53,7 @@ jobs:
           fi
           echo "Installing from: $RACKET_DIR"
           sudo cp -R "$RACKET_DIR" /usr/local/racket
+          sudo chown -R $(whoami) /usr/local/racket
           sudo ln -sf /usr/local/racket/bin/racket /usr/local/bin/racket
           sudo ln -sf /usr/local/racket/bin/raco /usr/local/bin/raco
           hdiutil detach "$MOUNT"
@@ -135,6 +136,7 @@ jobs:
           fi
           echo "Installing from: $RACKET_DIR"
           sudo cp -R "$RACKET_DIR" /usr/local/racket
+          sudo chown -R $(whoami) /usr/local/racket
           sudo ln -sf /usr/local/racket/bin/racket /usr/local/bin/racket
           sudo ln -sf /usr/local/racket/bin/raco /usr/local/bin/raco
           hdiutil detach "$MOUNT"
