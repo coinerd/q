@@ -28,7 +28,7 @@
     (if (and (or (not api-key) (string=? (string-trim api-key) "")) (local-provider? base-url))
         "local-no-auth"
         api-key))
-  (define config (hash 'base-url base-url 'api-key effective-key 'model model-name))
+  (define config (hasheq 'base-url base-url 'api-key effective-key 'model model-name))
   (cond
     [(equal? prov-name "gemini") (make-gemini-provider config)]
     [(equal? prov-name "anthropic") (make-anthropic-provider config)]

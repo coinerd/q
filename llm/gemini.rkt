@@ -22,7 +22,9 @@
          "provider.rkt"
          "stream.rkt")
 
-(provide make-gemini-provider
+(provide ;; Provider constructor
+ make-gemini-provider
+         ;; Request/response helpers (exported for testing)
          gemini-build-request-body
          gemini-parse-response
          gemini-parse-stream-chunks
@@ -109,41 +111,41 @@
                  (hash-ref content 'content "")
                  (if (string? content) content "")))
            (define tool-name (hash-ref call-id->name tool-call-id ""))
-           (list (hash 'functionResponse
-                       (hash 'name tool-name 'response (hash 'content tool-result-content))))]
+           (list (hasheq 'functionResponse
+                       (hasheq 'name tool-name 'response (hasheq 'content tool-result-content))))]
           ;; Assistant with list content (tool calls + text)
           [(and (equal? role "assistant") (list? content))
            (for/list ([block (in-list content)])
              (define btype (hash-ref block 'type "text"))
              (cond
-               [(equal? btype "text") (hash 'text (hash-ref block 'text ""))]
+               [(equal? btype "text") (hasheq 'text (hash-ref block 'text ""))]
                [(equal? btype "tool-call")
-                (hash
+                (hasheq
                  'functionCall
-                 (hash 'name (hash-ref block 'name "") 'args (hash-ref block 'arguments (hash))))]
+                 (hasheq 'name (hash-ref block 'name "") 'args (hash-ref block 'arguments (hasheq))))]
                [else block]))]
           ;; Simple string content: text part
-          [(string? content) (list (hash 'text content))]
+          [(string? content) (list (hasheq 'text content))]
           ;; Fallback
           [else content]))
-      (hash 'role gemini-role 'parts parts)))
+      (hasheq 'role gemini-role 'parts parts)))
 
   ;; Build generationConfig
   (define gen-config
-    (let ([base-config (hash 'maxOutputTokens max-tokens)])
+    (let ([base-config (hasheq 'maxOutputTokens max-tokens)])
       (if (hash-has-key? settings 'temperature)
           (hash-set base-config 'temperature (hash-ref settings 'temperature))
           base-config)))
 
   ;; Base body
-  (define base (hash 'contents contents 'generationConfig gen-config))
+  (define base (hasheq 'contents contents 'generationConfig gen-config))
 
   ;; Add optional system prompt — goes to systemInstruction, not contents
   (define with-system
     (if (hash-has-key? settings 'system)
         (hash-set base
                   'systemInstruction
-                  (hash 'parts (list (hash 'text (hash-ref settings 'system)))))
+                  (hasheq 'parts (list (hasheq 'text (hash-ref settings 'system)))))
         base))
 
   ;; Translate tools to Gemini format if present
@@ -151,7 +153,7 @@
     (if (model-request-tools req)
         (hash-set with-system
                   'tools
-                  (list (hash 'functionDeclarations
+                  (list (hasheq 'functionDeclarations
                               (for/list ([tool (in-list (model-request-tools req))])
                                 (gemini-translate-tool tool)))))
         with-system))
@@ -166,7 +168,7 @@
   (define name (hash-ref fn 'name "unknown"))
   (define description (hash-ref fn 'description ""))
   (define parameters (hash-ref fn 'parameters (hash)))
-  (hash 'name name 'description description 'parameters parameters))
+  (hasheq 'name name 'description description 'parameters parameters))
 
 ;; ============================================================
 ;; Response parsing
@@ -175,7 +177,7 @@
 ;; Convert Gemini generateContent API response to model-response.
 (define (gemini-parse-response raw)
   (define candidates (hash-ref raw 'candidates '()))
-  (define usage-raw (hash-ref raw 'usageMetadata (hash)))
+  (define usage-raw (hash-ref raw 'usageMetadata (hasheq)))
   (define model-version (hash-ref raw 'modelVersion GEMINI-DEFAULT-MODEL))
 
   ;; Extract first candidate
@@ -204,7 +206,7 @@
   (define candidates-tokens (hash-ref usage-raw 'candidatesTokenCount 0))
   (define total-tokens (hash-ref usage-raw 'totalTokenCount (+ prompt-tokens candidates-tokens)))
   (define usage
-    (hash 'prompt_tokens
+    (hasheq 'prompt_tokens
           prompt-tokens
           'completion_tokens
           candidates-tokens
@@ -215,18 +217,18 @@
   (define content
     (for/list ([part (in-list parts)])
       (cond
-        [(hash-has-key? part 'text) (hash 'type "text" 'text (hash-ref part 'text ""))]
+        [(hash-has-key? part 'text) (hasheq 'type "text" 'text (hash-ref part 'text ""))]
         [(hash-has-key? part 'functionCall)
          (let* ([fc (hash-ref part 'functionCall)]
                 [tool-id (gemini-gen-tool-id)])
-           (hash 'type
+           (hasheq 'type
                  "tool-call"
                  'id
                  tool-id
                  'name
                  (hash-ref fc 'name "")
                  'arguments
-                 (hash-ref fc 'args (hash))))]
+                 (hash-ref fc 'args (hasheq))))]
         [else part])))
 
   ;; Check for safety/recitation filtering — add warning when content is empty
@@ -239,7 +241,7 @@
              [else #f]))))
   (define final-content
     (if (and filtered-reason (null? content))
-        (list (hash 'type "text" 'text (format "[SYS] ⚠ ~a" filtered-reason)))
+        (list (hasheq 'type "text" 'text (format "[SYS] ⚠ ~a" filtered-reason)))
         content))
 
   (make-model-response final-content usage model-version stop-reason))
@@ -308,12 +310,12 @@
       [(hash-has-key? part 'functionCall)
        (let* ([fc (hash-ref part 'functionCall)]
               [tc-delta
-               (hash 'index
+               (hasheq 'index
                      0
                      'id
                      (gemini-gen-tool-id)
                      'function
-                     (hash 'name (hash-ref fc 'name "") 'arguments (hash-ref fc 'args (hash))))])
+                     (hasheq 'name (hash-ref fc 'name "") 'arguments (hash-ref fc 'args (hasheq))))])
          (set! results (cons (stream-chunk #f tc-delta #f #f) results)))]
       [else (void)]))
 
@@ -321,19 +323,19 @@
   (cond
     [(and finish-reason (not (eq? finish-reason 'null)) (not (null? finish-reason)))
      (let* ([usage (if usage-raw
-                       (hash 'prompt_tokens
+                       (hasheq 'prompt_tokens
                              (hash-ref usage-raw 'promptTokenCount 0)
                              'completion_tokens
                              (hash-ref usage-raw 'candidatesTokenCount 0)
                              'total_tokens
                              (hash-ref usage-raw 'totalTokenCount 0))
-                       (hash))])
+                       (hasheq))])
        (set! results (cons (stream-chunk #f #f usage #t) results)))]
     [(and usage-raw (not finish-reason))
      ;; Usage-only event without finish — emit usage chunk
      (let* ([prompt-tokens (hash-ref usage-raw 'promptTokenCount 0)])
        (when (> prompt-tokens 0)
-         (set! results (cons (stream-chunk #f #f (hash 'prompt_tokens prompt-tokens) #f) results))))])
+         (set! results (cons (stream-chunk #f #f (hasheq 'prompt_tokens prompt-tokens) #f) results))))])
 
   (reverse results))
 
@@ -487,6 +489,6 @@
                         [else (loop)])])))))
 
   (make-provider (lambda () "gemini")
-                 (lambda () (hash 'streaming #t 'token-counting #f))
+                 (lambda () (hasheq 'streaming #t 'token-counting #f))
                  send
                  stream))

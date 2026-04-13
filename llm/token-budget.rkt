@@ -11,6 +11,7 @@
 
 (provide
  estimate-context-tokens
+ estimate-turn-tokens
  should-compact?
  remaining-budget
 
@@ -43,6 +44,21 @@
   (define total-chars
     (for/sum ([msg (in-list messages)])
       (string-length (extract-message-text msg))))
+  (quotient total-chars CHARS-PER-TOKEN))
+
+;; ============================================================
+;; estimate-turn-tokens
+;; ============================================================
+
+;; Estimate token count from messages plus response text as fallback.
+;; This is used by the agent loop when the provider returns no usage data.
+;; Uses the same chars/4 heuristic as estimate-context-tokens but also
+;; accounts for the response text length.
+(define (estimate-turn-tokens messages response-text)
+  (define total-chars
+    (+ (for/sum ([msg (in-list messages)])
+         (string-length (extract-message-text msg)))
+       (string-length (or response-text ""))))
   (quotient total-chars CHARS-PER-TOKEN))
 
 ;; ============================================================

@@ -4,6 +4,7 @@
          racket/hash
          (only-in racket/string string-trim)
          json
+         (only-in "../util/json-helpers.rkt" ensure-hash-args)
          ;; ARCH-01: tool-call and tool-result structs from util/protocol-types.rkt
          (only-in "../util/protocol-types.rkt"
                   tool-call
@@ -69,7 +70,7 @@
          make-tool-call
 
          ;; ── Tool-call argument validation ──
-         ensure-hash-args
+         (all-from-out "../util/json-helpers.rkt")
          json-serializable?
          validate-tool-result
 
@@ -220,19 +221,7 @@
 
 ;; Ensure that tool-call-part-arguments is a hash after processing.
 ;; This guards against raw strings or other types leaking through.
-(define (ensure-hash-args args)
-  (cond
-    [(hash? args) args]
-    [(string? args)
-     (define cleaned (string-trim args))
-     (if (or (string=? cleaned "") (string=? cleaned "{}"))
-         (hasheq)
-         (with-handlers ([exn:fail? (lambda (e) (hasheq '_parse_failed #t '_raw_args args))])
-           (define parsed (string->jsexpr cleaned))
-           (if (hash? parsed)
-               parsed
-               (hasheq '_parse_failed #t '_raw_args args))))]
-    [else (hasheq '_parse_failed #t '_raw_args (format "~a" args))]))
+;; ensure-hash-args imported from util/json-helpers.rkt
 
 ;; ============================================================
 ;; Argument validation

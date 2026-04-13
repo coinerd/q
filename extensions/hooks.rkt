@@ -21,7 +21,9 @@
          "../util/hook-types.rkt")
 
 (provide
+ ;; Re-export hook result types
  (all-from-out "../util/hook-types.rkt")
+ ;; Hook dispatch
  dispatch-hooks)
 
 ;; ============================================================

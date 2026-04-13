@@ -9,6 +9,7 @@
 (require racket/contract)
 
 (provide
+ ;; Agent steering/followup message queue
  make-queue
  queue?
  enqueue-steering!

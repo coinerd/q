@@ -130,7 +130,7 @@
                     (stream-chunk (hash-ref tp 'text "") #f #f #f))
                   (list (stream-chunk #f #f (model-response-usage response) #t))))))
   (make-provider (lambda () name)
-                 (lambda () (hash 'streaming #t 'token-counting #t))
+                 (lambda () (hasheq 'streaming #t 'token-counting #t))
                  (lambda (req) response)
                  (lambda (req)
                    ;; Return a generator that yields each chunk then #f

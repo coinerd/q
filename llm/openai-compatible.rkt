@@ -20,7 +20,9 @@
          "provider.rkt"
          "stream.rkt")
 
-(provide make-openai-compatible-provider
+(provide ;; Provider constructor
+ make-openai-compatible-provider
+         ;; Request/response helpers (exported for testing)
          openai-build-request-body
          openai-parse-response
          check-http-status!)
@@ -87,17 +89,17 @@
        (define tool-calls (hash-ref message 'tool_calls #f))
        ;; Text content
        (append (if (and text-content (string? text-content))
-                   (list (hash 'type "text" 'text text-content))
+                   (list (hasheq 'type "text" 'text text-content))
                    '())
                ;; Tool calls
                (if tool-calls
                    (for/list ([tc (in-list tool-calls)])
-                     (define fn (hash-ref tc 'function (hash)))
+                     (define fn (hash-ref tc 'function (hasheq)))
                      (define args-str (hash-ref fn 'arguments "{}"))
                      (define args
                        (with-handlers ([exn:fail? (lambda (e) args-str)])
                          (string->jsexpr args-str)))
-                     (hash 'type
+                     (hasheq 'type
                            "tool-call"
                            'id
                            (hash-ref tc 'id)
@@ -313,6 +315,6 @@
                     (loop)]))))
 
   (make-provider (lambda () "openai-compatible")
-                 (lambda () (hash 'streaming #t 'token-counting #f))
+                 (lambda () (hasheq 'streaming #t 'token-counting #f))
                  send
                  stream))

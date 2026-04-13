@@ -18,6 +18,7 @@
          "../util/ansi.rkt"
          "../util/markdown.rkt"
          "../util/error-classify.rkt"
+         (only-in "../util/content-helpers.rkt" tool-result-content->string)
          json
          racket/string
          racket/format
@@ -37,20 +38,7 @@
 ;; Convert tool-result content to display string
 ;; ============================================================
 
-;; Convert tool-result content (list of content-parts, strings, or hashes) to a
-;; display string. Handles both the structured content-part format and plain strings.
-(define (tool-result-content->string content)
-  (cond
-    [(string? content) content]
-    [(list? content)
-     (string-join (for/list ([part (in-list content)])
-                    (cond
-                      [(string? part) part]
-                      [(hash? part) (hash-ref part 'text (format "~a" part))]
-                      [else (format "~a" part)]))
-                  "\n")]
-    [(hash? content) (hash-ref content 'text (format "~a" content))]
-    [else (format "~a" content)]))
+;; tool-result-content->string imported from util/content-helpers.rkt
 
 ;; ============================================================
 ;; Markdown → Terminal renderer

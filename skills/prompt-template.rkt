@@ -7,4 +7,5 @@
 
 (require "template.rkt")
 
-(provide (all-from-out "template.rkt"))
+(provide ;; Re-export template rendering
+ (all-from-out "template.rkt"))

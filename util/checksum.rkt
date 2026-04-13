@@ -14,6 +14,7 @@
 ;; ============================================================
 
 (provide
+ ;; SHA-256 hashing and checksum verification
  (contract-out
   [sha256-string        (-> string? string?)]
   [sha256-file          (-> path-string? string?)]

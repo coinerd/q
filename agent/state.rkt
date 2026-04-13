@@ -8,6 +8,7 @@
 (require racket/contract)
 
 (provide
+ ;; Agent loop mutable state
  make-loop-state
  loop-state?
  loop-state-session-id

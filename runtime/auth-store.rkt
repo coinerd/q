@@ -227,7 +227,7 @@
       (make-directory* dir))
     (define existing (load-credential-file path))
     (define updated
-      (hash-set existing provider-name (hash 'api-key api-key)))
+      (hash-set existing provider-name (hasheq 'api-key api-key)))
     ;; Write in the format: { "providers": { ... } }
     (define file-content
       (hasheq 'providers

@@ -151,7 +151,7 @@
         (define agent-text
           (extract-role-content content "Agent"))
 
-        (hash 'title title
+        (hasheq 'title title
               'user user-text
               'agent agent-text
               'raw content))))
@@ -210,7 +210,7 @@
                (define tool-name (cadr m))
                (loop (if current-pref (cons current-pref acc) acc)
                      rest
-                     (hash 'tool tool-name 'when "" 'description "")))]
+                     (hasheq 'tool tool-name 'when "" 'description "")))]
          ;; When: condition
          [(regexp-match #rx"^[ \t]+when:[ \t]*(.+)$" line)
           => (λ (m)

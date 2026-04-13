@@ -14,6 +14,7 @@
          racket/path
          json
          (only-in racket/string string-trim)
+         (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message? message-id message-role message-content
                   make-message make-tool-result-part
@@ -43,7 +44,8 @@
 (provide run-iteration-loop
          emit-session-event!
          maybe-dispatch-hooks
-         ensure-hash-args) ;; for testing
+         ensure-hash-args ;; for testing
+         )
 
 ;; ============================================================
 ;; Shared helpers
@@ -65,29 +67,6 @@
 ;; ============================================================
 ;; Iteration-loop helpers (private)
 ;; ============================================================
-
-;; Parse tool-call arguments from string to hash if needed.
-;; Streaming produces arguments as JSON strings; tools expect hashes.
-(define (ensure-hash-args args)
-  (cond
-    [(hash? args) args]
-    [(string? args)
-     (define cleaned (string-trim args))
-     (if (or (string=? cleaned "") (string=? cleaned "{}"))
-         (hash)
-         (with-handlers ([exn:fail? (lambda (e)
-                                       (fprintf (current-error-port)
-                                                "warning: ensure-hash-args: failed to parse JSON args: ~a~n"
-                                                args)
-                                       (hasheq '_parse_failed #t
-                                               '_raw_args args))])
-           (define parsed (string->jsexpr cleaned))
-           (if (hash? parsed)
-               parsed
-               (hasheq '_parse_failed #t
-                       '_raw_args args))))]
-    [else (hasheq '_parse_failed #t
-                  '_raw_args (format "~a" args))]))
 
 ;; Extract tool-call structs from assistant messages' tool-call-parts
 (define (extract-tool-calls-from-messages messages)
@@ -126,6 +105,145 @@
         acc)))
 
 ;; ============================================================
+;; Extracted iteration-loop sub-procedures (QUAL-08)
+;; ============================================================
+
+;; Build assembled context using tiered context assembly with hooks.
+;; Returns the assembled message list.
+(define (build-assembled-context ctx-to-use config ext-reg bus session-id iteration)
+  ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
+  (define tier-b-count (hash-ref config 'tier-b-count 20))
+  (define tier-c-count (hash-ref config 'tier-c-count 4))
+  (define max-tokens (hash-ref config 'max-tokens 8192))
+
+  ;; R2-6: Create hook dispatcher function for context assembly
+  (define ctx-assembly-hook-dispatcher
+    (and ext-reg
+         (lambda (hook-point payload)
+           (define result (dispatch-hooks hook-point payload ext-reg))
+           result)))
+
+  ;; Build tiered context with hook support
+  (define-values (tc assembly-hook-result)
+    (build-tiered-context-with-hooks
+     ctx-to-use
+     #:hook-dispatcher ctx-assembly-hook-dispatcher
+     #:tier-b-count tier-b-count
+     #:tier-c-count tier-c-count
+     #:max-tokens max-tokens))
+
+  ;; Handle block action from context-assembly hook
+  (when (and assembly-hook-result
+             (eq? (hook-result-action assembly-hook-result) 'block))
+    (emit-session-event! bus session-id "context.assembly.blocked"
+                         (hasheq 'reason "extension-block"))
+    (raise (exn:fail "Context assembly blocked by extension"
+                     (current-continuation-marks))))
+
+  (define ctx-assembled (tiered-context->message-list tc))
+
+  ;; Emit context.assembled event
+  (emit-session-event! bus session-id "context.assembled"
+                       (hasheq 'iteration iteration
+                               'total-messages (length ctx-to-use)
+                               'assembled-messages (length ctx-assembled)))
+
+  ;; Dispatch 'context hook — extensions can amend final context
+  (define-values (ctx-final _ctx-hook)
+    (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
+
+  ctx-final)
+
+;; Run the provider turn: dispatch before-provider-request hook, then run agent turn.
+;; Returns the loop-result from run-agent-turn.
+(define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token)
+  ;; Dispatch 'before-provider-request hook (informational)
+  (define-values (_bpr-payload _bpr-res)
+    (maybe-dispatch-hooks ext-reg 'before-provider-request
+                              (hasheq 'session-id session-id 'turn-id turn-id)))
+
+  ;; Get tools from registry for the LLM request
+  (define tools (and reg (list-tools-jsexpr reg)))
+
+  (run-agent-turn ctx-final prov bus
+                  #:session-id session-id
+                  #:turn-id turn-id
+                  #:tools tools
+                  #:cancellation-token token))
+
+;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
+;; and return (values tool-result-messages updated-ctx) for the next loop iteration.
+(define (handle-tool-calls-pending new-msgs ctx-with-steering ext-reg reg bus session-id
+                                    log-path token config)
+  ;; Extract tool calls from assistant messages
+  (define tool-calls (extract-tool-calls-from-messages new-msgs))
+
+  ;; Dispatch 'tool-call hook (F2: renamed from 'before-tool-execution)
+  (define tool-calls-to-run
+    (let-values ([(amended hook-res)
+                  (maybe-dispatch-hooks ext-reg 'tool-call tool-calls)])
+      (if (and hook-res (eq? (hook-result-action hook-res) 'block))
+          '()  ; blocked → empty list = skip execution
+          amended)))
+
+  ;; Find assistant message ID for tool-result parent
+  (define assistant-msg-id
+    (let ([asst-msgs (filter (λ (m) (eq? (message-role m) 'assistant)) new-msgs)])
+      (if (null? asst-msgs) #f (message-id (last asst-msgs)))))
+
+  ;; Run tool batch through scheduler
+  (define hook-dispatcher-fn
+    (and ext-reg
+         (λ (hook-point payload)
+           (dispatch-hooks hook-point payload ext-reg))))
+
+  (define sched-result
+    (run-tool-batch tool-calls-to-run reg
+                    #:hook-dispatcher hook-dispatcher-fn
+                    #:exec-context (make-exec-context
+                                    #:working-directory (path-only log-path)
+                                    #:cancellation-token token
+                                    #:event-publisher (λ (event-type payload)
+                                                        (emit-session-event! bus session-id event-type payload))
+                                    #:call-id (generate-id)
+                                    #:session-metadata (hasheq 'session-id session-id))
+                    #:parallel? (hash-ref config 'parallel-tools #f)))
+
+  ;; Emit tool.call.completed / tool.call.failed events
+  (for ([tc (in-list tool-calls-to-run)]
+        [tr (in-list (scheduler-result-results sched-result))])
+    (if (tool-result-is-error? tr)
+        (emit-session-event! bus session-id "tool.call.failed"
+                             (hasheq 'name (tool-call-name tc)
+                                     'error (tool-result-content tr)))
+        (emit-session-event! bus session-id "tool.call.completed"
+                             (hasheq 'name (tool-call-name tc)
+                                     'result (tool-result-content tr)))))
+
+  ;; Convert scheduler results to tool-result messages
+  (define tool-result-msgs
+    (make-tool-result-messages tool-calls-to-run
+                               (scheduler-result-results sched-result)
+                               assistant-msg-id))
+
+  ;; Dispatch 'tool-result hook (F2: renamed from 'after-tool-execution)
+  (define tool-result-msgs-amended
+    (let-values ([(amended hook-res)
+                  (maybe-dispatch-hooks ext-reg 'tool-result tool-result-msgs)])
+      (if (and hook-res (eq? (hook-result-action hook-res) 'block))
+          tool-result-msgs
+          amended)))
+
+  ;; F1: Validate — filter to only message? values
+  (define validated-msgs (filter message? tool-result-msgs-amended))
+
+  ;; Append validated tool results to log
+  (append-entries! log-path validated-msgs)
+
+  ;; Return updated context for next iteration
+  (append ctx-with-steering new-msgs validated-msgs))
+
+;; ============================================================
 ;; Iteration loop
 ;; ============================================================
 
@@ -146,211 +264,92 @@
   (if (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
       (make-loop-result '() 'completed (hasheq 'reason "extension-block"))
       (let loop ([ctx context]
-             [iteration 0])
+                 [iteration 0])
 
-    ;; ── Cooperative cancellation check (between iterations) ──
-    ;; R2-5: Check steering queue for injected messages.
-    (define ctx-with-steering
-      (if steering-queue
-          (let ([steering-msgs (dequeue-all-steering! steering-queue)])
-            (if (null? steering-msgs)
-                ctx
-                (append ctx steering-msgs)))
-          ctx))
+        ;; ── Cooperative cancellation check (between iterations) ──
+        ;; R2-5: Check steering queue for injected messages.
+        (define ctx-with-steering
+          (if steering-queue
+              (let ([steering-msgs (dequeue-all-steering! steering-queue)])
+                (if (null? steering-msgs)
+                    ctx
+                    (append ctx steering-msgs)))
+              ctx))
 
-    (cond
-      [(and token (cancellation-token-cancelled? token))
-       (emit-session-event! bus session-id "turn.cancelled"
-                            (hasheq 'reason "cancellation-token"
-                                    'iteration iteration))
-       (make-loop-result (append ctx-with-steering '()) 'cancelled
-                         (hasheq 'reason "cancellation-token"
-                                 'iteration iteration))]
+        (cond
+          [(and token (cancellation-token-cancelled? token))
+           (emit-session-event! bus session-id "turn.cancelled"
+                                (hasheq 'reason "cancellation-token"
+                                        'iteration iteration))
+           (make-loop-result (append ctx-with-steering '()) 'cancelled
+                             (hasheq 'reason "cancellation-token"
+                                     'iteration iteration))]
 
-      [else
-       (define turn-id (generate-id))
+          [else
+           (define turn-id (generate-id))
 
-       ;; Dispatch 'turn-start hook — extensions can amend context or block (F2: renamed from 'before-turn)
-       (define-values (ctx-to-use turn-blocked?)
-         (let-values ([(amended-ctx hook-res)
-                       (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-steering)])
-           (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-               (values ctx-with-steering #t)
-               (values amended-ctx #f))))
+           ;; Dispatch 'turn-start hook — extensions can amend context or block
+           (define-values (ctx-to-use turn-blocked?)
+             (let-values ([(amended-ctx hook-res)
+                           (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-steering)])
+               (if (and hook-res (eq? (hook-result-action hook-res) 'block))
+                   (values ctx-with-steering #t)
+                   (values amended-ctx #f))))
 
-       (cond
-         ;; ── Turn blocked by extension: emit event and return completed (F6) ──
-         [turn-blocked?
-          (emit-session-event! bus session-id "turn.blocked"
-                               (hasheq 'reason "extension-block"))
-          (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
+           (cond
+             ;; ── Turn blocked by extension ──
+             [turn-blocked?
+              (emit-session-event! bus session-id "turn.blocked"
+                                   (hasheq 'reason "extension-block"))
+              (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
 
-         [else
-          ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
-          (define tier-b-count (hash-ref config 'tier-b-count 20))
-          (define tier-c-count (hash-ref config 'tier-c-count 4))
-          (define max-tokens (hash-ref config 'max-tokens 8192))
+             [else
+              ;; Build assembled context (tiered + hooks)
+              (define ctx-final
+                (build-assembled-context ctx-to-use config ext-reg bus session-id iteration))
 
-          ;; R2-6: Create hook dispatcher function for context assembly
-          (define ctx-assembly-hook-dispatcher
-            (and ext-reg
-                 (lambda (hook-point payload)
-                   (define result (dispatch-hooks hook-point payload ext-reg))
-                   result)))
+              ;; Run provider turn
+              (define result
+                (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token))
 
-          ;; Build tiered context with hook support
-          (define-values (tc assembly-hook-result)
-            (build-tiered-context-with-hooks
-             ctx-to-use
-             #:hook-dispatcher ctx-assembly-hook-dispatcher
-             #:tier-b-count tier-b-count
-             #:tier-c-count tier-c-count
-             #:max-tokens max-tokens))
+              (define termination (loop-result-termination-reason result))
+              (define new-msgs (loop-result-messages result))
 
-          ;; Handle block action from context-assembly hook
-          (when (and assembly-hook-result
-                     (eq? (hook-result-action assembly-hook-result) 'block))
-            (emit-session-event! bus session-id "context.assembly.blocked"
-                                 (hasheq 'reason "extension-block"))
-            (raise (exn:fail "Context assembly blocked by extension"
-                             (current-continuation-marks))))
+              (cond
+                ;; ── Completed: append and return ──
+                [(eq? termination 'completed)
+                 (append-entries! log-path new-msgs)
+                 ;; Dispatch 'turn-end hook
+                 (define-values (amended-result after-hook-res)
+                   (maybe-dispatch-hooks ext-reg 'turn-end result))
+                 (define effective-result
+                   (if (and after-hook-res (eq? (hook-result-action after-hook-res) 'amend))
+                       amended-result
+                       result))
+                 effective-result]
 
-          (define ctx-assembled (tiered-context->message-list tc))
+                ;; ── Max iterations reached: append and stop ──
+                [(and (eq? termination 'tool-calls-pending)
+                      (>= (add1 iteration) max-iterations))
+                 (append-entries! log-path new-msgs)
+                 (emit-session-event! bus session-id "runtime.error"
+                                      (hasheq 'error "max-iterations-exceeded"
+                                              'iteration iteration
+                                              'maxIterations max-iterations))
+                 (make-loop-result new-msgs
+                                   'max-iterations-exceeded
+                                   (hash-set (loop-result-metadata result)
+                                             'maxIterationsReached #t))]
 
-          ;; Emit context.assembled event
-          (emit-session-event! bus session-id "context.assembled"
-                               (hasheq 'iteration iteration
-                                       'total-messages (length ctx-to-use)
-                                       'assembled-messages (length ctx-assembled)))
+                ;; ── Tool calls pending: execute tools and re-run ──
+                [(eq? termination 'tool-calls-pending)
+                 (append-entries! log-path new-msgs)
+                 (define updated-ctx
+                   (handle-tool-calls-pending new-msgs ctx-with-steering ext-reg reg
+                                              bus session-id log-path token config))
+                 (loop updated-ctx (add1 iteration))]
 
-          ;; Dispatch 'context hook — extensions can amend final context
-          (define-values (ctx-final _ctx-hook)
-            (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
-
-       ;; Dispatch 'before-provider-request hook (informational)
-       (define-values (_bpr-payload _bpr-res)
-         (maybe-dispatch-hooks ext-reg 'before-provider-request
-                                   (hasheq 'session-id session-id 'turn-id turn-id)))
-
-       ;; Get tools from registry for the LLM request
-       (define tools (and reg (list-tools-jsexpr reg)))
-
-       (define result
-         (run-agent-turn ctx-final prov bus
-                         #:session-id session-id
-                         #:turn-id turn-id
-                         #:tools tools
-                         #:cancellation-token token))
-
-       (define termination (loop-result-termination-reason result))
-       (define new-msgs (loop-result-messages result))
-
-       (cond
-         ;; ── Completed: append and return ──
-         [(eq? termination 'completed)
-          (append-entries! log-path new-msgs)
-          ;; Dispatch 'turn-end hook — capture amended result (F2: renamed, F7: capture return)
-          (define-values (amended-result after-hook-res)
-            (maybe-dispatch-hooks ext-reg 'turn-end result))
-          (define effective-result
-            (if (and after-hook-res (eq? (hook-result-action after-hook-res) 'amend))
-                amended-result
-                result))
-          effective-result]
-
-         ;; ── Max iterations reached: append and stop ──
-         [(and (eq? termination 'tool-calls-pending)
-               (>= (add1 iteration) max-iterations))
-          (append-entries! log-path new-msgs)
-          (emit-session-event! bus session-id "runtime.error"
-                               (hasheq 'error "max-iterations-exceeded"
-                                       'iteration iteration
-                                       'maxIterations max-iterations))
-          (make-loop-result new-msgs
-                            'max-iterations-exceeded
-                            (hash-set (loop-result-metadata result)
-                                      'maxIterationsReached #t))]
-
-         ;; ── Tool calls pending: execute tools and re-run ──
-         [(eq? termination 'tool-calls-pending)
-          (append-entries! log-path new-msgs)
-
-          ;; Extract tool calls from assistant messages
-          (define tool-calls (extract-tool-calls-from-messages new-msgs))
-
-          ;; Dispatch 'tool-call hook (F2: renamed from 'before-tool-execution)
-          (define tool-calls-to-run
-            (let-values ([(amended hook-res)
-                          (maybe-dispatch-hooks ext-reg 'tool-call tool-calls)])
-              (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-                  '()  ; blocked → empty list = skip execution
-                  amended)))
-
-          ;; Find assistant message ID for tool-result parent
-          (define assistant-msg-id
-            (let ([asst-msgs (filter (λ (m) (eq? (message-role m) 'assistant)) new-msgs)])
-              (if (null? asst-msgs) #f (message-id (last asst-msgs)))))
-
-          ;; Run tool batch through scheduler
-          ;; Pass extension registry as hook-dispatcher so scheduler's
-          ;; preflight pipeline can validate and amend tool calls
-          (define hook-dispatcher-fn
-            (and ext-reg
-                 (λ (hook-point payload)
-                   (dispatch-hooks hook-point payload ext-reg))))
-
-          (define sched-result
-            (run-tool-batch tool-calls-to-run reg
-                            #:hook-dispatcher hook-dispatcher-fn
-                            #:exec-context (make-exec-context
-                                            #:working-directory (path-only log-path)
-                                            #:cancellation-token token
-                                            #:event-publisher (λ (event-type payload)
-                                                                (emit-session-event! bus session-id event-type payload))
-                                            #:call-id (generate-id)
-                                            #:session-metadata (hasheq 'session-id session-id))
-                            #:parallel? (hash-ref config 'parallel-tools #f)))
-
-          ;; Emit tool.call.completed / tool.call.failed events
-          (for ([tc (in-list tool-calls-to-run)]
-                [tr (in-list (scheduler-result-results sched-result))])
-            (if (tool-result-is-error? tr)
-                (emit-session-event! bus session-id "tool.call.failed"
-                                     (hasheq 'name (tool-call-name tc)
-                                             'error (tool-result-content tr)))
-                (emit-session-event! bus session-id "tool.call.completed"
-                                     (hasheq 'name (tool-call-name tc)
-                                             'result (tool-result-content tr)))))
-
-          ;; Convert scheduler results to tool-result messages
-          (define tool-result-msgs
-            (make-tool-result-messages tool-calls-to-run
-                                       (scheduler-result-results sched-result)
-                                       assistant-msg-id))
-
-          ;; Dispatch 'tool-result hook (F2: renamed from 'after-tool-execution)
-          (define tool-result-msgs-amended
-            (let-values ([(amended hook-res)
-                          (maybe-dispatch-hooks ext-reg 'tool-result tool-result-msgs)])
-              (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-                  tool-result-msgs
-                  amended)))
-
-          ;; F1: Validate — filter to only message? values
-          (define validated-msgs (filter message? tool-result-msgs-amended))
-
-          ;; Append validated tool results to log
-          (append-entries! log-path validated-msgs)
-
-          ;; Re-run with updated context (using validated msgs)
-          (define updated-ctx (append ctx-with-steering new-msgs validated-msgs))
-          (loop updated-ctx (add1 iteration))]
-
-         ;; ── Unknown termination: append and return ──
-         [else
-          (append-entries! log-path new-msgs)
-          result])
-         ])
-       ])
-    )
-  ))
+                ;; ── Unknown termination: append and return ──
+                [else
+                 (append-entries! log-path new-msgs)
+                 result])])]))))

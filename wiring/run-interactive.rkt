@@ -21,7 +21,7 @@
                   fork-session)
          "../runtime/settings.rkt"
          "../runtime/model-registry.rkt"
-         (only-in "../runtime/provider-factory.rkt" build-provider)
+
          "../tools/tool.rkt"
          "../agent/event-bus.rkt"
          (only-in "../util/protocol-types.rkt"

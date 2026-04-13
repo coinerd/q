@@ -11,6 +11,7 @@
 (require racket/contract)
 
 (provide
+ ;; Error structs and constructors
  (struct-out q-error)
  (struct-out provider-error)
  (struct-out tool-error)

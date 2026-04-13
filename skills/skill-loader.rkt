@@ -8,4 +8,5 @@
 
 (require "resource-loader.rkt")
 
-(provide (all-from-out "resource-loader.rkt"))
+(provide ;; Re-export resource loader types
+ (all-from-out "resource-loader.rkt"))

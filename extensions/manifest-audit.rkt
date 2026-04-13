@@ -20,6 +20,7 @@
 ;; ============================================================
 
 (provide
+ ;; Package integrity verification
  (contract-out
   [verify-package-checksum (-> path-string? boolean?)]
   [audit-package           (-> path-string? (listof string?))]))
