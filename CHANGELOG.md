@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-04-13
+
+### Added — Wave 1: Test-Case Conversion
+- Converted 105 bare `let` blocks to `test-case` forms in tests/interfaces/tui.rkt (#283)
+
+### Changed — Wave 2: Test Infrastructure Standardization
+- Unified test-case form across 14 test files (#284–#286)
+- Standardized assertion patterns in workflow tests (#287)
+- Added test-line linter to scripts/lint-tests.rkt (#288)
+
+### Changed — Wave 3: Tool Utility Extraction
+- Extracted shared tool utilities to util/ modules (#289–#291)
+- Consolidated duplicate tool argument validation (#292)
+- Unified tool-result construction patterns (#293)
+- Added tool contract helpers (#294)
+
+### Changed — Wave 4: Provider Dedup
+- Deduplicated provider error handling across 3 providers (#295–#296)
+- Extracted shared SSE parsing utilities (#297)
+- Unified model parameter normalization (#298)
+
+### Changed — Wave 5: Module Decomposition
+- Decomposed large modules into focused submodules (#299–#301)
+- Extracted shared constants to dedicated modules (#302)
+
+### Changed — Wave 6: Architecture Polish
+- Fixed circular dependency between agent/types and tools/tool (#303)
+- Cleaned up import chains across 8 modules (#304)
+- Added layer boundary documentation (#305)
+
+### Security — Wave 7: Security Hardening
+- Added path traversal checks in file tools (#306–#307)
+- Added destructive-command pattern detection (#308)
+- Added file locking in session store (#309)
+- Added credential docstrings in auth-store (#310)
+
+### Documentation — Wave 8: Documentation Cleanup
+- Updated stale metrics across all documentation files (#311–#313)
+- Added missing CHANGELOG entries for v0.7.x series (#314)
+- Fixed broken internal documentation links (#315)
+- Standardized code examples in README and docs (#316)
+
+### Metrics
+- Source modules: 119 → 124 | Test files: 138 → 140
+- Tests: 3,352 → 3,275 | Assertions: 6,133 → 6,133
+- Source lines: 22,032 → 22,172 | Test lines: 38,032 → 38,076
+- 34 issues closed (#283–#316)
+
 ## [0.8.0] — 2026-04-12
 
 ### Added — Wave 1: Critical Security & Doc Fixes
@@ -589,7 +637,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.7.7...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/coinerd/q/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/coinerd/q/compare/v0.7.9...v0.8.0
+[0.7.9]: https://github.com/coinerd/q/compare/v0.7.8...v0.7.9
+[0.7.8]: https://github.com/coinerd/q/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/coinerd/q/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/coinerd/q/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/coinerd/q/compare/v0.7.4...v0.7.5

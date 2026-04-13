@@ -46,7 +46,7 @@ raco q --version   # or: racket main.rkt --version
 After installing, confirm everything works:
 
 ```bash
-raco q --version            # should print: q version 0.8.0
+raco q --version            # should print: q version 0.8.1
 raco q doctor               # checks Racket version, dependencies, config
 ```
 
