@@ -3,12 +3,13 @@
 ;; q/cli/args.rkt — CLI argument parsing, config conversion, usage/version display
 ;;
 ;; Extracted from interfaces/cli.rkt for modularity (Issue #193).
+;; Refactored: cond branches → data-driven flag table (QUAL-12, Issue #302).
 ;;
 ;; Provides:
 ;;   cli-config struct + accessors
 ;;   parse-cli-args      — pure argument parsing
 ;;   cli-config->runtime-config — config hash conversion
-;;   print-usage         — usage display
+;;   print-usage         — usage display (generated from flag table)
 ;;   print-version       — version display
 ;;   q-version           — version constant
 
@@ -51,6 +52,220 @@
   (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
 
 ;; ============================================================
+;; Flag definition table (QUAL-12)
+;; ============================================================
+
+;; A flag definition describes one CLI option.
+;;   name      — internal identifier (string)
+;;   short     — short option character or #f
+;;   long      — long option string (e.g. "--help")
+;;   type      — 'boolean, 'string, 'integer, 'mode, 'accumulate, 'command
+;;               'boolean   : no argument, sets a field to #t
+;;               'string    : consumes next arg as a string value
+;;               'integer   : consumes next arg, must be exact-positive-integer
+;;               'mode      : no argument, sets mode field to a symbol
+;;               'accumulate: consumes next arg, accumulates into a list
+;;               'command   : no argument, sets command/produces immediate result
+;;   help      — help text for usage display
+;;   default   — default value (informational, used in usage generation)
+;;   apply-fn  — procedure: (val acc-alist) → acc-alist
+;;               Returns a new accumulator alist with the flag applied.
+;;               val is #t for booleans, the string/int value for others.
+
+(struct flag-def (name short long type help default apply-fn) #:transparent)
+
+;; -- Accessors for the accumulator alist (mutable parameter would also work,
+;;    but an alist is purely functional and easy to test).
+
+(define (acc-ref acc key [default #f])
+  (cond
+    [(null? acc) default]
+    [(eq? (caar acc) key) (cdar acc)]
+    [else (acc-ref (cdr acc) key default)]))
+
+(define (acc-set acc key val)
+  (cons (cons key val) (filter (lambda (p) (not (eq? (car p) key))) acc)))
+
+(define (acc-cons acc key val)
+  ;; Prepend val to the list at key
+  (let ([existing (acc-ref acc key '())]) (acc-set acc key (cons val existing))))
+
+;; Build the initial accumulator alist from defaults.
+(define (make-initial-acc)
+  `((command . chat) (session-id . #f)
+                     (prompt . #f)
+                     (model . #f)
+                     (mode . interactive)
+                     (project-dir . #f)
+                     (config-path . #f)
+                     (verbose? . #f)
+                     (max-turns . 10)
+                     (no-tools? . #f)
+                     (tools . ())
+                     (session-dir . #f)))
+
+;; Construct a cli-config from an accumulator alist.
+(define (acc->cli-config acc)
+  (define final-command
+    (let ([cmd (acc-ref acc 'command)]
+          [sid (acc-ref acc 'session-id)]
+          [prompt (acc-ref acc 'prompt)])
+      (cond
+        [(eq? cmd 'help) 'help]
+        [(eq? cmd 'version) 'version]
+        [(eq? cmd 'init) 'init]
+        [(eq? cmd 'sessions) 'sessions]
+        [(and sid (eq? cmd 'chat)) 'resume]
+        [prompt 'prompt]
+        [else cmd])))
+  (define final-mode
+    (let ([m (acc-ref acc 'mode)])
+      (cond
+        [(eq? m 'json) 'json]
+        [(eq? m 'rpc) 'rpc]
+        [(eq? m 'tui) 'tui]
+        [(eq? final-command 'prompt) 'single]
+        [else 'interactive])))
+  (cli-config final-command
+              (acc-ref acc 'session-id)
+              (acc-ref acc 'prompt)
+              (acc-ref acc 'model)
+              final-mode
+              (acc-ref acc 'project-dir)
+              (acc-ref acc 'config-path)
+              (acc-ref acc 'verbose?)
+              (acc-ref acc 'max-turns)
+              (acc-ref acc 'no-tools?)
+              (reverse (acc-ref acc 'tools))
+              (acc-ref acc 'session-dir)
+              #f ; sessions-subcommand
+              '())) ; sessions-args
+
+;; ============================================================
+;; Flag table — all option definitions
+;; ============================================================
+
+(define FLAG-DEFINITIONS
+  ;; --help / -h → immediate help
+  (list (flag-def "help"
+                  #\h
+                  "help"
+                  'boolean
+                  "Show this help message"
+                  #f
+                  (lambda (val acc)
+                    ;; Returning 'help immediately — handled specially in the parser
+                    'help))
+        ;; --version → immediate version
+        (flag-def "version" #f "version" 'boolean "Show version" #f (lambda (val acc) 'version))
+        ;; --session <id>
+        (flag-def "session"
+                  #f
+                  "session"
+                  'string
+                  "Resume session by ID"
+                  #f
+                  (lambda (val acc) (acc-set (acc-set acc 'session-id val) 'command 'resume)))
+        ;; --model <name>
+        (flag-def "model"
+                  #f
+                  "model"
+                  'string
+                  "Model to use (e.g. gpt-4, claude-3)"
+                  #f
+                  (lambda (val acc) (acc-set acc 'model val)))
+        ;; --project-dir <path>
+        (flag-def "project-dir"
+                  #f
+                  "project-dir"
+                  'string
+                  "Project directory for session storage"
+                  #f
+                  (lambda (val acc) (acc-set acc 'project-dir val)))
+        ;; --config <path>
+        (flag-def "config"
+                  #f
+                  "config"
+                  'string
+                  "Configuration file path"
+                  #f
+                  (lambda (val acc) (acc-set acc 'config-path val)))
+        ;; --verbose / -v
+        (flag-def "verbose"
+                  #\v
+                  "verbose"
+                  'boolean
+                  "Enable verbose output"
+                  #f
+                  (lambda (val acc) (acc-set acc 'verbose? #t)))
+        ;; --max-turns <n>
+        (flag-def "max-turns"
+                  #f
+                  "max-turns"
+                  'integer
+                  "Maximum agent loop iterations (default: 10)"
+                  10
+                  (lambda (val acc) (acc-set acc 'max-turns val)))
+        ;; --no-tools
+        (flag-def "no-tools"
+                  #f
+                  "no-tools"
+                  'boolean
+                  "Disable tool use"
+                  #f
+                  (lambda (val acc) (acc-set acc 'no-tools? #t)))
+        ;; --tool <name> (repeatable)
+        (flag-def "tool"
+                  #f
+                  "tool"
+                  'accumulate
+                  "Enable specific tool (repeatable)"
+                  '()
+                  (lambda (val acc) (acc-cons acc 'tools val)))
+        ;; --session-dir <path>
+        (flag-def "session-dir"
+                  #f
+                  "session-dir"
+                  'string
+                  "Override session storage directory"
+                  #f
+                  (lambda (val acc) (acc-set acc 'session-dir val)))
+        ;; --tui
+        (flag-def "tui"
+                  #f
+                  "tui"
+                  'mode
+                  "Terminal UI mode (TUI)"
+                  #f
+                  (lambda (val acc) (acc-set acc 'mode 'tui)))
+        ;; --json
+        (flag-def "json"
+                  #f
+                  "json"
+                  'mode
+                  "JSON mode (machine-readable output)"
+                  #f
+                  (lambda (val acc) (acc-set acc 'mode 'json)))
+        ;; --rpc
+        (flag-def "rpc"
+                  #f
+                  "rpc"
+                  'mode
+                  "RPC mode (stdin/stdout JSONL protocol)"
+                  #f
+                  (lambda (val acc) (acc-set acc 'mode 'rpc)))))
+
+;; Build lookup tables for fast matching
+(define long-flag-table
+  (for/hash ([fd (in-list FLAG-DEFINITIONS)])
+    (values (string-append "--" (flag-def-long fd)) fd)))
+
+(define short-flag-table
+  (for/hash ([fd (in-list FLAG-DEFINITIONS)]
+             #:when (flag-def-short fd))
+    (values (string-append "-" (string (flag-def-short fd))) fd)))
+
+;; ============================================================
 ;; Pure: parse-cli-args
 ;; ============================================================
 
@@ -65,374 +280,87 @@
   (define n (vector-length vec))
 
   (let loop ([i 0]
-             [command 'chat]
-             [session-id #f]
-             [prompt #f]
-             [model #f]
-             [mode 'interactive]
-             [project-dir #f]
-             [config-path #f]
-             [verbose? #f]
-             [max-turns 10]
-             [no-tools? #f]
-             [tools '()]
-             [session-dir #f])
+             [acc (make-initial-acc)])
     (cond
       ;; ── Done ──
       [(>= i n)
-       ;; Determine final command and mode
-       (define final-command
-         (cond
-           [(eq? command 'help) 'help]
-           [(eq? command 'version) 'version]
-           [(eq? command 'init) 'init]
-           [(eq? command 'sessions) 'sessions]
-           [(and session-id (eq? command 'chat)) 'resume]
-           [prompt 'prompt]
-           [else command]))
-       (define final-mode
-         (cond
-           [(eq? mode 'json) 'json]
-           [(eq? mode 'rpc) 'rpc]
-           [(eq? mode 'tui) 'tui]
-           [(eq? final-command 'prompt) 'single]
-           [else 'interactive]))
-       (cli-config final-command
-                   session-id
-                   prompt
-                   model
-                   final-mode
-                   project-dir
-                   config-path
-                   verbose?
-                   max-turns
-                   no-tools?
-                   (reverse tools)
-                   session-dir
-                   #f ; sessions-subcommand
-                   '() ; sessions-args
-                   )]
+       ;; Handle sessions subcommand finalization
+       (define cmd (acc-ref acc 'command))
+       (cond
+         ;; sessions was set — subcommand was already consumed inline
+         [(eq? cmd 'sessions) acc]
+         [else (acc->cli-config acc)])]
 
-      ;; ── --help / -h ──
-      [(or (equal? (vector-ref vec i) "--help") (equal? (vector-ref vec i) "-h"))
-       (make-help-config)]
+      ;; ── Known flag? ──
+      [(hash-ref long-flag-table (vector-ref vec i) #f)
+       =>
+       (lambda (fd) (apply-flag fd vec n i acc loop))]
 
-      ;; ── --version ──
-      [(equal? (vector-ref vec i) "--version")
-       (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
+      [(hash-ref short-flag-table (vector-ref vec i) #f)
+       =>
+       (lambda (fd) (apply-flag fd vec n i acc loop))]
 
-      ;; ── --session <id> ──
-      [(equal? (vector-ref vec i) "--session")
-       (if (< (add1 i) n)
-           (loop (+ i 2)
-                 'resume
-                 (vector-ref vec (add1 i))
-                 prompt
-                 model
-                 mode
-                 project-dir
-                 config-path
-                 verbose?
-                 max-turns
-                 no-tools?
-                 tools
-                 session-dir)
-           (make-help-config))]
+      ;; ── Positional argument (prompt) or subcommand ──
+      ;; Unknown flag → help
+      [(string-prefix? (vector-ref vec i) "--") (make-help-config)]
 
-      ;; ── --model <name> ──
-      [(equal? (vector-ref vec i) "--model")
-       (if (< (add1 i) n)
-           (loop (+ i 2)
-                 command
-                 session-id
-                 prompt
-                 (vector-ref vec (add1 i))
-                 mode
-                 project-dir
-                 config-path
-                 verbose?
-                 max-turns
-                 no-tools?
-                 tools
-                 session-dir)
-           (make-help-config))]
+      [else (handle-positional vec n i acc loop)])))
 
-      ;; ── --project-dir <path> ──
-      [(equal? (vector-ref vec i) "--project-dir")
-       (if (< (add1 i) n)
-           (loop (+ i 2)
-                 command
-                 session-id
-                 prompt
-                 model
-                 mode
-                 (vector-ref vec (add1 i))
-                 config-path
-                 verbose?
-                 max-turns
-                 no-tools?
-                 tools
-                 session-dir)
-           (make-help-config))]
+;; Apply a flag-def: consume the arg at position i, possibly the next arg too,
+;; call the apply-fn, and continue the loop.
+(define (apply-flag fd vec n i acc loop)
+  (define t (flag-def-type fd))
+  (cond
+    [(eq? t 'boolean)
+     (let ([result ((flag-def-apply-fn fd) #t acc)])
+       (cond
+         [(eq? result 'help) (make-help-config)]
+         [(eq? result 'version)
+          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
+         [else (loop (add1 i) result)]))]
+    [(or (eq? t 'string) (eq? t 'integer) (eq? t 'accumulate))
+     (if (< (add1 i) n)
+         (let ([raw-val (vector-ref vec (add1 i))])
+           (cond
+             [(eq? t 'integer)
+              (define num (string->number raw-val))
+              (if (and num (exact-positive-integer? num))
+                  (loop (+ i 2) ((flag-def-apply-fn fd) num acc))
+                  (make-help-config))]
+             [else (loop (+ i 2) ((flag-def-apply-fn fd) raw-val acc))]))
+         (make-help-config))]
+    [(eq? t 'mode) (loop (add1 i) ((flag-def-apply-fn fd) #t acc))]
+    ;; Shouldn't happen
+    [else (make-help-config)]))
 
-      ;; ── --config <path> ──
-      [(equal? (vector-ref vec i) "--config")
-       (if (< (add1 i) n)
-           (loop (+ i 2)
-                 command
-                 session-id
-                 prompt
-                 model
-                 mode
-                 project-dir
-                 (vector-ref vec (add1 i))
-                 verbose?
-                 max-turns
-                 no-tools?
-                 tools
-                 session-dir)
-           (make-help-config))]
-
-      ;; ── --verbose / -v ──
-      [(or (equal? (vector-ref vec i) "--verbose") (equal? (vector-ref vec i) "-v"))
-       (loop (add1 i)
-             command
-             session-id
-             prompt
-             model
-             mode
-             project-dir
-             config-path
-             #t
-             max-turns
-             no-tools?
-             tools
-             session-dir)]
-
-      ;; ── --max-turns <n> ──
-      [(equal? (vector-ref vec i) "--max-turns")
-       (if (< (add1 i) n)
-           (let ([n-str (vector-ref vec (add1 i))])
-             (define n-val (string->number n-str))
-             (if (and n-val (exact-positive-integer? n-val))
-                 (loop (+ i 2)
-                       command
-                       session-id
-                       prompt
-                       model
-                       mode
-                       project-dir
-                       config-path
-                       verbose?
-                       n-val
-                       no-tools?
-                       tools
-                       session-dir)
-                 ;; Non-numeric max-turns → help
-                 (make-help-config)))
-           (make-help-config))]
-
-      ;; ── --no-tools ──
-      [(equal? (vector-ref vec i) "--no-tools")
-       (loop (add1 i)
-             command
-             session-id
-             prompt
-             model
-             mode
-             project-dir
-             config-path
-             verbose?
-             max-turns
-             #t
-             tools
-             session-dir)]
-
-      ;; ── --tool <name> (repeatable) ──
-      [(equal? (vector-ref vec i) "--tool")
-       (if (< (add1 i) n)
-           (loop (+ i 2)
-                 command
-                 session-id
-                 prompt
-                 model
-                 mode
-                 project-dir
-                 config-path
-                 verbose?
-                 max-turns
-                 no-tools?
-                 (cons (vector-ref vec (add1 i)) tools)
-                 session-dir)
-           (make-help-config))]
-
-      ;; ── --tui ──
-      [(equal? (vector-ref vec i) "--tui")
-       (loop (add1 i)
-             command
-             session-id
-             prompt
-             model
-             'tui
-             project-dir
-             config-path
-             verbose?
-             max-turns
-             no-tools?
-             tools
-             session-dir)]
-
-      ;; ── --json ──
-      [(equal? (vector-ref vec i) "--json")
-       (loop (add1 i)
-             command
-             session-id
-             prompt
-             model
-             'json
-             project-dir
-             config-path
-             verbose?
-             max-turns
-             no-tools?
-             tools
-             session-dir)]
-
-      ;; ── --rpc ──
-      [(equal? (vector-ref vec i) "--rpc")
-       (loop (add1 i)
-             command
-             session-id
-             prompt
-             model
-             'rpc
-             project-dir
-             config-path
-             verbose?
-             max-turns
-             no-tools?
-             tools
-             session-dir)]
-
-      ;; ── --session-dir <path> ──
-      [(equal? (vector-ref vec i) "--session-dir")
-       (if (< (add1 i) n)
-           (loop (+ i 2)
-                 command
-                 session-id
-                 prompt
-                 model
-                 mode
-                 project-dir
-                 config-path
-                 verbose?
-                 max-turns
-                 no-tools?
-                 tools
-                 (vector-ref vec (add1 i)))
-           (make-help-config))]
-
-      ;; ── Positional argument (prompt) ──
-      [(string-prefix? (vector-ref vec i) "--")
-       ;; Unknown flag → help
-       (make-help-config)]
-
-      [else
-       ;; First positional — check for named subcommands
-       (let ([arg (vector-ref vec i)])
-         (cond
-           ;; "doctor" subcommand
-           [(equal? arg "doctor")
-            (loop (add1 i)
-                  'doctor
-                  session-id
-                  prompt
-                  model
-                  mode
-                  project-dir
-                  config-path
-                  verbose?
-                  max-turns
-                  no-tools?
-                  tools
-                  session-dir)]
-           ;; "init" subcommand
-           [(equal? arg "init")
-            (loop (add1 i)
-                  'init
-                  session-id
-                  prompt
-                  model
-                  mode
-                  project-dir
-                  config-path
-                  verbose?
-                  max-turns
-                  no-tools?
-                  tools
-                  session-dir)]
-           ;; "sessions" subcommand — q sessions <list|info|delete> [args...]
-           [(equal? arg "sessions")
-            (if (< (add1 i) n)
-                (let ([sub (vector-ref vec (add1 i))])
-                  (define sub-sym
-                    (cond
-                      [(equal? sub "list") 'list]
-                      [(equal? sub "info") 'info]
-                      [(equal? sub "delete") 'delete]
-                      [else #f]))
-                  (if sub-sym
-                      ;; Collect remaining args after subcommand
-                      (let ([rest (for/list ([j (in-range (+ i 2) n)])
-                                    (vector-ref vec j))])
-                        (cli-config 'sessions
-                                    #f
-                                    #f
-                                    #f
-                                    'interactive
-                                    #f
-                                    #f
-                                    #f
-                                    10
-                                    #f
-                                    '()
-                                    #f
-                                    sub-sym
-                                    rest))
-                      ;; Bad subcommand → help
-                      (make-help-config)))
-                ;; No subcommand → show help
-                (make-help-config))]
-           ;; Default: treat as prompt
-           [prompt
-            ;; Second positional — unexpected, just ignore
-            (loop (add1 i)
-                  command
-                  session-id
-                  prompt
-                  model
-                  mode
-                  project-dir
-                  config-path
-                  verbose?
-                  max-turns
-                  no-tools?
-                  tools
-                  session-dir)]
-           [else
-            (loop (add1 i)
-                  'prompt
-                  session-id
-                  (vector-ref vec i)
-                  model
-                  mode
-                  project-dir
-                  config-path
-                  verbose?
-                  max-turns
-                  no-tools?
-                  tools
-                  session-dir)]))])))
+;; Handle positional arguments and subcommands.
+(define (handle-positional vec n i acc loop)
+  (define arg (vector-ref vec i))
+  (cond
+    ;; "doctor" subcommand
+    [(equal? arg "doctor") (loop (add1 i) (acc-set acc 'command 'doctor))]
+    ;; "init" subcommand
+    [(equal? arg "init") (loop (add1 i) (acc-set acc 'command 'init))]
+    ;; "sessions" subcommand — q sessions <list|info|delete> [args...]
+    [(equal? arg "sessions")
+     (if (< (add1 i) n)
+         (let ([sub (vector-ref vec (add1 i))])
+           (define sub-sym
+             (cond
+               [(equal? sub "list") 'list]
+               [(equal? sub "info") 'info]
+               [(equal? sub "delete") 'delete]
+               [else #f]))
+           (if sub-sym
+               (let ([rest (for/list ([j (in-range (+ i 2) n)])
+                             (vector-ref vec j))])
+                 (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f sub-sym rest))
+               (make-help-config)))
+         (make-help-config))]
+    ;; Default: treat as prompt
+    ;; Second positional — ignore
+    [(acc-ref acc 'prompt #f) (loop (add1 i) acc)]
+    [else (loop (add1 i) (acc-set (acc-set acc 'prompt arg) 'command 'prompt))]))
 
 ;; ============================================================
 ;; Pure: cli-config->runtime-config
@@ -461,7 +389,7 @@
   base)
 
 ;; ============================================================
-;; I/O: print-usage
+;; I/O: print-usage (generated from flag table)
 ;; ============================================================
 
 (define (print-usage [port (current-output-port)])
@@ -481,17 +409,33 @@
   (displayln "  q sessions delete <id>     Delete a session" port)
   (newline port)
   (displayln "Options:" port)
-  (displayln "  --model <name>             Model to use (e.g. gpt-4, claude-3)" port)
-  (displayln "  --project-dir <path>       Project directory for session storage" port)
-  (displayln "  --session-dir <path>       Override session storage directory" port)
-  (displayln "  --config <path>            Configuration file path" port)
-  (displayln "  --session <id>             Resume session by ID" port)
-  (displayln "  --max-turns <n>            Maximum agent loop iterations (default: 10)" port)
-  (displayln "  --verbose, -v              Enable verbose output" port)
-  (displayln "  --no-tools                 Disable tool use" port)
-  (displayln "  --tool <name>              Enable specific tool (repeatable)" port)
-  (displayln "  --help, -h                 Show this help message" port)
-  (displayln "  --version                  Show version" port)
+  ;; Generate option lines from FLAG-DEFINITIONS
+  (for ([fd (in-list FLAG-DEFINITIONS)])
+    (define short-part
+      (if (flag-def-short fd)
+          (format "-~a, " (flag-def-short fd))
+          "    "))
+    (define long-part (format "--~a" (flag-def-long fd)))
+    (define type-placeholder
+      (cond
+        [(eq? (flag-def-type fd) 'string) " <value>"]
+        [(eq? (flag-def-type fd) 'integer) " <n>"]
+        [(eq? (flag-def-type fd) 'accumulate) " <name>"]
+        [else ""]))
+    (define help-text (flag-def-help fd))
+    (define line
+      (format "  ~a~a~a~a"
+              short-part
+              long-part
+              type-placeholder
+              ;; Pad to column 30
+              (make-string (max 1
+                                (- 26
+                                   (string-length short-part)
+                                   (string-length long-part)
+                                   (string-length type-placeholder)))
+                           #\space)))
+    (displayln (string-append line help-text) port))
   (displayln "  doctor                     Run setup and provider diagnostics" port)
   (newline port)
   (displayln "Interactive commands:" port)
