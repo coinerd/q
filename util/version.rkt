@@ -7,4 +7,4 @@
 
 (provide q-version)
 
-(define q-version "0.7.9")
+(define q-version "0.8.0")
