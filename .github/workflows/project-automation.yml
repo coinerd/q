@@ -6,16 +6,17 @@ on:
   pull_request_review:
     types: [submitted]
 
+permissions:
+  contents: read
+
 jobs:
   update-project-status:
     runs-on: ubuntu-latest
-    # Only run if the PR is linked to an issue (has "Fixes #N" or "Closes #N")
     steps:
       - name: Update issue status on linked project
         uses: actions/github-script@v7
         with:
-          # Requires a PAT with project scope stored as PROJECT_PAT secret
-          github-token: ${{ secrets.PROJECT_PAT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
             const body = pr.body || '';
