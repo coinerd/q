@@ -18,10 +18,11 @@
          net/http-client
          "model.rkt"
          "provider.rkt"
-         "stream.rkt")
+         "stream.rkt"
+         "http-helpers.rkt")
 
-(provide ;; Provider constructor
- make-openai-compatible-provider
+;; Provider constructor
+(provide make-openai-compatible-provider
          ;; Request/response helpers (exported for testing)
          openai-build-request-body
          openai-parse-response
@@ -100,13 +101,13 @@
                        (with-handlers ([exn:fail? (lambda (e) args-str)])
                          (string->jsexpr args-str)))
                      (hasheq 'type
-                           "tool-call"
-                           'id
-                           (hash-ref tc 'id)
-                           'name
-                           (hash-ref fn 'name)
-                           'arguments
-                           args))
+                             "tool-call"
+                             'id
+                             (hash-ref tc 'id)
+                             'name
+                             (hash-ref fn 'name)
+                             'arguments
+                             args))
                    '()))]))
 
   (make-model-response content usage model-name finish-reason))
@@ -126,26 +127,25 @@
   (define headers (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   ;; Wrap entire request in overall timeout (SEC-11)
-  (call-with-request-timeout
-   (lambda ()
-     (define-values (status-line response-headers response-port)
-       (if port
-           (http-sendrecv host
-                          path-str
-                          #:port port
-                          #:ssl? ssl?
-                          #:method "POST"
-                          #:headers headers
-                          #:data body-bytes)
-           (http-sendrecv host
-                          path-str
-                          #:ssl? ssl?
-                          #:method "POST"
-                          #:headers headers
-                          #:data body-bytes)))
-     (define response-body (read-response-body/timeout response-port))
-     (check-http-status! status-line response-body)
-     (bytes->jsexpr response-body))))
+  (call-with-request-timeout (lambda ()
+                               (define-values (status-line response-headers response-port)
+                                 (if port
+                                     (http-sendrecv host
+                                                    path-str
+                                                    #:port port
+                                                    #:ssl? ssl?
+                                                    #:method "POST"
+                                                    #:headers headers
+                                                    #:data body-bytes)
+                                     (http-sendrecv host
+                                                    path-str
+                                                    #:ssl? ssl?
+                                                    #:method "POST"
+                                                    #:headers headers
+                                                    #:data body-bytes)))
+                               (define response-body (read-response-body/timeout response-port))
+                               (check-http-status! status-line response-body)
+                               (bytes->jsexpr response-body))))
 
 ;; ============================================================
 ;; HTTP status check helper
@@ -184,21 +184,15 @@
         response-body
         (string->bytes/utf-8 response-body)))
   ;; Extract numeric status code from "HTTP/1.1 200 OK" or similar
-  (define status-code
-    (let ([m (regexp-match #rx"HTTP/[0-9.]+ ([0-9]+)" status-str)])
-      (if m
-          (string->number (cadr m))
-          0)))
+  (define status-code (extract-status-code status-line))
   (cond
     ;; Redirects — http-sendrecv does not follow them automatically
     [(and (>= status-code 300) (< status-code 400))
-     (raise
-      (exn:fail
-       (format
-        "API request redirected (~a: ~a). The server returned a redirect — check your base-url in config.json."
-        status-code
-        status-str)
-       (current-continuation-marks)))]
+     (raise-http-error!
+      (format
+       "API request redirected (~a: ~a). The server returned a redirect — check your base-url in config.json."
+       status-code
+       status-str))]
     ;; Client/server errors
     [(= status-code 429)
      (define error-text-429
@@ -206,16 +200,15 @@
                                     (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
          (define jsexpr (bytes->jsexpr response-bytes))
          (or (extract-error-message jsexpr) (format "~a" jsexpr))))
-     (raise (exn:fail (format "API rate limited (429). Please wait and try again.\n~a" error-text-429)
-                      (current-continuation-marks)))]
-    [(>= status-code 400)
+     (raise-http-error! (format "API rate limited (429). Please wait and try again.\n~a"
+                                error-text-429))]
+    [(http-error? status-code)
      (define error-text
        (with-handlers ([exn:fail? (λ (_)
                                     (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
          (define jsexpr (bytes->jsexpr response-bytes))
          (or (extract-error-message jsexpr) (format "~a" jsexpr))))
-     (raise (exn:fail (format "API request failed (~a): ~a" status-code error-text)
-                      (current-continuation-marks)))]))
+     (raise-http-error! (format "API request failed (~a): ~a" status-code error-text))]))
 
 ;; ============================================================
 ;; Provider constructor
@@ -259,24 +252,23 @@
     ;; call-with-request-timeout returns a single value,
     ;; so we capture the 3 http-sendrecv values in a vector.
     (define result-vec
-      (call-with-request-timeout
-       (lambda ()
-         (define-values (sl rh rp)
-           (if req-port
-               (http-sendrecv host
-                              path-str
-                              #:port req-port
-                              #:ssl? ssl?
-                              #:method "POST"
-                              #:headers headers
-                              #:data body-bytes)
-               (http-sendrecv host
-                              path-str
-                              #:ssl? ssl?
-                              #:method "POST"
-                              #:headers headers
-                              #:data body-bytes)))
-         (vector sl rh rp))))
+      (call-with-request-timeout (lambda ()
+                                   (define-values (sl rh rp)
+                                     (if req-port
+                                         (http-sendrecv host
+                                                        path-str
+                                                        #:port req-port
+                                                        #:ssl? ssl?
+                                                        #:method "POST"
+                                                        #:headers headers
+                                                        #:data body-bytes)
+                                         (http-sendrecv host
+                                                        path-str
+                                                        #:ssl? ssl?
+                                                        #:method "POST"
+                                                        #:headers headers
+                                                        #:data body-bytes)))
+                                   (vector sl rh rp))))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))

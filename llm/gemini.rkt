@@ -20,10 +20,11 @@
          net/http-client
          "model.rkt"
          "provider.rkt"
-         "stream.rkt")
+         "stream.rkt"
+         "http-helpers.rkt")
 
-(provide ;; Provider constructor
- make-gemini-provider
+;; Provider constructor
+(provide make-gemini-provider
          ;; Request/response helpers (exported for testing)
          gemini-build-request-body
          gemini-parse-response
@@ -112,7 +113,7 @@
                  (if (string? content) content "")))
            (define tool-name (hash-ref call-id->name tool-call-id ""))
            (list (hasheq 'functionResponse
-                       (hasheq 'name tool-name 'response (hasheq 'content tool-result-content))))]
+                         (hasheq 'name tool-name 'response (hasheq 'content tool-result-content))))]
           ;; Assistant with list content (tool calls + text)
           [(and (equal? role "assistant") (list? content))
            (for/list ([block (in-list content)])
@@ -154,8 +155,8 @@
         (hash-set with-system
                   'tools
                   (list (hasheq 'functionDeclarations
-                              (for/list ([tool (in-list (model-request-tools req))])
-                                (gemini-translate-tool tool)))))
+                                (for/list ([tool (in-list (model-request-tools req))])
+                                  (gemini-translate-tool tool)))))
         with-system))
 
   with-tools)
@@ -207,11 +208,11 @@
   (define total-tokens (hash-ref usage-raw 'totalTokenCount (+ prompt-tokens candidates-tokens)))
   (define usage
     (hasheq 'prompt_tokens
-          prompt-tokens
-          'completion_tokens
-          candidates-tokens
-          'total_tokens
-          total-tokens))
+            prompt-tokens
+            'completion_tokens
+            candidates-tokens
+            'total_tokens
+            total-tokens))
 
   ;; Translate content parts
   (define content
@@ -222,13 +223,13 @@
          (let* ([fc (hash-ref part 'functionCall)]
                 [tool-id (gemini-gen-tool-id)])
            (hasheq 'type
-                 "tool-call"
-                 'id
-                 tool-id
-                 'name
-                 (hash-ref fc 'name "")
-                 'arguments
-                 (hash-ref fc 'args (hasheq))))]
+                   "tool-call"
+                   'id
+                   tool-id
+                   'name
+                   (hash-ref fc 'name "")
+                   'arguments
+                   (hash-ref fc 'args (hasheq))))]
         [else part])))
 
   ;; Check for safety/recitation filtering — add warning when content is empty
@@ -310,12 +311,13 @@
       [(hash-has-key? part 'functionCall)
        (let* ([fc (hash-ref part 'functionCall)]
               [tc-delta
-               (hasheq 'index
-                     0
-                     'id
-                     (gemini-gen-tool-id)
-                     'function
-                     (hasheq 'name (hash-ref fc 'name "") 'arguments (hash-ref fc 'args (hasheq))))])
+               (hasheq
+                'index
+                0
+                'id
+                (gemini-gen-tool-id)
+                'function
+                (hasheq 'name (hash-ref fc 'name "") 'arguments (hash-ref fc 'args (hasheq))))])
          (set! results (cons (stream-chunk #f tc-delta #f #f) results)))]
       [else (void)]))
 
@@ -324,18 +326,19 @@
     [(and finish-reason (not (eq? finish-reason 'null)) (not (null? finish-reason)))
      (let* ([usage (if usage-raw
                        (hasheq 'prompt_tokens
-                             (hash-ref usage-raw 'promptTokenCount 0)
-                             'completion_tokens
-                             (hash-ref usage-raw 'candidatesTokenCount 0)
-                             'total_tokens
-                             (hash-ref usage-raw 'totalTokenCount 0))
+                               (hash-ref usage-raw 'promptTokenCount 0)
+                               'completion_tokens
+                               (hash-ref usage-raw 'candidatesTokenCount 0)
+                               'total_tokens
+                               (hash-ref usage-raw 'totalTokenCount 0))
                        (hasheq))])
        (set! results (cons (stream-chunk #f #f usage #t) results)))]
     [(and usage-raw (not finish-reason))
      ;; Usage-only event without finish — emit usage chunk
      (let* ([prompt-tokens (hash-ref usage-raw 'promptTokenCount 0)])
        (when (> prompt-tokens 0)
-         (set! results (cons (stream-chunk #f #f (hasheq 'prompt_tokens prompt-tokens) #f) results))))])
+         (set! results
+               (cons (stream-chunk #f #f (hasheq 'prompt_tokens prompt-tokens) #f) results))))])
 
   (reverse results))
 
@@ -344,40 +347,23 @@
 ;; ============================================================
 
 (define (gemini-check-http-status! status-line response-body)
-  (define status-str
-    (if (bytes? status-line)
-        (bytes->string/utf-8 status-line)
-        status-line))
-  (define status-code
-    (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
-      (if parts
-          (string->number (cadr parts))
-          0)))
-  (when (>= status-code 400)
+  (define status-code (extract-status-code status-line))
+  (when (http-error? status-code)
     (define error-body
       (if (bytes? response-body)
           (bytes->string/utf-8 response-body)
           response-body))
     (cond
-      [(= status-code 400)
-       (raise (exn:fail (format "Gemini API bad request (400): ~a" error-body)
-                        (current-continuation-marks)))]
+      [(= status-code 400) (raise-http-error! (format "Gemini API bad request (400): ~a" error-body))]
       [(= status-code 401)
-       (raise (exn:fail (format "Gemini API authentication failed (401): ~a" error-body)
-                        (current-continuation-marks)))]
-      [(= status-code 403)
-       (raise (exn:fail (format "Gemini API forbidden (403): ~a" error-body)
-                        (current-continuation-marks)))]
+       (raise-http-error! (format "Gemini API authentication failed (401): ~a" error-body))]
+      [(= status-code 403) (raise-http-error! (format "Gemini API forbidden (403): ~a" error-body))]
       [(= status-code 429)
-       (raise (exn:fail (format "Gemini API rate limited (429). Please wait and try again.\n~a"
-                                error-body)
-                        (current-continuation-marks)))]
+       (raise-http-error! (format "Gemini API rate limited (429). Please wait and try again.\n~a"
+                                  error-body))]
       [(>= status-code 500)
-       (raise (exn:fail (format "Gemini API server error (~a): ~a" status-code error-body)
-                        (current-continuation-marks)))]
-      [else
-       (raise (exn:fail (format "Gemini API error (~a): ~a" status-code error-body)
-                        (current-continuation-marks)))])))
+       (raise-http-error! (format "Gemini API server error (~a): ~a" status-code error-body))]
+      [else (raise-http-error! (format "Gemini API error (~a): ~a" status-code error-body))])))
 
 ;; ============================================================
 ;; HTTP request execution (non-streaming)
@@ -390,14 +376,13 @@
   (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
   (define body-bytes (jsexpr->bytes body))
   ;; Wrap entire request in overall timeout (SEC-11)
-  (call-with-request-timeout
-   (lambda ()
-     (define-values (status-line response-headers response-port)
-       (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-     (define response-body (read-response-body response-port))
-     ;; Check HTTP status
-     (gemini-check-http-status! status-line response-body)
-     (bytes->jsexpr response-body))))
+  (call-with-request-timeout (lambda ()
+                               (define-values (status-line response-headers response-port)
+                                 (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+                               (define response-body (read-response-body response-port))
+                               ;; Check HTTP status
+                               (gemini-check-http-status! status-line response-body)
+                               (bytes->jsexpr response-body))))
 
 ;; ============================================================
 ;; Provider constructor
@@ -410,12 +395,7 @@
   (define default-model (hash-ref config 'model GEMINI-DEFAULT-MODEL))
 
   (define (send req)
-    (define merged-req
-      (if (hash-has-key? (model-request-settings req) 'model)
-          req
-          (make-model-request (model-request-messages req)
-                              (model-request-tools req)
-                              (hash-set (model-request-settings req) 'model default-model))))
+    (define merged-req (ensure-model-setting req default-model))
     (define body (gemini-build-request-body merged-req))
     (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
     ;; Bind per-request counter (Issue #200)
@@ -424,12 +404,7 @@
       (gemini-parse-response raw)))
 
   (define (stream req)
-    (define merged-req
-      (if (hash-has-key? (model-request-settings req) 'model)
-          req
-          (make-model-request (model-request-messages req)
-                              (model-request-tools req)
-                              (hash-set (model-request-settings req) 'model default-model))))
+    (define merged-req (ensure-model-setting req default-model))
     (define body (gemini-build-request-body merged-req #:stream? #t))
     (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
     (define url-str
@@ -443,11 +418,10 @@
     (define body-bytes (jsexpr->bytes body))
     ;; Wrap initial HTTP request in overall timeout (SEC-11)
     (define result-vec
-      (call-with-request-timeout
-       (lambda ()
-         (define-values (sl rh rp)
-           (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-         (vector sl rh rp))))
+      (call-with-request-timeout (lambda ()
+                                   (define-values (sl rh rp)
+                                     (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+                                   (vector sl rh rp))))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))

@@ -19,6 +19,7 @@
 
 (provide provider?
          validate-api-key!
+         ensure-model-setting
          (contract-out [provider-name (-> provider? string?)]
                        [provider-send (-> provider? model-request? any/c)]
                        [provider-stream (-> provider? model-request? any/c)]
@@ -27,6 +28,18 @@
                        [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
                        [make-mock-provider
                         (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
+
+;; ============================================================
+;; Model-setting helper (ARCH-08)
+;; ============================================================
+
+;; Ensure the model-request has a 'model setting; if missing, set it to default-model.
+(define (ensure-model-setting req default-model)
+  (if (hash-has-key? (model-request-settings req) 'model)
+      req
+      (make-model-request (model-request-messages req)
+                          (model-request-tools req)
+                          (hash-set (model-request-settings req) 'model default-model))))
 
 ;; ============================================================
 ;; API key validation helper
