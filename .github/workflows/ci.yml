@@ -34,12 +34,29 @@ jobs:
           echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
           ls -la /usr/local/racket/bin/raco || (echo "Racket installation failed" && exit 1)
 
-      # macOS: no .sh installer available for aarch64, use Homebrew
+      # macOS: Racket 8.10 DMG contains a .app bundle, not a .pkg.
+      # Mount DMG, copy .app to /Applications, symlink binaries.
       - name: Install Racket (macOS)
         if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
-          brew install minimal-racket
-          raco --version
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
+          hdiutil attach -nobrowse /tmp/racket.dmg
+          MOUNT=$(ls -d /Volumes/Racket* | head -1)
+          echo "Mounted at: $MOUNT"
+          ls -la "$MOUNT"
+          APP=$(find "$MOUNT" -maxdepth 1 -name '*.app' | head -1)
+          if [ -n "$APP" ]; then
+            echo "Installing app: $APP"
+            sudo cp -R "$APP" /Applications/
+            APP_NAME=$(basename "$APP")
+            sudo ln -sf "/Applications/$APP_NAME/Contents/MacOS/racket" /usr/local/bin/racket
+            sudo ln -sf "/Applications/$APP_NAME/Contents/MacOS/raco" /usr/local/bin/raco
+          else
+            echo "ERROR: No .app found in DMG"
+            exit 1
+          fi
+          hdiutil detach "$MOUNT"
+          racket --version
 
       - name: Verify Racket Installation
         run: racket --version
@@ -106,8 +123,24 @@ jobs:
       - name: Install Racket (macOS)
         if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
         run: |
-          brew install minimal-racket
-          raco --version
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
+          hdiutil attach -nobrowse /tmp/racket.dmg
+          MOUNT=$(ls -d /Volumes/Racket* | head -1)
+          echo "Mounted at: $MOUNT"
+          ls -la "$MOUNT"
+          APP=$(find "$MOUNT" -maxdepth 1 -name '*.app' | head -1)
+          if [ -n "$APP" ]; then
+            echo "Installing app: $APP"
+            sudo cp -R "$APP" /Applications/
+            APP_NAME=$(basename "$APP")
+            sudo ln -sf "/Applications/$APP_NAME/Contents/MacOS/racket" /usr/local/bin/racket
+            sudo ln -sf "/Applications/$APP_NAME/Contents/MacOS/raco" /usr/local/bin/raco
+          else
+            echo "ERROR: No .app found in DMG"
+            exit 1
+          fi
+          hdiutil detach "$MOUNT"
+          racket --version
 
       - name: Verify Racket Installation
         run: racket --version
