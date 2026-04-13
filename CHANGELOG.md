@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-04-12
+
+### Added — Wave 1: Critical Security & Doc Fixes
+- `current-warn-on-destructive` default changed to `#t` in bash tool (SEC-02, #239)
+- `[ADMIN-ONLY]` docstring on `repair-session-log!` in session-store (SEC-07, #268)
+- 8 destructive-command warning tests (#237)
+
+### Changed — Wave 2: Code Dedup & Architecture Cleanup
+- Extract `ensure-hash-args` to `util/json-helpers.rkt` (QUAL-01, #241)
+- Extract `path-only` to `util/path-helpers.rkt` (QUAL-02, #242)
+- Extract `result-content->string` to `util/content-helpers.rkt` (QUAL-03, #243)
+- Extract `make-help-config` helper in `cli/args.rkt` (QUAL-04, #244)
+- Standardize `hash` → `hasheq` for symbolic keys across 16 modules (QUAL-05, #245)
+- Add purpose comments to provide blocks across 23 modules (QUAL-06, #246)
+- Replace local `estimate-tokens` with import from `token-budget` (QUAL-07, #247)
+- Decompose deeply nested iteration loop into named helpers (QUAL-08, #248)
+- Extract shared SSE streaming helpers `parse-sse-data-line`, `sse-done?` (QUAL-09, #249)
+- Simplify `main.rkt` provide block with `all-from-out` (ARCH-01, #250)
+
+### Security — Wave 3: Security Hardening
+- `current-max-write-bytes` parameter (1MB default) in tool-write (SEC-03, #252)
+- `current-audit-log-max-bytes` parameter (10MB) with rotation (SEC-04, #253)
+- Extension integrity hash verification (SHA256) (SEC-05, #254)
+- Atomic quarantine writes (write-to-tmp + rename) (SEC-06, #253)
+- Remove weak crypto fallback in RPC handshake (SEC-08, #254)
+- Configurable sandbox limits via parameters (SEC-09, #255)
+
+### Testing — Wave 4: Test Quality
+- 6 new test files: test-tui-init, test-tui-keybindings, test-tui-render-loop, test-wiring-run-modes, test-wiring-run-interactive, test-tool-edge-cases
+- Widened timing bounds in 3 flaky test files (TEST-03, #258)
+- Edge case tests for tool-write and tool-read (TEST-04, #259)
+
+### Documentation — Wave 5: Docs & CI
+- Batch-update stale metrics across all documentation files (DOC-02-10, #261)
+
+### Metrics
+- Source modules: 116 → 119 | Test files: 128 → 138
+- Tests: 3,265 → 3,352 | Assertions: 6,008 → 6,133
+- Source lines: 21,931 → 22,032 | Test lines: 37,266 → 38,032
+- 27 issues closed (#237-#261)
+
+### Fixed
+- Removed `fprintf` handshake token leak in RPC mode (SEC-01, #238)
+
 ## [0.7.9] — 2026-04-12
 
 ### Added
