@@ -8,6 +8,24 @@
 ;;
 ;; Also provides shared helpers used by agent-session.rkt:
 ;;   now-seconds, emit-session-event!, maybe-dispatch-hooks
+;;
+;; ── LAYER EXCEPTION (ARCH-01 / #341) ──────────────────────────
+;; This module resides in the runtime/ layer but imports upward into
+;; the tools/ and extensions/ layers:
+;;
+;;   tools/tool.rkt       → make-exec-context, tool-result accessors, list-tools-jsexpr
+;;   tools/scheduler.rkt  → run-tool-batch, scheduler-result-results
+;;   extensions/hooks.rkt → dispatch-hooks
+;;
+;; These upward imports exist because the iteration loop is the single
+;; coordination point that wires together tool execution and extension
+;; hooks within each agent turn. Moving this wiring into tools/ or
+;; extensions/ would create a circular dependency back into runtime/
+;; (the loop needs session-store, compactor, and queue). A full
+;; dependency-injection refactor to eliminate the upward imports is
+;; deferred to a future major version; the current trade-off keeps
+;; the coordination logic in one well-documented place.
+;; ───────────────────────────────────────────────────────────────
 
 (require racket/contract
          racket/list
@@ -25,11 +43,20 @@
          "../agent/event-bus.rkt"
          "../agent/queue.rkt"
          "../agent/loop.rkt"
+         ;; ARCH-01 upward import — runtime→tools: iteration loop builds exec
+         ;; contexts and queries the tool registry to pass tool definitions to
+         ;; the LLM and to construct tool-result messages.
          (only-in "../tools/tool.rkt"
                   make-exec-context
                   tool-result-content tool-result-is-error?
                   list-tools-jsexpr)
+         ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
+         ;; call site for run-tool-batch, coordinating parallel tool execution
+         ;; within each agent turn.
          "../tools/scheduler.rkt"
+         ;; ARCH-01 upward import — runtime→extensions: iteration loop
+         ;; dispatches lifecycle hooks (turn-start, tool-call, tool-result,
+         ;; turn-end, etc.) so extensions can observe/amend/block each step.
          "../extensions/hooks.rkt"
          "../runtime/session-store.rkt"
          (only-in "../runtime/compactor.rkt"
