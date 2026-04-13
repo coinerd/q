@@ -43,12 +43,15 @@ jobs:
           hdiutil attach -nobrowse /tmp/racket.dmg
           MOUNT=$(ls -d /Volumes/Racket* | head -1)
           echo "Mounted at: $MOUNT"
-          # The DMG contains a "Racket v8.10" directory — copy to /usr/local/racket
-          RACKET_DIR=$(find "$MOUNT" -maxdepth 1 -type d -name 'Racket*' ! -name 'Racket*' -prune -o -type d -name 'Racket v*' -print | head -1)
-          if [ -z "$RACKET_DIR" ]; then
-            RACKET_DIR=$(find "$MOUNT" -maxdepth 1 -type d -name 'Racket*' | grep -v '^\.$' | tail -1)
+          # The DMG volume root is "/Volumes/Racket v8.10" which contains a
+          # subdirectory also called "Racket v8.10" with bin/, lib/, etc.
+          RACKET_DIR="$MOUNT/Racket v8.10"
+          if [ ! -d "$RACKET_DIR/bin" ]; then
+            echo "ERROR: $RACKET_DIR/bin not found"
+            ls -la "$MOUNT"
+            exit 1
           fi
-          echo "Found Racket dir: $RACKET_DIR"
+          echo "Installing from: $RACKET_DIR"
           sudo cp -R "$RACKET_DIR" /usr/local/racket
           sudo ln -sf /usr/local/racket/bin/racket /usr/local/bin/racket
           sudo ln -sf /usr/local/racket/bin/raco /usr/local/bin/raco
@@ -124,12 +127,13 @@ jobs:
           hdiutil attach -nobrowse /tmp/racket.dmg
           MOUNT=$(ls -d /Volumes/Racket* | head -1)
           echo "Mounted at: $MOUNT"
-          # The DMG contains a "Racket v8.10" directory — copy to /usr/local/racket
-          RACKET_DIR=$(find "$MOUNT" -maxdepth 1 -type d -name 'Racket*' | grep -v "$(basename "$MOUNT")" | head -1)
-          if [ -z "$RACKET_DIR" ]; then
-            RACKET_DIR="$MOUNT/Racket v8.10"
+          RACKET_DIR="$MOUNT/Racket v8.10"
+          if [ ! -d "$RACKET_DIR/bin" ]; then
+            echo "ERROR: $RACKET_DIR/bin not found"
+            ls -la "$MOUNT"
+            exit 1
           fi
-          echo "Found Racket dir: $RACKET_DIR"
+          echo "Installing from: $RACKET_DIR"
           sudo cp -R "$RACKET_DIR" /usr/local/racket
           sudo ln -sf /usr/local/racket/bin/racket /usr/local/bin/racket
           sudo ln -sf /usr/local/racket/bin/raco /usr/local/bin/raco
