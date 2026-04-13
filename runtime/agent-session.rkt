@@ -273,19 +273,14 @@
   new-sess)
 
 ;; ============================================================
-;; run-prompt!
+;; Private helpers extracted from run-prompt!
 ;; ============================================================
 
-(define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
-  (define bus (agent-session-event-bus sess))
-  (define prov (agent-session-provider sess))
-  (define reg (agent-session-tool-registry sess))
+;; build-session-context — context preparation:
+;;   converts user-message, appends to log, loads history, injects
+;;   system instructions. Returns the context message list.
+(define (build-session-context sess user-message)
   (define log-path (session-log-path (agent-session-session-dir sess)))
-  (define idx-path (session-index-path (agent-session-session-dir sess)))
-  (define sid (agent-session-session-id sess))
-  (define cfg (agent-session-config sess))
-  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 10)))
-  (define token-budget-threshold (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
 
   ;; Convert string to message struct if needed
   (define user-msg
@@ -309,27 +304,32 @@
                         (hasheq)))
         user-message))
 
-  ;; 1. Append user message to session log
+  ;; Append user message to session log
   (append-entry! log-path user-msg)
 
-  ;; 2. Build context from full session history
+  ;; Build context from full session history
   (define history (load-session-log log-path))
 
-  ;; 3. Inject system instructions as an ephemeral system message prefix
+  ;; Inject system instructions as an ephemeral system message prefix
   (define system-instrs (agent-session-system-instructions sess))
-  (define context-with-system
-    (if (null? system-instrs)
-        history
-        (cons (make-message (generate-id)
-                            #f
-                            'system
-                            'system-instruction
-                            (list (make-text-part (string-join system-instrs "\n\n")))
-                            (now-seconds)
-                            (hasheq))
-              history)))
+  (if (null? system-instrs)
+      history
+      (cons (make-message (generate-id)
+                          #f
+                          'system
+                          'system-instruction
+                          (list (make-text-part (string-join system-instrs "\n\n")))
+                          (now-seconds)
+                          (hasheq))
+            history)))
 
-  ;; 4. Check token budget (on full context including system message)
+;; maybe-compact-context — token budget check and compaction triggering.
+;;   May mutate context (return a compacted version). Returns the
+;;   (possibly compacted) context message list.
+(define (maybe-compact-context sess context-with-system token-budget-threshold)
+  (define bus (agent-session-event-bus sess))
+  (define sid (agent-session-session-id sess))
+
   (define raw-messages
     (for/list ([msg (in-list context-with-system)])
       (hasheq 'role
@@ -337,44 +337,56 @@
               'content
               (map content-part->jsexpr (message-content msg)))))
   (define token-count (estimate-context-tokens raw-messages))
-  (when (should-compact? token-count token-budget-threshold)
-    ;; Dispatch 'session-before-compact hook — extensions can amend or block compaction
-    (define compact-payload
-      (hasheq 'session-id
-              sid
-              'token-count
-              token-count
-              'budget-threshold
-              token-budget-threshold
-              'message-count
-              (length context-with-system)))
-    (define-values (amended-compact compact-hook-res)
-      (maybe-dispatch-hooks (agent-session-extension-registry sess)
-                            'session-before-compact
-                            compact-payload))
-    ;; Proceed with compaction unless blocked
-    (unless (and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block))
-      (emit-session-event! bus
-                           sid
-                           "compaction.warning"
-                           (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
-      ;; R2-6: Auto-compact when threshold exceeded
-      (define compact-result (compact-history context-with-system))
-      (set! context-with-system (compaction-result->message-list compact-result))
-      (emit-session-event! bus
-                           sid
-                           "compaction.completed"
-                           (hasheq 'removedCount
-                                   (compaction-result-removed-count compact-result)
-                                   'keptCount
-                                   (length (compaction-result-kept-messages compact-result))
-                                   'tokenCount
-                                   token-count))))
+  (cond
+    [(not (should-compact? token-count token-budget-threshold)) context-with-system]
+    [else
+     ;; Dispatch 'session-before-compact hook — extensions can amend or block compaction
+     (define compact-payload
+       (hasheq 'session-id
+               sid
+               'token-count
+               token-count
+               'budget-threshold
+               token-budget-threshold
+               'message-count
+               (length context-with-system)))
+     (define-values (_amended-compact compact-hook-res)
+       (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                             'session-before-compact
+                             compact-payload))
+     ;; Proceed with compaction unless blocked
+     (cond
+       [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block)) context-with-system]
+       [else
+        (emit-session-event! bus
+                             sid
+                             "compaction.warning"
+                             (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
+        ;; R2-6: Auto-compact when threshold exceeded
+        (define compact-result (compact-history context-with-system))
+        (emit-session-event! bus
+                             sid
+                             "compaction.completed"
+                             (hasheq 'removedCount
+                                     (compaction-result-removed-count compact-result)
+                                     'keptCount
+                                     (length (compaction-result-kept-messages compact-result))
+                                     'tokenCount
+                                     token-count))
+        (compaction-result->message-list compact-result)])]))
 
-  ;; 5. Extract cancellation token from config
+;; dispatch-iteration — model-select hook + iteration loop dispatch.
+;;   Runs the core agent loop with error handling. Returns a loop-result.
+(define (dispatch-iteration sess context-with-system max-iterations)
+  (define bus (agent-session-event-bus sess))
+  (define prov (agent-session-provider sess))
+  (define reg (agent-session-tool-registry sess))
+  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define sid (agent-session-session-id sess))
+  (define cfg (agent-session-config sess))
   (define cancellation-tok (hash-ref cfg 'cancellation-token #f))
 
-  ;; 5b. Dispatch 'model-select hook — extensions can override model
+  ;; Dispatch 'model-select hook — extensions can override model
   (define-values (_model-hook-res model-hook-res)
     (maybe-dispatch-hooks (agent-session-extension-registry sess)
                           'model-select
@@ -386,35 +398,58 @@
     (define override-model (hash-ref (hook-result-payload model-hook-res) 'model))
     (set-agent-session-model-name! sess override-model))
 
-  ;; 6. Run the core agent loop with tool-call iteration
-  (define final-result
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       ;; Emit runtime.error event
-                       (emit-session-event! bus sid "runtime.error" (hasheq 'error (exn-message e)))
-                       ;; Classify error: distinguish iteration limits from provider failures
-                       (define error-type
-                         (if (regexp-match? #rx"max.iterations" (exn-message e))
-                             'max-iterations-exceeded
-                             'provider-error))
-                       (make-loop-result context-with-system
-                                         'error
-                                         (hasheq 'error (exn-message e) 'errorType error-type)))])
-      (run-iteration-loop context-with-system
-                          prov
-                          bus
-                          reg
-                          (agent-session-extension-registry sess)
-                          log-path
-                          sid
-                          max-iterations
-                          #:cancellation-token cancellation-tok
-                          #:config cfg)))
+  ;; Run the core agent loop with tool-call iteration
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     ;; Emit runtime.error event
+                     (emit-session-event! bus sid "runtime.error" (hasheq 'error (exn-message e)))
+                     ;; Classify error: distinguish iteration limits from provider failures
+                     (define error-type
+                       (if (regexp-match? #rx"max.iterations" (exn-message e))
+                           'max-iterations-exceeded
+                           'provider-error))
+                     (make-loop-result context-with-system
+                                       'error
+                                       (hasheq 'error (exn-message e) 'errorType error-type)))])
+    (run-iteration-loop context-with-system
+                        prov
+                        bus
+                        reg
+                        (agent-session-extension-registry sess)
+                        log-path
+                        sid
+                        max-iterations
+                        #:cancellation-token cancellation-tok
+                        #:config cfg)))
 
-  ;; 7. Rebuild index
+;; ============================================================
+;; run-prompt!
+;; ============================================================
+
+(define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
+  (define bus (agent-session-event-bus sess))
+  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define idx-path (session-index-path (agent-session-session-dir sess)))
+  (define sid (agent-session-session-id sess))
+  (define cfg (agent-session-config sess))
+  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 10)))
+  (define token-budget-threshold
+    (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
+
+  ;; 1. Build context: convert message, append to log, load history, inject system instructions
+  (define context-with-system (build-session-context sess user-message))
+
+  ;; 2. Check token budget and compact if needed
+  (define context-after-compact
+    (maybe-compact-context sess context-with-system token-budget-threshold))
+
+  ;; 3. Run the core agent loop (model-select hook + iteration dispatch)
+  (define final-result (dispatch-iteration sess context-after-compact max-iterations))
+
+  ;; 4. Rebuild index
   (set-agent-session-index! sess (build-index! log-path idx-path))
 
-  ;; 8. Emit session.updated
+  ;; 5. Emit session.updated
   (emit-session-event!
    bus
    sid
