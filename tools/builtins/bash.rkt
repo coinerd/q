@@ -41,9 +41,9 @@
     (string-contains? lower (string-downcase pattern))))
 
 ;; Optional settings parameter for destructive command warning.
-;; When #t, emit a warning to stderr before executing.
-;; Defaults to #f (no warning).
-(define current-warn-on-destructive (make-parameter #f))
+;; When #t (default), emit a warning to stderr before executing.
+;; Can be set to #f to suppress warnings.
+(define current-warn-on-destructive (make-parameter #t))
 
 (provide tool-bash
          current-warn-on-destructive

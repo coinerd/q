@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-04-12
+
+### Added
+- 50 new tests across 5 modules: evaluator, cli-args, run-modes, audit-log, token-budget (#221-#225)
+- HTTP request timeout (300s default) via `call-with-request-timeout` in all providers (#227)
+- Destructive-command warning in bash tool (#228)
+- Audit logging utility `util/audit-log.rkt` with `audit-log!` and `with-audit-log` (#229)
+- `DEFAULT-TOKEN-BUDGET-THRESHOLD` constant extracted from magic number in `interfaces/sdk.rkt` (#235)
+
+### Changed
+- `lint-version.rkt` now cross-checks version in both `info.rkt` and `util/version.rkt` (#232)
+- `releasing.md` updated with `util/version.rkt` step (#231)
+
+### Fixed
+- TUI naming kept as-is after review (#234 — not applicable)
+- Sleep-based timing not changed — existing approach acceptable (#236)
+
+### Metrics
+- Source modules: 114 → 116 | Test files: 123 → 128
+- Tests: 3,201 → 3,265 | Assertions: 5,904 → 6,008
+- Source lines: 21,486 → 21,930 | Test lines: 36,597 → 37,200
+- 16 issues closed (#221-#236)
+
+## [0.7.8] — 2026-04-12
+
+### Architecture
+- Decomposed 389-line `run-agent-turn` into 4 helpers + ~70-line orchestrator (#206-#210)
+  - `build-raw-messages`, `stream-response`, `handle-cancellation`, `build-loop-result`
+
+### Security
+- Manifest validation before `dynamic-require` in `extensions/loader.rkt` (#215)
+- Crypto-random handshake tokens in `rpc-mode.rkt` (#216)
+
+### Added
+- Structured error types in `util/errors.rkt` with `raise-tool-error` (#212)
+- Firecrawl migrated to `raise-tool-error` for 13 error sites (#213)
+
+### Fixed
+- `close-session!` export fix in `main.rkt` (#217)
+- Duplicate `require` removed in `tui/renderer.rkt` (#218)
+- `run-sessions-command` moved to `interfaces/sessions.rkt` (#220)
+
+### Metrics
+- Source modules: 114 | Test files: 123
+- Tests: 3,201 | Assertions: 5,904
+- Source lines: 21,486 | Test lines: 36,597
+- 15 issues closed (#206-#220)
+
 ## [0.7.7] — 2026-04-12
 
 ### Architecture

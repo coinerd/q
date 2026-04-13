@@ -194,8 +194,6 @@
                        #:output-port [out (current-output-port)]
                        #:handshake-token [handshake-token #f])
   ;; SEC-15: If handshake token provided, require it before any commands
-  (when handshake-token
-    (fprintf (current-error-port) "RPC handshake token: ~a\n" handshake-token))
   (define authenticated? (box (not handshake-token)))
   ;; Read lines until handshake succeeds (if required)
   (when handshake-token
