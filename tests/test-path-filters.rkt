@@ -33,8 +33,8 @@
      (check-false (should-skip-entry? "main.rkt")))
 
    (test-case "path-component-hidden? detects hidden path segment"
-     (check-true (path-component-hidden? (string->path "/home/user/.config/app")))
-     (check-false (path-component-hidden? (string->path "/home/user/config/app"))))
+     (check-true (path-component-hidden? (string->path "/tmp/test/.config/app")))
+     (check-false (path-component-hidden? (string->path "/tmp/test/config/app"))))
 
    (test-case "skip-dirs is a non-empty list"
      (check-true (and (list? skip-dirs) (pair? skip-dirs))))))
