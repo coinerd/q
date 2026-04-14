@@ -144,6 +144,68 @@
      (check-equal? (display-col->string-offset "a你b" 4) 3))
 
    (test-case "display-col->string-offset: past end returns length"
-     (check-equal? (display-col->string-offset "hi" 100) 2))))
+     (check-equal? (display-col->string-offset "hi" 100) 2))
+
+   ;; ============================================================
+   ;; Grapheme cluster utilities (UAX #29)
+   ;; ============================================================
+
+   (test-case "grapheme-span-at: ASCII"
+     (check-equal? (grapheme-span-at "hello" 0) 1)
+     (check-equal? (grapheme-span-at "hello" 4) 1))
+
+   (test-case "grapheme-span-at: combining character"
+     ;; e + combining acute = 2 codepoints, 1 grapheme
+     (check-equal? (grapheme-span-at "e\u0301" 0) 2))
+
+   (test-case "grapheme-span-at: past end returns 0"
+     (check-equal? (grapheme-span-at "hi" 5) 0))
+
+   (test-case "grapheme-count: ASCII"
+     (check-equal? (grapheme-count "hello") 5))
+
+   (test-case "grapheme-count: combining chars"
+     ;; e+combining acute + o = 3 codepoints, 2 graphemes
+     (check-equal? (grapheme-count "e\u0301o") 2))
+
+   (test-case "grapheme-count: CJK"
+     (check-equal? (grapheme-count "你好") 2))
+
+   (test-case "grapheme-count: empty string"
+     (check-equal? (grapheme-count "") 0))
+
+   (test-case "string-grapheme-length is alias for grapheme-count"
+     (check-equal? (string-grapheme-length "hello") 5))
+
+   (test-case "substring-by-graphemes: basic"
+     (check-equal? (substring-by-graphemes "hello" 1 3) "el"))
+
+   (test-case "substring-by-graphemes: to end"
+     (check-equal? (substring-by-graphemes "hello" 3) "lo"))
+
+   (test-case "substring-by-graphemes: with combining"
+     ;; e+acute + l + l + o = 4 graphemes
+     (check-equal? (substring-by-graphemes "e\u0301llo" 0 1) "e\u0301"))
+
+   (test-case "prev-grapheme-start: ASCII"
+     (check-equal? (prev-grapheme-start "hello" 3) 2))
+
+   (test-case "prev-grapheme-start: combining character"
+     ;; "e\u0301x" — cursor at 2 (x) should go back to 0 (start of e+acute)
+     (check-equal? (prev-grapheme-start "e\u0301x" 2) 0))
+
+   (test-case "prev-grapheme-start: at beginning returns 0"
+     (check-equal? (prev-grapheme-start "hello" 0) 0))
+
+   (test-case "next-grapheme-start: ASCII"
+     (check-equal? (next-grapheme-start "hello" 2) 3))
+
+   (test-case "next-grapheme-start: combining character"
+     ;; "e\u0301x" — cursor at 0 should go to 2 (start of x)
+     (check-equal? (next-grapheme-start "e\u0301x" 0) 2))
+
+   (test-case "next-grapheme-start: at end returns length"
+     (check-equal? (next-grapheme-start "hi" 2) 2))
+   ))
 
 (run-tests char-width-tests)

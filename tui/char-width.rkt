@@ -8,12 +8,17 @@
 ;;
 ;; Reference: Unicode East Asian Width property (UAX #11)
 
-(require racket/contract)
+(require racket/contract
+         racket/string)
 
 (provide char-width
          string-visible-width
          visible-width
-         display-col->string-offset)
+         display-col->string-offset
+         grapheme-span-at
+         grapheme-count
+         string-grapheme-length
+         substring-by-graphemes)
 
 ;; char-width : Char → {0, 1, 2}
 ;; Returns the terminal column width of a single character.
@@ -95,8 +100,8 @@
 
     ;; Halfwidth and Fullwidth Forms (U+FF00–U+FFEF):
     ;; Fullwidth variants are width 2, halfwidth are width 1
-    [(and (>= cp #xFF01) (<= cp #xFF60)) 2]  ; Fullwidth
-    [(and (>= cp #xFFE0) (<= cp #xFFE6)) 2]  ; Fullwidth signs
+    [(and (>= cp #xFF01) (<= cp #xFF60)) 2] ; Fullwidth
+    [(and (>= cp #xFFE0) (<= cp #xFFE6)) 2] ; Fullwidth signs
 
     ;; Miscellaneous Symbols (U+2600–U+26FF): width 2 (emoji-like)
     [(and (>= cp #x2600) (<= cp #x26FF)) 2]
@@ -119,18 +124,99 @@
 ;; string-visible-width : String → Natural
 ;; Returns the total visual column width of a string.
 (define (string-visible-width s)
-  (for/sum ([c (in-string s)])
-    (char-width c)))
+  (for/sum ([c (in-string s)]) (char-width c)))
 
 ;; Alias for convenience
 (define visible-width string-visible-width)
+
+;; ============================================================
+;; Grapheme cluster utilities (UAX #29)
+;; ============================================================
+;; Uses Racket's built-in string-grapheme-span for segmentation.
+
+;; grapheme-span-at : String Natural → Natural
+;; Returns the codepoint span of the grapheme cluster starting at position i.
+;; If i is past the end, returns 0.
+(define (grapheme-span-at s i)
+  (if (>= i (string-length s))
+      0
+      (string-grapheme-span s i)))
+
+;; grapheme-count : String → Natural
+;; Returns the number of grapheme clusters in the string.
+(define (grapheme-count s)
+  (let loop ([i 0]
+             [count 0])
+    (cond
+      [(>= i (string-length s)) count]
+      [else
+       (define span (string-grapheme-span s i))
+       (loop (+ i span) (+ count 1))])))
+
+;; Alias
+(define string-grapheme-length grapheme-count)
+
+;; substring-by-graphemes : String Natural [Natural] → String
+;; Returns substring by grapheme cluster indices.
+;; start-gc and end-gc are grapheme cluster offsets (0-based).
+(define (substring-by-graphemes s start-gc [end-gc #f])
+  (define start-offset (grapheme-offset->string-offset s start-gc))
+  (define end-offset
+    (if end-gc
+        (grapheme-offset->string-offset s end-gc)
+        (string-length s)))
+  (substring s start-offset end-offset))
+
+;; grapheme-offset->string-offset : String Natural → Natural
+;; Convert a grapheme cluster offset to a string (codepoint) offset.
+;; Returns the string position of the start of the Nth grapheme.
+(define (grapheme-offset->string-offset s gc)
+  (let loop ([i 0]
+             [n 0])
+    (cond
+      [(>= n gc) i]
+      [(>= i (string-length s)) (string-length s)]
+      [else
+       (define span (string-grapheme-span s i))
+       (loop (+ i span) (+ n 1))])))
+
+;; prev-grapheme-start : String Natural → Natural
+;; Given a cursor position (codepoint offset), find the start of the
+;; previous grapheme cluster. Returns 0 if already at start.
+(define (prev-grapheme-start s pos)
+  (if (zero? pos)
+      0
+      ;; Walk from beginning to find the grapheme boundary before pos
+      (let loop ([i 0])
+        (define span (string-grapheme-span s i))
+        (define next (+ i span))
+        (cond
+          [(>= next pos) i]
+          [(>= next (string-length s)) i]
+          [else (loop next)]))))
+
+;; next-grapheme-start : String Natural → Natural
+;; Given a cursor position, find the start of the next grapheme cluster.
+;; Returns (string-length s) if at end.
+(define (next-grapheme-start s pos)
+  (if (>= pos (string-length s))
+      (string-length s)
+      (+ pos (string-grapheme-span s pos))))
+
+(provide prev-grapheme-start
+         next-grapheme-start)
+
+;; ============================================================
+;; Display column utilities
+;; ============================================================
 
 ;; display-col->string-offset : String Natural → Natural
 ;; Given a display column (0-based), find the corresponding string offset.
 ;; CJK chars consume 2 display columns but 1 string position.
 ;; Returns (string-length s) if col is past the end.
 (define (display-col->string-offset s col)
-  (let loop ([i 0] [display-pos 0])
+  (let loop ([i 0]
+             [display-pos 0])
     (cond
       [(>= i (string-length s)) (string-length s)]
       [(>= display-pos col) i]
@@ -138,5 +224,5 @@
        (define w (char-width (string-ref s i)))
        (define next-pos (+ display-pos w))
        (if (> next-pos col)
-           i  ;; col falls inside this wide char — snap to its start
+           i ;; col falls inside this wide char — snap to its start
            (loop (+ i 1) next-pos))])))
