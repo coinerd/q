@@ -35,6 +35,16 @@
  message->jsexpr
  jsexpr->message
 
+ ;; Entry kind predicates (#497)
+ message-entry?
+ model-change-entry?
+ thinking-level-change-entry?
+ branch-summary-entry?
+ custom-message-entry?
+ session-info-entry?
+ compaction-summary-entry?
+ tool-result-entry?
+
  ;; Event envelope
  (struct-out event)
  event-event
@@ -154,6 +164,52 @@
                 (map jsexpr->content-part (hash-ref h 'content))
                 (hash-ref h 'timestamp)
                 (hash-ref h 'meta)))
+
+;; ============================================================
+;; Entry kind predicates (#497)
+;; ============================================================
+;; Entry kinds extend the message struct's `kind` field to support
+;; session metadata and special entries beyond user/assistant messages.
+
+(define (message-entry? msg)
+  ;; Standard message entry (user or assistant)
+  (and (message? msg)
+       (memq (message-kind msg) '(message)) #t))
+
+(define (model-change-entry? msg)
+  ;; Records a model change mid-session
+  (and (message? msg)
+       (eq? (message-kind msg) 'model-change)))
+
+(define (thinking-level-change-entry? msg)
+  ;; Records a thinking level change mid-session
+  (and (message? msg)
+       (eq? (message-kind msg) 'thinking-level-change)))
+
+(define (branch-summary-entry? msg)
+  ;; Summary of a branched path (used in context assembly)
+  (and (message? msg)
+       (eq? (message-kind msg) 'branch-summary)))
+
+(define (custom-message-entry? msg)
+  ;; Custom/labeled message for extensions
+  (and (message? msg)
+       (eq? (message-kind msg) 'custom-message)))
+
+(define (session-info-entry? msg)
+  ;; Session metadata (version, settings, etc.)
+  (and (message? msg)
+       (eq? (message-kind msg) 'session-info)))
+
+(define (compaction-summary-entry? msg)
+  ;; Compaction summary entry
+  (and (message? msg)
+       (eq? (message-kind msg) 'compaction-summary)))
+
+(define (tool-result-entry? msg)
+  ;; Tool result entry
+  (and (message? msg)
+       (eq? (message-kind msg) 'tool-result)))
 
 ;; ============================================================
 ;; Event envelope struct

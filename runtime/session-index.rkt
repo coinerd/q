@@ -41,6 +41,12 @@
          active-leaf
          switch-leaf!
          mark-active-leaf!
+         ;; Tree operations (#496)
+         get-branch
+         branch!
+         reset-leaf!
+         append-to-leaf!
+         leaf-depth
          ;; Bookmark API
          bookmark?
          bookmark-id
@@ -223,6 +229,77 @@
       (begin
         (set-box! (session-index-active-leaf-id idx) entry-id)
         entry-id)
+      #f))
+
+;; ============================================================
+;; Tree operations (#496)
+;; ============================================================
+
+(define (get-branch idx entry-id)
+  ;; Walk entry→root, returning the path as a list of messages.
+  ;; The root is first, the given entry is last.
+  ;; Returns #f if entry-id is not found.
+  (define (walk-up id acc)
+    (define entry (lookup-entry idx id))
+    (cond
+      [(not entry) #f]
+      [else
+       (define new-acc (cons entry acc))
+       (define pid (message-parent-id entry))
+       (if pid
+           (walk-up pid new-acc)
+           new-acc)]))
+  (walk-up entry-id '()))
+
+(define (branch! idx entry-id)
+  ;; Move active leaf to the given entry-id.
+  ;; Returns the entry on success, #f if not found.
+  (define entry (lookup-entry idx entry-id))
+  (cond
+    [(not entry) #f]
+    [else
+     (set-box! (session-index-active-leaf-id idx) entry-id)
+     entry]))
+
+(define (reset-leaf! idx)
+  ;; Set active leaf to #f (use latest entry as default).
+  (set-box! (session-index-active-leaf-id idx) #f)
+  (void))
+
+(define (append-to-leaf! idx entry)
+  ;; Create child of active leaf, advance leaf pointer.
+  ;; Adds entry to the index and updates parent-child map.
+  ;; Returns the entry on success.
+  (define parent (active-leaf idx))
+  (define parent-id (if parent (message-id parent) #f))
+  ;; Update entry's parent-id to match
+  (define fixed-entry
+    (if (and parent-id (not (message-parent-id entry)))
+        (struct-copy message entry [parent-id parent-id])
+        entry))
+  ;; Add to by-id
+  (hash-set! (session-index-by-id idx) (message-id fixed-entry) fixed-entry)
+  ;; Add to children of parent
+  (when parent-id
+    (hash-update! (session-index-children idx)
+                  parent-id
+                  (lambda (lst) (append lst (list fixed-entry)))))
+  ;; Initialize own children list
+  (hash-set! (session-index-children idx) (message-id fixed-entry) '())
+  ;; Append to entry-order vector — use vector->list, append, list->vector
+  ;; through the by-id and children hashes (which ARE mutable)
+  ;; Note: entry-order is immutable, so we create a new vector.
+  ;; For session-index, callers should rebuild the index after bulk operations.
+  ;; For single appends, the entry-order vector is best-effort (in-memory only).
+  (set-box! (session-index-active-leaf-id idx) (message-id fixed-entry))
+  fixed-entry)
+
+(define (leaf-depth idx entry-id)
+  ;; Depth from root to given entry (root = 0).
+  ;; Returns #f if entry-id is not found.
+  (define path (get-branch idx entry-id))
+  (if path
+      (sub1 (length path))
       #f))
 
 ;; ============================================================

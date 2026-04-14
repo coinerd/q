@@ -5,8 +5,10 @@
 (require rackunit
          rackunit/text-ui
          racket/file
+         racket/list
          "../util/protocol-types.rkt"
-         "../runtime/session-store.rkt")
+         "../runtime/session-store.rkt"
+         "../runtime/session-index.rkt")
 
 ;; ── Helpers ──
 
@@ -587,6 +589,187 @@
                            (make-timestamped-message "id2" "id1" 'assistant 'message 1000)))
     (define report (verify-session-integrity path))
     (check-true (hash-ref report 'entry-order-valid?))
+    (delete-directory/files dir #:must-exist? #f))
+
+  ;; ============================================================
+  ;; Tree operations (#496)
+  ;; ============================================================
+
+  (test-case "get-branch: walks entry to root"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (define idx-path (build-path dir "session.index"))
+    (define entries
+      (list (make-timestamped-message "root" #f 'user 'message 1000)
+            (make-timestamped-message "child1" "root" 'assistant 'message 1001)
+            (make-timestamped-message "child2" "child1" 'user 'message 1002)))
+    (append-entries! path entries)
+    (define idx (build-index! path idx-path))
+    (define branch (get-branch idx "child2"))
+    (check-not-false branch "branch should exist")
+    (when branch
+      (check-equal? (length branch) 3)
+      (check-equal? (message-id (first branch)) "root")
+      (check-equal? (message-id (last branch)) "child2"))
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "get-branch: returns #f for nonexistent entry"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (define idx-path (build-path dir "session.index"))
+    (append-entries! path (list (make-timestamped-message "root" #f 'user 'message 1000)))
+    (define idx (build-index! path idx-path))
+    (check-false (get-branch idx "nonexistent"))
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "branch!: switches active leaf"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (define idx-path (build-path dir "session.index"))
+    (define entries
+      (list (make-timestamped-message "root" #f 'user 'message 1000)
+            (make-timestamped-message "child1" "root" 'assistant 'message 1001)
+            (make-timestamped-message "child2" "root" 'assistant 'message 1002)))
+    (append-entries! path entries)
+    (define idx (build-index! path idx-path))
+    ;; Default active leaf = last entry (child2)
+    (check-equal? (message-id (active-leaf idx)) "child2")
+    ;; Switch to child1
+    (define result (branch! idx "child1"))
+    (check-not-false result)
+    (check-equal? (message-id (active-leaf idx)) "child1")
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "reset-leaf!: clears active leaf"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (define idx-path (build-path dir "session.index"))
+    (append-entries! path (list (make-timestamped-message "root" #f 'user 'message 1000)))
+    (define idx (build-index! path idx-path))
+    (branch! idx "root")
+    (check-equal? (message-id (active-leaf idx)) "root")
+    (reset-leaf! idx)
+    ;; After reset, active-leaf falls back to last entry
+    (check-equal? (message-id (active-leaf idx)) "root")
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "append-to-leaf!: adds child to active leaf"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (define idx-path (build-path dir "session.index"))
+    (append-entries! path (list (make-timestamped-message "root" #f 'user 'message 1000)))
+    (define idx (build-index! path idx-path))
+    (branch! idx "root")
+    (define new-entry (make-timestamped-message "new-id" #f 'assistant 'message 1001))
+    (define result (append-to-leaf! idx new-entry))
+    (check-not-false result)
+    (check-equal? (message-parent-id result) "root")
+    (check-equal? (message-id (active-leaf idx)) "new-id")
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "leaf-depth: computes depth from root"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (define idx-path (build-path dir "session.index"))
+    (define entries
+      (list (make-timestamped-message "root" #f 'user 'message 1000)
+            (make-timestamped-message "c1" "root" 'assistant 'message 1001)
+            (make-timestamped-message "c2" "c1" 'user 'message 1002)))
+    (append-entries! path entries)
+    (define idx (build-index! path idx-path))
+    (check-equal? (leaf-depth idx "root") 0)
+    (check-equal? (leaf-depth idx "c1") 1)
+    (check-equal? (leaf-depth idx "c2") 2)
+    (check-false (leaf-depth idx "nonexistent"))
+    (delete-directory/files dir #:must-exist? #f))
+
+  ;; ============================================================
+  ;; Entry kind predicates (#497)
+  ;; ============================================================
+
+  (test-case "entry kind predicates: model-change"
+    (define msg (make-message "id1" #f 'system 'model-change '() 1000 (hasheq)))
+    (check-true (model-change-entry? msg))
+    (check-false (message-entry? msg)))
+
+  (test-case "entry kind predicates: session-info"
+    (define msg (make-message "id1" #f 'system 'session-info '() 1000 (hasheq 'version 2)))
+    (check-true (session-info-entry? msg))
+    (check-false (model-change-entry? msg)))
+
+  (test-case "entry kind predicates: branch-summary"
+    (define msg (make-message "id1" #f 'system 'branch-summary '() 1000 (hasheq)))
+    (check-true (branch-summary-entry? msg)))
+
+  (test-case "entry kind predicates: compaction-summary"
+    (define msg (make-message "id1" #f 'system 'compaction-summary '() 1000 (hasheq)))
+    (check-true (compaction-summary-entry? msg)))
+
+  (test-case "entry kind predicates: regular message"
+    (define msg (make-message "id1" #f 'user 'message '() 1000 (hasheq)))
+    (check-true (message-entry? msg))
+    (check-false (model-change-entry? msg)))
+
+  ;; ============================================================
+  ;; Session versioning (#499)
+  ;; ============================================================
+
+  (test-case "write-session-version-header!: writes header to new file"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    (write-session-version-header! path)
+    (check-true (file-exists? path))
+    (define entries (load-session-log path))
+    (check-equal? (length entries) 1)
+    (check-true (session-info-entry? (first entries)))
+    (check-equal? (hash-ref (message-meta (first entries)) 'version) 2)
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "ensure-session-version-header!: adds header to v1 log"
+    (define dir (make-temp-dir))
+    (define path (session-path dir))
+    ;; Write a v1 log (no version header)
+    (append-entry! path (make-timestamped-message "id1" #f 'user 'message 1000))
+    (define ver (ensure-session-version-header! path))
+    (check-equal? ver 2)
+    (define entries (load-session-log path))
+    (check-true (session-info-entry? (first entries)))
+    (delete-directory/files dir #:must-exist? #f))
+
+  ;; ============================================================
+  ;; Session forking (#500)
+  ;; ============================================================
+
+  (test-case "fork-session!: extracts path to new file"
+    (define dir (make-temp-dir))
+    (define source-path (session-path dir))
+    (define entries
+      (list (make-timestamped-message "root" #f 'user 'message 1000)
+            (make-timestamped-message "c1" "root" 'assistant 'message 1001)
+            (make-timestamped-message "c2" "c1" 'user 'message 1002)
+            (make-timestamped-message "c3" "root" 'assistant 'message 1003)))
+    (append-entries! source-path entries)
+    (define dest-path (build-path dir "forked.jsonl"))
+    (define count (fork-session! source-path "c2" dest-path))
+    (check-equal? count 3)  ; root + c1 + c2
+    (define forked (load-session-log dest-path))
+    ;; First entry should be version header
+    (check-true (session-info-entry? (first forked)))
+    ;; Remaining entries are the path
+    (check-equal? (length forked) 4)  ; header + root + c1 + c2
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "fork-session!: original session unchanged"
+    (define dir (make-temp-dir))
+    (define source-path (session-path dir))
+    (define entries
+      (list (make-timestamped-message "root" #f 'user 'message 1000)
+            (make-timestamped-message "c1" "root" 'assistant 'message 1001)))
+    (append-entries! source-path entries)
+    (define dest-path (build-path dir "forked.jsonl"))
+    (fork-session! source-path "c1" dest-path)
+    (define original (load-session-log source-path))
+    (check-equal? (length original) 2)
     (delete-directory/files dir #:must-exist? #f))
   )
 
