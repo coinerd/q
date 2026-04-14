@@ -74,6 +74,8 @@
          terminal-sync-begin!
          terminal-sync-end!
          detect-sync-mode-support!
+         parse-xtversion-response
+         parse-da1-response
 
          ;; Clipboard
          clipboard-copy
@@ -113,7 +115,12 @@
          reassemble-utf8-chars
          utf8-accumulate-char
          utf8-accumulator-reset!
-         utf8-accumulator-length)
+         utf8-accumulator-length
+
+         ;; Buffered input (Issue #409)
+         buffered-read-byte
+         input-buffer-reset!
+         input-buffer-length)
 
 ;; ============================================================
 ;; Input selection (bridge between terminal-bridge and terminal-input)
@@ -338,17 +345,66 @@
 (define (terminal-sync-available?)
   sync-mode-supported)
 
+;; Parse an XTVERSION response: ESC[>Pp;Pv;Pc
+;; Returns a terminal identifier string or #f.
+(define (parse-xtversion-response s)
+  (define m (regexp-match #rx"\x1b\\[>[0-9;]+" s))
+  (and m (car m)))
+
+;; Parse a DA1 response: ESC[?num;num;numc
+;; Returns #t if it looks like a known sync-capable terminal.
+(define (parse-da1-response s)
+  (regexp-match? #rx"\x1b\\[[?][0-9;]+c" s))
+
+;; Attempt to query the terminal for its version.
+;; Sends ESC[>c (XTVERSION) and reads the response with a short timeout.
+;; Returns #t if a valid response was received (terminal supports queries),
+;; #f if no response (non-interactive or unknown terminal).
+(define (query-terminal-version)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (cond
+      [(not (terminal-port? (current-input-port))) #f]
+      [else
+       (display "\x1b[>c")
+       (flush-output)
+       (define ready (sync/timeout 0.05 (current-input-port)))
+       (if (not ready)
+           #f
+           (let ([buf (make-bytes 64)])
+             (define n (read-bytes-avail! buf (current-input-port)))
+             (cond
+               [(eof-object? n) #f]
+               [(and (integer? n) (> n 0))
+                (define resp (bytes->string/latin-1 (subbytes buf 0 n)))
+                (or (parse-xtversion-response resp)
+                    (parse-da1-response resp))]
+               [else #f])))])))
+
+;; Check if port is a real terminal.
+(define (tty? port)
+  (terminal-port? port))
+
 ;; Probe terminal for sync mode support.
-;; Checks TERM_PROGRAM and TERM for known supporters.
-;; Called once during init. Gracefully defaults to #f.
+;; Strategy: Try XTVERSION query first (most reliable),
+;; then fall back to env vars for non-interactive init.
 (define (detect-sync-mode-support!)
-  (define term-program (getenv "TERM_PROGRAM"))
-  (define term (getenv "TERM"))
-  (set! sync-mode-supported
-        (or (and term-program
-                 (member (string-downcase term-program)
-                         '("wezterm" "kitty" "hyper" "alacritty" "ghostty" " rio" " contour")))
-            (and term (regexp-match? #rx"^(foot|kitty|wezterm|ghostty)" term)))))
+  ;; Try interactive query first
+  (define query-result (query-terminal-version))
+  (cond
+    [query-result
+     ;; Terminal responded to query — it likely supports sync mode
+     ;; (most modern terminals that respond to DA also support DEC 2026)
+     (set! sync-mode-supported #t)]
+    [else
+     ;; Fall back to env var heuristics
+     (define term-program (getenv "TERM_PROGRAM"))
+     (define term (getenv "TERM"))
+     (set! sync-mode-supported
+           (or (and term-program
+                    (member (string-downcase term-program)
+                            '("wezterm" "kitty" "hyper" "alacritty" "ghostty"
+                              "rio" "contour")))
+               (and term (regexp-match? #rx"^(foot|kitty|wezterm|ghostty)" term))))]))
 
 ;; Begin synchronized output bracket.
 ;; All output between begin and end is batched by the terminal
