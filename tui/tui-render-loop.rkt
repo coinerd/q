@@ -28,7 +28,8 @@
          "../tui/frame-diff.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
-         "../tui/tui-keybindings.rkt")
+         "../tui/tui-keybindings.rkt"
+         "../tui/terminal-input.rkt")
 
 ;; ── Ubuf/terminal lifecycle ──
 (provide render-ubuf-to-terminal!
@@ -233,6 +234,9 @@
   (cond
     ;; No input available
     [(not msg) #f]
+    ;; Paste event (bracketed paste DEC 2004)
+    [(paste-event? msg)
+     (list 'paste (vector-ref msg 1))]
     ;; Key message
     [(tkeymsg? msg)
      (define keycode (tui-keycode msg))
@@ -313,6 +317,13 @@
 
           ;; Redraw command: mark dirty
           [(redraw) (mark-dirty! ctx)]
+
+          ;; Paste event: insert as single undo entry
+          [(paste)
+           (define text (cadr msg))
+           (define inp (unbox (tui-ctx-input-state-box ctx)))
+           (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text))
+           (mark-dirty! ctx)]
 
           ;; Mouse event: dispatch to handler
           [(mouse) (handle-mouse ctx (cdr msg))]
