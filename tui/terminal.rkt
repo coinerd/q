@@ -77,6 +77,17 @@
          parse-xtversion-response
          parse-da1-response
 
+         ;; Kitty keyboard protocol (Issue #410)
+         kitty-mode-supported?
+         kitty-mode-enable!
+         kitty-mode-disable!
+         modify-other-keys-enable!
+         modify-other-keys-disable!
+         parse-kitty-csi-u
+         parse-modify-other-keys
+         kitty-codepoint->key
+         detect-kitty-support!
+
          ;; Clipboard
          clipboard-copy
          osc-52-copy ;; internal, exported for testing

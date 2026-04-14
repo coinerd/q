@@ -225,12 +225,65 @@
      (check-false (parse-da1-response "not-a-response")))
    ))
 
+
+;; ============================================================
+;; Kitty keyboard protocol (Issue #410)
+;; ============================================================
+
+(define kitty-protocol-tests
+  (test-suite
+   "Kitty keyboard protocol"
+
+   (test-case "kitty-codepoint->key maps special keys"
+     (check-equal? (kitty-codepoint->key 57344) 'escape)
+     (check-equal? (kitty-codepoint->key 57345) 'enter)
+     (check-equal? (kitty-codepoint->key 57350) 'left)
+     (check-equal? (kitty-codepoint->key 57352) 'up)
+     (check-equal? (kitty-codepoint->key 57356) 'home)
+     (check-equal? (kitty-codepoint->key 57357) 'end))
+
+   (test-case "kitty-codepoint->key maps F-keys"
+     (check-equal? (kitty-codepoint->key 57376) 'f1)
+     (check-equal? (kitty-codepoint->key 57387) 'f12))
+
+   (test-case "kitty-codepoint->key maps printable ASCII"
+     (check-equal? (kitty-codepoint->key 65) #\A)
+     (check-equal? (kitty-codepoint->key 97) #\a)
+     (check-equal? (kitty-codepoint->key 32) #\space))
+
+   (test-case "parse-kitty-csi-u returns key with modifiers"
+     (define result (parse-kitty-csi-u 65 5))
+     (check-equal? (car result) #\A)
+     (check-not-false (member 'ctrl (cadr result)))
+     (check-not-false (member 'shift (cadr result))))
+
+   (test-case "parse-modify-other-keys returns key with modifiers"
+     (define result (parse-modify-other-keys 5 65))
+     (check-equal? (car result) #\A)
+     (check-not-false (member 'ctrl (cadr result)))
+     (check-not-false (member 'shift (cadr result))))
+
+   (test-case "modify-other-keys-enable/disable produce output"
+     (check-not-exn
+      (lambda ()
+        (with-output-to-string modify-other-keys-enable!)
+        (with-output-to-string modify-other-keys-disable!))))
+
+   (test-case "kitty-mode-enable/disable safe when unsupported"
+     (detect-kitty-support!)
+     (check-not-exn
+      (lambda ()
+        (with-output-to-string kitty-mode-enable!)
+        (with-output-to-string kitty-mode-disable!))))
+   ))
+
 (define all-tests
   (test-suite
    "All TUI Terminal Tests"
    terminal-tests
    keycode-mapping-tests
-   buffered-sync-tests))
+   buffered-sync-tests
+   kitty-protocol-tests))
 
 (run-tests all-tests)
 

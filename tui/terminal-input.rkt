@@ -18,6 +18,17 @@
          input-buffer-reset!
          input-buffer-length
 
+         ;; Kitty keyboard protocol (Issue #410)
+         kitty-mode-supported?
+         kitty-mode-enable!
+         kitty-mode-disable!
+         modify-other-keys-enable!
+         modify-other-keys-disable!
+         parse-kitty-csi-u
+         parse-modify-other-keys
+         kitty-codepoint->key
+         detect-kitty-support!
+
          ;; Bracketed paste support
          bracketed-paste-start-seq
          bracketed-paste-end-seq
@@ -236,6 +247,117 @@
        [(and (byte? b4) (= b4 70)) (make-tkeymsg-raw 'end)]
        [else (make-tkeymsg-raw 'escape)])]
     [else (make-tkeymsg-raw 'escape)]))
+
+;; ============================================================
+;; Kitty keyboard protocol (Issue #410)
+;; ============================================================
+
+;; Kitty keyboard protocol provides unambiguous key encoding.
+;; Enable: ESC[=1u  Disable: ESC[=0u
+;; Sequences: ESC[<codepoint>;<modifiers>u
+;; Modifier bitmask: 1=shift, 2=alt, 4=ctrl, 8=super
+
+(define kitty-supported #f)
+
+(define (kitty-mode-supported?)
+  kitty-supported)
+
+(define (kitty-mode-enable!)
+  (when kitty-supported
+    (display "\x1b[=1u")
+    (flush-output)))
+
+(define (kitty-mode-disable!)
+  (when kitty-supported
+    (display "\x1b[=0u")
+    (flush-output)))
+
+;; modifyOtherKeys mode 4 (xterm-compatible)
+;; Enable: ESC[>4;2m  Disable: ESC[>4;0m
+(define (modify-other-keys-enable!)
+  (display "\x1b[>4;2m")
+  (flush-output))
+
+(define (modify-other-keys-disable!)
+  (display "\x1b[>4;0m")
+  (flush-output))
+
+;; Detect Kitty support from environment
+(define (detect-kitty-support!)
+  (define term-program (getenv "TERM_PROGRAM"))
+  (define term (getenv "TERM"))
+  (set! kitty-supported
+        (or (and term-program
+                 (member (string-downcase term-program)
+                         '("kitty" "ghostty")))
+            (and term (regexp-match? #rx"^(kitty|ghostty)" term)))))
+
+;; Parse a Kitty CSI-u sequence: ESC[<codepoint>;<modifiers>u
+;; Returns (list 'key key-symbol modifiers) or #f
+(define (parse-kitty-csi-u codepoint modifiers)
+  (define base-key (kitty-codepoint->key codepoint))
+  (define mods (bitmask->modifiers modifiers))
+  (list base-key mods))
+
+;; Parse modifyOtherKeys sequence: ESC[27;<modifiers>;<keycode>~
+;; Returns (list 'key key-symbol modifiers) or #f
+(define (parse-modify-other-keys modifiers keycode)
+  (define base-key
+    (cond
+      [(= keycode 13) 'return]
+      [(= keycode 27) 'escape]
+      [(= keycode 127) 'backspace]
+      [(<= 32 keycode 126) (integer->char keycode)]
+      [else #f]))
+  (if base-key
+      (list base-key (bitmask->modifiers modifiers))
+      #f))
+
+;; Convert modifier bitmask to list of modifier symbols
+;; Bit 1=shift, 2=alt, 4=ctrl, 8=super
+(define (bitmask->modifiers mask)
+  (define mods '())
+  (when (bitwise-bit-set? mask 0) (set! mods (cons 'shift mods)))
+  (when (bitwise-bit-set? mask 1) (set! mods (cons 'alt mods)))
+  (when (bitwise-bit-set? mask 2) (set! mods (cons 'ctrl mods)))
+  (when (bitwise-bit-set? mask 3) (set! mods (cons 'super mods)))
+  (reverse mods))
+
+;; Map Kitty key codepoints to key symbols
+;; Special keys have fixed codepoints per the Kitty protocol
+(define (kitty-codepoint->key cp)
+  (cond
+    ;; Printable ASCII (32-126)
+    [(and (>= cp 32) (<= cp 126)) (integer->char cp)]
+    ;; Special keys (Kitty-defined codepoints)
+    [(= cp 57344) 'escape]
+    [(= cp 57345) 'enter]
+    [(= cp 57346) 'tab]
+    [(= cp 57347) 'backspace]
+    [(= cp 57348) 'insert]
+    [(= cp 57349) 'delete]
+    [(= cp 57350) 'left]
+    [(= cp 57351) 'right]
+    [(= cp 57352) 'up]
+    [(= cp 57353) 'down]
+    [(= cp 57354) 'page-up]
+    [(= cp 57355) 'page-down]
+    [(= cp 57356) 'home]
+    [(= cp 57357) 'end]
+    [(= cp 57358) 'caps-lock]
+    [(= cp 57359) 'scroll-lock]
+    [(= cp 57360) 'num-lock]
+    [(= cp 57361) 'print-screen]
+    [(= cp 57362) 'pause]
+    [(= cp 57363) 'menu]
+    ;; F1-F12: 57376-57387
+    [(and (>= cp 57376) (<= cp 57387))
+     (string->symbol (format "f~a" (- cp 57375)))]
+    ;; F13-F24: 57388-57399
+    [(and (>= cp 57388) (<= cp 57399))
+     (string->symbol (format "f~a" (- cp 57375)))]
+    ;; Unknown
+    [else 'unknown]))
 
 ;; ============================================================
 ;; Input byte buffer (Issue #409)
