@@ -65,6 +65,10 @@
          enable-mouse-tracking
          disable-mouse-tracking
 
+         ;; Bracketed paste (DEC 2004)
+         enable-bracketed-paste
+         disable-bracketed-paste
+
          ;; Synchronized output (DEC mode 2026)
          terminal-sync-available?
          terminal-sync-begin!
@@ -129,11 +133,13 @@
   (define term (make-tty-term #:tty tty))
   (term-alternate-screen term)
   (term-hide-cursor term)
+  (enable-bracketed-paste)
   term)
 
 ;; Close terminal and restore state.
 ;; Shows cursor, restores normal screen, closes tty.
 (define (tui-term-close term)
+  (disable-bracketed-paste)
   (term-show-cursor term)
   (term-normal-screen term)
   (term-close term))
@@ -143,11 +149,13 @@
   (let ([term (make-tty-term)])
     (dynamic-wind (lambda ()
                     (term-alternate-screen term)
-                    (term-hide-cursor term))
+                    (term-hide-cursor term)
+                    (enable-bracketed-paste))
                   (lambda ()
                     body ...)
                   (lambda ()
                     (with-handlers ([exn:fail? (lambda (e) (void))])
+                      (disable-bracketed-paste)
                       (term-show-cursor term)
                       (term-normal-screen term))))))
 
@@ -339,10 +347,8 @@
   (set! sync-mode-supported
         (or (and term-program
                  (member (string-downcase term-program)
-                         '("wezterm" "kitty" "hyper" "alacritty"
-                           "ghostty" " rio" " contour")))
-            (and term
-                 (regexp-match? #rx"^(foot|kitty|wezterm|ghostty)" term)))))
+                         '("wezterm" "kitty" "hyper" "alacritty" "ghostty" " rio" " contour")))
+            (and term (regexp-match? #rx"^(foot|kitty|wezterm|ghostty)" term)))))
 
 ;; Begin synchronized output bracket.
 ;; All output between begin and end is batched by the terminal
@@ -373,6 +379,16 @@
 (define (disable-mouse-tracking)
   (display "\x1b[?1002l")
   (display "\x1b[?1000l")
+  (flush-output))
+
+;; Bracketed paste mode (DEC 2004)
+;; When enabled, terminal wraps pasted text in ESC[200~...ESC[201~
+(define (enable-bracketed-paste)
+  (display "\x1b[?2004h")
+  (flush-output))
+
+(define (disable-bracketed-paste)
+  (display "\x1b[?2004l")
   (flush-output))
 
 ;; ============================================================

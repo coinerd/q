@@ -15,6 +15,19 @@
 (provide real-stdin-read-msg
          stub-byte-ready?
 
+         ;; Bracketed paste support
+         bracketed-paste-start-seq
+         bracketed-paste-end-seq
+         bracketed-paste-begin-pattern?
+         bracketed-paste-end-pattern?
+         paste-buffer-reset!
+         paste-buffer-add!
+         paste-buffer-get
+         in-paste?
+         set-in-paste!
+         make-paste-event
+         paste-event?
+
          ;; Raw message constructors (vectors, compatible with tui-term message API)
          make-tkeymsg-raw
          make-tsizemsg-raw
@@ -114,6 +127,46 @@
 
 (define (make-tmousemsg-raw cb cx cy)
   (vector 'tmousemsg cb cx cy))
+
+;; ============================================================
+;; Bracketed paste support (DEC 2004 mode)
+;; ============================================================
+;; When enabled, the terminal wraps pasted text in:
+;;   ESC[200~ ... pasted text ... ESC[201~
+;; This allows the TUI to insert pasted text as a single undo entry.
+
+(define bracketed-paste-start-seq "\x1b[200~")
+(define bracketed-paste-end-seq "\x1b[201~")
+
+;; Paste buffer state
+(define paste-buffer-str "")
+(define in-paste-state #f)
+
+(define (in-paste?)
+  in-paste-state)
+(define (set-in-paste! v)
+  (set! in-paste-state v))
+(define (paste-buffer-reset!)
+  (set! paste-buffer-str ""))
+(define (paste-buffer-add! s)
+  (set! paste-buffer-str (string-append paste-buffer-str s)))
+(define (paste-buffer-get)
+  paste-buffer-str)
+
+;; Make a paste event
+(define (make-paste-event text)
+  (vector 'tpaste text))
+
+(define (paste-event? msg)
+  (and (vector? msg) (eq? (vector-ref msg 0) 'tpaste)))
+
+;; Check if a CSI sequence matches bracketed paste start (200~)
+(define (bracketed-paste-begin-pattern? CSI-params final-byte)
+  (and (string=? CSI-params "200") (char=? final-byte #\~)))
+
+;; Check if a CSI sequence matches bracketed paste end (201~)
+(define (bracketed-paste-end-pattern? CSI-params final-byte)
+  (and (string=? CSI-params "201") (char=? final-byte #\~)))
 
 ;; ============================================================
 ;; Mouse event predicates and accessors

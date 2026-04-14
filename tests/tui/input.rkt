@@ -680,6 +680,47 @@
      (define st2 (input-insert-string st ""))
      (check-equal? (input-state-buffer st2) "hello")
      (check-equal? (input-state-cursor st2) 3))
+
+   ;; ============================================================
+   ;; Grapheme-aware cursor (Issue #402)
+   ;; ============================================================
+
+   (test-case "cursor-left skips combining mark as unit"
+     ;; "e\u0301x" — cursor at 2 (on 'x'), left should go to 0 (start of e+acute)
+     (define st (struct-copy input-state (initial-input-state) [buffer "e\u0301x"] [cursor 2]))
+     (define st2 (input-cursor-left st))
+     (check-equal? (input-state-cursor st2) 0))
+
+   (test-case "cursor-right skips combining mark as unit"
+     ;; "e\u0301x" — cursor at 0, right should go to 2 (start of 'x')
+     (define st (struct-copy input-state (initial-input-state) [buffer "e\u0301x"] [cursor 0]))
+     (define st2 (input-cursor-right st))
+     (check-equal? (input-state-cursor st2) 2))
+
+   (test-case "backspace deletes combining mark with base"
+     ;; "ae\u0301x" — cursor at 3 (after e+acute), backspace should delete e+acute
+     (define st (struct-copy input-state (initial-input-state) [buffer "ae\u0301x"] [cursor 3]))
+     (define st2 (input-backspace st))
+     (check-equal? (input-state-buffer st2) "ax")
+     (check-equal? (input-state-cursor st2) 1))
+
+   (test-case "delete removes combining mark with base"
+     ;; "ae\u0301x" — cursor at 0, delete should remove a, leave e+acute+x
+     (define st (struct-copy input-state (initial-input-state) [buffer "ae\u0301x"] [cursor 0]))
+     (define st2 (input-delete st))
+     (check-equal? (input-state-buffer st2) "e\u0301x")
+     (check-equal? (input-state-cursor st2) 0))
+
+   (test-case "cursor movement in pure ASCII still works"
+     (define st (struct-copy input-state (initial-input-state) [buffer "abcde"] [cursor 3]))
+     (check-equal? (input-state-cursor (input-cursor-left st)) 2)
+     (check-equal? (input-state-cursor (input-cursor-right st)) 4))
+
+   (test-case "backspace on ASCII still deletes single char"
+     (define st (struct-copy input-state (initial-input-state) [buffer "abcde"] [cursor 3]))
+     (define st2 (input-backspace st))
+     (check-equal? (input-state-buffer st2) "abde")
+     (check-equal? (input-state-cursor st2) 2))
    ))
 
 (run-tests input-tests)

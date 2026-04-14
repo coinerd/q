@@ -144,8 +144,9 @@
   (define cur (input-state-cursor st))
   (if (zero? cur)
       st
-      (let ([new-buf (string-append (substring buf 0 (- cur 1)) (substring buf cur))])
-        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor (- cur 1)])))))
+      (let* ([prev-start (prev-grapheme-start buf cur)]
+             [new-buf (string-append (substring buf 0 prev-start) (substring buf cur))])
+        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor prev-start])))))
 ;; Visible input width helper — prompt takes 4 columns ("q> ")
 (define INPUT-PROMPT-WIDTH 3)
 
@@ -234,24 +235,23 @@
   (define cur (input-state-cursor st))
   (if (>= cur (string-length buf))
       st
-      (push-undo st
-                 (struct-copy input-state
-                              st
-                              [buffer (string-append (substring buf 0 cur) (substring buf (+ cur 1)))]
-                              [cursor cur]))))
+      (let* ([next-start (next-grapheme-start buf cur)]
+             [new-buf (string-append (substring buf 0 cur) (substring buf next-start))])
+        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor cur])))))
 
 (define (input-cursor-left st)
+  (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (if (zero? cur)
       st
-      (struct-copy input-state st [cursor (- cur 1)])))
+      (struct-copy input-state st [cursor (prev-grapheme-start buf cur)])))
 
 (define (input-cursor-right st)
+  (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
-  (define len (string-length (input-state-buffer st)))
-  (if (>= cur len)
+  (if (>= cur (string-length buf))
       st
-      (struct-copy input-state st [cursor (+ cur 1)])))
+      (struct-copy input-state st [cursor (next-grapheme-start buf cur)])))
 
 (define (input-home st)
   (struct-copy input-state st [cursor 0]))
@@ -389,7 +389,8 @@
              [killed-start (find-word-start-backward buf cur)])
         (define killed-text (substring buf killed-start killed-end))
         (define new-buf (string-append (substring buf 0 killed-start) (substring buf killed-end)))
-        (push-undo st (push-kill (struct-copy input-state st [buffer new-buf] [cursor killed-start])
+        (push-undo st
+                   (push-kill (struct-copy input-state st [buffer new-buf] [cursor killed-start])
                               killed-text)))))
 
 ;; Kill from cursor to beginning of line.
@@ -400,7 +401,8 @@
       st
       (let* ([killed-text (substring buf 0 cur)]
              [new-buf (substring buf cur)])
-        (push-undo st (push-kill (struct-copy input-state st [buffer new-buf] [cursor 0])
+        (push-undo st
+                   (push-kill (struct-copy input-state st [buffer new-buf] [cursor 0])
                               killed-text)))))
 
 ;; Kill from cursor to end of line/buffer.
@@ -411,7 +413,8 @@
       st
       (let* ([killed-text (substring buf cur)]
              [new-buf (substring buf 0 cur)])
-        (push-undo st (push-kill (struct-copy input-state st [buffer new-buf] [cursor cur])
+        (push-undo st
+                   (push-kill (struct-copy input-state st [buffer new-buf] [cursor cur])
                               killed-text)))))
 
 ;; Yank (insert) top of kill ring at cursor.
@@ -489,7 +492,8 @@
       (let* ([buf (input-state-buffer st)]
              [cur (input-state-cursor st)]
              [new-buf (string-append (substring buf 0 cur) text (substring buf cur))])
-        (push-undo st
+        (push-undo
+         st
          (struct-copy input-state st [buffer new-buf] [cursor (+ cur (string-length text))])))))
 
 ;; ============================================================
