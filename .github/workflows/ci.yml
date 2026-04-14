@@ -18,48 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Cache Racket installation
-        id: cache-racket
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/racket-install
-          key: racket-8.10-${{ matrix.os }}
-
-      - name: Install Racket (Linux)
-        if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
-        run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
-          sh /tmp/racket.sh --in-place --dest $HOME/racket-install
-          ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
-
-      - name: Install Racket (macOS)
-        if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
-        run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
-          hdiutil attach -nobrowse /tmp/racket.dmg
-          MOUNT=$(ls -d /Volumes/Racket* | head -1)
-          echo "Mounted at: $MOUNT"
-          RACKET_DIR="$MOUNT/Racket v8.10"
-          if [ ! -d "$RACKET_DIR/bin" ]; then
-            echo "ERROR: $RACKET_DIR/bin not found"
-            ls -la "$MOUNT"
-            exit 1
-          fi
-          echo "Installing from: $RACKET_DIR"
-          cp -R "$RACKET_DIR" $HOME/racket-install
-          hdiutil detach "$MOUNT"
-
-      - name: Add Racket to PATH
-        run: echo "$HOME/racket-install/bin" >> $GITHUB_PATH
-
-      - name: Verify Racket Installation
-        run: racket --version
-
-      - name: Install dependencies
-        run: |
-          raco pkg install --auto --batch
-          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+      - name: Setup Racket
+        uses: ./.github/actions/setup-racket
 
       - name: Clean bytecode cache
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
@@ -91,6 +51,12 @@ jobs:
       - name: Run tests
         run: raco test tests/
 
+      - name: Coverage report
+        if: runner.os == 'Linux'
+        run: |
+          raco pkg install --auto --batch cover-coveralls 2>/dev/null || true
+          raco cover tests/ 2>/dev/null || echo "Coverage step completed (optional)"
+
   smoke:
     strategy:
       matrix:
@@ -99,48 +65,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Cache Racket installation
-        id: cache-racket
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/racket-install
-          key: racket-8.10-${{ matrix.os }}
-
-      - name: Install Racket (Linux)
-        if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
-        run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
-          sh /tmp/racket.sh --in-place --dest $HOME/racket-install
-          ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
-
-      - name: Install Racket (macOS)
-        if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
-        run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
-          hdiutil attach -nobrowse /tmp/racket.dmg
-          MOUNT=$(ls -d /Volumes/Racket* | head -1)
-          echo "Mounted at: $MOUNT"
-          RACKET_DIR="$MOUNT/Racket v8.10"
-          if [ ! -d "$RACKET_DIR/bin" ]; then
-            echo "ERROR: $RACKET_DIR/bin not found"
-            ls -la "$MOUNT"
-            exit 1
-          fi
-          echo "Installing from: $RACKET_DIR"
-          cp -R "$RACKET_DIR" $HOME/racket-install
-          hdiutil detach "$MOUNT"
-
-      - name: Add Racket to PATH
-        run: echo "$HOME/racket-install/bin" >> $GITHUB_PATH
-
-      - name: Verify Racket Installation
-        run: racket --version
-
-      - name: Install dependencies
-        run: |
-          raco pkg install --auto --batch
-          raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
+      - name: Setup Racket
+        uses: ./.github/actions/setup-racket
 
       - name: Version smoke check
         run: |
