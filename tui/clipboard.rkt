@@ -59,7 +59,20 @@
 ;;   DISPLAY set → try xclip/xsel first
 ;;   macOS → pbcopy (always tried)
 ;; Returns: (list tool-path tool-name) or #f
+;;
+;; Memoized: detection result is cached for the session lifetime.
+;; This avoids re-running find-executable-path on every clipboard call.
+(define clipboard-tool-cache (box #f))
+
 (define (detect-clipboard-tool)
+  (define cached (unbox clipboard-tool-cache))
+  (if cached
+      (if (eq? cached 'none) #f cached)
+      (let ([result (detect-clipboard-tool-uncached)])
+        (set-box! clipboard-tool-cache (or result 'none))
+        result)))
+
+(define (detect-clipboard-tool-uncached)
   (define wayland? (getenv "WAYLAND_DISPLAY"))
   (define x11? (getenv "DISPLAY"))
   (cond

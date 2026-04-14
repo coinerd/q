@@ -26,52 +26,52 @@
 ;; Skips extended color sequences (38;5;N, 48;5;N, 38;2;R;G;B, 48;2;R;G;B).
 (define (replace-bg-black-params params)
   (define parts (string-split params ";"))
-  (define result (list))
-  (define i 0)
   (define n (length parts))
-  (let loop ()
-    (when (< i n)
-      (define p (list-ref parts i))
-      (cond
-        ;; Extended fg: 38;5;N or 38;2;R;G;B — skip all
-        [(and (equal? p "38") (< (+ i 1) n))
-         (define next (list-ref parts (+ i 1)))
-         (cond
-           [(and (equal? next "5") (< (+ i 2) n))
-            ;; 38;5;N — consume 3 params
-            (set! result (append result (list p next (list-ref parts (+ i 2)))))
-            (set! i (+ i 3))]
-           [(and (equal? next "2") (>= (- n i) 5))
-            ;; 38;2;R;G;B — consume 5 params
-            (set! result (append result (take (drop parts i) 5)))
-            (set! i (+ i 5))]
-           [else
-            (set! result (append result (list p)))
-            (set! i (+ i 1))])]
-        ;; Extended bg: 48;5;N or 48;2;R;G;B — skip all
-        [(and (equal? p "48") (< (+ i 1) n))
-         (define next (list-ref parts (+ i 1)))
-         (cond
-           [(and (equal? next "5") (< (+ i 2) n))
-            ;; 48;5;N — consume 3 params
-            (set! result (append result (list p next (list-ref parts (+ i 2)))))
-            (set! i (+ i 3))]
-           [(and (equal? next "2") (>= (- n i) 5))
-            ;; 48;2;R;G;B — consume 5 params
-            (set! result (append result (take (drop parts i) 5)))
-            (set! i (+ i 5))]
-           [else
-            (set! result (append result (list p)))
-            (set! i (+ i 1))])]
-        ;; bg=black → default
-        [(equal? p "40")
-         (set! result (append result (list "49")))
-         (set! i (+ i 1))]
-        [else
-         (set! result (append result (list p)))
-         (set! i (+ i 1))]))
-    (when (< i n) (loop)))
-  (string-join result ";"))
+  (let loop ([i 0] [acc '()])
+    (cond
+      [(>= i n) (string-join (reverse acc) ";")]
+      [else
+       (define p (list-ref parts i))
+       (cond
+         ;; Extended fg: 38;5;N or 38;2;R;G;B — skip all
+         [(and (equal? p "38") (< (+ i 1) n))
+          (define next (list-ref parts (+ i 1)))
+          (cond
+            [(and (equal? next "5") (< (+ i 2) n))
+             ;; 38;5;N — consume 3 params
+             (loop (+ i 3)
+                   (cons (list-ref parts (+ i 2)) (cons next (cons p acc))))]
+            [(and (equal? next "2") (>= (- n i) 5))
+             ;; 38;2;R;G;B — consume 5 params
+             (loop (+ i 5)
+                   (list* (list-ref parts (+ i 4))
+                          (list-ref parts (+ i 3))
+                          (list-ref parts (+ i 2))
+                          next p acc))]
+            [else
+             (loop (+ i 1) (cons p acc))])]
+         ;; Extended bg: 48;5;N or 48;2;R;G;B — skip all
+         [(and (equal? p "48") (< (+ i 1) n))
+          (define next (list-ref parts (+ i 1)))
+          (cond
+            [(and (equal? next "5") (< (+ i 2) n))
+             ;; 48;5;N — consume 3 params
+             (loop (+ i 3)
+                   (cons (list-ref parts (+ i 2)) (cons next (cons p acc))))]
+            [(and (equal? next "2") (>= (- n i) 5))
+             ;; 48;2;R;G;B — consume 5 params
+             (loop (+ i 5)
+                   (list* (list-ref parts (+ i 4))
+                          (list-ref parts (+ i 3))
+                          (list-ref parts (+ i 2))
+                          next p acc))]
+            [else
+             (loop (+ i 1) (cons p acc))])]
+         ;; bg=black → default
+         [(equal? p "40")
+          (loop (+ i 1) (cons "49" acc))]
+         [else
+          (loop (+ i 1) (cons p acc))])])))
 
 ;; Replace SGR parameter "40" (bg=black) with "49" (default bg)
 ;; in all SGR escape sequences within a string.

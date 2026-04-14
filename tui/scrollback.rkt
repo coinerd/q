@@ -12,10 +12,27 @@
 
          ;; Persistence
          save-scrollback
-         load-scrollback)
+         load-scrollback
+
+         ;; Testing support
+         reset-scrollback-id-counter!) ;; for test isolation
 
 ;; Maximum number of scrollback entries to keep on disk.
 (define scrollback-max-entries 500)
+
+;; Global counter for assigning IDs to deserialized entries.
+;; Ensures reloaded entries get unique IDs so the render cache works.
+(define scrollback-id-counter (box 0))
+
+;; Reset the counter (for test isolation).
+(define (reset-scrollback-id-counter!)
+  (set-box! scrollback-id-counter 0))
+
+;; Assign a unique ID from the scrollback counter.
+(define (next-scrollback-id)
+  (define id (unbox scrollback-id-counter))
+  (set-box! scrollback-id-counter (add1 id))
+  id)
 
 ;; Serialize a transcript-entry to a JSON-compatible hash.
 (define (transcript-entry->jsexpr entry)
@@ -25,16 +42,19 @@
           (transcript-entry-text entry)
           'timestamp
           (transcript-entry-timestamp entry)
+          'id
+          (or (transcript-entry-id entry) 0)
           'meta
           (hash->jsexpr-deep (transcript-entry-meta entry))))
 
 ;; Deserialize a jsexpr hash back to a transcript-entry.
+;; Assigns a unique ID so the render cache can track the entry.
 (define (jsexpr->transcript-entry h)
   (transcript-entry (string->symbol (hash-ref h 'kind "system"))
                     (hash-ref h 'text "")
                     (hash-ref h 'timestamp 0)
                     (jsexpr->hash-deep (hash-ref h 'meta (hash)))
-                    #f))
+                    (next-scrollback-id)))
 
 ;; Save transcript-entries to a JSONL file.
 ;; Atomically rewrites with only the last scrollback-max-entries entries
