@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.8.2-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.8.3-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.8.2
+racket main.rkt --version  # q version 0.8.3
 raco test tests/           # run the full test suite
 ```
 
@@ -328,7 +328,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.8.2** — Review Remediation & Documentation Accuracy. 28 issues across 6 waves: immediate fixes (stale metrics, CHANGELOG links, version bump), documentation drift (dead links, subcommand docs, wiki metrics), architecture quality (contracts, logging, layer docs), security hardening (destructive blocking, SECURITY section), test coverage (12 new test files, PBT quickcheck invariants), CI maturity (composite action, coverage reporting). PRs #360–#365.
+**v0.8.3** — Review Remediation & Documentation Accuracy. 28 issues across 6 waves: immediate fixes (stale metrics, CHANGELOG links, version bump), documentation drift (dead links, subcommand docs, wiki metrics), architecture quality (contracts, logging, layer docs), security hardening (destructive blocking, SECURITY section), test coverage (12 new test files, PBT quickcheck invariants), CI maturity (composite action, coverage reporting). PRs #360–#365.
 
 **v0.8.0** — Critical Security & Architecture. Destructive-command warnings default on, shared type extraction (hook-types, protocol-types), CLI/TUI decomposition into submodules, agent turn refactor, manifest validation, crypto-random RPC tokens, structured error types, 50 new tests across 5 modules, HTTP request timeouts.
 
