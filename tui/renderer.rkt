@@ -215,17 +215,17 @@
   (for ([line (in-list visible-lines)]
         [i (in-naturals)])
     (draw-styled-line! ubuf line (+ trans-y pad-count i) cols)
-    (vector-set! frame-vec (+ trans-y pad-count i) (styled-line->text line)))
+    (vector-set! frame-vec (+ trans-y pad-count i) (styled-line->ansi line)))
 
   ;; 4. Draw status bar (inverse = fg=0, bg=7)
   (define status-line (render-status-bar ui-state cols))
   (draw-styled-line! ubuf status-line status-y cols)
-  (vector-set! frame-vec status-y (styled-line->text status-line))
+  (vector-set! frame-vec status-y (styled-line->ansi status-line))
 
   ;; 5. Draw input line
   (define input-line (render-input-line input-st cols))
   (draw-styled-line! ubuf input-line input-y cols)
-  (vector-set! frame-vec input-y (styled-line->text input-line))
+  (vector-set! frame-vec input-y (styled-line->ansi input-line))
 
   ;; 6. Return cursor position (0-indexed for ANSI escape)
   (define-values (_visible-text _scroll-offset cursor-display-col)

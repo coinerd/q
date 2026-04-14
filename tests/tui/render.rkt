@@ -628,6 +628,32 @@
       (define result (wrap-text "hello 你好" 8))
       (check-equal? (length result) 2)
       (check-equal? (first result) "hello ")
-      (check-equal? (second result) "你好"))))
+      (check-equal? (second result) "你好"))
+
+    ;; ============================================================
+    ;; styled-line->ansi — ANSI encoding of styled lines
+    ;; ============================================================
+
+    (test-case "styled-line->ansi: plain text (no styles)"
+      (define sl (styled-line (list (styled-segment "hello" '()))))
+      (check-equal? (styled-line->ansi sl) "hello"))
+
+    (test-case "styled-line->ansi: single style"
+      (define sl (styled-line (list (styled-segment "error" '(bold red)))))
+      (check-equal? (styled-line->ansi sl) "\x1b[1;31merror\x1b[0m"))
+
+    (test-case "styled-line->ansi: multi-segment with different styles"
+      (define sl (styled-line (list (styled-segment "> " '(bold cyan))
+                                     (styled-segment "text" '(bold)))))
+      (define ansi (styled-line->ansi sl))
+      (check-true (string-contains? ansi "\x1b[1;36m> "))
+      (check-true (string-contains? ansi "\x1b[1mtext"))
+      (check-true (string-suffix? ansi "\x1b[0m")))
+
+    (test-case "styles->sgr: empty styles"
+      (check-equal? (styles->sgr '()) ""))
+
+    (test-case "styles->sgr: bold cyan"
+      (check-equal? (styles->sgr '(bold cyan)) "\x1b[1;36m"))))
 
 (run-tests cjk-wrapping-tests)

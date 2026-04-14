@@ -12,7 +12,8 @@
 
 (provide char-width
          string-visible-width
-         visible-width)
+         visible-width
+         display-col->string-offset)
 
 ;; char-width : Char → {0, 1, 2}
 ;; Returns the terminal column width of a single character.
@@ -123,3 +124,14 @@
 
 ;; Alias for convenience
 (define visible-width string-visible-width)
+
+;; display-col->string-offset : String Natural → Natural
+;; Given a display column (0-based), find the corresponding string offset.
+;; CJK chars consume 2 display columns but 1 string position.
+;; Returns (string-length s) if col is past the end.
+(define (display-col->string-offset s col)
+  (let loop ([i 0] [display-pos 0])
+    (cond
+      [(>= display-pos col) i]
+      [(>= i (string-length s)) (string-length s)]
+      [else (loop (+ i 1) (+ display-pos (char-width (string-ref s i))))])))
