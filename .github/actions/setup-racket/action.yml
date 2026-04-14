@@ -1,0 +1,57 @@
+name: 'Setup Racket'
+description: 'Install Racket 8.10 with caching and dependencies'
+inputs:
+  racket-version:
+    description: 'Racket version to install'
+    required: false
+    default: '8.10'
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache Racket installation
+      id: cache-racket
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/racket-install
+        key: racket-${{ inputs.racket-version }}-${{ runner.os }}
+
+    - name: Install Racket (Linux)
+      if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        curl -L https://download.racket-lang.org/installers/${{ inputs.racket-version }}/racket-${{ inputs.racket-version }}-x86_64-linux-cs.sh -o /tmp/racket.sh
+        sh /tmp/racket.sh --in-place --dest $HOME/racket-install
+        ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
+
+    - name: Install Racket (macOS)
+      if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        curl -L https://download.racket-lang.org/installers/${{ inputs.racket-version }}/racket-${{ inputs.racket-version }}-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
+        hdiutil attach -nobrowse /tmp/racket.dmg
+        MOUNT=$(ls -d /Volumes/Racket* | head -1)
+        echo "Mounted at: $MOUNT"
+        RACKET_DIR="$MOUNT/Racket v${{ inputs.racket-version }}"
+        if [ ! -d "$RACKET_DIR/bin" ]; then
+          echo "ERROR: $RACKET_DIR/bin not found"
+          ls -la "$MOUNT"
+          exit 1
+        fi
+        echo "Installing from: $RACKET_DIR"
+        cp -R "$RACKET_DIR" $HOME/racket-install
+        hdiutil detach "$MOUNT"
+
+    - name: Add Racket to PATH
+      shell: bash
+      run: echo "$HOME/racket-install/bin" >> $GITHUB_PATH
+
+    - name: Verify Racket Installation
+      shell: bash
+      run: racket --version
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        raco pkg install --auto --batch
+        raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
