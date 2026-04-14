@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-04-14
+
+### Fixed — Wave 1: Immediate Fixes (#329–#334)
+- Updated stale test count 3,131→3,275 in README metrics (#330)
+- Fixed CHANGELOG comparison links for v0.7.8–v0.8.0 (#331)
+- Removed dead `runtime/settings.rkt` import from `bash.rkt` (#332)
+- Bumped version to 0.8.1 across all files (#333)
+- Added CHANGELOG entry for v0.8.1 (34 issues, 8 waves) (#334)
+
+### Fixed — Wave 2: Documentation Drift (#335–#339)
+- Updated README module structure to include `wiring/` (#336)
+- Fixed dead links `docs/architecture/` → `docs/adr/` (#336)
+- Updated ADR listing in docs/README.md (7 actual ADRs) (#336)
+- Fixed `--resume` → `--session` in docs/demos/README.md (#337)
+- Added subcommands table (init, doctor, sessions) to README (#336)
+- Clarified `raco q` vs `racket main.rkt` in docs/install.md (#337)
+- Updated stale wiki metrics (#336)
+- Fixed `raco test .` → `raco test tests/` in docs/releasing.md (#338)
+- Added CONTRIBUTING.md tarball note (#339)
+
+### Changed — Wave 3: Architecture & Code Quality (#340–#344)
+- Documented layer exception in `runtime/iteration.rkt` (DI deferred) (#341)
+- Enhanced layer exception markers in util/ (#342)
+- Moved `util/package-audit.rkt` to `extensions/` (util/ re-export facade) (#342)
+- Added `contract-out` to `agent/event-bus.rkt` and `runtime/session-store.rkt` (#343)
+- Added logging to 10 silent error handlers in `sessions.rkt` and `doctor.rkt` (#344)
+- Documented unused exports as reserved for SDK consumers (#344)
+
+### Security — Wave 4: Security Hardening (#357–#359)
+- Added `current-block-destructive` parameter for configurable command blocking (#358)
+- Added Security section to README (credential storage, session logs, shell safety) (#359)
+- Documented session log append-only convention and audit recommendations (#359)
+- Added SECURITY NOTE to `shell-quote` trust boundary in `subprocess.rkt` (#359)
+
+### Added — Wave 5: Test Coverage (#350–#353)
+- Added direct test files for 12 previously uncovered modules (112 new tests) (#351)
+- Added property-based tests using quickcheck (6 PBT invariants) (#353)
+- Test count: 3,275 → 3,399 (+124 tests)
+
+### Changed — Wave 6: CI Maturity (#354–#356)
+- Extracted CI composite action `.github/actions/setup-racket/` (#355)
+- Added optional coverage reporting step to CI (#356)
+- Removed CONTRIBUTING.md from `.gitattributes` export-ignore (#356)
+- Removed stale `dist/` tarballs (#355)
+
 ## [0.8.1] — 2026-04-13
 
 ### Added — Wave 1: Test-Case Conversion
