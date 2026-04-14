@@ -73,3 +73,6 @@ jobs:
           output=$(racket main.rkt --version)
           echo "$output"
           echo "$output" | grep -qE '^q version [0-9]+\.[0-9]+\.[0-9]+$'
+
+      - name: Provider compilation smoke tests
+        run: raco test tests/test-provider-smoke.rkt

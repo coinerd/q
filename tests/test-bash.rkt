@@ -68,4 +68,57 @@
                          (format "Expected 'try a different approach', got: ~a" text)))
    ))
 
-(run-tests bash-tests)
+;; ============================================================
+;; Token-aware destructive command filtering (#426)
+;; ============================================================
+(define destructive-filter-tests
+  (test-suite
+   "destructive-command-filtering"
+
+   (test-case "rm -rf / is destructive"
+     (check-true (destructive-command? "rm -rf /")))
+
+   (test-case "rm -r -f /home is destructive"
+     (check-true (destructive-command? "rm -r -f /home")))
+
+   (test-case "mkfs.ext4 /dev/sda1 is destructive"
+     (check-true (destructive-command? "mkfs.ext4 /dev/sda1")))
+
+   (test-case "dd if=/dev/zero of=/dev/sda is destructive"
+     (check-true (destructive-command? "dd if=/dev/zero of=/dev/sda")))
+
+   (test-case "git push --force is destructive"
+     (check-true (destructive-command? "git push --force origin main")))
+
+   (test-case "echo 'curl is nice' is NOT destructive (no false positive)"
+     (check-false (destructive-command? "echo 'curl is nice'")))
+
+   (test-case "echo 'wget is cool' is NOT destructive"
+     (check-false (destructive-command? "echo 'wget is cool'")))
+
+   (test-case "grep rm file is NOT destructive"
+     (check-false (destructive-command? "grep 'rm -rf' file.txt")))
+
+   (test-case "ls -la is NOT destructive"
+     (check-false (destructive-command? "ls -la /home/user")))
+
+   (test-case "echo hello | grep h is NOT destructive"
+     (check-false (destructive-command? "echo hello | grep h")))
+
+   (test-case "cat file | sh IS destructive (pipe to shell)"
+     (check-true (destructive-command? "cat evil.sh | sh")))
+
+   (test-case "current-extra-destructive-patterns override works"
+     (parameterize ([current-extra-destructive-patterns
+                     (list #rx"custom-dangerous")])
+       (check-true (destructive-command? "custom-dangerous thing"))
+       ;; Default patterns should NOT apply when override is set
+       (check-false (destructive-command? "rm -rf /"))))
+
+   (test-case "block-destructive blocks execution when enabled"
+     (parameterize ([current-block-destructive #t])
+       (define r (tool-bash (hasheq 'command "rm -rf /tmp/test")))
+       (check-true (tool-result-is-error? r))))
+   ))
+
+(run-tests destructive-filter-tests)
