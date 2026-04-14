@@ -302,6 +302,9 @@
         #f))
 
   ;; Emit text/tool deltas from parts
+  ;; Tool calls use a running index from gemini-tool-id-counter-param
+  ;; so that multiple functionCalls across SSE chunks get distinct indices.
+  ;; The counter starts at 0 and is incremented by gemini-gen-tool-id.
   (for ([part (in-list parts)])
     (cond
       [(hash-has-key? part 'text)
@@ -310,12 +313,14 @@
            (set! results (cons (stream-chunk text #f #f #f) results))))]
       [(hash-has-key? part 'functionCall)
        (let* ([fc (hash-ref part 'functionCall)]
+              [tc-id (gemini-gen-tool-id)]
+              [tc-index (sub1 (gemini-tool-id-counter-param))]
               [tc-delta
                (hasheq
                 'index
-                0
+                tc-index
                 'id
-                (gemini-gen-tool-id)
+                tc-id
                 'function
                 (hasheq 'name (hash-ref fc 'name "") 'arguments (hash-ref fc 'args (hasheq))))])
          (set! results (cons (stream-chunk #f tc-delta #f #f) results)))]
