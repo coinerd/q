@@ -21,7 +21,11 @@
   [publish!        (-> event-bus? any/c any/c)])
  event-bus?
  ;; Error handler parameter — reserved for SDK consumers
- current-event-bus-error-handler)
+ current-event-bus-error-handler
+ ;; Circuit breaker configuration
+ current-circuit-breaker-threshold
+ current-circuit-breaker-cooldown-secs
+ circuit-breaker-state)
 
 ;; ============================================================
 ;; Error handler parameter
@@ -35,6 +39,58 @@
      (log-warning "event-bus: subscriber raised ~a for event ~a"
                   (exn-message exn)
                   (and evt (event-ev evt))))))
+
+;; ============================================================
+;; Circuit breaker (#430)
+;; ============================================================
+
+;; Number of consecutive failures before a subscriber is disabled.
+;; Set to #f to disable circuit breaker.
+(define current-circuit-breaker-threshold (make-parameter 5))
+
+;; Cooldown period in seconds before a circuit-broken subscriber
+;; is automatically re-enabled. Set to #f for permanent disable.
+(define current-circuit-breaker-cooldown-secs (make-parameter 60))
+
+;; Per-subscriber circuit breaker state: hash of sub-id -> (cons failure-count last-failure-secs)
+;; Must be wrapped in a parameter so each event-bus instance can have its own state.
+(define circuit-breaker-state (make-parameter (make-hash)))
+
+;; Check if a subscriber is circuit-broken
+(define (circuit-broken? sub-id)
+  (define threshold (current-circuit-breaker-threshold))
+  (if (not threshold)
+      #f
+      (let ([entry (hash-ref (circuit-breaker-state) sub-id #f)])
+        (and entry
+             (>= (car entry) threshold)
+             (let ([cooldown (current-circuit-breaker-cooldown-secs)])
+               (if (and cooldown
+                        (> (- (current-seconds) (cdr entry)) cooldown))
+                   (begin
+                     ;; Cooldown elapsed, reset
+                     (hash-remove! (circuit-breaker-state) sub-id)
+                     #f)
+                   #t))))))
+
+;; Record a failure for a subscriber
+(define (record-failure! sub-id)
+  (define threshold (current-circuit-breaker-threshold))
+  (when threshold
+    (define state (circuit-breaker-state))
+    (define entry (hash-ref state sub-id (cons 0 0)))
+    (define new-count (add1 (car entry)))
+    (hash-set! state sub-id (cons new-count (current-seconds)))
+    (when (= new-count threshold)
+      (log-warning
+       "event-bus: subscriber ~a circuit-broken after ~a consecutive failures"
+       sub-id threshold))))
+
+;; Reset failure count on success
+(define (record-success! sub-id)
+  (define state (circuit-breaker-state))
+  (when (hash-has-key? state sub-id)
+    (hash-remove! state sub-id)))
 
 ;; ============================================================
 ;; Internal subscription record
@@ -97,10 +153,17 @@
         (reverse (unbox (event-bus-subscriptions-box bus))))))
   (define err-handler (current-event-bus-error-handler))
   (for ([s (in-list subs)])
+    (define sub-id (subscription-id s))
     (define pred (subscription-filter s))
-    (when (or (not pred) (pred evt))
-      (with-handlers ([exn:fail?
-                        (λ (exn)
-                          (err-handler evt (subscription-handler s) exn))])
-        ((subscription-handler s) evt))))
+    (cond
+      ;; Skip circuit-broken subscribers
+      [(circuit-broken? sub-id) (void)]
+      [(or (not pred) (pred evt))
+       (with-handlers ([exn:fail?
+                         (λ (exn)
+                           (record-failure! sub-id)
+                           (err-handler evt (subscription-handler s) exn))])
+         ((subscription-handler s) evt)
+         (record-success! sub-id))]
+      [else (void)]))
   evt)

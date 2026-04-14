@@ -45,6 +45,10 @@
 ;; category is one of: 'not-found 'syntax-error 'api-mismatch 'unknown
 (struct extension-load-error (path message category) #:transparent)
 
+;; Per-extension startup timeout in seconds (default: 30s).
+;; Set to #f to disable timeout.
+(define current-extension-startup-timeout (make-parameter 30))
+
 ;; ============================================================
 ;; discover-extensions : path-string? -> (listof extension?)
 ;; ============================================================
@@ -73,10 +77,26 @@
   (define ext-name (get-extension-name-from-path path))
   (define state (extension-state ext-name))
   (when (and (not (eq? state 'disabled)) (not (eq? state 'quarantined)))
-    (define result (try-load-extension path))
+    (define timeout-secs (current-extension-startup-timeout))
+    (define result
+      (if timeout-secs
+          ;; Run with timeout to prevent hanging on slow extensions
+          (let ([chan (make-channel)])
+            (thread
+             (lambda ()
+               (channel-put chan (try-load-extension path))))
+            (define maybe-result (sync/timeout timeout-secs chan))
+            (if maybe-result
+                maybe-result
+                (extension-load-error
+                 (if (path? path) (path->string path) path)
+                 (format "extension startup timed out after ~as" timeout-secs)
+                 'timeout)))
+          ;; No timeout — direct call
+          (try-load-extension path)))
     (cond
       [(extension-load-error? result)
-       (log-warning (format "extension load failed [~a]: ~a — ~a"
+       (log-warning (format "extension load failed [~a]: ~a \u2014 ~a"
                             (extension-load-error-category result)
                             path
                             (extension-load-error-message result)))
