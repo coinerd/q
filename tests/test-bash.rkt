@@ -108,6 +108,18 @@
    (test-case "cat file | sh IS destructive (pipe to shell)"
      (check-true (destructive-command? "cat evil.sh | sh")))
 
+   (test-case "chmod -R 777 / is destructive (review: #449 case-sensitivity)"
+     (check-true (destructive-command? "chmod -R 777 /")))
+
+   (test-case "chmod 000 / is destructive"
+     (check-true (destructive-command? "chmod 000 /")))
+
+   (test-case "echo shutdown notice is NOT destructive"
+     (check-false (destructive-command? "echo \"shutdown notice\"")))
+
+   (test-case "shutdown now IS destructive"
+     (check-true (destructive-command? "shutdown now")))
+
    (test-case "current-extra-destructive-patterns override works"
      (parameterize ([current-extra-destructive-patterns
                      (list #rx"custom-dangerous")])

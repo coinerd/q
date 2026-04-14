@@ -194,4 +194,14 @@
 (test-case "http-read-timeout-default is a positive number"
   (check-true (and (number? http-read-timeout-default) (> http-read-timeout-default 0))))
 
+(test-case "call-with-request-timeout calls #:cleanup on timeout (#454)"
+  (define cleanup-called (box #f))
+  (check-exn exn:fail:network:timeout?
+    (lambda ()
+      (call-with-request-timeout
+       (lambda () (sync/timeout 10 never-evt))  ; blocks forever
+       #:timeout 0.001
+       #:cleanup (lambda () (set-box! cleanup-called #t)))))
+  (check-true (unbox cleanup-called)))
+
 (displayln "All stream incremental tests passed")

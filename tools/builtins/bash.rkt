@@ -54,7 +54,7 @@
    #rx"^format[ ]+[A-Za-z]:"                        ;; Windows format
    #rx"^del[ ]+/"                                   ;; Windows del
    ;; Permission destruction
-   #rx"^chmod[ ]+-R[ ]+777[ ]+/"                    ;; recursive 777 on root
+   #rx"^chmod[ ]+-r[ ]+777[ ]+/"                    ;; recursive 777 on root
    #rx"^chmod[ ]+000[ ]+/"                          ;; lock out root
    ;; Pipe-to-shell (must be at pipe boundary)
    #rx"[|][ ]*sh[ ]*$"                              ;; | sh
