@@ -209,3 +209,33 @@
    ))
 
 (run-tests char-width-tests)
+
+;; ============================================================
+;; truncate-to-visible-width (#424)
+;; ============================================================
+(define truncate-tests
+  (test-suite
+   "truncate-to-visible-width"
+
+   (test-case "ASCII string within width"
+     (check-equal? (truncate-to-visible-width "hello" 10) "hello"))
+
+   (test-case "ASCII string truncated"
+     (check-equal? (truncate-to-visible-width "hello world" 5) "hello"))
+
+   (test-case "CJK string truncated at wide char boundary"
+     ;; Each CJK char is width 2, so 5 cols can hold 2 CJK chars (4 cols)
+     (check-equal? (truncate-to-visible-width "\u4f60\u597d\u4e16\u754c" 5) "\u4f60\u597d"))
+
+   (test-case "Mixed ASCII+CJK truncated"
+     ;; "AB\u4f60" = 1+1+2 = 4 cols, truncate to 3 cols → "AB"
+     (check-equal? (truncate-to-visible-width "AB\u4f60" 3) "AB"))
+
+   (test-case "Empty string"
+     (check-equal? (truncate-to-visible-width "" 5) ""))
+
+   (test-case "Zero max-cols returns empty"
+     (check-equal? (truncate-to-visible-width "hello" 0) ""))
+   ))
+
+(run-tests truncate-tests)

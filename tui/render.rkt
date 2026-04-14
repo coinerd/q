@@ -393,7 +393,7 @@
   (define left (format " ~a q | ~a | ~a " busy-marker session model))
   (define right (format "~a~a~a " status thinking-indicator scroll-indicator))
   ;; Pad to width
-  (define pad-len (max 0 (- width (string-length left) (string-length right))))
+  (define pad-len (max 0 (- width (string-visible-width left) (string-visible-width right))))
   (define padded (string-append left (make-string pad-len #\ ) right))
   (styled-line (list (styled-segment padded '(inverse)))))
 
@@ -403,7 +403,7 @@
 (define (render-input-line input-st width)
   (define-values (visible-text scroll-offset cursor-col) (input-visible-window input-st width))
   (define prompt-str "q> ")
-  (define pad-len (max 0 (- width (string-length prompt-str) (string-length visible-text))))
+  (define pad-len (max 0 (- width (string-visible-width prompt-str) (string-visible-width visible-text))))
   (styled-line (list (styled-segment prompt-str '(bold cyan))
                      (styled-segment (string-append visible-text (make-string pad-len #\space))
                                      '(bold)))))

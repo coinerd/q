@@ -5,7 +5,8 @@
          "render.rkt"
          "layout.rkt"
          "state.rkt"
-         "input.rkt")
+         "input.rkt"
+         "char-width.rkt")
 ;;
 ;; Renders styled-lines to a tui-ubuf buffer.
 ;; No terminal I/O directly — all output goes through ubuf.
@@ -134,17 +135,18 @@
     #:break (<= remaining-width 0)
     (define text (styled-segment-text seg))
     (define styles (styled-segment-style seg))
-    ;; Truncate if necessary
+    ;; Truncate if necessary (use visible width for CJK support)
     (define visible-text
-      (if (> (string-length text) remaining-width)
-          (substring text 0 remaining-width)
+      (if (> (string-visible-width text) remaining-width)
+          ;; Truncate by character until visible width fits
+          (truncate-to-visible-width text remaining-width)
           text))
     ;; Resolve styles to ubuf keywords
     (define-values (kws vals) (style->ubuf-kws styles))
     ;; Draw segment with styles
     (keyword-apply ubuf-putstring! kws vals (list ubuf col row visible-text))
-    (set! col (+ col (string-length visible-text)))
-    (set! remaining-width (- remaining-width (string-length visible-text))))
+    (set! col (+ col (string-visible-width visible-text)))
+    (set! remaining-width (- remaining-width (string-visible-width visible-text))))
   ;; Pad rest with spaces
   (when (> remaining-width 0)
     (ubuf-putstring! ubuf col row (make-string remaining-width #\space))))

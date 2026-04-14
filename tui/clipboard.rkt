@@ -120,7 +120,10 @@
         (display text in)
         (close-output-port in)
         ;; Wait up to 2 seconds for clipboard tool to finish
-        (sync/timeout 2.0 sp))
+        (define result (sync/timeout 2.0 sp))
+        ;; Kill zombie subprocess if timeout elapsed
+        (when (not result)
+          (subprocess-kill sp #t)))
       (lambda ()
         (close-input-port out)
         (close-input-port err)))
@@ -229,5 +232,7 @@
                 (string-trim result "\r\n")
                 #f))
           (lambda ()
-            (close-input-port out)
-            (close-input-port err))))))
+            (with-handlers ([exn:fail? (lambda (e) (void))])
+              (close-input-port out))
+            (with-handlers ([exn:fail? (lambda (e) (void))])
+              (close-input-port err)))))))
