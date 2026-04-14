@@ -23,6 +23,8 @@
 ;; Returns: (listof diff-cmd)
 (define (diff-frames prev curr)
   (cond
+    ;; No previous frame (first render or resize) — full redraw
+    [(not prev) (list (diff-cmd 'full 0 #f))]
     [(null? prev) (list (diff-cmd 'full 0 #f))]
     [(not (= (length prev) (length curr))) (list (diff-cmd 'full 0 #f))]
     [else

@@ -34,3 +34,11 @@
 
 ;; frame->string-lines is identity
 (check-equal? (frame->string-lines frame-3) frame-3 "frame->string-lines returns the frame unchanged")
+
+;; #f prev (first render) → full redraw (Issue #390)
+(check-equal? (diff-frames #f frame-3)
+              (list (diff-cmd 'full 0 #f))
+              "#f prev yields full redraw (first render)")
+(check-equal? (diff-frames #f empty-frame)
+              (list (diff-cmd 'full 0 #f))
+              "#f prev with empty current yields full redraw")
