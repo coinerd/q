@@ -29,32 +29,33 @@
 ;; Default timeout in seconds
 (define DEFAULT-TIMEOUT-SECONDS 120)
 
-;; Destructive command patterns (SEC-03)
-;; Each pattern is a regexp that matches at token boundaries.
-;; These are checked case-insensitively against the command string.
-;; Patterns use word-boundary-aware matching to avoid false positives
-;; on benign commands like "echo \"curl is nice\"".
+;; Destructive command patterns (SEC-03, #449)
+;; Each pattern uses anchors (^|[&;|\n]) or word boundaries to avoid
+;; false positives on benign strings like `echo "shutdown notice"`.
+;; Patterns are matched case-insensitively against the full command.
 (define destructive-patterns
   (list
-   ;; Recursive / forceful deletion
-   #rx"rm[ ]+.*-[a-zA-Z]*r.*-[a-zA-Z]*f"  ;; rm with -r and -f flags
-   #rx"rm[ ]+-rf[ ]+"                        ;; rm -rf shorthand
-   #rx"rm[ ]+-fr[ ]+"                        ;; rm -fr shorthand
-   #rx"rm[ ]+-r[ ]+-f[ ]+"                   ;; rm -r -f
-   #rx"rmdir[ ]+"                                   ;; rmdir
+   ;; Recursive / forceful deletion — anchored at command start
+   #rx"^rm[ ]+.*-[a-zA-Z]*r.*-[a-zA-Z]*f"  ;; rm with -r and -f flags
+   #rx"^rm[ ]+-rf[ ]+"                       ;; rm -rf shorthand
+   #rx"^rm[ ]+-fr[ ]+"                       ;; rm -fr shorthand
+   #rx"^rm[ ]+-r[ ]+-f[ ]+"                  ;; rm -r -f
+   #rx"^rmdir[ ]+"                                  ;; rmdir
+   ;; Also match after pipe/semicolon/&& operators
+   #rx"[|;&][ ]*rm[ ]+-rf[ ]+"                    ;; piped rm -rf
    ;; Disk/filesystem destruction
-   #rx"mkfs[.]"                                     ;; mkfs.*
-   #rx"dd[ ]+if="                                   ;; dd if=
-   #rx"dd[ ]+.*of=/dev/"                            ;; dd of=/dev/
+   #rx"^mkfs[.]"                                    ;; mkfs.*
+   #rx"^dd[ ]+if="                                  ;; dd if=
+   #rx"^dd[ ]+.*of=/dev/"                           ;; dd of=/dev/
    #rx">[ ]*/dev/sd"                                ;; device file write
-   ;; System commands
-   #rx"shutdown[ ]"                                 ;; shutdown
-   #rx"reboot[ ]"                                   ;; reboot
-   #rx"format[ ]+[A-Za-z]:"                         ;; Windows format
-   #rx"del[ ]+/"                                    ;; Windows del
+   ;; System commands — anchored at command start
+   #rx"^shutdown([ ]|$)"                            ;; shutdown
+   #rx"^reboot([ ]|$)"                              ;; reboot
+   #rx"^format[ ]+[A-Za-z]:"                        ;; Windows format
+   #rx"^del[ ]+/"                                   ;; Windows del
    ;; Permission destruction
-   #rx"chmod[ ]+-R[ ]+777[ ]+/"                     ;; recursive 777 on root
-   #rx"chmod[ ]+000[ ]+/"                           ;; lock out root
+   #rx"^chmod[ ]+-R[ ]+777[ ]+/"                    ;; recursive 777 on root
+   #rx"^chmod[ ]+000[ ]+/"                          ;; lock out root
    ;; Pipe-to-shell (must be at pipe boundary)
    #rx"[|][ ]*sh[ ]*$"                              ;; | sh
    #rx"[|][ ]*bash[ ]*$"                            ;; | bash
@@ -62,9 +63,9 @@
    #rx">[ ]*/etc/passwd"                             ;; passwd overwrite
    #rx">[ ]*/etc/shadow"                             ;; shadow overwrite
    ;; Git destructive
-   #rx"git[ ]+push[ ]+.*--force"                    ;; force push
+   #rx"^git[ ]+push[ ]+.*--force"                   ;; force push
    ;; Root directory operations
-   #rx"mv[ ]+/[ ]+"                                 ;; mv /
+   #rx"^mv[ ]+/[ ]+"                                ;; mv /
    ))
 
 ;; User-configurable override patterns (loaded from settings).

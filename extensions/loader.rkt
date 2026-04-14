@@ -82,10 +82,11 @@
       (if timeout-secs
           ;; Run with timeout to prevent hanging on slow extensions
           (let ([chan (make-channel)])
-            (thread
-             (lambda ()
-               (channel-put chan (try-load-extension path))))
+            (define thd (thread
+                          (lambda ()
+                            (channel-put chan (try-load-extension path)))))
             (define maybe-result (sync/timeout timeout-secs chan))
+            (unless maybe-result (kill-thread thd))  ; #447: prevent thread leak
             (if maybe-result
                 maybe-result
                 (extension-load-error
@@ -117,49 +118,9 @@
       [(and result (extension? result)) (register-extension! registry result)]))
   (void))
 
-;; Cache for try-load-extension results with LRU eviction (Issue #201)
-;; Max 64 entries, TTL 30 minutes
-(define max-cache-entries 64)
-(define cache-ttl-seconds (* 30 60))
-
-;; Cache is a list of (key . (value . timestamp)) pairs, most-recently-used first
-(define load-cache (box '()))
-(define load-cache-sem (make-semaphore 1))
-
-(define (cache-entry-expired? entry)
-  (> (- (current-seconds) (cddr entry)) cache-ttl-seconds))
-
-(define (evict-cache!)
-  (define now (current-seconds))
-  (define entries (unbox load-cache))
-  ;; Remove expired entries
-  (define live (filter (lambda (e) (not (cache-entry-expired? e))) entries))
-  ;; If still over limit, remove oldest (last in list = least recently used)
-  (define trimmed
-    (if (> (length live) max-cache-entries)
-        (take live max-cache-entries)
-        live))
-  (set-box! load-cache trimmed))
-
-(define (cached-try-load path)
-  (call-with-semaphore load-cache-sem
-                       (lambda ()
-                         (evict-cache!)
-                         (define entries (unbox load-cache))
-                         (define found (assoc path entries))
-                         (cond
-                           [(and found (not (cache-entry-expired? found)))
-                            ;; Move to front (most recently used)
-                            (define rest (filter (lambda (e) (not (equal? (car e) path))) entries))
-                            (set-box! load-cache (cons found rest))
-                            (cdr found)]
-                           [else
-                            ;; Remove stale entry if present
-                            (define clean (filter (lambda (e) (not (equal? (car e) path))) entries))
-                            (define result (try-load-extension path))
-                            (define entry (cons path (cons result (current-seconds))))
-                            (set-box! load-cache (cons entry clean))
-                            result]))))
+;; Cache infrastructure removed (#448): was never called in production
+;; code paths (discover-extensions calls try-load-extension directly).
+;; If caching is needed in the future, re-introduce with a clear call site.
 
 ;; ============================================================
 ;; Internal helper: try to load a module and extract the-extension

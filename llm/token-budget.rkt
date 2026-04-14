@@ -123,7 +123,9 @@
 (define COMPACT-RATIO 0.8)
 
 (define (should-compact? current-tokens budget-threshold)
-  (define threshold (* budget-threshold COMPACT-RATIO))
+  ;; Apply safety margin so compaction triggers before actual overflow (#450)
+  (define effective-budget (* budget-threshold (- 1 DEFAULT-SAFETY-MARGIN-PCT)))
+  (define threshold (* effective-budget COMPACT-RATIO))
   (>= current-tokens threshold))
 
 ;; ============================================================
@@ -131,4 +133,6 @@
 ;; ============================================================
 
 (define (remaining-budget current-tokens budget-threshold)
-  (- budget-threshold current-tokens))
+  ;; Account for safety margin in reported remaining budget (#450)
+  (define effective-budget (* budget-threshold (- 1 DEFAULT-SAFETY-MARGIN-PCT)))
+  (- effective-budget current-tokens))
