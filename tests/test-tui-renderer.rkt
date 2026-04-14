@@ -318,7 +318,7 @@
       (define state (initial-ui-state #:session-id "test-session" #:model-name "gpt-4"))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
-      (define status-row-num (- (tui-layout-status-row layout) 1))
+      (define status-row-num (tui-layout-status-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define status-str (mock-ubuf-row-string ubuf status-row-num))
       (check-true (string-contains? status-str "q") "status bar contains 'q' indicator")
@@ -329,7 +329,7 @@
       (define state (initial-ui-state #:session-id "s1"))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
-      (define status-row-num (- (tui-layout-status-row layout) 1))
+      (define status-row-num (tui-layout-status-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define inverse-count
         (mock-ubuf-row-style-count ubuf status-row-num (lambda (c) (= (mock-cell-bg c) 7))))
@@ -340,7 +340,7 @@
       (define state (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
-      (define status-row-num (- (tui-layout-status-row layout) 1))
+      (define status-row-num (tui-layout-status-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define status-str (mock-ubuf-row-string ubuf status-row-num))
       ;; Status bar should have busy marker (⏳) or session info
@@ -355,7 +355,7 @@
       (define state (initial-ui-state))
       (define input-st (input-insert-char (input-insert-char (initial-input-state) #\h) #\i))
       (define layout (compute-layout 80 24))
-      (define input-row-num (- (tui-layout-input-row layout) 1))
+      (define input-row-num (tui-layout-input-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define input-str (mock-ubuf-row-string ubuf input-row-num))
       (check-true (string-contains? input-str "q>") "input line shows q> prompt")
@@ -366,7 +366,7 @@
       (define state (initial-ui-state))
       (define input-st (input-insert-char (initial-input-state) #\x))
       (define layout (compute-layout 80 24))
-      (define input-row-num (- (tui-layout-input-row layout) 1))
+      (define input-row-num (tui-layout-input-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define bold-count (mock-ubuf-row-style-count ubuf input-row-num mock-cell-bold))
       (check-true (> bold-count 0) "input line should have bold style"))
@@ -376,7 +376,7 @@
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
-      (define input-row-num (- (tui-layout-input-row layout) 1))
+      (define input-row-num (tui-layout-input-row layout))
       (run-render-frame! ubuf state input-st layout)
       (define input-str (mock-ubuf-row-string ubuf input-row-num))
       (check-true (string-contains? input-str "q>") "empty input still shows prompt"))
@@ -389,7 +389,7 @@
       (define layout (compute-layout 80 24))
       (define-values (cursor-col cursor-row) (run-render-frame! ubuf state input-st layout))
       ;; cursor-row should be input row
-      (check-equal? cursor-row (- (tui-layout-input-row layout) 1))
+      (check-equal? cursor-row (tui-layout-input-row layout))
       ;; cursor-col should account for "q> " (4 chars) + 2 chars typed
       (check-true (>= cursor-col 4) "cursor column should be >= prompt width"))
 
@@ -419,7 +419,7 @@
       (define layout (compute-layout 80 10))
       (run-render-frame! ubuf state input-st layout)
       ;; Empty transcript cells have bg=0 (ANSI black)
-      (define trans-start (sub1 (tui-layout-transcript-start-row layout)))
+      (define trans-start (tui-layout-transcript-start-row layout))
       (define cell (mock-ubuf-cell ubuf 0 trans-start))
       (check-equal? (mock-cell-bg cell) 0 "empty cells use bg=0"))
 
@@ -429,7 +429,7 @@
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 10))
       (run-render-frame! ubuf state input-st layout)
-      (define header-y (sub1 (tui-layout-header-row layout)))
+      (define header-y (tui-layout-header-row layout))
       (define cell (mock-ubuf-cell ubuf 1 header-y))
       (check-equal? (mock-cell-bg cell) 7 "header uses inverse bg=7"))
 
