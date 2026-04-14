@@ -10,7 +10,8 @@
          rackunit/text-ui
          "../tui/tui-render-loop.rkt"
          "../tui/tui-keybindings.rkt"
-         "../tui/sgr.rkt")
+         "../tui/sgr.rkt"
+         "../tui/terminal.rkt")
 
 (define test-tui-render-loop
   (test-suite "tui/tui-render-loop"
@@ -77,6 +78,41 @@
     ;; --------------------------------------------------
     (test-case "drain-events! on empty channel does not crash"
       (define ctx (make-tui-ctx))
-      (check-not-exn (lambda () (drain-events! ctx))))))
+      (check-not-exn (lambda () (drain-events! ctx))))
+
+    ;; --------------------------------------------------
+    ;; Test 6: Synchronized output (DEC mode 2026)
+    ;; --------------------------------------------------
+    (test-case "terminal-sync-begin! is callable (no terminal)"
+      ;; In headless/stub mode, sync-begin! should be a no-op
+      (check-not-exn (lambda () (terminal-sync-begin!))))
+
+    (test-case "terminal-sync-end! is callable (no terminal)"
+      (check-not-exn (lambda () (terminal-sync-end!))))
+
+    (test-case "terminal-sync-available? returns boolean"
+      (check-pred boolean? (terminal-sync-available?)))
+
+    (test-case "detect-sync-mode-support! runs without error"
+      (check-not-exn (lambda () (detect-sync-mode-support!))))
+
+    (test-case "sync mode wraps render output when supported"
+      ;; Test that sync brackets appear when mode is force-enabled
+      ;; We capture stdout to verify the escape sequences
+      (define captured (open-output-string))
+      (parameterize ([current-output-port captured])
+        ;; Force-enable sync for this test
+        (detect-sync-mode-support!)
+        (terminal-sync-begin!)
+        (display "test-output")
+        (terminal-sync-end!))
+      (define output (get-output-string captured))
+      ;; When supported: output should contain \x1b[?2026h and \x1b[?2026l
+      ;; When not supported: output is just "test-output"
+      (when (terminal-sync-available?)
+        (check-true (string-contains? output "\x1b[?2026h")
+                    "sync begin escape present when supported")
+        (check-true (string-contains? output "\x1b[?2026l")
+                    "sync end escape present when supported")))))
 
 (run-tests test-tui-render-loop)

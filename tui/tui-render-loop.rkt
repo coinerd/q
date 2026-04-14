@@ -99,12 +99,16 @@
 ;; Render ubuf to terminal with bg=0 replaced by terminal default bg.
 ;; Captures display-ubuf! output, post-processes SGR sequences,
 ;; then writes the fixed output to the real terminal.
+;; Uses DEC mode 2026 (Synchronized Output) when available to
+;; prevent torn frames during rapid streaming output.
 (define (render-ubuf-to-terminal! ubuf)
   (define out (open-output-bytes))
   (display-ubuf! ubuf out #:only-dirty #f #:linear #f)
   (define bs (get-output-bytes out))
   (define str (bytes->string/utf-8 bs))
-  (display (fix-sgr-bg-black str) (current-output-port)))
+  (terminal-sync-begin!)
+  (display (fix-sgr-bg-black str) (current-output-port))
+  (terminal-sync-end!))
 
 ;; ============================================================
 ;; Terminal/ubuf lifecycle helpers
@@ -122,6 +126,8 @@
   (renderer:current-ubuf-putstring ubuf-putstring!)
   ;; Enable mouse tracking for scroll wheel support
   (enable-mouse-tracking)
+  ;; Detect synchronized output support
+  (detect-sync-mode-support!)
   term)
 
 ;; Resize ubuf when terminal size changes

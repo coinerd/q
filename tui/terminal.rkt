@@ -65,6 +65,12 @@
          enable-mouse-tracking
          disable-mouse-tracking
 
+         ;; Synchronized output (DEC mode 2026)
+         terminal-sync-available?
+         terminal-sync-begin!
+         terminal-sync-end!
+         detect-sync-mode-support!
+
          ;; Clipboard
          clipboard-copy
          osc-52-copy ;; internal, exported for testing
@@ -309,6 +315,48 @@
 ;; Check if a byte is ready (input available)
 (define (tui-byte-ready?)
   (byte-ready?))
+
+;; ============================================================
+;; Synchronized Output (DEC mode 2026)
+;; ============================================================
+
+;; Feature detection: check if the terminal likely supports
+;; DEC private mode 2026 (Synchronized Output).
+;; Modern terminals (kitty, wezterm, alacritty ≥0.13, foot, etc.)
+;; support this. Unknown/older terminals get a graceful no-op.
+
+(define sync-mode-supported #f)
+
+(define (terminal-sync-available?)
+  sync-mode-supported)
+
+;; Probe terminal for sync mode support.
+;; Checks TERM_PROGRAM and TERM for known supporters.
+;; Called once during init. Gracefully defaults to #f.
+(define (detect-sync-mode-support!)
+  (define term-program (getenv "TERM_PROGRAM"))
+  (define term (getenv "TERM"))
+  (set! sync-mode-supported
+        (or (and term-program
+                 (member (string-downcase term-program)
+                         '("wezterm" "kitty" "hyper" "alacritty"
+                           "ghostty" " rio" " contour")))
+            (and term
+                 (regexp-match? #rx"^(foot|kitty|wezterm|ghostty)" term)))))
+
+;; Begin synchronized output bracket.
+;; All output between begin and end is batched by the terminal
+;; and applied atomically, preventing torn frames.
+(define (terminal-sync-begin!)
+  (when sync-mode-supported
+    (display "\x1b[?2026h")))
+
+;; End synchronized output bracket.
+;; Flushes the batched output atomically.
+(define (terminal-sync-end!)
+  (when sync-mode-supported
+    (display "\x1b[?2026l")
+    (flush-output)))
 
 ;; ============================================================
 ;; Mouse tracking — X10 protocol
