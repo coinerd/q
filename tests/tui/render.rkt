@@ -6,7 +6,8 @@
          rackunit/text-ui
          "../../../q/tui/render.rkt"
          "../../../q/tui/state.rkt"
-         "../../../q/tui/input.rkt")
+         "../../../q/tui/input.rkt"
+         "../../../q/tui/char-width.rkt")
 
 (define render-tests
   (test-suite "TUI Render"
@@ -564,3 +565,66 @@
                      "no [thinking...] when streaming text is present")))))
 
 (run-tests thinking-tests)
+
+;; CJK/wide-char wrapping tests (Wave 1: #368)
+(define cjk-wrapping-tests
+  (test-suite "CJK/wide-char wrapping"
+
+    (test-case "wrap-text: CJK string wraps at visual column boundary"
+      ;; 你好世界 = 4+4 = 8 visible cols, 4 chars
+      ;; Wrap at width 5 → first line: 你好 (4 cols), second: 世界 (4 cols)
+      (define result (wrap-text "你好世界" 5))
+      (check-equal? (length result) 2 "CJK wraps into 2 lines")
+      (check-equal? (string-visible-width (first result)) 4 "first line is 4 cols")
+      (check-equal? (string-visible-width (second result)) 4 "second line is 4 cols"))
+
+    (test-case "wrap-text: mixed ASCII+CJK wraps correctly"
+      ;; hello你好 = 5+4 = 9 visible cols
+      ;; Wrap at width 9 → fits in one line
+      (define result1 (wrap-text "hello你好" 9))
+      (check-equal? (length result1) 1 "9 cols: fits in one line")
+      ;; Wrap at width 7 → hello (5) + 你 (2) = 7 cols on first line
+      ;; But 你 is char index 5, 好 is char index 6
+      (define result2 (wrap-text "hello你好" 7))
+      (check > (length result2) 1 "7 cols: wraps to multiple lines")
+      (check-equal? (string-visible-width (first result2)) 7 "first line is 7 cols"))
+
+    (test-case "wrap-text: combining marks don't consume column budget"
+      ;; e + combining acute (2 chars, 1 visible col)
+      (define result (wrap-text "e\u0301e\u0301e\u0301" 3))
+      (check-equal? (length result) 1 "combining marks fit in 3 cols"))
+
+    (test-case "wrap-single-line: long CJK string wraps correctly"
+      ;; 10 CJK chars = 20 visible cols, wrap at 10 → 2 lines of 10 cols each
+      (define cjk-str "一二三四五六七八九十")
+      (define result (wrap-single-line cjk-str 10))
+      (check-equal? (length result) 2)
+      (check-equal? (string-visible-width (first result)) 10)
+      (check-equal? (string-visible-width (second result)) 10))
+
+    (test-case "wrap-styled-line: CJK with styles preserves segment styles"
+      (define sl (styled-line (list (styled-segment "你好世界" '(bold)))))
+      (define result (wrap-styled-line sl 5))
+      (check-equal? (length result) 2 "CJK styled line wraps to 2 lines")
+      ;; All segments should have 'bold style
+      (for ([line result])
+        (for ([seg (styled-line-segments line)])
+          (check-not-false (member 'bold (styled-segment-style seg))
+                           (format "segment '~a' should be bold"
+                                   (styled-segment-text seg))))))
+
+    (test-case "wrap-text: long ASCII string still works correctly"
+      ;; Regression test: ensure ASCII wrapping still works after refactor
+      (define result (wrap-text (make-string 100 #\a) 40))
+      (check-equal? (length result) 3 "100 a's at width 40 = 3 lines")
+      (check-equal? (apply string-append result) (make-string 100 #\a)))
+
+    (test-case "wrap-text: whitespace break with mixed content"
+      ;; "hello 你好" = 5+1+4 = 10 visible cols
+      ;; Wrap at 8 → "hello " (6 cols) + "你好" (4 cols)
+      (define result (wrap-text "hello 你好" 8))
+      (check-equal? (length result) 2)
+      (check-equal? (first result) "hello ")
+      (check-equal? (second result) "你好"))))
+
+(run-tests cjk-wrapping-tests)

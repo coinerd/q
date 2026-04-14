@@ -5,6 +5,7 @@
          racket/function
          "state.rkt"
          "input.rkt"
+         "char-width.rkt"
          "../util/markdown.rkt")
 
 ;; Types
@@ -30,7 +31,9 @@
 
          ;; Helpers
          styled-line->text
-         wrap-styled-line)
+         wrap-styled-line
+         wrap-text
+         wrap-single-line)
 
 ;; A styled segment (part of a line)
 (struct styled-segment
@@ -90,7 +93,7 @@
 ;; Preserves segment styles by tracking character-to-segment mapping.
 (define (wrap-styled-line sl width)
   (define text (styled-line->text sl))
-  (if (<= (string-length text) width)
+  (if (<= (string-visible-width text) width)
       (list sl)
       (let* ([segs (styled-line-segments sl)]
              ;; Build char-style table: for each character, which style?
@@ -171,7 +174,8 @@
   ;; Flush remaining inline segments
   (flush-current lines current-segs))
 
-;; Wrap text to a given width, returning list of strings
+;; Wrap text to a given width, returning list of strings.
+;; Uses visible column width (CJK-aware) instead of string-length.
 (define (wrap-text text max-width)
   (if (<= max-width 0)
       (list text)
@@ -181,23 +185,41 @@
                  (wrap-single-line line max-width))))))
 
 (define (wrap-single-line line max-width)
-  (if (<= (string-length line) max-width)
+  (if (<= (string-visible-width line) max-width)
       (list line)
       (let loop ([remaining line]
                  [acc '()])
-        (if (<= (string-length remaining) max-width)
+        (if (<= (string-visible-width remaining) max-width)
             (reverse (cons remaining acc))
             (let ([break-pos (find-break-pos remaining max-width)])
-              (loop (substring remaining break-pos) (cons (substring remaining 0 break-pos) acc)))))))
+              (loop (substring remaining break-pos)
+                    (cons (substring remaining 0 break-pos) acc)))))))
 
-;; Find a good break position (prefer space)
+;; Find a good break position using visible column width (prefer space).
+;; Returns a character index (not a column index) into `text`.
 (define (find-break-pos text max-width)
-  (define search-start (sub1 max-width))
-  (let loop ([i search-start])
+  ;; Walk through the string by character, accumulating visible width.
+  ;; Find the last whitespace before visible width exceeds max-width.
+  (let loop ([i 0]
+             [col 0]
+             [last-space-idx #f])
     (cond
-      [(<= i 0) max-width]
-      [(char-whitespace? (string-ref text i)) (+ i 1)]
-      [else (loop (sub1 i))])))
+      [(>= i (string-length text)) (string-length text)]
+      [(>= col max-width)
+       ;; Exceeded width — break at last space or current position
+       (or last-space-idx i)]
+      [else
+       (define c (string-ref text i))
+       (define w (char-width c))
+       (define new-col (+ col w))
+       (cond
+         ;; Char would exceed max-width on its own
+         [(> new-col max-width)
+          (or last-space-idx i)]
+         [(char-whitespace? c)
+          (loop (add1 i) new-col (add1 i))]
+         [else
+          (loop (add1 i) new-col last-space-idx)])])))
 
 ;; Invert a style (add 'inverse if not present, remove if present)
 (define (style-invert style)
