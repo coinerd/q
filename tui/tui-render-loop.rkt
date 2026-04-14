@@ -196,6 +196,9 @@
 
   ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
+  ;; Emit IME cursor marker for CJK input support (Kitty/Ghostty/WezTerm)
+  (when (terminal-sync-available?)
+    (display "\x1b]1337;CursorMarker\x1b\\" (current-output-port)))
   (tui-cursor-show)
   (tui-flush)
   (set-box! (tui-ctx-needs-redraw-box ctx) #f))

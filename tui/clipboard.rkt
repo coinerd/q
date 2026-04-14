@@ -13,6 +13,7 @@
 ;;   'off    — disable clipboard entirely
 
 (require racket/port
+         racket/string
          net/base64)
 
 (provide
@@ -23,6 +24,7 @@
  copy-text!
  copy-selection!
  clipboard-backend-available?
+ clipboard-paste
 
  ;; Status symbols (documented, not exported as values)
  ;; 'ok-osc52   — OSC 52 sequence emitted successfully
@@ -174,3 +176,58 @@
         (if (or (not text) (string=? text ""))
             'disabled
             (copy-text! text)))))
+
+;; ============================================================
+;; Clipboard paste (read from system clipboard)
+;; ============================================================
+
+;; Detect a paste-capable clipboard tool.
+;; Returns (list tool-path tool-name) or #f.
+(define (detect-paste-tool)
+  (define wayland? (getenv "WAYLAND_DISPLAY"))
+  (define x11? (getenv "DISPLAY"))
+  (cond
+    [(find-executable-path "pbpaste") => (lambda (p) (list p 'pbpaste))]
+    [(and wayland? (find-executable-path "wl-paste"))
+     => (lambda (p) (list p 'wl-paste))]
+    [(and x11? (find-executable-path "xclip"))
+     => (lambda (p) (list p 'xclip))]
+    [(and x11? (find-executable-path "xsel"))
+     => (lambda (p) (list p 'xsel))]
+    [(find-executable-path "wl-paste") => (lambda (p) (list p 'wl-paste))]
+    [(find-executable-path "xclip")   => (lambda (p) (list p 'xclip))]
+    [(find-executable-path "xsel")    => (lambda (p) (list p 'xsel))]
+    [else #f]))
+
+;; Read text from system clipboard.
+;; Returns: string or #f on failure.
+(define (clipboard-paste)
+  (define tool (detect-paste-tool))
+  (if (not tool)
+      #f
+      (with-handlers ([exn:fail? (lambda (e) #f)])
+        (define tool-path (car tool))
+        (define tool-name (cadr tool))
+        (define args
+          (case tool-name
+            [(pbcopy pbpaste) '()]
+            [(wl-copy wl-paste) '()]
+            [(xclip)  '("-selection" "clipboard" "-o")]
+            [(xsel)   '("--clipboard" "--output")]
+            [else '()]))
+        (define-values (sp out in err)
+          (apply subprocess #f #f #f tool-path args))
+        (dynamic-wind
+          (lambda () (void))
+          (lambda ()
+            (close-output-port in)
+            (define result (port->string out))
+            (close-input-port out)
+            (close-input-port err)
+            (subprocess-wait sp)
+            (if (= (subprocess-status sp) 0)
+                (string-trim result "\r\n")
+                #f))
+          (lambda ()
+            (close-input-port out)
+            (close-input-port err))))))

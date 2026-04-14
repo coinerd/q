@@ -132,6 +132,11 @@
 (define (display-col->string-offset s col)
   (let loop ([i 0] [display-pos 0])
     (cond
-      [(>= display-pos col) i]
       [(>= i (string-length s)) (string-length s)]
-      [else (loop (+ i 1) (+ display-pos (char-width (string-ref s i))))])))
+      [(>= display-pos col) i]
+      [else
+       (define w (char-width (string-ref s i)))
+       (define next-pos (+ display-pos w))
+       (if (> next-pos col)
+           i  ;; col falls inside this wide char — snap to its start
+           (loop (+ i 1) next-pos))])))
