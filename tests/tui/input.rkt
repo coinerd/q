@@ -369,14 +369,14 @@
    ;; ============================================================
 
    (test-case "input-visible-window: short text fits in window"
-     (define st (input-state "hello" 3 '() #f #f 0))
+     (define st (input-state "hello" 3 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 80))
      (check-equal? vis "hello")
      (check-equal? offset 0)
      (check-equal? cursor-col (+ INPUT-PROMPT-WIDTH 3)))
 
    (test-case "input-visible-window: cursor at end fits"
-     (define st (input-state "hello" 5 '() #f #f 0))
+     (define st (input-state "hello" 5 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 80))
      (check-equal? vis "hello")
      (check-equal? offset 0)
@@ -385,7 +385,7 @@
    (test-case "input-visible-window: long text scrolls right"
      ;; 30 chars, 20-col terminal -> visible width = 16
      (define buf (make-string 30 #\x))
-     (define st (input-state buf 30 '() #f #f 0))
+     (define st (input-state buf 30 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 20))
      (check-equal? offset 14)  ;; 30 - 17 + 1
      (check-equal? (string-length vis) 16)
@@ -394,14 +394,14 @@
    (test-case "input-visible-window: scroll follows cursor left"
      ;; Start scrolled to end, cursor moves to beginning
      (define buf (make-string 30 #\x))
-     (define st (input-state buf 0 '() #f #f 20))  ;; cursor=0, offset=20
+     (define st (input-state buf 0 '() #f #f 20 '() '() '()))  ;; cursor=0, offset=20
      (define-values (vis offset cursor-col) (input-visible-window st 20))
      (check-equal? offset 0)  ;; offset adjusts to show cursor at 0
      (check-equal? cursor-col INPUT-PROMPT-WIDTH))
 
    (test-case "input-visible-window: cursor in middle of long text"
      (define buf (make-string 50 #\x))
-     (define st (input-state buf 25 '() #f #f 0))  ;; cursor=25
+     (define st (input-state buf 25 '() #f #f 0 '() '() '()))  ;; cursor=25
      (define-values (vis offset cursor-col) (input-visible-window st 20))
      ;; Visible width = 17, cursor at 25
      ;; offset should be 25-17+1 = 9
@@ -419,20 +419,20 @@
 
    (test-case "input-visible-window: very narrow terminal"
      (define buf "abc")
-     (define st (input-state buf 1 '() #f #f 0))
+     (define st (input-state buf 1 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 5))
      ;; Width 5, prompt 4 -> visible = 1 char
      (check-true (>= (string-length vis) 1))
      (check-true (>= cursor-col INPUT-PROMPT-WIDTH)))
 
    (test-case "input-state scroll-offset preserved after cursor-right"
-     (define st (input-state "hello" 3 '() #f #f 0))
+     (define st (input-state "hello" 3 '() #f #f 0 '() '() '()))
      (define moved (input-cursor-right st))
      (check-equal? (input-state-cursor moved) 4)
      (check-equal? (input-state-scroll-offset moved) 0))
 
    (test-case "input-state scroll-offset preserved after cursor-left"
-     (define st (input-state "hello" 3 '() #f #f 0))
+     (define st (input-state "hello" 3 '() #f #f 0 '() '() '()))
      (define moved (input-cursor-left st))
      (check-equal? (input-state-cursor moved) 2)
      (check-equal? (input-state-scroll-offset moved) 0))
@@ -501,7 +501,7 @@
    ;; ============================================================
 
    (test-case "input-visible-window: CJK text fits in window"
-     (define st (input-state "你好" 2 '() #f #f 0))
+     (define st (input-state "你好" 2 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 80))
      (check-equal? vis "你好")
      (check-equal? offset 0)
@@ -511,7 +511,7 @@
    (test-case "input-visible-window: CJK text scrolls"
      ;; 10 CJK chars = 20 visible cols, terminal 12 cols
      (define buf "一二三四五六七八九十")
-     (define st (input-state buf 10 '() #f #f 0))
+     (define st (input-state buf 10 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 12))
      (check-true (> offset 0) "offset should be positive to show cursor")
      (check-true (< (string-visible-width vis) 20) "visible text < full width")
@@ -521,7 +521,7 @@
 
    (test-case "input-visible-window: mixed ASCII+CJK"
      ;; hello你好 = 5+4 = 9 visible cols
-     (define st (input-state "hello你好" 7 '() #f #f 0))
+     (define st (input-state "hello你好" 7 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 20))
      (check-equal? vis "hello你好")
      (check-equal? offset 0)
@@ -530,17 +530,156 @@
 
    (test-case "input-visible-window: cursor before wide char"
      ;; cursor at 0, buffer starts with CJK
-     (define st (input-state "你好世界" 0 '() #f #f 0))
+     (define st (input-state "你好世界" 0 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 80))
      (check-equal? offset 0)
      (check-equal? cursor-col INPUT-PROMPT-WIDTH))
 
    (test-case "input-visible-window: long CJK scrolls when cursor at end"
      (define buf "一二三四五六七八九十")
-     (define st (input-state buf 10 '() #f #f 0))
+     (define st (input-state buf 10 '() #f #f 0 '() '() '()))
      (define-values (vis offset cursor-col) (input-visible-window st 10))
      (check-true (> offset 0) "should scroll right")
      (check-true (< cursor-col 10) "cursor should be within terminal width"))
+
+   ;; ============================================================
+   ;; Undo / Redo (Issue #396)
+   ;; ============================================================
+
+   (test-case "undo restores previous state"
+     (define st0 (initial-input-state))
+     (define st1 (input-insert-char st0 #\h))
+     (define st2 (input-insert-char st1 #\i))
+     (check-equal? (input-state-buffer st2) "hi")
+     (define st3 (input-undo st2))
+     (check-equal? (input-state-buffer st3) "h")
+     (check-equal? (input-state-cursor st3) 1))
+
+   (test-case "undo twice restores earlier state"
+     (define st0 (initial-input-state))
+     (define st1 (input-insert-char st0 #\a))
+     (define st2 (input-insert-char st1 #\b))
+     (define st3 (input-insert-char st2 #\c))
+     (define st4 (input-undo (input-undo st3)))
+     (check-equal? (input-state-buffer st4) "a"))
+
+   (test-case "redo restores undone state"
+     (define st0 (initial-input-state))
+     (define st1 (input-insert-char st0 #\x))
+     (define st2 (input-insert-char st1 #\y))
+     (define st3 (input-undo st2))
+     (check-equal? (input-state-buffer st3) "x")
+     (define st4 (input-redo st3))
+     (check-equal? (input-state-buffer st4) "xy"))
+
+   (test-case "new edit clears redo stack"
+     (define st0 (initial-input-state))
+     (define st1 (input-insert-char st0 #\a))
+     (define st2 (input-insert-char st1 #\b))
+     (define st3 (input-undo st2))
+     (define st4 (input-insert-char st3 #\c))
+     (define st5 (input-redo st4))
+     ;; redo stack was cleared by new edit, so redo does nothing
+     (check-equal? (input-state-buffer st5) "ac"))
+
+   (test-case "undo on empty stack does nothing"
+     (define st (input-undo (initial-input-state)))
+     (check-equal? (input-state-buffer st) ""))
+
+   (test-case "redo on empty stack does nothing"
+     (define st (input-redo (initial-input-state)))
+     (check-equal? (input-state-buffer st) ""))
+
+   ;; ============================================================
+   ;; Kill ring (Issue #397)
+   ;; ============================================================
+
+   (test-case "kill-to-end removes text after cursor"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello"] [cursor 2]))
+     (define st2 (input-kill-to-end st))
+     (check-equal? (input-state-buffer st2) "he")
+     (check-equal? (input-state-kill-ring st2) '("llo")))
+
+   (test-case "kill-to-beginning removes text before cursor"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello"] [cursor 3]))
+     (define st2 (input-kill-to-beginning st))
+     (check-equal? (input-state-buffer st2) "lo")
+     (check-equal? (input-state-cursor st2) 0)
+     (check-equal? (input-state-kill-ring st2) '("hel")))
+
+   (test-case "kill-word-backward removes previous word"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello world"] [cursor 11]))
+     (define st2 (input-kill-word-backward st))
+     (check-equal? (input-state-buffer st2) "hello ")
+     (check-equal? (input-state-kill-ring st2) '("world")))
+
+   (test-case "yank inserts top of kill ring"
+     ;; Kill from middle
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello world"] [cursor 5]))
+     (define st2 (input-kill-to-end st))
+     (check-equal? (input-state-buffer st2) "hello")
+     (check-equal? (input-state-kill-ring st2) '(" world"))
+     ;; Yank at end
+     (define st3 (input-yank st2))
+     (check-equal? (input-state-buffer st3) "hello world"))
+
+   (test-case "yank on empty kill ring does nothing"
+     (define st (input-yank (initial-input-state)))
+     (check-equal? (input-state-buffer st) ""))
+
+   ;; ============================================================
+   ;; Word navigation (Issue #398)
+   ;; ============================================================
+
+   (test-case "cursor-word-left skips word"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello world"] [cursor 11]))
+     (define st2 (input-cursor-word-left st))
+     (check-equal? (input-state-cursor st2) 6))
+
+   (test-case "cursor-word-left from middle of word"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello world"] [cursor 8]))
+     (define st2 (input-cursor-word-left st))
+     (check-equal? (input-state-cursor st2) 6))
+
+   (test-case "cursor-word-right skips word"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello world"] [cursor 0]))
+     (define st2 (input-cursor-word-right st))
+     (check-equal? (input-state-cursor st2) 5))
+
+   (test-case "cursor-word-right from space"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello world"] [cursor 5]))
+     (define st2 (input-cursor-word-right st))
+     (check-equal? (input-state-cursor st2) 11))
+
+   (test-case "cursor-word-left at beginning does nothing"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello"] [cursor 0]))
+     (check-equal? (input-state-cursor (input-cursor-word-left st)) 0))
+
+   (test-case "cursor-word-right at end does nothing"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello"] [cursor 5]))
+     (check-equal? (input-state-cursor (input-cursor-word-right st)) 5))
+
+   ;; ============================================================
+   ;; Insert string / paste (Issue #399)
+   ;; ============================================================
+
+   (test-case "input-insert-string inserts at cursor"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello"] [cursor 5]))
+     (define st2 (input-insert-string st " world"))
+     (check-equal? (input-state-buffer st2) "hello world")
+     (check-equal? (input-state-cursor st2) 11))
+
+   (test-case "input-insert-string in middle"
+     (define st (struct-copy input-state (initial-input-state) [buffer "helo"] [cursor 2]))
+     (define st2 (input-insert-string st "l"))
+     (check-equal? (input-state-buffer st2) "hello")
+     (check-equal? (input-state-cursor st2) 3))
+
+   (test-case "input-insert-string empty does nothing"
+     (define st (struct-copy input-state (initial-input-state) [buffer "hello"] [cursor 3]))
+     (define st2 (input-insert-string st ""))
+     (check-equal? (input-state-buffer st2) "hello")
+     (check-equal? (input-state-cursor st2) 3))
    ))
 
 (run-tests input-tests)

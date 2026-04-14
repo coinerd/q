@@ -23,6 +23,7 @@
          "../tui/input.rkt"
          "../tui/render.rkt"
          "../tui/layout.rkt"
+         "../tui/clipboard.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          (prefix-in commands: "../tui/commands.rkt"))
@@ -44,8 +45,19 @@
          copy-selection!
          current-clipboard-mode
          clipboard-backend-available?
+         clipboard-paste
          ;; ── Re-exports from tui/render.rkt ──
-         styled-line->text)
+         styled-line->text
+         ;; ── Re-exports from tui/input.rkt ──
+         input-undo
+         input-redo
+         input-kill-word-backward
+         input-kill-to-beginning
+         input-kill-to-end
+         input-yank
+         input-cursor-word-left
+         input-cursor-word-right
+         input-insert-string)
 
 ;; ============================================================
 ;; TUI context
@@ -245,6 +257,36 @@
         (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
         'continue]
        [(escape) 'continue]
+       ;; Undo/Redo
+       [(ctrl-z)
+        (set-box! (tui-ctx-input-state-box ctx) (input-undo inp))
+        'continue]
+       [(ctrl-y)
+        (set-box! (tui-ctx-input-state-box ctx) (input-redo inp))
+        'continue]
+       ;; Kill ring
+       [(ctrl-w)
+        (set-box! (tui-ctx-input-state-box ctx) (input-kill-word-backward inp))
+        'continue]
+       [(ctrl-u)
+        (set-box! (tui-ctx-input-state-box ctx) (input-kill-to-beginning inp))
+        'continue]
+       [(ctrl-k)
+        (set-box! (tui-ctx-input-state-box ctx) (input-kill-to-end inp))
+        'continue]
+       ;; Paste from system clipboard
+       [(ctrl-v)
+        (define text (clipboard-paste))
+        (when text
+          (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text)))
+        'continue]
+       ;; Word navigation
+       [(ctrl-left)
+        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-left inp))
+        'continue]
+       [(ctrl-right)
+        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-right inp))
+        'continue]
        [(page-up pgup kp-pgup)
         ;; Page up: scroll by one viewport height (page)
         (define-values (_cols rows) (tui-screen-size))

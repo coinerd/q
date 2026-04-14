@@ -28,6 +28,23 @@
          input-end
          input-clear
 
+         ;; Undo/Redo
+         input-undo
+         input-redo
+
+         ;; Kill ring
+         input-kill-word-backward
+         input-kill-to-beginning
+         input-kill-to-end
+         input-yank
+
+         ;; Word navigation
+         input-cursor-word-left
+         input-cursor-word-right
+
+         ;; Paste (insert string)
+         input-insert-string
+
          ;; History
          input-history-push
          input-history-up
@@ -57,6 +74,12 @@
          ;; X10 mouse decoding
          decode-mouse-x10)
 
+;; Maximum undo stack depth
+(define MAX-UNDO-STACK 100)
+
+;; Maximum kill ring entries
+(define MAX-KILL-RING 10)
+
 ;; Input state
 (struct input-state
         (buffer ; string — current input text
@@ -65,18 +88,56 @@
          history-idx ; integer or #f — current position in history (#f = not browsing)
          saved-text ; string or #f — text saved when entering history browsing
          scroll-offset ; integer — horizontal scroll offset for long inputs
+         undo-stack ; (listof input-state) — prior states for undo (max MAX-UNDO-STACK)
+         redo-stack ; (listof input-state) — undone states for redo
+         kill-ring ; (listof string) — killed text ring (max MAX-KILL-RING)
          )
   #:transparent)
 
 (define (initial-input-state)
-  (input-state "" 0 '() #f #f 0))
+  (input-state "" 0 '() #f #f 0 '() '() '()))
+
+;; Push old-st onto undo stack of new-st, clear redo stack.
+;; Returns new-st with updated undo/redo stacks.
+(define (push-undo old-st new-st)
+  (define stack (cons (strip-for-undo old-st) (input-state-undo-stack new-st)))
+  (struct-copy input-state
+               new-st
+               [undo-stack
+                (if (> (length stack) MAX-UNDO-STACK)
+                    (take stack MAX-UNDO-STACK)
+                    stack)]
+               [redo-stack '()]))
+
+;; Strip history/undo/redo/kill for undo snapshots (avoid unbounded nesting).
+(define (strip-for-undo st)
+  (struct-copy input-state
+               st
+               [history '()]
+               [history-idx #f]
+               [saved-text #f]
+               [undo-stack '()]
+               [redo-stack '()]
+               [kill-ring '()]))
+
+;; Push text onto kill ring
+(define (push-kill st text)
+  (if (string=? text "")
+      st
+      (let ([ring (cons text (input-state-kill-ring st))])
+        (struct-copy input-state
+                     st
+                     [kill-ring
+                      (if (> (length ring) MAX-KILL-RING)
+                          (take ring MAX-KILL-RING)
+                          ring)]))))
 
 ;; Editing operations
 (define (input-insert-char st ch)
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (define new-buf (string-append (substring buf 0 cur) (string ch) (substring buf cur)))
-  (struct-copy input-state st [buffer new-buf] [cursor (+ cur 1)]))
+  (push-undo st (struct-copy input-state st [buffer new-buf] [cursor (+ cur 1)])))
 
 (define (input-backspace st)
   (define buf (input-state-buffer st))
@@ -84,8 +145,7 @@
   (if (zero? cur)
       st
       (let ([new-buf (string-append (substring buf 0 (- cur 1)) (substring buf cur))])
-        (struct-copy input-state st [buffer new-buf] [cursor (- cur 1)]))))
-
+        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor (- cur 1)])))))
 ;; Visible input width helper — prompt takes 4 columns ("q> ")
 (define INPUT-PROMPT-WIDTH 3)
 
@@ -100,8 +160,7 @@
   (define max-visible (max 1 (- cols INPUT-PROMPT-WIDTH)))
   ;; Compute visible width from offset to cursor
   (define cursor-offset-width
-    (if (or (>= offset (string-length buf))
-            (< cur offset))
+    (if (or (>= offset (string-length buf)) (< cur offset))
         0
         (string-visible-width (substring buf offset cur))))
   ;; Compute total visible width from offset to end
@@ -113,13 +172,11 @@
   (define new-offset
     (cond
       ;; Cursor is before current offset
-      [(< cur offset)
-       ;; Walk backward from offset to find a new offset
-       ;; that places cursor at or near the left edge
-       (find-offset-for-cursor buf cur max-visible)]
+      ;; Walk backward from offset to find a new offset
+      ;; that places cursor at or near the left edge
+      [(< cur offset) (find-offset-for-cursor buf cur max-visible)]
       ;; Cursor's visible width from offset exceeds max-visible
-      [(> cursor-offset-width max-visible)
-       (find-offset-for-cursor buf cur max-visible)]
+      [(> cursor-offset-width max-visible) (find-offset-for-cursor buf cur max-visible)]
       [else offset]))
   (define clamped-offset (max 0 (min new-offset (string-length buf))))
   ;; Find end position: advance from clamped-offset until visible width > max-visible
@@ -170,17 +227,18 @@
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (define new-buf (string-append (substring buf 0 cur) "\n" (substring buf cur)))
-  (struct-copy input-state st [buffer new-buf] [cursor (add1 cur)] [history-idx #f]))
+  (push-undo st (struct-copy input-state st [buffer new-buf] [cursor (add1 cur)] [history-idx #f])))
 
 (define (input-delete st)
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (if (>= cur (string-length buf))
       st
-      (struct-copy input-state
-                   st
-                   [buffer (string-append (substring buf 0 cur) (substring buf (+ cur 1)))]
-                   [cursor cur])))
+      (push-undo st
+                 (struct-copy input-state
+                              st
+                              [buffer (string-append (substring buf 0 cur) (substring buf (+ cur 1)))]
+                              [cursor cur]))))
 
 (define (input-cursor-left st)
   (define cur (input-state-cursor st))
@@ -202,7 +260,7 @@
   (struct-copy input-state st [cursor (string-length (input-state-buffer st))]))
 
 (define (input-clear st)
-  (struct-copy input-state st [buffer ""] [cursor 0]))
+  (push-undo st (struct-copy input-state st [buffer ""] [cursor 0])))
 
 ;; History
 (define (input-history-push st text)
@@ -280,6 +338,159 @@
 
 (define (input-empty? st)
   (string=? (input-state-buffer st) ""))
+
+;; ============================================================
+;; Undo / Redo
+;; ============================================================
+
+(define (input-undo st)
+  (define stack (input-state-undo-stack st))
+  (if (null? stack)
+      st
+      (let* ([prev (car stack)]
+             [rest (cdr stack)]
+             ;; Push current (stripped) onto redo stack
+             [redo (cons (strip-for-undo st) (input-state-redo-stack st))])
+        ;; Restore buffer/cursor from undo snapshot, keeping current
+        ;; history/kill-ring/etc
+        (struct-copy input-state
+                     st
+                     [buffer (input-state-buffer prev)]
+                     [cursor (input-state-cursor prev)]
+                     [undo-stack rest]
+                     [redo-stack redo]))))
+
+(define (input-redo st)
+  (define stack (input-state-redo-stack st))
+  (if (null? stack)
+      st
+      (let* ([next (car stack)]
+             [rest (cdr stack)]
+             [undo (cons (strip-for-undo st) (input-state-undo-stack st))])
+        (struct-copy input-state
+                     st
+                     [buffer (input-state-buffer next)]
+                     [cursor (input-state-cursor next)]
+                     [undo-stack undo]
+                     [redo-stack rest]))))
+
+;; ============================================================
+;; Kill ring
+;; ============================================================
+
+;; Kill the word before the cursor (backward).
+;; Deletes from cursor back to the start of the previous word.
+(define (input-kill-word-backward st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (if (zero? cur)
+      st
+      (let* ([killed-end cur]
+             [killed-start (find-word-start-backward buf cur)])
+        (define killed-text (substring buf killed-start killed-end))
+        (define new-buf (string-append (substring buf 0 killed-start) (substring buf killed-end)))
+        (push-undo st (push-kill (struct-copy input-state st [buffer new-buf] [cursor killed-start])
+                              killed-text)))))
+
+;; Kill from cursor to beginning of line.
+(define (input-kill-to-beginning st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (if (zero? cur)
+      st
+      (let* ([killed-text (substring buf 0 cur)]
+             [new-buf (substring buf cur)])
+        (push-undo st (push-kill (struct-copy input-state st [buffer new-buf] [cursor 0])
+                              killed-text)))))
+
+;; Kill from cursor to end of line/buffer.
+(define (input-kill-to-end st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (if (>= cur (string-length buf))
+      st
+      (let* ([killed-text (substring buf cur)]
+             [new-buf (substring buf 0 cur)])
+        (push-undo st (push-kill (struct-copy input-state st [buffer new-buf] [cursor cur])
+                              killed-text)))))
+
+;; Yank (insert) top of kill ring at cursor.
+(define (input-yank st)
+  (define ring (input-state-kill-ring st))
+  (if (null? ring)
+      st
+      (input-insert-string st (car ring))))
+
+;; ============================================================
+;; Word navigation
+;; ============================================================
+
+;; Find the start of the previous word (going backward from pos).
+;; Skips whitespace, then skips word chars.
+(define (find-word-start-backward buf pos)
+  (let loop ([i (sub1 pos)]
+             [skipping-ws #t])
+    (cond
+      [(< i 0) 0]
+      [skipping-ws
+       (if (char-whitespace? (string-ref buf i))
+           (loop (sub1 i) #t)
+           (loop i #f))]
+      [else
+       (if (char-whitespace? (string-ref buf i))
+           (add1 i)
+           (if (zero? i)
+               0
+               (loop (sub1 i) #f)))])))
+
+;; Find the end of the next word (going forward from pos).
+;; Skips word chars, then skips whitespace.
+(define (find-word-end-forward buf pos)
+  (define len (string-length buf))
+  (let loop ([i pos])
+    (cond
+      [(>= i len) len]
+      [(char-whitespace? (string-ref buf i)) i]
+      [else (loop (add1 i))])))
+
+(define (input-cursor-word-left st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (if (zero? cur)
+      st
+      (struct-copy input-state st [cursor (find-word-start-backward buf cur)])))
+
+(define (skip-whitespace-forward buf pos)
+  (define len (string-length buf))
+  (let loop ([i pos])
+    (cond
+      [(>= i len) len]
+      [(char-whitespace? (string-ref buf i)) (loop (add1 i))]
+      [else i])))
+
+(define (input-cursor-word-right st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (if (>= cur (string-length buf))
+      st
+      (let* ([after-space (skip-whitespace-forward buf cur)]
+             [word-end (find-word-end-forward buf after-space)])
+        (struct-copy input-state st [cursor word-end]))))
+
+;; ============================================================
+;; Paste / Insert string
+;; ============================================================
+
+;; Insert a string at cursor position (for paste operations).
+;; Single undo entry for the entire paste.
+(define (input-insert-string st text)
+  (if (string=? text "")
+      st
+      (let* ([buf (input-state-buffer st)]
+             [cur (input-state-cursor st)]
+             [new-buf (string-append (substring buf 0 cur) text (substring buf cur))])
+        (push-undo st
+         (struct-copy input-state st [buffer new-buf] [cursor (+ cur (string-length text))])))))
 
 ;; ============================================================
 ;; Mouse event support
