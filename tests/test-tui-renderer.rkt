@@ -99,7 +99,7 @@
 (define (run-render-frame! ubuf state input-st layout)
   (parameterize ([current-ubuf-clear mock-ubuf-clear!]
                  [current-ubuf-putstring mock-ubuf-putstring!])
-    (define-values (cc cr _st) (render-frame! ubuf state input-st layout))
+    (define-values (cc cr _st _frame-lines) (render-frame! ubuf state input-st layout))
     (values cc cr)))
 
 ;; ============================================================

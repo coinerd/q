@@ -64,6 +64,7 @@
          term-box ; (boxof any) — terminal instance for tui-term
          ubuf-box ; (boxof any) — ubuf buffer for output
          model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
+         previous-frame-box ; (boxof (or/c (listof string) #f)) — last rendered frame for diffing
          )
   #:transparent)
 
@@ -81,7 +82,8 @@
            (box #t) ; needs-redraw: #t for first frame
            (box #f) ; term-box - set when terminal opened
            (box #f) ; ubuf-box - set when buffer created
-           (box reg))) ; model-registry-box
+           (box reg) ; model-registry-box
+           (box #f))) ; previous-frame-box - #f means no previous frame
 
 ;; ============================================================
 ;; mark-dirty!
