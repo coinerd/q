@@ -176,12 +176,11 @@
   (define ubuf-clear! (current-ubuf-clear))
   (define ubuf-putstring! (current-ubuf-putstring))
 
-  ;; ubuf is 0-indexed, layout rows are 1-indexed.
-  ;; Convert all row numbers to 0-indexed for ubuf calls.
-  (define header-y (- header-row 1))
-  (define trans-y (- transcript-start-row 1))
-  (define status-y (- status-row 1))
-  (define input-y (- input-row 1))
+  ;; Layout rows are 0-based, matching ubuf's 0-based indexing.
+  (define header-y header-row)
+  (define trans-y transcript-start-row)
+  (define status-y status-row)
+  (define input-y input-row)
 
   ;; 1. Clear the buffer
   (ubuf-clear! ubuf)

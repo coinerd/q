@@ -113,10 +113,10 @@
          (define-values (all-lines _state*) (render-transcript state trans-height cols))
          ;; Map screen rows to line indices (screen row → rendered line index)
          ;; Mouse y is 0-based: row 0 = header, row 1 = first transcript line.
-         ;; trans-y is 1-based: value 2 means transcript starts at screen row 1 (0-based).
-         ;; So: line-index = screen-row - (trans-y - 1)
-         (define start-idx (max 0 (- start-row (sub1 trans-y))))
-         (define end-idx (min (sub1 (length all-lines)) (- end-row (sub1 trans-y))))
+         ;; trans-y is now 0-based: value 1 means transcript starts at screen row 1.
+         ;; So: line-index = screen-row - trans-y
+         (define start-idx (max 0 (- start-row trans-y)))
+         (define end-idx (min (sub1 (length all-lines)) (- end-row trans-y)))
          (if (> start-idx end-idx)
              ""
              (string-join
