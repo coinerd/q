@@ -29,6 +29,18 @@
          tui-theme-selection-bg
          tui-theme-input-prompt
          tui-theme-border
+         tui-theme-md-code-block-border
+         tui-theme-md-quote-border
+         tui-theme-tool-diff-added
+         tui-theme-tool-diff-removed
+         tui-theme-tool-diff-context
+         tui-theme-syntax-comment
+         tui-theme-syntax-keyword
+         tui-theme-syntax-string
+         tui-theme-syntax-number
+         tui-theme-thinking-indicator
+         tui-theme-border-accent
+         tui-theme-border-muted
          default-dark-theme
          default-light-theme
          current-tui-theme
@@ -65,7 +77,20 @@
               status-bg
               selection-bg
               input-prompt
-              border)
+              border
+              ;; New fields (#468)
+              md-code-block-border
+              md-quote-border
+              tool-diff-added
+              tool-diff-removed
+              tool-diff-context
+              syntax-comment
+              syntax-keyword
+              syntax-string
+              syntax-number
+              thinking-indicator
+              border-accent
+              border-muted)
   #:transparent)
 
 ;; Default dark theme — matches original hardcoded colors
@@ -94,6 +119,19 @@
              'cyan ; selection-bg
              'cyan ; input-prompt
              'bright-black ; border
+             ;; New fields (#468)
+             'bright-black ; md-code-block-border
+             'cyan ; md-quote-border
+             'green ; tool-diff-added
+             'red ; tool-diff-removed
+             'bright-black ; tool-diff-context
+             'bright-black ; syntax-comment
+             'magenta ; syntax-keyword
+             'bright-green ; syntax-string
+             'yellow ; syntax-number
+             'cyan ; thinking-indicator
+             'cyan ; border-accent
+             'bright-black ; border-muted
              ))
 
 ;; Default light theme
@@ -118,6 +156,19 @@
              'cyan ; selection-bg
              'blue ; input-prompt
              'bright-black ; border
+             ;; New fields (#468)
+             'bright-black ; md-code-block-border
+             'blue ; md-quote-border
+             'green ; tool-diff-added
+             'red ; tool-diff-removed
+             'bright-black ; tool-diff-context
+             'bright-black ; syntax-comment
+             'magenta ; syntax-keyword
+             'green ; syntax-string
+             'yellow ; syntax-number
+             'blue ; thinking-indicator
+             'blue ; border-accent
+             'bright-black ; border-muted
              ))
 
 ;; Current theme parameter
@@ -148,6 +199,19 @@
     [(selection-bg) (tui-theme-selection-bg theme)]
     [(input-prompt) (tui-theme-input-prompt theme)]
     [(border) (tui-theme-border theme)]
+    ;; New fields (#468)
+    [(md-code-block-border) (tui-theme-md-code-block-border theme)]
+    [(md-quote-border) (tui-theme-md-quote-border theme)]
+    [(tool-diff-added) (tui-theme-tool-diff-added theme)]
+    [(tool-diff-removed) (tui-theme-tool-diff-removed theme)]
+    [(tool-diff-context) (tui-theme-tool-diff-context theme)]
+    [(syntax-comment) (tui-theme-syntax-comment theme)]
+    [(syntax-keyword) (tui-theme-syntax-keyword theme)]
+    [(syntax-string) (tui-theme-syntax-string theme)]
+    [(syntax-number) (tui-theme-syntax-number theme)]
+    [(thinking-indicator) (tui-theme-thinking-indicator theme)]
+    [(border-accent) (tui-theme-border-accent theme)]
+    [(border-muted) (tui-theme-border-muted theme)]
     [else #f]))
 
 ;; Convert a theme color value to an SGR foreground parameter string.

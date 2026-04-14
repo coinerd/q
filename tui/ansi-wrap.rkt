@@ -4,6 +4,11 @@
 ;;
 ;; Wraps text that may contain ANSI/SGR escape sequences.
 ;; Escape sequences have zero visual width and should not be broken.
+;;
+;; NOTE: The main render pipeline uses styled-line structs (not raw ANSI
+;; strings), so this module is not called from render.rkt. It is kept as a
+;; utility for extensions, external consumers, or future ANSI-text paths.
+;; Verified to compile and pass tests (#469).
 
 (require racket/string
          "char-width.rkt")
