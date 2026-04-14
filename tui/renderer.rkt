@@ -133,6 +133,15 @@
       [(magenta) (set! fg-color 5)]
       [(cyan) (set! fg-color 6)]
       [(white) (set! fg-color 7)]
+      ;; Bright colors use 8-bit: 8=bright-black, 9=bright-red, etc.
+      [(bright-black) (set! fg-color 8)]
+      [(bright-red) (set! fg-color 9)]
+      [(bright-green) (set! fg-color 10)]
+      [(bright-yellow) (set! fg-color 11)]
+      [(bright-blue) (set! fg-color 12)]
+      [(bright-magenta) (set! fg-color 13)]
+      [(bright-cyan) (set! fg-color 14)]
+      [(bright-white) (set! fg-color 15)]
       [else (void)]))
   ;; Collect kw/val pairs — only include non-defaults
   (define pairs '())
