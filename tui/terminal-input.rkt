@@ -99,7 +99,7 @@
         (string-ref str 0)
         (integer->char 0))))
 
-;; UTF-8 accumulator state
+;; UTF-8 accumulator state (uses cons + reverse for O(1) push, #453)
 (define utf8-accumulator (list))
 
 ;; Reset the accumulator
@@ -115,17 +115,17 @@
 ;;   - #f if the sequence is incomplete (need more bytes)
 ;;   - char? if the sequence is complete and decoded
 (define (utf8-accumulate-char ch)
-  (set! utf8-accumulator (append utf8-accumulator (list ch)))
-  (define lead (car utf8-accumulator))
-  (define total (utf8-lead-byte-count (char->integer lead)))
+  (set! utf8-accumulator (cons ch utf8-accumulator))  ; O(1) cons
   (define n (length utf8-accumulator))
+  ;; The lead byte is the last element (was first pushed, now at end of cons list)
+  (define lead-byte (char->integer (list-ref utf8-accumulator (- n 1))))
+  (define expected (utf8-lead-byte-count lead-byte))
   (cond
-    [(>= n total)
-     ;; Complete sequence — decode
-     (define decoded (reassemble-utf8-chars utf8-accumulator))
+    [(>= n expected)
+     ;; Complete sequence — reverse and decode
+     (define decoded (reassemble-utf8-chars (reverse utf8-accumulator)))
      (set! utf8-accumulator (list))
      decoded]
-    ;; Incomplete — need more bytes
     [else #f]))
 
 ;; ============================================================

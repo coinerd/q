@@ -84,22 +84,29 @@
   (check-true (within-limits? lim #:processes 5))
   (check-false (within-limits? lim #:processes 6)))
 
-(test-case "track-process! increments counter"
-  (parameterize ([current-process-count 0])
-    (track-process!)
-    (check-equal? (current-process-count) 1)
-    (track-process!)
-    (check-equal? (current-process-count) 2)))
+(test-case "track-process! increments counter (#452)"
+  ;; Save/restore box state instead of parameterize
+  (define saved (unbox process-count-box))
+  (set-box! process-count-box 0)
+  (track-process!)
+  (check-equal? (get-process-count) 1)
+  (track-process!)
+  (check-equal? (get-process-count) 2)
+  (set-box! process-count-box saved))
 
-(test-case "untrack-process! decrements counter"
-  (parameterize ([current-process-count 2])
-    (untrack-process!)
-    (check-equal? (current-process-count) 1)))
+(test-case "untrack-process! decrements counter (#452)"
+  (define saved (unbox process-count-box))
+  (set-box! process-count-box 2)
+  (untrack-process!)
+  (check-equal? (get-process-count) 1)
+  (set-box! process-count-box saved))
 
-(test-case "untrack-process! never goes below zero"
-  (parameterize ([current-process-count 0])
-    (untrack-process!)
-    (check-equal? (current-process-count) 0)))
+(test-case "untrack-process! never goes below zero (#452)"
+  (define saved (unbox process-count-box))
+  (set-box! process-count-box 0)
+  (untrack-process!)
+  (check-equal? (get-process-count) 0)
+  (set-box! process-count-box saved))
 
 (test-case "process count over limit fails within-limits?"
   (define lim (exec-limits 10 1000 10000 3))

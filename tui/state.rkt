@@ -25,7 +25,7 @@
          ;; Render cache helpers
          rendered-cache-ref
          rendered-cache-set
-         rendered-cache-clear!
+         rendered-cache-clear
          rendered-cache-invalidate-entry
          rendered-cache-width-valid?
          rendered-cache-set-width
@@ -136,7 +136,7 @@
                [rendered-cache (hash-set (ui-state-rendered-cache state) entry-id lines)]))
 
 ;; Clear the entire render cache and reset width
-(define (rendered-cache-clear! state)
+(define (rendered-cache-clear state)
   (struct-copy ui-state state [rendered-cache (hash)] [rendered-cache-width #f]))
 
 ;; Remove a single entry from the render cache

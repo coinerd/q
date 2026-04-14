@@ -56,12 +56,15 @@
 ;; Set by the runtime from settings; read by LLM providers.
 (define current-http-request-timeout (make-parameter http-request-timeout-default))
 
-;; call-with-request-timeout : thunk [#:timeout seconds] -> any
+;; call-with-request-timeout : thunk [#:timeout seconds #:cleanup thunk] -> any
 ;; Runs thunk in a separate thread with a channel for results;
 ;; kills the thread and raises exn:fail:network:timeout if the
 ;; overall timeout is exceeded.  Used by LLM providers to wrap
 ;; blocking http-sendrecv + body reads.
-(define (call-with-request-timeout thunk #:timeout [timeout-secs (current-http-request-timeout)])
+;; When #:cleanup is provided, it is called on timeout (e.g. to close ports).
+(define (call-with-request-timeout thunk
+                                   #:timeout [timeout-secs (current-http-request-timeout)]
+                                   #:cleanup [cleanup-thunk (lambda () (void))])
   (define ch (make-channel))
   (define th
     (thread
@@ -73,6 +76,7 @@
   (cond
     [(eq? result #f)
      (kill-thread th)
+     (with-handlers ([exn:fail? void]) (cleanup-thunk))  ; #454: close ports
      (raise (exn:fail:network:timeout
              (format "HTTP request timeout (~a seconds)" timeout-secs)
              (current-continuation-marks)))]

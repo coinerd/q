@@ -347,7 +347,7 @@
   (define state0
     (if (rendered-cache-width-valid? state width)
         state
-        (rendered-cache-set-width (rendered-cache-clear! state) width)))
+        (rendered-cache-set-width (rendered-cache-clear state) width)))
   ;; Format entries using cache where possible
   (define-values (formatted-lines state1)
     (for/fold ([lines '()]
