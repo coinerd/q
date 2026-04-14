@@ -76,3 +76,27 @@
                     (diff-cmd 'write 4 "e")
                     (diff-cmd 'write 5 "f"))
               "grow by multiple lines yields all writes")
+
+;; ──────────────────────────────
+;; ANSI content in frames (#488)
+;; ──────────────────────────────
+
+;; Style-only changes: same text, different ANSI codes → detected as changed
+(define ansi-frame-a '("\x1b[1;31merror\x1b[0m" "plain" "\x1b[36minfo\x1b[0m"))
+(define ansi-frame-b '("\x1b[1;32merror\x1b[0m" "plain" "\x1b[36minfo\x1b[0m"))
+
+(check-equal? (diff-frames ansi-frame-a ansi-frame-b)
+              (list (diff-cmd 'write 0 "\x1b[1;32merror\x1b[0m"))
+              "style-only change detected (red→green)")
+
+;; ANSI frames identical → no diff
+(check-equal? (diff-frames ansi-frame-a ansi-frame-a)
+              '()
+              "identical ANSI frames yield no diff")
+
+;; Bright-color ANSI content
+(define ansi-bright '("\x1b[90mmuted\x1b[0m"))
+(define ansi-plain '("muted"))
+(check-equal? (diff-frames ansi-bright ansi-plain)
+              (list (diff-cmd 'write 0 "muted"))
+              "bright-color ANSI vs plain text detected")

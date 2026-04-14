@@ -668,6 +668,20 @@
       (check-equal? (styles->sgr '()) ""))
 
     (test-case "styles->sgr: bold cyan"
-      (check-equal? (styles->sgr '(bold cyan)) "\x1b[1;36m"))))
+      (check-equal? (styles->sgr '(bold cyan)) "\x1b[1;36m"))
+
+    ;; Bright color support (SGR 90-97)
+    (test-case "styles->sgr: bright-black"
+      (check-equal? (styles->sgr '(bright-black)) "\x1b[90m"))
+
+    (test-case "styles->sgr: bright-green"
+      (check-equal? (styles->sgr '(bright-green)) "\x1b[92m"))
+
+    (test-case "styles->sgr: bold bright-white"
+      (check-equal? (styles->sgr '(bold bright-white)) "\x1b[1;97m"))
+
+    (test-case "styled-line->ansi: bright color segment"
+      (define sl (styled-line (list (styled-segment "muted text" '(bright-black)))))
+      (check-equal? (styled-line->ansi sl) "\x1b[90mmuted text\x1b[0m"))))
 
 (run-tests cjk-wrapping-tests)

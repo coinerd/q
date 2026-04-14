@@ -132,6 +132,9 @@
         [(dim) 2]
         [(black) 30] [(red) 31] [(green) 32] [(yellow) 33]
         [(blue) 34] [(magenta) 35] [(cyan) 36] [(white) 37]
+        [(bright-black) 90] [(bright-red) 91] [(bright-green) 92]
+        [(bright-yellow) 93] [(bright-blue) 94] [(bright-magenta) 95]
+        [(bright-cyan) 96] [(bright-white) 97]
         [else #f])))
   (define valid (filter values codes))
   (if (null? valid)

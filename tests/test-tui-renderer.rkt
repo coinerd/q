@@ -151,6 +151,26 @@
       (check-not-false (member '#:fg kws) "fg present")
       (check-equal? (list-ref vals (index-of kws '#:fg)) 1 "red fg=1"))
 
+    (test-case "style->ubuf-kws converts bright-black to fg=8"
+      (define-values (kws vals) (style->ubuf-kws '(bright-black)))
+      (check-not-false (member '#:fg kws) "fg keyword present")
+      (check-equal? (list-ref vals (index-of kws '#:fg)) 8 "bright-black fg=8"))
+
+    (test-case "style->ubuf-kws converts bright-green to fg=10"
+      (define-values (kws vals) (style->ubuf-kws '(bright-green)))
+      (check-not-false (member '#:fg kws) "fg keyword present")
+      (check-equal? (list-ref vals (index-of kws '#:fg)) 10 "bright-green fg=10"))
+
+    (test-case "style->ubuf-kws converts bright-white to fg=15"
+      (define-values (kws vals) (style->ubuf-kws '(bright-white)))
+      (check-not-false (member '#:fg kws) "fg keyword present")
+      (check-equal? (list-ref vals (index-of kws '#:fg)) 15 "bright-white fg=15"))
+
+    (test-case "style->ubuf-kws bright-blue overrides dim"
+      (define-values (kws vals) (style->ubuf-kws '(dim bright-blue)))
+      (check-not-false (member '#:fg kws) "fg keyword present")
+      (check-equal? (list-ref vals (index-of kws '#:fg)) 12 "bright-blue fg=12 (overrides dim 8)"))
+
     (test-case "style->ubuf-kws handles empty style list"
       (define-values (kws vals) (style->ubuf-kws '()))
       (check-equal? kws '() "empty styles → no keywords")
