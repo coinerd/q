@@ -6,7 +6,8 @@
 ;; The input-state struct is immutable.
 
 (require racket/string
-         racket/list)
+         racket/list
+         "char-width.rkt")
 
 ;; Structs
 (provide (struct-out input-state)
@@ -89,23 +90,79 @@
 
 ;; Compute the visible window of the buffer given a terminal width.
 ;; Returns (values visible-text scroll-offset cursor-display-col)
-;; scroll-offset is the index of the first visible character.
+;; scroll-offset is the character index of the first visible character.
+;; Uses visible column width (CJK-aware) instead of string-length.
 (define (input-visible-window st cols)
   (define buf (input-state-buffer st))
   (define cur (input-state-cursor st))
   (define offset (input-state-scroll-offset st))
   (define max-visible (max 1 (- cols INPUT-PROMPT-WIDTH)))
+  ;; Compute visible width from offset to cursor
+  (define cursor-offset-width
+    (if (or (>= offset (string-length buf))
+            (< cur offset))
+        0
+        (string-visible-width (substring buf offset cur))))
+  ;; Compute total visible width from offset to end
+  (define buf-remaining-width
+    (if (>= offset (string-length buf))
+        0
+        (string-visible-width (substring buf offset))))
   ;; Adjust offset so cursor is visible
   (define new-offset
     (cond
-      [(< cur offset) cur]
-      [(>= cur (+ offset max-visible)) (+ (- cur max-visible) 1)]
+      ;; Cursor is before current offset
+      [(< cur offset)
+       ;; Walk backward from offset to find a new offset
+       ;; that places cursor at or near the left edge
+       (find-offset-for-cursor buf cur max-visible)]
+      ;; Cursor's visible width from offset exceeds max-visible
+      [(> cursor-offset-width max-visible)
+       (find-offset-for-cursor buf cur max-visible)]
       [else offset]))
   (define clamped-offset (max 0 (min new-offset (string-length buf))))
-  (define end-pos (min (string-length buf) (+ clamped-offset max-visible)))
+  ;; Find end position: advance from clamped-offset until visible width > max-visible
+  (define end-pos (find-end-pos buf clamped-offset max-visible))
   (define visible-text (substring buf clamped-offset end-pos))
-  (define cursor-display-col (+ INPUT-PROMPT-WIDTH (- cur clamped-offset)))
+  (define cursor-display-col
+    (+ INPUT-PROMPT-WIDTH
+       (if (>= clamped-offset cur)
+           0
+           (string-visible-width (substring buf clamped-offset cur)))))
   (values visible-text clamped-offset cursor-display-col))
+
+;; Find a character offset into `buf` such that the visible width from
+;; that offset to `cursor` fits within `max-visible` columns.
+;; The cursor is placed as far right as possible (one column from the edge).
+(define (find-offset-for-cursor buf cursor max-visible)
+  ;; Target: visible width from offset to cursor <= max-visible - 1
+  (define target-width (max 1 (- max-visible 1)))
+  (let loop ([i (min cursor (string-length buf))]
+             [col 0])
+    (cond
+      [(<= i 0) 0]
+      [else
+       (define c (string-ref buf (sub1 i)))
+       (define w (char-width c))
+       (define new-col (+ col w))
+       (if (> new-col target-width)
+           i
+           (loop (sub1 i) new-col))])))
+
+;; Find end position: advance from start-offset until visible width
+;; would exceed max-visible columns.
+(define (find-end-pos buf start-offset max-visible)
+  (let loop ([i start-offset]
+             [col 0])
+    (cond
+      [(>= i (string-length buf)) (string-length buf)]
+      [else
+       (define c (string-ref buf i))
+       (define w (char-width c))
+       (define new-col (+ col w))
+       (if (> new-col max-visible)
+           i
+           (loop (add1 i) new-col))])))
 
 ;; Insert a literal newline at cursor position (for multi-line input)
 (define (input-insert-newline st)

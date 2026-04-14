@@ -4,7 +4,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/input.rkt")
+         "../../../q/tui/input.rkt"
+         "../../../q/tui/char-width.rkt")
 
 (define input-tests
   (test-suite
@@ -494,6 +495,52 @@
             [st2 (input-insert-newline st1)])
        (check-false (input-state-history-idx st2)
                     "insert-newline clears history browsing")))
+
+   ;; ============================================================
+   ;; CJK/wide-char visible window tests (Wave 1: #369)
+   ;; ============================================================
+
+   (test-case "input-visible-window: CJK text fits in window"
+     (define st (input-state "你好" 2 '() #f #f 0))
+     (define-values (vis offset cursor-col) (input-visible-window st 80))
+     (check-equal? vis "你好")
+     (check-equal? offset 0)
+     ;; cursor at char 2, visible width from 0 to 2 = 4 cols
+     (check-equal? cursor-col (+ INPUT-PROMPT-WIDTH 4)))
+
+   (test-case "input-visible-window: CJK text scrolls"
+     ;; 10 CJK chars = 20 visible cols, terminal 12 cols
+     (define buf "一二三四五六七八九十")
+     (define st (input-state buf 10 '() #f #f 0))
+     (define-values (vis offset cursor-col) (input-visible-window st 12))
+     (check-true (> offset 0) "offset should be positive to show cursor")
+     (check-true (< (string-visible-width vis) 20) "visible text < full width")
+     (check-true (and (>= cursor-col INPUT-PROMPT-WIDTH)
+                      (< cursor-col 12))
+                (format "cursor-col ~a should be in prompt..cols" cursor-col)))
+
+   (test-case "input-visible-window: mixed ASCII+CJK"
+     ;; hello你好 = 5+4 = 9 visible cols
+     (define st (input-state "hello你好" 7 '() #f #f 0))
+     (define-values (vis offset cursor-col) (input-visible-window st 20))
+     (check-equal? vis "hello你好")
+     (check-equal? offset 0)
+     ;; cursor at char 7, visible width from 0 to 7 = 5+4 = 9 cols
+     (check-equal? cursor-col (+ INPUT-PROMPT-WIDTH 9)))
+
+   (test-case "input-visible-window: cursor before wide char"
+     ;; cursor at 0, buffer starts with CJK
+     (define st (input-state "你好世界" 0 '() #f #f 0))
+     (define-values (vis offset cursor-col) (input-visible-window st 80))
+     (check-equal? offset 0)
+     (check-equal? cursor-col INPUT-PROMPT-WIDTH))
+
+   (test-case "input-visible-window: long CJK scrolls when cursor at end"
+     (define buf "一二三四五六七八九十")
+     (define st (input-state buf 10 '() #f #f 0))
+     (define-values (vis offset cursor-col) (input-visible-window st 10))
+     (check-true (> offset 0) "should scroll right")
+     (check-true (< cursor-col 10) "cursor should be within terminal width"))
    ))
 
 (run-tests input-tests)
