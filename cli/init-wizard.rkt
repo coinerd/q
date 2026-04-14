@@ -47,16 +47,26 @@
 
   (unless (unbox aborted?)
     ;; Ask for provider
-    (display "Choose provider (openai/anthropic/gemini): " out)
+    (display "Choose provider (openai/anthropic/gemini/openai-compatible): " out)
     (flush-output out)
     (define provider (read-input))
     (cond
-      [(not (member provider '("openai" "anthropic" "gemini")))
-       (displayln "Invalid provider. Choose openai, anthropic, or gemini." out)
+      [(not (member provider '("openai" "anthropic" "gemini" "openai-compatible")))
+       (displayln "Invalid provider. Choose openai, anthropic, gemini, or openai-compatible." out)
        (set-box! aborted? #t)]
       [else
-       ;; Ask for API key
-       (display "API key (will be visible): " out)
+       ;; For openai-compatible, ask for base URL
+       (define base-url
+         (if (string=? provider "openai-compatible")
+             (begin
+               (display "Base URL (e.g. http://localhost:11434/v1): " out)
+               (flush-output out)
+               (let ([url (read-input)])
+                 (if (string=? url "") #f url)))
+             #f))
+
+       ;; Ask for API key (optional for local providers)
+       (display "API key (press Enter if not required): " out)
        (flush-output out)
        (define api-key (read-input))
 
@@ -71,26 +81,44 @@
            [(string=? provider "openai") "gpt-4o"]
            [(string=? provider "anthropic") "claude-3-5-sonnet-20241022"]
            [(string=? provider "gemini") "gemini-2.5-pro"]
+           [(string=? provider "openai-compatible") ""]
            [else ""]))
 
+       ;; The effective provider name for config storage:
+       ;; openai-compatible uses the base URL hostname as provider name
+       ;; so multiple OpenAI-compatible endpoints can coexist.
+       ;; But for the default case, just use "openai-compatible".
+       (define config-provider-name
+         (if (string=? provider "openai-compatible")
+             'openai-compatible
+             (string->symbol provider)))
+
        ;; Build provider config (no secrets)
-       (define provider-hash
-         (make-hash
-          (list
-           (cons 'default-model
-                 (if (and model (not (string=? model "")))
-                     model
-                     default-model)))))
+       (define provider-hash-base
+         (list
+          (cons 'default-model
+                (if (and model (not (string=? model "")))
+                    model
+                    default-model))))
+       ;; Add base-url for openai-compatible providers
+       (define provider-hash-entries
+         (if base-url
+             (cons (cons 'base-url base-url) provider-hash-base)
+             provider-hash-base))
+       (define provider-hash (make-hash provider-hash-entries))
 
        ;; Build non-secret config
        (define config
          (make-hash
           (list
-           (cons 'default-provider provider)
+           (cons 'default-provider
+                 (if (string=? provider "openai-compatible")
+                     "openai-compatible"
+                     provider))
            (cons 'providers
                  (make-hash
                   (list
-                   (cons (string->symbol provider) provider-hash)))))))
+                   (cons config-provider-name provider-hash)))))))
 
        ;; Write config
        (make-directory* config-dir)
@@ -100,7 +128,7 @@
 
        ;; Store API key in dedicated credentials file with restricted permissions (#455)
        (when (and api-key (not (string=? api-key "")))
-         (save-credential-file! provider api-key))
+         (save-credential-file! (symbol->string config-provider-name) api-key))
 
        (displayln "Configuration saved to ~/.q/config.json." out)
        (when (and api-key (not (string=? api-key "")))

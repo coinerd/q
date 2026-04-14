@@ -136,10 +136,19 @@
         (for/list ([m (in-list models-list)])
           (define model-id (extract-model-id m))
           (model-entry model-id prov-name prov-config)))
+      ;; If no explicit models list but a default-model is set,
+      ;; add the default-model as a single entry so it can be resolved.
+      (define effective-entries
+        (if (and (null? entries)
+                 (flex-ref prov-config 'default-model #f))
+            (list (model-entry (flex-ref prov-config 'default-model #f)
+                               prov-name
+                               prov-config))
+            entries))
       ;; Add each model to the index
       (define new-idx
         (for/fold ([i idx])
-                  ([e (in-list entries)])
+                  ([e (in-list effective-entries)])
           (hash-update i (model-entry-name e)
                        (λ (existing) (cons e existing))
                        '())))

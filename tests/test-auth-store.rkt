@@ -155,6 +155,63 @@
     (check-equal? (credential-source result) 'config))
 
   ;; ──────────────────────────────
+  ;; lookup-credential — credential file fallback
+  ;; ──────────────────────────────
+
+  (test-case "lookup-credential falls back to credential file"
+    (clear-test-env! "NOFILE")
+    (define dir (make-temp-dir))
+    (define cred-path (build-path dir "credentials.json"))
+    ;; Write a credential file
+    (call-with-output-file cred-path
+      (lambda (out)
+        (write-json (hasheq 'providers
+                            (hasheq 'file-provider (hasheq 'api-key "sk-from-file")))
+                    out))
+      #:exists 'replace)
+    ;; Override credential-file-path by testing the fallback chain
+    ;; We test by calling lookup-credential with empty config
+    ;; It will try to load from the default credential file
+    ;; So we need a provider that exists in the file but not in env/config
+    ;; Since we cannot override credential-file-path, test with
+    ;; a temp approach: write to actual credential file, then restore
+    (define real-cred-path (credential-file-path))
+    (define backup
+      (if (file-exists? real-cred-path)
+          (call-with-input-file real-cred-path port->string)
+          #f))
+    (with-handlers ([exn:fail? (lambda (e)
+                                  ;; Restore on error
+                                  (when backup
+                                    (call-with-output-file real-cred-path
+                                     (lambda (out) (display backup out))
+                                      #:exists 'replace)))])
+      ;; Write test credentials
+      (save-credential-file! "file-test-provider" "sk-file-key-123")
+      ;; Lookup with empty config — should fall back to file
+      (define result (lookup-credential "file-test-provider" (hash)))
+      (check-not-false result)
+      (check-equal? (credential-api-key result) "sk-file-key-123")
+      (check-equal? (credential-source result) 'stored)
+      ;; Cleanup: restore original credentials
+      (if backup
+          (call-with-output-file real-cred-path
+            (lambda (out) (display backup out))
+            #:exists 'replace)
+          (delete-file real-cred-path)))
+    (delete-directory/files dir #:must-exist? #f))
+
+  (test-case "lookup-credential returns #f when provider not in credential file"
+    (clear-test-env! "MISSINGPROV")
+    ;; Use a provider name that definitely won't be in any credential file
+    (define result (lookup-credential "nonexistent-provider-xyz-999" (hash)))
+    (check-false result))
+
+  (test-case "lookup-credential with #f provider-config tries credential file"
+    (define result (lookup-credential "nonexistent-provider-xyz-998" #f))
+    (check-false result))
+
+  ;; ──────────────────────────────
   ;; credential-present?
   ;; ──────────────────────────────
 

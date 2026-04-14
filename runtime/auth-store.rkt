@@ -104,9 +104,10 @@
 (define (lookup-credential provider-name provider-config)
   ;; Normalize provider-name to string (JSON keys may be symbols)
   (define norm-name (if (symbol? provider-name) (symbol->string provider-name) provider-name))
-  ;; Guard: if provider-config is #f, no credentials possible
+  ;; Guard: if provider-config is #f, try credential file only
   (cond
-    [(not provider-config) #f]
+    [(not provider-config)
+     (credential-from-file norm-name)]
     [else
      (let* ([env-var-name (config-ref provider-config 'api-key-env "api-key-env")]
             [env-val (and env-var-name (getenv env-var-name))])
@@ -115,9 +116,25 @@
           (credential norm-name env-val 'environment)]
          [else
           (let ([config-key (config-ref provider-config 'api-key "api-key")])
-            (if (and config-key (non-empty-string? config-key))
-                (credential norm-name config-key 'config)
-                #f))]))]))
+            (cond
+              [(and config-key (non-empty-string? config-key))
+               (credential norm-name config-key 'config)]
+              [else
+               ;; Fall back to credential file (~/.q/credentials.json)
+               (credential-from-file norm-name)]))]))]))
+
+;; Lookup credential from the dedicated credential file.
+;; Returns #<credential ...> or #f.
+(define (credential-from-file provider-name)
+  (define file-creds (load-credential-file))
+  (define prov-cfg (hash-ref file-creds provider-name #f))
+  (cond
+    [(not prov-cfg) #f]
+    [else
+     (define key (hash-ref prov-cfg 'api-key #f))
+     (if (and key (non-empty-string? key))
+         (credential provider-name key 'stored)
+         #f)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; credential-present?

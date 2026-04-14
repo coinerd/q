@@ -56,6 +56,32 @@
   (check-true (string-contains? output "Invalid provider"))
   (cleanup-config))
 
+(test-case "run-init-wizard accepts openai-compatible provider with base URL"
+  (cleanup-config)
+  (define output (run-wizard-with-input "openai-compatible\nhttp://localhost:11434/v1\n\nllama3\n"))
+  (check-true (string-contains? output "Configuration saved"))
+  (when (config-exists?)
+    (define cfg (read-config))
+    (check-equal? (hash-ref cfg 'default-provider) "openai-compatible")
+    (define providers (hash-ref cfg 'providers))
+    (define compat-cfg (hash-ref providers 'openai-compatible))
+    (check-equal? (hash-ref compat-cfg 'base-url) "http://localhost:11434/v1")
+    (check-equal? (hash-ref compat-cfg 'default-model) "llama3"))
+  (cleanup-config))
+
+(test-case "run-init-wizard openai-compatible with empty base URL"
+  (cleanup-config)
+  (define output (run-wizard-with-input "openai-compatible\n\nsk-test\nmodel-x\n"))
+  (check-true (string-contains? output "Configuration saved"))
+  (when (config-exists?)
+    (define cfg (read-config))
+    (define providers (hash-ref cfg 'providers))
+    (define compat-cfg (hash-ref providers 'openai-compatible))
+    ;; No base-url key when empty
+    (check-false (hash-ref compat-cfg 'base-url #f))
+    (check-equal? (hash-ref compat-cfg 'default-model) "model-x"))
+  (cleanup-config))
+
 (test-case "run-init-wizard accepts anthropic provider"
   (cleanup-config)
   (define output (run-wizard-with-input "anthropic\nsk-ant-test\nclaude-3\n"))
