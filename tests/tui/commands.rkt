@@ -62,10 +62,11 @@
       (check-true (string-contains? all-text "/model") "contains /model")
       (check-true (string-contains? all-text "/history") "contains /history")
       (check-true (string-contains? all-text "/fork") "contains /fork")
+      (check-true (string-contains? all-text "/sessions") "contains /sessions")
       ;; Check that descriptions are present
-      (check-true (string-contains? all-text "Show this help") "has /help description")
+      (check-true (string-contains? all-text "Show help") "has /help description")
       (check-true (string-contains? all-text "Clear transcript") "has /clear description")
-      (check-true (string-contains? all-text "Exit q") "has /quit description"))
+      (check-true (string-contains? all-text "Exit session") "has /quit description"))
 
     (test-case "/help each command line has both name and description"
       (define cctx (make-test-cctx))

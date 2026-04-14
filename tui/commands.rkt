@@ -11,10 +11,12 @@
 ;; Extracted from interfaces/tui.rkt for modularity.
 
 (require racket/base
+         racket/string
          racket/list
          "state.rkt"
          "render.rkt"
          "terminal.rkt"
+         "palette.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/session-index.rkt"
@@ -364,21 +366,28 @@
        [(model) (handle-model-command cctx)]
        [(history) (handle-history-command cctx)]
        [(help)
+        ;; Generate help from palette registry
+        (define reg (make-command-registry))
+        (define cmds (all-commands reg))
         (define help-entries
-          (list (transcript-entry 'system "Commands:" 0 (hash))
-                (transcript-entry 'system "  /help        Show this help" 0 (hash))
-                (transcript-entry 'system "  /clear       Clear transcript" 0 (hash))
-                (transcript-entry 'system "  /compact     Compact session context" 0 (hash))
-                (transcript-entry 'system "  /interrupt   Cancel current operation" 0 (hash))
-                (transcript-entry 'system "  /quit        Exit q" 0 (hash))
-                (transcript-entry 'system "  /branches    List session branches" 0 (hash))
-                (transcript-entry 'system "  /leaves      List leaf nodes" 0 (hash))
-                (transcript-entry 'system "  /children    Show children of a node" 0 (hash))
-                (transcript-entry 'system "  /switch      Switch to a branch" 0 (hash))
-                (transcript-entry 'system "  /model       List or switch models" 0 (hash))
-                (transcript-entry 'system "  /history     Show session history" 0 (hash))
-                (transcript-entry 'system "  /fork        Fork session at entry" 0 (hash))
-                (transcript-entry 'system "  /sessions    List and manage sessions" 0 (hash))))
+          (cons
+           (transcript-entry 'system "Commands:" 0 (hash))
+           (for/list ([c (in-list cmds)])
+             (define args-str (if (null? (cmd-entry-args-spec c))
+                                  ""
+                                  (string-append " " (string-join (cmd-entry-args-spec c) " "))))
+             (define aliases-str (if (null? (cmd-entry-aliases c))
+                                     ""
+                                     (format " (~a)" (string-join (cmd-entry-aliases c) ", "))))
+             (transcript-entry
+              'system
+              (format "  ~a~a~a  ~a"
+                      (cmd-entry-name c)
+                      args-str
+                      aliases-str
+                      (cmd-entry-summary c))
+              0
+              (hash)))))
         (define new-state
           (for/fold ([s state]) ([e (in-list help-entries)])
             (add-transcript-entry s e)))
