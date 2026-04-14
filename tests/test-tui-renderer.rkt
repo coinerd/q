@@ -10,7 +10,8 @@
          "../tui/render.rkt"
          "../tui/layout.rkt"
          "../tui/state.rkt"
-         "../tui/input.rkt")
+         "../tui/input.rkt"
+         "../tui/char-width.rkt")
 
 ;; ============================================================
 ;; Mock ubuf implementation for testing
@@ -456,7 +457,55 @@
       (define found-streaming?
         (for/or ([row (in-range 1 22)])
           (string-contains? (mock-ubuf-row-string ubuf row) "Partial")))
-      (check-true found-streaming? "streaming text should be rendered"))))
+      (check-true found-streaming? "streaming text should be rendered"))
+
+    ;; ──────────────────────────────
+    ;; Width safety net (#462)
+    ;; ──────────────────────────────
+
+    (test-case "assert-line-width! passes for narrow line"
+      (check-not-exn
+       (lambda () (assert-line-width! "hello" 80))))
+
+    (test-case "assert-line-width! passes for exact-width line"
+      (check-not-exn
+       (lambda () (assert-line-width! (make-string 80 #\x) 80))))
+
+    (test-case "assert-line-width! raises in strict mode on overflow"
+      (parameterize ([current-assert-width #t])
+        (check-exn
+         exn:fail?
+         (lambda () (assert-line-width! (make-string 100 #\x) 80)))))
+
+    (test-case "assert-line-width! does not raise in default mode on overflow"
+      (check-not-exn
+       (lambda () (assert-line-width! (make-string 100 #\x) 80))))
+
+    (test-case "draw-styled-line! truncates overflow to buffer width"
+      (define ubuf (make-mock-ubuf 40 4))
+      (define long-line
+        (styled-line (list (styled-segment (make-string 200 #\A) '()))))
+      (parameterize ([current-ubuf-putstring mock-ubuf-putstring!])
+        (check-not-exn
+         (lambda ()
+           (draw-styled-line! ubuf long-line 0 40)))
+        (check-equal? (mock-ubuf-row-string ubuf 0)
+                      (make-string 40 #\A))))
+
+    (test-case "render-frame! survives wide content"
+      (define ubuf (make-mock-ubuf 40 10))
+      ;; Create state with a very long user message
+      (define state
+        (struct-copy ui-state (initial-ui-state)
+                     [transcript
+                      (list (transcript-entry 'user
+                                              (make-string 500 #\X)
+                                              0
+                                              (hasheq) #f))]))
+      (define input-st (initial-input-state))
+      (define layout (compute-layout 40 10))
+      ;; Should not raise — render wraps/truncates
+      (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))))
 
 ;; ============================================================
 ;; Run tests
