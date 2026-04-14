@@ -8,8 +8,7 @@
 ;;
 ;; Reference: Unicode East Asian Width property (UAX #11)
 
-(require racket/contract
-         racket/string)
+(require racket/string)
 
 (provide char-width
          string-visible-width

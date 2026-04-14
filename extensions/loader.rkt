@@ -222,7 +222,9 @@
    #:description (hash-ref h 'description "")
    #:author (hash-ref h 'author "unknown")))
 
-;; SEC-05: Compute SHA256 hash of all files listed in the manifest
+;; SEC-05: Compute SHA256 hash of all files listed in the manifest.
+;; Warns and includes a special marker for missing files (instead of
+;; silently skipping them, which would weaken the integrity guarantee).
 (define (compute-extension-directory-hash ext-dir manifest-hash)
   (define files (hash-ref manifest-hash 'files '()))
   (if (null? files)
@@ -233,9 +235,17 @@
           (lambda (out)
             (for ([f (in-list sorted)])
               (define full-path (build-path ext-dir f))
-              (when (file-exists? full-path)
-                (call-with-input-file full-path
-                  (lambda (in) (display (port->string in) out)))))))))))
+              (cond
+                [(file-exists? full-path)
+                 (call-with-input-file full-path
+                   (lambda (in) (display (port->string in) out)))]
+                [else
+                 (log-warning
+                  "extension manifest: declared file missing: ~a (in ~a)"
+                  f ext-dir)
+                 ;; Include a special marker so the hash changes when files
+                 ;; are missing — prevents a "missing files = no change" exploit
+                 (display (format "[MISSING:~a]" f) out)]))))))))
 
 ;; Classify an exception into a category symbol.
 (define (classify-exception e)

@@ -23,8 +23,17 @@
          parse-inline-markdown)
 
 ;; ============================================================
-;; Core struct — flat token model (no nesting in first version)
+;; Core struct — token model with selective nesting
 ;; ============================================================
+;;
+;; Block-level tokens (blockquote, unordered-list, ordered-list) contain
+;; nested token lists from inline parsing. Their content field is:
+;;   blockquote     → (cons depth (listof md-token))
+;;   unordered-list → (cons indent (listof md-token))
+;;   ordered-list   → (cons indent (cons number (listof md-token)))
+;;
+;; All other tokens carry flat content (strings, pairs, #t).
+;; Consumers should handle nested token lists for these three types.
 
 (struct md-token (type content) #:transparent)
 ;; type : 'text | 'bold | 'italic | 'code | 'code-block | 'header | 'link | 'newline
@@ -38,9 +47,9 @@
 ;;   'header     → (cons level-number header-text-string)
 ;;   'link       → (cons url-string link-text-string)
 ;;   'newline    → string "\n" (line separator)
-;;   'unordered-list → (cons indent-level list-text-string)
-;;   'ordered-list   → (cons indent-level (cons number list-text-string))
-;;   'blockquote    → string (quoted text, without > prefix)
+;;   'unordered-list → (cons indent-level (listof md-token))
+;;   'ordered-list   → (cons indent-level (cons number (listof md-token)))
+;;   'blockquote    → (cons depth (listof md-token))
 ;;   'hr            → #t
 ;;   'strikethrough → string (struck-through text)
 
@@ -64,9 +73,9 @@
 
 (define (parse-code-blocks text)
   ;; Manual approach: split on triple-backtick boundaries.
-  ;; Find opening ``` and closing ``` pairs.
+  ;; Uses cons + reverse for O(n) accumulation.
   (define len (string-length text))
-  (define result '())
+  (define result-acc '())
   (define pos 0)
   (let loop ()
     (define open-pos (find-triple-backtick text pos))
@@ -74,11 +83,15 @@
       [(not open-pos)
        ;; No more code blocks — emit remaining text
        (when (< pos len)
-         (set! result (append result (parse-regular-text (substring text pos len)))))]
+         (set! result-acc
+               (foldl cons result-acc
+                      (parse-regular-text (substring text pos len)))))]
       [else
        ;; Emit text before the code block
        (when (> open-pos pos)
-         (set! result (append result (parse-regular-text (substring text pos open-pos)))))
+         (set! result-acc
+               (foldl cons result-acc
+                      (parse-regular-text (substring text pos open-pos)))))
        ;; Find the language tag (rest of the opening line)
        (define after-open (+ open-pos 3)) ; skip ```
        (define newline-pos (find-char text after-open #\newline))
@@ -95,7 +108,9 @@
        (cond
          [(not close-pos)
           ;; Unclosed code block — emit opening fence as text
-          (set! result (append result (list (md-token 'text (substring text open-pos len)))))
+          (set! result-acc
+                (cons (md-token 'text (substring text open-pos len))
+                      result-acc))
           (set! pos len)]
          [else
           (define code (substring text code-start close-pos))
@@ -103,19 +118,20 @@
           (define after-close (+ close-pos 3)) ; skip closing ```
           (define trailing-nl?
             (and (< after-close len) (char=? (string-ref text after-close) #\newline)))
-          (set! result
-                (append result
-                        (list (md-token 'code-block (cons (if (string=? lang "") #f lang) code))
-                              ;; Newline separator after code block
-                              (md-token 'newline "\n"))))
+          (set! result-acc
+                (cons (md-token 'newline "\n")
+                      (cons (md-token 'code-block
+                                      (cons (if (string=? lang "") #f lang) code))
+                            result-acc)))
           (set! pos
                 (if trailing-nl?
                     (add1 after-close)
                     after-close))
           (loop)])]))
   ;; Filter out empty text tokens
-  (filter (lambda (t) (not (and (eq? (md-token-type t) 'text) (string=? (md-token-content t) ""))))
-          result))
+  (filter (lambda (t) (not (and (eq? (md-token-type t) 'text)
+                                 (string=? (md-token-content t) ""))))
+          (reverse result-acc)))
 
 ;; Find the start of a triple-backtick sequence (```) at or after pos
 (define (find-triple-backtick text pos)
@@ -150,7 +166,7 @@
   (cond
     ;; Horizontal rule: 3+ hyphens/asterisks/underscores with optional spaces
     [(or (regexp-match? #px"^[ \t]*-[- \t]*-[- \t]*-[ \t]*$" line)
-          (regexp-match? #px"^[ \t]*[*][*]+[* \t]*$" line)
+          (regexp-match? #px"^[ \t]*[*][*][*][* \t]*$" line)
           (regexp-match? #px"^[ \t]*___+[_ \t]*$" line))
      (list (md-token 'hr #t))]
     ;; Header: # heading

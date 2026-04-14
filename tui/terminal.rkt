@@ -468,6 +468,8 @@
 ;; clipboard-copy is replaced by copy-text! from clipboard.rkt
 
 ;; Backward-compatible wrapper: clipboard-copy calls copy-text!
+;; DEPRECATED: Use copy-text! directly. This wrapper will be removed
+;; in a future version.
 (define (clipboard-copy text)
   (copy-text! text))
 
