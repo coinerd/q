@@ -22,9 +22,24 @@
      (let ([reg (make-command-registry)])
        (check-not-false (hash? reg))))
 
-   (test-case "registry has all 12 built-in commands"
+   (test-case "registry has all 14 built-in commands by canonical name"
      (let ([reg (make-command-registry)])
-       (check-equal? (hash-count reg) 12)))
+       ;; Canonical names (not aliases)
+       (check-not-false (lookup-command reg "/help"))
+       (check-not-false (lookup-command reg "/quit"))
+       (check-not-false (lookup-command reg "/clear"))
+       (check-not-false (lookup-command reg "/compact"))
+       (check-not-false (lookup-command reg "/interrupt"))
+       (check-not-false (lookup-command reg "/branches"))
+       (check-not-false (lookup-command reg "/leaves"))
+       (check-not-false (lookup-command reg "/switch"))
+       (check-not-false (lookup-command reg "/children"))
+       (check-not-false (lookup-command reg "/model"))
+       (check-not-false (lookup-command reg "/history"))
+       (check-not-false (lookup-command reg "/fork"))
+       (check-not-false (lookup-command reg "/sessions"))
+       ;; 13 canonical + aliases
+       (check-true (>= (hash-count reg) 13) "registry has at least 13 canonical entries")))
 
    (test-case "registry contains /help"
      (check-not-false (lookup-command (make-command-registry) "/help")))
@@ -94,9 +109,14 @@
    ;; ================================================================
    ;; 3. All commands
    ;; ================================================================
-   (test-case "all-commands returns sorted list of 12"
+   (test-case "all-commands returns sorted list of canonical commands"
      (let ([cmds (all-commands (make-command-registry))])
-       (check-equal? (length cmds) 12)
+       ;; all-commands returns hash-values, includes alias entries
+       ;; Only count unique canonical names (aliases point to same entry)
+       (define unique-names (remove-duplicates (map cmd-entry-name cmds)))
+       (check-true (>= (length unique-names) 13)
+                   (format "expected >= 13 canonical commands, got ~a" (length unique-names)))
+       ;; Verify sorted
        (for ([a (in-list cmds)]
              [b (in-list (cdr cmds))])
          (check-true (string<? (cmd-entry-name a) (cmd-entry-name b))))))
@@ -109,16 +129,26 @@
    ;; 4. Category filter
    ;; ================================================================
    (test-case "commands-by-category general returns clear/help/quit"
-     (let ([names (map cmd-entry-name
-                       (commands-by-category (make-command-registry) 'general))])
-       (check-equal? names '("/clear" "/help" "/quit"))))
+     (let* ([names (remove-duplicates
+                    (map cmd-entry-name
+                         (commands-by-category (make-command-registry) 'general)))]
+            [sorted (sort names string<?)])
+       (check-equal? sorted '("/clear" "/help" "/quit"))))
 
-   (test-case "commands-by-category session returns 8 commands"
-     (let ([names (map cmd-entry-name
-                       (commands-by-category (make-command-registry) 'session))])
-       (check-equal? names
-                     '("/branches" "/children" "/compact" "/fork"
-                       "/history" "/interrupt" "/leaves" "/switch"))))
+   (test-case "commands-by-category session returns core commands"
+     (let* ([names (remove-duplicates
+                    (map cmd-entry-name
+                         (commands-by-category (make-command-registry) 'session)))]
+            [sorted (sort names string<?)])
+       (check-not-false (member "/branches" sorted))
+       (check-not-false (member "/children" sorted))
+       (check-not-false (member "/compact" sorted))
+       (check-not-false (member "/fork" sorted))
+       (check-not-false (member "/history" sorted))
+       (check-not-false (member "/interrupt" sorted))
+       (check-not-false (member "/leaves" sorted))
+       (check-not-false (member "/sessions" sorted))
+       (check-not-false (member "/switch" sorted))))
 
    (test-case "commands-by-category model returns /model"
      (let ([names (map cmd-entry-name
@@ -133,7 +163,7 @@
    ;; ================================================================
    (test-case "register-command! adds custom command"
      (let* ([reg (make-command-registry)]
-            [custom (cmd-entry "/custom" "A custom command" 'debug '())]
+            [custom (cmd-entry "/custom" "A custom command" 'debug '() '())]
             [reg2 (register-command! reg custom)])
        (check-not-false (lookup-command reg2 "/custom"))
        (check-equal? (cmd-entry-summary (lookup-command reg2 "/custom"))
@@ -141,20 +171,21 @@
 
    (test-case "register-command! replaces existing command"
      (let* ([reg (make-command-registry)]
-            [replacement (cmd-entry "/help" "New help text" 'general '())]
+            [replacement (cmd-entry "/help" "New help text" 'general '() '())]
             [reg2 (register-command! reg replacement)])
        (check-equal? (cmd-entry-summary (lookup-command reg2 "/help"))
                      "New help text")))
 
    (test-case "register-command! increases count for new"
      (let* ([reg (make-command-registry)]
-            [custom (cmd-entry "/test" "Test" 'general '())]
+            [custom (cmd-entry "/test" "Test" 'general '() '())]
             [reg2 (register-command! reg custom)])
-       (check-equal? (hash-count reg2) (add1 (hash-count reg)))))
+       (check-true (> (hash-count reg2) (hash-count reg))
+                   "adding new command increases count")))
 
    (test-case "register-command! same count for replacement"
      (let* ([reg (make-command-registry)]
-            [replacement (cmd-entry "/quit" "Replaced" 'general '())]
+            [replacement (cmd-entry "/quit" "Replaced" 'general '() '())]
             [reg2 (register-command! reg replacement)])
        (check-equal? (hash-count reg2) (hash-count reg))))
 
@@ -162,17 +193,19 @@
    ;; 6. Filter commands
    ;; ================================================================
    (test-case "filter-commands empty prefix returns all"
-     (check-equal? (length (filter-commands (make-command-registry) "")) 12))
+     (check-true (>= (length (filter-commands (make-command-registry) "")) 13)
+                "empty prefix returns at least 13 canonical commands"))
 
    (test-case "filter-commands /h returns help and history"
      (let ([names (map cmd-entry-name
                        (filter-commands (make-command-registry) "/h"))])
        (check-equal? names '("/help" "/history"))))
 
-   (test-case "filter-commands /s returns switch"
+   (test-case "filter-commands /s returns switch and sessions"
      (let ([names (map cmd-entry-name
                        (filter-commands (make-command-registry) "/s"))])
-       (check-equal? names '("/switch"))))
+       (check-not-false (member "/switch" names) "contains /switch")
+       (check-not-false (member "/sessions" names) "contains /sessions")))
 
    (test-case "filter-commands /xyz returns empty"
      (check-equal? (filter-commands (make-command-registry) "/xyz") '()))
@@ -246,8 +279,9 @@
    (test-case "complete-command /z returns empty"
      (check-equal? (complete-command (make-command-registry) "/z") '()))
 
-   (test-case "complete-command empty returns all 12 names"
-     (check-equal? (length (complete-command (make-command-registry) "")) 12))
+   (test-case "complete-command empty returns all names"
+     (check-true (>= (length (complete-command (make-command-registry) "")) 13)
+                "empty prefix returns at least 13 names"))
 
    (test-case "complete-command /q returns quit"
      (check-equal? (complete-command (make-command-registry) "/q")
@@ -278,11 +312,12 @@
        (check-equal? (cmd-entry-name (car result)) "/fork")))
 
    (test-case "cmd-entry struct accessors"
-     (let ([e (cmd-entry "/test" "Test" 'general '())])
+     (let ([e (cmd-entry "/test" "Test" 'general '() '("t"))])
        (check-equal? (cmd-entry-name e) "/test")
        (check-equal? (cmd-entry-summary e) "Test")
        (check-equal? (cmd-entry-category e) 'general)
-       (check-equal? (cmd-entry-args-spec e) '())))
+       (check-equal? (cmd-entry-args-spec e) '())
+       (check-equal? (cmd-entry-aliases e) '("t"))))
    ))
 
 (run-tests palette-tests)

@@ -5,6 +5,8 @@
 (require racket/string
          racket/list
          racket/function
+         racket/set
+         "command-parse.rkt"
          "render.rkt")
 
 (provide
@@ -12,6 +14,7 @@
  make-command-registry
  register-command!
  lookup-command
+ resolve-command
  all-commands
  commands-by-category
  filter-commands
@@ -27,6 +30,7 @@
    summary      ; string — one-line description
    category     ; symbol — 'general | 'session | 'model | 'debug
    args-spec    ; (listof string) — arg names for display, e.g. '("<id>")
+   aliases      ; (listof string) — short forms, e.g. '("h" "?")
    )
   #:transparent)
 
@@ -38,21 +42,30 @@
 (define (make-command-registry)
   (define built-ins
     (list
-     (cmd-entry "/help"      "Show help"                     'general '())
-     (cmd-entry "/quit"      "Exit session"                  'general '())
-     (cmd-entry "/clear"     "Clear transcript"              'general '())
-     (cmd-entry "/compact"   "Trigger compaction"            'session '())
-     (cmd-entry "/interrupt" "Interrupt current turn"        'session '())
-     (cmd-entry "/branches"  "List session branches"         'session '())
-     (cmd-entry "/leaves"    "List leaf nodes"               'session '())
-     (cmd-entry "/switch"    "Switch to branch"              'session '("<id>"))
-     (cmd-entry "/children"  "Show children of node"         'session '("<id>"))
-     (cmd-entry "/model"     "Switch or show model"          'model   '("<name>"))
-     (cmd-entry "/history"   "Show session history"          'session '())
-     (cmd-entry "/fork"      "Fork session at point"         'session '("<id>"))))
-  (for/fold ([h (hash)])
+     (cmd-entry "/help"      "Show help"                     'general '() '("h" "?"))
+     (cmd-entry "/quit"      "Exit session"                  'general '() '("q" "exit"))
+     (cmd-entry "/clear"     "Clear transcript"              'general '() '("cls"))
+     (cmd-entry "/compact"   "Trigger compaction"            'session '() '())
+     (cmd-entry "/interrupt" "Interrupt current turn"        'session '() '("stop" "cancel"))
+     (cmd-entry "/branches"  "List session branches"         'session '() '())
+     (cmd-entry "/leaves"    "List leaf nodes"               'session '() '())
+     (cmd-entry "/switch"    "Switch to branch"              'session '("<id>") '())
+     (cmd-entry "/children"  "Show children of node"         'session '("<id>") '())
+     (cmd-entry "/model"     "Switch or show model"          'model   '("<name>") '("m"))
+     (cmd-entry "/history"   "Show session history"          'session '() '())
+     (cmd-entry "/fork"      "Fork session at point"         'session '("<id>") '())
+     (cmd-entry "/sessions"  "List and manage sessions"      'session '("list|info|delete") '())))
+  ;; Build main hash by name
+  (define by-name
+    (for/fold ([h (hash)])
+              ([e (in-list built-ins)])
+      (hash-set h (cmd-entry-name e) e)))
+  ;; Add alias entries: "/h" → same entry as "/help"
+  (for/fold ([h by-name])
             ([e (in-list built-ins)])
-    (hash-set h (cmd-entry-name e) e)))
+    (for/fold ([h2 h])
+              ([a (in-list (cmd-entry-aliases e))])
+      (hash-set h2 (string-append "/" a) e))))
 
 ;; Adds or replaces a command in the registry
 (define (register-command! reg entry)
@@ -62,27 +75,61 @@
 (define (lookup-command reg name)
   (hash-ref reg name #f))
 
-;; Returns (listof cmd-entry), sorted by name
-(define (all-commands reg)
-  (sort (hash-values reg)
-        string<? #:key cmd-entry-name))
+;; Resolve a slash command string to (values cmd-entry args) or (values #f #f).
+;; Uses command-parse.rkt for name→symbol mapping, then looks up in registry.
+(define (resolve-command reg text)
+  (define trimmed (string-trim text))
+  (cond
+    [(string=? trimmed "") (values #f #f)]
+    [(not (char=? (string-ref trimmed 0) #\/)) (values #f #f)]
+    [else
+     (define parts (string-split trimmed))
+     (define cmd-name (car parts))
+     (define args (cdr parts))
+     (define entry (lookup-command reg cmd-name))
+     (if entry
+         (values entry args)
+         (values #f #f))]))
 
-;; Filter by category
+;; Returns (listof cmd-entry), sorted by name, deduplicated by canonical name
+(define (all-commands reg)
+  (define seen (mutable-set))
+  (define unique '())
+  (for ([e (in-list (sort (hash-values reg) string<? #:key cmd-entry-name))])
+    (define canonical (cmd-entry-name e))
+    (unless (set-member? seen canonical)
+      (set-add! seen canonical)
+      (set! unique (cons e unique))))
+  (sort unique string<? #:key cmd-entry-name))
+
+;; Filter by category, deduplicated
 (define (commands-by-category reg cat)
-  (sort (filter (lambda (e) (eq? (cmd-entry-category e) cat))
-                (hash-values reg))
-        string<? #:key cmd-entry-name))
+  (define seen (mutable-set))
+  (define results '())
+  (for ([e (in-list (hash-values reg))])
+    (define name (cmd-entry-name e))
+    (when (and (eq? (cmd-entry-category e) cat)
+               (not (set-member? seen name)))
+      (set-add! seen name)
+      (set! results (cons e results))))
+  (sort results string<? #:key cmd-entry-name))
 
 ;; ---------------------------------------------------------------------------
 ;; Palette filtering
 ;; ---------------------------------------------------------------------------
 
 ;; Filter commands matching a prefix string.
-;; Returns (listof cmd-entry) where name starts with prefix, sorted by name.
+;; Returns (listof cmd-entry) where name starts with prefix, deduplicated.
 (define (filter-commands reg prefix)
-  (sort (filter (lambda (e) (string-prefix? (cmd-entry-name e) prefix))
-                (hash-values reg))
-        string<? #:key cmd-entry-name))
+  (define seen (mutable-set))
+  (define results '())
+  (for ([e (in-list (hash-values reg))])
+    (define name (cmd-entry-name e))
+    (when (and (string-prefix? name prefix)
+               (not (set-member? seen name)))
+      (set-add! seen name)
+      (set! results (cons e results))))
+  (sort results string<? #:key cmd-entry-name))
 
 ;; ---------------------------------------------------------------------------
 ;; TUI Palette Overlay
@@ -141,7 +188,7 @@
 ;; ---------------------------------------------------------------------------
 
 ;; Complete a partial slash command.
-;; Returns (listof string) of matching command names.
+;; Returns (listof string) of matching command names, deduplicated.
 (define (complete-command reg partial)
   (define matches (filter-commands reg partial))
   (map cmd-entry-name matches))

@@ -7,7 +7,8 @@
 
 (require racket/string
          racket/list
-         "char-width.rkt")
+         "char-width.rkt"
+         "command-parse.rkt")
 
 ;; Structs
 (provide (struct-out input-state)
@@ -385,41 +386,6 @@
 
 ;; Parse slash command from input text
 ;; Returns: symbol | (list symbol arg...) | #f
-;; Simple commands: 'help | 'clear | 'compact | 'interrupt | 'quit | 'branches | 'leaves | 'unknown | #f
-;; Commands with args: '(switch id) | '(children id)
+;; Delegates to command-parse.rkt for single source of truth.
 (define (parse-tui-slash-command text)
-  (define trimmed (string-trim text))
-  (cond
-    [(string=? trimmed "") #f]
-    [(not (char=? (string-ref trimmed 0) #\/)) #f]
-    [else
-     ;; Split command and arguments
-     (define parts (string-split trimmed))
-     (define cmd (car parts))
-     (define args (cdr parts))
-     (cond
-       [(member cmd '("/help" "/h" "/?")) 'help]
-       [(member cmd '("/clear" "/cls")) 'clear]
-       [(member cmd '("/compact")) 'compact]
-       [(member cmd '("/interrupt" "/stop" "/cancel")) 'interrupt]
-       [(member cmd '("/quit" "/exit" "/q")) 'quit]
-       [(member cmd '("/branches")) 'branches]
-       [(member cmd '("/leaves")) 'leaves]
-       [(member cmd '("/switch"))
-        (if (null? args)
-            '(switch-error "Usage: /switch <branch-id>")
-            `(switch ,(car args)))]
-       [(member cmd '("/children"))
-        (if (null? args)
-            '(children-error "Usage: /children <node-id>")
-            `(children ,(car args)))]
-       [(member cmd '("/model"))
-        (if (null? args)
-            'model
-            `(model ,(car args)))]
-       [(member cmd '("/history")) 'history]
-       [(member cmd '("/fork"))
-        (if (null? args)
-            'history ; /fork with no arg shows history as fallback
-            `(fork ,(car args)))]
-       [else 'unknown])]))
+  (parse-command-name text))
