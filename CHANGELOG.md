@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.8] — 2026-04-13
+
+### Added — TUI Correctness
+- Fixed `decode-csi-tilled` to accumulate multi-digit CSI params (was broken for sequences like ESC[200~)
+- Bright color support: SGR 90-97 (bright-black through bright-white) in `styles->sgr`
+- Bright color fg values 8-15 in `style->ubuf-kws` for proper ubuf rendering
+- Frame-diff iterator variable fix for correct incremental rendering
+- `assert-line-width!` validation on every rendered line
+- Theme wiring: `theme->style` helper maps semantic tokens to theme color values
+
+### Added — Input Editor Power
+- Bracketed paste (DEC 2004 mode): full pipeline from CSI detection to input insertion
+  - `read-paste-until-end` for streaming paste accumulation with UTF-8 safety
+  - Paste events wired into tui-render-loop main message dispatch
+  - Pasted text inserted as single undo entry via `input-insert-string`
+- Verified already-implemented features: undo/redo (Ctrl+Z/Y), kill ring (Ctrl+W/U/K/Y),
+  word navigation (Ctrl+Left/Right), grapheme-aware cursor movement
+
+### Added — Session Tree Foundation
+- Tree operations in session-index: `get-branch`, `branch!`, `reset-leaf!`, `append-to-leaf!`, `leaf-depth`
+- Extended entry types with predicates: model-change, thinking-level-change, branch-summary,
+  custom-message, session-info, compaction-summary, tool-result
+- Context assembly pipeline (`runtime/context-builder.rkt`): walks tree path from active leaf,
+  handles compaction summaries, filters metadata entries
+- Session versioning: version 2 header on creation, auto-migration from v1 with backup
+- Session forking: `fork-session!` extracts root→entry path to new JSONL file
+
+### Added — TUI Polish
+- Markdown rendering: HR (──), blockquote (> prefix + dim), unordered list (•),
+  ordered list (N.), strikethrough (dim)
+- Configurable keybindings: wired `keymap.rkt` into `handle-key` dispatch pipeline,
+  user overrides from `~/.q/keybindings.json`
+
+### Testing
+- 898 tests pass (0 failures), format lint green
+
 ## [0.8.2] — 2026-04-14
 
 ### Fixed — Wave 1: Immediate Fixes (#329–#334)
