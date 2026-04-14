@@ -11,13 +11,25 @@
          "../../../q/tui/state.rkt"
          "../../../q/tui/terminal.rkt"
          (only-in "../../../q/tui/render.rkt"
-                  styled-line styled-line?
-                  styled-segment styled-segment?
-                  styled-line-segments styled-segment-text styled-segment-style
-                  apply-selection-highlight highlight-line-range style-invert
-                  render-transcript render-status-bar render-input-line
-                  render-branch-list render-leaf-nodes render-children-list
-                  format-entry md-format-assistant wrap-styled-line)
+                  styled-line
+                  styled-line?
+                  styled-segment
+                  styled-segment?
+                  styled-line-segments
+                  styled-segment-text
+                  styled-segment-style
+                  apply-selection-highlight
+                  highlight-line-range
+                  style-invert
+                  render-transcript
+                  render-status-bar
+                  render-input-line
+                  render-branch-list
+                  render-leaf-nodes
+                  render-children-list
+                  format-entry
+                  md-format-assistant
+                  wrap-styled-line)
          "../../../q/tui/layout.rkt"
          "../../../q/util/protocol-types.rkt"
          "../../../q/agent/event-bus.rkt"
@@ -26,17 +38,13 @@
 (test-case "make-tui-ctx returns a valid tui-ctx with default values"
   (let ([ctx (make-tui-ctx)])
     (check-true (tui-ctx? ctx) "make-tui-ctx returns a tui-ctx")
-    (check-true (ui-state? (unbox (tui-ctx-ui-state-box ctx)))
-                "initial ui-state is a ui-state")
+    (check-true (ui-state? (unbox (tui-ctx-ui-state-box ctx))) "initial ui-state is a ui-state")
     (check-true (input-state? (unbox (tui-ctx-input-state-box ctx)))
                 "initial input-state is an input-state")
-    (check-false (tui-ctx-event-bus ctx)
-                 "event-bus defaults to #f")
-    (check-true (unbox (tui-ctx-running-box ctx))
-                "running defaults to #t")
+    (check-false (tui-ctx-event-bus ctx) "event-bus defaults to #f")
+    (check-true (unbox (tui-ctx-running-box ctx)) "running defaults to #t")
     ;; BUG-33: needs-redraw defaults to #t (first frame must draw)
-    (check-true (unbox (tui-ctx-needs-redraw-box ctx))
-                "needs-redraw defaults to #t")))
+    (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "needs-redraw defaults to #t")))
 
 (test-case "make-tui-ctx stores event-bus and session-runner kwargs"
   (let ([bus (make-event-bus)]
@@ -48,26 +56,21 @@
 (test-case "BUG-33: needs-redraw flag is set by key events"
   (let ([ctx (make-tui-ctx)])
     ;; Initial state: needs-redraw is #t
-    (check-true (unbox (tui-ctx-needs-redraw-box ctx))
-                "BUG-33: initial needs-redraw is #t")
+    (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "BUG-33: initial needs-redraw is #t")
     ;; Simulate: mark as drawn
     (set-box! (tui-ctx-needs-redraw-box ctx) #f)
-    (check-false (unbox (tui-ctx-needs-redraw-box ctx))
-                 "BUG-33: can clear needs-redraw")
+    (check-false (unbox (tui-ctx-needs-redraw-box ctx)) "BUG-33: can clear needs-redraw")
     ;; Simulate: key press marks dirty
     (handle-key ctx #\h)
-    (check-true (unbox (tui-ctx-needs-redraw-box ctx))
-                "BUG-33: key press sets needs-redraw")
+    (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "BUG-33: key press sets needs-redraw")
     ;; Simulate: escape key still marks dirty (cursor may need reposition)
     (set-box! (tui-ctx-needs-redraw-box ctx) #f)
     (handle-key ctx #\u001b)
-    (check-true (unbox (tui-ctx-needs-redraw-box ctx))
-                "BUG-33: escape key sets needs-redraw")
+    (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "BUG-33: escape key sets needs-redraw")
     ;; Simulate: arrow keys mark dirty
     (set-box! (tui-ctx-needs-redraw-box ctx) #f)
     (handle-key ctx 'left)
-    (check-true (unbox (tui-ctx-needs-redraw-box ctx))
-                "BUG-33: arrow key sets needs-redraw")))
+    (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "BUG-33: arrow key sets needs-redraw")))
 
 ;; ============================================================
 ;; handle-key — character input
@@ -93,20 +96,20 @@
   (let ([ctx (make-tui-ctx)])
     (handle-key ctx #\a)
     (handle-key ctx #\b)
-  (define result (handle-key ctx #\backspace))
-  (check-equal? result 'continue "backspace returns 'continue")
-  (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
-                "a"
-                "backspace removes last char")))
+    (define result (handle-key ctx #\backspace))
+    (check-equal? result 'continue "backspace returns 'continue")
+    (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
+                  "a"
+                  "backspace removes last char")))
 
 (test-case "handle-key: rubout (delete) removes character"
   (let ([ctx (make-tui-ctx)])
     (handle-key ctx #\x)
-  (define result (handle-key ctx #\rubout))
-  (check-equal? result 'continue "rubout returns 'continue")
-  (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
-                ""
-                "rubout removes char")))
+    (define result (handle-key ctx #\rubout))
+    (check-equal? result 'continue "rubout returns 'continue")
+    (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
+                  ""
+                  "rubout removes char")))
 
 (test-case "handle-key: return on empty buffer returns 'continue"
   (let ([ctx (make-tui-ctx)])
@@ -136,8 +139,7 @@
     (define result (handle-key ctx #\newline))
     (check-equal? result 'continue "newline inserts, does not submit")
     (define inp (unbox (tui-ctx-input-state-box ctx)))
-    (check-true (string-contains? (input-state-buffer inp) "\n")
-                "newline char in buffer")))
+    (check-true (string-contains? (input-state-buffer inp) "\n") "newline char in buffer")))
 
 (test-case "handle-key: slash /help command is parsed"
   (let ([ctx (make-tui-ctx)])
@@ -173,33 +175,29 @@
   (let ([ctx (make-tui-ctx)])
     (handle-key ctx #\a)
     (handle-key ctx #\b)
-  (define result (handle-key ctx 'left))
-  (check-equal? result 'continue "left returns 'continue")
-  (check-equal? (input-state-cursor (unbox (tui-ctx-input-state-box ctx)))
-                1
-                "cursor moved left")))
+    (define result (handle-key ctx 'left))
+    (check-equal? result 'continue "left returns 'continue")
+    (check-equal? (input-state-cursor (unbox (tui-ctx-input-state-box ctx))) 1 "cursor moved left")))
 
 (test-case "handle-key: right arrow moves cursor right"
   (let ([ctx (make-tui-ctx)])
     (handle-key ctx #\a)
     (handle-key ctx 'left)
-  (define result (handle-key ctx 'right))
-  (check-equal? result 'continue "right returns 'continue")
-  (check-equal? (input-state-cursor (unbox (tui-ctx-input-state-box ctx)))
-                1
-                "cursor moved right")))
+    (define result (handle-key ctx 'right))
+    (check-equal? result 'continue "right returns 'continue")
+    (check-equal? (input-state-cursor (unbox (tui-ctx-input-state-box ctx))) 1 "cursor moved right")))
 
 (test-case "handle-key: up arrow restores history entry"
   (let ([ctx (make-tui-ctx)])
     ;; Push some history by submitting
     (handle-key ctx #\a)
-  (handle-key ctx #\return)
-  ;; Now press up
-  (define result (handle-key ctx 'up))
-  (check-equal? result 'continue "up returns 'continue")
-  (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
-                "a"
-                "up restores history entry")))
+    (handle-key ctx #\return)
+    ;; Now press up
+    (define result (handle-key ctx 'up))
+    (check-equal? result 'continue "up returns 'continue")
+    (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
+                  "a"
+                  "up restores history entry")))
 
 (test-case "handle-key: down arrow after up returns 'continue"
   (let ([ctx (make-tui-ctx)])
@@ -254,7 +252,7 @@
     ;; Add entries to transcript
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set-box! (tui-ctx-ui-state-box ctx) state)
     (define result (handle-key ctx 'page-up))
@@ -268,7 +266,7 @@
   (let ([ctx (make-tui-ctx)])
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set! state (scroll-up state 20))
     (set-box! (tui-ctx-ui-state-box ctx) state)
@@ -311,7 +309,7 @@
     ;; Add some transcript entries first
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (set-box! (tui-ctx-ui-state-box ctx)
-              (add-transcript-entry state (transcript-entry 'user "hello" 0 (hash))))
+              (add-transcript-entry state (make-entry 'user "hello" 0 (hash))))
     (check-true (positive? (length (ui-state-transcript (unbox (tui-ctx-ui-state-box ctx)))))
                 "transcript has entries before clear")
     (define result (process-slash-command ctx 'clear))
@@ -345,7 +343,8 @@
     (define result (process-slash-command ctx 'interrupt))
     (check-equal? result 'continue "interrupt returns 'continue")
     (check-true (event? received) "interrupt publishes event")
-    (check-equal? (event-ev received) "interrupt.requested"
+    (check-equal? (event-ev received)
+                  "interrupt.requested"
                   "interrupt publishes correct event type")))
 
 (test-case "process-slash-command: /interrupt without bus returns 'continue"
@@ -396,11 +395,11 @@
          (define evt (sync/timeout 0 ch-inner))
          (when evt
            (define state (unbox (tui-ctx-ui-state-box ctx)))
-           (set-box! (tui-ctx-ui-state-box ctx)
-                     (apply-event-to-state state evt))
+           (set-box! (tui-ctx-ui-state-box ctx) (apply-event-to-state state evt))
            (loop)))))
     ;; Check the event was applied
-    (check-equal? (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))) "s1"
+    (check-equal? (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx)))
+                  "s1"
                   "drain-events: session.started applied via channel")))
 
 (test-case "tui-ctx has event-ch async-channel"
@@ -436,10 +435,10 @@
     (handle-key ctx #\a)
     (handle-key ctx #\return)
     (define result (handle-key ctx 'kp-up))
-  (check-equal? result 'continue "kp-up returns 'continue")
-  (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
-                "a"
-                "kp-up loads history")))
+    (check-equal? result 'continue "kp-up returns 'continue")
+    (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx)))
+                  "a"
+                  "kp-up loads history")))
 
 (test-case "BUG-31: kp-down returns 'continue"
   (let ([ctx (make-tui-ctx)])
@@ -488,7 +487,7 @@
   (let ([ctx (make-tui-ctx)])
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set-box! (tui-ctx-ui-state-box ctx) state)
     (define result (handle-key ctx 'pgup))
@@ -499,7 +498,7 @@
   (let ([ctx (make-tui-ctx)])
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set! state (scroll-up state 20))
     (set-box! (tui-ctx-ui-state-box ctx) state)
@@ -512,7 +511,7 @@
   (let ([ctx (make-tui-ctx)])
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set-box! (tui-ctx-ui-state-box ctx) state)
     (define result (handle-key ctx 'kp-pgup))
@@ -524,7 +523,7 @@
   (let ([ctx (make-tui-ctx)])
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set! state (scroll-up state 20))
     (set-box! (tui-ctx-ui-state-box ctx) state)
@@ -543,7 +542,6 @@
                   ""
                   "kp-enter clears buffer after submit")))
 
-
 ;; --------------------------------------------------------
 ;; fix-sgr-bg-black — SGR post-processor
 ;; --------------------------------------------------------
@@ -552,32 +550,31 @@
 (test-case "fix-sgr: standalone \\e[40m → \\e[49m"
   (let ()
     ;; T1: standalone \e[40m → \e[49m
-    (check-equal? (fix-sgr-bg-black "\x1b[40m") "\x1b[49m"
-                  "fix-sgr: standalone bg=black → default")))
+    (check-equal? (fix-sgr-bg-black "\x1b[40m") "\x1b[49m" "fix-sgr: standalone bg=black → default")))
 
 (test-case "fix-sgr: compound fg+bg black → fg+default"
   (let ()
     ;; T2: compound \e[37;40m → \e[37;49m (fg+bg)
-    (check-equal? (fix-sgr-bg-black "\x1b[37;40m") "\x1b[37;49m"
+    (check-equal? (fix-sgr-bg-black "\x1b[37;40m")
+                  "\x1b[37;49m"
                   "fix-sgr: compound fg+bg black → fg+default")))
 
 (test-case "fix-sgr: compound fg+bg+bold → fg+default+bold"
   (let ()
     ;; T3: compound \e[37;40;1m → \e[37;49;1m (fg+bg+bold)
-    (check-equal? (fix-sgr-bg-black "\x1b[37;40;1m") "\x1b[37;49;1m"
+    (check-equal? (fix-sgr-bg-black "\x1b[37;40;1m")
+                  "\x1b[37;49;1m"
                   "fix-sgr: compound fg+bg+bold → fg+default+bold")))
 
 (test-case "fix-sgr: non-black bg preserved"
   (let ()
     ;; T4: non-black bg preserved
-    (check-equal? (fix-sgr-bg-black "\x1b[47m") "\x1b[47m"
-                  "fix-sgr: non-black bg unchanged")))
+    (check-equal? (fix-sgr-bg-black "\x1b[47m") "\x1b[47m" "fix-sgr: non-black bg unchanged")))
 
 (test-case "fix-sgr: plain text passthrough unchanged"
   (let ()
     ;; T5: plain text passthrough
-    (check-equal? (fix-sgr-bg-black "hello world") "hello world"
-                  "fix-sgr: plain text unchanged")))
+    (check-equal? (fix-sgr-bg-black "hello world") "hello world" "fix-sgr: plain text unchanged")))
 
 (test-case "fix-sgr: mixed sequences handled"
   (let ()
@@ -589,8 +586,7 @@
 (test-case "fix-sgr: empty SGR unchanged"
   (let ()
     ;; T7: empty SGR \e[m
-    (check-equal? (fix-sgr-bg-black "\x1b[m") "\x1b[m"
-                  "fix-sgr: empty SGR unchanged")))
+    (check-equal? (fix-sgr-bg-black "\x1b[m") "\x1b[m" "fix-sgr: empty SGR unchanged")))
 
 (test-case "fix-sgr: multiple SGR all fixed"
   (let ()
@@ -602,32 +598,37 @@
 (test-case "fix-sgr: bg=0 as first param → default"
   (let ()
     ;; T9: bg=0 first param \e[40;1m
-    (check-equal? (fix-sgr-bg-black "\x1b[40;1m") "\x1b[49;1m"
+    (check-equal? (fix-sgr-bg-black "\x1b[40;1m")
+                  "\x1b[49;1m"
                   "fix-sgr: bg=0 as first param → default")))
 
 (test-case "fix-sgr: 256-color fg index 40 not changed"
   (let ()
     ;; T10: 256-color fg with index 40 — should NOT be changed
     ;; \e[38;5;40m is fg=256-color-40, not bg=black
-    (check-equal? (fix-sgr-bg-black "\x1b[38;5;40m") "\x1b[38;5;40m"
+    (check-equal? (fix-sgr-bg-black "\x1b[38;5;40m")
+                  "\x1b[38;5;40m"
                   "fix-sgr: 256-color fg index 40 not changed")))
 
 (test-case "fix-sgr: 256-color bg index 40 not changed"
   (let ()
     ;; T11: 256-color bg with index 40 — should NOT be changed
-    (check-equal? (fix-sgr-bg-black "\x1b[48;5;40m") "\x1b[48;5;40m"
+    (check-equal? (fix-sgr-bg-black "\x1b[48;5;40m")
+                  "\x1b[48;5;40m"
                   "fix-sgr: 256-color bg index 40 not changed")))
 
 (test-case "fix-sgr: truecolor fg R=40 not changed"
   (let ()
     ;; T12: truecolor fg with R=40 — should NOT be changed
-    (check-equal? (fix-sgr-bg-black "\x1b[38;2;40;0;0m") "\x1b[38;2;40;0;0m"
+    (check-equal? (fix-sgr-bg-black "\x1b[38;2;40;0;0m")
+                  "\x1b[38;2;40;0;0m"
                   "fix-sgr: truecolor fg R=40 not changed")))
 
 (test-case "fix-sgr: truecolor bg R=40 not changed"
   (let ()
     ;; T13: truecolor bg with R=40 — should NOT be changed
-    (check-equal? (fix-sgr-bg-black "\x1b[48;2;40;0;0m") "\x1b[48;2;40;0;0m"
+    (check-equal? (fix-sgr-bg-black "\x1b[48;2;40;0;0m")
+                  "\x1b[48;2;40;0;0m"
                   "fix-sgr: truecolor bg R=40 not changed")))
 
 ;; --------------------------------------------------------
@@ -640,7 +641,7 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set-box! (tui-ctx-ui-state-box ctx) state)
     (handle-mouse ctx '(scroll-up 0 5))
@@ -654,7 +655,7 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set! state (scroll-up state 10))
     (set-box! (tui-ctx-ui-state-box ctx) state)
@@ -669,7 +670,7 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set! state (scroll-up state 2))
     (set-box! (tui-ctx-ui-state-box ctx) state)
@@ -684,7 +685,7 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (for ([i (in-range 10)])
-      (define entry (transcript-entry 'system (format "line ~a" i) 0 (hash)))
+      (define entry (make-entry 'system (format "line ~a" i) 0 (hash)))
       (set! state (add-transcript-entry state entry)))
     (set! state (scroll-up state 5))
     (set-box! (tui-ctx-ui-state-box ctx) state)
@@ -705,22 +706,22 @@
   (let ()
     ;; Right click does NOT set selection (only left button)
     (define ctx (make-tui-ctx))
-    (handle-mouse ctx '(click 2 10 5))  ;; button=2 (right)
+    (handle-mouse ctx '(click 2 10 5)) ;; button=2 (right)
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (check-false (ui-state-sel-anchor state) "right click does not set selection")))
 (test-case "middle click does not set selection"
   (let ()
     ;; Middle click does NOT set selection (only left button)
     (define ctx (make-tui-ctx))
-    (handle-mouse ctx '(click 1 10 5))  ;; button=1 (middle)
+    (handle-mouse ctx '(click 1 10 5)) ;; button=1 (middle)
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (check-false (ui-state-sel-anchor state) "middle click does not set selection")))
 (test-case "drag updates sel-end"
   (let ()
     ;; Drag updates selection end
     (define ctx (make-tui-ctx))
-    (handle-mouse ctx '(click 0 10 5))   ;; start
-    (handle-mouse ctx '(drag 15 8))     ;; drag to new position
+    (handle-mouse ctx '(click 0 10 5)) ;; start
+    (handle-mouse ctx '(drag 15 8)) ;; drag to new position
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (check-equal? (ui-state-sel-end state) '(15 . 8) "drag updates sel-end")))
 (test-case "drag without anchor does nothing"
@@ -734,8 +735,8 @@
   (let ()
     ;; Release preserves selection (for visual feedback + clipboard)
     (define ctx (make-tui-ctx))
-    (handle-mouse ctx '(click 0 10 5))   ;; start
-    (handle-mouse ctx '(release 15 8))   ;; release
+    (handle-mouse ctx '(click 0 10 5)) ;; start
+    (handle-mouse ctx '(release 15 8)) ;; release
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (check-not-false (ui-state-sel-anchor state) "release preserves sel-anchor")
     (check-not-false (ui-state-sel-end state) "release preserves sel-end")))
@@ -749,8 +750,8 @@
 (test-case "styled-line->text concatenates segments"
   (let ()
     ;; styled-line->text extracts plain text
-    (define line (styled-line (list (styled-segment "hello" '(bold cyan))
-                                    (styled-segment " world" '(dim)))))
+    (define line
+      (styled-line (list (styled-segment "hello" '(bold cyan)) (styled-segment " world" '(dim)))))
     (check-equal? (styled-line->text line) "hello world" "styled-line->text concatenates segments")))
 (test-case "empty styled-line gives empty string"
   (let ()
@@ -763,10 +764,8 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     ;; Add a user message entry
-    (define state2 (add-transcript-entry state
-                 (transcript-entry 'user "hello world" 0 (hash))))
-    (define state3 (add-transcript-entry state2
-                 (transcript-entry 'assistant "test response" 0 (hash))))
+    (define state2 (add-transcript-entry state (make-entry 'user "hello world" 0 (hash))))
+    (define state3 (add-transcript-entry state2 (make-entry 'assistant "test response" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state3)
     ;; Set selection anchor at (0, 0) — but transcript starts below header
     (define state-sel (set-selection-anchor state3 0 2))
@@ -779,8 +778,7 @@
     ;; selection-text returns "" for out-of-bounds coordinates
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                 (transcript-entry 'system "log entry" 0 (hash))))
+    (define state2 (add-transcript-entry state (make-entry 'system "log entry" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
     ;; Selection entirely out of transcript bounds
     (define state-sel (set-selection-anchor state2 0 100))
@@ -810,21 +808,15 @@
 (test-case "decode-mouse-x10: middle drag"
   (let ()
     ;; Right click: cb=34 (button=2, no motion)
-    (check-equal? (decode-mouse-x10 34 38 43)
-                  '(mouse click 2 5 10)
-                  "decode-mouse-x10: right click")))
+    (check-equal? (decode-mouse-x10 34 38 43) '(mouse click 2 5 10) "decode-mouse-x10: right click")))
 (test-case "decode-mouse-x10: release (P0 — was silently dropped)"
   (let ()
     ;; Drag (left held + motion): cb = 32+32 = 64
-    (check-equal? (decode-mouse-x10 64 38 43)
-                  '(mouse drag 5 10)
-                  "decode-mouse-x10: left drag")))
+    (check-equal? (decode-mouse-x10 64 38 43) '(mouse drag 5 10) "decode-mouse-x10: left drag")))
 (test-case "decode-mouse-x10: release at (0,0)"
   (let ()
     ;; Drag (middle held + motion): cb = 33+32 = 65
-    (check-equal? (decode-mouse-x10 65 38 43)
-                  '(mouse drag 5 10)
-                  "decode-mouse-x10: middle drag")))
+    (check-equal? (decode-mouse-x10 65 38 43) '(mouse drag 5 10) "decode-mouse-x10: middle drag")))
 (test-case "decode-mouse-x10: scroll up"
   (let ()
     ;; Release: cb=35 (button=3, NO motion bit) — this was the P0 bug
@@ -841,9 +833,7 @@
 (test-case "decode-mouse-x10: cb=67 is release (button=3 regardless of motion)"
   (let ()
     ;; Scroll up: cb = 96 (64 + 0 + 32)
-    (check-equal? (decode-mouse-x10 96 33 33)
-                  '(mouse scroll-up 0 0)
-                  "decode-mouse-x10: scroll up")))
+    (check-equal? (decode-mouse-x10 96 33 33) '(mouse scroll-up 0 0) "decode-mouse-x10: scroll up")))
 (test-case "decode-mouse-x10: scroll down cb=97"
   (let ()
     ;; Scroll down: cb = 97 (64 + 1 + 32)
@@ -865,10 +855,8 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     ;; Add two entries so we have multiple lines
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'user "first line" 0 (hash))))
-    (define state3 (add-transcript-entry state2
-                     (transcript-entry 'assistant "second line" 0 (hash))))
+    (define state2 (add-transcript-entry state (make-entry 'user "first line" 0 (hash))))
+    (define state3 (add-transcript-entry state2 (make-entry 'assistant "second line" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state3)
     ;; Select first transcript line (screen row 1 = first line after header)
     (define state-sel (set-selection-anchor state3 0 1))
@@ -882,10 +870,8 @@
     ;; selection-text row mapping — second transcript line
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'user "alpha" 0 (hash))))
-    (define state3 (add-transcript-entry state2
-                     (transcript-entry 'assistant "beta" 0 (hash))))
+    (define state2 (add-transcript-entry state (make-entry 'user "alpha" 0 (hash))))
+    (define state3 (add-transcript-entry state2 (make-entry 'assistant "beta" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state3)
     ;; Select second transcript line (screen row 2)
     (define state-sel (set-selection-anchor state3 0 2))
@@ -899,25 +885,22 @@
     (define ctx (make-tui-ctx))
     ;; Add transcript content
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'assistant "Hello world this is a test" 0 (hash))))
+    (define state2
+      (add-transcript-entry state (make-entry 'assistant "Hello world this is a test" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
 
     ;; Simulate click (left button, col 0, row 1)
     (handle-mouse ctx '(click 0 0 1))
     (define after-click (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor after-click)
-                     "selection lifecycle: anchor set after click")
-    (check-not-false (ui-state-sel-end after-click)
-                     "selection lifecycle: end set after click")
+    (check-not-false (ui-state-sel-anchor after-click) "selection lifecycle: anchor set after click")
+    (check-not-false (ui-state-sel-end after-click) "selection lifecycle: end set after click")
 
     ;; Simulate drag (col 10, row 1)
     (handle-mouse ctx '(drag 10 1))
     (define after-drag (unbox (tui-ctx-ui-state-box ctx)))
     (check-not-false (ui-state-sel-anchor after-drag)
                      "selection lifecycle: anchor persists during drag")
-    (check-not-false (ui-state-sel-end after-drag)
-                     "selection lifecycle: end updated during drag")
+    (check-not-false (ui-state-sel-end after-drag) "selection lifecycle: end updated during drag")
 
     ;; Simulate release (col 10, row 1)
     (handle-mouse ctx '(release 10 1))
@@ -931,10 +914,8 @@
     ;; Test 2: Next click resets selection
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'assistant "First line" 0 (hash))))
-    (define state3 (add-transcript-entry state2
-                     (transcript-entry 'assistant "Second line" 0 (hash))))
+    (define state2 (add-transcript-entry state (make-entry 'assistant "First line" 0 (hash))))
+    (define state3 (add-transcript-entry state2 (make-entry 'assistant "Second line" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state3)
 
     ;; Select first line
@@ -957,8 +938,7 @@
     ;; Test 3: Zero-length selection has no text
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'assistant "Hello" 0 (hash))))
+    (define state2 (add-transcript-entry state (make-entry 'assistant "Hello" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
     ;; Click and release at same point (no drag)
     (handle-mouse ctx '(click 0 3 1))
@@ -973,20 +953,19 @@
   (let ()
     ;; Release does NOT move sel-end to release position
     (define ctx (make-tui-ctx))
-    (handle-mouse ctx '(click 0 2 1))    ;; left-click at (2,1)
-    (handle-mouse ctx '(drag 10 1))       ;; drag to (10,1)
-    (handle-mouse ctx '(release 20 1))    ;; release at (20,1) — should NOT move end
+    (handle-mouse ctx '(click 0 2 1)) ;; left-click at (2,1)
+    (handle-mouse ctx '(drag 10 1)) ;; drag to (10,1)
+    (handle-mouse ctx '(release 20 1)) ;; release at (20,1) — should NOT move end
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (define sel-end (ui-state-sel-end state))
-    (check-equal? sel-end '(10 . 1)
-                  "release does not move sel-end: stays at last drag position")))
+    (check-equal? sel-end '(10 . 1) "release does not move sel-end: stays at last drag position")))
 (test-case "right-click does not change sel-anchor"
   (let ()
     ;; Right-click does not corrupt existing selection
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'assistant "Hello world test string" 0 (hash))))
+    (define state2
+      (add-transcript-entry state (make-entry 'assistant "Hello world test string" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
     ;; Left-click and drag to select "Hello"
     (handle-mouse ctx '(click 0 0 1))
@@ -998,17 +977,19 @@
     (handle-mouse ctx '(release 15 3))
     (define after-right-click (unbox (tui-ctx-ui-state-box ctx)))
     ;; Selection endpoints should be UNCHANGED by right-click
-    (check-equal? (ui-state-sel-anchor after-right-click) '(0 . 1)
+    (check-equal? (ui-state-sel-anchor after-right-click)
+                  '(0 . 1)
                   "right-click does not change sel-anchor")
-    (check-equal? (ui-state-sel-end after-right-click) drag-end
+    (check-equal? (ui-state-sel-end after-right-click)
+                  drag-end
                   "right-click does not change sel-end")))
 (test-case "Resize polling tests (BUG: TUI not resized on terminal resize)"
   (let ()
     ;; Release copies correct text (from drag selection, not release position)
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define state2 (add-transcript-entry state
-                     (transcript-entry 'assistant "Alpha Beta Gamma Delta" 0 (hash))))
+    (define state2
+      (add-transcript-entry state (make-entry 'assistant "Alpha Beta Gamma Delta" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
     ;; Select first 5 chars ("Alpha") — drag to col 4 (0..4 = 5 chars)
     (handle-mouse ctx '(click 0 0 1))
@@ -1017,8 +998,7 @@
     (handle-mouse ctx '(release 20 1))
     (define state-after (unbox (tui-ctx-ui-state-box ctx)))
     (define text (selection-text ctx state-after))
-    (check-true (and (string? text)
-                     (string=? text "Alpha"))
+    (check-true (and (string? text) (string=? text "Alpha"))
                 (format "release copies drag selection text, got: ~s" text))))
 (test-case "Resize polling tests (BUG: TUI not resized on terminal resize)"
   (let ()
@@ -1035,16 +1015,14 @@
     (define ctx (make-tui-ctx))
     (set-box! (tui-ctx-needs-redraw-box ctx) #f)
     (mark-dirty! ctx)
-    (check-true (unbox (tui-ctx-needs-redraw-box ctx))
-                "resize poll: mark-dirty! sets redraw flag")))
+    (check-true (unbox (tui-ctx-needs-redraw-box ctx)) "resize poll: mark-dirty! sets redraw flag")))
 (test-case "no-feedback-loop: first call returns #t"
   (let ()
     ;; Test: tui-screen-size-cache-reset! clears cached size
     ;; After reset, tui-screen-size should re-query (not crash)
     (tui-screen-size-cache-reset!)
     (define-values (cols rows) (tui-screen-size))
-    (check-true (and (integer? cols) (> cols 0))
-                "resize poll: cols is positive integer after reset")
+    (check-true (and (integer? cols) (> cols 0)) "resize poll: cols is positive integer after reset")
     (check-true (and (integer? rows) (> rows 0))
                 "resize poll: rows is positive integer after reset")))
 (test-case "no-feedback-loop: first call returns #t"
@@ -1086,7 +1064,8 @@
     (define ctx (make-tui-ctx))
     ;; Add transcript entries so selection has text to select
     (define state0 (unbox (tui-ctx-ui-state-box ctx)))
-    (define state1 (add-transcript-entry state0 (transcript-entry 'assistant "Alpha Beta Gamma Delta" 0 (hash))))
+    (define state1
+      (add-transcript-entry state0 (make-entry 'assistant "Alpha Beta Gamma Delta" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state1)
     ;; Set up a selection via mouse click+drag at row 1 (transcript line 0)
     (handle-mouse ctx '(click 0 0 1))
@@ -1095,8 +1074,9 @@
     (define state-with-sel (unbox (tui-ctx-ui-state-box ctx)))
     (check-not-false (has-selection? state-with-sel) "ctrl-c: selection exists after drag")
     ;; Ctrl-C should copy — test by checking handle-key returns 'continue
-    (define result (parameterize ([current-clipboard-mode 'osc52])
-                     (handle-key ctx 'ctrl-c)))
+    (define result
+      (parameterize ([current-clipboard-mode 'osc52])
+        (handle-key ctx 'ctrl-c)))
     (check-equal? result 'continue "ctrl-c: handle-key returns 'continue")))
 (test-case "ctrl-c no selection: returns 'continue"
   (let ()
@@ -1104,15 +1084,13 @@
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     ;; No selection set — should not crash
-    (define result (parameterize ([current-clipboard-mode 'osc52])
-                     (handle-key ctx 'ctrl-c)))
+    (define result
+      (parameterize ([current-clipboard-mode 'osc52])
+        (handle-key ctx 'ctrl-c)))
     (check-equal? result 'continue "ctrl-c no selection: returns 'continue")))
 (test-case "current-clipboard-mode is a parameter"
   (let ()
     ;; copy-text! is accessible from interfaces/tui
-    (check-true (procedure? copy-text!)
-                "copy-text! is exported from interfaces/tui")
-    (check-true (procedure? copy-selection!)
-                "copy-selection! is exported from interfaces/tui")
-    (check-true (parameter? current-clipboard-mode)
-                "current-clipboard-mode is a parameter")))
+    (check-true (procedure? copy-text!) "copy-text! is exported from interfaces/tui")
+    (check-true (procedure? copy-selection!) "copy-selection! is exported from interfaces/tui")
+    (check-true (parameter? current-clipboard-mode) "current-clipboard-mode is a parameter")))

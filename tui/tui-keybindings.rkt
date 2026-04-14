@@ -110,7 +110,7 @@
          (define layout (compute-layout cols rows))
          (define trans-y (tui-layout-transcript-start-row layout))
          (define trans-height (tui-layout-transcript-height layout))
-         (define all-lines (render-transcript state trans-height cols))
+         (define-values (all-lines _state*) (render-transcript state trans-height cols))
          ;; Map screen rows to line indices (screen row → rendered line index)
          ;; Mouse y is 0-based: row 0 = header, row 1 = first transcript line.
          ;; trans-y is 1-based: value 2 means transcript starts at screen row 1 (0-based).
@@ -184,7 +184,7 @@
            (list 'command (or cmd 'unknown))]
           [else
            ;; Add user message to transcript
-           (define user-entry (transcript-entry 'user text (current-inexact-milliseconds) (hash)))
+           (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
            (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
            (list 'submit text)])]
        [(#\newline)
@@ -215,7 +215,7 @@
            (list 'command (or cmd 'unknown))]
           [else
            ;; Add user message to transcript
-           (define user-entry (transcript-entry 'user text (current-inexact-milliseconds) (hash)))
+           (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
            (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
            (list 'submit text)])]
        [(left kp-left)

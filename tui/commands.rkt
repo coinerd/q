@@ -100,7 +100,7 @@
   (define lines (render-branch-list branches-with-active cols))
   (define new-state
     (for/fold ([s state]) ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system (styled-line->text line) 0 (hash)))))
+      (add-transcript-entry s (make-entry 'system (styled-line->text line) 0 (hash)))))
   (set-box! (cmd-ctx-state-box cctx) (set-visible-branches new-state branches-with-active))
   'continue)
 
@@ -118,7 +118,7 @@
   (define lines (render-leaf-nodes branches-with-active cols))
   (define new-state
     (for/fold ([s state]) ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system (styled-line->text line) 0 (hash)))))
+      (add-transcript-entry s (make-entry 'system (styled-line->text line) 0 (hash)))))
   (set-box! (cmd-ctx-state-box cctx) new-state)
   'continue)
 
@@ -128,11 +128,11 @@
   (define idx (get-session-index cctx))
   (define entry
     (if (and idx (lookup-entry idx branch-id))
-        (transcript-entry 'system
-                          (format "[switched to branch: ~a]" branch-id)
-                          0
-                          (hasheq 'branch-id branch-id))
-        (transcript-entry 'error (format "Branch not found: ~a" branch-id) 0 (hasheq))))
+        (make-entry 'system
+                    (format "[switched to branch: ~a]" branch-id)
+                    0
+                    (hasheq 'branch-id branch-id))
+        (make-entry 'error (format "Branch not found: ~a" branch-id) 0 (hasheq))))
   (define new-state (add-transcript-entry state entry))
   (when (and idx (lookup-entry idx branch-id))
     (set-box! (cmd-ctx-state-box cctx) (set-current-branch new-state branch-id)))
@@ -164,7 +164,7 @@
   ;; Add lines to transcript
   (define final-state
     (for/fold ([s new-state]) ([line (in-list lines)])
-      (add-transcript-entry s (transcript-entry 'system (styled-line->text line) 0 (hash)))))
+      (add-transcript-entry s (make-entry 'system (styled-line->text line) 0 (hash)))))
   (set-box! (cmd-ctx-state-box cctx) final-state)
   'continue)
 
@@ -177,20 +177,20 @@
   (define idx (get-session-index cctx))
   (cond
     [(not idx)
-     (define entry (transcript-entry 'error "No session index available" 0 (hash)))
+     (define entry (make-entry 'error "No session index available" 0 (hash)))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     [else
      (define entries (session-index-entry-order idx))
      (if (null? entries)
-         (let ([entry (transcript-entry 'system "Session is empty." 0 (hash))])
+         (let ([entry (make-entry 'system "Session is empty." 0 (hash))])
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
            'continue)
          (let ()
-           (define header (transcript-entry 'system "Session history:" 0 (hash)))
+           (define header (make-entry 'system "Session history:" 0 (hash)))
            (define entries-out
              (for/list ([msg (in-vector entries)])
-               (transcript-entry 'system (format "  [~a]" (message-role msg)) 0 (hash))))
+               (make-entry 'system (format "  [~a]" (message-role msg)) 0 (hash))))
            (define all-entries (cons header entries-out))
            (define new-state
              (for/fold ([s state]) ([e (in-list all-entries)])
@@ -206,15 +206,15 @@
   (define state (unbox (cmd-ctx-state-box cctx)))
   (cond
     [(not entry-id)
-     (define entry (transcript-entry 'error "Usage: /fork <entry-id>" 0 (hash)))
+     (define entry (make-entry 'error "Usage: /fork <entry-id>" 0 (hash)))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     [else
      (define entry
-       (transcript-entry 'system
-                         (format "[fork requested at: ~a]" entry-id)
-                         0
-                         (hasheq 'fork-entry-id entry-id)))
+       (make-entry 'system
+                   (format "[fork requested at: ~a]" entry-id)
+                   0
+                   (hasheq 'fork-entry-id entry-id)))
      ;; Publish fork event for runtime to handle
      (when (cmd-ctx-event-bus cctx)
        (publish! (cmd-ctx-event-bus cctx)
@@ -238,22 +238,21 @@
   (cond
     ;; No registry available
     [(not reg)
-     (define entry (transcript-entry 'error "[no model registry available]" 0 (hash)))
+     (define entry (make-entry 'error "[no model registry available]" 0 (hash)))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
     ;; No argument — list available models
     [(not arg)
      (define models (available-models reg))
      (define default (default-model reg))
-     (define header (transcript-entry 'system "Available models:" 0 (hash)))
+     (define header (make-entry 'system "Available models:" 0 (hash)))
      (define model-entries
        (for/list ([m (in-list models)])
          (define marker (if (equal? (model-entry-name m) default) " *" "  "))
-         (transcript-entry
-          'system
-          (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))
-          0
-          (hash))))
+         (make-entry 'system
+                     (format "~a ~a (~a)" marker (model-entry-name m) (model-entry-provider-name m))
+                     0
+                     (hash))))
      (define all-entries (cons header model-entries))
      (define new-state
        (for/fold ([s state]) ([e (in-list all-entries)])
@@ -266,10 +265,10 @@
      (cond
        [(not resolution)
         (define entry
-          (transcript-entry 'error
-                            (format "Model not found: ~a. Use /model to list available models." arg)
-                            0
-                            (hash)))
+          (make-entry 'error
+                      (format "Model not found: ~a. Use /model to list available models." arg)
+                      0
+                      (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else
@@ -281,19 +280,19 @@
                                 (or (ui-state-session-id state) "")
                                 #f
                                 (hasheq 'model
-                                      (model-resolution-model-name resolution)
-                                      'provider
-                                      (model-resolution-provider-name resolution)))))
+                                        (model-resolution-model-name resolution)
+                                        'provider
+                                        (model-resolution-provider-name resolution)))))
         (define entry
-          (transcript-entry 'system
-                            (format "[switched to model: ~a (provider: ~a)]"
-                                    (model-resolution-model-name resolution)
-                                    (model-resolution-provider-name resolution))
-                            0
-                            (hasheq 'model
-                                  (model-resolution-model-name resolution)
-                                  'provider
-                                  (model-resolution-provider-name resolution))))
+          (make-entry 'system
+                      (format "[switched to model: ~a (provider: ~a)]"
+                              (model-resolution-model-name resolution)
+                              (model-resolution-provider-name resolution))
+                      0
+                      (hasheq 'model
+                              (model-resolution-model-name resolution)
+                              'provider
+                              (model-resolution-provider-name resolution))))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue])]))
 
@@ -311,25 +310,24 @@
        (define sess-list (sessions-list session-dir #:limit 10))
        (define strings (sessions-list->strings sess-list))
        (if (null? sess-list)
-           (list (transcript-entry 'system "No sessions found." 0 (hash)))
+           (list (make-entry 'system "No sessions found." 0 (hash)))
            (for/list ([s (in-list strings)])
-             (transcript-entry 'system s 0 (hash))))]
+             (make-entry 'system s 0 (hash))))]
       ;; /sessions info <id>
       [(and (list? cmd) (>= (length cmd) 3) (eq? (cadr cmd) 'info))
        (define sid (caddr cmd))
        (define info (sessions-info session-dir sid))
-       (list (transcript-entry 'system (sessions-info->string info) 0 (hash)))]
+       (list (make-entry 'system (sessions-info->string info) 0 (hash)))]
       ;; /sessions delete <id>
       [(and (list? cmd) (>= (length cmd) 3) (eq? (cadr cmd) 'delete))
        (define sid (caddr cmd))
        (define result (sessions-delete session-dir sid))
        (list (case result
-               [(ok) (transcript-entry 'system (format "Session ~a deleted." sid) 0 (hash))]
-               [(not-found) (transcript-entry 'error (format "Session not found: ~a" sid) 0 (hash))]
-               [(cancelled) (transcript-entry 'system "Cancelled." 0 (hash))]))]
+               [(ok) (make-entry 'system (format "Session ~a deleted." sid) 0 (hash))]
+               [(not-found) (make-entry 'error (format "Session not found: ~a" sid) 0 (hash))]
+               [(cancelled) (make-entry 'system "Cancelled." 0 (hash))]))]
       ;; Fallback
-      [else
-       (list (transcript-entry 'system "Usage: /sessions [list|info <id>|delete <id>]" 0 (hash)))]))
+      [else (list (make-entry 'system "Usage: /sessions [list|info <id>|delete <id>]" 0 (hash)))]))
   (define new-state
     (for/fold ([s state]) ([e (in-list entries)])
       (add-transcript-entry s e)))
@@ -356,7 +354,7 @@
        [(fork) (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
        [(sessions) (handle-sessions-tui-command cctx cmd)]
        [(switch-error children-error)
-        (define entry (transcript-entry 'error (cadr cmd) 0 (hash)))
+        (define entry (make-entry 'error (cadr cmd) 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else 'continue])]
@@ -371,21 +369,19 @@
         (define cmds (all-commands reg))
         (define help-entries
           (cons
-           (transcript-entry 'system "Commands:" 0 (hash))
+           (make-entry 'system "Commands:" 0 (hash))
            (for/list ([c (in-list cmds)])
-             (define args-str (if (null? (cmd-entry-args-spec c))
-                                  ""
-                                  (string-append " " (string-join (cmd-entry-args-spec c) " "))))
-             (define aliases-str (if (null? (cmd-entry-aliases c))
-                                     ""
-                                     (format " (~a)" (string-join (cmd-entry-aliases c) ", "))))
-             (transcript-entry
+             (define args-str
+               (if (null? (cmd-entry-args-spec c))
+                   ""
+                   (string-append " " (string-join (cmd-entry-args-spec c) " "))))
+             (define aliases-str
+               (if (null? (cmd-entry-aliases c))
+                   ""
+                   (format " (~a)" (string-join (cmd-entry-aliases c) ", "))))
+             (make-entry
               'system
-              (format "  ~a~a~a  ~a"
-                      (cmd-entry-name c)
-                      args-str
-                      aliases-str
-                      (cmd-entry-summary c))
+              (format "  ~a~a~a  ~a" (cmd-entry-name c) args-str aliases-str (cmd-entry-summary c))
               0
               (hash)))))
         (define new-state
@@ -398,7 +394,7 @@
         'continue]
        [(compact)
         ;; Compact: add status message and notify runtime
-        (define entry (transcript-entry 'system "[compact requested]" 0 (hash)))
+        (define entry (make-entry 'system "[compact requested]" 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         (when (cmd-ctx-event-bus cctx)
           (publish! (cmd-ctx-event-bus cctx)
@@ -418,7 +414,7 @@
                                 #f
                                 (hash))))
         (define entry
-          (transcript-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
+          (make-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [(branches) (handle-branches-command cctx)]
@@ -428,7 +424,7 @@
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]
        [(unknown)
-        (define entry (transcript-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
+        (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [else 'continue])]))

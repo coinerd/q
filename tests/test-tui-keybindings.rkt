@@ -79,7 +79,7 @@
       (define ctx (make-tui-ctx))
       ;; Add a transcript entry
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (define entry (transcript-entry 'user "hello" (current-inexact-milliseconds) (hash)))
+      (define entry (make-entry 'user "hello" (current-inexact-milliseconds) (hash)))
       (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state entry))
       (check-equal? (length (ui-state-transcript (unbox (tui-ctx-ui-state-box ctx)))) 1)
       (process-slash-command ctx 'clear)

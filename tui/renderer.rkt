@@ -21,34 +21,37 @@
 ;;   dim     = fg=8 (dark gray)
 ;;   reset   = fg=7, bg=0, bold=#f (default values)
 
-(provide
- ;; Main rendering function
- render-frame!
+;; Main rendering function
+(provide render-frame!
 
- ;; Style mapping (for testing)
- style->ubuf-kws
+         ;; Style mapping (for testing)
+         style->ubuf-kws
 
- ;; Ubuf operations (settable for testing)
- current-ubuf-clear
- current-ubuf-putstring)
+         ;; Ubuf operations (settable for testing)
+         current-ubuf-clear
+         current-ubuf-putstring)
 
 ;; ============================================================
 ;; Ubuf operations (parameterized for testability)
 ;; ============================================================
 
 ;; Parameter for ubuf-clear! function
-(define current-ubuf-clear
-  (make-parameter (lambda (ubuf) (void))))
+(define current-ubuf-clear (make-parameter (lambda (ubuf) (void))))
 
 ;; Parameter for ubuf-putstring! function
 ;; Signature matches tui-ubuf: (ubuf x y str #:fg #:bg #:bold #:underline ...)
 (define current-ubuf-putstring
-  (make-parameter
-   (lambda (ubuf x y str
-            #:fg [fg 7] #:bg [bg 0]
-            #:bold [bold #f] #:underline [underline #f]
-            #:italic [italic #f] #:blink [blink #f])
-     (void))))
+  (make-parameter (lambda (ubuf
+                           x
+                           y
+                           str
+                           #:fg [fg 7]
+                           #:bg [bg 0]
+                           #:bold [bold #f]
+                           #:underline [underline #f]
+                           #:italic [italic #f]
+                           #:blink [blink #f])
+                    (void))))
 
 ;; ============================================================
 ;; Style → ubuf attribute conversion
@@ -57,16 +60,16 @@
 ;; Color name → ANSI color number
 (define (color-name->number c)
   (case c
-    [(black)  0]
-    [(red)    1]
-    [(green)  2]
+    [(black) 0]
+    [(red) 1]
+    [(green) 2]
     [(yellow) 3]
-    [(blue)   4]
-    [(magenta)5]
-    [(cyan)   6]
-    [(white)  7]
+    [(blue) 4]
+    [(magenta) 5]
+    [(cyan) 6]
+    [(white) 7]
     [(dim-gray dark-gray) 8]
-    [else     7]))
+    [else 7]))
 
 ;; Resolve a list of style symbols into ubuf keyword arguments.
 ;; Returns (values kw-list val-list) for keyword-apply.
@@ -75,26 +78,28 @@
 ;; Style symbols from render.rkt:
 ;;   'bold 'inverse 'underline 'dim 'red 'green 'yellow 'cyan
 (define (style->ubuf-kws styles)
-  (define fg-color   #f)
-  (define bg-color   #f)
-  (define bold?      #f)
+  (define fg-color #f)
+  (define bg-color #f)
+  (define bold? #f)
   (define underline? #f)
-  (define italic?    #f)
-  (define inverse?   #f)
+  (define italic? #f)
+  (define inverse? #f)
   (for ([s (in-list styles)])
     (case s
-      [(bold)      (set! bold? #t)]
-      [(italic)    (set! italic? #t)]
-      [(inverse)   (set! inverse? #t)]
+      [(bold) (set! bold? #t)]
+      [(italic) (set! italic? #t)]
+      [(inverse) (set! inverse? #t)]
       [(underline) (set! underline? #t)]
-      [(dim)       (when (not fg-color) (set! fg-color 8))]
-      [(red)       (set! fg-color 1)]
-      [(green)     (set! fg-color 2)]
-      [(yellow)    (set! fg-color 3)]
-      [(blue)      (set! fg-color 4)]
-      [(magenta)   (set! fg-color 5)]
-      [(cyan)      (set! fg-color 6)]
-      [(white)     (set! fg-color 7)]
+      [(dim)
+       (when (not fg-color)
+         (set! fg-color 8))]
+      [(red) (set! fg-color 1)]
+      [(green) (set! fg-color 2)]
+      [(yellow) (set! fg-color 3)]
+      [(blue) (set! fg-color 4)]
+      [(magenta) (set! fg-color 5)]
+      [(cyan) (set! fg-color 6)]
+      [(white) (set! fg-color 7)]
       [else (void)]))
   ;; Collect kw/val pairs — only include non-defaults
   (define pairs '())
@@ -176,7 +181,7 @@
   (define header-y (- header-row 1))
   (define trans-y (- transcript-start-row 1))
   (define status-y (- status-row 1))
-  (define input-y  (- input-row 1))
+  (define input-y (- input-row 1))
 
   ;; 1. Clear the buffer
   (ubuf-clear! ubuf)
@@ -185,8 +190,8 @@
   (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
   (ubuf-putstring! ubuf 0 header-y header-text #:fg 0 #:bg 7)
 
-  ;; 3. Draw transcript entries
-  (define trans-lines-raw (render-transcript ui-state transcript-height cols))
+  ;; 3. Draw transcript entries (with render cache)
+  (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
   ;; Apply selection highlight if selection is active
   (define sel-anchor (ui-state-sel-anchor ui-state))
   (define sel-end (ui-state-sel-end ui-state))
@@ -216,4 +221,4 @@
   ;; 6. Return cursor position (0-indexed for ANSI escape)
   (define-values (_visible-text _scroll-offset cursor-display-col)
     (input-visible-window input-st cols))
-  (values cursor-display-col input-y))
+  (values cursor-display-col input-y ui-state*))

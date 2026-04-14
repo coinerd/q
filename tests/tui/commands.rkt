@@ -95,7 +95,7 @@
       ;; Add an entry first
       (set-box! (cmd-ctx-state-box cctx)
                 (add-transcript-entry (unbox (cmd-ctx-state-box cctx))
-                                      (transcript-entry 'user "hello" 0 (hash))))
+                                      (make-entry 'user "hello" 0 (hash))))
       (check-equal? (length (ui-state-transcript (unbox (cmd-ctx-state-box cctx)))) 1)
       (process-slash-command cctx 'clear)
       (check-equal? (length (ui-state-transcript (unbox (cmd-ctx-state-box cctx))))

@@ -191,7 +191,7 @@
 
     (test-case "add-transcript-entry: appends entry and resets scroll"
       (let* ([s (struct-copy ui-state (initial-ui-state) [scroll-offset 5])]
-             [entry (transcript-entry 'user "hello" 1000 (hash))]
+             [entry (make-entry 'user "hello" 1000 (hash))]
              [s2 (add-transcript-entry s entry)])
         (check-equal? (length (ui-state-transcript s2)) 1)
         (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'user)
@@ -203,14 +203,14 @@
 
     (test-case "visible-entries: returns all entries (line slicing is renderer's job)"
       (let* ([entries (for/list ([i (in-range 10)])
-                        (transcript-entry 'assistant (format "msg ~a" i) i (hash)))]
+                        (make-entry 'assistant (format "msg ~a" i) i (hash)))]
              [s (struct-copy ui-state (initial-ui-state) [transcript entries])]
              [vis (visible-entries s 5)])
         (check-equal? (length vis) 10 "visible-entries: returns all entries regardless of height")))
 
     (test-case "visible-entries: ignores scroll offset (line slicing is renderer's job)"
       (let* ([entries (for/list ([i (in-range 10)])
-                        (transcript-entry 'assistant (format "msg ~a" i) i (hash)))]
+                        (make-entry 'assistant (format "msg ~a" i) i (hash)))]
              [s (struct-copy ui-state (initial-ui-state) [transcript entries] [scroll-offset 3])]
              [vis (visible-entries s 5)])
         (check-equal? (length vis) 10 "visible-entries: returns all entries regardless of scroll")))
@@ -221,7 +221,7 @@
 
     (test-case "scroll-up: increments offset"
       (let* ([entries (for/list ([i (in-range 10)])
-                        (transcript-entry 'assistant (format "msg ~a" i) i (hash)))]
+                        (make-entry 'assistant (format "msg ~a" i) i (hash)))]
              [s (struct-copy ui-state (initial-ui-state) [transcript entries])]
              [s2 (scroll-up s)]
              [s3 (scroll-up s2 5)])
@@ -245,13 +245,13 @@
 
     (test-case "scroll-to-top: sets large offset for renderer clamping"
       (let* ([entries (for/list ([i (in-range 10)])
-                        (transcript-entry 'assistant (format "msg ~a" i) i (hash)))]
+                        (make-entry 'assistant (format "msg ~a" i) i (hash)))]
              [s (struct-copy ui-state (initial-ui-state) [transcript entries])]
              [s-top (scroll-to-top s)])
         (check-true (> (ui-state-scroll-offset s-top) 100)
-                   "scroll-to-top sets large offset for multi-line entries")
+                    "scroll-to-top sets large offset for multi-line entries")
         (check-true (> (ui-state-scroll-offset s-top) (length entries))
-                   "scroll-to-top offset exceeds entry count")))
+                    "scroll-to-top offset exceeds entry count")))
 
     ;; ============================================================
     ;; ui-busy?, ui-session-label, ui-model-label, ui-status-text
@@ -383,8 +383,8 @@
     (test-case "save-scrollback writes JSONL file"
       (let* ([tmpdir (make-temporary-file "scrollback-test-~a" 'directory)]
              [path (build-path tmpdir "scrollback.jsonl")]
-             [entries (list (transcript-entry 'assistant "Hello" 1000 (hash 'foo "bar"))
-                            (transcript-entry 'tool-start "[tool: bash]" 1001 (hash 'name "bash")))])
+             [entries (list (make-entry 'assistant "Hello" 1000 (hash 'foo "bar"))
+                            (make-entry 'tool-start "[tool: bash]" 1001 (hash 'name "bash")))])
         (save-scrollback entries path)
         (check-true (file-exists? path) "save-scrollback creates file")
         (define content (file->string path))
@@ -421,16 +421,16 @@
     (test-case "roundtrip: save then load preserves events"
       (let* ([tmpdir (make-temporary-file "scrollback-test-~a" 'directory)]
              [path (build-path tmpdir "scrollback.jsonl")]
-             [entries (list (transcript-entry 'assistant "Hello world" 1000 (hash))
-                            (transcript-entry 'tool-start "[TOOL: bash]" 1001 (hash 'name "bash"))
-                            (transcript-entry 'tool-end "[OK: bash]" 1002 (hash 'name "bash"))
-                            (transcript-entry 'tool-fail
-                                              "[FAIL: read] not found"
-                                              1003
-                                              (hash 'name "read" 'error "not found"))
-                            (transcript-entry 'system "Session started" 1004 (hash))
-                            (transcript-entry 'error "Error: boom" 1005 (hash))
-                            (transcript-entry 'user "What is 2+2?" 1006 (hash)))])
+             [entries (list (make-entry 'assistant "Hello world" 1000 (hash))
+                            (make-entry 'tool-start "[TOOL: bash]" 1001 (hash 'name "bash"))
+                            (make-entry 'tool-end "[OK: bash]" 1002 (hash 'name "bash"))
+                            (make-entry 'tool-fail
+                                        "[FAIL: read] not found"
+                                        1003
+                                        (hash 'name "read" 'error "not found"))
+                            (make-entry 'system "Session started" 1004 (hash))
+                            (make-entry 'error "Error: boom" 1005 (hash))
+                            (make-entry 'user "What is 2+2?" 1006 (hash)))])
         (save-scrollback entries path)
         (define loaded (load-scrollback path))
         (check-equal? (length loaded) 7 "roundtrip: same entry count")
@@ -573,7 +573,7 @@
   ;; Selection helpers preserve other state fields
   (define state
     (add-transcript-entry (initial-ui-state #:session-id "test")
-                          (transcript-entry 'assistant "hello" 0 (hash))))
+                          (make-entry 'assistant "hello" 0 (hash))))
   (define state+sel (set-selection-anchor state 5 10))
   (check-equal? (ui-state-session-id state+sel) "test" "set-selection-anchor preserves session-id")
   (check-equal? (ui-state-scroll-offset state+sel) 0 "set-selection-anchor preserves scroll-offset"))

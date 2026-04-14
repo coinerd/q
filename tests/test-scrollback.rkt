@@ -9,7 +9,7 @@
 ;; ============================================================
 
 (test-case "transcript-entry->jsexpr serializes fields"
-  (define entry (transcript-entry 'assistant "hello" 12345 (hash 'model "gpt")))
+  (define entry (make-entry 'assistant "hello" 12345 (hash 'model "gpt")))
   (define j (transcript-entry->jsexpr entry))
   (check-equal? (hash-ref j 'kind) "assistant")
   (check-equal? (hash-ref j 'text) "hello")
@@ -24,7 +24,7 @@
   (check-equal? (transcript-entry-timestamp entry) 99))
 
 (test-case "transcript-entry round-trip preserves data"
-  (define original (transcript-entry 'system "test" 42 (hash 'key "val")))
+  (define original (make-entry 'system "test" 42 (hash 'key "val")))
   (define restored (jsexpr->transcript-entry (transcript-entry->jsexpr original)))
   (check-equal? (transcript-entry-text restored) "test")
   (check-eq? (transcript-entry-kind restored) 'system)
@@ -36,9 +36,7 @@
 
 (test-case "save-scrollback and load-scrollback round-trip"
   (define tmp (make-temporary-file "q-test-scrollback-~a.jsonl"))
-  (define entries
-    (list (transcript-entry 'assistant "hello" 1 (hash))
-          (transcript-entry 'user "world" 2 (hash))))
+  (define entries (list (make-entry 'assistant "hello" 1 (hash)) (make-entry 'user "world" 2 (hash))))
   (save-scrollback entries tmp)
   (define loaded (load-scrollback tmp))
   (check-equal? (length loaded) 2)
@@ -55,7 +53,7 @@
   (define tmp (make-temporary-file "q-test-scrollback-~a.jsonl"))
   (define entries
     (for/list ([i (in-range 600)])
-      (transcript-entry 'system (format "entry-~a" i) i (hash))))
+      (make-entry 'system (format "entry-~a" i) i (hash))))
   (save-scrollback entries tmp)
   (define loaded (load-scrollback tmp))
   ;; Should be trimmed to 500 (scrollback-max-entries)
