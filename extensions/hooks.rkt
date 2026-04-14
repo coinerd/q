@@ -72,12 +72,13 @@
       (if timeout-ms
           ;; Run with timeout
           (let ([chan (make-channel)])
-            (thread
-             (lambda ()
-               (channel-put chan
-                 (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
-                   (cons 'ok (handler payload))))))
+            (define thd (thread
+                          (lambda ()
+                            (channel-put chan
+                              (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
+                                (cons 'ok (handler payload)))))))
             (define maybe (sync/timeout (/ timeout-ms 1000.0) chan))
+            (unless maybe (kill-thread thd))  ; #447: prevent thread leak
             (cond
               [(not maybe)
                (log-warning

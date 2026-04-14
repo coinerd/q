@@ -60,9 +60,10 @@
  (check-false (should-compact? 500 1000)))
 
 (test-case
- "should-compact? returns #t when tokens at or above 80% threshold"
- (check-true (should-compact? 800 1000))
- (check-true (should-compact? 1000 1000))
+ "should-compact? returns #t when tokens at or above effective 80% threshold"
+ ;; With 10% safety margin: effective = 900, threshold = 900*0.8 = 720
+ (check-true (should-compact? 720 1000))
+ (check-true (should-compact? 900 1000))
  (check-true (should-compact? 1500 1000)))
 
 (test-case
@@ -74,11 +75,12 @@
 ;; ------------------------------------------------------------
 
 (test-case
- "remaining-budget calculations"
- (check-equal? (remaining-budget 0 1000) 1000)
- (check-equal? (remaining-budget 500 1000) 500)
- (check-equal? (remaining-budget 1000 1000) 0)
- (check-equal? (remaining-budget 1500 1000) -500))
+ "remaining-budget applies safety margin (#450)"
+ ;; With 10% safety margin: effective-budget = 1000 * 0.9 = 900
+ (check-equal? (remaining-budget 0 1000) 900.0)
+ (check-equal? (remaining-budget 500 1000) 400.0)
+ (check-equal? (remaining-budget 900 1000) 0.0)
+ (check-equal? (remaining-budget 1500 1000) -600.0))
 
 ;; ------------------------------------------------------------
 ;; 4. estimate-context-tokens heuristic is reasonable
