@@ -14,6 +14,7 @@
 (provide char-width
          string-visible-width
          visible-width
+         truncate-to-visible-width
          display-col->string-offset
          grapheme-span-at
          grapheme-count
@@ -128,6 +129,22 @@
 
 ;; Alias for convenience
 (define visible-width string-visible-width)
+
+;; truncate-to-visible-width : String Natural → String
+;; Truncates a string to fit within max-cols visible columns.
+;; Returns the longest prefix whose visible width is <= max-cols.
+(define (truncate-to-visible-width s max-cols)
+  (let loop ([i 0]
+             [col 0])
+    (cond
+      [(>= i (string-length s)) s]
+      [(>= col max-cols) (substring s 0 i)]
+      [else
+       (define c (string-ref s i))
+       (define w (char-width c))
+       (cond
+         [(> (+ col w) max-cols) (substring s 0 i)]
+         [else (loop (add1 i) (+ col w))])])))
 
 ;; ============================================================
 ;; Grapheme cluster utilities (UAX #29)

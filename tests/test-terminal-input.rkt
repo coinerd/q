@@ -199,3 +199,87 @@
     ;; char-ready? on an empty string port returns #t (EOF is ready)
     ;; This just checks the function doesn't crash
     (check-true (boolean? (stub-byte-ready?)))))
+
+;; ============================================================
+;; CSI modifier handling (#422)
+;; ============================================================
+
+(test-case "real-stdin-read-msg decodes Ctrl+Up (ESC[1;5A)"
+  ;; CSI 1;5 A = Ctrl+Up arrow
+  (define in (open-input-bytes (bytes 27 91 49 59 53 65)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-up)))
+
+(test-case "real-stdin-read-msg decodes Ctrl+Down (ESC[1;5B)"
+  (define in (open-input-bytes (bytes 27 91 49 59 53 66)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-down)))
+
+(test-case "real-stdin-read-msg decodes Ctrl+Right (ESC[1;5C)"
+  (define in (open-input-bytes (bytes 27 91 49 59 53 67)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-right)))
+
+(test-case "real-stdin-read-msg decodes Ctrl+Left (ESC[1;5D)"
+  (define in (open-input-bytes (bytes 27 91 49 59 53 68)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'ctrl-left)))
+
+(test-case "real-stdin-read-msg decodes Shift+Up (ESC[1;2A)"
+  (define in (open-input-bytes (bytes 27 91 49 59 50 65)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'shift-up)))
+
+(test-case "real-stdin-read-msg decodes Alt+Up (ESC[1;3A)"
+  (define in (open-input-bytes (bytes 27 91 49 59 51 65)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'alt-up)))
+
+(test-case "plain arrow key without modifier still works (ESC[A)"
+  (define in (open-input-bytes (bytes 27 91 65)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'up)))
+
+;; ============================================================
+;; Paste buffer cap (#428)
+;; ============================================================
+
+(test-case "paste-buffer-add! respects 1MB cap"
+  (paste-buffer-reset!)
+  (set-in-paste! #t)
+  ;; Add small amount
+  (paste-buffer-add! "hello")
+  (check-equal? (paste-buffer-get) "hello")
+  ;; Adding to existing buffer works
+  (paste-buffer-add! " world")
+  (check-equal? (paste-buffer-get) "hello world")
+  (set-in-paste! #f)
+  (paste-buffer-reset!))

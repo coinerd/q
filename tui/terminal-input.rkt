@@ -156,6 +156,9 @@
 (define paste-buffer-str "")
 (define in-paste-state #f)
 
+;; Maximum paste buffer size (1 MB)
+(define paste-buffer-max-size 1048576)
+
 (define (in-paste?)
   in-paste-state)
 (define (set-in-paste! v)
@@ -163,7 +166,8 @@
 (define (paste-buffer-reset!)
   (set! paste-buffer-str ""))
 (define (paste-buffer-add! s)
-  (set! paste-buffer-str (string-append paste-buffer-str s)))
+  (when (<= (+ (string-length paste-buffer-str) (string-length s)) paste-buffer-max-size)
+    (set! paste-buffer-str (string-append paste-buffer-str s))))
 (define (paste-buffer-get)
   paste-buffer-str)
 
@@ -236,16 +240,38 @@
   (cond
     [(and (byte? b2) (= b2 126)) (make-tkeymsg-raw default-key)] ;; ~
     [(and (byte? b2) (= b2 59)) ;; ; — modifier like ESC[1;5A
-     (define _mod (buffered-read-byte in 0.01)) ;; skip modifier number
+     (define mod-byte (buffered-read-byte in 0.01)) ;; modifier number (e.g. 5=ctrl)
      (define b4 (buffered-read-byte in 0.01))
+     (define base-key
+       (cond
+         [(and (byte? b4) (= b4 65)) 'up]
+         [(and (byte? b4) (= b4 66)) 'down]
+         [(and (byte? b4) (= b4 67)) 'right]
+         [(and (byte? b4) (= b4 68)) 'left]
+         [(and (byte? b4) (= b4 72)) 'home]
+         [(and (byte? b4) (= b4 70)) 'end]
+         [else #f]))
      (cond
-       [(and (byte? b4) (= b4 65)) (make-tkeymsg-raw 'up)]
-       [(and (byte? b4) (= b4 66)) (make-tkeymsg-raw 'down)]
-       [(and (byte? b4) (= b4 67)) (make-tkeymsg-raw 'right)]
-       [(and (byte? b4) (= b4 68)) (make-tkeymsg-raw 'left)]
-       [(and (byte? b4) (= b4 72)) (make-tkeymsg-raw 'home)]
-       [(and (byte? b4) (= b4 70)) (make-tkeymsg-raw 'end)]
-       [else (make-tkeymsg-raw 'escape)])]
+       [(not base-key) (make-tkeymsg-raw 'escape)]
+       ;; No modifier (1) or unknown — return base key
+       [(not (and (byte? mod-byte) (> mod-byte 49)))
+        (make-tkeymsg-raw base-key)]
+       ;; Apply modifier: 2=shift, 3=alt, 4=shift+alt, 5=ctrl, 6=shift+ctrl,
+       ;; 7=alt+ctrl, 8=shift+alt+ctrl
+       [else
+        (define mod-sym
+          (cond
+            [(= mod-byte 50) 'shift]   ;; 2
+            [(= mod-byte 51) 'alt]     ;; 3
+            [(= mod-byte 52) 'S-A]     ;; 4 shift+alt
+            [(= mod-byte 53) 'ctrl]    ;; 5
+            [(= mod-byte 54) 'S-C]     ;; 6 shift+ctrl
+            [(= mod-byte 55) 'A-C]     ;; 7 alt+ctrl
+            [(= mod-byte 56) 'S-A-C]   ;; 8 shift+alt+ctrl
+            [else #f]))
+        (if mod-sym
+            (make-tkeymsg-raw (string->symbol (format "~a-~a" mod-sym base-key)))
+            (make-tkeymsg-raw base-key))])]
     [else (make-tkeymsg-raw 'escape)]))
 
 ;; ============================================================
