@@ -26,7 +26,8 @@
          "../tui/clipboard.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
-         (prefix-in commands: "../tui/commands.rkt"))
+         (prefix-in commands: "../tui/commands.rkt")
+         "../tui/keymap.rkt")
 
 ;; ── tui-ctx struct ──
 (provide (struct-out tui-ctx)
@@ -177,14 +178,117 @@
 
 ;; Handle a single key event.
 ;; Returns: 'continue | 'quit | (list 'submit string) | (list 'command symbol)
+;; Cached merged keymap (default + user overrides)
+(define cached-keymap #f)
+
+(define (get-active-keymap)
+  ;; Return the merged keymap (default + user overrides).
+  ;; Loads and caches on first call.
+  (cond
+    [cached-keymap cached-keymap]
+    [else
+     (define base (default-keymap))
+     (define user (load-user-keymap))
+     (when user
+       (keymap-merge base user))
+     (set! cached-keymap base)
+     base]))
+
+;; Convert a raw keycode (char/symbol) from the terminal to a key-spec
+;; for keymap lookup. Handles modifier-prefixed symbols like 'ctrl-z.
+(define (keycode->key-spec-from-msg keycode)
+  (cond
+    [(char? keycode)
+     (key-spec keycode #f #f #f)]
+    [(symbol? keycode)
+     (define s (symbol->string keycode))
+     (cond
+       ;; ctrl-X pattern
+       [(and (> (string-length s) 5) (string-prefix? s "ctrl-"))
+        (define rest (substring s 5))
+        (key-spec (string->symbol rest) #t #f #f)]
+       ;; shift-X pattern
+       [(and (> (string-length s) 6) (string-prefix? s "shift-"))
+        (define rest (substring s 6))
+        (key-spec (string->symbol rest) #f #t #f)]
+       [else (key-spec keycode #f #f #f)])]
+    [else #f]))
+
+;; Dispatch a keymap action to the appropriate handler.
+;; Returns 'handled if handled (maps to 'continue in handle-key),
+;; or #f if not (falls through to hardcoded).
+(define (dispatch-keymap-action ctx inp state action)
+  (case action
+    [(submit) #f] ;; Complex — fall through to hardcoded for proper submit flow
+    [(backspace)
+     (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp)) 'handled]
+    [(delete)
+     (set-box! (tui-ctx-input-state-box ctx) (input-delete inp)) 'handled]
+    [(home)
+     (set-box! (tui-ctx-input-state-box ctx) (input-home inp)) 'handled]
+    [(end)
+     (set-box! (tui-ctx-input-state-box ctx) (input-end inp)) 'handled]
+    [(history-up)
+     (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp)) 'handled]
+    [(history-down)
+     (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp)) 'handled]
+    [(word-left)
+     (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-left inp)) 'handled]
+    [(word-right)
+     (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-right inp)) 'handled]
+    [(clear-input)
+     (set-box! (tui-ctx-input-state-box ctx) (input-kill-to-beginning inp)) 'handled]
+    [(clear-screen)
+     (mark-dirty! ctx) 'handled]
+    [(copy) #f]  ;; Complex — let hardcoded handle
+    [(cut) #f]
+    [(paste)
+     (define text (clipboard-paste))
+     (when text
+       (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text)))
+     'handled]
+    [(select-all) #f] ;; Complex — let hardcoded handle
+    [(scroll-up)
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 1)) 'handled]
+    [(scroll-down)
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 1)) 'handled]
+    [(page-up)
+     (define-values (_cols rows) (tui-screen-size))
+     (define layout (compute-layout _cols rows))
+     (set-box! (tui-ctx-ui-state-box ctx)
+               (scroll-up state (max 1 (tui-layout-transcript-height layout))))
+     'handled]
+    [(page-down)
+     (define-values (_cols rows) (tui-screen-size))
+     (define layout (compute-layout _cols rows))
+     (set-box! (tui-ctx-ui-state-box ctx)
+               (scroll-down state (max 1 (tui-layout-transcript-height layout))))
+     'handled]
+    [(scroll-top)
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-top state)) 'handled]
+    [(scroll-bottom)
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-bottom state)) 'handled]
+    [else #f]))
+
+(define (reload-keymap!)
+  ;; Force reload of keymap (e.g., after user edits keybindings.json)
+  (set! cached-keymap #f)
+  (void))
+
 (define (handle-key ctx keycode)
   (define inp (unbox (tui-ctx-input-state-box ctx)))
   (define state (unbox (tui-ctx-ui-state-box ctx)))
   ;; Any key that reaches here may change state — mark for redraw
   (mark-dirty! ctx)
 
+  ;; Check configurable keymap first
+  (define km (get-active-keymap))
+  (define ks (keycode->key-spec-from-msg keycode))
+  (define action (and ks (keymap-lookup km ks)))
   (cond
-    ;; Regular character input
+    [(and action (eq? (dispatch-keymap-action ctx inp state action) 'handled))
+     'continue]
+    ;; Fallback to hardcoded behavior
     [(char? keycode)
      (case keycode
        [(#\return)

@@ -94,6 +94,7 @@
     [(text) (styled-segment content '())]
     [(bold) (styled-segment content '(bold))]
     [(italic) (styled-segment content '(italic))]
+    [(strikethrough) (styled-segment content '(dim))]
     [(code) (styled-segment content (theme->style 'md-code))]
     [(link) (styled-segment (cdr content) (theme->style 'md-link '(underline)))]
     [else (styled-segment (format "~a" content) '())]))
@@ -219,6 +220,62 @@
          (values (append prev-lines
                          (list (styled-line (list (styled-segment header-text (theme->style 'md-heading '(bold)))))))
                  '())]
+        [(hr)
+         (define prev-lines (flush-current lines current-segs))
+         ;; Horizontal rule — dim line
+         (values (append prev-lines
+                         (list (styled-line
+                                (list (styled-segment
+                                       (make-string (max width 20) #\u2500)
+                                       (theme->style 'muted))))))
+                 '())]
+        [(blockquote)
+         (define prev-lines (flush-current lines current-segs))
+         (define bq-content (md-token-content tok))
+         ;; Blockquote: prefix with > and dim styling
+         (define depth (car bq-content))
+         (define inner-tokens (cdr bq-content))
+         (define prefix (make-string depth #\>))
+         (define inner-segs
+           (for/list ([t (in-list inner-tokens)])
+             (md-token->segment t)))
+         (define bq-line
+           (styled-line
+            (cons (styled-segment (string-append prefix " ") (theme->style 'muted))
+                  inner-segs)))
+         (values (append prev-lines (list bq-line)) '())]
+        [(unordered-list)
+         (define prev-lines (flush-current lines current-segs))
+         (define ul-content (md-token-content tok))
+         (define indent (car ul-content))
+         (define inner-tokens (cdr ul-content))
+         (define bullet-prefix
+           (string-append (make-string (* indent 2) #\space) "\u2022 "))
+         (define inner-segs
+           (for/list ([t (in-list inner-tokens)])
+             (md-token->segment t)))
+         (define ul-line
+           (styled-line
+            (cons (styled-segment bullet-prefix '())
+                  inner-segs)))
+         (values (append prev-lines (list ul-line)) '())]
+        [(ordered-list)
+         (define prev-lines (flush-current lines current-segs))
+         (define ol-content (md-token-content tok))
+         (define indent (car ol-content))
+         (define num (cadr ol-content))
+         (define inner-tokens (cddr ol-content))
+         (define ol-prefix
+           (string-append (make-string (* indent 2) #\space)
+                          (format "~a. " num)))
+         (define inner-segs
+           (for/list ([t (in-list inner-tokens)])
+             (md-token->segment t)))
+         (define ol-line
+           (styled-line
+            (cons (styled-segment ol-prefix '())
+                  inner-segs)))
+         (values (append prev-lines (list ol-line)) '())]
         [else
          ;; Inline token — accumulate segments
          (define seg (md-token->segment tok))
