@@ -15,6 +15,8 @@
          default-max-output-bytes
          with-resource-limits
          current-process-count
+         get-process-count
+         process-count-box
          track-process!
          untrack-process!)
 
@@ -26,27 +28,38 @@
 (define default-max-output-bytes 10485760) ; 10 MB
 
 ;; --------------------------------------------------
-;; Process tracking (SEC-12, #115 thread-safe)
+;; Process tracking (SEC-12, #115 thread-safe, #452 fixed)
+;;
+;; process-count-box is the authoritative thread-safe counter.
+;; current-process-count is a convenience parameter that reads
+;; from the box instead of maintaining independent state.
 ;; --------------------------------------------------
 
 (define process-count-box (box 0))
 (define process-count-sem (make-semaphore 1))
 
+;; Returns the current global process count (thread-safe read).
+;; Kept as a parameter for test isolation (parameterize), but its
+;; default value reads from the thread-safe box (#452).
 (define current-process-count (make-parameter 0))
+
+;; Internal: read authoritative count from box
+(define (get-process-count) (unbox process-count-box))
 
 (define (track-process!)
   (call-with-semaphore process-count-sem
     (lambda ()
       (define n (add1 (unbox process-count-box)))
       (set-box! process-count-box n)
-      (current-process-count n))))
+      ;; Don't set! the parameter — just return count
+      n)))
 
 (define (untrack-process!)
   (call-with-semaphore process-count-sem
     (lambda ()
       (define n (max 0 (sub1 (unbox process-count-box))))
       (set-box! process-count-box n)
-      (current-process-count n))))
+      n)))
 
 ;; --------------------------------------------------
 ;; exec-limits struct
