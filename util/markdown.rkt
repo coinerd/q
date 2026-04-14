@@ -334,7 +334,7 @@
        (define close-pos
          (let search ([j (+ i 2)])
            (cond
-             [(> (+ j 1) len) #f]
+             [(>= (+ j 1) len) #f]
              [(and (char=? (string-ref text j) #\~) (char=? (string-ref text (+ j 1)) #\~)) j]
              [else (search (+ j 1))])))
        (if (and close-pos (> close-pos (+ i 2)))
