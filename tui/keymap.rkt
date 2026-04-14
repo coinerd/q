@@ -135,12 +135,12 @@
 (define (default-keymap)
   (define km (make-keymap))
   ;; Navigation
-  (keymap-add! km (key-spec 'up #f #f #f) 'scroll-up)
-  (keymap-add! km (key-spec 'down #f #f #f) 'scroll-down)
+  (keymap-add! km (key-spec 'up #f #f #f) 'history-up)
+  (keymap-add! km (key-spec 'down #f #f #f) 'history-down)
   (keymap-add! km (key-spec 'page-up #f #f #f) 'page-up)
   (keymap-add! km (key-spec 'page-down #f #f #f) 'page-down)
-  (keymap-add! km (key-spec 'home #f #f #f) 'scroll-top)
-  (keymap-add! km (key-spec 'end #f #f #f) 'scroll-bottom)
+  (keymap-add! km (key-spec 'home #f #f #f) 'home)
+  (keymap-add! km (key-spec 'end #f #f #f) 'end)
   ;; Ctrl+up/down for scrolling
   (keymap-add! km (key-spec 'up #t #f #f) 'scroll-up)
   (keymap-add! km (key-spec 'down #t #f #f) 'scroll-down)

@@ -71,7 +71,7 @@
 
    (test-case "default-keymap has standard bindings"
      (define km (default-keymap))
-     (check-equal? (keymap-lookup km (key-spec 'up #f #f #f)) 'scroll-up)
+     (check-equal? (keymap-lookup km (key-spec 'up #f #f #f)) 'history-up)
      (check-equal? (keymap-lookup km (key-spec 'return #f #f #f)) 'submit)
      (check-equal? (keymap-lookup km (key-spec #\c #t #f #f)) 'copy))
 
