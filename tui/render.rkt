@@ -192,8 +192,7 @@
         (if (<= (string-visible-width remaining) max-width)
             (reverse (cons remaining acc))
             (let ([break-pos (find-break-pos remaining max-width)])
-              (loop (substring remaining break-pos)
-                    (cons (substring remaining 0 break-pos) acc)))))))
+              (loop (substring remaining break-pos) (cons (substring remaining 0 break-pos) acc)))))))
 
 ;; Find a good break position using visible column width (prefer space).
 ;; Returns a character index (not a column index) into `text`.
@@ -205,21 +204,17 @@
              [last-space-idx #f])
     (cond
       [(>= i (string-length text)) (string-length text)]
-      [(>= col max-width)
-       ;; Exceeded width — break at last space or current position
-       (or last-space-idx i)]
+      ;; Exceeded width — break at last space or current position
+      [(>= col max-width) (or last-space-idx i)]
       [else
        (define c (string-ref text i))
        (define w (char-width c))
        (define new-col (+ col w))
        (cond
          ;; Char would exceed max-width on its own
-         [(> new-col max-width)
-          (or last-space-idx i)]
-         [(char-whitespace? c)
-          (loop (add1 i) new-col (add1 i))]
-         [else
-          (loop (add1 i) new-col last-space-idx)])])))
+         [(> new-col max-width) (or last-space-idx i)]
+         [(char-whitespace? c) (loop (add1 i) new-col (add1 i))]
+         [else (loop (add1 i) new-col last-space-idx)])])))
 
 ;; Invert a style (add 'inverse if not present, remove if present)
 (define (style-invert style)
@@ -308,9 +303,25 @@
 (define (render-transcript state transcript-height [width 200])
   (define entries (ui-state-transcript state))
   (define scroll-offset (ui-state-scroll-offset state))
-  ;; Format all entries into lines
-  (define formatted-lines (apply append (map (lambda (e) (format-entry e width)) entries)))
-  ;; If streaming, append the partial streaming text
+  ;; Check width validity — flush cache if terminal resized
+  (define state0
+    (if (rendered-cache-width-valid? state width)
+        state
+        (rendered-cache-set-width (rendered-cache-clear! state) width)))
+  ;; Format entries using cache where possible
+  (define-values (formatted-lines state1)
+    (for/fold ([lines '()]
+               [st state0])
+              ([e (in-list entries)])
+      (define eid (transcript-entry-id e))
+      (define cached (and eid (rendered-cache-ref st eid)))
+      (if cached
+          (values (append lines cached) st)
+          (let ([fmt (format-entry e width)])
+            (if eid
+                (values (append lines fmt) (rendered-cache-set st eid fmt))
+                (values (append lines fmt) st))))))
+  ;; If streaming, append the partial streaming text (not cached)
   (define streaming (ui-state-streaming-text state))
   (define all-lines
     (if (and streaming (not (string=? streaming "")))
@@ -319,12 +330,13 @@
                   (styled-line (list (styled-segment line '(dim))))))
         formatted-lines))
   (define total (length all-lines))
-  (if (<= total transcript-height)
-      all-lines
-      (let* ([start (max 0 (- total transcript-height scroll-offset))]
-             [end (max transcript-height (- total scroll-offset))]
-             [available (drop all-lines start)])
-        (take available (min transcript-height (length available))))))
+  (define sliced-lines
+    (if (<= total transcript-height)
+        all-lines
+        (let* ([start (max 0 (- total transcript-height scroll-offset))]
+               [available (drop all-lines start)])
+          (take available (min transcript-height (length available))))))
+  (values sliced-lines state1))
 
 ;; Render the status bar (bottom area above input)
 ;; Returns styled-line

@@ -161,7 +161,10 @@
   (define layout (compute-layout cols rows))
 
   ;; Render to ubuf (returns cursor position)
-  (define-values (cursor-col cursor-row) (renderer:render-frame! ubuf state inp layout))
+  (define-values (cursor-col cursor-row state*) (renderer:render-frame! ubuf state inp layout))
+
+  ;; Write back state with updated render cache
+  (set-box! (tui-ctx-ui-state-box ctx) state*)
 
   ;; Display ubuf to terminal
   (tui-cursor-hide)

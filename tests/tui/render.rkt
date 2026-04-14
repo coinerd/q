@@ -93,13 +93,13 @@
     ;; format-entry
     ;; --------------------------------------------------------
     (test-case "format-entry assistant message"
-      (let ([entry (transcript-entry 'assistant "Hello!" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "Hello!" 1000 (hash))])
         (define lines (format-entry entry 80))
         (check-equal? (length lines) 1 "one line")
         (check-equal? (styled-segment-text (first (styled-line-segments (first lines)))) "Hello!")))
 
     (test-case "format-entry user message has prompt prefix"
-      (let ([entry (transcript-entry 'user "Hello!" 1000 (hash))])
+      (let ([entry (make-entry 'user "Hello!" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define segs (styled-line-segments (first lines)))
         ;; Two segments: cyan prompt + bold text
@@ -110,7 +110,7 @@
         (check-equal? (styled-segment-style (second segs)) '(bold))))
 
     (test-case "format-entry error message has [ERR] prefix and bold red style"
-      (let ([entry (transcript-entry 'error "Oops" 1000 (hash))])
+      (let ([entry (make-entry 'error "Oops" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[ERR]"))
@@ -152,7 +152,7 @@
     ;; Markdown rendering via format-entry (assistant)
     ;; --------------------------------------------------------
     (test-case "format-entry assistant bold text"
-      (let ([entry (transcript-entry 'assistant "hello **world** end" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "hello **world** end" 1000 (hash))])
         (define lines (format-entry entry 80))
         (check-equal? (length lines) 1 "one line")
         (define segs (styled-line-segments (first lines)))
@@ -164,7 +164,7 @@
         (check-equal? (styled-segment-text (third segs)) " end")))
 
     (test-case "format-entry assistant italic text"
-      (let ([entry (transcript-entry 'assistant "say *hi* now" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "say *hi* now" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define segs (styled-line-segments (first lines)))
         (check-equal? (length segs) 3)
@@ -172,7 +172,7 @@
         (check-equal? (styled-segment-text (second segs)) "hi")))
 
     (test-case "format-entry assistant inline code"
-      (let ([entry (transcript-entry 'assistant "use `foo` here" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "use `foo` here" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define segs (styled-line-segments (first lines)))
         (check-equal? (length segs) 3)
@@ -180,7 +180,7 @@
         (check-equal? (styled-segment-text (second segs)) "foo")))
 
     (test-case "format-entry assistant header"
-      (let ([entry (transcript-entry 'assistant "### Title" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "### Title" 1000 (hash))])
         (define lines (format-entry entry 80))
         (check-equal? (length lines) 1 "one line")
         (define segs (styled-line-segments (first lines)))
@@ -188,14 +188,14 @@
         (check-equal? (styled-segment-style (first segs)) '(bold yellow))))
 
     (test-case "format-entry assistant multi-line with newline"
-      (let ([entry (transcript-entry 'assistant "line1\nline2" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "line1\nline2" 1000 (hash))])
         (define lines (format-entry entry 80))
         (check-equal? (length lines) 2 "two lines")
         (check-equal? (styled-segment-text (first (styled-line-segments (first lines)))) "line1")
         (check-equal? (styled-segment-text (first (styled-line-segments (second lines)))) "line2")))
 
     (test-case "format-entry assistant code block produces green lines"
-      (let ([entry (transcript-entry 'assistant "```\ncode line\n```" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "```\ncode line\n```" 1000 (hash))])
         (define lines (format-entry entry 80))
         ;; code-block line + trailing newline line
         (check-true (>= (length lines) 1) "at least one code line")
@@ -204,7 +204,7 @@
         (check-true (string-contains? (styled-segment-text (first code-segs)) "code line"))))
 
     (test-case "format-entry assistant link uses blue underline"
-      (let ([entry (transcript-entry 'assistant "click [here](http://example.com) ok" 1000 (hash))])
+      (let ([entry (make-entry 'assistant "click [here](http://example.com) ok" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define segs (styled-line-segments (first lines)))
         ;; text "click " + link "here" + text " ok"
@@ -216,7 +216,7 @@
         (check-not-false (member 'underline (styled-segment-style link-seg)) "link has underline")))
 
     (test-case "format-entry tool-start shows [TOOL] text prefix and cyan color"
-      (let ([entry (transcript-entry 'tool-start "[TOOL: read]" 1000 (hash))])
+      (let ([entry (make-entry 'tool-start "[TOOL: read]" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[TOOL")
@@ -224,7 +224,7 @@
         (check-equal? (styled-segment-style seg) '(cyan))))
 
     (test-case "format-entry tool-end shows [OK] text prefix and green color"
-      (let ([entry (transcript-entry 'tool-end "[OK: read]" 1000 (hash))])
+      (let ([entry (make-entry 'tool-end "[OK: read]" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[OK")
@@ -232,7 +232,7 @@
         (check-equal? (styled-segment-style seg) '(green))))
 
     (test-case "format-entry tool-fail shows [FAIL] text prefix and red color"
-      (let ([entry (transcript-entry 'tool-fail "[FAIL: read]" 1000 (hash))])
+      (let ([entry (make-entry 'tool-fail "[FAIL: read]" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[FAIL")
@@ -240,7 +240,7 @@
         (check-equal? (styled-segment-style seg) '(red))))
 
     (test-case "format-entry system shows [SYS] prefix"
-      (let ([entry (transcript-entry 'system "Session started" 1000 (hash))])
+      (let ([entry (make-entry 'system "Session started" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[SYS]"))
@@ -250,68 +250,73 @@
     ;; Line-based viewport slicing (render-transcript)
     ;; --------------------------------------------------------
     (test-case "render-transcript: content fits in height returns all lines"
-      (let* ([entries (list (transcript-entry 'system "line1" 0 (hash))
-                            (transcript-entry 'system "line2" 0 (hash)))]
+      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
+                            (make-entry 'system "line2" 0 (hash)))]
              [state (struct-copy ui-state (initial-ui-state) [transcript entries])])
-        (define lines (render-transcript state 10 200))
+        (define-values (lines _st) (render-transcript state 10 200))
         (check-equal? (length lines) 2 "render-transcript: returns all when fits")))
 
     (test-case "render-transcript: more lines than height shows last N"
-      (let* ([entries (list (transcript-entry 'system "line1" 0 (hash))
-                            (transcript-entry 'system "line2" 0 (hash))
-                            (transcript-entry 'system "line3" 0 (hash)))]
+      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
+                            (make-entry 'system "line2" 0 (hash))
+                            (make-entry 'system "line3" 0 (hash)))]
              [state (struct-copy ui-state (initial-ui-state) [transcript entries])])
-        (define lines (render-transcript state 2 200))
+        (define-values (lines _st) (render-transcript state 2 200))
         (check-equal? (length lines) 2 "render-transcript: shows last 2 of 3 lines")
         ;; First visible should be "[SYS] line2", second "[SYS] line3"
-        (check-equal? (styled-segment-text (first (styled-line-segments (first lines)))) "[SYS] line2")
-        (check-equal? (styled-segment-text (first (styled-line-segments (second lines)))) "[SYS] line3")))
+        (check-equal? (styled-segment-text (first (styled-line-segments (first lines))))
+                      "[SYS] line2")
+        (check-equal? (styled-segment-text (first (styled-line-segments (second lines))))
+                      "[SYS] line3")))
 
     (test-case "render-transcript: scroll-offset=1 shows lines offset 1 from bottom"
-      (let* ([entries (list (transcript-entry 'system "line1" 0 (hash))
-                            (transcript-entry 'system "line2" 0 (hash))
-                            (transcript-entry 'system "line3" 0 (hash))
-                            (transcript-entry 'system "line4" 0 (hash)))]
+      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
+                            (make-entry 'system "line2" 0 (hash))
+                            (make-entry 'system "line3" 0 (hash))
+                            (make-entry 'system "line4" 0 (hash)))]
              [state (struct-copy ui-state (initial-ui-state) [transcript entries] [scroll-offset 1])])
-        (define lines (render-transcript state 2 200))
+        (define-values (lines _st) (render-transcript state 2 200))
         (check-equal? (length lines) 2 "render-transcript: scroll=1 shows 2 lines")
         ;; Should show [SYS] line2 and [SYS] line3 (offset 1 from bottom)
-        (check-equal? (styled-segment-text (first (styled-line-segments (first lines)))) "[SYS] line2")
-        (check-equal? (styled-segment-text (first (styled-line-segments (second lines)))) "[SYS] line3")))
+        (check-equal? (styled-segment-text (first (styled-line-segments (first lines))))
+                      "[SYS] line2")
+        (check-equal? (styled-segment-text (first (styled-line-segments (second lines))))
+                      "[SYS] line3")))
 
     (test-case "render-transcript: scroll-offset=2 shows older lines"
-      (let* ([entries (list (transcript-entry 'system "line1" 0 (hash))
-                            (transcript-entry 'system "line2" 0 (hash))
-                            (transcript-entry 'system "line3" 0 (hash))
-                            (transcript-entry 'system "line4" 0 (hash))
-                            (transcript-entry 'system "line5" 0 (hash)))]
+      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
+                            (make-entry 'system "line2" 0 (hash))
+                            (make-entry 'system "line3" 0 (hash))
+                            (make-entry 'system "line4" 0 (hash))
+                            (make-entry 'system "line5" 0 (hash)))]
              [state (struct-copy ui-state (initial-ui-state) [transcript entries] [scroll-offset 2])])
-        (define lines (render-transcript state 3 200))
+        (define-values (lines _st) (render-transcript state 3 200))
         (check-equal? (length lines) 3 "render-transcript: scroll=2 shows 3 lines")
         ;; Should show [SYS] line1, [SYS] line2, [SYS] line3 (last 5 - 3 - 2 = start at 0)
-        (check-equal? (styled-segment-text (first (styled-line-segments (first lines)))) "[SYS] line1")))
+        (check-equal? (styled-segment-text (first (styled-line-segments (first lines))))
+                      "[SYS] line1")))
 
     (test-case "render-transcript: scroll-offset larger than content clamps to top"
-      (let* ([entries (list (transcript-entry 'system "line1" 0 (hash))
-                            (transcript-entry 'system "line2" 0 (hash)))]
+      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
+                            (make-entry 'system "line2" 0 (hash)))]
              [state
               (struct-copy ui-state (initial-ui-state) [transcript entries] [scroll-offset 100])])
-        (define lines (render-transcript state 10 200))
+        (define-values (lines _st) (render-transcript state 10 200))
         ;; Both lines fit, scroll doesn't matter
         (check-equal? (length lines) 2 "render-transcript: small content always shows all")))
 
     (test-case "render-transcript: empty transcript returns empty"
       (let ([state (initial-ui-state)])
-        (define lines (render-transcript state 10 200))
+        (define-values (lines _st) (render-transcript state 10 200))
         (check-equal? (length lines) 0 "render-transcript: empty returns empty")))
 
     (test-case "render-transcript: streaming text shown at bottom when scroll=0"
-      (let* ([entries (list (transcript-entry 'system "line1" 0 (hash)))]
+      (let* ([entries (list (make-entry 'system "line1" 0 (hash)))]
              [state (struct-copy ui-state
                                  (initial-ui-state)
                                  [transcript entries]
                                  [streaming-text "streaming..."])])
-        (define lines (render-transcript state 10 200))
+        (define-values (lines _st) (render-transcript state 10 200))
         (check-equal? (length lines) 2 "streaming text appended")
         ;; Last line should be the streaming text (dim)
         (define last-seg (first (styled-line-segments (last lines))))
@@ -551,8 +556,7 @@
       (let ([state (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")])
         (define line (render-status-bar state 80))
         (define text (styled-segment-text (first (styled-line-segments line))))
-        (check-false (string-contains? text "[thinking...]")
-                     "no [thinking...] when not busy")))
+        (check-false (string-contains? text "[thinking...]") "no [thinking...] when not busy")))
 
     (test-case "render-status-bar does NOT show [thinking...] when streaming text present"
       (let ([state (struct-copy ui-state
@@ -610,8 +614,7 @@
       (for ([line result])
         (for ([seg (styled-line-segments line)])
           (check-not-false (member 'bold (styled-segment-style seg))
-                           (format "segment '~a' should be bold"
-                                   (styled-segment-text seg))))))
+                           (format "segment '~a' should be bold" (styled-segment-text seg))))))
 
     (test-case "wrap-text: long ASCII string still works correctly"
       ;; Regression test: ensure ASCII wrapping still works after refactor

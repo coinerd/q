@@ -17,6 +17,19 @@
          ;; Constructors
          initial-ui-state
 
+         ;; Entry helpers
+         make-entry
+         assign-entry-id
+         next-entry-id
+
+         ;; Render cache helpers
+         rendered-cache-ref
+         rendered-cache-set
+         rendered-cache-clear!
+         rendered-cache-invalidate-entry
+         rendered-cache-width-valid?
+         rendered-cache-set-width
+
          ;; Branch management
          set-current-branch
          set-visible-branches
@@ -48,12 +61,14 @@
          set-selection-end
          clear-selection
          has-selection?)
+
 ;; A single line in the transcript display
 (struct transcript-entry
         (kind ; symbol: 'assistant | 'tool-start | 'tool-end | 'tool-fail | 'system | 'error | 'user
          text ; string — the display text
          timestamp ; number — epoch seconds (or 0)
          meta ; hash — extra data (tool name, error message, etc.)
+         id ; integer or #f — unique entry id for render cache
          )
   #:transparent)
 
@@ -72,6 +87,9 @@
          visible-branches ; (listof branch-info) — cached branch list for display
          sel-anchor ; (cons col row) or #f — mouse selection start
          sel-end ; (cons col row) or #f — mouse selection end
+         rendered-cache ; hash — maps entry-id → (listof styled-line)
+         rendered-cache-width ; integer or #f — width used for cache
+         next-entry-id ; integer — monotonic counter
          )
   #:transparent)
 
@@ -85,7 +103,60 @@
          )
   #:transparent)
 
+;; ============================================================
+;; Entry construction helpers
+;; ============================================================
+
+;; Create a transcript-entry with id=#f (not yet assigned)
+(define (make-entry kind text timestamp meta)
+  (transcript-entry kind text timestamp meta #f))
+
+;; Assign a unique id to an entry, returning (values new-entry new-state)
+(define (assign-entry-id entry state)
+  (define id (ui-state-next-entry-id state))
+  (values (struct-copy transcript-entry entry [id id])
+          (struct-copy ui-state state [next-entry-id (add1 id)])))
+
+;; Get the current next-entry-id (without incrementing)
+(define (next-entry-id state)
+  (ui-state-next-entry-id state))
+
+;; ============================================================
+;; Render cache helpers
+;; ============================================================
+
+;; Look up cached rendered lines for an entry id
+(define (rendered-cache-ref state entry-id)
+  (hash-ref (ui-state-rendered-cache state) entry-id #f))
+
+;; Store cached rendered lines for an entry id, returning new state
+(define (rendered-cache-set state entry-id lines)
+  (struct-copy ui-state
+               state
+               [rendered-cache (hash-set (ui-state-rendered-cache state) entry-id lines)]))
+
+;; Clear the entire render cache and reset width
+(define (rendered-cache-clear! state)
+  (struct-copy ui-state state [rendered-cache (hash)] [rendered-cache-width #f]))
+
+;; Remove a single entry from the render cache
+(define (rendered-cache-invalidate-entry state entry-id)
+  (struct-copy ui-state
+               state
+               [rendered-cache (hash-remove (ui-state-rendered-cache state) entry-id)]))
+
+;; Check if the cache width matches the given width
+(define (rendered-cache-width-valid? state width)
+  (equal? (ui-state-rendered-cache-width state) width))
+
+;; Set the cache width (typically after clearing cache on resize)
+(define (rendered-cache-set-width state width)
+  (struct-copy ui-state state [rendered-cache-width width]))
+
+;; ============================================================
 ;; Constructor with defaults
+;; ============================================================
+
 (define (initial-ui-state #:session-id [session-id #f]
                           #:model-name [model-name #f]
                           #:mode [mode 'chat])
@@ -101,7 +172,14 @@
             #f ; current-branch
             '() ; visible-branches
             #f ; sel-anchor
-            #f)) ; sel-end
+            #f ; sel-end
+            (hash) ; rendered-cache
+            #f ; rendered-cache-width
+            0)) ; next-entry-id
+
+;; ============================================================
+;; Event reduction
+;; ============================================================
 
 ;; Apply a runtime event to the UI state.
 ;; Returns a new ui-state (immutable update).
@@ -111,6 +189,12 @@
   ;; (event version ev time session-id turn-id payload)
   (define ev (event-ev evt))
   (define payload (event-payload evt))
+
+  ;; Helper: create entry, assign id, append to transcript, return new state
+  (define (append-entry st entry)
+    (define-values (id-entry st1) (assign-entry-id entry st))
+    (struct-copy ui-state st1 [transcript (append (ui-state-transcript st1) (list id-entry))]))
+
   (case ev
     [("assistant.message.completed")
      ;; Add assistant text to transcript, mark not busy
@@ -120,10 +204,7 @@
      (define content (or streamed (hash-ref payload 'content "")))
      (define ts (event-time evt))
      (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'assistant content ts (hash))))]
+                  (append-entry state (make-entry 'assistant content ts (hash)))
                   [busy? #f]
                   [pending-tool-name #f]
                   [streaming-text #f])]
@@ -143,10 +224,7 @@
      (define ts (event-time evt))
      (define meta (hasheq 'name name 'arguments (or args-raw "")))
      (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'tool-start text ts meta)))]
+                  (append-entry state (make-entry 'tool-start text ts meta))
                   [busy? #t]
                   [pending-tool-name name])]
 
@@ -165,10 +243,7 @@
      (define ts (event-time evt))
      (define meta (hasheq 'name name 'result (or result-raw "")))
      (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'tool-end text ts meta)))]
+                  (append-entry state (make-entry 'tool-end text ts meta))
                   [pending-tool-name #f])]
 
     [("tool.call.failed")
@@ -176,55 +251,38 @@
      (define name (hash-ref payload 'name "?"))
      (define err (hash-ref payload 'error "unknown"))
      (define ts (event-time evt))
-     (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'tool-fail
-                                                   (format "[FAIL: ~a] ~a" name err)
-                                                   ts
-                                                   (hasheq 'name name 'error err))))]
-                  [pending-tool-name #f])]
+     (struct-copy
+      ui-state
+      (append-entry
+       state
+       (make-entry 'tool-fail (format "[FAIL: ~a] ~a" name err) ts (hasheq 'name name 'error err)))
+      [pending-tool-name #f])]
 
     [("runtime.error")
      (define err (hash-ref payload 'error "unknown error"))
      (define ts (event-time evt))
      (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'error (format "Error: ~a" err) ts (hash))))]
+                  (append-entry state (make-entry 'error (format "Error: ~a" err) ts (hash)))
                   [busy? #f])]
 
     [("session.started")
      (define sid (hash-ref payload 'sessionId ""))
-     (struct-copy ui-state
-                  state
-                  [session-id sid]
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'system
-                                                   (format "Session started: ~a" sid)
-                                                   (event-time evt)
-                                                   (hash))))])]
+     (define s1 (struct-copy ui-state state [session-id sid]))
+     (append-entry s1
+                   (make-entry 'system (format "Session started: ~a" sid) (event-time evt) (hash)))]
 
     [("session.resumed")
      (define sid (hash-ref payload 'sessionId ""))
-     (struct-copy ui-state
-                  state
-                  [session-id sid]
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'system
-                                                   (format "Session resumed: ~a" sid)
-                                                   (event-time evt)
-                                                   (hash))))])]
+     (define s1 (struct-copy ui-state state [session-id sid]))
+     (append-entry s1
+                   (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash)))]
 
     [("model.stream.delta")
      ;; Accumulate streaming text from the model
      (define delta (hash-ref payload 'delta ""))
      (define current-streaming (ui-state-streaming-text state))
      (define new-streaming (string-append (or current-streaming "") delta))
+     ;; Invalidate cache for the streaming entry (if re-rendering)
      (struct-copy ui-state state [streaming-text new-streaming] [busy? #t])]
 
     ;; Agent starts processing — mark busy
@@ -239,25 +297,15 @@
 
     [("compaction.warning")
      (define tc (hash-ref payload 'tokenCount "?"))
-     (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'system
-                                                   (format "[compaction warning: ~a tokens]" tc)
-                                                   (event-time evt)
-                                                   (hash))))])]
+     (append-entry
+      state
+      (make-entry 'system (format "[compaction warning: ~a tokens]" tc) (event-time evt) (hash)))]
 
     [("session.forked")
      (define new-sid (hash-ref payload 'newSessionId ""))
-     (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'system
-                                                   (format "[session forked: ~a]" new-sid)
-                                                   (event-time evt)
-                                                   (hash))))])]
+     (append-entry
+      state
+      (make-entry 'system (format "[session forked: ~a]" new-sid) (event-time evt) (hash)))]
 
     [("compaction.started") (struct-copy ui-state state [status-message "Compacting..."])]
 
@@ -273,22 +321,29 @@
      (define name (hash-ref payload 'name "?"))
      (define reason (hash-ref payload 'reason "blocked by extension"))
      (struct-copy ui-state
-                  state
-                  [transcript
-                   (append (ui-state-transcript state)
-                           (list (transcript-entry 'system
-                                                   (format "[tool blocked: ~a — ~a]" name reason)
-                                                   (event-time evt)
-                                                   (hasheq 'name name))))]
+                  (append-entry state
+                                (make-entry 'system
+                                            (format "[tool blocked: ~a — ~a]" name reason)
+                                            (event-time evt)
+                                            (hasheq 'name name)))
                   [pending-tool-name #f])]
 
     [else state])) ;; Ignore unknown events
 
+;; ============================================================
+;; Transcript helpers
+;; ============================================================
+
 ;; Add a user message to transcript (called when user submits input)
+;; Assigns an entry id if the entry doesn't already have one.
 (define (add-transcript-entry state entry)
+  (define-values (id-entry state1)
+    (if (transcript-entry-id entry)
+        (values entry state)
+        (assign-entry-id entry state)))
   (struct-copy ui-state
-               state
-               [transcript (append (ui-state-transcript state) (list entry))]
+               state1
+               [transcript (append (ui-state-transcript state1) (list id-entry))]
                [scroll-offset 0])) ;; Reset scroll to bottom
 
 ;; Get visible entries — returns all transcript entries.
@@ -319,6 +374,10 @@
 (define (scroll-to-top state)
   (struct-copy ui-state state [scroll-offset 999999]))
 
+;; ============================================================
+;; Selection
+;; ============================================================
+
 ;; Set mouse selection anchor (start of drag)
 (define (set-selection-anchor state col row)
   (struct-copy ui-state state [sel-anchor (cons col row)] [sel-end (cons col row)]))
@@ -335,7 +394,10 @@
 (define (has-selection? state)
   (and (ui-state-sel-anchor state) (ui-state-sel-end state)))
 
+;; ============================================================
 ;; Queries
+;; ============================================================
+
 (define (ui-busy? state)
   (ui-state-busy? state))
 

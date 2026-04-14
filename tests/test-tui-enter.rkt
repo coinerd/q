@@ -125,14 +125,14 @@
     ;; --------------------------------------------------
     (test-case "welcome transcript entries have system kind"
       (define welcome-entries
-        (list (transcript-entry 'system
-                                "Welcome to q! Type a message to get started."
-                                (current-inexact-milliseconds)
-                                (hash))
-              (transcript-entry 'system
-                                "Commands: /help for reference, /quit to exit."
-                                (current-inexact-milliseconds)
-                                (hash))))
+        (list (make-entry 'system
+                          "Welcome to q! Type a message to get started."
+                          (current-inexact-milliseconds)
+                          (hash))
+              (make-entry 'system
+                          "Commands: /help for reference, /quit to exit."
+                          (current-inexact-milliseconds)
+                          (hash))))
       (for ([entry (in-list welcome-entries)])
         (check-equal? (transcript-entry-kind entry) 'system)
         (check-pred string? (transcript-entry-text entry))
@@ -141,9 +141,8 @@
 
     (test-case "welcome entries prepended before user entries"
       (define welcome-entries
-        (list (transcript-entry 'system "Welcome" 0 (hash))
-              (transcript-entry 'system "Commands" 0 (hash))))
-      (define user-entries (list (transcript-entry 'user "hello" 0 (hash))))
+        (list (make-entry 'system "Welcome" 0 (hash)) (make-entry 'system "Commands" 0 (hash))))
+      (define user-entries (list (make-entry 'user "hello" 0 (hash))))
       (define combined (append welcome-entries user-entries))
       (check-equal? (length combined) 3)
       (check-equal? (transcript-entry-kind (car combined)) 'system)
@@ -151,14 +150,14 @@
 
     (test-case "welcome entries contain expected text"
       (define welcome-entries
-        (list (transcript-entry 'system
-                                "Welcome to q! Type a message to get started."
-                                (current-inexact-milliseconds)
-                                (hash))
-              (transcript-entry 'system
-                                "Commands: /help for reference, /quit to exit."
-                                (current-inexact-milliseconds)
-                                (hash))))
+        (list (make-entry 'system
+                          "Welcome to q! Type a message to get started."
+                          (current-inexact-milliseconds)
+                          (hash))
+              (make-entry 'system
+                          "Commands: /help for reference, /quit to exit."
+                          (current-inexact-milliseconds)
+                          (hash))))
       (check-equal? (transcript-entry-text (first welcome-entries))
                     "Welcome to q! Type a message to get started.")
       (check-equal? (transcript-entry-text (second welcome-entries))

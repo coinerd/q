@@ -81,17 +81,16 @@
                             base-state
                             (struct-copy ui-state base-state [transcript loaded])))
                       base-state)]
-           [welcome-entries
-            (if (and first-run? (null? (ui-state-transcript state)))
-                (list (transcript-entry 'system
-                                        "Welcome to q! Type a message to get started."
-                                        (current-inexact-milliseconds)
-                                        (hash))
-                      (transcript-entry 'system
-                                        "Commands: /help for reference, /quit to exit."
-                                        (current-inexact-milliseconds)
-                                        (hash)))
-                '())])
+           [welcome-entries (if (and first-run? (null? (ui-state-transcript state)))
+                                (list (make-entry 'system
+                                                  "Welcome to q! Type a message to get started."
+                                                  (current-inexact-milliseconds)
+                                                  (hash))
+                                      (make-entry 'system
+                                                  "Commands: /help for reference, /quit to exit."
+                                                  (current-inexact-milliseconds)
+                                                  (hash)))
+                                '())])
       (if (not (null? welcome-entries))
           (struct-copy ui-state
                        state
