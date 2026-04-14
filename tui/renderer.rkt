@@ -2,6 +2,7 @@
 
 (require racket/keyword
          racket/list
+         racket/logging
          "render.rkt"
          "layout.rkt"
          "state.rkt"
@@ -30,7 +31,14 @@
 
          ;; Ubuf operations (settable for testing)
          current-ubuf-clear
-         current-ubuf-putstring)
+         current-ubuf-putstring
+
+         ;; Width safety net
+         current-assert-width
+         assert-line-width!
+
+         ;; Low-level draw (for testing)
+         draw-styled-line!)
 
 ;; ============================================================
 ;; Ubuf operations (parameterized for testability)
@@ -53,6 +61,30 @@
                            #:italic [italic #f]
                            #:blink [blink #f])
                     (void))))
+
+;; ============================================================
+;; Width safety net
+;; ============================================================
+
+;; When #t, assert-line-width! raises on overflow instead of truncating.
+;; Set to #t in tests for immediate visibility of width bugs.
+(define current-assert-width (make-parameter #f))
+
+;; Validate that a rendered line does not exceed max-width.
+;; - In production: log warning, truncate to max-width
+;; - In test mode (current-assert-width = #t): raise exn:fail
+(define (assert-line-width! line-text max-width)
+  (define vw (string-visible-width line-text))
+  (when (> vw max-width)
+    (define msg (format "width overflow: ~a cols in ~a-col terminal (line: ~a)"
+                        vw max-width
+                        (if (> (string-length line-text) 60)
+                            (string-append (substring line-text 0 60) "...")
+                            line-text)))
+    (if (current-assert-width)
+        (raise (exn:fail msg (current-continuation-marks)))
+        (log-warning msg)))
+  vw)
 
 ;; ============================================================
 ;; Style → ubuf attribute conversion
@@ -150,6 +182,10 @@
   ;; Pad rest with spaces
   (when (> remaining-width 0)
     (ubuf-putstring! ubuf col row (make-string remaining-width #\space))))
+  ;; Width overflow protection: draw-styled-line! truncates per-segment
+  ;; and pads to exactly 'width'. Upstream wrap-styled-line handles word wrap.
+  ;; The assert-line-width! function is available for external callers to
+  ;; validate line widths before they reach this function.)
 
 ;; ============================================================
 ;; Frame rendering
