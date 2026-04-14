@@ -68,7 +68,7 @@
   (check-true (string-contains? output "Configuration saved"))
   (cleanup-config))
 
-(test-case "run-init-wizard handles empty model (no default-model key)"
+(test-case "run-init-wizard uses provider default when model is empty"
   (cleanup-config)
   (define output (run-wizard-with-input "openai\nsk-test\n\n"))
   (check-true (string-contains? output "Configuration saved"))
@@ -76,7 +76,8 @@
     (define cfg (read-config))
     (define providers (hash-ref cfg 'providers))
     (define openai-cfg (hash-ref providers 'openai))
-    (check-false (hash-has-key? openai-cfg 'default-model)))
+    ;; Now always sets a sensible default (#455)
+    (check-equal? (hash-ref openai-cfg 'default-model) "gpt-4o"))
   (cleanup-config))
 
 (test-case "run-init-wizard sets default-model when provided"

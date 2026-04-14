@@ -48,6 +48,7 @@
          ;; the LLM and to construct tool-result messages.
          (only-in "../tools/tool.rkt"
                   make-exec-context
+                  make-error-result
                   tool-result-content tool-result-is-error?
                   list-tools-jsexpr)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
@@ -205,38 +206,39 @@
   ;; Extract tool calls from assistant messages
   (define tool-calls (extract-tool-calls-from-messages new-msgs))
 
+  ;; Find assistant message ID for tool-result parent
+  (define assistant-msg-id
+    (let ([asst-msgs (filter (lambda (m) (eq? (message-role m) 'assistant)) new-msgs)])
+      (if (null? asst-msgs) #f (message-id (last asst-msgs)))))
+
   ;; Dispatch 'tool-call hook (F2: renamed from 'before-tool-execution)
-  (define tool-calls-to-run
+  (define-values (tool-calls-to-run tool-call-blocked?)
     (let-values ([(amended hook-res)
                   (maybe-dispatch-hooks ext-reg 'tool-call tool-calls)])
       (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-          '()  ; blocked → empty list = skip execution
-          amended)))
+          (values '() #t)
+          (values amended #f))))
 
-  ;; Find assistant message ID for tool-result parent
-  (define assistant-msg-id
-    (let ([asst-msgs (filter (λ (m) (eq? (message-role m) 'assistant)) new-msgs)])
-      (if (null? asst-msgs) #f (message-id (last asst-msgs)))))
-
-  ;; Run tool batch through scheduler
-  (define hook-dispatcher-fn
-    (and ext-reg
-         (λ (hook-point payload)
-           (dispatch-hooks hook-point payload ext-reg))))
-
+  ;; Run tool batch through scheduler (skip if blocked)
   (define sched-result
-    (run-tool-batch tool-calls-to-run reg
-                    #:hook-dispatcher hook-dispatcher-fn
-                    #:exec-context (make-exec-context
-                                    #:working-directory (path-only log-path)
-                                    #:cancellation-token token
-                                    #:event-publisher (λ (event-type payload)
-                                                        (emit-session-event! bus session-id event-type payload))
-                                    #:call-id (generate-id)
-                                    #:session-metadata (hasheq 'session-id session-id))
-                    #:parallel? (hash-ref config 'parallel-tools #f)))
+    (if tool-call-blocked?
+        (scheduler-result '() '() #f)
+        (let ([hook-dispatcher-fn
+               (and ext-reg
+                    (lambda (hook-point payload)
+                      (dispatch-hooks hook-point payload ext-reg)))])
+          (run-tool-batch tool-calls-to-run reg
+                          #:hook-dispatcher hook-dispatcher-fn
+                          #:exec-context (make-exec-context
+                                          #:working-directory (path-only log-path)
+                                          #:cancellation-token token
+                                          #:event-publisher (lambda (event-type payload)
+                                                              (emit-session-event! bus session-id event-type payload))
+                                          #:call-id (generate-id)
+                                          #:session-metadata (hasheq 'session-id session-id))
+                          #:parallel? (hash-ref config 'parallel-tools #f)))))
 
-  ;; Emit tool.call.completed / tool.call.failed events
+  ;; Emit tool.call.completed / tool.call.failed events (only for executed calls)
   (for ([tc (in-list tool-calls-to-run)]
         [tr (in-list (scheduler-result-results sched-result))])
     (if (tool-result-is-error? tr)
@@ -247,11 +249,20 @@
                              (hasheq 'name (tool-call-name tc)
                                      'result (tool-result-content tr)))))
 
-  ;; Convert scheduler results to tool-result messages
+  ;; Convert scheduler results to tool-result messages.
+  ;; When blocked, synthesize error results for ALL original tool calls
+  ;; so the LLM sees a proper tool-result for every tool_call (#446).
   (define tool-result-msgs
-    (make-tool-result-messages tool-calls-to-run
-                               (scheduler-result-results sched-result)
-                               assistant-msg-id))
+    (if tool-call-blocked?
+        (make-tool-result-messages tool-calls
+                                   (for/list ([tc (in-list tool-calls)])
+                                     (make-error-result
+                                      (format "Tool call '~a' blocked by extension"
+                                              (tool-call-name tc))))
+                                   assistant-msg-id)
+        (make-tool-result-messages tool-calls-to-run
+                                   (scheduler-result-results sched-result)
+                                   assistant-msg-id)))
 
   ;; Dispatch 'tool-result hook (F2: renamed from 'after-tool-execution)
   (define tool-result-msgs-amended

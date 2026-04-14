@@ -1066,3 +1066,69 @@
   (define content (model-response-content parsed))
   (check-equal? (length content) 1)
   (check-equal? (hash-ref (car content) 'text) "I cannot help with that."))
+
+;; ============================================================
+;; Issue #443 — Gemini streaming tool calls: distinct indices per tool call
+;; ============================================================
+
+(test-case "Issue #443: streaming tool calls across separate SSE chunks get distinct indices"
+  (gemini-reset-tool-id-counter!)
+  ;; Simulate Gemini streaming: functionCall A in chunk 1, functionCall B in chunk 2
+  (define stream-events
+    (list
+     (hash 'candidates
+           (list (hash 'content
+                       (hash 'role "model"
+                             'parts (list (hash 'functionCall
+                                                (hash 'name "bash" 'args (hash 'command "ls")))))
+                       'finishReason #f)))
+     (hash 'candidates
+           (list (hash 'content
+                       (hash 'role "model"
+                             'parts (list (hash 'functionCall
+                                                (hash 'name "read" 'args (hash 'path "/tmp")))))
+                       'finishReason "STOP")))))
+  (define chunks (gemini-parse-stream-chunks stream-events))
+  (define tc-chunks (filter (lambda (c) (stream-chunk-delta-tool-call c)) chunks))
+  (check-equal? (length tc-chunks) 2 "two tool-call deltas across two SSE chunks")
+  ;; First tool call should have index 0, second index 1
+  (define tc1 (stream-chunk-delta-tool-call (car tc-chunks)))
+  (define tc2 (stream-chunk-delta-tool-call (cadr tc-chunks)))
+  (check-equal? (hash-ref tc1 'index) 0 "first tool call has index 0")
+  (check-equal? (hash-ref tc2 'index) 1 "second tool call has index 1")
+  ;; IDs must be unique
+  (check-not-equal? (hash-ref tc1 'id) (hash-ref tc2 'id)
+                     "streaming tool calls across chunks have unique IDs")
+  ;; Names preserved
+  (check-equal? (hash-ref (hash-ref tc1 'function) 'name) "bash"
+                "first tool call name preserved")
+  (check-equal? (hash-ref (hash-ref tc2 'function) 'name) "read"
+                "second tool call name preserved")
+  ;; Verify accumulation produces two separate tool calls
+  (define accumulated (accumulate-tool-call-deltas tc-chunks))
+  (check-equal? (length accumulated) 2
+                "accumulated tool calls produce 2 separate entries")
+  (check-equal? (hash-ref (car accumulated) 'name) "bash"
+                "first accumulated tool call is bash")
+  (check-equal? (hash-ref (cadr accumulated) 'name) "read"
+                "second accumulated tool call is read"))
+
+(test-case "Issue #443: single SSE chunk with two functionCalls gets distinct indices"
+  (gemini-reset-tool-id-counter!)
+  (define event
+    (hash 'candidates
+          (list (hash 'content
+                      (hash 'role "model"
+                            'parts (list (hash 'functionCall (hash 'name "bash" 'args (hash 'command "ls")))
+                                         (hash 'functionCall (hash 'name "read" 'args (hash 'path "/tmp")))))
+                      'finishReason "STOP"))))
+  (define chunks (gemini-parse-single-event event))
+  (define tc-chunks (filter (lambda (c) (stream-chunk-delta-tool-call c)) chunks))
+  (check-equal? (length tc-chunks) 2 "two tool-call deltas in one event")
+  (define tc1 (stream-chunk-delta-tool-call (car tc-chunks)))
+  (define tc2 (stream-chunk-delta-tool-call (cadr tc-chunks)))
+  ;; First gets index 0, second gets index 1 (sequential)
+  (check-equal? (hash-ref tc1 'index) 0 "first tool call in same event: index 0")
+  (check-equal? (hash-ref tc2 'index) 1 "second tool call in same event: index 1")
+  (check-not-equal? (hash-ref tc1 'id) (hash-ref tc2 'id)
+                     "tool calls in same event have unique IDs"))

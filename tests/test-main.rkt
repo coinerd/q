@@ -144,6 +144,11 @@
   (define cfg (parse-cli-args #("--session" "s1")))
   (check-equal? (mode-for-config cfg) 'interactive))
 
+;; Issue #455 — init command dispatches to init mode
+(test-case "init -> init mode (not interactive)"
+  (define cfg (parse-cli-args #("init")))
+  (check-equal? (mode-for-config cfg) 'init))
+
 ;; ============================================================
 ;; build-provider
 ;; ============================================================

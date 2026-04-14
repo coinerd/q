@@ -328,6 +328,23 @@
      (check-equal? (length result) 3)
      (check-equal? (md-token-type (cadr result)) 'strikethrough)
      (check-equal? (md-token-content (cadr result)) "remove"))
+
+   ;; Issue #445 — strikethrough off-by-one at end of string
+   (test-case "unmatched ~~ at end of string does not crash"
+     (define result (parse-inline-markdown "some ~~text"))
+     ;; Should return as plain text (no closing ~~)
+     (check-true (andmap (lambda (t) (eq? (md-token-type t) 'text)) result)
+                "unmatched ~~ produces only text tokens"))
+
+   (test-case "unmatched ~~ at exact string boundary"
+     (define result (parse-inline-markdown "~~"))
+     (check-true (andmap (lambda (t) (eq? (md-token-type t) 'text)) result)
+                "bare ~~ produces only text tokens"))
+
+   (test-case "unmatched ~~~ at string boundary"
+     (define result (parse-inline-markdown "a ~~~"))
+     (check-true (andmap (lambda (t) (eq? (md-token-type t) 'text)) result)
+                "~~~ at boundary produces only text tokens"))
    ))
 
 (run-tests markdown-suite 'verbose)

@@ -3,6 +3,7 @@
 ;; q/cli/init-wizard.rkt — First-run guided setup wizard
 ;;
 ;; Extracted from interfaces/cli.rkt for modularity (Issue #193).
+;; Updated (#455): API keys stored in ~/.q/credentials.json (not config.json).
 ;;
 ;; Provides:
 ;;   run-init-wizard — creates ~/.q/config.json via interactive prompts
@@ -10,7 +11,8 @@
 (require json
          racket/string
          racket/file
-         racket/list)
+         racket/list
+         "../runtime/auth-store.rkt")
 
 (provide run-init-wizard)
 
@@ -63,19 +65,44 @@
        (flush-output out)
        (define model (read-input))
 
-       ;; Build config hash
-       (define provider-hash (make-hash (list (cons 'api-key (if (string=? api-key "") "" api-key)))))
-       (when (and model (not (string=? model "")))
-         (hash-set! provider-hash 'default-model model))
+       ;; Resolve default model for provider
+       (define default-model
+         (cond
+           [(string=? provider "openai") "gpt-4o"]
+           [(string=? provider "anthropic") "claude-3-5-sonnet-20241022"]
+           [(string=? provider "gemini") "gemini-2.5-pro"]
+           [else ""]))
 
+       ;; Build provider config (no secrets)
+       (define provider-hash
+         (make-hash
+          (list
+           (cons 'default-model
+                 (if (and model (not (string=? model "")))
+                     model
+                     default-model)))))
+
+       ;; Build non-secret config
        (define config
-         (make-hash (list (cons 'default-provider provider)
-                          (cons 'providers
-                                (make-hash (list (cons (string->symbol provider) provider-hash)))))))
+         (make-hash
+          (list
+           (cons 'default-provider provider)
+           (cons 'providers
+                 (make-hash
+                  (list
+                   (cons (string->symbol provider) provider-hash)))))))
 
        ;; Write config
        (make-directory* config-dir)
-       (call-with-output-file config-path (lambda (port) (write-json config port)) #:exists 'replace)
+       (call-with-output-file config-path
+         (lambda (port) (write-json config port))
+         #:exists 'replace)
+
+       ;; Store API key in dedicated credentials file with restricted permissions (#455)
+       (when (and api-key (not (string=? api-key "")))
+         (save-credential-file! provider api-key))
 
        (displayln "Configuration saved to ~/.q/config.json." out)
+       (when (and api-key (not (string=? api-key "")))
+         (displayln "API key saved to ~/.q/credentials.json (owner-only permissions)." out))
        (displayln "Run 'q' to start chatting." out)])))

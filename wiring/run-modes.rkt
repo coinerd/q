@@ -143,5 +143,6 @@
     [(help) 'help]
     [(version) 'version]
     [(doctor) 'doctor]
+    [(init) 'init]
     [(sessions) 'sessions]
     [else (cli-config-mode cfg)]))
