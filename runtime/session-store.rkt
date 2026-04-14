@@ -35,7 +35,14 @@
   [verify-session-integrity (path-string? . -> . hash?)]
   [repair-session-log!      (path-string? . -> . hash?)]
   [has-pending-marker?      (path-string? . -> . boolean?)]
-  [pending-marker-path      (path-string? . -> . path?)]))
+  [pending-marker-path      (path-string? . -> . path?)])
+ ;; Session versioning (#499)
+ CURRENT-SESSION-VERSION
+ write-session-version-header!
+ ensure-session-version-header!
+ migrate-session-log!
+ ;; Session forking (#500)
+ fork-session!)
 
 ;; ── Write-ahead marker ──
 
@@ -309,3 +316,134 @@
                 (or bak-path "N/A")))
 
      (hasheq 'entries-kept (length valid-entries) 'entries-removed removed)]))
+
+;; ============================================================
+;; Session versioning (#499)
+;; ============================================================
+
+;; Current session log format version.
+;; Version 1: original format (no version header).
+;; Version 2: version header as first entry (kind=session-info, meta.version=2).
+(define CURRENT-SESSION-VERSION 2)
+
+;; ============================================================
+;; Session forking (#500)
+;; ============================================================
+
+(define (fork-session! source-path source-entry-id dest-path)
+  ;; Extract root→entry path from source session to a new JSONL file.
+  ;; The new session starts with a version header and all entries from
+  ;; the extracted path. Original session is unchanged.
+  ;; Returns the number of entries copied.
+  ;;
+  ;; source-path: path to source session JSONL
+  ;; source-entry-id: id of the entry to fork at (inclusive)
+  ;; dest-path: path for the new forked session JSONL
+  (define entries (load-session-log source-path))
+  ;; Build by-id map
+  (define by-id (make-hash))
+  (for ([e (in-list entries)])
+    (hash-set! by-id (message-id e) e))
+  ;; Walk from entry to root
+  (define (walk-up id acc)
+    (define e (hash-ref by-id id #f))
+    (cond
+      [(not e) acc]
+      [else
+       (define new-acc (cons e acc))
+       (define pid (message-parent-id e))
+       (if pid
+           (walk-up pid new-acc)
+           new-acc)]))
+  (define path-entries (walk-up source-entry-id '()))
+  ;; Write version header + path entries to dest
+  (ensure-parent-dirs* dest-path)
+  (define header-msg
+    (make-message (format "session-version-header")
+                  #f
+                  'system
+                  'session-info
+                  '()
+                  (current-seconds)
+                  (hasheq 'version CURRENT-SESSION-VERSION
+                          'parentSession (path->string source-path))))
+  (define all-entries (cons header-msg path-entries))
+  ;; Write dest file
+  (jsonl-append-entries! dest-path (map message->jsexpr all-entries))
+  ;; Return count (excluding header)
+  (length path-entries))
+
+(define (write-session-version-header! log-path)
+  ;; Write a version header entry as the first line of a new session log.
+  ;; Only writes if the file doesn't exist or is empty.
+  (ensure-parent-dirs* log-path)
+  (cond
+    [(and (file-exists? log-path)
+          (> (file-size log-path) 0))
+     (void)] ;; Already has content — don't prepend
+    [else
+     (define header-msg
+       (make-message (format "session-version-header")
+                     #f
+                     'system
+                     'session-info
+                     '()
+                     (current-seconds)
+                     (hasheq 'version CURRENT-SESSION-VERSION)))
+     ;; Write directly (don't use append-entry! to avoid marker overhead)
+     (call-with-output-file log-path
+                            (lambda (out)
+                              (write-json (message->jsexpr header-msg) out)
+                              (newline out))
+                            #:mode 'text
+                            #:exists 'truncate)]))
+
+(define (ensure-session-version-header! log-path)
+  ;; Check if session log has a version header; add one if not.
+  ;; Returns the detected version number.
+  (cond
+    [(not (file-exists? log-path))
+     (write-session-version-header! log-path)
+     CURRENT-SESSION-VERSION]
+    [(= (file-size log-path) 0)
+     (write-session-version-header! log-path)
+     CURRENT-SESSION-VERSION]
+    [else
+     ;; Check first line for version header
+     (define entries (load-session-log log-path))
+     (cond
+       [(null? entries)
+        (write-session-version-header! log-path)
+        CURRENT-SESSION-VERSION]
+       [(session-info-entry? (car entries))
+        (hash-ref (message-meta (car entries)) 'version 1)]
+       [else
+        ;; Old format (v1) — no version header. Run migration.
+        (migrate-session-log! log-path 1 CURRENT-SESSION-VERSION)
+        CURRENT-SESSION-VERSION])]))
+
+(define (migrate-session-log! log-path from-version to-version)
+  ;; Migrate session log from one version to another.
+  ;; Currently only supports 1->2 (add version header).
+  (when (< from-version to-version)
+    (define entries (load-session-log log-path))
+    (define header-msg
+      (make-message (format "session-version-header")
+                    #f
+                    'system
+                    'session-info
+                    '()
+                    (current-seconds)
+                    (hasheq 'version to-version)))
+    ;; Rewrite with header prepended
+    (define all-entries (cons header-msg entries))
+    ;; Backup original
+    (define bak-path (format "~a.v~a.bak" log-path from-version))
+    (when (file-exists? bak-path)
+      (delete-file bak-path))
+    (rename-file-or-directory log-path bak-path #t)
+    ;; Write new version
+    (jsonl-append-entries! log-path (map message->jsexpr all-entries))
+    (fprintf (current-error-port)
+             "Session migrated v~a -> v~a: ~a entries. Backup: ~a\n"
+             from-version to-version (length entries) bak-path)))
