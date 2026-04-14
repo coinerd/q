@@ -116,6 +116,34 @@
 
    (test-case "long mixed string"
      ;; "hello你好world世界" = 5 + 4 + 5 + 4 = 18
-     (check-equal? (string-visible-width "hello你好world世界") 18))))
+     (check-equal? (string-visible-width "hello你好world世界") 18))
+
+   ;; ============================================================
+   ;; display-col->string-offset
+   ;; ============================================================
+
+   (test-case "display-col->string-offset: ASCII identity"
+     (check-equal? (display-col->string-offset "hello" 0) 0)
+     (check-equal? (display-col->string-offset "hello" 3) 3)
+     (check-equal? (display-col->string-offset "hello" 5) 5))
+
+   (test-case "display-col->string-offset: CJK width-2 chars"
+     ;; "你好" → display widths: [0,2) and [2,4)
+     (check-equal? (display-col->string-offset "你好" 0) 0)
+     (check-equal? (display-col->string-offset "你好" 1) 0) ; inside first CJK char
+     (check-equal? (display-col->string-offset "你好" 2) 1) ; second char
+     (check-equal? (display-col->string-offset "你好" 3) 1) ; inside second CJK char
+     (check-equal? (display-col->string-offset "你好" 4) 2))
+
+   (test-case "display-col->string-offset: mixed ASCII + CJK"
+     ;; "a你b" → display: [0]=a(1) [1-2]=你(2) [3]=b(1)
+     (check-equal? (display-col->string-offset "a你b" 0) 0)
+     (check-equal? (display-col->string-offset "a你b" 1) 1)
+     (check-equal? (display-col->string-offset "a你b" 2) 1) ; inside 你
+     (check-equal? (display-col->string-offset "a你b" 3) 2)
+     (check-equal? (display-col->string-offset "a你b" 4) 3))
+
+   (test-case "display-col->string-offset: past end returns length"
+     (check-equal? (display-col->string-offset "hi" 100) 2))))
 
 (run-tests char-width-tests)

@@ -31,6 +31,8 @@
 
          ;; Helpers
          styled-line->text
+         styled-line->ansi
+         styles->sgr
          wrap-styled-line
          wrap-text
          wrap-single-line)
@@ -88,6 +90,42 @@
 ;; Extract plain text from a styled-line (local helper)
 (define (styled-line->text sl)
   (apply string-append (map styled-segment-text (styled-line-segments sl))))
+
+;; Convert a styled-line to an ANSI-encoded string.
+;; Each segment gets its SGR codes; a final reset is appended.
+(define (styled-line->ansi sl)
+  (define parts
+    (for/list ([seg (in-list (styled-line-segments sl))])
+      (define text (styled-segment-text seg))
+      (define styles (styled-segment-style seg))
+      (if (null? styles)
+          text
+          (string-append (styles->sgr styles) text))))
+  (define content (apply string-append parts))
+  ;; Append SGR reset if any segment had styles
+  (if (for/or ([seg (in-list (styled-line-segments sl))])
+        (pair? (styled-segment-style seg)))
+      (string-append content "\x1b[0m")
+      content))
+
+;; Convert a list of style symbols to an SGR escape sequence.
+;; e.g. '(bold cyan) → "\x1b[1;36m"
+(define (styles->sgr styles)
+  (define codes
+    (for/list ([s (in-list styles)])
+      (case s
+        [(bold) 1]
+        [(italic) 3]
+        [(underline) 4]
+        [(inverse) 7]
+        [(dim) 2]
+        [(black) 30] [(red) 31] [(green) 32] [(yellow) 33]
+        [(blue) 34] [(magenta) 35] [(cyan) 36] [(white) 37]
+        [else #f])))
+  (define valid (filter values codes))
+  (if (null? valid)
+      ""
+      (format "\x1b[~am" (string-join (map number->string valid) ";"))))
 
 ;; Wrap a styled-line to a given width, returning a list of styled-lines.
 ;; Preserves segment styles by tracking character-to-segment mapping.
@@ -243,17 +281,19 @@
             [(< i sel-start-idx) line]
             [(> i sel-end-idx) line]
             [else
-             ;; This line is in the selection range — apply inverse
+             ;; This line is in the selection range — apply inverse.
+             ;; Mouse X/Y gives display columns; convert to string offsets
+             ;; so CJK characters (width 2) get correct selection bounds.
              (define line-text
                (apply string-append (map styled-segment-text (styled-line-segments line))))
              (define line-len (string-length line-text))
              (define col-start
                (if (= i sel-start-idx)
-                   (min start-col line-len)
+                   (min (display-col->string-offset line-text start-col) line-len)
                    0))
              (define col-end
                (if (= i sel-end-idx)
-                   (min (add1 end-col) line-len)
+                   (min (display-col->string-offset line-text (add1 end-col)) line-len)
                    line-len))
              (if (>= col-start col-end)
                  line ;; selection range empty on this line
