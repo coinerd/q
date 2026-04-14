@@ -162,7 +162,8 @@
 ;;   layout     — tui-layout struct
 ;;
 ;; Side effect: Modifies ubuf contents.
-;; Returns: (values cursor-col cursor-row) for cursor positioning
+;; Returns: (values cursor-col cursor-row ui-state frame-lines)
+;;   frame-lines is (listof string) — plain text for each row, for diffing
 (define (render-frame! ubuf ui-state input-st layout)
   (define cols (tui-layout-cols layout))
   (define rows (tui-layout-rows layout))
@@ -189,6 +190,10 @@
   (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
   (ubuf-putstring! ubuf 0 header-y header-text #:fg 0 #:bg 7)
 
+  ;; Build frame-lines for diffing
+  (define frame-vec (make-vector rows ""))
+  (vector-set! frame-vec header-y header-text)
+
   ;; 3. Draw transcript entries (with render cache)
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
   ;; Apply selection highlight if selection is active
@@ -204,20 +209,25 @@
         trans-lines))
   (define pad-count (- transcript-height (length visible-lines)))
   (for ([i (in-range pad-count)])
-    (ubuf-putstring! ubuf 0 (+ trans-y i) (make-string cols #\space)))
+    (define blank (make-string cols #\space))
+    (ubuf-putstring! ubuf 0 (+ trans-y i) blank)
+    (vector-set! frame-vec (+ trans-y i) blank))
   (for ([line (in-list visible-lines)]
         [i (in-naturals)])
-    (draw-styled-line! ubuf line (+ trans-y pad-count i) cols))
+    (draw-styled-line! ubuf line (+ trans-y pad-count i) cols)
+    (vector-set! frame-vec (+ trans-y pad-count i) (styled-line->text line)))
 
   ;; 4. Draw status bar (inverse = fg=0, bg=7)
   (define status-line (render-status-bar ui-state cols))
   (draw-styled-line! ubuf status-line status-y cols)
+  (vector-set! frame-vec status-y (styled-line->text status-line))
 
   ;; 5. Draw input line
   (define input-line (render-input-line input-st cols))
   (draw-styled-line! ubuf input-line input-y cols)
+  (vector-set! frame-vec input-y (styled-line->text input-line))
 
   ;; 6. Return cursor position (0-indexed for ANSI escape)
   (define-values (_visible-text _scroll-offset cursor-display-col)
     (input-visible-window input-st cols))
-  (values cursor-display-col input-y ui-state*))
+  (values cursor-display-col input-y ui-state* (vector->list frame-vec)))

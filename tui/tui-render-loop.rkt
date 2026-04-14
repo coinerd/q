@@ -25,6 +25,7 @@
          "../tui/sgr.rkt"
          (prefix-in renderer: "../tui/renderer.rkt")
          "../tui/layout.rkt"
+         "../tui/frame-diff.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt")
@@ -134,7 +135,9 @@
 (define (tui-ctx-resize-ubuf! ctx)
   (define-values (cols rows) (tui-screen-size))
   (define ubuf (make-ubuf cols rows))
-  (set-box! (tui-ctx-ubuf-box ctx) ubuf))
+  (set-box! (tui-ctx-ubuf-box ctx) ubuf)
+  ;; Clear previous frame on resize to force full redraw
+  (set-box! (tui-ctx-previous-frame-box ctx) #f))
 
 ;; Get current ubuf from context
 (define (tui-ctx-ubuf ctx)
@@ -160,15 +163,35 @@
   (define-values (cols rows) (tui-screen-size))
   (define layout (compute-layout cols rows))
 
-  ;; Render to ubuf (returns cursor position)
-  (define-values (cursor-col cursor-row state*) (renderer:render-frame! ubuf state inp layout))
+  ;; Render to ubuf (returns cursor position, state, frame lines)
+  (define-values (cursor-col cursor-row state* frame-lines)
+    (renderer:render-frame! ubuf state inp layout))
 
   ;; Write back state with updated render cache
   (set-box! (tui-ctx-ui-state-box ctx) state*)
 
-  ;; Display ubuf to terminal
+  ;; Diff-based terminal output
+  (define prev-frame (unbox (tui-ctx-previous-frame-box ctx)))
+  (define diffs (diff-frames prev-frame frame-lines))
   (tui-cursor-hide)
-  (render-ubuf-to-terminal! ubuf)
+  (cond
+    ;; No changes — skip terminal output entirely
+    [(null? diffs) (void)]
+    [(and (= (length diffs) 1) (eq? (diff-cmd-type (car diffs)) 'full))
+     ;; Full redraw needed (first frame or resize)
+     (render-ubuf-to-terminal! ubuf)]
+    [else
+     ;; Incremental: write only changed lines
+     (for ([cmd (in-list diffs)])
+       (case (diff-cmd-type cmd)
+         [(write)
+          (tui-cursor 1 (+ (diff-cmd-row cmd) 1)) ; ANSI is 1-based
+          (display (diff-cmd-content cmd) (current-output-port))]
+         [else (void)]))
+     (tui-flush)])
+
+  ;; Store current frame for next diff
+  (set-box! (tui-ctx-previous-frame-box ctx) frame-lines)
 
   ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
