@@ -60,10 +60,10 @@
        ;; Current is shorter — diff common prefix, clear surplus
        [else
         (define common-diffs
-          (for/list ([p (in-list curr)]
+          (for/list ([p (in-list prev)]
                      [c (in-list curr)]
                      [i (in-naturals)]
-                     #:when (not (string=? (list-ref prev i) c)))
+                     #:when (not (string=? p c)))
             (diff-cmd 'write i c)))
         ;; Clear rows from curr-len to prev-len-1
         (define cleared

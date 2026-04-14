@@ -6,6 +6,7 @@
          "state.rkt"
          "input.rkt"
          "char-width.rkt"
+         "theme.rkt"
          "../util/markdown.rkt")
 
 ;; Types
@@ -55,6 +56,16 @@
 (define (plain-line text)
   (styled-line (list (styled-segment text '()))))
 
+;; Resolve a theme field to a style list for styled-segment.
+;; Returns a list of symbols suitable for the style field.
+;; For example: (theme->style 'accent) => '(cyan)
+;;              (theme->style 'accent '(bold)) => '(bold cyan)
+(define (theme->style field [modifiers '()])
+  (define color (theme-ref field))
+  (if color
+      (append modifiers (list color))
+      modifiers))
+
 ;; Format a transcript entry into styled lines
 (define (format-entry entry [width 200])
   ;; Returns (listof styled-line) — usually 1 line, but could be multi-line
@@ -63,14 +74,14 @@
   (case kind
     ;; Parse markdown and render as styled-lines
     [(assistant) (md-format-assistant text width)]
-    [(tool-start) (list (styled-line (list (styled-segment text '(cyan)))))]
-    [(tool-end) (list (styled-line (list (styled-segment text '(green)))))]
-    [(tool-fail) (list (styled-line (list (styled-segment text '(red)))))]
-    [(system) (list (styled-line (list (styled-segment (string-append "[SYS] " text) '(dim)))))]
-    [(error) (list (styled-line (list (styled-segment (string-append "[ERR] " text) '(bold red)))))]
+    [(tool-start) (list (styled-line (list (styled-segment text (theme->style 'tool-title)))))]
+    [(tool-end) (list (styled-line (list (styled-segment text (theme->style 'success)))))]
+    [(tool-fail) (list (styled-line (list (styled-segment text (theme->style 'error)))))]
+    [(system) (list (styled-line (list (styled-segment (string-append "[SYS] " text) (theme->style 'muted)))))]
+    [(error) (list (styled-line (list (styled-segment (string-append "[ERR] " text) (theme->style 'error '(bold))))))]
     [(user)
-     ;; Split into cyan prompt + bold text, like pi's user message styling
-     (list (styled-line (list (styled-segment "> " '(bold cyan)) (styled-segment text '(bold)))))]
+     ;; Split into themed prompt + bold text
+     (list (styled-line (list (styled-segment "> " (theme->style 'input-prompt '(bold))) (styled-segment text '(bold)))))]
     [else (list (plain-line text))]))
 
 ;; Convert a single md-token to a styled-segment
@@ -83,8 +94,8 @@
     [(text) (styled-segment content '())]
     [(bold) (styled-segment content '(bold))]
     [(italic) (styled-segment content '(italic))]
-    [(code) (styled-segment content '(cyan))]
-    [(link) (styled-segment (cdr content) '(blue underline))]
+    [(code) (styled-segment content (theme->style 'md-code))]
+    [(link) (styled-segment (cdr content) (theme->style 'md-link '(underline)))]
     [else (styled-segment (format "~a" content) '())]))
 
 ;; Extract plain text from a styled-line (local helper)
@@ -196,14 +207,14 @@
          (define code (cdr (md-token-content tok)))
          (define code-lines
            (for/list ([line (string-split code "\n" #:trim? #f)])
-             (styled-line (list (styled-segment (string-append "  " line) '(green))))))
+             (styled-line (list (styled-segment (string-append "  " line) (theme->style 'md-code))))))
          (values (append prev-lines code-lines) '())]
         [(header)
          (define prev-lines (flush-current lines current-segs))
          (define header-text (cdr (md-token-content tok)))
-         ;; Gold/yellow like pi's mdHeading
+         ;; Heading uses md-heading theme color
          (values (append prev-lines
-                         (list (styled-line (list (styled-segment header-text '(bold yellow))))))
+                         (list (styled-line (list (styled-segment header-text (theme->style 'md-heading '(bold)))))))
                  '())]
         [else
          ;; Inline token — accumulate segments
@@ -367,7 +378,7 @@
     (if (and streaming (not (string=? streaming "")))
         (append formatted-lines
                 (for/list ([line (in-list (wrap-text streaming width))])
-                  (styled-line (list (styled-segment line '(dim))))))
+                  (styled-line (list (styled-segment line (theme->style 'muted))))))
         formatted-lines))
   (define total (length all-lines))
   (define sliced-lines
@@ -398,13 +409,13 @@
   (styled-line (list (styled-segment padded '(inverse)))))
 
 ;; Render the input line
-;; Returns styled-line with cyan prompt + bold text
+;; Returns styled-line with themed prompt + bold text
 ;; Returns styled-line
 (define (render-input-line input-st width)
   (define-values (visible-text scroll-offset cursor-col) (input-visible-window input-st width))
   (define prompt-str "q> ")
   (define pad-len (max 0 (- width (string-visible-width prompt-str) (string-visible-width visible-text))))
-  (styled-line (list (styled-segment prompt-str '(bold cyan))
+  (styled-line (list (styled-segment prompt-str (theme->style 'input-prompt '(bold)))
                      (styled-segment (string-append visible-text (make-string pad-len #\space))
                                      '(bold)))))
 
@@ -424,8 +435,8 @@
       (define line-text (format "~a~a. ~a (~a)~a" prefix i id role-str leaf-indicator))
       (define style
         (if (branch-info-active? b)
-            '(bold green)
-            '(dim)))
+            (theme->style 'success '(bold))
+            (theme->style 'muted)))
       (styled-line (list (styled-segment line-text style)))))
   (cons header branch-lines))
 
@@ -445,8 +456,8 @@
       (define line-text (format "~a~a. ~a (~a)" prefix i id role-str))
       (define style
         (if (branch-info-active? b)
-            '(bold green)
-            '(dim)))
+            (theme->style 'success '(bold))
+            (theme->style 'muted)))
       (styled-line (list (styled-segment line-text style)))))
   (cons header leaf-lines))
 
@@ -457,7 +468,7 @@
     (styled-line (list (styled-segment (format "  Children of ~a (~a):" parent-id (length children))
                                        '(bold underline)))))
   (if (null? children)
-      (list header (styled-line (list (styled-segment "    (no children)" '(dim)))))
+      (list header (styled-line (list (styled-segment "    (no children)" (theme->style 'muted)))))
       (cons header
             (for/list ([b (in-list children)]
                        [i (in-naturals 1)])
@@ -465,4 +476,4 @@
               (define role-str (symbol->string (branch-info-role b)))
               (define leaf-indicator (if (branch-info-leaf? b) " [leaf]" ""))
               (define line-text (format "    ~a. ~a (~a)~a" i id role-str leaf-indicator))
-              (styled-line (list (styled-segment line-text '(dim))))))))
+              (styled-line (list (styled-segment line-text (theme->style 'muted))))))))

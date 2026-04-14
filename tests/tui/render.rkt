@@ -105,7 +105,7 @@
         ;; Two segments: cyan prompt + bold text
         (check-equal? (length segs) 2)
         (check-equal? (styled-segment-text (first segs)) "> ")
-        (check-equal? (styled-segment-style (first segs)) '(bold cyan))
+        (check-equal? (styled-segment-style (first segs)) '(bold cyan) "user prompt uses theme")
         (check-equal? (styled-segment-text (second segs)) "Hello!")
         (check-equal? (styled-segment-style (second segs)) '(bold))))
 
@@ -114,7 +114,9 @@
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[ERR]"))
-        (check-equal? (styled-segment-style seg) '(bold red) "error entry has bold red style")))
+        ;; Error uses theme->style 'error '(bold) which resolves to '(bold red)
+        (check-not-false (member 'red (styled-segment-style seg)) "error has red")
+        (check-not-false (member 'bold (styled-segment-style seg)) "error has bold")))
 
     ;; --------------------------------------------------------
     ;; render-status-bar and render-input-line
@@ -176,7 +178,9 @@
         (define lines (format-entry entry 80))
         (define segs (styled-line-segments (first lines)))
         (check-equal? (length segs) 3)
-        (check-equal? (styled-segment-style (second segs)) '(cyan))
+        ;; Inline code uses theme 'md-code → 'bright-green in default dark theme
+        (check-not-false (member 'bright-green (styled-segment-style (second segs)))
+                         "inline code uses theme md-code color")
         (check-equal? (styled-segment-text (second segs)) "foo")))
 
     (test-case "format-entry assistant header"
@@ -185,7 +189,9 @@
         (check-equal? (length lines) 1 "one line")
         (define segs (styled-line-segments (first lines)))
         (check-equal? (styled-segment-text (first segs)) "Title")
-        (check-equal? (styled-segment-style (first segs)) '(bold yellow))))
+        ;; Header uses theme 'md-heading → 'cyan in default dark theme
+        (check-not-false (member 'bold (styled-segment-style (first segs))) "header is bold")
+        (check-not-false (member 'cyan (styled-segment-style (first segs))) "header uses theme md-heading")))
 
     (test-case "format-entry assistant multi-line with newline"
       (let ([entry (make-entry 'assistant "line1\nline2" 1000 (hash))])
@@ -200,7 +206,9 @@
         ;; code-block line + trailing newline line
         (check-true (>= (length lines) 1) "at least one code line")
         (define code-segs (styled-line-segments (first lines)))
-        (check-equal? (styled-segment-style (first code-segs)) '(green))
+        ;; Code block uses theme 'md-code → 'bright-green in default dark theme
+        (check-not-false (member 'bright-green (styled-segment-style (first code-segs)))
+                         "code block uses theme md-code color")
         (check-true (string-contains? (styled-segment-text (first code-segs)) "code line"))))
 
     (test-case "format-entry assistant link uses blue underline"
@@ -212,8 +220,9 @@
         ;; Second segment is the link
         (define link-seg (second segs))
         (check-equal? (styled-segment-text link-seg) "here")
-        (check-not-false (member 'blue (styled-segment-style link-seg)) "link has blue")
-        (check-not-false (member 'underline (styled-segment-style link-seg)) "link has underline")))
+        ;; Link uses theme 'md-link → 'cyan in default dark theme
+        (check-not-false (member 'underline (styled-segment-style link-seg)) "link has underline")
+        (check-not-false (member 'cyan (styled-segment-style link-seg)) "link uses theme md-link color")))
 
     (test-case "format-entry tool-start shows [TOOL] text prefix and cyan color"
       (let ([entry (make-entry 'tool-start "[TOOL: read]" 1000 (hash))])
@@ -221,7 +230,8 @@
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[TOOL")
                     "tool-start text has [TOOL] prefix")
-        (check-equal? (styled-segment-style seg) '(cyan))))
+        ;; tool-start uses theme 'tool-title → 'cyan in default dark theme
+        (check-equal? (styled-segment-style seg) '(cyan) "tool-start uses theme")))
 
     (test-case "format-entry tool-end shows [OK] text prefix and green color"
       (let ([entry (make-entry 'tool-end "[OK: read]" 1000 (hash))])
@@ -229,7 +239,8 @@
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[OK")
                     "tool-end text has [OK] prefix")
-        (check-equal? (styled-segment-style seg) '(green))))
+        ;; tool-end uses theme 'success → 'green in default dark theme
+        (check-equal? (styled-segment-style seg) '(green) "tool-end uses theme")))
 
     (test-case "format-entry tool-fail shows [FAIL] text prefix and red color"
       (let ([entry (make-entry 'tool-fail "[FAIL: read]" 1000 (hash))])
@@ -237,14 +248,16 @@
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[FAIL")
                     "tool-fail text has [FAIL] prefix")
-        (check-equal? (styled-segment-style seg) '(red))))
+        ;; tool-fail uses theme 'error → 'red in default dark theme
+        (check-equal? (styled-segment-style seg) '(red) "tool-fail uses theme")))
 
     (test-case "format-entry system shows [SYS] prefix"
       (let ([entry (make-entry 'system "Session started" 1000 (hash))])
         (define lines (format-entry entry 80))
         (define seg (first (styled-line-segments (first lines))))
         (check-true (string-contains? (styled-segment-text seg) "[SYS]"))
-        (check-equal? (styled-segment-style seg) '(dim))))
+        ;; System uses theme 'muted → 'bright-black in default dark theme
+        (check-equal? (styled-segment-style seg) '(bright-black) "system uses theme muted")))
 
     ;; --------------------------------------------------------
     ;; Line-based viewport slicing (render-transcript)
@@ -321,7 +334,8 @@
         ;; Last line should be the streaming text (dim)
         (define last-seg (first (styled-line-segments (last lines))))
         (check-equal? (styled-segment-text last-seg) "streaming...")
-        (check-equal? (styled-segment-style last-seg) '(dim))))))
+        ;; Streaming text uses theme 'muted → 'bright-black in default dark theme
+        (check-equal? (styled-segment-style last-seg) '(bright-black) "streaming uses theme muted")))))
 
 (run-tests render-tests)
 
@@ -514,8 +528,8 @@
         ;; None of the code lines should be wrapped
         ;; (they may exceed terminal width but that's handled by draw-styled-line!)
         (check-not-false
-         (member 'green (apply append (map styled-segment-style (styled-line-segments line))))
-         (format "code line '~a' should be green" line-text))))
+         (member 'bright-green (apply append (map styled-segment-style (styled-line-segments line))))
+         (format "code line '~a' should be bright-green (theme md-code)" line-text))))
 
     (test-case "md-format-assistant does NOT wrap headers"
       (define header-text (string-append "# " (make-string 200 #\h)))

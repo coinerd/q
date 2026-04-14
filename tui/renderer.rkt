@@ -252,16 +252,20 @@
     (vector-set! frame-vec (+ trans-y i) blank))
   (for ([line (in-list visible-lines)]
         [i (in-naturals)])
+    (define line-ansi (styled-line->ansi line))
+    (assert-line-width! (styled-line->text line) cols)
     (draw-styled-line! ubuf line (+ trans-y pad-count i) cols)
-    (vector-set! frame-vec (+ trans-y pad-count i) (styled-line->ansi line)))
+    (vector-set! frame-vec (+ trans-y pad-count i) line-ansi))
 
   ;; 4. Draw status bar (inverse = fg=0, bg=7)
   (define status-line (render-status-bar ui-state cols))
+  (assert-line-width! (styled-line->text status-line) cols)
   (draw-styled-line! ubuf status-line status-y cols)
   (vector-set! frame-vec status-y (styled-line->ansi status-line))
 
   ;; 5. Draw input line
   (define input-line (render-input-line input-st cols))
+  (assert-line-width! (styled-line->text input-line) cols)
   (draw-styled-line! ubuf input-line input-y cols)
   (vector-set! frame-vec input-y (styled-line->ansi input-line))
 
