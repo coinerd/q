@@ -9,6 +9,8 @@
          racket/port
          racket/file
          racket/match
+         racket/function
+         json
          "../util/config-paths.rkt")
 
 (provide key-spec
@@ -220,32 +222,53 @@
       [else (string->symbol rest)]))
   (key-spec key-name ctrl shift alt))
 
-;; Minimal config reader (sexp-based, no JSON dependency needed)
-;; Keybindings file format: (("key" . "action") ...)
-;; where "key" uses C-/M-/S- prefixes, e.g. "C-a", "M-x", "C-S-right"
+;; JSON keybindings loader.
+;; Keybindings file format: [{ "key": "C-a", "action": "select-all" }, ...]
+;; Key format: C- = ctrl, M- = alt, S- = shift, then key name.
+;; Uses the `json` library for proper JSON parsing — key order in objects
+;; is not significant.
 
 (define (load-keybindings-file path)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (log-warning
+                      (format "keymap: failed to load ~a: ~a"
+                              path (exn-message e)))
+                     #f)])
     (if (file-exists? path)
         (let ([content (file->string path)])
-          (parse-keybindings-content content))
+          (parse-keybindings-content content path))
         #f)))
 
-(define (parse-keybindings-content content)
-  ;; Match key/action pairs from JSON config
-  (define kb-rx
-    (regexp
-     (string-append
-      "\"key\"[ \t]*:[ \t]*\"([^\"]+)\"][ \t]*,"
-      "[ \t]*\"action\"[ \t]*:[ \t]*\"([^\"]+)\"")))
-  (let ([entries (regexp-match* kb-rx content)])
-    (if (null? entries)
+(define (parse-keybindings-content content [source-path "<keybindings>"])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (log-warning
+                      (format "keymap: invalid JSON in ~a: ~a"
+                              source-path (exn-message e)))
+                     #f)])
+    (define data (string->jsexpr content))
+    (unless (list? data)
+      (raise (exn:fail (format "keymap: expected JSON array in ~a" source-path)
+                       (current-continuation-marks))))
+    (define bindings
+      (for/list ([entry (in-list data)]
+                 #:when (and (hash? entry)
+                             (hash-has-key? entry 'key)
+                             (hash-has-key? entry 'action)))
+        (define key-str (hash-ref entry 'key #f))
+        (define action-str (hash-ref entry 'action #f))
+        (if (and (string? key-str) (string? action-str))
+            (cons (parse-key-string key-str)
+                  (string->symbol action-str))
+            (begin
+              (log-warning
+               (format "keymap: skipping invalid entry in ~a: ~v"
+                       source-path entry))
+              #f))))
+    (define valid-bindings (filter identity bindings))
+    (if (null? valid-bindings)
         #f
-        (for/list ([e (in-list entries)])
-          (define m (regexp-match kb-rx e))
-          (if m
-              (cons (parse-key-string (cadr m))
-                    (string->symbol (caddr m)))
-              #f)))))
+        valid-bindings)))
 
 

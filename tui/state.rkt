@@ -185,7 +185,7 @@
 ;; Returns a new ui-state (immutable update).
 ;; This is the core event→state reduction.
 (define (apply-event-to-state state evt)
-  ;; evt is an event struct from agent/types.rkt
+  ;; evt is an event struct from util/protocol-types.rkt
   ;; (event version ev time session-id turn-id payload)
   (define ev (event-ev evt))
   (define payload (event-payload evt))

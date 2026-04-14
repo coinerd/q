@@ -147,7 +147,7 @@
       (let* ([prev-start (prev-grapheme-start buf cur)]
              [new-buf (string-append (substring buf 0 prev-start) (substring buf cur))])
         (push-undo st (struct-copy input-state st [buffer new-buf] [cursor prev-start])))))
-;; Visible input width helper — prompt takes 4 columns ("q> ")
+;; Visible input width helper — prompt takes 3 columns (">> ")
 (define INPUT-PROMPT-WIDTH 3)
 
 ;; Compute the visible window of the buffer given a terminal width.
