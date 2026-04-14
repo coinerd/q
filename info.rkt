@@ -12,7 +12,7 @@
 ;; These packages do NOT compile on Racket 8.10 (upstream bugs).
 ;; The TUI works without them using built-in fallbacks.
 
-(define build-deps '("rackunit-lib"))
+(define build-deps '("rackunit-lib" "quickcheck"))
 
 (define pkg-authors '("coinerd"))
 (define pkg-license "MIT")
