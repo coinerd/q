@@ -464,4 +464,4 @@ The credentials file should be readable only by your user.
 - [Installation Guide](install.md) — Full installation instructions
 - [Builder Tutorials](tutorials/builder-tutorials.md) — Build custom tools, providers, and extensions
 - [Configuration Reference](../docs/getting-started/configuration.md) — Complete config schema
-- [Architecture Overview](../docs/architecture/overview.md) — How q works internally
+- [Architecture Overview](../adr/0001-small-trusted-core.md) — How q works internally

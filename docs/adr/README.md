@@ -22,4 +22,4 @@ Each ADR describes a decision that was made, the context that led to it, and its
 - **Format**: Title, Status, Context, Decision, Consequences
 - **Template**: See [TEMPLATE.md](TEMPLATE.md)
 - **Naming**: `NNNN-kebab-case-title.md`
-- ADRs are not design docs — they record *why*, not *what*. For *what*, see `docs/architecture/`.
+- ADRs are not design docs — they record *why*, not *what*. For *what*, see the README and source code.

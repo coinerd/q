@@ -225,7 +225,7 @@
 ;; are not encrypted at rest. On shared systems, consider using
 ;; environment variables or a dedicated secrets manager instead.
 (define (save-credential-file! provider-name api-key [path (credential-file-path)])
-  (with-handlers ([exn:fail? (λ (e) (void))])
+  (with-handlers ([exn:fail? (λ (e) (log-warning (format "save-credential-file! failed: ~a" (exn-message e))))])
     (define dir (path-only path))
     (when (and dir (not (directory-exists? dir)))
       (make-directory* dir))
@@ -265,7 +265,7 @@
 ;; are not encrypted at rest. On shared systems, consider using
 ;; environment variables or a dedicated secrets manager instead.
 (define (write-credential-to-config! config-path provider-name api-key)
-  (with-handlers ([exn:fail? (lambda (e) (void))])
+  (with-handlers ([exn:fail? (lambda (e) (log-warning (format "credential save failed: ~a" (exn-message e))))])
     (internal-write-credential-to-config! config-path provider-name api-key)))
 
 ;; Actual implementation (separated for clarity)
@@ -304,7 +304,9 @@
     (make-directory* dir))
   (define tmp (make-temporary-file "credential-~a.tmp" #f (if dir dir (find-system-path 'temp-dir))))
   (with-handlers ([exn:fail? (lambda (e)
-                                (with-handlers ([exn:fail? void])
+                                (with-handlers ([exn:fail? (lambda (e)
+                                                            (log-warning (format "credential load failed: ~a"
+                                                                               (exn-message e))))])
                                   (delete-file tmp))
                                 (raise e))])
     (call-with-output-file tmp

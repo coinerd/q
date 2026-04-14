@@ -52,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed CONTRIBUTING.md from `.gitattributes` export-ignore (#356)
 - Removed stale `dist/` tarballs (#355)
 
-## [0.8.1] — 2026-04-13
+## [0.8.2] — 2026-04-14
+[0.8.1] — 2026-04-13
 
 ### Added — Wave 1: Test-Case Conversion
 - Converted 105 bare `let` blocks to `test-case` forms in tests/interfaces/tui.rkt (#283)
@@ -682,7 +683,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/coinerd/q/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/coinerd/q/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/coinerd/q/compare/v0.7.9...v0.8.0
 [0.7.9]: https://github.com/coinerd/q/compare/v0.7.8...v0.7.9

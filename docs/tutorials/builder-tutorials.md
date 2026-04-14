@@ -694,7 +694,7 @@ raco test tests/test-extension-api.rkt
 
 ## See Also
 
-- [Architecture: Tools](../docs/architecture/tools.md) — Tool system design
-- [Architecture: Extensions](../docs/architecture/extensions.md) — Extension hook points
+- [Architecture: Tools](../adr/0005-interface-separation.md) — Tool system design
+- [Architecture: Extensions](../adr/0006-extension-hook-model.md) — Extension hook points
 - [Configuration Guide](../docs/getting-started/configuration.md) — Provider configuration
 - [Team Setup Guide](team-setup.md) — Team onboarding and shared configs

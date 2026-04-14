@@ -25,5 +25,5 @@
     (hasheq 'session
             (hasheq 'entries entries
                     'exported_at (current-seconds)
-                    'version "0.5.3")))
+                    'export_format_version "0.5.3")))
   (jsexpr->string envelope))

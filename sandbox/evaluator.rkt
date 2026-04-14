@@ -64,7 +64,8 @@
                      [sandbox-error-output 'string]
                      [sandbox-memory-limit (current-sandbox-memory-limit)]
                      [sandbox-eval-limits (list timeout (current-sandbox-memory-limit))]
-                     [sandbox-network-guard #f]
+                     [sandbox-network-guard (lambda args
+                                                   (error 'evaluator "network access denied in sandbox"))]
                      [sandbox-path-permissions (or (current-sandbox-path-limit) '())])
         (make-evaluator lang)))
 
