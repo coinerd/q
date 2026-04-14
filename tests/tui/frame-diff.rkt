@@ -27,10 +27,15 @@
               (list (diff-cmd 'write 0 "a") (diff-cmd 'write 1 "b") (diff-cmd 'write 2 "c"))
               "all lines changed yields write cmds for all rows")
 
-;; Different length → full redraw
+;; Different length (curr longer) — incremental append
 (check-equal? (diff-frames frame-3 frame-4)
-              (list (diff-cmd 'full 0 #f))
-              "different-length frames yield full redraw")
+              (list (diff-cmd 'write 3 "line3"))
+              "longer frame yields append write cmd")
+
+;; Different length (curr shorter) — incremental clear
+(check-equal? (diff-frames frame-4 frame-3)
+              (list (diff-cmd 'clear-from 3 #f))
+              "shorter frame yields clear-from cmd")
 
 ;; frame->string-lines is identity
 (check-equal? (frame->string-lines frame-3) frame-3 "frame->string-lines returns the frame unchanged")
@@ -42,3 +47,32 @@
 (check-equal? (diff-frames #f empty-frame)
               (list (diff-cmd 'full 0 #f))
               "#f prev with empty current yields full redraw")
+
+;; ──────────────────────────────
+;; Incremental resize tests (#466)
+;; ──────────────────────────────
+
+;; Append + change in common region
+(define frame-3-mod-append '("line0" "CHANGED" "line2" "extra"))
+(check-equal? (diff-frames frame-3 frame-3-mod-append)
+              (list (diff-cmd 'write 1 "CHANGED")
+                    (diff-cmd 'write 3 "extra"))
+              "changed + appended yields write for both")
+
+;; Shrink with change in common region
+(define frame-4-mod-shrink '("line0" "DIFF" "line2"))
+(check-equal? (diff-frames frame-4 frame-4-mod-shrink)
+              (list (diff-cmd 'write 1 "DIFF")
+                    (diff-cmd 'clear-from 3 #f))
+              "changed + shrunk yields write + clear-from")
+
+;; Grow by multiple lines
+(define frame-6 '("a" "b" "c" "d" "e" "f"))
+(check-equal? (diff-frames frame-3 frame-6)
+              (list (diff-cmd 'write 0 "a")
+                    (diff-cmd 'write 1 "b")
+                    (diff-cmd 'write 2 "c")
+                    (diff-cmd 'write 3 "d")
+                    (diff-cmd 'write 4 "e")
+                    (diff-cmd 'write 5 "f"))
+              "grow by multiple lines yields all writes")

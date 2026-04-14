@@ -58,6 +58,14 @@
     (collection-path "tui")
     #t))
 
+;; Minimum render interval in milliseconds.
+;; Coalesces rapid state changes (e.g., streaming) into single frames.
+;; 16ms ≈ 60fps, prevents flicker during fast streaming output.
+(define MIN-RENDER-INTERVAL-MS 16)
+
+;; Track last render timestamp for debouncing.
+(define last-render-ms (box 0.0))
+
 (define make-ubuf-fn
   (and tui-ubuf-available?
        (with-handlers ([exn:fail? (lambda (e) #f)])
@@ -188,6 +196,10 @@
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1)) ; ANSI is 1-based
           (display "\x1b[2K" (current-output-port)) ; clear line
           (display (diff-cmd-content cmd) (current-output-port))]
+         [(clear-from)
+          ;; Clear from given row to end of screen
+          (tui-cursor 1 (+ (diff-cmd-row cmd) 1))
+          (display "\x1b[J" (current-output-port))]
          [else (void)]))
      (tui-flush)])
 
@@ -196,11 +208,12 @@
 
   ;; Position cursor at input location (renderer returns 0-indexed, ANSI is 1-indexed)
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
-  ;; Emit IME cursor marker for CJK input support (Kitty/Ghostty/WezTerm)
-  (when (terminal-sync-available?)
-    (display "\x1b]1337;CursorMarker\x1b\\" (current-output-port)))
+  ;; Emit IME cursor marker for CJK input support
+  ;; Uses APC protocol — silently ignored by terminals that don't understand it
+  (display CURSOR-MARKER (current-output-port))
   (tui-cursor-show)
   (tui-flush)
+  (set-box! last-render-ms (current-inexact-milliseconds))
   (set-box! (tui-ctx-needs-redraw-box ctx) #f))
 
 ;; Deprecated: Old draw-frame is now an alias for render-frame!
@@ -253,9 +266,20 @@
       (tui-ctx-resize-ubuf! ctx)
       (mark-dirty! ctx))
 
-    ;; Draw the frame only when state changed
+    ;; Draw the frame only when state changed (with debouncing)
     (when (unbox (tui-ctx-needs-redraw-box ctx))
-      (render-frame! ctx))
+      (define now (current-inexact-milliseconds))
+      (define elapsed (- now (unbox last-render-ms)))
+      (cond
+        [(< elapsed MIN-RENDER-INTERVAL-MS)
+         ;; Too soon — sleep the remainder, then render
+         (sleep (/ (- MIN-RENDER-INTERVAL-MS elapsed) 1000.0))
+         ;; Re-check in case resize happened during sleep
+         (when (unbox (tui-ctx-needs-redraw-box ctx))
+           (render-frame! ctx))]
+        [else
+         ;; Enough time elapsed — render immediately
+         (render-frame! ctx)]))
 
     (when (unbox (tui-ctx-running-box ctx))
       ;; Get next message from terminal (adapter pattern)

@@ -23,6 +23,7 @@
 
 (require racket/port
          racket/string
+         racket/list
          "clipboard.rkt"
          "terminal-bridge.rkt"
          "terminal-input.rkt")
@@ -97,6 +98,10 @@
          copy-selection!
          clipboard-backend-available?
          current-clipboard-mode
+
+         ;; IME cursor support
+         CURSOR-MARKER
+         strip-cursor-marker
 
          ;; Mouse events
          tmousemsg?
@@ -485,3 +490,34 @@
 
 (define (tui-key-symbol keycode)
   keycode)
+
+;; ============================================================
+;; IME Cursor Marker (APC protocol)
+;; ============================================================
+
+;; Zero-width APC marker for IME cursor positioning.
+;; Uses \x1b_q:c\x07 which is silently ignored by terminals
+;; that don't understand it, and used by CJK-aware terminals
+;; for correct IME composition placement.
+;; Replaces the iTerm2-specific \x1b]1337;CursorMarker\x1b\\.
+(define CURSOR-MARKER "\x1b_q:c\x07")
+
+;; Strip CURSOR_MARKER from rendered output and return the
+;; clean string. The marker is zero-width, so stripping it
+;; doesn't affect layout.
+;; Returns (values clean-string (or/c #f (cons row col)))
+;; where row/col indicate where the marker was found (0-indexed).
+(define (strip-cursor-marker str)
+  (define m (regexp-match-positions (regexp-quote CURSOR-MARKER) str))
+  (if m
+      (let ([idx (caar m)])
+        (values (string-replace str CURSOR-MARKER "")
+                ;; Compute row/col from position before the marker
+                (let* ([before (substring str 0 idx)]
+                       [lines (if (string=? before "")
+                                  '("")
+                                  (string-split before "\n"))]
+                       [row (sub1 (length lines))]
+                       [col (string-length (last lines))])
+                  (cons row col))))
+      (values str #f)))
