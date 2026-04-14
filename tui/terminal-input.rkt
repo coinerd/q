@@ -14,6 +14,9 @@
 ;; Raw stdin reading (used by facade for input selection)
 (provide real-stdin-read-msg
          stub-byte-ready?
+         buffered-read-byte
+         input-buffer-reset!
+         input-buffer-length
 
          ;; Bracketed paste support
          bracketed-paste-start-seq
@@ -188,10 +191,9 @@
 
 ;; Decode a CSI sequence (ESC [ already consumed)
 (define (decode-csi-sequence in)
-  (sync/timeout 0.01 in) ;; wait briefly for rest of sequence
-  (define b (read-byte in))
+  (define b (buffered-read-byte in 0.01))
   (cond
-    [(eof-object? b) (make-tkeymsg-raw 'escape)]
+    [(not b) (make-tkeymsg-raw 'escape)]
     [(= b 65) (make-tkeymsg-raw 'up)] ;; ESC[A
     [(= b 66) (make-tkeymsg-raw 'down)] ;; ESC[B
     [(= b 67) (make-tkeymsg-raw 'right)] ;; ESC[C
@@ -202,34 +204,29 @@
     [(= b 81) (make-tkeymsg-raw 'f2)] ;; ESC[Q
     [(= b 82) (make-tkeymsg-raw 'f3)] ;; ESC[R
     [(= b 83) (make-tkeymsg-raw 'f4)] ;; ESC[S
-    ;; ESC[1~ = home, ESC[4~ = end, ESC[5~ = pgup, ESC[6~ = pgdn
-    [(= b 49) (decode-csi-tilled in 'home)] ;; ESC[1
-    [(= b 52) (decode-csi-tilled in 'end)] ;; ESC[4
-    [(= b 53) (decode-csi-tilled in 'page-up)] ;; ESC[5
-    [(= b 54) (decode-csi-tilled in 'page-down)] ;; ESC[6
-    [(= b 50) (decode-csi-tilled in 'insert)] ;; ESC[2
-    [(= b 51) (decode-csi-tilled in 'delete)] ;; ESC[3
+    [(= b 49) (decode-csi-tilled in 'home)]
+    [(= b 52) (decode-csi-tilled in 'end)]
+    [(= b 53) (decode-csi-tilled in 'page-up)]
+    [(= b 54) (decode-csi-tilled in 'page-down)]
+    [(= b 50) (decode-csi-tilled in 'insert)]
+    [(= b 51) (decode-csi-tilled in 'delete)]
     [(= b 77) ;; ESC[M — X10 mouse event
-     (sync/timeout 0.01 in)
-     (define cb (read-byte in))
-     (define cx (read-byte in))
-     (define cy (read-byte in))
-     (if (and (byte? cb) (byte? cx) (byte? cy))
+     (define cb (buffered-read-byte in 0.01))
+     (define cx (buffered-read-byte in 0.01))
+     (define cy (buffered-read-byte in 0.01))
+     (if (and cb cx cy)
          (make-tmousemsg-raw cb cx cy)
          (make-tkeymsg-raw 'escape))]
     [else (make-tkeymsg-raw 'escape)]))
 
 ;; Decode ESC[N~ style sequences (N already consumed)
 (define (decode-csi-tilled in default-key)
-  (sync/timeout 0.01 in)
-  (define b2 (read-byte in))
+  (define b2 (buffered-read-byte in 0.01))
   (cond
     [(and (byte? b2) (= b2 126)) (make-tkeymsg-raw default-key)] ;; ~
     [(and (byte? b2) (= b2 59)) ;; ; — modifier like ESC[1;5A
-     (sync/timeout 0.01 in)
-     (read-byte in) ;; skip modifier number
-     (sync/timeout 0.01 in)
-     (define b4 (read-byte in))
+     (define _mod (buffered-read-byte in 0.01)) ;; skip modifier number
+     (define b4 (buffered-read-byte in 0.01))
      (cond
        [(and (byte? b4) (= b4 65)) (make-tkeymsg-raw 'up)]
        [(and (byte? b4) (= b4 66)) (make-tkeymsg-raw 'down)]
@@ -241,72 +238,95 @@
     [else (make-tkeymsg-raw 'escape)]))
 
 ;; ============================================================
+;; Input byte buffer (Issue #409)
+;; ============================================================
+
+;; Byte buffer for efficient stdin reading.
+;; read-bytes-avail! fills the buffer; we consume from it.
+(define input-buffer (make-bytes 256))
+(define input-buffer-data #f) ;; #f or (cons start-pos end-pos)
+
+(define (input-buffer-reset!)
+  (set! input-buffer-data #f))
+
+(define (input-buffer-length)
+  (if input-buffer-data
+      (- (cdr input-buffer-data) (car input-buffer-data))
+      0))
+
+;; Read one byte, using the buffer first.
+;; Returns byte? or #f on timeout.
+(define (buffered-read-byte in timeout)
+  (cond
+    ;; Data available in buffer
+    [(and input-buffer-data
+          (< (car input-buffer-data) (cdr input-buffer-data)))
+     (define b (bytes-ref input-buffer (car input-buffer-data)))
+     (set! input-buffer-data
+           (cons (add1 (car input-buffer-data)) (cdr input-buffer-data)))
+     b]
+    ;; Buffer exhausted or empty — refill
+    [else
+     (define ready (sync/timeout timeout in))
+     (if (not ready)
+         #f ;; timeout
+         (let ([n (read-bytes-avail! input-buffer in)])
+           (cond
+             [(eof-object? n) #f]
+             [(and (integer? n) (> n 0))
+              (set! input-buffer-data (cons 0 n))
+              (buffered-read-byte in 0)] ;; recursive call to consume
+             [else #f])))]))
+
+;; ============================================================
 ;; Raw stdin reading (when tui-term is unavailable)
 ;; ============================================================
 
 ;; Real stdin-based input when tui-term is unavailable.
+;; Uses buffered reading (Issue #409) for efficient stdin parsing.
 ;; Reads raw bytes from stdin, decodes ANSI escape sequences,
 ;; and returns tkeymsg/tsizemsg structs (as vectors).
 (define (real-stdin-read-msg #:timeout [timeout 0.20])
   (define in (current-input-port))
-  (define result (sync/timeout timeout in))
-  (if (not result)
-      #f ;; timeout, no input
-      (let ([b (read-byte in)])
-        (cond
-          [(eof-object? b) #f]
-          [(= b 27) ;; ESC — could be escape sequence
-           (sync/timeout 0.01 in) ;; wait briefly for rest of sequence
-           (if (char-ready? in)
-               (let ([b2 (read-byte in)])
-                 (cond
-                   [(eof-object? b2) (make-tkeymsg-raw 'escape)]
-                   [(= b2 91) (decode-csi-sequence in)] ;; ESC[
-                   [else (make-tkeymsg-raw (integer->char b2))])) ;; Alt+key
-               (make-tkeymsg-raw 'escape))]
-          [(= b 13) (make-tkeymsg-raw 'return)]
-          [(= b 10) (make-tkeymsg-raw 'return)]
-          [(= b 127) (make-tkeymsg-raw 'backspace)]
-          [(= b 8) (make-tkeymsg-raw 'backspace)]
-          [(= b 3) (make-tkeymsg-raw 'ctrl-c)] ;; Ctrl-C → copy selection
-          ;; BUG-41: UTF-8 multi-byte sequence handling
-          ;; Lead bytes 0xC0+ start a multi-byte sequence.
-          ;; We use the existing utf8-accumulate-char accumulator
-          ;; to collect continuation bytes and decode.
-          [(>= b 192)
-           (utf8-accumulator-reset!)
-           (define lead-char (integer->char b))
-           (define total-bytes (utf8-lead-byte-count b))
-           (if (= total-bytes 1)
-               ;; Shouldn't happen for >= 192, but defensive
-               (make-tkeymsg-raw lead-char)
-               ;; Start accumulation, read remaining bytes
-               (let _loop ()
-                 (define decoded (utf8-accumulate-char lead-char))
-                 (cond
-                   [decoded (make-tkeymsg-raw decoded)]
-                   ;; Need more continuation bytes
-                   [else
-                    (sync/timeout 0.05 in)
-                    (if (char-ready? in)
-                        (let ([cb (read-byte in)])
-                          (if (and (byte? cb) (utf8-continuation-byte? cb))
-                              (begin
-                                (set! lead-char (integer->char cb))
-                                (_loop))
-                              ;; Unexpected byte — reset and return what we have
-                              (begin
-                                (utf8-accumulator-reset!)
-                                #f)))
-                        ;; Timeout waiting for continuation — reset
-                        (begin
-                          (utf8-accumulator-reset!)
-                          #f))])))]
-          [(>= b 128) #f] ;; Stray continuation byte (0x80-0xBF) — skip
-          [(>= b 32)
-           (utf8-accumulator-reset!)
-           (make-tkeymsg-raw (integer->char b))]
-          [else #f]))))
+  (define b (buffered-read-byte in timeout))
+  (cond
+    [(not b) #f]
+    [(= b 27)
+     (define b2 (buffered-read-byte in 0.01))
+     (cond
+       [(not b2) (make-tkeymsg-raw 'escape)]
+       [(= b2 91) (decode-csi-sequence in)]
+       [else (make-tkeymsg-raw (integer->char b2))])]
+    [(= b 13) (make-tkeymsg-raw 'return)]
+    [(= b 10) (make-tkeymsg-raw 'return)]
+    [(= b 127) (make-tkeymsg-raw 'backspace)]
+    [(= b 8) (make-tkeymsg-raw 'backspace)]
+    [(= b 3) (make-tkeymsg-raw 'ctrl-c)]
+    [(>= b 192)
+     (utf8-accumulator-reset!)
+     (define lead-char (integer->char b))
+     (define total-bytes (utf8-lead-byte-count b))
+     (if (= total-bytes 1)
+         (make-tkeymsg-raw lead-char)
+         (let _loop ()
+           (define decoded (utf8-accumulate-char lead-char))
+           (cond
+             [decoded (make-tkeymsg-raw decoded)]
+             [else
+              (define cb (buffered-read-byte in 0.05))
+              (if (and cb (utf8-continuation-byte? cb))
+                  (begin
+                    (set! lead-char (integer->char cb))
+                    (_loop))
+                  (begin
+                    (utf8-accumulator-reset!)
+                    #f))])))]
+    [(>= b 128) #f]
+    [(>= b 32)
+     (utf8-accumulator-reset!)
+     (make-tkeymsg-raw (integer->char b))]
+    [else #f]))
+
 
 (define (stub-byte-ready?)
   (char-ready? (current-input-port)))

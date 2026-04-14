@@ -166,11 +166,71 @@
 ;; Run all tests
 ;; ============================================================
 
+
+;; ============================================================
+;; Buffered stdin & sync detection (Issues #409, #412)
+;; ============================================================
+
+(define buffered-sync-tests
+  (test-suite
+   "Buffered stdin & sync detection"
+
+   (test-case "buffered-read-byte: returns #f on empty port timeout"
+     (define in (open-input-string ""))
+     (define result (buffered-read-byte in 0.001))
+     (check-equal? result #f))
+
+   (test-case "buffered-read-byte: reads byte from string port"
+     (define in (open-input-string "A"))
+     (define result (buffered-read-byte in 0.1))
+     (check-equal? result 65))
+
+   (test-case "buffered-read-byte: reads multiple bytes sequentially"
+     (define in (open-input-string "ABC"))
+     (input-buffer-reset!)
+     (check-equal? (buffered-read-byte in 0.1) 65)
+     (check-equal? (buffered-read-byte in 0.1) 66)
+     (check-equal? (buffered-read-byte in 0.1) 67)
+     (check-equal? (buffered-read-byte in 0.001) #f))
+
+   (test-case "input-buffer-reset! clears buffer state"
+     (define in (open-input-string "X"))
+     (buffered-read-byte in 0.1)
+     (input-buffer-reset!)
+     (check-equal? (input-buffer-length) 0))
+
+   (test-case "detect-sync-mode-support! runs without error"
+     (detect-sync-mode-support!)
+     (check-true (or (terminal-sync-available?)
+                     (not (terminal-sync-available?)))))
+
+   (test-case "terminal-sync-begin/end are safe to call"
+     (detect-sync-mode-support!)
+     (terminal-sync-begin!)
+     (terminal-sync-end!)
+     (check-not-exn (lambda ()
+                      (terminal-sync-begin!)
+                      (terminal-sync-end!))))
+
+   (test-case "parse-xtversion-response matches valid response"
+     (check-not-false
+      (parse-xtversion-response
+       (format "~a[>0;10" (integer->char 27))))
+     (check-false (parse-xtversion-response "not-a-response")))
+
+   (test-case "parse-da1-response matches valid DA1 response"
+     (check-not-false
+      (parse-da1-response
+       (format "~a[?64;1;2;6;22c" (integer->char 27))))
+     (check-false (parse-da1-response "not-a-response")))
+   ))
+
 (define all-tests
   (test-suite
    "All TUI Terminal Tests"
    terminal-tests
-   keycode-mapping-tests))
+   keycode-mapping-tests
+   buffered-sync-tests))
 
 (run-tests all-tests)
 
