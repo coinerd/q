@@ -283,3 +283,51 @@
   (check-equal? (paste-buffer-get) "hello world")
   (set-in-paste! #f)
   (paste-buffer-reset!))
+
+;; ============================================================
+;; Bracketed paste CSI decoding (#493)
+;; ============================================================
+
+(test-case "real-stdin-read-msg decodes bracketed paste (ESC[200~textESC[201~)"
+  ;; Simulate: ESC[200~helloESC[201~
+  (define paste-bytes
+    (bytes-append
+     #"\x1b[200~hello\x1b[201~"))
+  (define in (open-input-bytes paste-bytes))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (paste-buffer-reset!)
+    (set-in-paste! #f)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (paste-event? result) "should be a paste event")
+    (when (paste-event? result)
+      (check-equal? (vector-ref result 1) "hello" "paste content"))
+    (check-false (in-paste?) "should have exited paste mode")
+    (paste-buffer-reset!)))
+
+(test-case "real-stdin-read-msg decodes bracketed paste with multi-byte UTF-8"
+  ;; Simulate: ESC[200~日本語ESC[201~
+  (define paste-bytes
+    (bytes-append
+     #"\x1b[200~"
+     (string->bytes/utf-8 "\u65e5\u672c\u8a9e")
+     #"\x1b[201~"))
+  (define in (open-input-bytes paste-bytes))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (paste-buffer-reset!)
+    (set-in-paste! #f)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (paste-event? result) "should be a paste event")
+    (when (paste-event? result)
+      (check-equal? (vector-ref result 1) "\u65e5\u672c\u8a9e" "paste content"))
+    (paste-buffer-reset!)))
+
+(test-case "CSI tilde multi-digit: ESC[5~ is page-up"
+  (define in (open-input-bytes (bytes 27 91 53 126)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg)
+    (check-equal? (vector-ref result 1) 'page-up)))

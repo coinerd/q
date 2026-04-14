@@ -219,12 +219,12 @@
     [(= b 81) (make-tkeymsg-raw 'f2)] ;; ESC[Q
     [(= b 82) (make-tkeymsg-raw 'f3)] ;; ESC[R
     [(= b 83) (make-tkeymsg-raw 'f4)] ;; ESC[S
-    [(= b 49) (decode-csi-tilled in 'home)]
-    [(= b 52) (decode-csi-tilled in 'end)]
-    [(= b 53) (decode-csi-tilled in 'page-up)]
-    [(= b 54) (decode-csi-tilled in 'page-down)]
-    [(= b 50) (decode-csi-tilled in 'insert)]
-    [(= b 51) (decode-csi-tilled in 'delete)]
+    [(= b 49) (decode-csi-tilled in 49)]
+    [(= b 52) (decode-csi-tilled in 52)]
+    [(= b 53) (decode-csi-tilled in 53)]
+    [(= b 54) (decode-csi-tilled in 54)]
+    [(= b 50) (decode-csi-tilled in 50)]
+    [(= b 51) (decode-csi-tilled in 51)]
     [(= b 77) ;; ESC[M — X10 mouse event
      (define cb (buffered-read-byte in 0.01))
      (define cx (buffered-read-byte in 0.01))
@@ -234,15 +234,49 @@
          (make-tkeymsg-raw 'escape))]
     [else (make-tkeymsg-raw 'escape)]))
 
-;; Decode ESC[N~ style sequences (N already consumed)
-(define (decode-csi-tilled in default-key)
-  (define b2 (buffered-read-byte in 0.01))
+;; Decode ESC[N~ style sequences (first digit of N already consumed as `first-digit`)
+;; Accumulates all remaining digit bytes to support multi-digit params like 200, 201.
+(define (decode-csi-tilled in first-digit)
+  ;; Accumulate digit bytes into a param string
+  (define (digit-byte? b) (and (byte? b) (>= b 48) (<= b 57)))
+  (define (read-digits acc)
+    (define b (buffered-read-byte in 0.01))
+    (cond
+      [(digit-byte? b) (read-digits (cons (integer->char b) acc))]
+      [else (values (list->string (reverse acc)) b)]))
+  (define-values (param-str final-byte)
+    (read-digits (list (integer->char first-digit))))
+  (define final-ch (and (byte? final-byte) (integer->char final-byte)))
   (cond
-    [(and (byte? b2) (= b2 126)) (make-tkeymsg-raw default-key)] ;; ~
-    [(and (byte? b2) (= b2 59)) ;; ; — modifier like ESC[1;5A
-     (define mod-byte (buffered-read-byte in 0.01)) ;; modifier number (e.g. 5=ctrl)
+    ;; Final ~ — standard CSI N ~ sequence
+    [(and final-ch (char=? final-ch #\~))
+     (cond
+       ;; Bracketed paste start: ESC[200~
+       [(string=? param-str "200")
+        (set-in-paste! #t)
+        (paste-buffer-reset!)
+        ;; Read all bytes until ESC[201~ and return as paste event
+        (read-paste-until-end in)]
+       ;; Bracketed paste end: ESC[201~
+       ;; Should not reach here normally (handled in read-paste-until-end),
+       ;; but handle gracefully if it does.
+       [(string=? param-str "201")
+        (set-in-paste! #f)
+        (define text (paste-buffer-get))
+        (paste-buffer-reset!)
+        (make-paste-event text)]
+       ;; Standard key codes
+       [else
+        (define key (csi-num->key param-str))
+        (if key
+            (make-tkeymsg-raw key)
+            (make-tkeymsg-raw 'escape))])]
+    ;; ; — modifier like ESC[1;5A
+    [(and final-ch (char=? final-ch #\;))
+     (define mod-byte (buffered-read-byte in 0.01)) ;; modifier number
      (define b4 (buffered-read-byte in 0.01))
-     (define base-key
+     (define base-key (csi-num->key param-str))
+     (define base-key-or-dir
        (cond
          [(and (byte? b4) (= b4 65)) 'up]
          [(and (byte? b4) (= b4 66)) 'down]
@@ -250,29 +284,80 @@
          [(and (byte? b4) (= b4 68)) 'left]
          [(and (byte? b4) (= b4 72)) 'home]
          [(and (byte? b4) (= b4 70)) 'end]
-         [else #f]))
+         [else base-key]))
      (cond
-       [(not base-key) (make-tkeymsg-raw 'escape)]
-       ;; No modifier (1) or unknown — return base key
+       [(not base-key-or-dir) (make-tkeymsg-raw 'escape)]
        [(not (and (byte? mod-byte) (> mod-byte 49)))
-        (make-tkeymsg-raw base-key)]
-       ;; Apply modifier: 2=shift, 3=alt, 4=shift+alt, 5=ctrl, 6=shift+ctrl,
-       ;; 7=alt+ctrl, 8=shift+alt+ctrl
+        (make-tkeymsg-raw base-key-or-dir)]
        [else
         (define mod-sym
           (cond
-            [(= mod-byte 50) 'shift]   ;; 2
-            [(= mod-byte 51) 'alt]     ;; 3
-            [(= mod-byte 52) 'S-A]     ;; 4 shift+alt
-            [(= mod-byte 53) 'ctrl]    ;; 5
-            [(= mod-byte 54) 'S-C]     ;; 6 shift+ctrl
-            [(= mod-byte 55) 'A-C]     ;; 7 alt+ctrl
-            [(= mod-byte 56) 'S-A-C]   ;; 8 shift+alt+ctrl
+            [(= mod-byte 50) 'shift]
+            [(= mod-byte 51) 'alt]
+            [(= mod-byte 52) 'S-A]
+            [(= mod-byte 53) 'ctrl]
+            [(= mod-byte 54) 'S-C]
+            [(= mod-byte 55) 'A-C]
+            [(= mod-byte 56) 'S-A-C]
             [else #f]))
         (if mod-sym
-            (make-tkeymsg-raw (string->symbol (format "~a-~a" mod-sym base-key)))
-            (make-tkeymsg-raw base-key))])]
+            (make-tkeymsg-raw
+             (string->symbol (format "~a-~a" mod-sym base-key-or-dir)))
+            (make-tkeymsg-raw base-key-or-dir))])]
     [else (make-tkeymsg-raw 'escape)]))
+
+;; Map CSI tilde parameter string to key symbol.
+;; Standard keys: 1=home, 2=insert, 3=delete, 4=end, 5=page-up, 6=page-down
+(define (csi-num->key param-str)
+  (cond
+    [(string=? param-str "1") 'home]
+    [(string=? param-str "2") 'insert]
+    [(string=? param-str "3") 'delete]
+    [(string=? param-str "4") 'end]
+    [(string=? param-str "5") 'page-up]
+    [(string=? param-str "6") 'page-down]
+    [else #f]))
+
+;; Decode pasted bytes to string, replacing invalid UTF-8 with U+FFFD.
+(define (decode-paste-bytes bs)
+  (with-handlers ([exn:fail? (lambda (e) "")])
+    (bytes->string/utf-8 bs)))
+
+;; Read pasted content until ESC[201~ is received.
+;; Returns a paste-event with the accumulated text.
+;; Uses a byte accumulator to avoid UTF-8 decode errors on partial sequences.
+(define (read-paste-until-end in)
+  (define end-seq (bytes->list #"\x1b[201~"))
+  (define end-len (length end-seq))
+  (define (match-end? pending)
+    (and (= (length pending) end-len)
+         (equal? pending end-seq)))
+  (define (loop pending byte-acc)
+    (define b (buffered-read-byte in 0.1))
+    (cond
+      [(not b)
+       ;; Timeout — flush whatever we have
+       (set-in-paste! #f)
+       (define text (decode-paste-bytes (apply bytes (reverse byte-acc))))
+       (paste-buffer-reset!)
+       (make-paste-event text)]
+      [else
+       (define new-pending
+         (append pending (list b)))
+       (cond
+         [(match-end? new-pending)
+          ;; Found end sequence — emit paste event
+          (set-in-paste! #f)
+          (define text (decode-paste-bytes (apply bytes (reverse byte-acc))))
+          (paste-buffer-reset!)
+          (make-paste-event text)]
+         [(>= (length new-pending) end-len)
+          ;; Not a match — oldest byte is data, keep checking
+          (loop (cdr new-pending) (cons (car new-pending) byte-acc))]
+         [else
+          ;; Still building potential match — keep reading
+          (loop new-pending byte-acc)])]))
+  (loop '() '()))
 
 ;; ============================================================
 ;; Kitty keyboard protocol (Issue #410)
