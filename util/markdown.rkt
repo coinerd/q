@@ -19,6 +19,7 @@
          md-token-type
          md-token-content
          parse-markdown
+         parse-line
          parse-inline-markdown)
 
 ;; ============================================================
@@ -27,6 +28,7 @@
 
 (struct md-token (type content) #:transparent)
 ;; type : 'text | 'bold | 'italic | 'code | 'code-block | 'header | 'link | 'newline
+;;        | 'unordered-list | 'ordered-list | 'blockquote | 'hr | 'strikethrough
 ;; content : any
 ;;   'text       → string (literal text)
 ;;   'bold       → string (bold text content)
@@ -36,6 +38,11 @@
 ;;   'header     → (cons level-number header-text-string)
 ;;   'link       → (cons url-string link-text-string)
 ;;   'newline    → string "\n" (line separator)
+;;   'unordered-list → (cons indent-level list-text-string)
+;;   'ordered-list   → (cons indent-level (cons number list-text-string))
+;;   'blockquote    → string (quoted text, without > prefix)
+;;   'hr            → #t
+;;   'strikethrough → string (struck-through text)
 
 ;; ============================================================
 ;; Block-level parsing
@@ -53,8 +60,7 @@
 
 ;; For code blocks we cannot use (?s) flag (not supported in Racket #px).
 ;; Instead we use a manual approach: scan for triple-backtick boundaries.
-(define code-block-rx
-  (regexp "```([a-zA-Z0-9_-]*)[\n]"))
+(define code-block-rx (regexp "```([a-zA-Z0-9_-]*)[\n]"))
 
 (define (parse-code-blocks text)
   ;; Manual approach: split on triple-backtick boundaries.
@@ -76,11 +82,15 @@
        ;; Find the language tag (rest of the opening line)
        (define after-open (+ open-pos 3)) ; skip ```
        (define newline-pos (find-char text after-open #\newline))
-       (define lang (if (and newline-pos (> newline-pos after-open))
-                        (string-trim (substring text after-open newline-pos))
-                        ""))
+       (define lang
+         (if (and newline-pos (> newline-pos after-open))
+             (string-trim (substring text after-open newline-pos))
+             ""))
        ;; Find closing ```
-       (define code-start (if newline-pos (add1 newline-pos) after-open))
+       (define code-start
+         (if newline-pos
+             (add1 newline-pos)
+             after-open))
        (define close-pos (find-triple-backtick text code-start))
        (cond
          [(not close-pos)
@@ -91,20 +101,20 @@
           (define code (substring text code-start close-pos))
           ;; Consume trailing newline after ``` if present
           (define after-close (+ close-pos 3)) ; skip closing ```
-          (define trailing-nl? (and (< after-close len)
-                                    (char=? (string-ref text after-close) #\newline)))
+          (define trailing-nl?
+            (and (< after-close len) (char=? (string-ref text after-close) #\newline)))
           (set! result
                 (append result
-                        (list (md-token 'code-block
-                                        (cons (if (string=? lang "") #f lang) code))
+                        (list (md-token 'code-block (cons (if (string=? lang "") #f lang) code))
                               ;; Newline separator after code block
                               (md-token 'newline "\n"))))
-          (set! pos (if trailing-nl? (add1 after-close) after-close))
+          (set! pos
+                (if trailing-nl?
+                    (add1 after-close)
+                    after-close))
           (loop)])]))
   ;; Filter out empty text tokens
-  (filter (lambda (t)
-            (not (and (eq? (md-token-type t) 'text)
-                      (string=? (md-token-content t) ""))))
+  (filter (lambda (t) (not (and (eq? (md-token-type t) 'text) (string=? (md-token-content t) ""))))
           result))
 
 ;; Find the start of a triple-backtick sequence (```) at or after pos
@@ -129,25 +139,54 @@
         (define parsed-lines (map parse-line lines))
         (if (= (length parsed-lines) 1)
             (car parsed-lines)
-            (append*
-             (for/list ([line-tokens (in-list parsed-lines)]
-                        [i (in-naturals)])
-               (if (< i (sub1 (length parsed-lines)))
-                   (append line-tokens (list (md-token 'newline "\n")))
-                   line-tokens)))))))
+            (append* (for/list ([line-tokens (in-list parsed-lines)]
+                                [i (in-naturals)])
+                       (if (< i (sub1 (length parsed-lines)))
+                           (append line-tokens (list (md-token 'newline "\n")))
+                           line-tokens)))))))
 
-;; Parse a single line: check for header, then inline parse.
+;; Parse a single line: check for header, blockquote, list, hr, then inline parse.
 (define (parse-line line)
-  (define header-match (regexp-match-positions #px"^(#{1,6})[ \t]+(.+)$" line))
   (cond
-    [header-match
-     (define hashes (substring line (car (cadr header-match))
-                               (cdr (cadr header-match))))
-     (define header-text (substring line (car (caddr header-match))
-                                     (cdr (caddr header-match))))
-     (list (md-token 'header (cons (string-length hashes) header-text)))]
-    [else
-     (parse-inline-markdown line)]))
+    ;; Horizontal rule: 3+ hyphens/asterisks/underscores with optional spaces
+    [(or (regexp-match? #px"^[ \t]*-[- \t]*-[- \t]*-[ \t]*$" line)
+          (regexp-match? #px"^[ \t]*[*][*]+[* \t]*$" line)
+          (regexp-match? #px"^[ \t]*___+[_ \t]*$" line))
+     (list (md-token 'hr #t))]
+    ;; Header: # heading
+    [(regexp-match-positions #px"^(#{1,6})[ \t]+(.+)$" line)
+     =>
+     (lambda (m)
+       (define hashes (substring line (car (cadr m)) (cdr (cadr m))))
+       (define header-text (substring line (car (caddr m)) (cdr (caddr m))))
+       (list (md-token 'header (cons (string-length hashes) header-text))))]
+    ;; Blockquote: > text
+    [(regexp-match-positions #px"^[ \t]*(>+)[ \t]?(.*)$" line)
+     =>
+     (lambda (m)
+       (define depth (string-length (substring line (car (cadr m)) (cdr (cadr m)))))
+       (define quoted-text (substring line (car (caddr m)) (cdr (caddr m))))
+       ;; Parse inline within the quoted text
+       (define inner (parse-inline-markdown quoted-text))
+       (list (md-token 'blockquote (cons depth inner))))]
+    ;; Unordered list: [-*+] text
+    [(regexp-match-positions #px"^([ \t]*)([-*+])[ \t]+(.+)$" line)
+     =>
+     (lambda (m)
+       (define indent (quotient (string-length (substring line (car (cadr m)) (cdr (cadr m)))) 2))
+       (define list-text (substring line (car (cadddr m)) (cdr (cadddr m))))
+       (define inner (parse-inline-markdown list-text))
+       (cons (md-token 'unordered-list (cons indent inner)) inner))]
+    ;; Ordered list: N. text
+    [(regexp-match-positions #px"^([ \t]*)([0-9]+)[.][ \t]+(.+)$" line)
+     =>
+     (lambda (m)
+       (define indent (quotient (string-length (substring line (car (cadr m)) (cdr (cadr m)))) 2))
+       (define num (string->number (substring line (car (caddr m)) (cdr (caddr m)))))
+       (define list-text (substring line (car (cadddr m)) (cdr (cadddr m))))
+       (define inner (parse-inline-markdown list-text))
+       (cons (md-token 'ordered-list (cons indent (cons num inner))) inner))]
+    [else (parse-inline-markdown line)]))
 
 ;; ============================================================
 ;; Inline parsing
@@ -165,7 +204,8 @@
     [else
      ;; Collect all matches with their positions, then process left-to-right
      ;; by repeatedly scanning from the current position.
-     (let loop ([pos 0] [acc '()])
+     (let loop ([pos 0]
+                [acc '()])
        (cond
          [(>= pos len) (reverse acc)]
          [else
@@ -185,8 +225,7 @@
                    (cons (md-token 'text (substring text pos start)) acc)
                    acc))
              ;; Emit the matched token
-             (define new-acc2
-               (cons (md-token type content) new-acc))
+             (define new-acc2 (cons (md-token type content) new-acc))
              (loop end new-acc2)])]))]))
 
 ;; Find the first inline markdown construct starting at or after `pos`.
@@ -195,17 +234,17 @@
 (define (find-first-inline text pos)
   (define len (string-length text))
   (define candidates
-    (filter
-     values
-     (list
-      ;; Inline code: `code`
-      (find-inline-code text pos len)
-      ;; Bold: **text**
-      (find-bold text pos len)
-      ;; Italic: *text*
-      (find-italic text pos len)
-      ;; Links: [text](url)
-      (find-link text pos len))))
+    (filter values
+            ;; Inline code: `code`
+            (list (find-inline-code text pos len)
+                  ;; Bold: **text**
+                  (find-bold text pos len)
+                  ;; Italic: *text*
+                  (find-italic text pos len)
+                  ;; Strikethrough: ~~text~~
+                  (find-strikethrough text pos len)
+                  ;; Links: [text](url)
+                  (find-link text pos len))))
   (if (null? candidates)
       #f
       ;; Return the one with the smallest start position
@@ -251,8 +290,7 @@
           ;; Opening * found at i. Find closing * after i+1
           (define close-pos (find-closing-asterisk text (+ i 2) len))
           (if close-pos
-              (list 'italic i (add1 close-pos)
-                    (substring text (add1 i) close-pos))
+              (list 'italic i (add1 close-pos) (substring text (add1 i) close-pos))
               (loop (add1 i)))]
          [else (loop (add1 i))])]
       [else (loop (add1 i))])))
@@ -270,6 +308,24 @@
            (loop (+ i 2)))] ; skip ** and keep looking
       [else (loop (add1 i))])))
 
+;; Find strikethrough: ~~text~~ starting at or after pos
+(define (find-strikethrough text pos len)
+  (let loop ([i pos])
+    (cond
+      [(> (+ i 3) len) #f]
+      [(and (char=? (string-ref text i) #\~) (char=? (string-ref text (+ i 1)) #\~))
+       ;; Found ~~, look for closing ~~
+       (define close-pos
+         (let search ([j (+ i 2)])
+           (cond
+             [(> (+ j 1) len) #f]
+             [(and (char=? (string-ref text j) #\~) (char=? (string-ref text (+ j 1)) #\~)) j]
+             [else (search (+ j 1))])))
+       (if (and close-pos (> close-pos (+ i 2)))
+           (list 'strikethrough i (+ close-pos 2) (substring text (+ i 2) close-pos))
+           (loop (+ i 2)))]
+      [else (loop (add1 i))])))
+
 ;; Find link: [text](url) starting at or after pos, char-by-char
 (define (find-link text pos len)
   (let loop ([i pos])
@@ -280,8 +336,7 @@
        (define close-bracket (find-char text (add1 i) #\]))
        (cond
          [(not close-bracket) (loop (add1 i))]
-         [(and (< (add1 close-bracket) len)
-               (char=? (string-ref text (add1 close-bracket)) #\())
+         [(and (< (add1 close-bracket) len) (char=? (string-ref text (add1 close-bracket)) #\())
           ;; Found ](, look for closing )
           (define close-paren (find-char text (+ close-bracket 2) #\)))
           (cond

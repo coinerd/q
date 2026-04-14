@@ -262,6 +262,72 @@
      (check-equal? result
                    (list (md-token 'bold "bold")
                          (md-token 'text " ")
-                         (md-token 'link (cons "url" "link")))))))
+                         (md-token 'link (cons "url" "link")))))
+
+   ;; ============================================================
+   ;; New token types (#405)
+   ;; ============================================================
+
+   (test-case "horizontal rule: ---"
+     (define result (parse-line "---"))
+     (check-equal? result (list (md-token 'hr #t))))
+
+   (test-case "horizontal rule: ***"
+     (define result (parse-line "***"))
+     (check-equal? result (list (md-token 'hr #t))))
+
+   (test-case "horizontal rule: ___"
+     (define result (parse-line "___"))
+     (check-equal? result (list (md-token 'hr #t))))
+
+   (test-case "horizontal rule with spaces"
+     (define result (parse-line "- - -"))
+     (check-equal? result (list (md-token 'hr #t))))
+
+   (test-case "unordered list: dash"
+     (define result (parse-line "- item one"))
+     (check-equal? (md-token-type (car result)) 'unordered-list)
+     (check-equal? (car (md-token-content (car result))) 0))
+
+   (test-case "unordered list: asterisk"
+     (define result (parse-line "* item two"))
+     (check-equal? (md-token-type (car result)) 'unordered-list))
+
+   (test-case "unordered list: plus"
+     (define result (parse-line "+ item three"))
+     (check-equal? (md-token-type (car result)) 'unordered-list))
+
+   (test-case "unordered list: indented"
+     (define result (parse-line "  - nested item"))
+     (check-equal? (md-token-type (car result)) 'unordered-list)
+     (check-equal? (car (md-token-content (car result))) 1))
+
+   (test-case "ordered list"
+     (define result (parse-line "1. first item"))
+     (check-equal? (md-token-type (car result)) 'ordered-list)
+     (check-equal? (car (md-token-content (car result))) 0)
+     (check-equal? (cadr (md-token-content (car result))) 1))
+
+   (test-case "ordered list: indented"
+     (define result (parse-line "  3. nested"))
+     (check-equal? (md-token-type (car result)) 'ordered-list)
+     (check-equal? (car (md-token-content (car result))) 1)
+     (check-equal? (cadr (md-token-content (car result))) 3))
+
+   (test-case "blockquote"
+     (define result (parse-line "> quoted text"))
+     (check-equal? (md-token-type (car result)) 'blockquote)
+     (check-equal? (car (md-token-content (car result))) 1))
+
+   (test-case "strikethrough"
+     (define result (parse-inline-markdown "~~deleted~~"))
+     (check-equal? result (list (md-token 'strikethrough "deleted"))))
+
+   (test-case "strikethrough in text"
+     (define result (parse-inline-markdown "keep ~~remove~~ keep"))
+     (check-equal? (length result) 3)
+     (check-equal? (md-token-type (cadr result)) 'strikethrough)
+     (check-equal? (md-token-content (cadr result)) "remove"))
+   ))
 
 (run-tests markdown-suite 'verbose)
