@@ -301,3 +301,100 @@
  (check-not-false (member 'message-update hooks))
  (check-not-false (member 'model-response-post hooks))
  (check-not-false (member 'message-end hooks)))
+
+;; ============================================================
+;; 6. BUG #633: turn.started/turn.completed pairing on hook-blocked paths
+;; ============================================================
+
+(test-case
+ "BUG #633: model-request-pre hook block emits turn.completed"
+ (define bus (make-event-bus))
+ (define events '())
+ (subscribe! bus (lambda (evt) (set! events (cons evt events))))
+ (define (blocking-pre-hook hook-point payload)
+   (if (eq? hook-point 'model-request-pre)
+       (hook-block "test-block")
+       #f))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req) (list (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:hook-dispatcher blocking-pre-hook))
+ ;; Must be hook-blocked
+ (check-equal? (loop-result-termination-reason result) 'hook-blocked)
+ ;; Both turn.started AND turn.completed must be in events
+ (define event-names (map event-event (reverse events)))
+ (check-not-false (member "turn.started" event-names)
+                  "turn.started must be emitted")
+ (check-not-false (member "turn.completed" event-names)
+                  "turn.completed must be emitted after hook-blocked early return"))
+
+(test-case
+ "BUG #633: message-start hook block emits turn.completed"
+ (define bus (make-event-bus))
+ (define events '())
+ (subscribe! bus (lambda (evt) (set! events (cons evt events))))
+ (define (blocking-msg-start-hook hook-point payload)
+   (if (eq? hook-point 'message-start)
+       (hook-block "test-block")
+       #f))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req) (list (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:hook-dispatcher blocking-msg-start-hook))
+ ;; Must be hook-blocked
+ (check-equal? (loop-result-termination-reason result) 'hook-blocked)
+ ;; Both turn.started AND turn.completed must be in events
+ (define event-names (map event-event (reverse events)))
+ (check-not-false (member "turn.started" event-names)
+                  "turn.started must be emitted")
+ (check-not-false (member "turn.completed" event-names)
+                  "turn.completed must be emitted after message-start hook block"))
+
+;; ============================================================
+;; 7. BUG #634: stream-blocked emits model.stream.completed
+;; ============================================================
+
+(test-case
+ "BUG #634: stream-blocked by message-update hook emits model.stream.completed"
+ (define bus (make-event-bus))
+ (define events '())
+ (subscribe! bus (lambda (evt) (set! events (cons evt events))))
+ (define (blocking-update-hook hook-point payload)
+   (if (eq? hook-point 'message-update)
+       (hook-block "test-stream-block")
+       #f))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      ;; Emit one text delta, then done
+      (list (stream-chunk "hello" #f #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"
+                                #:hook-dispatcher blocking-update-hook))
+ (define event-names (map event-event (reverse events)))
+ ;; model.stream.completed must still be emitted even when stream is blocked
+ (check-not-false (member "model.stream.completed" event-names)
+                  "model.stream.completed must be emitted on stream-blocked path"))
