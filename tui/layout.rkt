@@ -7,6 +7,7 @@
 
 ;; Layout computation
 (provide compute-layout
+         compute-layout-with-widgets
 
          ;; Layout struct
          (struct-out tui-layout))
@@ -29,13 +30,20 @@
 ;;   Row H-2:      Status bar (1 line)
 ;;   Row H-1:      Input line (1 line)
 (define (compute-layout cols rows)
+  (compute-layout-with-widgets cols rows 0))
+
+;; Compute layout accounting for widget container rows.
+;; widget-rows-above: number of widget lines above input.
+(define (compute-layout-with-widgets cols rows [widget-rows-above 0])
   (define min-height 4) ; Need at least header + 1 transcript + status + input
   (define actual-rows (max min-height rows))
-  (define transcript-h (max 1 (- actual-rows 3)))
+  (define non-transcript (+ 3 widget-rows-above))
+  (define transcript-h (max 1 (- actual-rows non-transcript)))
   (tui-layout cols
               actual-rows
               0 ; header-row
               1 ; transcript-start-row
               transcript-h ; transcript-height
-              (+ 1 transcript-h) ; status-row
-              (+ 2 transcript-h))) ; input-row
+              (+ 1 transcript-h widget-rows-above) ; status-row
+              (+ 2 transcript-h widget-rows-above) ; input-row
+              ))

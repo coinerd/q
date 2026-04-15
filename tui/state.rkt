@@ -63,6 +63,13 @@
          truncate-string
          extract-arg-summary
 
+         ;; Widget management (#714)
+         set-extension-widget
+         remove-extension-widget
+         remove-all-extension-widgets
+         get-widget-lines-above
+         get-widget-lines-below
+
          ;; Selection
          set-selection-anchor
          set-selection-end
@@ -99,6 +106,7 @@
          next-entry-id ; integer — monotonic counter
          active-overlay ; (or/c #f overlay-state) — currently displayed overlay
          queue-counts ; hash or #f — steering/followup counts from queue.status-update
+         extension-widgets ; hash — maps (cons ext-name key) → (listof styled-line)
          )
   #:transparent)
 
@@ -195,6 +203,7 @@
             0 ; next-entry-id
             #f ; active-overlay
             #f ; queue-counts
+            (hash) ; extension-widgets
             ))
 
 ;; ============================================================
@@ -495,6 +504,46 @@
 (define (overlay-active? state)
   ;; Check if an overlay is currently active
   (and (ui-state-active-overlay state) #t))
+
+;; ============================================================
+;; Extension widget helpers (#714)
+;; ============================================================
+
+;; Set a widget for an extension. Key is a string identifier.
+;; lines is (listof styled-line). Returns new ui-state.
+(define (set-extension-widget state ext-name key lines)
+  (define widgets (ui-state-extension-widgets state))
+  (define widget-key (cons ext-name key))
+  (struct-copy ui-state state
+               [extension-widgets (hash-set widgets widget-key lines)]))
+
+;; Remove a specific widget by extension name and key.
+(define (remove-extension-widget state ext-name key)
+  (define widgets (ui-state-extension-widgets state))
+  (define widget-key (cons ext-name key))
+  (struct-copy ui-state state
+               [extension-widgets (hash-remove widgets widget-key)]))
+
+;; Remove all widgets for a given extension (for unload/disposal).
+(define (remove-all-extension-widgets state ext-name)
+  (define widgets (ui-state-extension-widgets state))
+  (define filtered
+    (for/hash ([(k v) (in-hash widgets)]
+               #:unless (equal? (car k) ext-name))
+      (values k v)))
+  (struct-copy ui-state state [extension-widgets filtered]))
+
+;; Get all widget lines for placement above input.
+;; Returns (listof styled-line) combining all widgets.
+(define (get-widget-lines-above state)
+  (define widgets (ui-state-extension-widgets state))
+  (apply append (hash-values widgets)))
+
+;; Get all widget lines for placement below input (placeholder for future).
+(define (get-widget-lines-below state)
+  ;; Currently all widgets render above input.
+  ;; Future: support #:placement 'below per widget.
+  '())
 
 ;; ============================================================
 ;; String helpers
