@@ -232,6 +232,7 @@
 ;; v0.8.9: Added #:provider, #:model-name for LLM-powered summarization,
 ;;         #:hook-dispatcher for extension hooks, #:previous-summary for
 ;;         iterative compaction.
+;; v0.9.1 (#636): Hook blocking now actually prevents compaction.
 (define (compact-history messages
                          #:strategy [strategy (default-strategy)]
                          #:summarize-fn [summarize-fn default-summarize]
@@ -240,46 +241,49 @@
                          #:previous-summary [prev-summary #f]
                          #:hook-dispatcher [hook-dispatcher #f])
   ;; Dispatch 'session-before-compact hook if dispatcher provided
-  (when hook-dispatcher
-    (define hook-res
-      (hook-dispatcher 'session-before-compact
-                       (hasheq 'message-count (length messages) 'strategy strategy)))
-    (when (and (hook-result? hook-res) (eq? (hook-result-action hook-res) 'block))
-      ;; Hook blocked compaction — return identity result
-      (compaction-result #f 0 messages)))
-  (define-values (old recent) (build-summary-window messages strategy))
+  ;; Returns identity result if hook blocks, otherwise proceeds with compaction.
   (cond
-    ;; Nothing to summarize — return identity result
-    [(null? old) (compaction-result #f 0 recent)]
+    [(and hook-dispatcher
+          (let ([hook-res (hook-dispatcher 'session-before-compact
+                                          (hasheq 'message-count (length messages) 'strategy strategy))])
+            (and (hook-result? hook-res) (eq? (hook-result-action hook-res) 'block))))
+     ;; Hook blocked compaction — return identity result immediately
+     (compaction-result #f 0 messages)]
     [else
-     ;; Choose summarization: LLM if provider given, else use summarize-fn
-     (define summary-text
-       (if (and provider model-name)
-           (let ([file-tracker (extract-file-tracker old)])
-             (llm-summarize old
-                            provider
-                            model-name
-                            #:previous-summary (or prev-summary (find-previous-summary recent))
-                            #:file-tracker file-tracker))
-           (summarize-fn old)))
-     ;; Build file tracker metadata for the summary message
-     (define file-tracker-meta
-       (if (and provider model-name)
-           (let ([ft (extract-file-tracker old)])
-             (if (> (hash-count ft) 0)
-                 (hasheq 'fileTracker ft)
-                 (hasheq)))
-           (hasheq)))
-     (define summary-msg
-       (make-message
-        (format "compaction-~a" (current-inexact-milliseconds))
-        #f ; no parent — compaction summaries are root-level context
-        'system
-        'compaction-summary
-        (list (make-text-part summary-text))
-        (current-seconds)
-        (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length old))))
-     (compaction-result summary-msg (length old) recent)]))
+     ;; Proceed with compaction
+     (define-values (old recent) (build-summary-window messages strategy))
+     (cond
+       ;; Nothing to summarize — return identity result
+       [(null? old) (compaction-result #f 0 recent)]
+       [else
+        ;; Choose summarization: LLM if provider given, else use summarize-fn
+        (define summary-text
+          (if (and provider model-name)
+              (let ([file-tracker (extract-file-tracker old)])
+                (llm-summarize old
+                               provider
+                               model-name
+                               #:previous-summary (or prev-summary (find-previous-summary recent))
+                               #:file-tracker file-tracker))
+              (summarize-fn old)))
+        ;; Build file tracker metadata for the summary message
+        (define file-tracker-meta
+          (if (and provider model-name)
+              (let ([ft (extract-file-tracker old)])
+                (if (> (hash-count ft) 0)
+                    (hasheq 'fileTracker ft)
+                    (hasheq)))
+              (hasheq)))
+        (define summary-msg
+          (make-message
+           (format "compaction-~a" (current-inexact-milliseconds))
+           #f ; no parent — compaction summaries are root-level context
+           'system
+           'compaction-summary
+           (list (make-text-part summary-text))
+           (current-seconds)
+           (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length old))))
+        (compaction-result summary-msg (length old) recent)])]))
 
 ;; ============================================================
 ;; compaction-result->message-list
