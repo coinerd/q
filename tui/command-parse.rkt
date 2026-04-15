@@ -41,6 +41,8 @@
    "/fork"      (cons 'fork 'optional)
    "/sessions"  (cons 'sessions 'optional)
    ;; Model
+   "/tree"      (cons 'tree 'none)
+   "/name"      (cons 'name 'optional)
    "/model"     (cons 'model 'optional)
    "/m"         (cons 'model 'optional)))
 

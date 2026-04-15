@@ -54,6 +54,8 @@
      (cmd-entry "/model"     "Switch or show model"          'model   '("<name>") '("m"))
      (cmd-entry "/history"   "Show session history"          'session '() '())
      (cmd-entry "/fork"      "Fork session at point"         'session '("<id>") '())
+     (cmd-entry "/tree"      "Show session tree"             'session '() '("t"))
+     (cmd-entry "/name"      "Set session name"              'session '("<title>") '())
      (cmd-entry "/sessions"  "List and manage sessions"      'session '("list|info|delete") '())))
   ;; Build main hash by name
   (define by-name

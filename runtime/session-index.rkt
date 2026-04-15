@@ -44,6 +44,7 @@
          ;; Tree operations (#496)
          get-branch
          branch!
+         branch-with-summary!
          reset-leaf!
          append-to-leaf!
          leaf-depth
@@ -261,6 +262,26 @@
      (set-box! (session-index-active-leaf-id idx) entry-id)
      entry]))
 
+;; Branch with summary — creates a branch and appends a branch-summary entry
+(define (branch-with-summary! idx entry-id summary-text)
+  ;; Move active leaf to entry-id
+  (define entry (branch! idx entry-id))
+  (cond
+    [(not entry) #f]
+    [else
+     ;; Create summary message
+     (define summary-msg
+       (make-message (format "branch-summary-~a" (current-inexact-milliseconds))
+                     entry-id
+                     'system
+                     'branch-summary
+                     (list (make-text-part summary-text))
+                     (current-seconds)
+                     (hasheq 'type "branch-summary" 'from-id entry-id)))
+     ;; Add to index
+     (append-to-leaf! idx summary-msg)
+     summary-msg]))
+
 (define (reset-leaf! idx)
   ;; Set active leaf to #f (use latest entry as default).
   (set-box! (session-index-active-leaf-id idx) #f)
@@ -271,7 +292,10 @@
   ;; Adds entry to the index and updates parent-child map.
   ;; Returns the entry on success.
   (define parent (active-leaf idx))
-  (define parent-id (if parent (message-id parent) #f))
+  (define parent-id
+    (if parent
+        (message-id parent)
+        #f))
   ;; Update entry's parent-id to match
   (define fixed-entry
     (if (and parent-id (not (message-parent-id entry)))
