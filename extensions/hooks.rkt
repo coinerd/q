@@ -6,23 +6,30 @@
 ;;   - hook-result struct with action ('pass | 'amend | 'block) and payload
 ;;   - Convenience constructors: hook-pass, hook-amend, hook-block
 ;;   - dispatch-hooks: runs handlers for a hook point over a payload
+;;   - Optional #:ctx parameter for ctx-aware dispatch
 ;;
 ;; Dispatch semantics:
 ;;   - Handlers run in registration order (via handlers-for-point)
 ;;   - 'pass: continue with unchanged payload
 ;;   - 'amend: replace payload for next handler
 ;;   - 'block: stop dispatch immediately, return block result
+;;   - When #:ctx is provided, handlers receive (ctx payload) if they accept 2 args
+;;   - Backward compat: 1-arg handlers still receive just (payload)
 ;;
 ;; ARCH-01: hook-result struct and constructors moved to util/hook-types.rkt.
 ;; Re-exported here for backward compatibility.
 
 (require racket/contract
+         racket/list
          "api.rkt"
+         "context.rkt"
          "../util/hook-types.rkt")
 
 (provide
  ;; Re-export hook result types
  (all-from-out "../util/hook-types.rkt")
+ ;; Re-export extension-ctx for convenience
+ (all-from-out "context.rkt")
  ;; Hook dispatch
  dispatch-hooks
  current-hook-timeout-ms)
@@ -31,12 +38,14 @@
 ;; Dispatch hooks
 ;; ============================================================
 
-;; dispatch-hooks : symbol? any/c extension-registry? -> hook-result?
+;; dispatch-hooks : symbol? any/c extension-registry? #:ctx (or/c extension-ctx? #f) -> hook-result?
 ;; Runs all registered handlers for `hook-point` over `payload`.
 ;; Returns a hook-result reflecting the combined outcome.
+;; When #:ctx is provided, handlers receive (ctx payload) instead of just (payload).
+;; Backward compat: handlers that only accept 1 arg (payload) still work.
 ;; Per-hook timeout: if a handler exceeds current-hook-timeout-ms,
 ;; it is skipped and a warning is logged.
-(define (dispatch-hooks hook-point payload registry)
+(define (dispatch-hooks hook-point payload registry #:ctx [ctx #f])
   (define handlers (handlers-for-point registry hook-point))
   (let loop ([remaining handlers]
              [current-payload payload]
@@ -48,7 +57,7 @@
        (define ext-name (car (car remaining)))
        (define handler  (cdr (car remaining)))
        (define result
-         (run-hook-with-timeout ext-name hook-point handler current-payload))
+         (run-hook-with-timeout ext-name hook-point handler current-payload ctx))
        (case (hook-result-action result)
          [(block) result]
          [(amend) (loop (cdr remaining) (hook-result-payload result) #t)]
@@ -59,8 +68,17 @@
 ;; Set to #f to disable timeout.
 (define current-hook-timeout-ms (make-parameter 100))
 
+;; Internal: call handler with or without ctx based on arity.
+;; If ctx is provided and handler accepts 2 args, call (handler ctx payload).
+;; Otherwise call (handler payload) for backward compat.
+(define (call-handler handler payload ctx)
+  (if (and ctx
+           (procedure-arity-includes? handler 2))
+      (handler ctx payload)
+      (handler payload)))
+
 ;; Internal: run a single hook handler with optional timeout.
-(define (run-hook-with-timeout ext-name hook-point handler payload)
+(define (run-hook-with-timeout ext-name hook-point handler payload ctx)
   (define timeout-ms (current-hook-timeout-ms))
   (with-handlers ([exn:fail?
                     (lambda (e)
@@ -76,7 +94,7 @@
                           (lambda ()
                             (channel-put chan
                               (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
-                                (cons 'ok (handler payload)))))))
+                                (cons 'ok (call-handler handler payload ctx)))))))
             (define maybe (sync/timeout (/ timeout-ms 1000.0) chan))
             (unless maybe (kill-thread thd))  ; #447: prevent thread leak
             (cond
@@ -92,7 +110,7 @@
                (hook-pass payload)]
               [else (cdr maybe)]))
           ;; No timeout — direct call
-          (handler payload)))
+          (call-handler handler payload ctx)))
     (if (hook-result? raw-result)
         raw-result
         (begin
