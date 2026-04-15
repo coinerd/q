@@ -32,13 +32,18 @@
 ;; ── Tool struct ──
 (provide (struct-out tool)
          tool?
-         (contract-out [make-tool (-> string? string? hash? procedure? tool?)]
+         (contract-out [make-tool (->* (string? string? hash? procedure?)
+                                        (#:prompt-snippet (or/c string? #f))
+                                        tool?)]
                        [validate-tool-args (-> tool? hash? any/c)])
          tool-name
          tool-description
          tool-schema
          tool-execute
+         tool-prompt-snippet
          tool->jsexpr
+         merge-tool-lists
+         validate-tool-schema
 
          ;; ── Tool result (re-exported from agent/types.rkt) ──
          tool-result?
@@ -88,9 +93,9 @@
 ;; Tool struct
 ;; ============================================================
 
-(struct tool (name description schema execute) #:transparent)
+(struct tool (name description schema execute prompt-snippet) #:transparent)
 
-(define (make-tool name description schema execute)
+(define (make-tool name description schema execute #:prompt-snippet [prompt-snippet #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -99,7 +104,56 @@
     (raise-argument-error 'make-tool "hash?" schema))
   (unless (procedure? execute)
     (raise-argument-error 'make-tool "procedure?" execute))
-  (tool name description schema execute))
+  (tool name description schema execute prompt-snippet))
+
+;; ============================================================
+;; Tool schema validation (#672)
+;; ============================================================
+
+;; Validates that a tool schema conforms to OpenAI function-calling spec.
+;; Returns #t if valid, raises exn:fail if not.
+(define (validate-tool-schema schema)
+  (unless (hash? schema)
+    (raise-argument-error 'validate-tool-schema "hash?" schema))
+  (unless (equal? (hash-ref schema 'type #f) "object")
+    (raise (exn:fail (format "validate-tool-schema: 'type must be \"object\", got ~v"
+                             (hash-ref schema 'type #f))
+                     (current-continuation-marks))))
+  (define props (hash-ref schema 'properties #f))
+  (when props
+    (unless (hash? props)
+      (raise (exn:fail (format "validate-tool-schema: 'properties must be a hash, got ~v" props)
+                       (current-continuation-marks)))))
+  (define required (hash-ref schema 'required #f))
+  (when required
+    (unless (list? required)
+      (raise (exn:fail (format "validate-tool-schema: 'required must be a list, got ~v" required)
+                       (current-continuation-marks)))))
+  #t)
+
+;; ============================================================
+;; Merge extension tools into LLM tool list (#673)
+;; ============================================================
+
+;; Merges a list of extension-provided tool jsexprs into the base tool list.
+;; Extension tools override built-in tools with the same name.
+(define (merge-tool-lists base-tools ext-tools)
+  (define base-hash
+    (for/hash ([t (in-list base-tools)])
+      (values (hash-ref (hash-ref t 'function) 'name) t)))
+  (define ext-hash
+    (for/hash ([t (in-list ext-tools)])
+      (values (hash-ref (hash-ref t 'function) 'name) t)))
+  ;; Extension tools override base tools with same name
+  (define merged (for/fold ([h base-hash]) ([(k v) (in-hash ext-hash)])
+                   (hash-set h k v)))
+  ;; Preserve base order, append new extension tools at end
+  (define base-names (for/list ([t (in-list base-tools)])
+                       (hash-ref (hash-ref t 'function) 'name)))
+  (define ext-only-names (filter (lambda (n) (not (member n base-names)))
+                                 (hash-keys ext-hash)))
+  (append (for/list ([n (in-list base-names)]) (hash-ref merged n))
+          (for/list ([n (in-list ext-only-names)]) (hash-ref merged n))))
 
 ;; ============================================================
 ;; JSON-serializability validation
@@ -199,10 +253,15 @@
 ;; Serialize a tool struct to the OpenAI normalized format.
 ;; Output: {"type":"function","function":{"name":"...","description":"...","parameters":{...}}}
 (define (tool->jsexpr t)
-  (hasheq 'type
-          "function"
-          'function
-          (hasheq 'name (tool-name t) 'description (tool-description t) 'parameters (tool-schema t))))
+  (define base-fn
+    (hasheq 'name (tool-name t)
+            'description (tool-description t)
+            'parameters (tool-schema t)))
+  (define fn-with-snippet
+    (if (tool-prompt-snippet t)
+        (hash-set base-fn 'promptSnippet (tool-prompt-snippet t))
+        base-fn))
+  (hasheq 'type "function" 'function fn-with-snippet))
 
 ;; list-tools-jsexpr : tool-registry? -> (listof hash?)
 ;; Return all registered tools serialized to the OpenAI normalized JSON format.

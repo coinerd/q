@@ -53,7 +53,8 @@
                   make-exec-context
                   make-error-result
                   tool-result-content tool-result-is-error?
-                  list-tools-jsexpr)
+                  list-tools-jsexpr
+                  merge-tool-lists)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
          ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
@@ -194,7 +195,21 @@
                               (hasheq 'session-id session-id 'turn-id turn-id)))
 
   ;; Get tools from registry for the LLM request
-  (define tools (and reg (list-tools-jsexpr reg)))
+  (define base-tools (and reg (list-tools-jsexpr reg)))
+
+  ;; #673: Merge extension-provided tools into the tool list
+  (define tools
+    (let ([ext-tools
+           (and ext-reg
+                (let ()
+                  (define-values (amended hook-res)
+                    (maybe-dispatch-hooks ext-reg 'register-tools (hasheq)))
+                  (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
+                      (hash-ref (hook-result-payload hook-res) 'tools '())
+                      '())))])
+      (if (and base-tools (pair? ext-tools))
+          (merge-tool-lists base-tools ext-tools)
+          base-tools)))
 
   (run-agent-turn ctx-final prov bus
                   #:session-id session-id
