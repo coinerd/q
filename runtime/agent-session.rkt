@@ -56,6 +56,8 @@
          agent-session-extension-registry
          agent-session-model-name
          agent-session-system-instructions
+         agent-session-compacting?
+         set-agent-session-compacting?!
          make-agent-session
          resume-agent-session
          fork-session
@@ -63,7 +65,8 @@
          session-id
          session-history
          session-active?
-         close-session!)
+         close-session!
+         maybe-compact-context)
 
 ;; ============================================================
 ;; Internal struct
@@ -82,7 +85,8 @@
          queue ; queue?
          config ; hash (runtime settings)
          [active? #:mutable] ; boolean
-         [start-time #:mutable]) ; integer (seconds since epoch)
+         [start-time #:mutable] ; integer (seconds since epoch)
+         [compacting? #:mutable]) ; boolean — guard against recursive compaction
   #:transparent)
 
 ;; ============================================================
@@ -129,7 +133,8 @@
                    (make-queue)
                    config
                    #t ; active
-                   session-created-at))
+                   session-created-at
+                   #f)) ; compacting?
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
@@ -201,7 +206,8 @@
                    (make-queue)
                    config
                    #t
-                   (now-seconds)))
+                   (now-seconds)
+                   #f)) ; compacting?
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
@@ -294,7 +300,8 @@
                    (make-queue)
                    (agent-session-config sess)
                    #t
-                   (now-seconds)))
+                   (now-seconds)
+                   #f)) ; compacting?
 
   ;; Emit session.forked on original session's bus
   (emit-session-event! (agent-session-event-bus sess)
@@ -429,40 +436,51 @@
   (cond
     [(not (should-compact? token-count token-budget-threshold)) context-with-system]
     [else
-     ;; Dispatch 'session-before-compact hook — extensions can amend or block compaction
-     (define compact-payload
-       (hasheq 'session-id
-               sid
-               'token-count
-               token-count
-               'budget-threshold
-               token-budget-threshold
-               'message-count
-               (length context-with-system)))
-     (define-values (_amended-compact compact-hook-res)
-       (maybe-dispatch-hooks (agent-session-extension-registry sess)
-                             'session-before-compact
-                             compact-payload))
-     ;; Proceed with compaction unless blocked
-     (cond
-       [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block)) context-with-system]
-       [else
-        (emit-session-event! bus
-                             sid
-                             "compaction.warning"
-                             (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
-        ;; R2-6: Auto-compact when threshold exceeded
-        (define compact-result (compact-history context-with-system))
-        (emit-session-event! bus
-                             sid
-                             "compaction.completed"
-                             (hasheq 'removedCount
-                                     (compaction-result-removed-count compact-result)
-                                     'keptCount
-                                     (length (compaction-result-kept-messages compact-result))
-                                     'tokenCount
-                                     token-count))
-        (compaction-result->message-list compact-result)])]))
+     ;; Guard against recursive compaction
+     (if (agent-session-compacting? sess)
+         context-with-system
+         (begin
+           (set-agent-session-compacting?! sess #t)
+           (emit-session-event! bus sid "compaction.start"
+                                (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
+           (dynamic-wind
+            (lambda () (void))
+            (lambda ()
+              (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid))
+            (lambda ()
+              (set-agent-session-compacting?! sess #f)
+              (emit-session-event! bus sid "compaction.end"
+                                    (hasheq 'tokenCount token-count))))))]))
+
+;; Internal compaction logic (extracted from maybe-compact-context for dynamic-wind)
+(define (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid)
+  ;; Dispatch 'session-before-compact hook
+  (define compact-payload
+    (hasheq 'session-id
+            sid
+            'token-count
+            token-count
+            'budget-threshold
+            token-budget-threshold
+            'message-count
+            (length context-with-system)))
+  (define-values (_amended-compact compact-hook-res)
+    (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                          'session-before-compact
+                          compact-payload))
+  (cond
+    [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block)) context-with-system]
+    [else
+     (emit-session-event! bus sid "compaction.warning"
+                          (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
+     (define compact-result (compact-history context-with-system))
+     (emit-session-event! bus sid "compaction.completed"
+                          (hasheq 'removedCount
+                                  (compaction-result-removed-count compact-result)
+                                  'keptCount
+                                  (length (compaction-result-kept-messages compact-result))
+                                  'tokenCount token-count))
+     (compaction-result->message-list compact-result)]))
 
 ;; dispatch-iteration — model-select hook + iteration loop dispatch.
 ;;   Runs the core agent loop with error handling. Returns a loop-result.
@@ -645,8 +663,11 @@
          (define log-path (session-log-path (agent-session-session-dir sess)))
          (when (file-exists? log-path)
            (define history (load-session-log log-path))
-           (when (not (null? history))
+           (when (and (not (null? history))
+                      (not (agent-session-compacting? sess)))
+             (set-agent-session-compacting?! sess #t)
              (define compact-result (compact-history history))
+             (set-agent-session-compacting?! sess #f)
              (emit-session-event! bus
                                   (agent-session-session-id sess)
                                   "session.compact.completed"
