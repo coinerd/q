@@ -58,6 +58,8 @@
          agent-session-system-instructions
          agent-session-compacting?
          set-agent-session-compacting?!
+         agent-session-last-compaction-time
+         set-agent-session-last-compaction-time!
          make-agent-session
          resume-agent-session
          fork-session
@@ -86,7 +88,8 @@
          config ; hash (runtime settings)
          [active? #:mutable] ; boolean
          [start-time #:mutable] ; integer (seconds since epoch)
-         [compacting? #:mutable]) ; boolean — guard against recursive compaction
+         [compacting? #:mutable] ; boolean — guard against recursive compaction
+         [last-compaction-time #:mutable]) ; integer or #f — timestamp of last compaction
   #:transparent)
 
 ;; ============================================================
@@ -134,7 +137,8 @@
                    config
                    #t ; active
                    session-created-at
-                   #f)) ; compacting?
+                   #f ; compacting?
+                   #f)) ; last-compaction-time
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
@@ -207,7 +211,8 @@
                    config
                    #t
                    (now-seconds)
-                   #f)) ; compacting?
+                   #f ; compacting?
+                   #f)) ; last-compaction-time
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
@@ -301,7 +306,8 @@
                    (agent-session-config sess)
                    #t
                    (now-seconds)
-                   #f)) ; compacting?
+                   #f ; compacting?
+                   #f)) ; last-compaction-time
 
   ;; Emit session.forked on original session's bus
   (emit-session-event! (agent-session-event-bus sess)
@@ -436,21 +442,27 @@
   (cond
     [(not (should-compact? token-count token-budget-threshold)) context-with-system]
     [else
-     ;; Guard against recursive compaction
-     (if (agent-session-compacting? sess)
-         context-with-system
-         (begin
-           (set-agent-session-compacting?! sess #t)
-           (emit-session-event! bus sid "compaction.start"
-                                (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
-           (dynamic-wind
-            (lambda () (void))
-            (lambda ()
-              (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid))
-            (lambda ()
-              (set-agent-session-compacting?! sess #f)
-              (emit-session-event! bus sid "compaction.end"
-                                    (hasheq 'tokenCount token-count))))))]))
+     ;; #770: Stale usage guard — skip if compaction just completed
+     (define last-compact (agent-session-last-compaction-time sess))
+     (define now-ms (current-inexact-milliseconds))
+     (cond
+       [(and last-compact (< (- now-ms last-compact) 2000))
+        context-with-system] ; too soon after last compaction
+       [(agent-session-compacting? sess)
+        context-with-system] ; recursive compaction guard
+       [else
+        (set-agent-session-compacting?! sess #t)
+        (emit-session-event! bus sid "compaction.start"
+                             (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
+        (dynamic-wind
+         (lambda () (void))
+         (lambda ()
+           (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid))
+         (lambda ()
+           (set-agent-session-compacting?! sess #f)
+           (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
+           (emit-session-event! bus sid "compaction.end"
+                                (hasheq 'tokenCount token-count))))])]))
 
 ;; Internal compaction logic (extracted from maybe-compact-context for dynamic-wind)
 (define (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid)
