@@ -13,6 +13,7 @@
 (provide (struct-out transcript-entry)
          (struct-out ui-state)
          (struct-out branch-info)
+         (struct-out overlay-state)
 
          ;; Constructors
          initial-ui-state
@@ -34,6 +35,12 @@
          set-current-branch
          set-visible-branches
          clear-visible-branches
+
+         ;; Overlay management (#643)
+         show-overlay
+         update-overlay-input
+         dismiss-overlay
+         overlay-active?
 
          ;; Event reduction (pure)
          apply-event-to-state
@@ -90,6 +97,15 @@
          rendered-cache ; hash — maps entry-id → (listof styled-line)
          rendered-cache-width ; integer or #f — width used for cache
          next-entry-id ; integer — monotonic counter
+         active-overlay ; (or/c #f overlay-state) — currently displayed overlay
+         )
+  #:transparent)
+
+;; Overlay state for modal/popup UI elements (command palette, etc.)
+(struct overlay-state
+        (type      ; symbol — 'command-palette | other overlay types
+         content   ; (listof styled-line) — overlay render content
+         input     ; string — current input for the overlay
          )
   #:transparent)
 
@@ -175,7 +191,9 @@
             #f ; sel-end
             (hash) ; rendered-cache
             #f ; rendered-cache-width
-            0)) ; next-entry-id
+            0 ; next-entry-id
+            #f ; active-overlay
+            ))
 
 ;; ============================================================
 ;; Event reduction
@@ -431,6 +449,31 @@
 (define (clear-visible-branches state)
   ;; Clear the cached branch list
   (struct-copy ui-state state [visible-branches '()]))
+
+;; ============================================================
+;; Overlay helpers (#643)
+;; ============================================================
+
+(define (show-overlay state type content [input ""])
+  ;; Show an overlay with the given type, content lines, and input
+  (struct-copy ui-state state
+               [active-overlay (overlay-state type content input)]))
+
+(define (update-overlay-input state input)
+  ;; Update the overlay input text (e.g., as user types in palette)
+  (define ov (ui-state-active-overlay state))
+  (if ov
+      (struct-copy ui-state state
+                   [active-overlay (struct-copy overlay-state ov [input input])])
+      state))
+
+(define (dismiss-overlay state)
+  ;; Dismiss the active overlay
+  (struct-copy ui-state state [active-overlay #f]))
+
+(define (overlay-active? state)
+  ;; Check if an overlay is currently active
+  (and (ui-state-active-overlay state) #t))
 
 ;; ============================================================
 ;; String helpers
