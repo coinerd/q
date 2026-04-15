@@ -134,8 +134,8 @@
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
 
-  ;; Dispatch 'session-start hook (R2-7: payload with session-id and config)
-  (define session-start-payload (hasheq 'session-id sid 'config config))
+  ;; Dispatch 'session-start hook (R2-7: payload with session-id, config, and reason)
+  (define session-start-payload (hasheq 'session-id sid 'config config 'reason 'new))
   (define-values (_session-start-payload _session-start-res)
     (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
                           'session-start
@@ -208,6 +208,12 @@
                        session-id
                        "session.resumed"
                        (hasheq 'sessionId session-id))
+
+  ;; Dispatch 'session-start hook with reason 'resume
+  (define resume-start-payload (hasheq 'session-id session-id 'config config 'reason 'resume))
+  (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
+                        'session-start
+                        resume-start-payload)
 
   ;; Subscribe to fork/compact events from TUI/CLI
   (wire-session-event-handlers! sess)
@@ -300,6 +306,14 @@
                                (agent-session-session-id sess)
                                'forkPoint
                                (or parent-entry-id "latest")))
+
+  ;; Dispatch 'session-start hook with reason 'fork
+  (when (agent-session-extension-registry sess)
+    (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                          'session-start
+                          (hasheq 'session-id new-id
+                                  'reason 'fork
+                                  'parent-session-id (agent-session-session-id sess))))
 
   new-sess)
 
