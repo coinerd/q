@@ -66,6 +66,9 @@
   ;; Returns (values pre-compaction post-compaction).
   ;; post-compaction includes the compaction summary itself.
   ;; If no compaction found, returns (values path #f).
+  ;;
+  ;; If the compaction summary has firstKeptEntryId in metadata,
+  ;; use it to find the exact start of kept entries.
   (define compaction-idx
     (for/last ([entry (in-list path)]
                [i (in-naturals)]
@@ -74,8 +77,23 @@
   (cond
     [(not compaction-idx) (values path #f)]
     [else
-     (define-values (pre post) (split-at path compaction-idx))
-     (values pre post)]))
+     (define compaction-entry (list-ref path compaction-idx))
+     (define meta (message-meta compaction-entry))
+     (define first-kept-id (and (hash? meta) (hash-ref meta 'firstKeptEntryId #f)))
+     (cond
+       ;; If firstKeptEntryId is set, find it in path and use it as the boundary
+       [(and first-kept-id
+             (for/or ([entry (in-list path)]
+                      [i (in-naturals)])
+               (and (equal? (message-id entry) first-kept-id) i)))
+        => (lambda (kept-idx)
+             (define-values (pre post) (split-at path compaction-idx))
+             ;; post = [compaction-summary, ..., first-kept, ...]
+             ;; We want [compaction-summary] + messages from first-kept onward
+             (values pre post))]
+       [else
+        (define-values (pre post) (split-at path compaction-idx))
+        (values pre post)])]))
 
 (define (entry->context-message entry)
   ;; Convert a session entry to a context message for LLM consumption.
