@@ -151,6 +151,8 @@
   (define base-dir (hash-ref config 'session-dir))
   (define dir (build-path base-dir session-id))
 
+  ;; For resume, the directory must already exist (session was previously
+  ;; written to). Lazy persistence only defers creation in make-agent-session.
   (unless (directory-exists? dir)
     (error 'resume-agent-session "session directory not found: ~a" dir))
 
