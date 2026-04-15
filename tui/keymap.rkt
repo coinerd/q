@@ -33,7 +33,8 @@
          keymap-merge
 
          default-keymap
-         load-user-keymap)
+         load-user-keymap
+         shortcut-specs->keymap)
 
 ;; ============================================================
 ;; Key specification
@@ -260,3 +261,19 @@
               #f))))
     (define valid-bindings (filter identity bindings))
     (if (null? valid-bindings) #f valid-bindings)))
+
+;; ============================================================
+;; Extension shortcut integration (#678)
+;; ============================================================
+
+;; Convert a list of shortcut hash descriptors to a keymap.
+;; Each hash should have keys: "key" (string), "action" (string).
+;; Returns a keymap with all extension shortcuts bound.
+(define (shortcut-specs->keymap specs)
+  (define km (make-keymap))
+  (for ([spec (in-list specs)])
+    (define key-str (hash-ref spec 'key #f))
+    (define action-str (hash-ref spec 'action #f))
+    (when (and (string? key-str) (string? action-str))
+      (keymap-add! km (parse-key-string key-str) (string->symbol action-str))))
+  km)

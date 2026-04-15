@@ -19,7 +19,9 @@
  commands-by-category
  filter-commands
  render-palette-overlay
- complete-command)
+ complete-command
+ commands-from-hashes
+ merge-extension-commands)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: command entry in the registry
@@ -132,6 +134,28 @@
       (set-add! seen name)
       (set! results (cons e results))))
   (sort results string<? #:key cmd-entry-name))
+
+;; ---------------------------------------------------------------------------
+;; Extension command integration (#677)
+;; ---------------------------------------------------------------------------
+
+;; Convert a list of command hash descriptors to cmd-entry structs.
+;; Each hash should have keys: name, summary, category, args-spec, aliases.
+;; Used by the runtime to convert extension-provided command definitions.
+(define (commands-from-hashes cmd-hashes)
+  (for/list ([h (in-list cmd-hashes)])
+    (cmd-entry (hash-ref h 'name "")
+               (hash-ref h 'summary "")
+               (hash-ref h 'category 'general)
+               (hash-ref h 'args-spec '())
+               (hash-ref h 'aliases '()))))
+
+;; Merge extension commands into a base registry hash.
+;; Extension commands override built-in commands with the same name.
+(define (merge-extension-commands reg ext-cmds)
+  (for/fold ([r reg])
+            ([e (in-list ext-cmds)])
+    (hash-set r (cmd-entry-name e) e)))
 
 ;; ---------------------------------------------------------------------------
 ;; TUI Palette Overlay
