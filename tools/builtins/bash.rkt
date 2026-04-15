@@ -18,7 +18,8 @@
                   exec-context-working-directory)
          "../../sandbox/subprocess.rkt"
          "../../sandbox/limits.rkt"
-         (only-in "../../util/path-helpers.rkt" expand-home-path))
+         (only-in "../../util/path-helpers.rkt" expand-home-path)
+         (only-in "../../util/truncation.rkt" truncate-output))
 
 (provide tool-bash
          current-warn-on-destructive
@@ -137,9 +138,8 @@
      ;; so it understands the command produced nothing and can change strategy
      (define combined
        (if (string=? raw-combined "")
-           "(Command produced no output. The command may have completed without producing any output, or the output was empty. Consider
-               checking: the command syntax, file paths, available tools, or try a different approach.)"
-           raw-combined))
+           "(Command produced no output. The command may have completed without producing any output, or the output was empty. Consider checking: the command syntax, file paths, available tools, or try a different approach.)"
+           (truncate-output raw-combined)))
      (make-success-result (list (hasheq 'type "text" 'text combined))
                           (hasheq 'exit-code
                                   (subprocess-result-exit-code result)

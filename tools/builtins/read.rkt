@@ -6,7 +6,8 @@
          racket/list
          racket/dict
          (only-in "../tool.rkt" make-success-result make-error-result)
-         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines expand-home-path))
+         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines expand-home-path)
+         (only-in "../../util/truncation.rkt" truncate-output))
 
 (provide tool-read)
 
