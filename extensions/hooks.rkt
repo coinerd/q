@@ -32,7 +32,21 @@
  (all-from-out "context.rkt")
  ;; Hook dispatch
  dispatch-hooks
- current-hook-timeout-ms)
+ current-hook-timeout-ms
+ critical-hook?
+ critical-hooks)
+
+;; ============================================================
+;; Hook criticality classification (#670, #671)
+;; ============================================================
+
+;; Critical hooks default to 'block on error (safety-first).
+;; Advisory hooks default to 'pass on error (liveness-first).
+(define critical-hooks
+  '(tool-call session-before-fork session-before-compact input))
+
+(define (critical-hook? hook-point)
+  (and (member hook-point critical-hooks) #t))
 
 ;; ============================================================
 ;; Dispatch hooks
@@ -80,12 +94,18 @@
 ;; Internal: run a single hook handler with optional timeout.
 (define (run-hook-with-timeout ext-name hook-point handler payload ctx)
   (define timeout-ms (current-hook-timeout-ms))
+  ;; #671: Error default depends on hook criticality.
+  (define error-default
+    (if (critical-hook? hook-point)
+        (hook-block (format "handler ~a failed for critical hook ~a" ext-name hook-point))
+        (hook-pass payload)))
   (with-handlers ([exn:fail?
                     (lambda (e)
                       (log-warning
-                       (format "Hook handler ~a for ~a threw: ~a"
-                               ext-name hook-point (exn-message e)))
-                      (hook-pass payload))])
+                       (format "Hook handler ~a for ~a threw: ~a [~a]"
+                               ext-name hook-point (exn-message e)
+                               (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+                      error-default)])
     (define raw-result
       (if timeout-ms
           ;; Run with timeout
@@ -100,14 +120,16 @@
             (cond
               [(not maybe)
                (log-warning
-                (format "Hook handler ~a for ~a timed out after ~ams"
-                        ext-name hook-point timeout-ms))
-               (hook-pass payload)]
+                (format "Hook handler ~a for ~a timed out after ~ams [~a]"
+                        ext-name hook-point timeout-ms
+                        (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+               error-default]
               [(eq? (car maybe) 'error)
                (log-warning
-                (format "Hook handler ~a for ~a threw: ~a"
-                        ext-name hook-point (exn-message (cdr maybe))))
-               (hook-pass payload)]
+                (format "Hook handler ~a for ~a threw: ~a [~a]"
+                        ext-name hook-point (exn-message (cdr maybe))
+                        (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+               error-default]
               [else (cdr maybe)]))
           ;; No timeout — direct call
           (call-handler handler payload ctx)))
@@ -115,6 +137,7 @@
         raw-result
         (begin
           (log-warning
-           (format "Hook handler ~a for ~a returned non-hook-result: ~v"
-                   ext-name hook-point raw-result))
-          (hook-pass payload)))))
+           (format "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
+                   ext-name hook-point raw-result
+                   (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+          error-default))))
