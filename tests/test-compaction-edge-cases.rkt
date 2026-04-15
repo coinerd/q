@@ -18,6 +18,7 @@
          "../runtime/context-builder.rkt"
          "../runtime/session-index.rkt"
          "../runtime/session-store.rkt"
+         "../runtime/token-compaction.rkt"
          "../util/protocol-types.rkt"
          (only-in "../util/hook-types.rkt" hook-result hook-result-action))
 
@@ -193,11 +194,13 @@
 (test-case "edge-compact: keep-recent-count + 1 messages (one compacted)"
   (define msgs (for/list ([i (in-range 21)])
                  (make-test-msg 'assistant (format "msg-~a" i))))
-  (define result (compact-history msgs))
-  ;; 21 > 20 (keep-recent), so 1 old message should be summarized
+  ;; Use a tiny token config so 21 messages exceed the budget
+  (define tiny-config (token-compaction-config 5 0 10))
+  (define result (compact-history msgs #:token-config tiny-config))
+  ;; With tiny config, some messages should be compacted
   (check > (compaction-result-removed-count result) 0)
   (check-true (message? (compaction-result-summary-message result))
-              "should have a summary when messages exceed keep-recent"))
+              "should have a summary when messages exceed token budget"))
 
 (test-case "edge-compact: tiered-context with only compaction summaries"
   ;; Only compaction summaries, no regular messages
@@ -252,8 +255,9 @@
 (test-case "edge-compact: hook allows compaction"
   (define msgs (for/list ([i (in-range 30)])
                  (make-test-msg 'assistant (format "msg-~a" i))))
+  (define tiny-config (token-compaction-config 5 0 10))
   (define allow (lambda (hook payload)
                   (hook-result 'pass (hasheq))))
-  (define result (compact-history msgs #:hook-dispatcher allow))
+  (define result (compact-history msgs #:hook-dispatcher allow #:token-config tiny-config))
   ;; Hook passed — normal compaction
   (check > (compaction-result-removed-count result) 0))

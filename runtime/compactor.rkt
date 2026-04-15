@@ -31,7 +31,11 @@
                   hook-result
                   hook-result?
                   hook-result-action
-                  hook-result-payload))
+                  hook-result-payload)
+         (only-in "token-compaction.rkt"
+                  build-token-summary-window
+                  default-token-compaction-config
+                  token-compaction-config))
 
 (provide (struct-out compaction-strategy)
          (struct-out compaction-result)
@@ -220,6 +224,47 @@
      (values old-to-summarize recent)]))
 
 ;; ============================================================
+;; Inline cutpoint adjustment (avoids circular dep with cutpoint-rules.rkt)
+;; ============================================================
+
+;; Check if a message contains tool-call parts.
+(define (has-tool-calls? msg)
+  (define content (message-content msg))
+  (and (list? content)
+       (ormap tool-call-part? content)))
+
+;; Check if a message is a tool-result.
+(define (tool-result-message? msg)
+  (eq? (message-kind msg) 'tool-result))
+
+;; Check if placing a cut BEFORE index `idx` is valid.
+;; A cut at N means messages[0..N) are old, messages[N..] are recent.
+(define (valid-cutpoint? messages idx)
+  (cond
+    [(or (< idx 0) (> idx (length messages))) #f]
+    [(or (= idx 0) (= idx (length messages))) #t]
+    [else
+     (define msg-at (list-ref messages idx))
+     (cond
+       [(tool-result-message? msg-at) #f]
+       [(eq? (message-role msg-at) 'user) #t]
+       [(eq? (message-role msg-at) 'assistant)
+        (define msg-before (list-ref messages (sub1 idx)))
+        (not (has-tool-calls? msg-before))]
+       [else #t])]))
+
+;; Adjust a proposed cut point backward to nearest valid position.
+(define (adjust-cutpoint messages proposed-idx)
+  (cond
+    [(valid-cutpoint? messages proposed-idx) proposed-idx]
+    [else
+     (let loop ([i (sub1 proposed-idx)])
+       (cond
+         [(<= i 0) 0]
+         [(valid-cutpoint? messages i) i]
+         [else (loop (sub1 i))]))]))
+
+;; ============================================================
 ;; compact-history
 ;; ============================================================
 
@@ -240,7 +285,8 @@
                          #:provider [provider #f]
                          #:model-name [model-name #f]
                          #:previous-summary [prev-summary #f]
-                         #:hook-dispatcher [hook-dispatcher #f])
+                         #:hook-dispatcher [hook-dispatcher #f]
+                         #:token-config [token-config (default-token-compaction-config)])
   ;; Dispatch 'session-before-compact hook if dispatcher provided
   ;; Returns identity result if hook blocks, otherwise proceeds with compaction.
   (cond
@@ -251,26 +297,34 @@
      ;; Hook blocked compaction — return identity result immediately
      (compaction-result #f 0 messages)]
     [else
-     ;; Proceed with compaction
-     (define-values (old recent) (build-summary-window messages strategy))
+     ;; Use token-based window split instead of fixed-count
+     (define-values (old recent) (build-token-summary-window messages token-config))
+     ;; Adjust cutpoint to a valid boundary (e.g., don't split mid-tool-call)
+     (define-values (adjusted-old adjusted-recent)
+       (if (and (pair? old) (pair? recent))
+           (let ([cut-idx (adjust-cutpoint messages (length old))])
+             (if (and cut-idx (> cut-idx 0) (< cut-idx (length messages)))
+                 (values (take messages cut-idx) (drop messages cut-idx))
+                 (values old recent)))
+           (values old recent)))
      (cond
        ;; Nothing to summarize — return identity result
-       [(null? old) (compaction-result #f 0 recent)]
+       [(null? adjusted-old) (compaction-result #f 0 adjusted-recent)]
        [else
         ;; Choose summarization: LLM if provider given, else use summarize-fn
         (define summary-text
           (if (and provider model-name)
-              (let ([file-tracker (extract-file-tracker old)])
-                (llm-summarize old
+              (let ([file-tracker (extract-file-tracker adjusted-old)])
+                (llm-summarize adjusted-old
                                provider
                                model-name
-                               #:previous-summary (or prev-summary (find-previous-summary recent))
+                               #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
                                #:file-tracker file-tracker))
-              (summarize-fn old)))
+              (summarize-fn adjusted-old)))
         ;; Build file tracker metadata for the summary message
         (define file-tracker-meta
           (if (and provider model-name)
-              (let ([ft (extract-file-tracker old)])
+              (let ([ft (extract-file-tracker adjusted-old)])
                 (if (> (hash-count ft) 0)
                     (hasheq 'fileTracker ft)
                     (hasheq)))
@@ -283,8 +337,8 @@
            'compaction-summary
            (list (make-text-part summary-text))
            (current-seconds)
-           (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length old))))
-        (compaction-result summary-msg (length old) recent)])]))
+           (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length adjusted-old))))
+        (compaction-result summary-msg (length adjusted-old) adjusted-recent)])]))
 
 ;; ============================================================
 ;; compaction-result->message-list
@@ -313,14 +367,16 @@
                                   #:provider [provider #f]
                                   #:model-name [model-name #f]
                                   #:previous-summary [prev-summary #f]
-                                  #:hook-dispatcher [hook-dispatcher #f])
+                                  #:hook-dispatcher [hook-dispatcher #f]
+                                  #:token-config [token-config (default-token-compaction-config)])
   (compact-history messages
                    #:strategy strategy
                    #:summarize-fn summarize-fn
                    #:provider provider
                    #:model-name model-name
                    #:previous-summary prev-summary
-                   #:hook-dispatcher hook-dispatcher))
+                   #:hook-dispatcher hook-dispatcher
+                   #:token-config token-config))
 
 ;; ============================================================
 ;; compact-and-persist!
@@ -340,7 +396,8 @@
                               #:provider [provider #f]
                               #:model-name [model-name #f]
                               #:previous-summary [prev-summary #f]
-                              #:hook-dispatcher [hook-dispatcher #f])
+                              #:hook-dispatcher [hook-dispatcher #f]
+                              #:token-config [token-config (default-token-compaction-config)])
   (define result
     (compact-history messages
                      #:strategy strategy
@@ -348,7 +405,8 @@
                      #:provider provider
                      #:model-name model-name
                      #:previous-summary prev-summary
-                     #:hook-dispatcher hook-dispatcher))
+                     #:hook-dispatcher hook-dispatcher
+                     #:token-config token-config))
   (write-compaction-entry! session-log-path result)
   result)
 
