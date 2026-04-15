@@ -45,6 +45,8 @@
                   compaction-strategy compaction-result->message-list compact-history
                   build-tiered-context tiered-context tiered-context? tiered-context-tier-a
                   tiered-context-tier-b tiered-context-tier-c tiered-context->message-list)
+         (only-in "../runtime/token-compaction.rkt"
+                  token-compaction-config)
          (only-in "helpers/mock-provider.rkt"
                   make-multi-mock-provider make-test-config
                   make-simple-mock-provider make-tool-call-mock-provider)
@@ -1228,7 +1230,8 @@
 
     ;; Compact the older portion to simulate Tier A
     (define-values (old-msgs recent-msgs) (values (take msgs 2) (drop msgs 2)))
-    (define compact-result (compact-history msgs #:strategy (compaction-strategy 10 2)))
+    (define compact-result (compact-history msgs #:strategy (compaction-strategy 10 2)
+                                           #:token-config (token-compaction-config 10 0 10)))
     (define compacted-context (compaction-result->message-list compact-result))
 
     ;; Now build tiered context
@@ -1240,11 +1243,10 @@
     (check-equal? (message-kind (first (tiered-context-tier-a tiered))) 'compaction-summary
                   "Tier A should contain compaction-summary message")
 
-    ;; Tier B should have recent messages (up to 2)
-    ;; Note: With 3 recent msgs and tier-c-count=1, Tier C takes 1, leaving 2 for Tier B
-    ;; But the actual logic may vary based on compaction result
-    (check-equal? (length (tiered-context-tier-b tiered)) 1
-                  "Tier B should have 1 message (remaining after Tier C)")
+    ;; Tier B should have recent messages
+    ;; With token compaction: summary + 3 kept = 4 msgs. Tier C=1, Tier B=2, Tier A=1
+    (check-equal? (length (tiered-context-tier-b tiered)) 2
+                  "Tier B should have 2 messages (remaining after Tier C)")
 
     ;; Tier C should have the most recent message
     (check-equal? (length (tiered-context-tier-c tiered)) 1
