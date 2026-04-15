@@ -50,16 +50,19 @@
   (define bus (hash-ref rt-config 'event-bus #f))
   (define sess (make-agent-session rt-config))
 
+  ;; Determine session dir before creating TUI context (Fix #513)
+  (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+
   (define ctx
     (make-tui-ctx #:event-bus bus
                   #:session-runner (lambda (prompt) (run-prompt! sess prompt))
+                  #:session-dir sess-dir
                   #:model-registry (hash-ref rt-config 'model-registry #f)))
 
   ;; Subscribe to events
   (subscribe-runtime-events! ctx)
 
   ;; Determine scrollback file path from session dir
-  (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
   (define scrollback-path (and sess-dir (build-path sess-dir "scrollback.jsonl")))
 
   ;; First-run welcome detection
