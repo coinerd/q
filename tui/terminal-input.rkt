@@ -115,7 +115,7 @@
 ;;   - #f if the sequence is incomplete (need more bytes)
 ;;   - char? if the sequence is complete and decoded
 (define (utf8-accumulate-char ch)
-  (set! utf8-accumulator (cons ch utf8-accumulator))  ; O(1) cons
+  (set! utf8-accumulator (cons ch utf8-accumulator)) ; O(1) cons
   (define n (length utf8-accumulator))
   ;; The lead byte is the last element (was first pushed, now at end of cons list)
   (define lead-byte (char->integer (list-ref utf8-accumulator (- n 1))))
@@ -238,14 +238,14 @@
 ;; Accumulates all remaining digit bytes to support multi-digit params like 200, 201.
 (define (decode-csi-tilled in first-digit)
   ;; Accumulate digit bytes into a param string
-  (define (digit-byte? b) (and (byte? b) (>= b 48) (<= b 57)))
+  (define (digit-byte? b)
+    (and (byte? b) (>= b 48) (<= b 57)))
   (define (read-digits acc)
     (define b (buffered-read-byte in 0.01))
     (cond
       [(digit-byte? b) (read-digits (cons (integer->char b) acc))]
       [else (values (list->string (reverse acc)) b)]))
-  (define-values (param-str final-byte)
-    (read-digits (list (integer->char first-digit))))
+  (define-values (param-str final-byte) (read-digits (list (integer->char first-digit))))
   (define final-ch (and (byte? final-byte) (integer->char final-byte)))
   (cond
     ;; Final ~ — standard CSI N ~ sequence
@@ -287,8 +287,7 @@
          [else base-key]))
      (cond
        [(not base-key-or-dir) (make-tkeymsg-raw 'escape)]
-       [(not (and (byte? mod-byte) (> mod-byte 49)))
-        (make-tkeymsg-raw base-key-or-dir)]
+       [(not (and (byte? mod-byte) (> mod-byte 49))) (make-tkeymsg-raw base-key-or-dir)]
        [else
         (define mod-sym
           (cond
@@ -301,8 +300,7 @@
             [(= mod-byte 56) 'S-A-C]
             [else #f]))
         (if mod-sym
-            (make-tkeymsg-raw
-             (string->symbol (format "~a-~a" mod-sym base-key-or-dir)))
+            (make-tkeymsg-raw (string->symbol (format "~a-~a" mod-sym base-key-or-dir)))
             (make-tkeymsg-raw base-key-or-dir))])]
     [else (make-tkeymsg-raw 'escape)]))
 
@@ -320,7 +318,13 @@
 
 ;; Decode pasted bytes to string, replacing invalid UTF-8 with U+FFFD.
 (define (decode-paste-bytes bs)
-  (with-handlers ([exn:fail? (lambda (e) "")])
+  (with-handlers ([exn:fail? (lambda (e)
+                               ;; Fallback: decode byte-by-byte, replacing invalid sequences
+                               (apply string
+                                      (for/list ([b (in-bytes bs)])
+                                        (if (< b 128)
+                                            (integer->char b)
+                                            #\UFFFD))))])
     (bytes->string/utf-8 bs)))
 
 ;; Read pasted content until ESC[201~ is received.
@@ -330,8 +334,7 @@
   (define end-seq (bytes->list #"\x1b[201~"))
   (define end-len (length end-seq))
   (define (match-end? pending)
-    (and (= (length pending) end-len)
-         (equal? pending end-seq)))
+    (and (= (length pending) end-len) (equal? pending end-seq)))
   (define (loop pending byte-acc)
     (define b (buffered-read-byte in 0.1))
     (cond
@@ -342,8 +345,7 @@
        (paste-buffer-reset!)
        (make-paste-event text)]
       [else
-       (define new-pending
-         (append pending (list b)))
+       (define new-pending (append pending (list b)))
        (cond
          [(match-end? new-pending)
           ;; Found end sequence — emit paste event
@@ -354,9 +356,8 @@
          [(>= (length new-pending) end-len)
           ;; Not a match — oldest byte is data, keep checking
           (loop (cdr new-pending) (cons (car new-pending) byte-acc))]
-         [else
-          ;; Still building potential match — keep reading
-          (loop new-pending byte-acc)])]))
+         ;; Still building potential match — keep reading
+         [else (loop new-pending byte-acc)])]))
   (loop '() '()))
 
 ;; ============================================================
@@ -398,9 +399,7 @@
   (define term-program (getenv "TERM_PROGRAM"))
   (define term (getenv "TERM"))
   (set! kitty-supported
-        (or (and term-program
-                 (member (string-downcase term-program)
-                         '("kitty" "ghostty")))
+        (or (and term-program (member (string-downcase term-program) '("kitty" "ghostty")))
             (and term (regexp-match? #rx"^(kitty|ghostty)" term)))))
 
 ;; Parse a Kitty CSI-u sequence: ESC[<codepoint>;<modifiers>u
@@ -428,10 +427,14 @@
 ;; Bit 1=shift, 2=alt, 4=ctrl, 8=super
 (define (bitmask->modifiers mask)
   (define mods '())
-  (when (bitwise-bit-set? mask 0) (set! mods (cons 'shift mods)))
-  (when (bitwise-bit-set? mask 1) (set! mods (cons 'alt mods)))
-  (when (bitwise-bit-set? mask 2) (set! mods (cons 'ctrl mods)))
-  (when (bitwise-bit-set? mask 3) (set! mods (cons 'super mods)))
+  (when (bitwise-bit-set? mask 0)
+    (set! mods (cons 'shift mods)))
+  (when (bitwise-bit-set? mask 1)
+    (set! mods (cons 'alt mods)))
+  (when (bitwise-bit-set? mask 2)
+    (set! mods (cons 'ctrl mods)))
+  (when (bitwise-bit-set? mask 3)
+    (set! mods (cons 'super mods)))
   (reverse mods))
 
 ;; Map Kitty key codepoints to key symbols
@@ -462,11 +465,9 @@
     [(= cp 57362) 'pause]
     [(= cp 57363) 'menu]
     ;; F1-F12: 57376-57387
-    [(and (>= cp 57376) (<= cp 57387))
-     (string->symbol (format "f~a" (- cp 57375)))]
+    [(and (>= cp 57376) (<= cp 57387)) (string->symbol (format "f~a" (- cp 57375)))]
     ;; F13-F24: 57388-57399
-    [(and (>= cp 57388) (<= cp 57399))
-     (string->symbol (format "f~a" (- cp 57375)))]
+    [(and (>= cp 57388) (<= cp 57399)) (string->symbol (format "f~a" (- cp 57375)))]
     ;; Unknown
     [else 'unknown]))
 
@@ -492,11 +493,9 @@
 (define (buffered-read-byte in timeout)
   (cond
     ;; Data available in buffer
-    [(and input-buffer-data
-          (< (car input-buffer-data) (cdr input-buffer-data)))
+    [(and input-buffer-data (< (car input-buffer-data) (cdr input-buffer-data)))
      (define b (bytes-ref input-buffer (car input-buffer-data)))
-     (set! input-buffer-data
-           (cons (add1 (car input-buffer-data)) (cdr input-buffer-data)))
+     (set! input-buffer-data (cons (add1 (car input-buffer-data)) (cdr input-buffer-data)))
      b]
     ;; Buffer exhausted or empty — refill
     [else
@@ -559,7 +558,6 @@
      (utf8-accumulator-reset!)
      (make-tkeymsg-raw (integer->char b))]
     [else #f]))
-
 
 (define (stub-byte-ready?)
   (char-ready? (current-input-port)))

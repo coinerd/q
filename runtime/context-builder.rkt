@@ -39,15 +39,13 @@
      (define path (get-branch idx (message-id leaf)))
      (cond
        [(not path) '()]
-       [else
-        ;; path is root→leaf order from get-branch
-        (assemble-context path)])]))
+       ;; path is root→leaf order from get-branch
+       [else (assemble-context path)])]))
 
 (define (assemble-context path)
   ;; Process a root→leaf path into context messages.
   ;; Handles compaction summaries and entry type filtering.
-  (define-values (pre-compaction post-compaction)
-    (split-at-compaction path))
+  (define-values (pre-compaction post-compaction) (split-at-compaction path))
   (define relevant-entries
     (if post-compaction
         ;; Include compaction summary + everything after it
@@ -79,39 +77,37 @@
   (define kind (message-kind entry))
   (cond
     ;; Standard messages pass through
-    [(memq kind '(message))
-     entry]
+    [(memq kind '(message)) entry]
     ;; Compaction summaries become user-role messages
-    [(eq? kind 'compaction-summary)
-     (transform-summary-to-user entry)]
+    [(eq? kind 'compaction-summary) (transform-summary-to-user entry)]
     ;; Branch summaries become user-role messages
-    [(eq? kind 'branch-summary)
-     (transform-summary-to-user entry)]
+    [(eq? kind 'branch-summary) (transform-summary-to-user entry)]
     ;; Filter out metadata entries
-    [(memq kind '(session-info model-change thinking-level-change))
-     #f]
+    [(memq kind '(session-info model-change thinking-level-change)) #f]
     ;; Tool results pass through
-    [(eq? kind 'tool-result)
-     entry]
+    [(eq? kind 'tool-result) entry]
     ;; System instructions pass through
-    [(eq? kind 'system-instruction)
-     entry]
+    [(eq? kind 'system-instruction) entry]
     ;; Custom messages pass through
-    [(eq? kind 'custom-message)
-     entry]
+    [(eq? kind 'custom-message) entry]
     ;; Unknown kinds pass through (backward compatibility)
     [else entry]))
 
 (define (transform-summary-to-user entry)
   ;; Transform a summary entry into a user-role message for context.
-  (struct-copy message entry
-               [role 'user]))
+  (struct-copy message entry [role 'user]))
 
 ;; ============================================================
 ;; Utility
 ;; ============================================================
 
 (define (filter-map f lst)
-  (for/list ([x (in-list lst)]
-             #:when (f x))
-    (f x)))
+  (let loop ([lst lst]
+             [acc '()])
+    (cond
+      [(null? lst) (reverse acc)]
+      [else
+       (let ([r (f (car lst))])
+         (if r
+             (loop (cdr lst) (cons r acc))
+             (loop (cdr lst) acc)))])))
