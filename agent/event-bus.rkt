@@ -26,7 +26,11 @@
  ;; Circuit breaker configuration
  current-circuit-breaker-threshold
  current-circuit-breaker-cooldown-secs
- circuit-breaker-state)
+ circuit-breaker-state
+ ;; #775: Event serialization queue
+ enable-serialization!
+ drain-event-queue!
+ serialization-enabled?)
 
 ;; ============================================================
 ;; Error handler parameter
@@ -115,7 +119,7 @@
 ;; Event bus struct
 ;; ============================================================
 
-(struct event-bus (subscriptions-box semaphore next-id-box breaker-state)
+(struct event-bus (subscriptions-box semaphore next-id-box breaker-state [queue-ch #:mutable] [queue-thread #:mutable])
   #:constructor-name make-event-bus-internal)
 
 ;; ============================================================
@@ -123,10 +127,14 @@
 ;; ============================================================
 
 (define (make-event-bus)
-  (make-event-bus-internal (box '())
-                           (make-semaphore 1)
-                           (box 0)
-                           (make-hash)))
+  (define ch (make-channel))
+  (define bus (make-event-bus-internal (box '())
+                                      (make-semaphore 1)
+                                      (box 0)
+                                      (make-hash)
+                                      #f ; queue-ch (enabled on demand)
+                                      #f)) ; queue-thread
+  bus)
 
 ;; ============================================================
 ;; subscribe! : event-bus? handler [#:filter pred] -> exact-nonnegative-integer?
@@ -158,21 +166,83 @@
 ;; ============================================================
 
 (define (publish! bus evt)
-  ;; Snapshot subscribers under lock, then notify outside the lock
-  ;; to avoid deadlock if a subscriber calls publish!/subscribe!.
+  ;; #775: If serialization enabled, enqueue; otherwise direct dispatch
+  (if (serialization-enabled? bus)
+      (begin
+        (channel-put (event-bus-queue-ch bus) (queue-item evt #f))
+        evt)
+      (publish-internal! bus evt)))
+
+;; ============================================================
+;; #775: Event Serialization Queue
+;; ============================================================
+;; When enabled, publish! enqueues events to a channel processed
+;; by a dedicated background thread. This ensures events are
+;; processed sequentially even if handlers are slow or async.
+
+(struct queue-item (evt reply-ch) #:transparent)
+
+;; Sentinel for drain operations (not dispatched to subscribers)
+(struct drain-signal () #:transparent)
+
+;; Enable serialization mode — starts background processing thread.
+;; event-bus? -> void?
+(define (enable-serialization! bus)
+  (when (not (event-bus-queue-thread bus))
+    (define ch (make-channel))
+    (set-event-bus-queue-ch! bus ch)
+    (define thread-id
+      (thread
+       (lambda ()
+         (let loop ()
+           (define item (channel-get ch))
+           (cond
+             [(eq? item 'shutdown) (void)]
+             [(queue-item? item)
+              (cond
+                [(drain-signal? (queue-item-evt item))
+                 ;; Drain signal — just reply, don't dispatch
+                 (when (queue-item-reply-ch item)
+                   (channel-put (queue-item-reply-ch item) 'done))]
+                [else
+                 ;; Process the event synchronously using the existing logic
+                 (define result (publish-internal! bus (queue-item-evt item)))
+                 ;; Send reply if requested
+                 (when (queue-item-reply-ch item)
+                   (channel-put (queue-item-reply-ch item) result))])
+              (loop)]
+             [else (loop)])))))
+    (set-event-bus-queue-thread! bus thread-id)))
+
+;; Drain all pending events and return.
+;; Blocks until all queued events have been processed.
+;; event-bus? -> void?
+(define (drain-event-queue! bus)
+  (when (serialization-enabled? bus)
+    ;; Send a sync item through the queue — when it completes,
+    ;; all previously queued items have been processed.
+    (define reply-ch (make-channel))
+    (channel-put (event-bus-queue-ch bus)
+                 (queue-item (drain-signal) reply-ch))
+    (channel-get reply-ch)))
+
+;; Check if serialization is enabled.
+;; event-bus? -> boolean?
+(define (serialization-enabled? bus)
+  (and (event-bus-queue-ch bus) (event-bus-queue-thread bus) #t))
+
+;; Internal: the actual synchronous publish logic (extracted from publish!)
+(define (publish-internal! bus evt)
   (define subs
     (call-with-semaphore (event-bus-semaphore bus)
       (lambda ()
-        ;; Return in subscription order (oldest first)
         (reverse (unbox (event-bus-subscriptions-box bus))))))
-  ;; Bind per-bus circuit breaker state so concurrent buses don't share state (#444)
   (parameterize ([circuit-breaker-state (event-bus-breaker-state bus)])
     (define err-handler (current-event-bus-error-handler))
     (for ([s (in-list subs)])
       (define sub-id (subscription-id s))
       (define pred (subscription-filter s))
       (cond
-        ;; Skip circuit-broken subscribers
         [(circuit-broken? sub-id) (void)]
         [(or (not pred) (pred evt))
          (with-handlers ([exn:fail?
