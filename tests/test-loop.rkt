@@ -398,3 +398,38 @@
  ;; model.stream.completed must still be emitted even when stream is blocked
  (check-not-false (member "model.stream.completed" event-names)
                   "model.stream.completed must be emitted on stream-blocked path"))
+
+(test-case
+ "streaming emits message.start, message.delta, message.end events"
+ (define bus (make-event-bus))
+ (define events (box '()))
+ (subscribe! bus (lambda (evt) (set-box! events (cons evt (unbox events)))))
+ (define prov
+   (make-provider
+    (lambda () "mock")
+    (lambda () (hasheq 'streaming #t))
+    (lambda (req) (error 'send "not used"))
+    (lambda (req)
+      (list (stream-chunk "Hello" #f #f #f)
+            (stream-chunk " world" #f #f #f)
+            (stream-chunk #f #f #f #t)))))
+ (define ctx (list (make-message "m-1" #f 'user 'message
+                                 (list (make-text-part "hi"))
+                                 1000 '#hash())))
+ (define result (run-agent-turn ctx prov bus
+                                #:session-id "s1" #:turn-id "t1"))
+ (define evts (reverse (unbox events)))
+ (define msg-events (filter (lambda (e) (member (event-event e)
+                                                 '("message.start" "message.delta" "message.end")))
+                             evts))
+ (define msg-event-names (map event-event msg-events))
+ ;; Should have: 1 start, 2 deltas, 1 end
+ (check-equal? (car msg-event-names) "message.start")
+ (check-equal? (last msg-event-names) "message.end")
+ (check = (count (lambda (n) (equal? n "message.delta")) msg-event-names) 2)
+ ;; message.start should have message-id
+ (define start-evt (car msg-events))
+ (check-true (hash-has-key? (event-payload start-evt) 'message-id))
+ ;; message.end should have message-id
+ (define end-evt (last msg-events))
+ (check-true (hash-has-key? (event-payload end-evt) 'message-id)))

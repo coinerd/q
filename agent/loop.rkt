@@ -188,6 +188,8 @@
   (define all-chunks (box '()))
   (define cancelled-during-stream (box #f))
   (define stream-blocked (box #f))
+  (define message-started (box #f))
+  (define message-id (format "msg-~a-~a" turn-id (current-inexact-milliseconds)))
 
   (define stream-gen (provider-stream provider req))
 
@@ -196,6 +198,12 @@
     (when (and chunk (not (eq? chunk #f)))
       (set-box! all-chunks (cons chunk (unbox all-chunks)))
       (when (stream-chunk-delta-text chunk)
+        ;; Emit message.start on first text delta
+        (unless (unbox message-started)
+          (set-box! message-started #t)
+          (emit! bus session-id turn-id "message.start"
+                 (hasheq 'message-id message-id)
+                 #:state state))
         ;; Text delta
         (set-box! accumulated-text
                   (string-append (unbox accumulated-text) (stream-chunk-delta-text chunk)))
@@ -204,6 +212,11 @@
                turn-id
                "model.stream.delta"
                (hasheq 'delta (stream-chunk-delta-text chunk))
+               #:state state)
+        ;; Emit message.delta with message-id for extension consumption
+        (emit! bus session-id turn-id "message.delta"
+               (hasheq 'text (stream-chunk-delta-text chunk)
+                       'message-id message-id)
                #:state state)
         ;; Dispatch message-update hook for text delta
         (when hook-dispatcher
@@ -250,7 +263,13 @@
                turn-id
                "model.stream.completed"
                (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
-               #:state state))
+               #:state state)
+        ;; Emit message.end if we started a message
+        (when (unbox message-started)
+          (emit! bus session-id turn-id "message.end"
+                 (hasheq 'message-id message-id
+                         'usage (or (stream-chunk-usage chunk) (hasheq)))
+                 #:state state)))
       ;; Check cancellation after processing chunk
       (cond
         [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
