@@ -6,7 +6,8 @@
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/glob.rkt" glob->regexp)
          (only-in "../../util/path-filters.rkt"
-                  hidden-name? vcs-dir? skip-dirs path-component-hidden?))
+                  hidden-name? vcs-dir? skip-dirs path-component-hidden?)
+         (only-in "../../util/path-helpers.rkt" expand-home-path))
 
 (provide tool-find)
 
@@ -72,7 +73,8 @@
   (cond
     [(not (hash-has-key? args 'path)) (make-error-result "Missing required argument: path")]
     [else
-     (define path-str (hash-ref args 'path))
+    (define raw-path (hash-ref args 'path))
+     (define path-str (expand-home-path raw-path))
      (cond
        [(not (string? path-str)) (make-error-result "Argument 'path' must be a string")]
 

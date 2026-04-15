@@ -10,7 +10,8 @@
 (require racket/file
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/safe-mode-predicates.rkt"
-                  safe-mode? allowed-path? safe-mode-project-root))
+                  safe-mode? allowed-path? safe-mode-project-root)
+         (only-in "../../util/path-helpers.rkt" expand-home-path))
 
 (provide tool-edit)
 
@@ -41,7 +42,8 @@
 ;; --------------------------------------------------
 
 (define (tool-edit args [exec-ctx #f])
-  (define path-str (hash-ref args 'path #f))
+  (define raw-path (hash-ref args 'path #f))
+  (define path-str (and raw-path (expand-home-path raw-path)))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
     [else

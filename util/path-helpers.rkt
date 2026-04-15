@@ -10,6 +10,7 @@
 
 (provide ;; Path utility
  path-only
+ expand-home-path
  ;; Byte helpers
  contains-null-bytes?
  bytes->display-lines)
@@ -39,3 +40,18 @@
 (define (path-only p)
   (define-values (dir _base _must-be-dir?) (split-path p))
   (if (eq? dir 'relative) #f dir))
+
+;; Expand leading ~ in a path string to the user's home directory.
+;; If the path doesn't start with ~, returns it unchanged.
+;; This is needed because Racket's file-exists?, directory-exists?, etc.
+;; do NOT expand ~ — they treat it as a literal directory name.
+(define (expand-home-path path-str)
+  (if (and (string? path-str)
+           (> (string-length path-str) 0)
+           (char=? (string-ref path-str 0) #\~))
+      (let ([home (find-system-path 'home-dir)])
+        (if (and (> (string-length path-str) 1)
+                 (char=? (string-ref path-str 1) #\/))
+            (string-append (path->string home) (substring path-str 1))
+            (path->string home)))
+      path-str))

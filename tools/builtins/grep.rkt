@@ -7,7 +7,7 @@
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/glob.rkt" glob->regexp)
-         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines)
+         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines expand-home-path)
          (only-in "../../util/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
 (provide tool-grep)
@@ -126,7 +126,8 @@
 (define (tool-grep args [exec-ctx #f])
   ;; (safe-mode path check is done by scheduler, not here)
   (define pattern (hash-ref args 'pattern #f))
-  (define path-str (hash-ref args 'path #f))
+  (define raw-path (hash-ref args 'path #f))
+  (define path-str (and raw-path (expand-home-path raw-path)))
 
   (cond
     [(not pattern) (make-error-result "Missing required argument: pattern")]
