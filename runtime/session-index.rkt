@@ -45,6 +45,8 @@
          get-branch
          branch!
          branch-with-summary!
+         find-common-ancestor
+         collect-branch-entries
          reset-leaf!
          append-to-leaf!
          leaf-depth
@@ -281,6 +283,65 @@
      ;; Add to index
      (append-to-leaf! idx summary-msg)
      summary-msg]))
+
+;; ============================================================
+;; #776: Branch summarization helpers
+;; ============================================================
+
+;; Find the common ancestor of two entries by walking parent links.
+;; Returns the message-id of the deepest shared ancestor, or #f if none.
+;; session-index? string? string? -> (or/c string? #f)
+(define (find-common-ancestor idx id-a id-b)
+  (define ancestors-a (ancestor-set idx id-a))
+  ;; Walk from id-b towards root, first match is the common ancestor
+  (let loop ([current id-b])
+    (cond
+      [(not current) #f]
+      [(set-member? ancestors-a current) current]
+      [else
+       (define msg (hash-ref (session-index-by-id idx) current #f))
+       (loop (and msg (message-parent-id msg)))])))
+
+;; Build a set of all ancestors of a given entry (inclusive)
+(define (ancestor-set idx id)
+  (let loop ([current id] [acc (set)])
+    (cond
+      [(not current) acc]
+      [(set-member? acc current) acc]
+      [else
+       (define msg (hash-ref (session-index-by-id idx) current #f))
+       (loop (and msg (message-parent-id msg))
+             (set-add acc current))])))
+
+;; Collect entries along the path from old-leaf-id towards ancestor-id.
+;; Stops at ancestor-id or when token budget is exhausted.
+;; Returns (listof message) in chronological order (oldest first).
+;; session-index? string? string? integer? -> (listof message)
+(define (collect-branch-entries idx old-leaf-id ancestor-id token-budget)
+  (let loop ([current old-leaf-id] [acc '()] [tokens-used 0])
+    (cond
+      [(not current) acc]
+      [(equal? current ancestor-id) acc]
+      [(>= tokens-used token-budget) acc]
+      [else
+       (define msg (hash-ref (session-index-by-id idx) current #f))
+       (cond
+         [(not msg) acc]
+         [else
+          (define cost (estimate-entry-tokens msg))
+          (loop (message-parent-id msg)
+                (cons msg acc)
+                (+ tokens-used cost))])])))
+
+;; Rough token estimate for a message (~4 chars per token)
+(define (estimate-entry-tokens msg)
+  (define content (message-content msg))
+  (for/sum ([part (in-list content)])
+    (cond
+      [(text-part? part) (quotient (string-length (text-part-text part)) 4)]
+      [else 10]))) ; rough estimate for non-text parts
+
+(require racket/set)
 
 (define (reset-leaf! idx)
   ;; Set active leaf to #f (use latest entry as default).
