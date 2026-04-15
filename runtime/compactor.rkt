@@ -21,45 +21,55 @@
 (require racket/contract
          racket/string
          racket/list
+         racket/set
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
-         (only-in "../util/hook-types.rkt" hook-result hook-result? hook-result-action hook-result-payload))
+         "../runtime/compaction-prompts.rkt"
+         (only-in "../llm/model.rkt" make-model-request model-response-content model-response?)
+         (only-in "../llm/provider.rkt" provider-send provider?)
+         (only-in "../util/hook-types.rkt"
+                  hook-result
+                  hook-result?
+                  hook-result-action
+                  hook-result-payload))
 
-(provide
- (struct-out compaction-strategy)
- (struct-out compaction-result)
- ;; Compaction functions (WP-37: now also exports compact-history for tests)
- compact-history
- compact-history-advisory
- compact-and-persist!
- build-summary-window
- write-compaction-entry!
- compaction-result->message-list
- default-strategy
- default-summarize
- ;; Tiered Context Assembly (WP-37)
- (struct-out tiered-context)
- build-tiered-context
- tiered-context->message-list
- ;; R2-6: Context Assembly Hooks
- build-tiered-context-with-hooks
- (struct-out context-assembly-payload)
- payload->tiered-context
- tiered-context->payload)
+(provide (struct-out compaction-strategy)
+         (struct-out compaction-result)
+         ;; Compaction functions (WP-37: now also exports compact-history for tests)
+         compact-history
+         compact-history-advisory
+         compact-and-persist!
+         build-summary-window
+         write-compaction-entry!
+         compaction-result->message-list
+         default-strategy
+         default-summarize
+         ;; LLM-powered summarization (v0.8.9)
+         llm-summarize
+         make-llm-summarize-fn
+         extract-file-tracker
+         format-messages-for-summary
+         ;; Tiered Context Assembly (WP-37)
+         (struct-out tiered-context)
+         build-tiered-context
+         tiered-context->message-list
+         ;; R2-6: Context Assembly Hooks
+         build-tiered-context-with-hooks
+         (struct-out context-assembly-payload)
+         payload->tiered-context
+         tiered-context->payload)
 
 ;; ============================================================
 ;; Structs
 ;; ============================================================
 
 ;; Compaction strategy parameters
-(struct compaction-strategy (summary-window-size keep-recent-count)
-  #:transparent)
+(struct compaction-strategy (summary-window-size keep-recent-count) #:transparent)
 ;; summary-window-size : integer — max number of past messages to summarize
 ;; keep-recent-count   : integer — how many recent messages to keep as-is
 
 ;; Compaction result
-(struct compaction-result (summary-message removed-count kept-messages)
-  #:transparent)
+(struct compaction-result (summary-message removed-count kept-messages) #:transparent)
 ;; summary-message : (or/c message? #f) — a single 'system message with the summary text, or #f if nothing was summarized
 ;; removed-count   : integer — how many messages were replaced by the summary
 ;; kept-messages   : (listof message?) — the recent messages that were kept verbatim
@@ -80,15 +90,107 @@
     (for/list ([m (in-list messages)])
       (define content (message-content m))
       (define text
-        (string-join
-          (for/list ([part (in-list content)]
-                     #:when (text-part? part))
-            (text-part-text part))
-          " "))
+        (string-join (for/list ([part (in-list content)]
+                                #:when (text-part? part))
+                       (text-part-text part))
+                     " "))
       (format "[~a] ~a" (message-role m) text)))
-  (format "[Compaction summary of ~a messages]\n~a"
-          n
-          (string-join parts "\n")))
+  (format "[Compaction summary of ~a messages]\n~a" n (string-join parts "\n")))
+
+;; ============================================================
+;; LLM-powered summarization (v0.8.9)
+;; ============================================================
+
+;; Format a list of messages into a text representation for the LLM.
+;; Truncates long tool results to keep the prompt within bounds.
+(define (format-messages-for-summary messages)
+  (string-join (for/list ([m (in-list messages)])
+                 (define role (message-role m))
+                 (define content (message-content m))
+                 (define text
+                   (string-join (for/list ([part (in-list content)]
+                                           #:when (text-part? part))
+                                  (define t (text-part-text part))
+                                  (if (> (string-length t) MAX-TOOL-RESULT-CHARS)
+                                      (string-append (substring t 0 MAX-TOOL-RESULT-CHARS)
+                                                     "\n... [truncated]")
+                                      t))
+                                " "))
+                 (format "[~a] ~a" role text))
+               "\n"))
+
+;; Walk messages to find file paths from tool calls.
+;; Returns a hash: 'readFiles -> list of paths,
+;;                  'modifiedFiles -> list of paths.
+(define (extract-file-tracker messages)
+  (define reads (mutable-set))
+  (define writes (mutable-set))
+  (for ([m (in-list messages)])
+    (define content (message-content m))
+    (for ([part (in-list content)])
+      (cond
+        [(tool-call-part? part)
+         (define tool-name (tool-call-part-name part))
+         (define args (tool-call-part-arguments part))
+         (define path
+           (cond
+             [(hash? args) (hash-ref args 'path #f)]
+             [(string? args)
+              ;; Try to extract path from JSON string
+              (and (string-contains? args "path")
+                   (let ([m (regexp-match #rx"\"path\"[[:space:]]*:[[:space:]]*\"([^\"]+)\"" args)])
+                     (and m (cadr m))))]
+             [else #f]))
+         (when path
+           (cond
+             [(member tool-name '("read" "find" "grep" "ls")) (set-add! reads path)]
+             [(member tool-name '("edit" "write")) (set-add! writes path)]))]
+        ;; Tool results may contain file paths in content
+        [(tool-result-part? part) (void)])))
+  (hasheq 'readFiles (set->list reads) 'modifiedFiles (set->list writes)))
+
+;; Find the most recent compaction-summary message in the list.
+;; Returns the text of the summary or #f.
+(define (find-previous-summary messages)
+  (for/first ([m (in-list (reverse messages))]
+              #:when (eq? (message-kind m) 'compaction-summary))
+    (string-join (for/list ([part (in-list (message-content m))]
+                            #:when (text-part? part))
+                   (text-part-text part))
+                 "")))
+
+;; Call the LLM to summarize messages.
+;; When #:previous-summary is provided, uses iterative update prompt.
+;; Returns the summary text string.
+(define (llm-summarize messages
+                       provider
+                       model-name
+                       #:previous-summary [prev-summary #f]
+                       #:file-tracker [file-tracker (hasheq)])
+  (define formatted (format-messages-for-summary messages))
+  (define prompt-text
+    (if prev-summary
+        (iterative-update-prompt prev-summary formatted file-tracker)
+        (summary-prompt formatted file-tracker)))
+  ;; Build a minimal model-request with just the prompt
+  (define req
+    (make-model-request (list (hasheq 'role "user" 'content prompt-text))
+                        #f
+                        (hasheq 'model model-name 'max_tokens 2000)))
+  (define resp (provider-send provider req))
+  ;; Extract text from response content
+  (define content (model-response-content resp))
+  (string-join (for/list ([part (in-list content)])
+                 (cond
+                   [(hash? part) (hash-ref part 'text "")]
+                   [(string? part) part]
+                   [else (format "~a" part)]))
+               ""))
+
+;; Create a summarize function suitable for use with compact-history.
+;; The returned function has signature: (listof message?) -> string
+(define (make-llm-summarize-fn provider model-name)
+  (lambda (messages) (llm-summarize messages provider model-name)))
 
 ;; ============================================================
 ;; build-summary-window
@@ -102,9 +204,8 @@
   (define keep-recent (compaction-strategy-keep-recent-count strategy))
   (define window-size (compaction-strategy-summary-window-size strategy))
   (cond
-    [(<= total keep-recent)
-     ;; All messages fit in the "recent" window — nothing to summarize
-     (values '() messages)]
+    ;; All messages fit in the "recent" window — nothing to summarize
+    [(<= total keep-recent) (values '() messages)]
     [else
      (define split-point (max 0 (- total keep-recent)))
      (define all-old (take messages split-point))
@@ -127,27 +228,57 @@
 ;; CONTRACT: This function is ADVISORY-ONLY. It does NOT modify the session log
 ;; or touch the filesystem in any way. To persist the compaction, use
 ;; `compact-and-persist!` or call `write-compaction-entry!` explicitly.
+;;
+;; v0.8.9: Added #:provider, #:model-name for LLM-powered summarization,
+;;         #:hook-dispatcher for extension hooks, #:previous-summary for
+;;         iterative compaction.
 (define (compact-history messages
                          #:strategy [strategy (default-strategy)]
-                         #:summarize-fn [summarize-fn default-summarize])
+                         #:summarize-fn [summarize-fn default-summarize]
+                         #:provider [provider #f]
+                         #:model-name [model-name #f]
+                         #:previous-summary [prev-summary #f]
+                         #:hook-dispatcher [hook-dispatcher #f])
+  ;; Dispatch 'session-before-compact hook if dispatcher provided
+  (when hook-dispatcher
+    (define hook-res
+      (hook-dispatcher 'session-before-compact
+                       (hasheq 'message-count (length messages) 'strategy strategy)))
+    (when (and (hook-result? hook-res) (eq? (hook-result-action hook-res) 'block))
+      ;; Hook blocked compaction — return identity result
+      (compaction-result #f 0 messages)))
   (define-values (old recent) (build-summary-window messages strategy))
   (cond
-    [(null? old)
-     ;; Nothing to summarize — return identity result
-     (compaction-result #f 0 recent)]
+    ;; Nothing to summarize — return identity result
+    [(null? old) (compaction-result #f 0 recent)]
     [else
-     ;; Summarize the old messages into a single system message
-     (define summary-text (summarize-fn old))
+     ;; Choose summarization: LLM if provider given, else use summarize-fn
+     (define summary-text
+       (if (and provider model-name)
+           (let ([file-tracker (extract-file-tracker old)])
+             (llm-summarize old
+                            provider
+                            model-name
+                            #:previous-summary (or prev-summary (find-previous-summary recent))
+                            #:file-tracker file-tracker))
+           (summarize-fn old)))
+     ;; Build file tracker metadata for the summary message
+     (define file-tracker-meta
+       (if (and provider model-name)
+           (let ([ft (extract-file-tracker old)])
+             (if (> (hash-count ft) 0)
+                 (hasheq 'fileTracker ft)
+                 (hasheq)))
+           (hasheq)))
      (define summary-msg
        (make-message
         (format "compaction-~a" (current-inexact-milliseconds))
-        #f  ; no parent — compaction summaries are root-level context
+        #f ; no parent — compaction summaries are root-level context
         'system
         'compaction-summary
         (list (make-text-part summary-text))
         (current-seconds)
-        (hasheq 'type "compaction"
-                'removedCount (length old))))
+        (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length old))))
      (compaction-result summary-msg (length old) recent)]))
 
 ;; ============================================================
@@ -172,9 +303,19 @@
 ;; the filesystem. Equivalent to `compact-history` but named to make
 ;; the advisory contract crystal clear.
 (define (compact-history-advisory messages
-                                   #:strategy [strategy (default-strategy)]
-                                   #:summarize-fn [summarize-fn default-summarize])
-  (compact-history messages #:strategy strategy #:summarize-fn summarize-fn))
+                                  #:strategy [strategy (default-strategy)]
+                                  #:summarize-fn [summarize-fn default-summarize]
+                                  #:provider [provider #f]
+                                  #:model-name [model-name #f]
+                                  #:previous-summary [prev-summary #f]
+                                  #:hook-dispatcher [hook-dispatcher #f])
+  (compact-history messages
+                   #:strategy strategy
+                   #:summarize-fn summarize-fn
+                   #:provider provider
+                   #:model-name model-name
+                   #:previous-summary prev-summary
+                   #:hook-dispatcher hook-dispatcher))
 
 ;; ============================================================
 ;; compact-and-persist!
@@ -187,10 +328,22 @@
 ;; The original messages are NOT deleted — they remain in the log.
 ;; Future context assembly can use the summary + recent messages
 ;; instead of replaying the full history.
-(define (compact-and-persist! messages session-log-path
-                               #:strategy [strategy (default-strategy)]
-                               #:summarize-fn [summarize-fn default-summarize])
-  (define result (compact-history messages #:strategy strategy #:summarize-fn summarize-fn))
+(define (compact-and-persist! messages
+                              session-log-path
+                              #:strategy [strategy (default-strategy)]
+                              #:summarize-fn [summarize-fn default-summarize]
+                              #:provider [provider #f]
+                              #:model-name [model-name #f]
+                              #:previous-summary [prev-summary #f]
+                              #:hook-dispatcher [hook-dispatcher #f])
+  (define result
+    (compact-history messages
+                     #:strategy strategy
+                     #:summarize-fn summarize-fn
+                     #:provider provider
+                     #:model-name model-name
+                     #:previous-summary prev-summary
+                     #:hook-dispatcher hook-dispatcher))
   (write-compaction-entry! session-log-path result)
   result)
 
@@ -214,8 +367,7 @@
 ;; - Tier A: Compacted summaries of older messages
 ;; - Tier B: Recent messages kept verbatim (not compacted)
 ;; - Tier C: Current turn messages (most recent, always included in full)
-(struct tiered-context (tier-a tier-b tier-c)
-  #:transparent)
+(struct tiered-context (tier-a tier-b tier-c) #:transparent)
 
 ;; Default tier boundaries
 (define DEFAULT-TIER-B-COUNT 20)
@@ -223,25 +375,22 @@
 
 ;; R2-6: Context Assembly Hook Payload
 ;; Serializable payload for context-assembly hook point
-(struct context-assembly-payload
-  (tier-a-messages tier-b-messages tier-c-messages max-tokens metadata)
+(struct context-assembly-payload (tier-a-messages tier-b-messages tier-c-messages max-tokens metadata)
   #:transparent)
 
 ;; Helper: Convert payload back to tiered-context
 (define (payload->tiered-context payload)
-  (tiered-context
-   (context-assembly-payload-tier-a-messages payload)
-   (context-assembly-payload-tier-b-messages payload)
-   (context-assembly-payload-tier-c-messages payload)))
+  (tiered-context (context-assembly-payload-tier-a-messages payload)
+                  (context-assembly-payload-tier-b-messages payload)
+                  (context-assembly-payload-tier-c-messages payload)))
 
 ;; Helper: Convert tiered-context to payload
 (define (tiered-context->payload tc max-tokens [metadata (hasheq)])
-  (context-assembly-payload
-   (tiered-context-tier-a tc)
-   (tiered-context-tier-b tc)
-   (tiered-context-tier-c tc)
-   max-tokens
-   metadata))
+  (context-assembly-payload (tiered-context-tier-a tc)
+                            (tiered-context-tier-b tc)
+                            (tiered-context-tier-c tc)
+                            max-tokens
+                            metadata))
 
 ;; Split messages into three tiers based on compaction status and recency.
 ;; Parameters:
@@ -250,12 +399,11 @@
 ;;   tier-c-count - how many most recent messages to treat as "current turn" (Tier C)
 ;; Returns: tiered-context struct
 (define (build-tiered-context messages
-                               #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
-                               #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT])
+                              #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
+                              #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT])
   ;; Separate compaction summaries (Tier A candidates) from regular messages
   (define-values (compaction-summaries regular-msgs)
-    (partition (lambda (m) (eq? (message-kind m) 'compaction-summary))
-               messages))
+    (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
 
   ;; Calculate how many messages go to Tier C (most recent)
   (define total (length regular-msgs))
@@ -296,22 +444,25 @@
 ;;   max-tokens - max tokens for context (for payload)
 ;; Returns: (values tiered-context hook-result-or-#f)
 ;; Raises: exn:fail if hook returns 'block
-(define (build-tiered-context-with-hooks
-         messages
-         #:hook-dispatcher [hook-dispatcher #f]
-         #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
-         #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
-         #:max-tokens [max-tokens 8192])
+(define (build-tiered-context-with-hooks messages
+                                         #:hook-dispatcher [hook-dispatcher #f]
+                                         #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
+                                         #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
+                                         #:max-tokens [max-tokens 8192])
   ;; First build the base tiered context
-  (define base-context (build-tiered-context messages
-                                              #:tier-b-count tier-b-count
-                                              #:tier-c-count tier-c-count))
+  (define base-context
+    (build-tiered-context messages #:tier-b-count tier-b-count #:tier-c-count tier-c-count))
 
   ;; Create the hook payload (serializable for logging)
-  (define payload (tiered-context->payload base-context max-tokens
-                                           (hasheq 'tier-b-count tier-b-count
-                                                   'tier-c-count tier-c-count
-                                                   'total-messages (length messages))))
+  (define payload
+    (tiered-context->payload base-context
+                             max-tokens
+                             (hasheq 'tier-b-count
+                                     tier-b-count
+                                     'tier-c-count
+                                     tier-c-count
+                                     'total-messages
+                                     (length messages))))
 
   ;; Dispatch hook if dispatcher provided
   (if hook-dispatcher
@@ -327,18 +478,14 @@
            ;; Hook amended - use new payload to build tiered context
            (define amended-payload (hook-result-payload result))
            (values (payload->tiered-context amended-payload) result)]
-          [(pass)
-           ;; Hook passed - use original context
-           (values base-context result)]
-          [else
-           ;; Unknown action - use original context
-           (values base-context result)]))
+          ;; Hook passed - use original context
+          [(pass) (values base-context result)]
+          ;; Unknown action - use original context
+          [else (values base-context result)]))
       ;; No hook dispatcher - return base context
       (values base-context #f)))
 
 ;; Flatten tiered context back into a single message list.
 ;; Order: Tier A (summaries) → Tier B (recent) → Tier C (current)
 (define (tiered-context->message-list tc)
-  (append (tiered-context-tier-a tc)
-          (tiered-context-tier-b tc)
-          (tiered-context-tier-c tc)))
+  (append (tiered-context-tier-a tc) (tiered-context-tier-b tc) (tiered-context-tier-c tc)))
