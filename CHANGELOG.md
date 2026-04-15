@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-04-13
+
+### Added — Testing Quick Wins (Wave 0)
+- 33 new tests: TUI clipboard, UTF-8 accumulator, component lifecycle, keymap merge
+- Test count: 3681 → 3714
+
+### Added — TUI Critical Fixes & Failure Injection (Wave 1)
+- 27 new tests + 3 bug fixes
+- Fixed: SGR style leak in styled-line→ansi (styled→plain transitions now emit reset)
+- Fixed: Incremental render path applies fix-sgr-bg-black (was only on full redraws)
+- Fixed: Header stored with ANSI inverse-video codes in frame-vec
+- New: `test-failure-injection.rkt` — provider errors, malformed responses, mid-stream failures
+- New: `test-command-integration.rkt` — command parsing, /help, /clear, /quit
+- Test count: 3714 → 3741
+
+### Added — Input Editor Power Features (Wave 2)
+- 32 integration tests for undo/redo, kill/yank, word navigation, clipboard paste
+- All features verified as already implemented from prior waves
+- Keymap dispatch and combined workflow tests
+- Test count: 3741 → 3773
+
+### Added — Compaction & Context Assembly Edge Cases (Wave 3)
+- 24 tests for empty session, single message, empty index edge cases
+- Threshold boundary tests, tiered context with only summaries
+- Discovered gap: hook blocking in compact-history is advisory-only
+- Test count: 3773 → 3797
+
+### Added — Markdown, ANSI Wrap & Theme Tests (Wave 4)
+- 46 tests: markdown token coverage, ANSI word wrapping, theme system
+- Nested constructs, boundary cases, strikethrough, CJK width
+- Test count: 3797 → 3843
+
+### Added — Property-Based Invariant Tests (Wave 5)
+- 19 property tests: keymap idempotency, session replay determinism
+- char-width invariants, UTF-8 round-trips, token estimation monotonicity
+- Verified: buffered stdin reads, Kitty protocol, configurable keybindings, sync mode query
+- Test count: 3843 → 3862
+
+### Verified — Already Implemented Features
+- Buffered stdin reads (read-bytes-avail! with byte buffer)
+- Kitty keyboard protocol (CSI-u parsing + detection)
+- Configurable keybindings via JSON (~/.q/keybindings.json)
+- Sync mode terminal query detection (XTVERSION)
+
 ## [0.8.9] — 2026-04-13
 
 ### Added — Context Assembly Pipeline
