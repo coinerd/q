@@ -1147,6 +1147,9 @@
                           'session-dir (path->string tmpdir)
                           'extension-registry ext-reg
                           'model-name "test-model")))
+    ;; #771: ensure session directory exists for resume test
+    (make-directory* (build-path tmpdir (session-id sess)))
+    (with-output-to-file (build-path tmpdir (session-id sess) "session.jsonl") (lambda () (void)))
     (define sid (session-id sess))
     ;; Resume it
     (define resumed (resume-agent-session
@@ -1175,6 +1178,9 @@
                           'event-bus bus
                           'session-dir (path->string tmpdir)
                           'system-instructions instrs)))
+    ;; #771: ensure directory exists for resume test
+    (make-directory* (build-path (string->path (path->string tmpdir)) (session-id sess)))
+    (with-output-to-file (build-path tmpdir (session-id sess) "session.jsonl") (lambda () (void)))
     (define sid (session-id sess))
     ;; Resume it
     (define resumed (resume-agent-session
