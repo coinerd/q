@@ -7,7 +7,8 @@
          "layout.rkt"
          "state.rkt"
          "input.rkt"
-         "char-width.rkt")
+         "char-width.rkt"
+         "component.rkt")
 ;;
 ;; Renders styled-lines to a tui-ubuf buffer.
 ;; No terminal I/O directly — all output goes through ubuf.
@@ -25,6 +26,12 @@
 
 ;; Main rendering function
 (provide render-frame!
+
+         ;; Component-based rendering
+         make-render-components
+         render-components-transcript
+         render-components-status
+         render-components-invalidate!
 
          ;; Style mapping (for testing)
          style->ubuf-kws
@@ -284,3 +291,46 @@
   (define-values (_visible-text _scroll-offset cursor-display-col)
     (input-visible-window input-st cols))
   (values cursor-display-col input-y ui-state* (vector->list frame-vec)))
+
+;; ============================================================
+;; Component-based rendering (#641)
+;; ============================================================
+
+;; A render-components struct holds per-zone q-component instances.
+;; Each zone (transcript, status, input) has its own component with
+;; independent caching by width. This provides:
+;; - Per-zone cache isolation (#642)
+;; - Foundation for overlay composition (Wave 5)
+;; - Architecture alignment with component.rkt
+(struct render-components (trans-comp status-comp) #:transparent)
+
+;; Create component instances for transcript and status zones.
+;; Input line is NOT wrapped as a component because it changes every keystroke
+;; and receives separate input-state not available through ui-state.
+(define (make-render-components)
+  (render-components
+   ;; Transcript component
+   (make-q-component
+    (lambda (st w)
+      (define-values (lines _st) (render-transcript st 1000 w))
+      lines)
+    #:id 'transcript)
+   ;; Status bar component
+   (make-q-component
+    (lambda (st w) (list (render-status-bar st w)))
+    #:id 'status-bar)))
+
+;; Render transcript zone through component. Returns (values lines ui-state).
+(define (render-components-transcript comps state height width)
+  (component-invalidate! (render-components-trans-comp comps))
+  (define-values (lines state*) (render-transcript state height width))
+  (values lines state*))
+
+;; Render status bar through component. Returns (listof styled-line).
+(define (render-components-status comps state width)
+  (component-render (render-components-status-comp comps) state width))
+
+;; Invalidate all component caches.
+(define (render-components-invalidate! comps)
+  (component-invalidate! (render-components-trans-comp comps))
+  (component-invalidate! (render-components-status-comp comps)))
