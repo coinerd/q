@@ -6,6 +6,7 @@
          rackunit/text-ui
          "../../../q/tui/component.rkt"
          "../../../q/tui/render.rkt"
+         "../../../q/tui/renderer.rkt"
          "../../../q/tui/state.rkt")
 
 (define-test-suite test-component
@@ -192,6 +193,48 @@
     (check-equal? (length result) 1)
     (define text (styled-line->text (car result)))
     (check-true (string-contains? text "gpt-4")))
+
+  ;; ──────────────────────────────
+  ;; Render-components wiring (#641)
+  ;; ──────────────────────────────
+
+  (test-case "make-render-components creates transcript + status components"
+    (define comps (make-render-components))
+    ;; Test via public render functions — they should work without error
+    (define state (initial-ui-state #:model-name "test"))
+    (define status-result (render-components-status comps state 80))
+    (check-equal? (length status-result) 1)
+    (check-true (string-contains? (styled-line->text (car status-result)) "test")))
+
+  (test-case "render-components-status returns styled lines via component"
+    (define comps (make-render-components))
+    (define state (initial-ui-state #:model-name "claude-3"))
+    (define result (render-components-status comps state 80))
+    (check-equal? (length result) 1)
+    (check-true (string-contains? (styled-line->text (car result)) "claude-3")))
+
+  (test-case "render-components-status caches by width"
+    (define comps (make-render-components))
+    (define state (initial-ui-state #:model-name "gpt-4"))
+    ;; First call — cache miss
+    (define r1 (render-components-status comps state 80))
+    ;; Second call — cache hit (same width)
+    (define r2 (render-components-status comps state 80))
+    (check-equal? r1 r2)
+    ;; Width change — cache miss
+    (define r3 (render-components-status comps state 120))
+    (check-not-equal? (length (styled-line-segments (car r3))) 0))
+
+  (test-case "render-components-invalidate! clears status cache"
+    (define comps (make-render-components))
+    (define state (initial-ui-state #:model-name "test"))
+    ;; Render to populate cache
+    (render-components-status comps state 80)
+    ;; Invalidate
+    (render-components-invalidate! comps)
+    ;; Re-render should work (cache cleared)
+    (define result (render-components-status comps state 80))
+    (check-equal? (length result) 1))
   )
 
 (run-tests test-component)
