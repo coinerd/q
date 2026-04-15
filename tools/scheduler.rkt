@@ -27,7 +27,9 @@
          (only-in "../util/hook-types.rkt"
                   hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode-predicates.rkt"
-                  safe-mode? allowed-tool? allowed-path? safe-mode-project-root))
+                  safe-mode? allowed-tool? allowed-path? safe-mode-project-root)
+         (only-in "file-mutation-queue.rkt"
+                  with-file-mutation-queue))
 
 (provide
  ;; ── Result struct ──
@@ -199,7 +201,8 @@
                  tc))
            tc))
 
-     ;; Execute the tool
+     ;; Execute the tool (with file mutation queue for write tools)
+     (define file-mutating-tools '("write" "edit"))
      (define exec-result
        (with-handlers ([exn:fail?
                         (lambda (e)
@@ -207,7 +210,14 @@
                            (format "tool '~a' raised: ~a"
                                    tc-name
                                    (exn-message e))))])
-         ((tool-execute t) (tool-call-arguments tc-to-execute) exec-ctx)))
+         (define args (tool-call-arguments tc-to-execute))
+         (define path-arg (and (member tc-name file-mutating-tools)
+                               (hash? args)
+                               (hash-ref args 'path #f)))
+         (with-file-mutation-queue
+          path-arg
+          (lambda ()
+            ((tool-execute t) args exec-ctx)))))
 
      ;; Dispatch 'tool-result-post hook
      (define post-payload
