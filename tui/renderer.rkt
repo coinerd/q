@@ -287,7 +287,26 @@
   (draw-styled-line! ubuf input-line input-y cols)
   (vector-set! frame-vec input-y (styled-line->ansi input-line))
 
-  ;; 6. Return cursor position (0-indexed for ANSI escape)
+  ;; 6. Draw overlay if active (#643)
+  ;; Overlay renders on top of the transcript zone.
+  ;; Background is drawn with inverse style to distinguish from transcript.
+  (define overlay (ui-state-active-overlay ui-state))
+  (when overlay
+    (define ov-content (overlay-state-content overlay))
+    (define ov-lines (if (> (length ov-content) transcript-height)
+                         (take-right ov-content transcript-height)
+                         ov-content))
+    ;; Clear overlay background
+    (for ([i (in-range transcript-height)])
+      (ubuf-putstring! ubuf 0 (+ trans-y i) (make-string cols #\space) #:bg 8))
+    ;; Draw overlay lines
+    (for ([line (in-list ov-lines)]
+          [i (in-naturals)])
+      #:break (>= i transcript-height)
+      (draw-styled-line! ubuf line (+ trans-y i) cols)
+      (vector-set! frame-vec (+ trans-y i) (styled-line->ansi line))))
+
+  ;; 7. Return cursor position (0-indexed for ANSI escape)
   (define-values (_visible-text _scroll-offset cursor-display-col)
     (input-visible-window input-st cols))
   (values cursor-display-col input-y ui-state* (vector->list frame-vec)))

@@ -6,6 +6,7 @@
          rackunit/text-ui
          racket/port
          "../../../q/tui/state.rkt"
+         "../../../q/tui/render.rkt"
          "../../../q/tui/scrollback.rkt"
          "../../../q/util/protocol-types.rkt")
 
@@ -626,3 +627,53 @@
   (define evt (make-test-event "turn.started" (hash)))
   (define s1 (apply-event-to-state s0 evt))
   (check-true (ui-state-busy? s1)))
+
+;; ============================================================
+;; Overlay state tests (#643)
+;; ============================================================
+
+(test-case "overlay-state: initial state has no overlay"
+  (define s0 (initial-ui-state))
+  (check-false (ui-state-active-overlay s0))
+  (check-false (overlay-active? s0)))
+
+(test-case "overlay-state: show-overlay activates overlay"
+  (define s0 (initial-ui-state))
+  (define content (list (styled-line (list (styled-segment "test" '())))))
+  (define s1 (show-overlay s0 'command-palette content "/h"))
+  (check-true (overlay-active? s1))
+  (check-equal? (overlay-state-type (ui-state-active-overlay s1)) 'command-palette)
+  (check-equal? (overlay-state-input (ui-state-active-overlay s1)) "/h")
+  (check-equal? (length (overlay-state-content (ui-state-active-overlay s1))) 1))
+
+(test-case "overlay-state: dismiss-overlay clears overlay"
+  (define s0 (initial-ui-state))
+  (define content (list (styled-line (list (styled-segment "test" '())))))
+  (define s1 (show-overlay s0 'command-palette content "/"))
+  (check-true (overlay-active? s1))
+  (define s2 (dismiss-overlay s1))
+  (check-false (overlay-active? s2))
+  (check-false (ui-state-active-overlay s2)))
+
+(test-case "overlay-state: update-overlay-input changes input"
+  (define s0 (initial-ui-state))
+  (define content (list (styled-line (list (styled-segment "test" '())))))
+  (define s1 (show-overlay s0 'command-palette content "/"))
+  (define s2 (update-overlay-input s1 "/he"))
+  (check-equal? (overlay-state-input (ui-state-active-overlay s2)) "/he"))
+
+(test-case "overlay-state: update-overlay-input on no overlay is no-op"
+  (define s0 (initial-ui-state))
+  (define s1 (update-overlay-input s0 "/he"))
+  (check-false (overlay-active? s1)))
+
+(test-case "overlay-state: show then dismiss returns to normal"
+  (define s0 (initial-ui-state))
+  (define content (list (styled-line (list (styled-segment "test" '())))))
+  (define s1 (show-overlay s0 'command-palette content "/help"))
+  (check-true (overlay-active? s1))
+  (define s2 (dismiss-overlay s1))
+  (check-false (overlay-active? s2))
+  ;; Transcript and other state preserved
+  (check-equal? (ui-state-transcript s2) '())
+  (check-equal? (ui-state-scroll-offset s2) 0))
