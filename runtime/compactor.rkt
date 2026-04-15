@@ -49,11 +49,12 @@
          make-llm-summarize-fn
          extract-file-tracker
          format-messages-for-summary
-         ;; Tiered Context Assembly (WP-37)
+         ;; Tiered Context Assembly (WP-37) — DEPRECATED (#648)
+         ;; Use build-session-context/tokens from context-builder.rkt instead.
          (struct-out tiered-context)
          build-tiered-context
          tiered-context->message-list
-         ;; R2-6: Context Assembly Hooks
+         ;; R2-6: Context Assembly Hooks — DEPRECATED (#648)
          build-tiered-context-with-hooks
          (struct-out context-assembly-payload)
          payload->tiered-context
@@ -365,7 +366,9 @@
 
 ;; ============================================================
 ;; Tiered Context Assembly (WP-37)
-;; ============================================================
+;; DEPRECATED (#648): Use build-session-context/tokens from context-builder.rkt
+;; instead. build-tiered-context remains for backward compatibility but will
+;; be removed in a future version.
 
 ;; Tiered context holds messages split into three tiers:
 ;; - Tier A: Compacted summaries of older messages

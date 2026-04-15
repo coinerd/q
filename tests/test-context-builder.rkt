@@ -119,3 +119,95 @@
    ))
 
 (run-tests context-builder-tests)
+
+;; ============================================================
+;; Token-aware context assembly tests (#646, #647)
+;; ============================================================
+
+(define token-aware-tests
+  (test-suite
+   "Token-aware context assembly"
+
+   (test-case "estimate-message-tokens: empty message"
+     (define msg (make-message "m1" #f 'user 'message (list) 1000 (hash)))
+     (check-equal? (estimate-message-tokens msg) 0))
+
+   (test-case "estimate-message-tokens: text message"
+     (define msg (make-message "m1" #f 'user 'message
+                               (list (make-text-part "Hello world")) 1000 (hash)))
+     (check-true (>= (estimate-message-tokens msg) 1)))
+
+   (test-case "estimate-message-tokens: long message"
+     (define long-text (make-string 1000 #\a))
+     (define msg (make-message "m1" #f 'user 'message
+                               (list (make-text-part long-text)) 1000 (hash)))
+     (define tokens (estimate-message-tokens msg))
+     (check-true (> tokens 0)))
+
+   (test-case "truncate-messages-to-budget: messages within budget are unchanged"
+     (define msgs
+       (for/list ([i (in-range 3)])
+         (make-message (format "m~a" i) #f 'user 'message
+                       (list (make-text-part "short")) 1000 (hash))))
+     (define result (truncate-messages-to-budget msgs 10000))
+     (check-equal? (length result) 3))
+
+   (test-case "truncate-messages-to-budget: truncates oldest when over budget"
+     (define msgs
+       (for/list ([i (in-range 10)])
+         (make-message (format "m~a" i) #f 'user 'message
+                       (list (make-text-part (make-string 100 #\x))) 1000 (hash))))
+     ;; Each message ~25 tokens. 10 messages = ~250 tokens. Budget 100 → ~4 fit.
+     (define result (truncate-messages-to-budget msgs 100))
+     (check-true (< (length result) 10))
+     (check-true (>= (length result) 1))
+     ;; Should keep the most recent messages (highest index)
+     (check-equal? (message-id (last result)) "m9"))
+
+   (test-case "truncate-messages-to-budget: preserves system instructions"
+     (define sys-msg
+       (make-message "sys" #f 'system 'system-instruction
+                     (list (make-text-part "You are helpful.")) 1000 (hash)))
+     (define user-msgs
+       (for/list ([i (in-range 10)])
+         (make-message (format "m~a" i) #f 'user 'message
+                       (list (make-text-part (make-string 100 #\x))) 1000 (hash))))
+     (define msgs (cons sys-msg user-msgs))
+     ;; Tiny budget — system instruction should survive
+     (define result (truncate-messages-to-budget msgs 10))
+     (define sys-remaining (filter (lambda (m) (eq? (message-kind m) 'system-instruction)) result))
+     (check-equal? (length sys-remaining) 1)
+     (check-equal? (message-id (car sys-remaining)) "sys"))
+
+   (test-case "truncate-messages-to-budget: preserves compaction summaries"
+     (define summary-msg
+       (make-message "summary1" #f 'system 'compaction-summary
+                     (list (make-text-part "Summary of old messages")) 1000 (hash)))
+     (define user-msgs
+       (for/list ([i (in-range 10)])
+         (make-message (format "m~a" i) #f 'user 'message
+                       (list (make-text-part (make-string 100 #\x))) 1000 (hash))))
+     (define msgs (cons summary-msg user-msgs))
+     (define result (truncate-messages-to-budget msgs 10))
+     (define summaries (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) result))
+     (check-equal? (length summaries) 1))
+
+   (test-case "truncate-messages-to-budget: empty list returns empty"
+     (check-equal? (truncate-messages-to-budget '() 100) '()))
+
+   (test-case "build-session-context/tokens: returns values"
+     (define dir (make-temp-dir))
+     (define sp (session-path dir))
+     (define ip (build-path dir "index.jsonl"))
+     (define entries
+       (list (make-timestamped-message "root" #f 'user 'message 1000)
+             (make-timestamped-message "c1" "root" 'assistant 'message 1001)))
+     (append-entries! sp entries)
+     (define idx (build-index! sp ip))
+     (define-values (msgs tokens) (build-session-context/tokens idx #:max-tokens 10000))
+     (check-true (>= (length msgs) 1))
+     (check-true (>= tokens 0))
+     (delete-directory/files dir #:must-exist? #f))
+   ))
+
+(run-tests token-aware-tests)
