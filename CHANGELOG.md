@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.9] — 2026-04-13
+
+### Added — Context Assembly Pipeline
+- Session index + context-builder tree walk wired into agent-session
+- ParentId chain uses active-leaf from index (no more stale IDs)
+- Settings extraction from path entries (model, thinking-level)
+
+### Added — Intelligent Compaction
+- LLM-powered structured summaries (Goal, Constraints, Progress, Key Decisions, Next Steps, Critical Context)
+- New `runtime/compaction-prompts.rkt` module with summary and iterative-update prompts
+- Cumulative file tracking across compactions (read/modified files)
+- Iterative compaction: updates previous summary instead of re-summarizing
+- Extension hook `session_before_compact` in compact-history
+
+### Added — Session Branching UX
+- `/tree` command renders session tree with Unicode box-drawing characters
+- `/name` command for session display naming
+- `branch-with-summary!` for branch switch with summary persistence
+- New `tui/tree-view.rkt` tree rendering module
+
+### Fixed — TUI Robustness
+- Mouse selection text extraction uses display-column offsets for CJK-correct copy
+- Lazy session persistence: directory created on first message write
+
 ## [0.8.8] — 2026-04-13
 
 ### Added — TUI Correctness
