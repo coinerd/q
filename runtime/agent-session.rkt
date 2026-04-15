@@ -60,6 +60,12 @@
          set-agent-session-compacting?!
          agent-session-last-compaction-time
          set-agent-session-last-compaction-time!
+         agent-session-persisted?
+         set-agent-session-persisted?!
+         agent-session-pending-entries
+         set-agent-session-pending-entries!
+         ensure-persisted!
+         buffer-or-append!
          make-agent-session
          resume-agent-session
          fork-session
@@ -89,7 +95,9 @@
          [active? #:mutable] ; boolean
          [start-time #:mutable] ; integer (seconds since epoch)
          [compacting? #:mutable] ; boolean — guard against recursive compaction
-         [last-compaction-time #:mutable]) ; integer or #f — timestamp of last compaction
+         [last-compaction-time #:mutable] ; integer or #f — timestamp of last compaction
+         [persisted? #:mutable] ; boolean — #f until directory + first write
+         [pending-entries #:mutable]) ; (listof message?) — buffered before persistence
   #:transparent)
 
 ;; ============================================================
@@ -98,6 +106,27 @@
 
 (define (session-log-path dir)
   (build-path dir "session.jsonl"))
+
+;; #771: Ensure session directory exists and flush pending entries.
+;; Called before the first write to the session log.
+;; Idempotent — no-op if already persisted.
+(define (ensure-persisted! sess)
+  (unless (agent-session-persisted? sess)
+    (make-directory* (agent-session-session-dir sess))
+    (set-agent-session-persisted?! sess #t)
+    ;; Flush any buffered entries
+    (when (not (null? (agent-session-pending-entries sess)))
+      (define log-path (session-log-path (agent-session-session-dir sess)))
+      (for ([entry (in-list (reverse (agent-session-pending-entries sess)))])
+        (append-entry! log-path entry))
+      (set-agent-session-pending-entries! sess '()))))
+
+;; #771: Buffer an entry for later persistence, or write immediately if already persisted.
+(define (buffer-or-append! sess entry)
+  (if (agent-session-persisted? sess)
+      (append-entry! (session-log-path (agent-session-session-dir sess)) entry)
+      (set-agent-session-pending-entries!
+       sess (cons entry (agent-session-pending-entries sess)))))
 
 (define (session-index-path dir)
   (build-path dir "session.index"))
@@ -118,7 +147,7 @@
   (define sid (generate-id))
   (define base-dir (hash-ref config 'session-dir))
   (define dir (build-path base-dir sid))
-  (make-directory* dir)
+  ;; #771: Don't create directory yet — deferred until first assistant response
 
   ;; Capture session creation time for duration tracking
   (define session-created-at (now-seconds))
@@ -138,7 +167,9 @@
                    #t ; active
                    session-created-at
                    #f ; compacting?
-                   #f)) ; last-compaction-time
+                   #f ; last-compaction-time
+                   #f ; persisted?
+                   '())) ; pending-entries
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
@@ -212,7 +243,9 @@
                    #t
                    (now-seconds)
                    #f ; compacting?
-                   #f)) ; last-compaction-time
+                   #f ; last-compaction-time
+                   #t ; persisted? (resumed sessions already have directory)
+                   '())) ; pending-entries
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
@@ -307,7 +340,9 @@
                    #t
                    (now-seconds)
                    #f ; compacting?
-                   #f)) ; last-compaction-time
+                   #f ; last-compaction-time
+                   #t ; persisted? (fork already created directory and wrote entries)
+                   '())) ; pending-entries
 
   ;; Emit session.forked on original session's bus
   (emit-session-event! (agent-session-event-bus sess)
@@ -377,8 +412,8 @@
                         (hasheq)))
         user-message))
 
-  ;; Append user message to session log
-  (append-entry! log-path user-msg)
+  ;; #771: Buffer user message (deferred persistence) — flushed on first assistant response
+  (buffer-or-append! sess user-msg)
 
   ;; Update index with new entry
   (when idx
@@ -596,13 +631,16 @@
   (define context-after-compact
     (maybe-compact-context sess context-with-system token-budget-threshold))
 
-  ;; 3. Run the core agent loop (model-select hook + iteration dispatch)
+  ;; 3. Ensure session directory exists before iteration writes assistant messages
+  (ensure-persisted! sess)
+
+  ;; 4. Run the core agent loop (model-select hook + iteration dispatch)
   (define final-result (dispatch-iteration sess context-after-compact max-iterations))
 
-  ;; 4. Rebuild index
+  ;; 5. Rebuild index
   (set-agent-session-index! sess (build-index! log-path idx-path))
 
-  ;; 5. Emit session.updated
+  ;; 6. Emit session.updated
   (emit-session-event!
    bus
    sid
