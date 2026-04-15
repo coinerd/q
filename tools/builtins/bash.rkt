@@ -17,7 +17,8 @@
                   exec-context?
                   exec-context-working-directory)
          "../../sandbox/subprocess.rkt"
-         "../../sandbox/limits.rkt")
+         "../../sandbox/limits.rkt"
+         (only-in "../../util/path-helpers.rkt" expand-home-path))
 
 (provide tool-bash
          current-warn-on-destructive
@@ -113,7 +114,8 @@
         (when (and (current-warn-on-destructive) (destructive-command? command))
           (fprintf (current-error-port) "WARNING: Destructive command detected: ~a~n" command))
      (define timeout-secs (hash-ref args 'timeout DEFAULT-TIMEOUT-SECONDS))
-     (define work-dir (hash-ref args 'working-directory #f))
+     (define raw-work-dir (hash-ref args 'working-directory #f))
+     (define work-dir (and raw-work-dir (expand-home-path raw-work-dir)))
 
      (define result
        (run-subprocess "/bin/sh"
