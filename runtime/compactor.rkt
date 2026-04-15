@@ -35,7 +35,12 @@
          (only-in "token-compaction.rkt"
                   build-token-summary-window
                   default-token-compaction-config
-                  token-compaction-config))
+                  token-compaction-config)
+         (only-in "split-turn.rkt"
+                  find-split-turn
+                  split-turn-result-is-split?
+                  split-turn-result-turn-messages
+                  generate-turn-prefix))
 
 (provide (struct-out compaction-strategy)
          (struct-out compaction-result)
@@ -311,8 +316,14 @@
        ;; Nothing to summarize — return identity result
        [(null? adjusted-old) (compaction-result #f 0 adjusted-recent)]
        [else
+        ;; #767: Detect split-turn — if cut falls mid-turn, generate turn prefix
+        (define turn-prefix
+          (let ([split-result (find-split-turn messages (length adjusted-old))])
+            (if (split-turn-result-is-split? split-result)
+                (generate-turn-prefix (split-turn-result-turn-messages split-result))
+                "")))
         ;; Choose summarization: LLM if provider given, else use summarize-fn
-        (define summary-text
+        (define base-summary-text
           (if (and provider model-name)
               (let ([file-tracker (extract-file-tracker adjusted-old)])
                 (llm-summarize adjusted-old
@@ -321,6 +332,11 @@
                                #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
                                #:file-tracker file-tracker))
               (summarize-fn adjusted-old)))
+        ;; Append turn prefix to summary if split-turn detected
+        (define summary-text
+          (if (string=? turn-prefix "")
+              base-summary-text
+              (string-append base-summary-text "\n\n" turn-prefix)))
         ;; Build file tracker metadata for the summary message
         (define file-tracker-meta
           (if (and provider model-name)
