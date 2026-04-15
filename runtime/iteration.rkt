@@ -43,6 +43,7 @@
          "../agent/event-bus.rkt"
          (only-in "../agent/queue.rkt"
                   dequeue-steering!
+                  dequeue-followup!
                   dequeue-all-followups!
                   queue-status)
          "../agent/loop.rkt"
@@ -321,7 +322,8 @@
 (define (run-iteration-loop context prov bus reg ext-reg log-path session-id max-iterations
                               #:cancellation-token [token #f]
                               #:config [config (hash)]
-                              #:queue [steering-queue #f])
+                              #:queue [steering-queue #f]
+                              #:follow-up-delivery-mode [follow-up-mode 'all])
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
   (define agent-start-payload
     (hasheq 'session-id session-id
@@ -405,8 +407,13 @@
                               result)])
                      ;; #662: Drain follow-up queue — if follow-ups exist,
                      ;; inject as user messages and continue the loop.
+                     ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
                      (if steering-queue
-                         (let ([followups (dequeue-all-followups! steering-queue)])
+                         (let ([followups
+                                (if (eq? follow-up-mode 'one-at-a-time)
+                                    (let ([one (dequeue-followup! steering-queue)])
+                                      (if one (list one) '()))
+                                    (dequeue-all-followups! steering-queue))])
                            (if (null? followups)
                                effective-result
                                (let ([followup-msgs
@@ -418,7 +425,8 @@
                                          (hasheq 'source 'followup)))])
                                  (emit-session-event!
                                   bus session-id "followup.injected"
-                                  (hasheq 'count (length followups)))
+                                  (hasheq 'count (length followups)
+                                          'mode (symbol->string follow-up-mode)))
                                  (append-entries! log-path followup-msgs)
                                  (loop (append ctx-with-steering
                                                new-msgs followup-msgs)

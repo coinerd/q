@@ -100,3 +100,25 @@
   (define status (ui-status-text next))
   (check-false (string-contains? status "steer"))
   (check-false (string-contains? status "follow")))
+
+(test-case "dequeue-followup! returns single item in FIFO order"
+  (define q (make-queue))
+  (enqueue-followup! q "first")
+  (enqueue-followup! q "second")
+  (enqueue-followup! q "third")
+  (check-equal? (dequeue-followup! q) "first")
+  (check-equal? (dequeue-followup! q) "second")
+  (check-equal? (dequeue-followup! q) "third")
+  (check-equal? (dequeue-followup! q) #f))
+
+(test-case "one-at-a-time mode dequeues only one followup"
+  ;; Simulate one-at-a-time logic: only dequeue one at a time
+  (define q (make-queue))
+  (enqueue-followup! q "a")
+  (enqueue-followup! q "b")
+  ;; One-at-a-time: dequeue one
+  (define one (dequeue-followup! q))
+  (check-equal? one "a")
+  ;; Should still have "b" in queue
+  (define remaining (dequeue-all-followups! q))
+  (check-equal? remaining '("b")))
