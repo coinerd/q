@@ -316,11 +316,13 @@
                          #:token-config [token-config (default-token-compaction-config)])
   ;; Dispatch 'session-before-compact hook if dispatcher provided
   ;; Returns identity result if hook blocks, otherwise proceeds with compaction.
+  ;; #769: Hook can provide custom summary via amend action.
+  (define hook-res
+    (and hook-dispatcher
+         (hook-dispatcher 'session-before-compact
+                          (hasheq 'message-count (length messages) 'strategy strategy))))
   (cond
-    [(and hook-dispatcher
-          (let ([hook-res (hook-dispatcher 'session-before-compact
-                                          (hasheq 'message-count (length messages) 'strategy strategy))])
-            (and (hook-result? hook-res) (eq? (hook-result-action hook-res) 'block))))
+    [(and (hook-result? hook-res) (eq? (hook-result-action hook-res) 'block))
      ;; Hook blocked compaction — return identity result immediately
      (compaction-result #f 0 messages)]
     [else
@@ -348,15 +350,22 @@
         (define current-ft (extract-file-tracker adjusted-old))
         (define previous-ft (find-previous-file-tracker adjusted-recent))
         (define cumulative-ft (merge-file-trackers current-ft previous-ft))
-        ;; Build summarization with cumulative file tracker
+        ;; #769: Check for hook-provided custom summary
+        (define custom-summary
+          (and (hook-result? hook-res)
+               (eq? (hook-result-action hook-res) 'amend)
+               (let ([payload (hook-result-payload hook-res)])
+                 (and (hash? payload) (hash-ref payload 'summary #f)))))
+        ;; Build summarization — use custom summary if provided, else standard path
         (define base-summary-text
-          (if (and provider model-name)
-              (llm-summarize adjusted-old
-                             provider
-                             model-name
-                             #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
-                             #:file-tracker cumulative-ft)
-              (summarize-fn adjusted-old)))
+          (or custom-summary
+              (if (and provider model-name)
+                  (llm-summarize adjusted-old
+                                 provider
+                                 model-name
+                                 #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
+                                 #:file-tracker cumulative-ft)
+                  (summarize-fn adjusted-old))))
         ;; Append turn prefix to summary if split-turn detected
         (define summary-text
           (if (string=? turn-prefix "")
