@@ -261,3 +261,21 @@
   (define result (compact-history msgs #:hook-dispatcher allow #:token-config tiny-config))
   ;; Hook passed — normal compaction
   (check > (compaction-result-removed-count result) 0))
+
+(test-case "compact-history sets firstKeptEntryId in summary metadata"
+  (define msgs (for/list ([i (in-range 20)])
+                 (make-message (format "id-~a" i) #f 'user 'message
+                               (list (make-text-part (format "msg ~a" i)))
+                               (current-seconds) (hash))))
+  (define tiny-config (token-compaction-config 5 0 10))
+  (define result (compact-history msgs #:token-config tiny-config))
+  (define summary (compaction-result-summary-message result))
+  (when summary
+    (define meta (message-meta summary))
+    (check-true (hash-has-key? meta 'firstKeptEntryId)
+                "summary should contain firstKeptEntryId")
+    (define first-kept (hash-ref meta 'firstKeptEntryId #f))
+    (define kept (compaction-result-kept-messages result))
+    (when (pair? kept)
+      (check-equal? first-kept (message-id (car kept))
+                    "firstKeptEntryId should match first kept message id"))))

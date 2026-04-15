@@ -329,6 +329,10 @@
                     (hasheq 'fileTracker ft)
                     (hasheq)))
               (hasheq)))
+        (define first-kept-id
+          (if (pair? adjusted-recent)
+              (message-id (car adjusted-recent))
+              #f))
         (define summary-msg
           (make-message
            (format "compaction-~a" (current-inexact-milliseconds))
@@ -337,7 +341,7 @@
            'compaction-summary
            (list (make-text-part summary-text))
            (current-seconds)
-           (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length adjusted-old))))
+           (hash-set (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length adjusted-old)) 'firstKeptEntryId first-kept-id)))
         (compaction-result summary-msg (length adjusted-old) adjusted-recent)])]))
 
 ;; ============================================================
