@@ -275,7 +275,18 @@
     (draw-styled-line! ubuf line (+ trans-y pad-count i) cols)
     (vector-set! frame-vec (+ trans-y pad-count i) line-ansi))
 
-  ;; 4. Draw status bar (inverse = fg=0, bg=7)
+  ;; 4. Draw widget container above input (#713)
+  (define widget-lines (get-widget-lines-above ui-state))
+  (define widget-count (length widget-lines))
+  (when (> widget-count 0)
+    (for ([line (in-list widget-lines)]
+          [i (in-naturals)])
+      (define widget-y (+ trans-y transcript-height i))
+      (when (< widget-y status-y)
+        (draw-styled-line! ubuf line widget-y cols)
+        (vector-set! frame-vec widget-y (styled-line->ansi line)))))
+
+  ;; 5. Draw status bar (inverse = fg=0, bg=7)
   (define status-line (render-status-bar ui-state cols))
   (assert-line-width! (styled-line->text status-line) cols)
   (draw-styled-line! ubuf status-line status-y cols)

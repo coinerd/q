@@ -170,7 +170,8 @@
   (define term (tui-ctx-term ctx))
 
   (define-values (cols rows) (tui-screen-size))
-  (define layout (compute-layout cols rows))
+  (define widget-lines (get-widget-lines-above state))
+  (define layout (compute-layout-with-widgets cols rows (length widget-lines)))
 
   ;; Render to ubuf (returns cursor position, state, frame lines)
   (define-values (cursor-col cursor-row state* frame-lines)
