@@ -24,6 +24,7 @@
          "../tui/render.rkt"
          "../tui/layout.rkt"
          "../tui/clipboard.rkt"
+         "../tui/char-width.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          (prefix-in commands: "../tui/commands.rkt")
@@ -140,14 +141,23 @@
                 (define text (styled-line->text line))
                 (cond
                   [(= i start-idx end-idx)
-                   ;; Single line: extract column range
+                   ;; Single line: extract column range (display-col→string-offset)
                    (substring text
-                              (min start-col (string-length text))
-                              (min (add1 end-col) (string-length text)))]
+                              (min (display-col->string-offset text start-col)
+                                   (string-length text))
+                              (min (display-col->string-offset text (add1 end-col))
+                                   (string-length text)))]
                   ;; First line: from start-col to end
-                  [(= i start-idx) (substring text (min start-col (string-length text)))]
+                  [(= i start-idx)
+                   (substring text
+                              (min (display-col->string-offset text start-col)
+                                   (string-length text)))]
                   ;; Last line: from 0 to end-col
-                  [(= i end-idx) (substring text 0 (min (add1 end-col) (string-length text)))]
+                  [(= i end-idx)
+                   (substring text
+                              0
+                              (min (display-col->string-offset text (add1 end-col))
+                                   (string-length text)))]
                   [else text]))
               "\n")))))
 
