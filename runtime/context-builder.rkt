@@ -9,10 +9,16 @@
 ;; Issue #498: Context assembly pipeline (tree walk).
 
 (require racket/list
+         racket/string
+         racket/set
          "../util/protocol-types.rkt"
-         "../runtime/session-index.rkt")
+         "../runtime/session-index.rkt"
+         "../llm/token-budget.rkt")
 
 (provide build-session-context
+         build-session-context/tokens
+         truncate-messages-to-budget
+         estimate-message-tokens
          entry->context-message)
 
 ;; ============================================================
@@ -96,6 +102,86 @@
 (define (transform-summary-to-user entry)
   ;; Transform a summary entry into a user-role message for context.
   (struct-copy message entry [role 'user]))
+
+;; ============================================================
+;; Token-aware context assembly (#646, #647)
+;; ============================================================
+
+;; Estimate token count for a single message struct.
+;; Extracts text from all text-parts in the message content.
+(define (estimate-message-tokens msg)
+  (define text-parts
+    (for/list ([part (in-list (message-content msg))]
+               #:when (text-part? part))
+      (text-part-text part)))
+  (estimate-text-tokens (string-join text-parts " ")))
+
+;; Build session context with token budget enforcement.
+;; If the assembled messages exceed max-tokens, truncates older messages
+;; while preserving system instructions and compaction summaries.
+;; Returns (values messages total-tokens)
+(define (build-session-context/tokens idx #:max-tokens max-tokens)
+  (define messages (build-session-context idx))
+  (cond
+    [(null? messages) (values '() 0)]
+    [else
+     (define total (for/sum ([m (in-list messages)]) (estimate-message-tokens m)))
+     (cond
+       [(<= total max-tokens) (values messages total)]
+       [else
+        (define truncated (truncate-messages-to-budget messages max-tokens))
+        (define new-total (for/sum ([m (in-list truncated)]) (estimate-message-tokens m)))
+        (values truncated new-total)])]))
+
+;; Truncate a message list to fit within a token budget.
+;; Strategy:
+;;   1. Always keep system-instruction and compaction-summary messages
+;;   2. Remove oldest non-system messages until within budget
+;;   3. Return truncated list
+(define (truncate-messages-to-budget messages max-tokens)
+  (cond
+    [(null? messages) '()]
+    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens m))
+         max-tokens)
+     messages]
+    [else
+     ;; Separate protected (system/compaction) from removable messages
+     (define-values (protected removable)
+       (partition (lambda (m)
+                    (memq (message-kind m) '(system-instruction compaction-summary)))
+                  messages))
+     ;; Protected messages always included; drop oldest removable until budget met
+     (define protected-tokens
+       (for/sum ([m (in-list protected)]) (estimate-message-tokens m)))
+     (define remaining-budget (- max-tokens protected-tokens))
+     (cond
+       [(<= remaining-budget 0) protected]
+       [else
+        ;; Keep most recent removable messages that fit
+        (define kept-removable
+          (fit-messages-from-recent removable remaining-budget))
+        ;; Reassemble in original order: protected + kept-removable
+        ;; (preserving order from original messages list)
+        (define kept-ids (for/set ([m (in-list kept-removable)]) (message-id m)))
+        (for/list ([m (in-list messages)]
+                   #:when (or (memq (message-kind m) '(system-instruction compaction-summary))
+                              (set-member? kept-ids (message-id m))))
+          m)])]))
+
+;; Fit as many messages as possible from the recent end within a token budget.
+;; Returns messages in their original order.
+(define (fit-messages-from-recent messages budget)
+  (let loop ([remaining (reverse messages)]
+             [acc '()]
+             [used 0])
+    (cond
+      [(null? remaining) (reverse acc)]
+      [else
+       (define m (car remaining))
+       (define tokens (estimate-message-tokens m))
+       (cond
+         [(> (+ used tokens) budget) (reverse acc)]
+         [else (loop (cdr remaining) (cons m acc) (+ used tokens))])])))
 
 ;; ============================================================
 ;; Utility
