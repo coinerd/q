@@ -325,7 +325,7 @@
 
 (test-case "empty payload event"
   (define evt-empty (make-event "session.started" 0 "s" #f '#hash()))
-  (check-equal? (hash-keys (event-payload (roundtrip-event evt-empty))) '()))
+  (check-equal? (sort (hash-keys (event-payload (roundtrip-event evt-empty))) symbol<?) '()))
 
 (test-case "bookmark message kind"
   (define msg-bm (make-message "bm-1" "msg-1" 'user 'bookmark

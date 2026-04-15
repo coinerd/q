@@ -100,7 +100,7 @@
      (check-false (destructive-command? "grep 'rm -rf' file.txt")))
 
    (test-case "ls -la is NOT destructive"
-     (check-false (destructive-command? "ls -la /home/user")))
+     (check-false (destructive-command? "ls -la /tmp")))
 
    (test-case "echo hello | grep h is NOT destructive"
      (check-false (destructive-command? "echo hello | grep h")))
