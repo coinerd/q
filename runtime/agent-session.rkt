@@ -114,9 +114,11 @@
   (unless (agent-session-persisted? sess)
     (make-directory* (agent-session-session-dir sess))
     (set-agent-session-persisted?! sess #t)
+    ;; #773: Write version header to new session log
+    (define log-path (session-log-path (agent-session-session-dir sess)))
+    (write-session-version-header! log-path)
     ;; Flush any buffered entries
     (when (not (null? (agent-session-pending-entries sess)))
-      (define log-path (session-log-path (agent-session-session-dir sess)))
       (for ([entry (in-list (reverse (agent-session-pending-entries sess)))])
         (append-entry! log-path entry))
       (set-agent-session-pending-entries! sess '()))))
@@ -210,7 +212,11 @@
   (unless (directory-exists? dir)
     (error 'resume-agent-session "session directory not found: ~a" dir))
 
+  ;; #773: Ensure session version header is up to date
   (define log-path (session-log-path dir))
+  (when (file-exists? log-path)
+    (ensure-session-version-header! log-path))
+
   (define idx-path (session-index-path dir))
 
   ;; Rebuild index from log (if log exists)
@@ -652,7 +658,9 @@
 (define (session-history sess)
   (define log-path (session-log-path (agent-session-session-dir sess)))
   (if (file-exists? log-path)
-      (load-session-log log-path)
+      ;; #773: Filter out session-info (version header) entries
+      (filter (lambda (m) (not (eq? (message-kind m) 'session-info)))
+              (load-session-log log-path))
       '()))
 
 (define (session-active? sess)
