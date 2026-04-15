@@ -682,6 +682,34 @@
 
     (test-case "styled-line->ansi: bright color segment"
       (define sl (styled-line (list (styled-segment "muted text" '(bright-black)))))
-      (check-equal? (styled-line->ansi sl) "\x1b[90mmuted text\x1b[0m"))))
+      (check-equal? (styled-line->ansi sl) "\x1b[90mmuted text\x1b[0m"))
+
+    ;; SGR leak regression: styled→plain segment must not leak styles
+    (test-case "styled-line->ansi: styled to plain segment resets SGR"
+      (define sl (styled-line (list (styled-segment "> " '(bold cyan))
+                                     (styled-segment "hello" '()))))
+      (define ansi (styled-line->ansi sl))
+      ;; First segment gets SGR codes (no leading reset since it's first)
+      (check-true (string-contains? ansi "\x1b[1;36m> "))
+      ;; Plain segment after styled gets a reset before it
+      (check-true (string-contains? ansi "\x1b[0mhello"))
+      (check-true (string-suffix? ansi "\x1b[0m"))
+      ;; The "hello" text must NOT have the cyan/bold style active
+      (check-false (string-contains? ansi "\x1b[1;36mhello")
+                   "plain segment must not inherit previous style"))
+
+    (test-case "styled-line->ansi: three segments with mixed styles"
+      (define sl (styled-line (list (styled-segment "[" '(bold))
+                                     (styled-segment "ok" '(green))
+                                     (styled-segment "]" '()))))
+      (define ansi (styled-line->ansi sl))
+      ;; First segment: no leading reset
+      (check-true (string-contains? ansi "\x1b[1m["))
+      ;; Second segment: reset + new style
+      (check-true (string-contains? ansi "\x1b[0m\x1b[32mok"))
+      ;; Third segment (plain after styled): reset
+      (check-true (string-contains? ansi "\x1b[0m]"))
+      ;; Final reset
+      (check-true (string-suffix? ansi "\x1b[0m")))))
 
 (run-tests cjk-wrapping-tests)
