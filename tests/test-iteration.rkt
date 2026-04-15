@@ -177,12 +177,12 @@
 (test-case "ensure-hash-args with empty JSON object string returns empty hash"
   (define result (ensure-hash-args "{}"))
   (check-pred hash? result)
-  (check-equal? (hash-keys result) '()))
+  (check-equal? (sort (hash-keys result) symbol<?) '()))
 
 (test-case "ensure-hash-args with empty string returns empty hash"
   (define result (ensure-hash-args ""))
   (check-pred hash? result)
-  (check-equal? (hash-keys result) '()))
+  (check-equal? (sort (hash-keys result) symbol<?) '()))
 
 ;; Run tests
 (module+ main

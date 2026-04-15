@@ -85,8 +85,8 @@
 
 ;; Check if two trees are equivalent
 (define (trees-equivalent? tree1 tree2)
-  (define keys1 (hash-keys tree1))
-  (define keys2 (hash-keys tree2))
+  (define keys1 (sort (hash-keys tree1) string<?))
+  (define keys2 (sort (hash-keys tree2) string<?))
   (and (= (length keys1) (length keys2))
        (for/and ([k (in-list keys1)])
          (equal? (hash-ref tree1 k '()) (hash-ref tree2 k '())))))
