@@ -40,7 +40,9 @@
          ensure-session-version-header!
          migrate-session-log!
          ;; Session forking (#500)
-         fork-session!)
+         fork-session!
+         ;; Session naming
+         write-session-name!)
 
 ;; ── Write-ahead marker ──
 
@@ -327,6 +329,22 @@
 ;; ============================================================
 ;; Session forking (#500)
 ;; ============================================================
+
+;; ============================================================
+;; Session naming
+;; ============================================================
+
+(define (write-session-name! log-path name)
+  ;; Persist session name as a session-info entry.
+  (define name-msg
+    (make-message (format "session-name-~a" (current-inexact-milliseconds))
+                  #f
+                  'system
+                  'session-info
+                  (list (make-text-part (format "Session renamed: ~a" name)))
+                  (current-seconds)
+                  (hasheq 'name name)))
+  (append-entry! log-path name-msg))
 
 (define (fork-session! source-path source-entry-id dest-path)
   ;; Extract root→entry path from source session to a new JSONL file.

@@ -32,8 +32,8 @@
       (process-slash-command cctx 'help)
       (define state (unbox (cmd-ctx-state-box cctx)))
       (define transcript (ui-state-transcript state))
-      ;; Should have 13 entries: header + 12 commands
-      (check-equal? (length transcript) 14 "/help produces 14 entries (header + 13 commands)")
+      ;; Should have 16 entries: header + 15 commands (including /tree and /name)
+      (check-equal? (length transcript) 16 "/help produces 16 entries (header + 15 commands)")
       ;; First entry is the header
       (check-true (string-contains? (transcript-entry-text (first transcript)) "Commands:")
                   "first entry is the Commands: header")

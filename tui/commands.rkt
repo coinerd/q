@@ -17,6 +17,7 @@
          "render.rkt"
          "terminal.rkt"
          "palette.rkt"
+         "tree-view.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/session-index.rkt"
@@ -227,6 +228,65 @@
      'continue]))
 
 ;; ============================================================
+;; /tree command handler
+;; ============================================================
+
+(define (handle-tree-command cctx)
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (define idx (get-session-index cctx))
+  (cond
+    [(not idx)
+     (define entry (make-entry 'error "No session index available" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    [else
+     (define entries (session-index-entry-order idx))
+     (if (zero? (vector-length entries))
+         (let ([entry (make-entry 'system "Session is empty." 0 (hash))])
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           'continue)
+         (let ()
+           (define msgs (vector->list entries))
+           (define nodes (build-tree-nodes msgs))
+           (define active-leaf-id (let ([leaf (active-leaf idx)]) (and leaf (message-id leaf))))
+           (define-values (cols rows) (tui-screen-size))
+           (define lines (render-session-tree nodes active-leaf-id cols))
+           (define header (make-entry 'system "Session tree:" 0 (hash)))
+           (define tree-entries
+             (for/list ([line (in-list lines)])
+               (make-entry 'system line 0 (hash))))
+           (define all-entries (cons header tree-entries))
+           (define new-state
+             (for/fold ([s state]) ([e (in-list all-entries)])
+               (add-transcript-entry s e)))
+           (set-box! (cmd-ctx-state-box cctx) new-state)
+           'continue))]))
+
+;; ============================================================
+;; /name command handler
+;; ============================================================
+
+(define (handle-name-command cctx [title #f])
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (cond
+    [(not title)
+     (define entry (make-entry 'error "Usage: /name <title>" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    [else
+     ;; Publish name event for runtime to persist
+     (when (cmd-ctx-event-bus cctx)
+       (publish! (cmd-ctx-event-bus cctx)
+                 (make-event "session.name"
+                             (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
+                             (or (ui-state-session-id state) "")
+                             #f
+                             (hasheq 'name title))))
+     (define entry (make-entry 'system (format "[session named: ~a]" title) 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]))
+
+;; ============================================================
 ;; /model command handler
 ;; ============================================================
 
@@ -351,6 +411,7 @@
        [(switch) (handle-switch-command cctx (cadr cmd))]
        [(children) (handle-children-command cctx (cadr cmd))]
        [(model) (handle-model-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
+       [(name) (handle-name-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
        [(fork) (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
        [(sessions) (handle-sessions-tui-command cctx cmd)]
        [(switch-error children-error)
@@ -417,8 +478,10 @@
           (make-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
+       [(tree) (handle-tree-command cctx)]
        [(branches) (handle-branches-command cctx)]
        [(leaves) (handle-leaves-command cctx)]
+       [(name) (handle-name-command cctx)]
        [(sessions) (handle-sessions-tui-command cctx #f)]
        [(quit)
         (set-box! (cmd-ctx-running-box cctx) #f)
