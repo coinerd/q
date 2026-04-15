@@ -71,7 +71,9 @@
                   cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
          (only-in "../util/hook-types.rkt"
-                  hook-result-action hook-result-payload hook-result?))
+                  hook-result-action hook-result-payload hook-result?)
+         (only-in "../runtime/auto-retry.rkt"
+                  with-auto-retry retryable-error?))
 
 (provide run-iteration-loop
          emit-session-event!
@@ -211,11 +213,24 @@
           (merge-tool-lists base-tools ext-tools)
           base-tools)))
 
-  (run-agent-turn ctx-final prov bus
-                  #:session-id session-id
-                  #:turn-id turn-id
-                  #:tools tools
-                  #:cancellation-token token))
+  (with-auto-retry
+   (lambda ()
+     (run-agent-turn ctx-final prov bus
+                     #:session-id session-id
+                     #:turn-id turn-id
+                     #:tools tools
+                     #:cancellation-token token))
+   #:max-retries 2
+   #:base-delay-ms 1000
+   #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                (publish! bus
+                          (make-event "auto-retry.start"
+                                                (current-inexact-milliseconds)
+                                                session-id turn-id
+                                                (hasheq 'attempt attempt
+                                                        'max-retries max-retries
+                                                        'delay-ms delay-ms
+                                                        'error error-msg))))))
 
 ;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
 ;; and return (values tool-result-messages updated-ctx) for the next loop iteration.
