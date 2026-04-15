@@ -35,13 +35,16 @@
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message? message-id message-role message-content
-                  make-message make-tool-result-part
+                  make-message make-tool-result-part make-text-part
                   tool-call-part? tool-call-part-id tool-call-part-name tool-call-part-arguments
                   make-tool-call tool-call-id tool-call-name
                   make-loop-result loop-result-termination-reason loop-result-messages loop-result-metadata
                   make-event)
          "../agent/event-bus.rkt"
-         "../agent/queue.rkt"
+         (only-in "../agent/queue.rkt"
+                  dequeue-steering!
+                  dequeue-all-followups!
+                  queue-status)
          "../agent/loop.rkt"
          ;; ARCH-01 upward import — runtime→tools: iteration loop builds exec
          ;; contexts and queries the tool registry to pass tool definitions to
@@ -309,6 +312,11 @@
         (define ctx-with-steering
           (if steering-queue
               (let ([steering-msgs (dequeue-all-steering! steering-queue)])
+                ;; #664: Emit queue-status event for TUI status bar
+                (let ([qs (queue-status steering-queue)])
+                  (when (or (> (hash-ref qs 'steering 0) 0)
+                            (> (hash-ref qs 'followup 0) 0))
+                    (emit-session-event! bus session-id "queue.status-update" qs)))
                 (if (null? steering-msgs)
                     ctx
                     (append ctx steering-msgs)))
@@ -358,13 +366,34 @@
                 [(eq? termination 'completed)
                  (append-entries! log-path new-msgs)
                  ;; Dispatch 'turn-end hook
-                 (define-values (amended-result after-hook-res)
-                   (maybe-dispatch-hooks ext-reg 'turn-end result))
-                 (define effective-result
-                   (if (and after-hook-res (eq? (hook-result-action after-hook-res) 'amend))
-                       amended-result
-                       result))
-                 effective-result]
+                 (let-values ([(amended-result after-hook-res)
+                               (maybe-dispatch-hooks ext-reg 'turn-end result)])
+                   (let ([effective-result
+                          (if (and after-hook-res
+                                   (eq? (hook-result-action after-hook-res) 'amend))
+                              amended-result
+                              result)])
+                     ;; #662: Drain follow-up queue — if follow-ups exist,
+                     ;; inject as user messages and continue the loop.
+                     (if steering-queue
+                         (let ([followups (dequeue-all-followups! steering-queue)])
+                           (if (null? followups)
+                               effective-result
+                               (let ([followup-msgs
+                                      (for/list ([fu (in-list followups)])
+                                        (make-message
+                                         (generate-id) #f 'user 'text
+                                         (list (make-text-part fu))
+                                         (now-seconds)
+                                         (hasheq 'source 'followup)))])
+                                 (emit-session-event!
+                                  bus session-id "followup.injected"
+                                  (hasheq 'count (length followups)))
+                                 (append-entries! log-path followup-msgs)
+                                 (loop (append ctx-with-steering
+                                               new-msgs followup-msgs)
+                                       (add1 iteration)))))
+                         effective-result)))]
 
                 ;; ── Max iterations reached: append and stop ──
                 [(and (eq? termination 'tool-calls-pending)

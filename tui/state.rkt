@@ -98,6 +98,7 @@
          rendered-cache-width ; integer or #f — width used for cache
          next-entry-id ; integer — monotonic counter
          active-overlay ; (or/c #f overlay-state) — currently displayed overlay
+         queue-counts ; hash or #f — steering/followup counts from queue.status-update
          )
   #:transparent)
 
@@ -193,6 +194,7 @@
             #f ; rendered-cache-width
             0 ; next-entry-id
             #f ; active-overlay
+            #f ; queue-counts
             ))
 
 ;; ============================================================
@@ -346,6 +348,9 @@
                                             (hasheq 'name name)))
                   [pending-tool-name #f])]
 
+    [("queue.status-update")
+     (struct-copy ui-state state [queue-counts payload])]
+
     [else state])) ;; Ignore unknown events
 
 ;; ============================================================
@@ -428,11 +433,27 @@
 (define (ui-status-text state)
   (or (ui-state-status-message state)
       (if (ui-state-busy? state)
-          (format "busy~a..."
+          (format "busy~a...~a"
                   (if (ui-state-pending-tool-name state)
                       (format " (~a)" (ui-state-pending-tool-name state))
-                      ""))
-          "idle")))
+                      "")
+                  (queue-status-suffix (ui-state-queue-counts state)))
+          (format "idle~a" (queue-status-suffix (ui-state-queue-counts state))))))
+
+;; Format queue counts as status suffix
+(define (queue-status-suffix counts)
+  (if (not counts)
+      ""
+      (let ([steering (hash-ref counts 'steering 0)]
+            [followup (hash-ref counts 'followup 0)])
+        (cond
+          [(and (> steering 0) (> followup 0))
+           (format " | \u2691~a steer, ~a follow" steering followup)]
+          [(> steering 0)
+           (format " | \u2691~a steer" steering)]
+          [(> followup 0)
+           (format " | \u2691~a follow" followup)]
+          [else ""]))))
 
 ;; ============================================================
 ;; Branch management helpers
