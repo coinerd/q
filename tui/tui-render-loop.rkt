@@ -196,7 +196,8 @@
          [(write)
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1)) ; ANSI is 1-based
           (display "\x1b[2K" (current-output-port)) ; clear line
-          (display (diff-cmd-content cmd) (current-output-port))]
+          (display (fix-sgr-bg-black (diff-cmd-content cmd))
+                   (current-output-port))]
          [(clear-from)
           ;; Clear from given row to end of screen
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1))

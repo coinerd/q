@@ -239,7 +239,9 @@
 
   ;; Build frame-lines for diffing
   (define frame-vec (make-vector rows ""))
-  (vector-set! frame-vec header-y header-text)
+  ;; Header: store ANSI-encoded (inverse video) for correct incremental diff
+  (vector-set! frame-vec header-y
+                (string-append "\x1b[0m\x1b[30;47m" header-text "\x1b[0m"))
 
   ;; 3. Draw transcript entries (with render cache)
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))

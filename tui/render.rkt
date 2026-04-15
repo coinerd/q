@@ -106,17 +106,30 @@
 ;; Convert a styled-line to an ANSI-encoded string.
 ;; Each segment gets its SGR codes; a final reset is appended.
 (define (styled-line->ansi sl)
+  ;; Emit reset before each segment so styles don't leak between them.
+  ;; This means every segment starts with \x1b[0m (except the very first
+  ;; one if it has no previous styled segment to reset from). We use a
+  ;; simple rule: reset before every segment after the first styled one.
+  (define seen-styled? (box #f))
   (define parts
     (for/list ([seg (in-list (styled-line-segments sl))])
       (define text (styled-segment-text seg))
       (define styles (styled-segment-style seg))
-      (if (null? styles)
-          text
-          (string-append (styles->sgr styles) text))))
+      (cond
+        [(null? styles)
+         ;; Plain segment: reset if a previous segment had styles
+         (if (unbox seen-styled?)
+             (string-append "\x1b[0m" text)
+             text)]
+        [else
+         ;; Styled segment: reset before (if not first) + SGR + text
+         (define reset-prefix
+           (if (unbox seen-styled?) "\x1b[0m" ""))
+         (set-box! seen-styled? #t)
+         (string-append reset-prefix (styles->sgr styles) text)])))
   (define content (apply string-append parts))
   ;; Append SGR reset if any segment had styles
-  (if (for/or ([seg (in-list (styled-line-segments sl))])
-        (pair? (styled-segment-style seg)))
+  (if (unbox seen-styled?)
       (string-append content "\x1b[0m")
       content))
 
