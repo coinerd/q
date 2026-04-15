@@ -26,7 +26,11 @@
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
          "../extensions/api.rkt"
-         (only-in "../extensions/loader.rkt" load-extension!))
+         (only-in "../extensions/loader.rkt" load-extension!)
+         (only-in "../extensions/hooks.rkt" dispatch-hooks)
+         (only-in "../util/hook-types.rkt" hook-amend hook-result-action hook-result-payload)
+         (only-in "../tui/palette.rkt" commands-from-hashes merge-extension-commands make-command-registry)
+         (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -92,6 +96,20 @@
   (load-extensions-from-dir! ext-reg (build-path project-dir ".q" "extensions") #:event-bus bus)
   (load-extensions-from-dir! ext-reg (build-path project-dir ".pi" "extensions") #:event-bus bus)
 
+  ;; #677/#678: Query extensions for commands and shortcuts
+  (define ext-cmds
+    (let ()
+      (define result (dispatch-hooks 'register-commands (hasheq) ext-reg))
+      (if (and result (eq? (hook-result-action result) 'amend))
+          (commands-from-hashes (hash-ref (hook-result-payload result) 'commands '()))
+          '())))
+  (define ext-shortcuts
+    (let ()
+      (define result (dispatch-hooks 'register-shortcuts (hasheq) ext-reg))
+      (if (and result (eq? (hook-result-action result) 'amend))
+          (hash-ref (hook-result-payload result) 'shortcuts '())
+          '())))
+
   ;; Model name from CLI --model flag
   (define model-name (hash-ref base-config 'model #f))
 
@@ -101,6 +119,8 @@
   (hash-set! base-config 'event-bus bus)
   (hash-set! base-config 'session-dir session-dir)
   (hash-set! base-config 'extension-registry ext-reg)
+  (hash-set! base-config 'extension-commands ext-cmds)
+  (hash-set! base-config 'extension-shortcuts ext-shortcuts)
   ;; Resolve effective model name: CLI flag > settings default
   ;; Also persist model-registry for /model command
   (define model-reg (make-model-registry-from-config (q-settings-merged settings)))
