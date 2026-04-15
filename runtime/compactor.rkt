@@ -57,6 +57,8 @@
          llm-summarize
          make-llm-summarize-fn
          extract-file-tracker
+         find-previous-file-tracker
+         merge-file-trackers
          format-messages-for-summary
          ;; Tiered Context Assembly (WP-37) — DEPRECATED (#648)
          ;; Use build-session-context/tokens from context-builder.rkt instead.
@@ -168,6 +170,26 @@
                             #:when (text-part? part))
                    (text-part-text part))
                  "")))
+
+;; #768: Find the file tracker from the most recent compaction summary.
+;; Returns a hash like (hasheq 'readFiles (...) 'modifiedFiles (...)) or (hasheq).
+(define (find-previous-file-tracker messages)
+  (or (for/first ([m (in-list (reverse messages))]
+                  #:when (eq? (message-kind m) 'compaction-summary))
+        (define meta (message-meta m))
+        (hash-ref meta 'fileTracker (hasheq)))
+      (hasheq)))
+
+;; #768: Merge two file trackers, deduplicating file paths.
+(define (merge-file-trackers . trackers)
+  (define all-reads (mutable-set))
+  (define all-writes (mutable-set))
+  (for ([ft (in-list trackers)])
+    (for ([path (in-list (hash-ref ft 'readFiles '()))])
+      (set-add! all-reads path))
+    (for ([path (in-list (hash-ref ft 'modifiedFiles '()))])
+      (set-add! all-writes path)))
+  (hasheq 'readFiles (set->list all-reads) 'modifiedFiles (set->list all-writes)))
 
 ;; Call the LLM to summarize messages.
 ;; When #:previous-summary is provided, uses iterative update prompt.
@@ -322,15 +344,18 @@
             (if (split-turn-result-is-split? split-result)
                 (generate-turn-prefix (split-turn-result-turn-messages split-result))
                 "")))
-        ;; Choose summarization: LLM if provider given, else use summarize-fn
+        ;; #768: Build cumulative file tracker merging current batch with previous compaction
+        (define current-ft (extract-file-tracker adjusted-old))
+        (define previous-ft (find-previous-file-tracker adjusted-recent))
+        (define cumulative-ft (merge-file-trackers current-ft previous-ft))
+        ;; Build summarization with cumulative file tracker
         (define base-summary-text
           (if (and provider model-name)
-              (let ([file-tracker (extract-file-tracker adjusted-old)])
-                (llm-summarize adjusted-old
-                               provider
-                               model-name
-                               #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
-                               #:file-tracker file-tracker))
+              (llm-summarize adjusted-old
+                             provider
+                             model-name
+                             #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
+                             #:file-tracker cumulative-ft)
               (summarize-fn adjusted-old)))
         ;; Append turn prefix to summary if split-turn detected
         (define summary-text
@@ -340,10 +365,9 @@
         ;; Build file tracker metadata for the summary message
         (define file-tracker-meta
           (if (and provider model-name)
-              (let ([ft (extract-file-tracker adjusted-old)])
-                (if (> (hash-count ft) 0)
-                    (hasheq 'fileTracker ft)
-                    (hasheq)))
+              (if (> (hash-count cumulative-ft) 0)
+                  (hasheq 'fileTracker cumulative-ft)
+                  (hasheq))
               (hasheq)))
         (define first-kept-id
           (if (pair? adjusted-recent)
