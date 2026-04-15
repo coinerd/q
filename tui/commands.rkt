@@ -79,8 +79,15 @@
 (define (get-session-index cctx)
   (define dir (cmd-ctx-session-dir cctx))
   (if dir
-      (with-handlers ([exn:fail? (lambda (e) #f)])
-        (load-index dir))
+      (with-handlers ([exn:fail? (lambda (e)
+                                    (fprintf (current-error-port) "WARNING: Failed to load session index: ~a~n" (exn-message e))
+                                    #f)])
+        (define state (unbox (cmd-ctx-state-box cctx)))
+        (define sid (ui-state-session-id state))
+        (if sid
+            (let ([index-path (build-path dir sid "session.index")])
+              (load-index index-path))
+            #f))
       #f))
 
 ;; ============================================================
@@ -183,7 +190,7 @@
      'continue]
     [else
      (define entries (session-index-entry-order idx))
-     (if (null? entries)
+     (if (zero? (vector-length entries))
          (let ([entry (make-entry 'system "Session is empty." 0 (hash))])
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
            'continue)
