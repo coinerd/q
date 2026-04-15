@@ -26,6 +26,9 @@
                   message-id
                   message-role
                   message-content
+                  message-kind
+                  message-meta
+                  message-parent-id
                   make-message
                   make-text-part
                   content-part->jsexpr
@@ -40,6 +43,8 @@
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"
+         (only-in "../runtime/context-builder.rkt"
+                  (build-session-context context-builder:build-session-context))
          "../util/ids.rkt"
          (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks))
 
@@ -277,24 +282,39 @@
 ;; ============================================================
 
 ;; build-session-context — context preparation:
-;;   converts user-message, appends to log, loads history, injects
-;;   system instructions. Returns the context message list.
+;;   converts user-message, appends to log, builds/updates index,
+;;   walks tree via context-builder, injects system instructions.
+;;   Returns the context message list.
+;;
+;;   Wave 1 (#520): Uses session-index + context-builder tree walk
+;;   instead of linear load-session-log.
 (define (build-session-context sess user-message)
   (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define idx-path (session-index-path (agent-session-session-dir sess)))
+
+  ;; Ensure index exists (build if first time)
+  (unless (agent-session-index sess)
+    (when (file-exists? log-path)
+      (set-agent-session-index!
+       sess (build-index! log-path idx-path))))
+  (define idx (agent-session-index sess))
 
   ;; Convert string to message struct if needed
   (define user-msg
     (if (string? user-message)
         (let ()
-          ;; Determine parent from existing history
-          (define existing
-            (if (file-exists? log-path)
-                (load-session-log log-path)
-                '()))
+          ;; Determine parent from active leaf in index (#521: use stored IDs)
           (define parent-id
-            (if (null? existing)
-                #f
-                (message-id (last existing))))
+            (if idx
+                (let ([leaf (active-leaf idx)])
+                  (and leaf (message-id leaf)))
+                ;; No index yet — determine from log
+                (let ([existing (if (file-exists? log-path)
+                                    (load-session-log log-path)
+                                    '())])
+                  (if (null? existing)
+                      #f
+                      (message-id (last existing))))))
           (make-message (generate-id)
                         parent-id
                         'user
@@ -307,13 +327,26 @@
   ;; Append user message to session log
   (append-entry! log-path user-msg)
 
-  ;; Build context from full session history
-  (define history (load-session-log log-path))
+  ;; Update index with new entry
+  (when idx
+    (append-to-leaf! idx user-msg))
+
+  ;; Build context: tree walk via context-builder when index available
+  (define context-messages
+    (if idx
+        (context-builder:build-session-context idx)
+        ;; Fallback: no index — use linear history (backward compat)
+        (load-session-log log-path)))
+
+  ;; Extract settings from path entries (#522)
+  (define settings (extract-path-settings context-messages))
+  (when (hash-ref settings 'model #f)
+    (set-agent-session-model-name! sess (hash-ref settings 'model)))
 
   ;; Inject system instructions as an ephemeral system message prefix
   (define system-instrs (agent-session-system-instructions sess))
   (if (null? system-instrs)
-      history
+      context-messages
       (cons (make-message (generate-id)
                           #f
                           'system
@@ -321,7 +354,23 @@
                           (list (make-text-part (string-join system-instrs "\n\n")))
                           (now-seconds)
                           (hasheq))
-            history)))
+            context-messages)))
+
+;; extract-path-settings — walk context messages to find latest
+;;   model-change and thinking-level-change entries.
+;;   Returns a hash with 'model and 'thinking-level keys.
+(define (extract-path-settings messages)
+  (for/fold ([settings (hasheq)])
+            ([msg (in-list messages)])
+    (define kind (message-kind msg))
+    (cond
+      [(and (eq? kind 'model-change)
+            (hash? (message-meta msg)))
+       (hash-set settings 'model (hash-ref (message-meta msg) 'model #f))]
+      [(and (eq? kind 'thinking-level-change)
+            (hash? (message-meta msg)))
+       (hash-set settings 'thinking-level (hash-ref (message-meta msg) 'level #f))]
+      [else settings])))
 
 ;; maybe-compact-context — token budget check and compaction triggering.
 ;;   May mutate context (return a compacted version). Returns the
