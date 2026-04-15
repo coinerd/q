@@ -41,6 +41,11 @@
          update-overlay-input
          dismiss-overlay
          overlay-active?
+         ;; Overlay anchors (#725)
+         ANCHOR-TOP-LEFT
+         ANCHOR-CENTER
+         ANCHOR-BOTTOM-RIGHT
+         anchor?
 
          ;; Event reduction (pure)
          apply-event-to-state
@@ -123,6 +128,10 @@
         (type      ; symbol — 'command-palette | other overlay types
          content   ; (listof styled-line) — overlay render content
          input     ; string — current input for the overlay
+         anchor    ; symbol — 'top-left | 'center | 'bottom-right (default 'top-left)
+         width     ; (or/c integer? #f) — explicit width override
+         height    ; (or/c integer? #f) — explicit height override
+         margin    ; integer — margin around overlay (default 0)
          )
   #:transparent)
 
@@ -491,13 +500,30 @@
   (struct-copy ui-state state [visible-branches '()]))
 
 ;; ============================================================
+;; Overlay anchors (#725)
+;; ============================================================
+
+(define ANCHOR-TOP-LEFT 'top-left)
+(define ANCHOR-CENTER 'center)
+(define ANCHOR-BOTTOM-RIGHT 'bottom-right)
+
+(define (anchor? v)
+  (and (symbol? v)
+       (or (eq? v ANCHOR-TOP-LEFT)
+           (eq? v ANCHOR-CENTER)
+           (eq? v ANCHOR-BOTTOM-RIGHT))))
+
+;; ============================================================
 ;; Overlay helpers (#643)
 ;; ============================================================
 
-(define (show-overlay state type content [input ""])
-  ;; Show an overlay with the given type, content lines, and input
+(define (show-overlay state type content [input ""] #:anchor [anchor ANCHOR-TOP-LEFT]
+                                                          #:width [width #f]
+                                                          #:height [height #f]
+                                                          #:margin [margin 0])
+  ;; Show an overlay with the given type, content lines, input, and positioning
   (struct-copy ui-state state
-               [active-overlay (overlay-state type content input)]))
+               [active-overlay (overlay-state type content input anchor width height margin)]))
 
 (define (update-overlay-input state input)
   ;; Update the overlay input text (e.g., as user types in palette)
