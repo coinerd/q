@@ -285,7 +285,13 @@
 
 ;; handle-cancellation : event-bus string string loop-state -> loop-result?
 ;; Emits turn.cancelled and turn.completed events, returns a cancelled loop-result.
-(define (handle-cancellation bus session-id turn-id state)
+(define (handle-cancellation bus session-id turn-id state #:hook-dispatcher [hook-dispatcher #f])
+  ;; #667: Dispatch agent-end hook on cancellation
+  (when hook-dispatcher
+    (hook-dispatcher 'agent-end
+                     (hasheq 'session-id (loop-state-session-id state)
+                             'turn-id turn-id
+                             'termination 'cancelled)))
   (emit! bus
          session-id
          turn-id
@@ -427,6 +433,12 @@
                "turn.completed"
                (hasheq 'termination 'completed 'turnId turn-id)
                #:state state)
+        ;; #667: Dispatch agent-end hook on completed turn
+        (when hook-dispatcher
+          (hook-dispatcher 'agent-end
+                           (hasheq 'session-id session-id
+                                   'turn-id turn-id
+                                   'termination 'completed)))
         (make-loop-result
          (loop-state-messages state)
          'completed
@@ -452,6 +464,12 @@
                "turn.completed"
                (hasheq 'termination 'tool-calls-pending 'turnId turn-id)
                #:state state)
+        ;; #667: Dispatch agent-end hook on tool-calls-pending turn
+        (when hook-dispatcher
+          (hook-dispatcher 'agent-end
+                           (hasheq 'session-id session-id
+                                   'turn-id turn-id
+                                   'termination 'tool-calls-pending)))
         (make-loop-result (loop-state-messages state)
                           'tool-calls-pending
                           (hasheq 'turnId
@@ -494,6 +512,13 @@
          "turn.started"
          (hasheq 'turnId turn-id 'sessionId session-id)
          #:state st)
+
+  ;; #667: Dispatch 'agent-start hook at LLM call begin
+  (when hook-dispatcher
+    (hook-dispatcher 'agent-start
+                     (hasheq 'session-id session-id
+                             'turn-id turn-id
+                             'message-count (length context))))
 
   ;; 2. Build normalized model context (pure function)
   (define raw-messages (build-raw-messages context))
@@ -575,7 +600,7 @@
 
         ;; -- Cancellation fast-path --
         (cond
-          [(hash-ref stream-data 'cancelled?) (handle-cancellation bus session-id turn-id st)]
+          [(hash-ref stream-data 'cancelled?) (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
           [else
            ;; 8-9. Build final result from stream data
            (build-stream-result stream-data

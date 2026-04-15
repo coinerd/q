@@ -43,6 +43,9 @@
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"
+         (only-in "../extensions/api.rkt"
+                  extension-name
+                  list-extensions)
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
          "../util/ids.rkt"
@@ -141,6 +144,17 @@
   ;; Subscribe to fork.requested and compact.requested events from TUI/CLI
   (wire-session-event-handlers! sess)
 
+  ;; #668: Emit resources.discover event — extensions can discover skill/prompt/theme paths
+  (let ([ext-reg (hash-ref config 'extension-registry #f)])
+    (emit-session-event!
+     (agent-session-event-bus sess)
+     sid
+     "resources.discover"
+     (hasheq 'session-id sid
+             'extensions (if ext-reg
+                             (map extension-name (list-extensions ext-reg))
+                             '()))))
+
   sess)
 
 ;; ============================================================
@@ -205,6 +219,16 @@
 ;; ============================================================
 
 (define (fork-session sess [parent-entry-id #f])
+  ;; #669: Dispatch 'session-before-fork hook — extensions can block fork
+  (let* ([ext-reg (agent-session-extension-registry sess)]
+         [fork-payload (hasheq 'session-id (agent-session-session-id sess)
+                               'parent-entry-id parent-entry-id
+                               'reason "user-fork")])
+    (maybe-dispatch-hooks ext-reg 'session-before-fork fork-payload)
+    ;; For now: proceed with fork (block support would short-circuit here)
+    (fork-session-internal sess parent-entry-id)))
+
+(define (fork-session-internal sess parent-entry-id)
   (define new-id (generate-id))
   (define base-dir (path-only (simple-form-path (agent-session-session-dir sess))))
   (define new-dir (build-path base-dir new-id))
@@ -479,13 +503,47 @@
 
 (define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
   (define bus (agent-session-event-bus sess))
-  (define log-path (session-log-path (agent-session-session-dir sess)))
-  (define idx-path (session-index-path (agent-session-session-dir sess)))
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
   (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 10)))
   (define token-budget-threshold
     (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
+
+  ;; #666: Dispatch 'input hook — intercept/transform user input before processing
+  (define ext-reg (agent-session-extension-registry sess))
+  (define-values (_processed-input input-hook-res)
+    (maybe-dispatch-hooks ext-reg 'input
+                          (hasheq 'session-id sid 'message user-message)))
+  (cond
+    [(and input-hook-res (eq? (hook-result-action input-hook-res) 'block))
+     ;; Input blocked by extension
+     (emit-session-event! bus sid "input.blocked" (hasheq 'reason "extension-block"))
+     (values sess (make-loop-result '() 'completed (hasheq 'reason "input-blocked")))]
+    [else
+     (define effective-input
+       (if (and input-hook-res (eq? (hook-result-action input-hook-res) 'amend))
+           (hash-ref (hook-result-payload input-hook-res) 'message user-message)
+           user-message))
+     (run-prompt-internal sess effective-input max-iterations token-budget-threshold)]))
+
+;; ============================================================
+;; Iteration loop lives in iteration.rkt
+;; ============================================================
+;; run-iteration-loop is imported from iteration.rkt
+
+;; ============================================================
+;; Accessors
+;; ============================================================
+
+(define (session-id sess)
+  (agent-session-session-id sess))
+
+;; #666: Internal prompt execution, extracted for input hook gating.
+(define (run-prompt-internal sess user-message max-iterations token-budget-threshold)
+  (define bus (agent-session-event-bus sess))
+  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define idx-path (session-index-path (agent-session-session-dir sess)))
+  (define sid (agent-session-session-id sess))
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system (build-session-context sess user-message))
@@ -508,18 +566,6 @@
    (hasheq 'sessionId sid 'lastTurnTermination (loop-result-termination-reason final-result)))
 
   (values sess final-result))
-
-;; ============================================================
-;; Iteration loop lives in iteration.rkt
-;; ============================================================
-;; run-iteration-loop is imported from iteration.rkt
-
-;; ============================================================
-;; Accessors
-;; ============================================================
-
-(define (session-id sess)
-  (agent-session-session-id sess))
 
 (define (session-history sess)
   (define log-path (session-log-path (agent-session-session-dir sess)))
