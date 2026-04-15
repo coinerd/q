@@ -192,7 +192,7 @@
        (define indent (quotient (string-length (substring line (car (cadr m)) (cdr (cadr m)))) 2))
        (define list-text (substring line (car (cadddr m)) (cdr (cadddr m))))
        (define inner (parse-inline-markdown list-text))
-       (cons (md-token 'unordered-list (cons indent inner)) inner))]
+       (list (md-token 'unordered-list (cons indent inner))))]
     ;; Ordered list: N. text
     [(regexp-match-positions #px"^([ \t]*)([0-9]+)[.][ \t]+(.+)$" line)
      =>
@@ -201,7 +201,7 @@
        (define num (string->number (substring line (car (caddr m)) (cdr (caddr m)))))
        (define list-text (substring line (car (cadddr m)) (cdr (cadddr m))))
        (define inner (parse-inline-markdown list-text))
-       (cons (md-token 'ordered-list (cons indent (cons num inner))) inner))]
+       (list (md-token 'ordered-list (cons indent (cons num inner)))))]
     [else (parse-inline-markdown line)]))
 
 ;; ============================================================

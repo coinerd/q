@@ -314,6 +314,23 @@
      (check-equal? (car (md-token-content (car result))) 1)
      (check-equal? (cadr (md-token-content (car result))) 3))
 
+   ;; Bug #749: list tokens returned both the wrapper AND inner tokens,
+   ;; causing duplicated list lines in the rendered output.
+   (test-case "unordered list: returns exactly one token (no duplication)"
+     (define result (parse-line "- item one"))
+     (check-equal? (length result) 1 "unordered list should produce exactly 1 token")
+     (check-equal? (md-token-type (car result)) 'unordered-list))
+
+   (test-case "ordered list: returns exactly one token (no duplication)"
+     (define result (parse-line "1. first item"))
+     (check-equal? (length result) 1 "ordered list should produce exactly 1 token")
+     (check-equal? (md-token-type (car result)) 'ordered-list))
+
+   (test-case "unordered list with bold: no inner token leakage"
+     (define result (parse-line "- **bold item**"))
+     (check-equal? (length result) 1 "unordered list with inline should produce exactly 1 token")
+     (check-equal? (md-token-type (car result)) 'unordered-list))
+
    (test-case "blockquote"
      (define result (parse-line "> quoted text"))
      (check-equal? (md-token-type (car result)) 'blockquote)
