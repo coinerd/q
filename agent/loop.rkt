@@ -261,7 +261,11 @@
                 "turn.cancelled"
                 (hasheq 'reason "cancellation-token")
                 #:state state)]
-        [(unbox stream-blocked) (void)] ;; message-update hook blocked -- stop streaming
+        [(unbox stream-blocked)
+         ;; message-update hook blocked -- emit model.stream.completed then stop streaming
+         (emit! bus session-id turn-id "model.stream.completed"
+                (hasheq 'usage (hasheq))
+                #:state state)]
         [else (stream-loop)])))
 
   (hasheq 'text
@@ -520,8 +524,10 @@
 
   (cond
     [(and (hook-result? pre-hook-result) (eq? (hook-result-action pre-hook-result) 'block))
-     ;; Hook blocked the request -- return early
+     ;; Hook blocked the request -- emit turn.completed then return early
      (emit! bus session-id turn-id "model.request.blocked" (hasheq 'reason "hook"))
+     (emit! bus session-id turn-id "turn.completed"
+            (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "model-request-pre-blocked"))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [else
      (emit! bus
@@ -552,6 +558,8 @@
      (cond
        [(and (hook-result? msg-start-result) (eq? (hook-result-action msg-start-result) 'block))
         (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
+        (emit! bus session-id turn-id "turn.completed"
+               (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "message-start-blocked"))
         (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
        [else
         ;; 5-7. Stream from provider
