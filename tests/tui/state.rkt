@@ -571,6 +571,26 @@
   (check-false (has-selection? state) "has-selection? returns #f after clear"))
 
 (let ()
+  ;; Scrolling clears selection (Bug #748: selection highlight stayed at fixed rows)
+  (define s (set-selection-anchor (initial-ui-state) 5 10))
+  (define scrolled (scroll-up s))
+  (check-false (has-selection? scrolled) "scroll-up clears selection")
+  (check-false (ui-state-sel-anchor scrolled) "scroll-up clears sel-anchor")
+  (check-false (ui-state-sel-end scrolled) "scroll-up clears sel-end"))
+
+(let ()
+  ;; scroll-down also clears selection
+  (define s (set-selection-end (set-selection-anchor (initial-ui-state) 5 10) 20 30))
+  (define scrolled (scroll-down s))
+  (check-false (has-selection? scrolled) "scroll-down clears selection")
+  (check-false (ui-state-sel-anchor scrolled) "scroll-down clears sel-anchor"))
+
+(let ()
+  ;; scroll-up preserves offset when no selection
+  (define s (scroll-up (initial-ui-state) 3))
+  (check-equal? (ui-state-scroll-offset s) 3 "scroll-up offset preserved without selection"))
+
+(let ()
   ;; Selection helpers preserve other state fields
   (define state
     (add-transcript-entry (initial-ui-state #:session-id "test")

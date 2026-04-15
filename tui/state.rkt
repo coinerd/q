@@ -407,14 +407,17 @@
 ;; Scroll up (see older entries)
 ;; scroll-offset counts rendered LINES from the bottom.
 ;; No upper clamp here — render-transcript clamps via max(0, ...).
+;; Selection is screen-relative — clear it when scrolling to avoid stale highlights.
 (define (scroll-up state [amount 1])
   (define actual (+ (ui-state-scroll-offset state) amount))
-  (struct-copy ui-state state [scroll-offset actual]))
+  (define next (struct-copy ui-state state [scroll-offset actual]))
+  (if (has-selection? next) (clear-selection next) next))
 
 ;; Scroll down (see newer entries)
 (define (scroll-down state [amount 1])
   (define new-offset (max 0 (- (ui-state-scroll-offset state) amount)))
-  (struct-copy ui-state state [scroll-offset new-offset]))
+  (define next (struct-copy ui-state state [scroll-offset new-offset]))
+  (if (has-selection? next) (clear-selection next) next))
 
 ;; Scroll to bottom (latest entries)
 (define (scroll-to-bottom state)
