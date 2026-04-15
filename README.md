@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.9.0
+racket main.rkt --version  # q version 0.9.1
 raco test tests/           # run the full test suite
 ```
 
@@ -328,7 +328,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.9.0** — Context Pipeline & Intelligent Compaction. Context assembly pipeline (tree walk via session index), LLM-powered structured summaries, cumulative file tracking, iterative compaction, branch UX (/tree, /name commands), CJK-correct selection, 3681 tests.
+**v0.9.1** — TUI Component System & Overlay Composition. Component-based rendering with per-zone caching, overlay composition framework for command palette, token-aware context assembly pipeline, test infrastructure cleanup, 3750+ tests.
 
 **v0.8.8** — TUI Correctness & Input Editor. CSI sequence parsing, bright color support, frame-diff fixes, theme wiring, input editor power features, 3681 tests.
 

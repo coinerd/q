@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] — 2026-04-13
+
+### Added — Wave 0: Test Infrastructure Cleanup
+- `lint-tests.rkt` now validates test-file headers (#632)
+- `lint-tests.rkt` detects `raco test` in test files (#633)
+- `lint-tests.rkt` detects missing `rackunit/text-ui` import (#634)
+
+### Added — Wave 1: Dead Code Cleanup
+- Removed `build-prompt` from `runtime/context-builder.rkt` (#635)
+- Removed `compaction-prompts.rkt` import from `runtime/compactor.rkt` (#636)
+
+### Fixed — Wave 2: Test Lint Cleanup
+- Fixed hardcoded path in `test-bash.rkt` (#638)
+- Fixed nondeterministic `hash-keys` ordering in test files (#639)
+
+### Added — Wave 4: Component System
+- Wire Component System into Render Pipeline (#641)
+- Per-zone independent caching for component cache isolation (#642)
+- New `render-components` struct with transcript + status zone components
+- New `render-components-status`, `render-components-transcript`, `render-components-invalidate!`
+
+### Added — Wave 5: Overlay Composition
+- Overlay Composition Framework for TUI (#643)
+- Command palette wired as first overlay consumer (#644)
+- Overlay input capture and Escape dismiss (#645)
+- New `overlay-state` struct, `show-overlay`, `dismiss-overlay`, `update-overlay-input`, `overlay-active?`
+- Overlay rendering in `render-frame!` (renders over transcript zone)
+
+### Added — Wave 6: Context Assembly Unification
+- Token-aware truncation in `build-session-context/tokens` (#646)
+- Token-aware message truncation preserving system instructions (#647)
+- Deprecated `build-tiered-context` in compactor.rkt (#648)
+- New `truncate-messages-to-budget`, `estimate-message-tokens`
+
+### Tests
+- 4 new component tests (18 total)
+- 6 new overlay state tests (81 total in state suite)
+- 9 new context-builder tests (14 total)
+- All 311 .rkt files pass format lint
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
