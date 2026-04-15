@@ -70,6 +70,12 @@
          get-widget-lines-above
          get-widget-lines-below
 
+         ;; Custom header/footer (#717)
+         set-custom-header
+         set-custom-footer
+         clear-custom-header
+         clear-custom-footer
+
          ;; Selection
          set-selection-anchor
          set-selection-end
@@ -107,6 +113,8 @@
          active-overlay ; (or/c #f overlay-state) — currently displayed overlay
          queue-counts ; hash or #f — steering/followup counts from queue.status-update
          extension-widgets ; hash — maps (cons ext-name key) → (listof styled-line)
+         custom-header ; (or/c #f (listof styled-line)) — extension-provided header
+         custom-footer ; (or/c #f (listof styled-line)) — extension-provided footer
          )
   #:transparent)
 
@@ -204,6 +212,8 @@
             #f ; active-overlay
             #f ; queue-counts
             (hash) ; extension-widgets
+            #f ; custom-header
+            #f ; custom-footer
             ))
 
 ;; ============================================================
@@ -544,6 +554,22 @@
   ;; Currently all widgets render above input.
   ;; Future: support #:placement 'below per widget.
   '())
+
+;; ============================================================
+;; Custom header/footer (#717)
+;; ============================================================
+
+(define (set-custom-header state lines)
+  (struct-copy ui-state state [custom-header lines]))
+
+(define (set-custom-footer state lines)
+  (struct-copy ui-state state [custom-footer lines]))
+
+(define (clear-custom-header state)
+  (struct-copy ui-state state [custom-header #f]))
+
+(define (clear-custom-footer state)
+  (struct-copy ui-state state [custom-footer #f]))
 
 ;; ============================================================
 ;; String helpers

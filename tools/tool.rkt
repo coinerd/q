@@ -33,7 +33,9 @@
 (provide (struct-out tool)
          tool?
          (contract-out [make-tool (->* (string? string? hash? procedure?)
-                                        (#:prompt-snippet (or/c string? #f))
+                                        (#:prompt-snippet (or/c string? #f)
+                                         #:render-call (or/c procedure? #f)
+                                         #:render-result (or/c procedure? #f))
                                         tool?)]
                        [validate-tool-args (-> tool? hash? any/c)])
          tool-name
@@ -93,9 +95,11 @@
 ;; Tool struct
 ;; ============================================================
 
-(struct tool (name description schema execute prompt-snippet) #:transparent)
+(struct tool (name description schema execute prompt-snippet render-call render-result) #:transparent)
 
-(define (make-tool name description schema execute #:prompt-snippet [prompt-snippet #f])
+(define (make-tool name description schema execute #:prompt-snippet [prompt-snippet #f]
+                                                           #:render-call [render-call #f]
+                                                           #:render-result [render-result #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -104,7 +108,7 @@
     (raise-argument-error 'make-tool "hash?" schema))
   (unless (procedure? execute)
     (raise-argument-error 'make-tool "procedure?" execute))
-  (tool name description schema execute prompt-snippet))
+  (tool name description schema execute prompt-snippet render-call render-result))
 
 ;; ============================================================
 ;; Tool schema validation (#672)
