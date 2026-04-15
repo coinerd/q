@@ -16,7 +16,9 @@
  enqueue-followup!
  dequeue-steering!
  dequeue-followup!
- queue-empty?)
+ dequeue-all-followups!
+ queue-empty?
+ queue-status)
 
 ;; ============================================================
 ;; Queue struct — two mutable lists (head/tail for FIFO)
@@ -78,3 +80,21 @@
     (lambda ()
       (and (box-empty? (queue-steering-box q))
            (box-empty? (queue-followup-box q))))))
+
+;; Dequeue all follow-up messages (returns list, empty if none)
+(define (dequeue-all-followups! q)
+  (call-with-semaphore (queue-semaphore q)
+    (lambda ()
+      (let loop ([acc '()])
+        (define msg (box-dequeue! (queue-followup-box q)))
+        (if msg
+            (loop (append acc (list msg)))
+            acc)))))
+
+;; Return queue status as hash for TUI/events
+;; Keys: 'steering, 'followup — each a count
+(define (queue-status q)
+  (call-with-semaphore (queue-semaphore q)
+    (lambda ()
+      (hasheq 'steering (length (unbox (queue-steering-box q)))
+              'followup (length (unbox (queue-followup-box q)))))))
