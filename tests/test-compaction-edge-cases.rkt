@@ -235,18 +235,19 @@
   ;; Empty messages → identity result regardless of hook
   (check-equal? (compaction-result-removed-count result) 0))
 
-(test-case "edge-compact: hook blocking does not prevent compaction (known gap)"
-  ;; NOTE: The hook-dispatcher 'session-before-compact' is called but its
-  ;; result is ignored. The `when` form's return value is not used to
-  ;; short-circuit the function. This is a known gap — the hook is
-  ;; advisory-only and cannot block compaction.
+(test-case "edge-compact: hook blocking prevents compaction (#636)"
+  ;; FIX #636: The hook-dispatcher 'session-before-compact' now properly
+  ;; blocks compaction. The `cond` form returns the identity result when
+  ;; the hook returns 'block.
   (define msgs (for/list ([i (in-range 30)])
                  (make-test-msg 'assistant (format "msg-~a" i))))
   (define blocker (lambda (hook payload)
                     (hook-result 'block (hasheq))))
   (define result (compact-history msgs #:hook-dispatcher blocker))
-  ;; Hook cannot actually block — compaction proceeds normally
-  (check > (compaction-result-removed-count result) 0))
+  ;; Hook blocks — no messages compacted, identity result returned
+  (check-equal? (compaction-result-removed-count result) 0)
+  (check-equal? (length (compaction-result-kept-messages result)) 30)
+  (check-false (compaction-result-summary-message result)))
 
 (test-case "edge-compact: hook allows compaction"
   (define msgs (for/list ([i (in-range 30)])
