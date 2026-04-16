@@ -6,6 +6,7 @@
 ;; The ui-state struct captures everything the TUI needs to render.
 
 (require racket/string
+         racket/list
          json
          "../util/protocol-types.rkt")
 
@@ -172,10 +173,22 @@
   (hash-ref (ui-state-rendered-cache state) entry-id #f))
 
 ;; Store cached rendered lines for an entry id, returning new state
+;; Maximum number of entries in the render cache
+(define RENDER-CACHE-MAX-SIZE 100)
+
 (define (rendered-cache-set state entry-id lines)
-  (struct-copy ui-state
-               state
-               [rendered-cache (hash-set (ui-state-rendered-cache state) entry-id lines)]))
+  (define old-cache (ui-state-rendered-cache state))
+  (define new-cache (hash-set old-cache entry-id lines))
+  ;; BUG-35 fix: evict oldest entries when cache exceeds limit
+  (define pruned-cache
+    (if (<= (hash-count new-cache) RENDER-CACHE-MAX-SIZE)
+        new-cache
+        ;; Remove oldest entries (lowest keys)
+        (let ([sorted-keys (sort (hash-keys new-cache) <)])
+          (for/fold ([c new-cache])
+                    ([k (in-list (take sorted-keys (- (hash-count new-cache) RENDER-CACHE-MAX-SIZE)))])
+            (hash-remove c k)))))
+  (struct-copy ui-state state [rendered-cache pruned-cache]))
 
 ;; Clear the entire render cache and reset width
 (define (rendered-cache-clear state)
