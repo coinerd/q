@@ -160,8 +160,13 @@
   term)
 
 ;; Close terminal and restore state.
-;; Shows cursor, restores normal screen, closes tty.
+;; Disables mouse tracking, shows cursor, restores normal screen, closes tty.
+;; BUG-56 fix: disable-mouse-tracking is now in tui-term-close for
+;; defense-in-depth — ensures mouse tracking is always disabled regardless
+;; of exit path (normal exit, error handler, or unexpected crash).
 (define (tui-term-close term)
+  (with-handlers ([exn:fail? (lambda (e) (void))])
+    (disable-mouse-tracking))
   (disable-bracketed-paste)
   (term-show-cursor term)
   (term-normal-screen term)
@@ -392,8 +397,7 @@
                [(eof-object? n) #f]
                [(and (integer? n) (> n 0))
                 (define resp (bytes->string/latin-1 (subbytes buf 0 n)))
-                (or (parse-xtversion-response resp)
-                    (parse-da1-response resp))]
+                (or (parse-xtversion-response resp) (parse-da1-response resp))]
                [else #f])))])))
 
 ;; Check if port is a real terminal.
@@ -407,10 +411,9 @@
   ;; Try interactive query first
   (define query-result (query-terminal-version))
   (cond
-    [query-result
-     ;; Terminal responded to query — it likely supports sync mode
-     ;; (most modern terminals that respond to DA also support DEC 2026)
-     (set! sync-mode-supported #t)]
+    ;; Terminal responded to query — it likely supports sync mode
+    ;; (most modern terminals that respond to DA also support DEC 2026)
+    [query-result (set! sync-mode-supported #t)]
     [else
      ;; Fall back to env var heuristics
      (define term-program (getenv "TERM_PROGRAM"))
@@ -418,8 +421,7 @@
      (set! sync-mode-supported
            (or (and term-program
                     (member (string-downcase term-program)
-                            '("wezterm" "kitty" "hyper" "alacritty" "ghostty"
-                              "rio" "contour")))
+                            '("wezterm" "kitty" "hyper" "alacritty" "ghostty" "rio" "contour")))
                (and term (regexp-match? #rx"^(foot|kitty|wezterm|ghostty)" term))))]))
 
 ;; Begin synchronized output bracket.

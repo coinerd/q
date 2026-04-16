@@ -84,7 +84,8 @@
                             base-state
                             (let ([max-id (for/fold ([m -1]) ([e (in-list loaded)])
                                             (max m (or (transcript-entry-id e) -1)))])
-                              (struct-copy ui-state base-state
+                              (struct-copy ui-state
+                                           base-state
                                            [transcript loaded]
                                            [next-entry-id (add1 max-id)]))))
                       base-state)]
@@ -117,8 +118,9 @@
                                           [transcript (ui-state-transcript state)])
                                      (when (not (null? transcript))
                                        (save-scrollback transcript scrollback-path)))))
-                               ;; Cleanup terminal
+                               ;; Cleanup terminal (BUG-56: mouse disable in close)
                                (with-handlers ([exn:fail? (lambda (_) (void))])
+                                 (disable-mouse-tracking)
                                  (tui-term-close (unbox (tui-ctx-term-box ctx))))
                                (raise e))])
     (tui-main-loop ctx))
@@ -143,6 +145,7 @@
   (with-handlers ([exn:break? (lambda (e) (void))]
                   [exn:fail? (lambda (e)
                                (with-handlers ([exn:fail? (lambda (_) (void))])
+                                 (disable-mouse-tracking)
                                  (tui-term-close (unbox (tui-ctx-term-box ctx))))
                                (raise e))])
     (tui-main-loop ctx))
