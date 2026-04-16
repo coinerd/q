@@ -17,6 +17,7 @@
 ;;              clipboard-backend-available?, styled-line->text
 
 (require racket/string
+         racket/list
          racket/async-channel
          "../tui/terminal.rkt"
          "../tui/state.rkt"
@@ -127,31 +128,35 @@
          (define trans-y (tui-layout-transcript-start-row layout))
          (define trans-height (tui-layout-transcript-height layout))
          (define-values (all-lines _state*) (render-transcript state trans-height cols))
-         ;; Map screen rows to line indices (screen row → rendered line index)
+         ;; BUG-57: Compute pad-count for correct coordinate mapping
+         (define visible-lines
+           (if (> (length all-lines) trans-height)
+               (take-right all-lines trans-height)
+               all-lines))
+         (define pad-count (- trans-height (length visible-lines)))
+         ;; Map screen rows to line indices (account for padding)
          ;; Mouse y is 0-based: row 0 = header, row 1 = first transcript line.
-         ;; trans-y is now 0-based: value 1 means transcript starts at screen row 1.
-         ;; So: line-index = screen-row - trans-y
-         (define start-idx (max 0 (- start-row trans-y)))
-         (define end-idx (min (sub1 (length all-lines)) (- end-row trans-y)))
+         ;; Content starts at (trans-y + pad-count). So:
+         ;;   line-index = screen-row - trans-y - pad-count
+         (define start-idx (max 0 (- start-row trans-y pad-count)))
+         (define end-idx (min (sub1 (length visible-lines)) (- end-row trans-y pad-count)))
          (if (> start-idx end-idx)
              ""
              (string-join
               (for/list ([i (in-range start-idx (add1 end-idx))])
-                (define line (list-ref all-lines i))
+                (define line (list-ref visible-lines i))
                 (define text (styled-line->text line))
                 (cond
                   [(= i start-idx end-idx)
                    ;; Single line: extract column range (display-col→string-offset)
                    (substring text
-                              (min (display-col->string-offset text start-col)
-                                   (string-length text))
+                              (min (display-col->string-offset text start-col) (string-length text))
                               (min (display-col->string-offset text (add1 end-col))
                                    (string-length text)))]
                   ;; First line: from start-col to end
                   [(= i start-idx)
                    (substring text
-                              (min (display-col->string-offset text start-col)
-                                   (string-length text)))]
+                              (min (display-col->string-offset text start-col) (string-length text)))]
                   ;; Last line: from 0 to end-col
                   [(= i end-idx)
                    (substring text
@@ -208,8 +213,7 @@
 ;; for keymap lookup. Handles modifier-prefixed symbols like 'ctrl-z.
 (define (keycode->key-spec-from-msg keycode)
   (cond
-    [(char? keycode)
-     (key-spec keycode #f #f #f)]
+    [(char? keycode) (key-spec keycode #f #f #f)]
     [(symbol? keycode)
      (define s (symbol->string keycode))
      (cond
@@ -231,26 +235,36 @@
   (case action
     [(submit) #f] ;; Complex — fall through to hardcoded for proper submit flow
     [(backspace)
-     (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
+     'handled]
     [(delete)
-     (set-box! (tui-ctx-input-state-box ctx) (input-delete inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-delete inp))
+     'handled]
     [(home)
-     (set-box! (tui-ctx-input-state-box ctx) (input-home inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-home inp))
+     'handled]
     [(end)
-     (set-box! (tui-ctx-input-state-box ctx) (input-end inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
+     'handled]
     [(history-up)
-     (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp))
+     'handled]
     [(history-down)
-     (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp))
+     'handled]
     [(word-left)
-     (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-left inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-left inp))
+     'handled]
     [(word-right)
-     (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-right inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-right inp))
+     'handled]
     [(clear-input)
-     (set-box! (tui-ctx-input-state-box ctx) (input-kill-to-beginning inp)) 'handled]
+     (set-box! (tui-ctx-input-state-box ctx) (input-kill-to-beginning inp))
+     'handled]
     [(clear-screen)
-     (mark-dirty! ctx) 'handled]
-    [(copy) #f]  ;; Complex — let hardcoded handle
+     (mark-dirty! ctx)
+     'handled]
+    [(copy) #f] ;; Complex — let hardcoded handle
     [(cut) #f]
     [(paste)
      (define text (clipboard-paste))
@@ -259,9 +273,11 @@
      'handled]
     [(select-all) #f] ;; Complex — let hardcoded handle
     [(scroll-up)
-     (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 1)) 'handled]
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 1))
+     'handled]
     [(scroll-down)
-     (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 1)) 'handled]
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 1))
+     'handled]
     [(page-up)
      (define-values (_cols rows) (tui-screen-size))
      (define layout (compute-layout _cols rows))
@@ -275,9 +291,11 @@
                (scroll-down state (max 1 (tui-layout-transcript-height layout))))
      'handled]
     [(scroll-top)
-     (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-top state)) 'handled]
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-top state))
+     'handled]
     [(scroll-bottom)
-     (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-bottom state)) 'handled]
+     (set-box! (tui-ctx-ui-state-box ctx) (scroll-to-bottom state))
+     'handled]
     [else #f]))
 
 (define (reload-keymap!)
@@ -296,8 +314,7 @@
   (define ks (keycode->key-spec-from-msg keycode))
   (define action (and ks (keymap-lookup km ks)))
   (cond
-    [(and action (eq? (dispatch-keymap-action ctx inp state action) 'handled))
-     'continue]
+    [(and action (eq? (dispatch-keymap-action ctx inp state action) 'handled)) 'continue]
     ;; Fallback to hardcoded behavior
     [(char? keycode)
      (case keycode

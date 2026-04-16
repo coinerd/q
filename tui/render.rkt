@@ -76,16 +76,20 @@
   (case kind
     [(assistant)
      (if (string=? (string-trim text) "")
-         '()  ;; empty/whitespace → no lines
+         '() ;; empty/whitespace → no lines
          (md-format-assistant text width))]
     [(tool-start) (list (styled-line (list (styled-segment text (theme->style 'tool-title)))))]
     [(tool-end) (list (styled-line (list (styled-segment text (theme->style 'success)))))]
     [(tool-fail) (list (styled-line (list (styled-segment text (theme->style 'error)))))]
-    [(system) (list (styled-line (list (styled-segment (string-append "[SYS] " text) (theme->style 'muted)))))]
-    [(error) (list (styled-line (list (styled-segment (string-append "[ERR] " text) (theme->style 'error '(bold))))))]
+    [(system)
+     (list (styled-line (list (styled-segment (string-append "[SYS] " text) (theme->style 'muted)))))]
+    [(error)
+     (list (styled-line (list (styled-segment (string-append "[ERR] " text)
+                                              (theme->style 'error '(bold))))))]
     [(user)
      ;; Split into themed prompt + bold text
-     (list (styled-line (list (styled-segment "> " (theme->style 'input-prompt '(bold))) (styled-segment text '(bold)))))]
+     (list (styled-line (list (styled-segment "> " (theme->style 'input-prompt '(bold)))
+                              (styled-segment text '(bold)))))]
     [else (list (plain-line text))]))
 
 ;; Convert a single md-token to a styled-segment
@@ -127,8 +131,7 @@
              text)]
         [else
          ;; Styled segment: reset before (if not first) + SGR + text
-         (define reset-prefix
-           (if (unbox seen-styled?) "\x1b[0m" ""))
+         (define reset-prefix (if (unbox seen-styled?) "\x1b[0m" ""))
          (set-box! seen-styled? #t)
          (string-append reset-prefix (styles->sgr styles) text)])))
   (define content (apply string-append parts))
@@ -148,11 +151,22 @@
         [(underline) 4]
         [(inverse) 7]
         [(dim) 2]
-        [(black) 30] [(red) 31] [(green) 32] [(yellow) 33]
-        [(blue) 34] [(magenta) 35] [(cyan) 36] [(white) 37]
-        [(bright-black) 90] [(bright-red) 91] [(bright-green) 92]
-        [(bright-yellow) 93] [(bright-blue) 94] [(bright-magenta) 95]
-        [(bright-cyan) 96] [(bright-white) 97]
+        [(black) 30]
+        [(red) 31]
+        [(green) 32]
+        [(yellow) 33]
+        [(blue) 34]
+        [(magenta) 35]
+        [(cyan) 36]
+        [(white) 37]
+        [(bright-black) 90]
+        [(bright-red) 91]
+        [(bright-green) 92]
+        [(bright-yellow) 93]
+        [(bright-blue) 94]
+        [(bright-magenta) 95]
+        [(bright-cyan) 96]
+        [(bright-white) 97]
         [else #f])))
   (define valid (filter values codes))
   (if (null? valid)
@@ -235,16 +249,16 @@
          (define header-text (cdr (md-token-content tok)))
          ;; Heading uses md-heading theme color
          (values (append prev-lines
-                         (list (styled-line (list (styled-segment header-text (theme->style 'md-heading '(bold)))))))
+                         (list (styled-line (list (styled-segment header-text
+                                                                  (theme->style 'md-heading
+                                                                                '(bold)))))))
                  '())]
         [(hr)
          (define prev-lines (flush-current lines current-segs))
          ;; Horizontal rule — dim line
          (values (append prev-lines
-                         (list (styled-line
-                                (list (styled-segment
-                                       (make-string (max width 20) #\u2500)
-                                       (theme->style 'muted))))))
+                         (list (styled-line (list (styled-segment (make-string (max width 20) #\u2500)
+                                                                  (theme->style 'muted))))))
                  '())]
         [(blockquote)
          (define prev-lines (flush-current lines current-segs))
@@ -257,24 +271,19 @@
            (for/list ([t (in-list inner-tokens)])
              (md-token->segment t)))
          (define bq-line
-           (styled-line
-            (cons (styled-segment (string-append prefix " ") (theme->style 'muted))
-                  inner-segs)))
+           (styled-line (cons (styled-segment (string-append prefix " ") (theme->style 'muted))
+                              inner-segs)))
          (values (append prev-lines (list bq-line)) '())]
         [(unordered-list)
          (define prev-lines (flush-current lines current-segs))
          (define ul-content (md-token-content tok))
          (define indent (car ul-content))
          (define inner-tokens (cdr ul-content))
-         (define bullet-prefix
-           (string-append (make-string (* indent 2) #\space) "\u2022 "))
+         (define bullet-prefix (string-append (make-string (* indent 2) #\space) "\u2022 "))
          (define inner-segs
            (for/list ([t (in-list inner-tokens)])
              (md-token->segment t)))
-         (define ul-line
-           (styled-line
-            (cons (styled-segment bullet-prefix '())
-                  inner-segs)))
+         (define ul-line (styled-line (cons (styled-segment bullet-prefix '()) inner-segs)))
          (values (append prev-lines (list ul-line)) '())]
         [(ordered-list)
          (define prev-lines (flush-current lines current-segs))
@@ -282,16 +291,11 @@
          (define indent (car ol-content))
          (define num (cadr ol-content))
          (define inner-tokens (cddr ol-content))
-         (define ol-prefix
-           (string-append (make-string (* indent 2) #\space)
-                          (format "~a. " num)))
+         (define ol-prefix (string-append (make-string (* indent 2) #\space) (format "~a. " num)))
          (define inner-segs
            (for/list ([t (in-list inner-tokens)])
              (md-token->segment t)))
-         (define ol-line
-           (styled-line
-            (cons (styled-segment ol-prefix '())
-                  inner-segs)))
+         (define ol-line (styled-line (cons (styled-segment ol-prefix '()) inner-segs)))
          (values (append prev-lines (list ol-line)) '())]
         [else
          ;; Inline token — accumulate segments
@@ -352,17 +356,19 @@
 ;; sel-anchor and sel-end are (cons col row) in screen coordinates,
 ;; where row is 0-based (row 0 = header, row 1 = first transcript line).
 ;; trans-start is the 0-based row where transcript starts (typically 1).
+;; pad-count is the number of blank rows at top of transcript area
+;; (BUG-57 fix: content is pushed down by pad-count rows when sparse).
 ;; Returns new list of styled-lines with 'inverse on selected ranges.
-(define (apply-selection-highlight lines sel-anchor sel-end trans-start)
+(define (apply-selection-highlight lines sel-anchor sel-end trans-start [pad-count 0])
   (if (not (and sel-anchor sel-end))
       lines ;; no selection — pass through
       (let ()
         ;; Normalize: ensure anchor <= end
         (define-values (start-col start-row end-col end-row)
           (normalize-selection-range sel-anchor sel-end))
-        ;; Convert screen rows to line indices
-        (define sel-start-idx (max 0 (- start-row trans-start)))
-        (define sel-end-idx (- end-row trans-start))
+        ;; Convert screen rows to line indices (BUG-57: subtract pad-count)
+        (define sel-start-idx (max 0 (- start-row trans-start pad-count)))
+        (define sel-end-idx (- end-row trans-start pad-count))
         (for/list ([line (in-list lines)]
                    [i (in-naturals)])
           (cond
@@ -439,30 +445,31 @@
   ;; Format entries using cache where possible
   ;; BUG-36 fix: cons lines in reverse order, then reverse at the end
   (define-values (formatted-lines state1)
-    (let loop ([entries entries] [rev-lines '()] [st state0])
+    (let loop ([entries entries]
+               [rev-lines '()]
+               [st state0])
       (if (null? entries)
           (values (reverse rev-lines) st)
           (let* ([e (car entries)]
                  [eid (transcript-entry-id e)]
                  [cached (and eid (rendered-cache-ref st eid))]
                  [entry-text (transcript-entry-text e)]
-                 [cache-valid?
-                  (and cached
-                       (string? entry-text)
-                       (> (string-length entry-text) 0)
-                       (> (length cached) 0)
-                       (let* ([first-line (styled-line->text (car cached))]
-                              [prefix-len (min 20 (string-length entry-text))]
-                              [prefix (substring entry-text 0 prefix-len)])
-                         (string-contains? first-line prefix)))])
+                 [cache-valid? (and cached
+                                    (string? entry-text)
+                                    (> (string-length entry-text) 0)
+                                    (> (length cached) 0)
+                                    (let* ([first-line (styled-line->text (car cached))]
+                                           [prefix-len (min 20 (string-length entry-text))]
+                                           [prefix (substring entry-text 0 prefix-len)])
+                                      (string-contains? first-line prefix)))])
             (if cache-valid?
-                (loop (cdr entries)
-                      (foldl (lambda (l acc) (cons l acc)) rev-lines cached)
-                      st)
+                (loop (cdr entries) (foldl (lambda (l acc) (cons l acc)) rev-lines cached) st)
                 (let ([fmt (format-entry e width)])
                   (loop (cdr entries)
                         (foldl (lambda (l acc) (cons l acc)) rev-lines fmt)
-                        (if eid (rendered-cache-set st eid fmt) st))))))))
+                        (if eid
+                            (rendered-cache-set st eid fmt)
+                            st))))))))
   ;; If streaming, append the partial streaming text (not cached)
   (define streaming (ui-state-streaming-text state))
   (define all-lines
@@ -505,7 +512,8 @@
 (define (render-input-line input-st width)
   (define-values (visible-text scroll-offset cursor-col) (input-visible-window input-st width))
   (define prompt-str "q> ")
-  (define pad-len (max 0 (- width (string-visible-width prompt-str) (string-visible-width visible-text))))
+  (define pad-len
+    (max 0 (- width (string-visible-width prompt-str) (string-visible-width visible-text))))
   (styled-line (list (styled-segment prompt-str (theme->style 'input-prompt '(bold)))
                      (styled-segment (string-append visible-text (make-string pad-len #\space))
                                      '(bold)))))
