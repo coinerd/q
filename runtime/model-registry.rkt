@@ -15,24 +15,24 @@
 
 (require racket/string)
 
-(provide
- ;; Structs
- (struct-out model-entry)
- (struct-out model-resolution)
+;; Structs
+(provide (struct-out model-entry)
+         (struct-out model-registry)
+         (struct-out model-resolution)
 
- ;; Resolution
- resolve-model
- resolve-model-by-provider
+         ;; Resolution
+         resolve-model
+         resolve-model-by-provider
 
- ;; Listing
- available-models
+         ;; Listing
+         available-models
 
- ;; Defaults
- default-model
- default-model-for-mode
+         ;; Defaults
+         default-model
+         default-model-for-mode
 
- ;; Registry creation
- make-model-registry-from-config)
+         ;; Registry creation
+         make-model-registry-from-config)
 
 ;; ============================================================
 ;; Structs
@@ -40,28 +40,28 @@
 
 ;; A model entry — describes an available model
 (struct model-entry
-  (name            ; string — model name (e.g. "gpt-4o")
-   provider-name   ; string — provider name (e.g. "openai")
-   provider-config ; hash — full provider config section
-   )
+        (name ; string — model name (e.g. "gpt-4o")
+         provider-name ; string — provider name (e.g. "openai")
+         provider-config ; hash — full provider config section
+         )
   #:transparent)
 
 ;; A resolution result — everything needed to create a provider instance
 (struct model-resolution
-  (model-name      ; string — the resolved model name
-   provider-name   ; string — the provider to use
-   base-url        ; string — API base URL
-   provider-config ; hash — full provider config (for auth-store etc.)
-   )
+        (model-name ; string — the resolved model name
+         provider-name ; string — the provider to use
+         base-url ; string — API base URL
+         provider-config ; hash — full provider config (for auth-store etc.)
+         )
   #:transparent)
 
 ;; Internal registry struct (not exported)
 (struct model-registry
-  (index           ; hash: model-name → (listof model-entry) — may have duplicates across providers
-   providers       ; hash: provider-name-string → provider-config-hash
-   default-provider ; string or #f
-   default-model    ; string or #f
-   )
+        (index ; hash: model-name → (listof model-entry) — may have duplicates across providers
+         providers ; hash: provider-name-string → provider-config-hash
+         default-provider ; string or #f
+         default-model ; string or #f
+         )
   #:transparent)
 
 ;; ============================================================
@@ -70,7 +70,9 @@
 
 ;; Normalize a key to string for consistent lookup
 (define (key->string k)
-  (if (symbol? k) (symbol->string k) k))
+  (if (symbol? k)
+      (symbol->string k)
+      k))
 
 ;; Normalize all keys in a hash to strings
 (define (normalize-keys h)
@@ -78,9 +80,18 @@
     (values (key->string k) v)))
 
 ;; Flexible hash-ref: tries both string and symbol keys
-(define (flex-ref h key [default (lambda () (raise (make-exn:fail "key not found" (current-continuation-marks))))])
-  (define str-key (if (symbol? key) (symbol->string key) key))
-  (define sym-key (if (string? key) (string->symbol key) key))
+(define (flex-ref h
+                  key
+                  [default
+                   (lambda () (raise (make-exn:fail "key not found" (current-continuation-marks))))])
+  (define str-key
+    (if (symbol? key)
+        (symbol->string key)
+        key))
+  (define sym-key
+    (if (string? key)
+        (string->symbol key)
+        key))
   (cond
     [(hash-has-key? h str-key) (hash-ref h str-key)]
     [(hash-has-key? h sym-key) (hash-ref h sym-key)]
@@ -107,8 +118,14 @@
     (equal? model-id (extract-model-id m))))
 
 (define (flex-has-key? h key)
-  (define str-key (if (symbol? key) (symbol->string key) key))
-  (define sym-key (if (string? key) (string->symbol key) key))
+  (define str-key
+    (if (symbol? key)
+        (symbol->string key)
+        key))
+  (define sym-key
+    (if (string? key)
+        (string->symbol key)
+        key))
   (or (hash-has-key? h str-key) (hash-has-key? h sym-key)))
 
 ;; ============================================================
@@ -130,8 +147,7 @@
                 [pmap (hash)])
                ([(prov-key prov-config) (in-hash providers-normalized)])
       (define prov-name (key->string prov-key))
-      (define models-list
-        (flex-ref prov-config 'models '()))
+      (define models-list (flex-ref prov-config 'models '()))
       (define entries
         (for/list ([m (in-list models-list)])
           (define model-id (extract-model-id m))
@@ -139,21 +155,14 @@
       ;; If no explicit models list but a default-model is set,
       ;; add the default-model as a single entry so it can be resolved.
       (define effective-entries
-        (if (and (null? entries)
-                 (flex-ref prov-config 'default-model #f))
-            (list (model-entry (flex-ref prov-config 'default-model #f)
-                               prov-name
-                               prov-config))
+        (if (and (null? entries) (flex-ref prov-config 'default-model #f))
+            (list (model-entry (flex-ref prov-config 'default-model #f) prov-name prov-config))
             entries))
       ;; Add each model to the index
       (define new-idx
-        (for/fold ([i idx])
-                  ([e (in-list effective-entries)])
-          (hash-update i (model-entry-name e)
-                       (λ (existing) (cons e existing))
-                       '())))
-      (values new-idx
-              (hash-set pmap prov-name prov-config))))
+        (for/fold ([i idx]) ([e (in-list effective-entries)])
+          (hash-update i (model-entry-name e) (λ (existing) (cons e existing)) '())))
+      (values new-idx (hash-set pmap prov-name prov-config))))
 
   ;; If no global default-model, try to derive from default-provider
   (define effective-default-model
@@ -161,9 +170,7 @@
       [default-model-name default-model-name]
       [default-provider-name
        (define prov-cfg (hash-ref provider-map default-provider-name #f))
-       (and prov-cfg
-            (let ([dm (flex-ref prov-cfg 'default-model #f)])
-              (if (eq? dm #f) #f dm)))]
+       (and prov-cfg (let ([dm (flex-ref prov-cfg 'default-model #f)]) (if (eq? dm #f) #f dm)))]
       [else #f]))
 
   ;; If no effective default, try first provider's default
@@ -182,8 +189,7 @@
 (define (resolve-model registry model-name)
   ;; If model-name is #f, resolve default
   (cond
-    [(not model-name)
-     (resolve-default registry)]
+    [(not model-name) (resolve-default registry)]
     [else
      ;; Check for provider prefix: "provider/model"
      (define parts (string-split model-name "/" #:trim? #f))
@@ -193,9 +199,8 @@
         (define prov-name (car parts))
         (define model (cadr parts))
         (resolve-with-provider registry prov-name model)]
-       [else
-        ;; Exact match across all providers
-        (resolve-exact registry model-name)])]))
+       ;; Exact match across all providers
+       [else (resolve-exact registry model-name)])]))
 
 (define (resolve-default registry)
   (define dm (model-registry-default-model registry))
@@ -221,10 +226,7 @@
     [else
      (define models-list (flex-ref prov-cfg 'models '()))
      (if (model-in-list? model-name models-list)
-         (model-resolution model-name
-                           provider-name
-                           (flex-ref prov-cfg 'base-url "")
-                           prov-cfg)
+         (model-resolution model-name provider-name (flex-ref prov-cfg 'base-url "") prov-cfg)
          #f)]))
 
 (define (entry->resolution entry)
@@ -245,11 +247,7 @@
      (define dm (flex-ref prov-cfg 'default-model #f))
      (cond
        [(not dm) #f]
-       [else
-        (model-resolution dm
-                          provider-name
-                          (flex-ref prov-cfg 'base-url "")
-                          prov-cfg)])]))
+       [else (model-resolution dm provider-name (flex-ref prov-cfg 'base-url "") prov-cfg)])]))
 
 ;; ============================================================
 ;; Listing

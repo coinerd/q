@@ -37,6 +37,7 @@
                   loop-result-termination-reason
                   make-loop-result)
          "../agent/queue.rkt"
+         (only-in "model-registry.rkt" available-models model-entry-name)
          "../agent/event-bus.rkt"
          "../llm/token-budget.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
@@ -53,6 +54,9 @@
          agent-session-session-dir
          agent-session-extension-registry
          agent-session-model-name
+         ;; FEAT-65: runtime model control
+         set-model!
+         cycle-model!
          agent-session-system-instructions
          agent-session-compacting?
          set-agent-session-compacting?!
@@ -773,3 +777,35 @@
                                   (hasheq 'removedCount
                                           (compaction-result-removed-count compact-result)))))))
      #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))))
+
+;; ============================================================
+;; FEAT-65: Runtime model control
+;; ============================================================
+
+;; set-model! : agent-session? string? -> void?
+;; Switch the active model for this session.
+(define (set-model! sess model-name)
+  (unless (string? model-name)
+    (raise-argument-error 'set-model! "string?" model-name))
+  (set-agent-session-model-name! sess model-name))
+
+;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
+;; Cycle to the next available model. Returns the new model name, or #f if
+;; no models are available.
+(define (cycle-model! sess registry)
+  (define models (available-models registry))
+  (if (null? models)
+      #f
+      (let* ([current (or (agent-session-model-name sess) "")]
+             [names (map model-entry-name models)]
+             [unique-names (remove-duplicates names)]
+             [current-idx (for/first ([n (in-list unique-names)]
+                                      [i (in-naturals)]
+                                      #:when (equal? n current))
+                            i)]
+             [next-idx (if current-idx
+                           (modulo (add1 current-idx) (length unique-names))
+                           0)]
+             [next-model (list-ref unique-names next-idx)])
+        (set-agent-session-model-name! sess next-model)
+        next-model)))
