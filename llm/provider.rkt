@@ -140,8 +140,8 @@
           (define text-parts
             (filter (lambda (c) (equal? (hash-ref c 'type #f) "text")) content-parts))
           (append (for/list ([tp (in-list text-parts)])
-                    (stream-chunk (hash-ref tp 'text "") #f #f #f))
-                  (list (stream-chunk #f #f (model-response-usage response) #t))))))
+                    (make-stream-chunk (hash-ref tp 'text "") #f #f #f))
+                  (list (make-stream-chunk #f #f (model-response-usage response) #t))))))
   (make-provider (lambda () name)
                  (lambda () (hasheq 'streaming #t 'token-counting #t))
                  (lambda (req) response)

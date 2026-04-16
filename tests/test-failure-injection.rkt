@@ -67,7 +67,7 @@
      (set-box! call-count (add1 (unbox call-count)))
      (if (= (unbox call-count) n)
          (raise err)
-         (list (stream-chunk "ok" #f
+         (list (make-stream-chunk "ok" #f
                              (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
                              #t))))))
 
@@ -94,8 +94,8 @@
          (raise (exn:fail "midstream failure" (current-continuation-marks)))
          (begin
            (set-box! sent-first? #t)
-           (list (stream-chunk "partial " #f #f #f)
-                 (stream-chunk #f #f #f #t)))))))
+           (list (make-stream-chunk "partial " #f #f #f)
+                 (make-stream-chunk #f #f #f #t)))))))
 
 ;; ============================================================
 ;; Test: Provider errors don't crash session
@@ -260,7 +260,7 @@
      (lambda (req)
        (set-box! call-idx (add1 (unbox call-idx)))
        (if (odd? (unbox call-idx))
-           (list (stream-chunk "ok" #f
+           (list (make-stream-chunk "ok" #f
                                (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
                                #t))
            (raise (exn:fail "intermittent failure"

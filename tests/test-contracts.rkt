@@ -158,14 +158,14 @@
   (check-equal? (model-response-model resp2) "rt-model"))
 
 (test-case "contract: stream-chunk has correct fields"
-  (define chunk (stream-chunk "hello" #f #f #f))
+  (define chunk (make-stream-chunk "hello" #f #f #f))
   (check-equal? (stream-chunk-delta-text chunk) "hello")
   (check-false (stream-chunk-delta-tool-call chunk))
   (check-false (stream-chunk-usage chunk))
   (check-false (stream-chunk-done? chunk)))
 
 (test-case "contract: stream-chunk done sentinel"
-  (define done-chunk (stream-chunk #f #f (hasheq 'total-tokens 10) #t))
+  (define done-chunk (make-stream-chunk #f #f (hasheq 'total-tokens 10) #t))
   (check-false (stream-chunk-delta-text done-chunk))
   (check-true (stream-chunk-done? done-chunk))
   (check-not-false (stream-chunk-usage done-chunk)))

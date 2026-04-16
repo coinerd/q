@@ -60,12 +60,12 @@
 ;; ============================================================
 
 (test-case "stream-chunk struct"
-  (define ch (stream-chunk "hello" #f #f #f))
+  (define ch (make-stream-chunk "hello" #f #f #f))
   (check-pred stream-chunk? ch)
   (check-equal? (stream-chunk-delta-text ch) "hello")
   (check-false (stream-chunk-done? ch)))
 
 (test-case "stream-chunk done sentinel"
-  (define ch (stream-chunk #f #f (hasheq) #t))
+  (define ch (make-stream-chunk #f #f (hasheq) #t))
   (check-pred stream-chunk-done? ch)
   (check-false (stream-chunk-delta-text ch)))

@@ -38,12 +38,12 @@
        (lambda () (hash 'streaming #t 'token-counting #t))
        (lambda (req) (make-model-response '() (hasheq) "mock" 'stop))
        (lambda (req)
-         (list (stream-chunk #f
+         (list (make-stream-chunk #f
                              (hasheq 'index 0 'id "tc-1"
                                      'function (hasheq 'name "read"
                                                        'arguments "/tmp/file"))
                              #f #f)
-               (stream-chunk #f #f
+               (make-stream-chunk #f #f
                              (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
                              #t)))))
 
@@ -83,7 +83,7 @@
        (lambda () (hash 'streaming #t 'token-counting #t))
        (lambda (req) (make-model-response '() (hasheq) "mock" 'stop))
        (lambda (req)
-         (list (stream-chunk #f #f
+         (list (make-stream-chunk #f #f
                              (hasheq 'prompt-tokens 5 'completion-tokens 0 'total-tokens 5)
                              #t)))))
 
@@ -128,8 +128,8 @@
        (lambda () (hash 'streaming #t 'token-counting #t))
        (lambda (req) (make-model-response '() (hasheq) "mock" 'stop))
        (lambda (req)
-         (list (stream-chunk "Hello" #f #f #f)
-               (stream-chunk #f #f
+         (list (make-stream-chunk "Hello" #f #f #f)
+               (make-stream-chunk #f #f
                              (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
                              #t)))))
 

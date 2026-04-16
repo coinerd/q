@@ -232,6 +232,15 @@
                                      #f)))
           (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
             (streaming-message-set-blocked! sm))))
+      ;; FEAT-72: Thinking/reasoning delta
+      (when (stream-chunk-delta-thinking chunk)
+        (streaming-message-append-thinking! sm (stream-chunk-delta-thinking chunk))
+        (emit! bus
+               session-id
+               turn-id
+               "model.stream.thinking"
+               (hasheq 'delta (stream-chunk-delta-thinking chunk))
+               #:state state))
       (when (stream-chunk-delta-tool-call chunk)
         ;; Tool call delta
         (define tc-delta (stream-chunk-delta-tool-call chunk))

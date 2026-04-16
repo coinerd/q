@@ -1,6 +1,6 @@
 #lang racket
 
-;; tests/test-streaming-message.rkt — FEAT-71: Structured streaming accumulator
+;; tests/test-streaming-message.rkt — FEAT-71/72: Streaming accumulator + thinking
 
 (require rackunit
          rackunit/text-ui
@@ -18,6 +18,7 @@
       (check-equal? (streaming-message-message-id sm) "msg-123")
       (check-equal? (streaming-message-text sm) "")
       (check-equal? (streaming-message-tool-calls sm) '())
+      (check-equal? (streaming-message-thinking sm) "")
       (check-equal? (streaming-message-chunks sm) '())
       (check-false (streaming-message-cancelled? sm))
       (check-false (streaming-message-blocked? sm))
@@ -57,7 +58,6 @@
       (streaming-message-append-chunk! sm 'chunk-1)
       (streaming-message-append-chunk! sm 'chunk-2)
       (define chunks (streaming-message-chunks sm))
-      ;; cons order: latest first
       (check-equal? chunks '(chunk-2 chunk-1)))
 
     ;; ============================================================
@@ -121,6 +121,27 @@
       (check-equal? (hash-ref h 'text) "text")
       (check-equal? (hash-ref h 'tool-calls) '())
       (check-true (hash-ref h 'cancelled?))
-      (check-false (hash-ref h 'stream-blocked?)))))
+      (check-false (hash-ref h 'stream-blocked?)))
+
+    ;; ============================================================
+    ;; Thinking accumulation (FEAT-72)
+    ;; ============================================================
+    (test-case "append-thinking accumulates reasoning tokens"
+      (define sm (make-streaming-message "msg-think-1"))
+      (streaming-message-append-thinking! sm "Let me analyze ")
+      (streaming-message-append-thinking! sm "this step by step.")
+      (check-equal? (streaming-message-thinking sm) "Let me analyze this step by step."))
+
+    (test-case "finalize includes thinking in metadata"
+      (define sm (make-streaming-message "msg-think-2"))
+      (streaming-message-append-thinking! sm "reasoning here")
+      (define msg (streaming-message-finalize sm))
+      (check-equal? (hash-ref (message-meta msg) 'thinking) "reasoning here"))
+
+    (test-case "->hash includes thinking key"
+      (define sm (make-streaming-message "msg-think-3"))
+      (streaming-message-append-thinking! sm "thoughts")
+      (define h (streaming-message->hash sm))
+      (check-equal? (hash-ref h 'thinking) "thoughts"))))
 
 (run-tests streaming-tests)

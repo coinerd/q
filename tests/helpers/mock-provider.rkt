@@ -43,9 +43,9 @@
       (for/list ([part (in-list content-parts)])
         (cond
           [(equal? (hash-ref part 'type #f) "text")
-           (stream-chunk (hash-ref part 'text "") #f #f #f)]
+           (make-stream-chunk (hash-ref part 'text "") #f #f #f)]
           [(equal? (hash-ref part 'type #f) "tool-call")
-           (stream-chunk #f
+           (make-stream-chunk #f
                           (hasheq 'index 0
                                   'id (hash-ref part 'id "")
                                   'function (hasheq 'name (hash-ref part 'name "")
@@ -56,8 +56,8 @@
                                                                                         (format "\"~a\":\"~a\"" k v))
                                                                                       ","))))))
                           #f #f)]
-          [else (stream-chunk #f #f #f #f)]))
-      (list (stream-chunk #f #f (model-response-usage resp) #t))))))
+          [else (make-stream-chunk #f #f #f #f)]))
+      (list (make-stream-chunk #f #f (model-response-usage resp) #t))))))
 
 ;; Simple text-only mock provider: returns text strings in sequence.
 (define (make-simple-mock-provider . texts)
@@ -78,8 +78,8 @@
      (define i (unbox idx))
      (set-box! idx (add1 i))
      (define text (if (< i (length texts)) (list-ref texts i) "done"))
-     (list (stream-chunk text #f #f #f)
-           (stream-chunk #f #f
+     (list (make-stream-chunk text #f #f #f)
+           (make-stream-chunk #f #f
                          (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
                          #t)))))
 
@@ -111,19 +111,19 @@
      (set-box! call-count (add1 (unbox call-count)))
      (cond
        [(<= (unbox call-count) 1)
-        (list (stream-chunk #f
+        (list (make-stream-chunk #f
                             (hasheq 'id "tc-mock-1"
                                     'name tool-name
                                     'arguments (if (hash? tool-args)
                                                    (jsexpr->string tool-args)
                                                    tool-args))
                             #f #f)
-              (stream-chunk #f #f
+              (make-stream-chunk #f #f
                             (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
                             #t))]
        [else
-        (list (stream-chunk response-text #f #f #f)
-              (stream-chunk #f #f
+        (list (make-stream-chunk response-text #f #f #f)
+              (make-stream-chunk #f #f
                             (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
                             #t))]))))
 

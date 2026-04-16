@@ -216,7 +216,7 @@
                 #f))
           #f))
 
-    (stream-chunk delta-text
+    (make-stream-chunk delta-text
                   delta-tool-call
                   usage
                   (and (string? finish-reason) #t))))
@@ -326,7 +326,7 @@
         (let ([tcs (hash-ref delta 'tool_calls #f)])
           (if (and tcs (pair? tcs)) (car tcs) #f))
         #f))
-  (stream-chunk delta-text delta-tool-call usage (and (string? finish-reason) #t)))
+  (make-stream-chunk delta-text delta-tool-call usage (and (string? finish-reason) #t)))
 
 ;; ============================================================
 ;; read-sse-chunks (incremental generator)

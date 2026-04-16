@@ -29,39 +29,39 @@
        ;; Scenario 1: Text then tool call
        (cons "text+tool"
              (lambda ()
-               (list (stream-chunk "Answer" #f #f #f)
-                     (stream-chunk #f
+               (list (make-stream-chunk "Answer" #f #f #f)
+                     (make-stream-chunk #f
                                    (hasheq 'id "tc-1" 'index 0
                                            'function (hasheq 'name "read"
                                                              'arguments "{\"path\":\"x\"}"))
                                    #f #f)
-                     (stream-chunk #f #f #f #t))))
+                     (make-stream-chunk #f #f #f #t))))
        ;; Scenario 2: Long text then multiple tool calls
        (cons "long-text+2-tools"
              (lambda ()
-               (list (stream-chunk "Let me " #f #f #f)
-                     (stream-chunk "check " #f #f #f)
-                     (stream-chunk "that." #f #f #f)
-                     (stream-chunk #f
+               (list (make-stream-chunk "Let me " #f #f #f)
+                     (make-stream-chunk "check " #f #f #f)
+                     (make-stream-chunk "that." #f #f #f)
+                     (make-stream-chunk #f
                                    (hasheq 'id "tc-1" 'index 0
                                            'function (hasheq 'name "read"
                                                              'arguments "{\"path\":\"a\"}"))
                                    #f #f)
-                     (stream-chunk #f
+                     (make-stream-chunk #f
                                    (hasheq 'id "tc-2" 'index 1
                                            'function (hasheq 'name "bash"
                                                              'arguments "{\"command\":\"ls\"}"))
                                    #f #f)
-                     (stream-chunk #f #f #f #t))))
+                     (make-stream-chunk #f #f #f #t))))
        ;; Scenario 3: No text, only tool call
        (cons "tool-only"
              (lambda ()
-               (list (stream-chunk #f
+               (list (make-stream-chunk #f
                                    (hasheq 'id "tc-1" 'index 0
                                            'function (hasheq 'name "bash"
                                                              'arguments "{\"command\":\"ls\"}"))
                                    #f #f)
-                     (stream-chunk #f #f #f #t))))))
+                     (make-stream-chunk #f #f #f #t))))))
 
     (define tools
       (list (hasheq 'type "function"
@@ -123,8 +123,8 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk "Hi" #f #f #f)
-               (stream-chunk #f #f #f #t)))))
+         (list (make-stream-chunk "Hi" #f #f #f)
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "hello"))
@@ -152,13 +152,13 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk "Go" #f #f #f)
-               (stream-chunk #f
+         (list (make-stream-chunk "Go" #f #f #f)
+               (make-stream-chunk #f
                              (hasheq 'id "tc-1" 'index 0
                                      'function (hasheq 'name "read"
                                                        'arguments "{\"path\":\"x\"}"))
                              #f #f)
-               (stream-chunk #f #f #f #t)))))
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "go"))

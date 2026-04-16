@@ -78,7 +78,7 @@
 
 ;; Helper: build a stream-chunk with a tool-call delta
 (define (make-tc-chunk index id name arguments)
-  (stream-chunk
+  (make-stream-chunk
    #f  ; no delta-text
    (hash 'index index
          'id id
@@ -99,8 +99,8 @@
 
 ;; accumulate handles chunks with same index (overwrite)
 ;; Second chunk with same index provides new id/name — should overwrite
-(let* ([ch1 (stream-chunk #f (hash 'index 0 'id "call_old" 'function (hash 'name "old_fn" 'arguments "arg1")) #f #f)]
-       [ch2 (stream-chunk #f (hash 'index 0 'id "call_new" 'function (hash 'name "new_fn" 'arguments "arg2")) #f #f)]
+(let* ([ch1 (make-stream-chunk #f (hash 'index 0 'id "call_old" 'function (hash 'name "old_fn" 'arguments "arg1")) #f #f)]
+       [ch2 (make-stream-chunk #f (hash 'index 0 'id "call_new" 'function (hash 'name "new_fn" 'arguments "arg2")) #f #f)]
        [result (accumulate-tool-call-deltas (list ch1 ch2))])
   (check-equal? (length result) 1)
   (check-equal? (hash-ref (car result) 'id) "call_new")
@@ -109,7 +109,7 @@
   (check-equal? (hash-ref (car result) 'arguments) "arg1arg2"))
 
 ;; accumulate handles missing index field (default to 0)
-(let* ([ch (stream-chunk #f (hash 'id "call_no_idx" 'function (hash 'name "fn" 'arguments "x")) #f #f)]
+(let* ([ch (make-stream-chunk #f (hash 'id "call_no_idx" 'function (hash 'name "fn" 'arguments "x")) #f #f)]
        [result (accumulate-tool-call-deltas (list ch))])
   (check-equal? (length result) 1)
   (check-equal? (hash-ref (car result) 'id) "call_no_idx")
@@ -118,9 +118,9 @@
 
 ;; accumulate handles partial function name across chunks
 ;; First chunk carries id+name, subsequent chunks carry only argument fragments
-(let* ([ch1 (stream-chunk #f (hash 'index 0 'id "call_partial" 'function (hash 'name "read_file" 'arguments "{\"pat")) #f #f)]
-       [ch2 (stream-chunk #f (hash 'index 0 'function (hash 'arguments "h\": \"")) #f #f)]
-       [ch3 (stream-chunk #f (hash 'index 0 'function (hash 'arguments "/tmp/x\"}")) #f #f)]
+(let* ([ch1 (make-stream-chunk #f (hash 'index 0 'id "call_partial" 'function (hash 'name "read_file" 'arguments "{\"pat")) #f #f)]
+       [ch2 (make-stream-chunk #f (hash 'index 0 'function (hash 'arguments "h\": \"")) #f #f)]
+       [ch3 (make-stream-chunk #f (hash 'index 0 'function (hash 'arguments "/tmp/x\"}")) #f #f)]
        [result (accumulate-tool-call-deltas (list ch1 ch2 ch3))])
   (check-equal? (length result) 1)
   (check-equal? (hash-ref (car result) 'id) "call_partial")
@@ -128,12 +128,12 @@
   (check-equal? (hash-ref (car result) 'arguments) "{\"path\": \"/tmp/x\"}"))
 
 ;; accumulate handles interleaved tool calls (index 0 and 1)
-(let* ([ch-a1 (stream-chunk #f (hash 'index 0 'id "call_a" 'function (hash 'name "bash" 'arguments "ls ")) #f #f)]
-       [ch-b1 (stream-chunk #f (hash 'index 1 'id "call_b" 'function (hash 'name "read" 'arguments "/et")) #f #f)]
-       [ch-a2 (stream-chunk #f (hash 'index 0 'function (hash 'arguments "-la")) #f #f)]
-       [ch-b2 (stream-chunk #f (hash 'index 1 'function (hash 'arguments "c/pa")) #f #f)]
-       [ch-a3 (stream-chunk #f (hash 'index 0 'function (hash 'arguments "")) #f #f)]
-       [ch-b3 (stream-chunk #f (hash 'index 1 'function (hash 'arguments "sswd")) #f #f)]
+(let* ([ch-a1 (make-stream-chunk #f (hash 'index 0 'id "call_a" 'function (hash 'name "bash" 'arguments "ls ")) #f #f)]
+       [ch-b1 (make-stream-chunk #f (hash 'index 1 'id "call_b" 'function (hash 'name "read" 'arguments "/et")) #f #f)]
+       [ch-a2 (make-stream-chunk #f (hash 'index 0 'function (hash 'arguments "-la")) #f #f)]
+       [ch-b2 (make-stream-chunk #f (hash 'index 1 'function (hash 'arguments "c/pa")) #f #f)]
+       [ch-a3 (make-stream-chunk #f (hash 'index 0 'function (hash 'arguments "")) #f #f)]
+       [ch-b3 (make-stream-chunk #f (hash 'index 1 'function (hash 'arguments "sswd")) #f #f)]
        [result (accumulate-tool-call-deltas (list ch-a1 ch-b1 ch-a2 ch-b2 ch-a3 ch-b3))])
   (check-equal? (length result) 2)
   ;; index 0 = bash

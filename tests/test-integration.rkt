@@ -19,7 +19,8 @@
                   stream-chunk-delta-text
                   stream-chunk-delta-tool-call
                   stream-chunk-usage
-                  stream-chunk-done?)
+                  stream-chunk-done?
+                  make-stream-chunk)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
          (only-in "../util/protocol-types.rkt"
                   make-event
@@ -458,8 +459,8 @@
         'tool-calls))
      (lambda (req)
        (list
-        (stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
-        (stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t)))))
+        (make-stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
+        (make-stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t)))))
   (define rt
     (make-test-runtime ever-calling-prov #:session-dir dir #:tool-registry reg #:max-iterations 1))
   (define rt2 (sdk:open-session rt))
