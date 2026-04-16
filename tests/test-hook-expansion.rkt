@@ -42,8 +42,7 @@
 (test-case "critical hook errors default to block"
   (define reg (make-extension-registry))
   (define throwing-ext
-    (extension "thrower" "0.1" "1.0"
-               (hasheq 'tool-call (lambda (payload) (error "boom")))))
+    (extension "thrower" "0.1" "1.0" (hasheq 'tool-call (lambda (payload) (error "boom")))))
   (register-extension! reg throwing-ext)
   (define result (dispatch-hooks 'tool-call "payload" reg))
   (check-equal? (hook-result-action result) 'block))
@@ -51,8 +50,7 @@
 (test-case "advisory hook errors default to pass"
   (define reg (make-extension-registry))
   (define throwing-ext
-    (extension "thrower" "0.1" "1.0"
-               (hasheq 'turn-start (lambda (payload) (error "boom")))))
+    (extension "thrower" "0.1" "1.0" (hasheq 'turn-start (lambda (payload) (error "boom")))))
   (register-extension! reg throwing-ext)
   (define result (dispatch-hooks 'turn-start "payload" reg))
   (check-equal? (hook-result-action result) 'pass))
@@ -60,8 +58,13 @@
 (test-case "critical hook timeout defaults to block"
   (define reg (make-extension-registry))
   (define slow-ext
-    (extension "sleeper" "0.1" "1.0"
-               (hasheq 'tool-call (lambda (payload) (sleep 10) payload))))
+    (extension "sleeper"
+               "0.1"
+               "1.0"
+               (hasheq 'tool-call
+                       (lambda (payload)
+                         (sleep 10)
+                         payload))))
   (register-extension! reg slow-ext)
   (parameterize ([current-hook-timeout-ms 50])
     (define result (dispatch-hooks 'tool-call "payload" reg))
@@ -70,8 +73,13 @@
 (test-case "advisory hook timeout defaults to pass"
   (define reg (make-extension-registry))
   (define slow-ext
-    (extension "sleeper" "0.1" "1.0"
-               (hasheq 'context (lambda (payload) (sleep 10) payload))))
+    (extension "sleeper"
+               "0.1"
+               "1.0"
+               (hasheq 'context
+                       (lambda (payload)
+                         (sleep 10)
+                         payload))))
   (register-extension! reg slow-ext)
   (parameterize ([current-hook-timeout-ms 50])
     (define result (dispatch-hooks 'context "payload" reg))
@@ -80,8 +88,7 @@
 (test-case "non-hook-result return from critical hook defaults to block"
   (define reg (make-extension-registry))
   (define bad-ext
-    (extension "bad-return" "0.1" "1.0"
-               (hasheq 'tool-call (lambda (payload) "not-a-hook-result"))))
+    (extension "bad-return" "0.1" "1.0" (hasheq 'tool-call (lambda (payload) "not-a-hook-result"))))
   (register-extension! reg bad-ext)
   (define result (dispatch-hooks 'tool-call "payload" reg))
   (check-equal? (hook-result-action result) 'block))
@@ -89,8 +96,7 @@
 (test-case "non-hook-result return from advisory hook defaults to pass"
   (define reg (make-extension-registry))
   (define bad-ext
-    (extension "bad-return" "0.1" "1.0"
-               (hasheq 'context (lambda (payload) "not-a-hook-result"))))
+    (extension "bad-return" "0.1" "1.0" (hasheq 'context (lambda (payload) "not-a-hook-result"))))
   (register-extension! reg bad-ext)
   (define result (dispatch-hooks 'context "payload" reg))
   (check-equal? (hook-result-action result) 'pass))
@@ -107,8 +113,7 @@
         (set-box! received payload))
       (hook-pass payload)))
   ;; Simulate what loop.rkt does
-  (dispatcher 'agent-start
-              (hasheq 'session-id "test" 'turn-id "t1" 'message-count 5))
+  (dispatcher 'agent-start (hasheq 'session-id "test" 'turn-id "t1" 'message-count 5))
   (check-true (hash? (unbox received)))
   (check-equal? (hash-ref (unbox received) 'session-id) "test")
   (check-equal? (hash-ref (unbox received) 'message-count) 5))
@@ -120,8 +125,7 @@
       (when (eq? hook-point 'agent-end)
         (set-box! received payload))
       (hook-pass payload)))
-  (dispatcher 'agent-end
-              (hasheq 'session-id "test" 'turn-id "t1" 'termination 'completed))
+  (dispatcher 'agent-end (hasheq 'session-id "test" 'turn-id "t1" 'termination 'completed))
   (check-equal? (hash-ref (unbox received) 'termination) 'completed))
 
 ;; ============================================================
@@ -130,36 +134,86 @@
 
 (test-case "dispatch-hooks with pass action continues"
   (define reg (make-extension-registry))
-  (register-extension! reg
-    (extension "pass-ext" "0.1" "1.0"
-               (hasheq 'turn-start (lambda (p) (hook-pass p)))))
+  (register-extension!
+   reg
+   (extension "pass-ext" "0.1" "1.0" (hasheq 'turn-start (lambda (p) (hook-pass p)))))
   (define result (dispatch-hooks 'turn-start "hello" reg))
   (check-equal? (hook-result-action result) 'pass))
 
 (test-case "dispatch-hooks with amend action replaces payload"
   (define reg (make-extension-registry))
-  (register-extension! reg
-    (extension "amend-ext" "0.1" "1.0"
-               (hasheq 'turn-start (lambda (p) (hook-amend "replaced")))))
+  (register-extension!
+   reg
+   (extension "amend-ext" "0.1" "1.0" (hasheq 'turn-start (lambda (p) (hook-amend "replaced")))))
   (define result (dispatch-hooks 'turn-start "original" reg))
   (check-equal? (hook-result-action result) 'amend)
   (check-equal? (hook-result-payload result) "replaced"))
 
 (test-case "dispatch-hooks with block action stops"
   (define reg (make-extension-registry))
-  (register-extension! reg
-    (extension "block-ext" "0.1" "1.0"
-               (hasheq 'tool-call (lambda (p) (hook-block "nope")))))
+  (register-extension!
+   reg
+   (extension "block-ext" "0.1" "1.0" (hasheq 'tool-call (lambda (p) (hook-block "nope")))))
   (define result (dispatch-hooks 'tool-call "payload" reg))
   (check-equal? (hook-result-action result) 'block))
 
 (test-case "dispatch-hooks with ctx-aware handler"
   (define reg (make-extension-registry))
   (register-extension! reg
-    (extension "ctx-ext" "0.1" "1.0"
-               (hasheq 'turn-start
-                       (lambda (ctx payload)
-                         (hook-amend (format "ctx:~a" (ctx-session-id ctx)))))))
-  (define ctx (extension-ctx "s42" "/tmp" (make-event-bus) reg #f #f #f))
+                       (extension "ctx-ext"
+                                  "0.1"
+                                  "1.0"
+                                  (hasheq 'turn-start
+                                          (lambda (ctx payload)
+                                            (hook-amend (format "ctx:~a" (ctx-session-id ctx)))))))
+  (define ctx (extension-ctx "s42" "/tmp" (make-event-bus) reg #f #f #f #f #f #f #f))
   (define result (dispatch-hooks 'turn-start "hello" reg #:ctx ctx))
   (check-equal? (hook-result-payload result) "ctx:s42"))
+
+;; ============================================================
+;; FEAT-63: Per-hook-point result validation
+;; ============================================================
+
+(require "../util/hook-types.rkt")
+
+(test-case "valid-hook-actions-for returns known actions for tool-call"
+  (define actions (valid-hook-actions-for 'tool-call))
+  (check-not-false (member 'pass actions))
+  (check-not-false (member 'amend actions))
+  (check-not-false (member 'block actions)))
+
+(test-case "valid-hook-actions-for defaults to all actions for unknown hook"
+  (define actions (valid-hook-actions-for 'unknown-hook-point))
+  (check-not-false (member 'pass actions))
+  (check-not-false (member 'amend actions))
+  (check-not-false (member 'block actions)))
+
+(test-case "validate-hook-result returns #t for valid tool-call + pass"
+  (check-true (validate-hook-result 'tool-call (hook-pass "payload"))))
+
+(test-case "validate-hook-result returns #t for valid tool-call + block"
+  (check-true (validate-hook-result 'tool-call (hook-block "reason"))))
+
+(test-case "validate-hook-result returns #t for message-end + amend"
+  (check-true (validate-hook-result 'message-end (hook-amend "new payload"))))
+
+(test-case "validate-hook-result returns #f for message-end + block (block not valid)"
+  ;; message-end only allows pass/amend, not block
+  (check-false (validate-hook-result 'message-end (hook-block "reason"))))
+
+(test-case "validate-hook-result returns #t for session-before-fork + pass"
+  (check-true (validate-hook-result 'session-before-fork (hook-pass))))
+
+(test-case "validate-hook-result returns #f for session-before-fork + amend (amend not valid)"
+  ;; session-before-fork only allows pass/block
+  (check-false (validate-hook-result 'session-before-fork (hook-amend "payload"))))
+
+(test-case "validate-hook-result: before-send allows pass and amend"
+  (check-true (validate-hook-result 'before-send (hook-pass)))
+  (check-true (validate-hook-result 'before-send (hook-amend "text")))
+  (check-false (validate-hook-result 'before-send (hook-block "reason"))))
+
+(test-case "validate-hook-result: register-tools allows pass and amend"
+  (check-true (validate-hook-result 'register-tools (hook-pass)))
+  (check-true (validate-hook-result 'register-tools (hook-amend (hasheq 'tools '()))))
+  (check-false (validate-hook-result 'register-tools (hook-block "nope"))))

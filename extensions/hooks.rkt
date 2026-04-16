@@ -25,16 +25,15 @@
          "context.rkt"
          "../util/hook-types.rkt")
 
-(provide
- ;; Re-export hook result types
- (all-from-out "../util/hook-types.rkt")
- ;; Re-export extension-ctx for convenience
- (all-from-out "context.rkt")
- ;; Hook dispatch
- dispatch-hooks
- current-hook-timeout-ms
- critical-hook?
- critical-hooks)
+;; Re-export hook result types
+(provide (all-from-out "../util/hook-types.rkt")
+         ;; Re-export extension-ctx for convenience
+         (all-from-out "context.rkt")
+         ;; Hook dispatch
+         dispatch-hooks
+         current-hook-timeout-ms
+         critical-hook?
+         critical-hooks)
 
 ;; ============================================================
 ;; Hook criticality classification (#670, #671)
@@ -42,8 +41,7 @@
 
 ;; Critical hooks default to 'block on error (safety-first).
 ;; Advisory hooks default to 'pass on error (liveness-first).
-(define critical-hooks
-  '(tool-call session-before-fork session-before-compact input))
+(define critical-hooks '(tool-call session-before-fork session-before-compact input))
 
 (define (critical-hook? hook-point)
   (and (member hook-point critical-hooks) #t))
@@ -65,18 +63,16 @@
              [current-payload payload]
              [amended? #f])
     (cond
-      [(null? remaining)
-       (hook-result (if amended? 'amend 'pass) current-payload)]
+      [(null? remaining) (hook-result (if amended? 'amend 'pass) current-payload)]
       [else
        (define ext-name (car (car remaining)))
-       (define handler  (cdr (car remaining)))
-       (define result
-         (run-hook-with-timeout ext-name hook-point handler current-payload ctx))
+       (define handler (cdr (car remaining)))
+       (define result (run-hook-with-timeout ext-name hook-point handler current-payload ctx))
        (case (hook-result-action result)
          [(block) result]
          [(amend) (loop (cdr remaining) (hook-result-payload result) #t)]
-         [(pass)  (loop (cdr remaining) current-payload amended?)]
-         [else    (loop (cdr remaining) current-payload amended?)])])))
+         [(pass) (loop (cdr remaining) current-payload amended?)]
+         [else (loop (cdr remaining) current-payload amended?)])])))
 
 ;; Per-hook timeout in milliseconds (default: 100ms for streaming hooks).
 ;; Set to #f to disable timeout.
@@ -86,8 +82,7 @@
 ;; If ctx is provided and handler accepts 2 args, call (handler ctx payload).
 ;; Otherwise call (handler payload) for backward compat.
 (define (call-handler handler payload ctx)
-  (if (and ctx
-           (procedure-arity-includes? handler 2))
+  (if (and ctx (procedure-arity-includes? handler 2))
       (handler ctx payload)
       (handler payload)))
 
@@ -99,45 +94,58 @@
     (if (critical-hook? hook-point)
         (hook-block (format "handler ~a failed for critical hook ~a" ext-name hook-point))
         (hook-pass payload)))
-  (with-handlers ([exn:fail?
-                    (lambda (e)
-                      (log-warning
-                       (format "Hook handler ~a for ~a threw: ~a [~a]"
-                               ext-name hook-point (exn-message e)
-                               (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
-                      error-default)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "Hook handler ~a for ~a threw: ~a [~a]"
+                                                    ext-name
+                                                    hook-point
+                                                    (exn-message e)
+                                                    (if (critical-hook? hook-point)
+                                                        "CRITICAL->block"
+                                                        "advisory->pass")))
+                               error-default)])
     (define raw-result
       (if timeout-ms
           ;; Run with timeout
           (let ([chan (make-channel)])
-            (define thd (thread
-                          (lambda ()
-                            (channel-put chan
-                              (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
-                                (cons 'ok (call-handler handler payload ctx)))))))
+            (define thd
+              (thread (lambda ()
+                        (channel-put chan
+                                     (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
+                                       (cons 'ok (call-handler handler payload ctx)))))))
             (define maybe (sync/timeout (/ timeout-ms 1000.0) chan))
-            (unless maybe (kill-thread thd))  ; #447: prevent thread leak
+            (unless maybe
+              (kill-thread thd)) ; #447: prevent thread leak
             (cond
               [(not maybe)
                (log-warning
                 (format "Hook handler ~a for ~a timed out after ~ams [~a]"
-                        ext-name hook-point timeout-ms
+                        ext-name
+                        hook-point
+                        timeout-ms
                         (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
                error-default]
               [(eq? (car maybe) 'error)
                (log-warning
                 (format "Hook handler ~a for ~a threw: ~a [~a]"
-                        ext-name hook-point (exn-message (cdr maybe))
+                        ext-name
+                        hook-point
+                        (exn-message (cdr maybe))
                         (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
                error-default]
               [else (cdr maybe)]))
           ;; No timeout — direct call
           (call-handler handler payload ctx)))
     (if (hook-result? raw-result)
-        raw-result
+        ;; FEAT-63: Validate action is valid for this hook-point
+        (let ([valid? (validate-hook-result hook-point raw-result)])
+          (if valid?
+              raw-result
+              ;; Invalid action: warn but still return the result (permissive)
+              raw-result))
         (begin
-          (log-warning
-           (format "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
-                   ext-name hook-point raw-result
-                   (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+          (log-warning (format "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
+                               ext-name
+                               hook-point
+                               raw-result
+                               (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
           error-default))))
