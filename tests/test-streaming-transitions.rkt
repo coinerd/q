@@ -199,7 +199,83 @@
                   "last entry is tool-fail, not tool-end")
     (define fail-text (last (transcript-texts final)))
     (check-not-false (regexp-match #rx"\\[FAIL:" fail-text)
-                     (format "fail entry has FAIL prefix, got: ~a" fail-text)))))
+                     (format "fail entry has FAIL prefix, got: ~a" fail-text)))
+
+   ;; ============================================================
+   ;; Wave 4 edge case tests
+   ;; ============================================================
+
+   ;; Edge 1: Empty streaming text — no content deltas at all
+   (test-case
+    "empty streaming: no deltas, only completion"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content ""))
+            (make-test-event "turn.completed"
+                             (hasheq 'termination 'completed 'turnId "turn-1"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 3))
+    (check-false (ui-state-streaming-text final) "no streaming text")
+    (check-false (ui-state-busy? final) "not busy")
+    (check-equal? (transcript-length final) 1 "one transcript entry for empty message"))
+
+   ;; Edge 2: Concurrent tool calls — both started before either completes
+   (test-case
+    "concurrent tool calls: both started before either completes"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "Working..."))
+            (make-test-event "tool.call.started"
+                             (hasheq 'id "tc-1" 'name "read" 'arguments "/tmp/a"))
+            (make-test-event "tool.call.started"
+                             (hasheq 'id "tc-2" 'name "read" 'arguments "/tmp/b"))
+            (make-test-event "tool.call.completed"
+                             (hasheq 'name "read" 'result "data-b"))
+            (make-test-event "tool.call.completed"
+                             (hasheq 'name "read" 'result "data-a"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 6))
+    (check-equal? (transcript-length final) 5
+                  "5 entries: 1 assistant + 2 tool-starts + 2 tool-ends")
+    (check-false (ui-state-busy? final) "not busy"))
+
+   ;; Edge 3: Rapid events — delta+completed+tool-start in quick succession
+   (test-case
+    "rapid events: delta then completed then tool-start"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "X"))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "X"))
+            (make-test-event "tool.call.started"
+                             (hasheq 'id "tc-1" 'name "bash" 'arguments "echo hi"))
+            (make-test-event "tool.call.completed"
+                             (hasheq 'name "bash" 'result "hi"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 5))
+    (check-equal? (transcript-types final) '(assistant tool-start tool-end)
+                  "rapid succession produces correct transcript")
+    (check-false (ui-state-streaming-text final) "streaming cleared"))
+
+   ;; Edge 4: Cancelled turn clears all state
+   (test-case
+    "cancelled turn clears streaming text and busy state"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "Partial..."))
+            (make-test-event "tool.call.started"
+                             (hasheq 'id "tc-1" 'name "read" 'arguments "/tmp/x"))
+            (make-test-event "turn.cancelled" (hasheq))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 4))
+    (check-false (ui-state-streaming-text final) "streaming cleared on cancel")
+    (check-false (ui-state-busy? final) "not busy after cancel"))))
 
 (module+ main
   (run-tests streaming-transition-tests))
