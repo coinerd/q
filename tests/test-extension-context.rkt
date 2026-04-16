@@ -298,6 +298,169 @@
     (check-eq? (hook-result-action result) 'block)
     (check-equal? (hook-result-payload result) "handler crasher failed for critical hook tool-call")))
 
+;; ============================================================
+;; 1b. extension-ctx new fields (FEAT-58)
+;; ============================================================
+
+(test-case "make-extension-ctx accepts new optional fields (session-store, tool-registry, command-registry, ui-channel)"
+  (define bus (make-event-bus))
+  (define reg (make-extension-registry))
+  (define store (box 'session-store-mock))
+  (define tools (box 'tool-registry-mock))
+  (define cmds (box 'command-registry-mock))
+  (define ui-ch (make-channel))
+  (define ctx
+    (make-extension-ctx #:session-id "sess-058"
+                        #:session-dir "/tmp/sess-058"
+                        #:event-bus bus
+                        #:extension-registry reg
+                        #:session-store store
+                        #:tool-registry tools
+                        #:command-registry cmds
+                        #:ui-channel ui-ch))
+  (check-eq? (ctx-session-store ctx) store)
+  (check-eq? (ctx-tool-registry ctx) tools)
+  (check-eq? (ctx-command-registry ctx) cmds)
+  (check-eq? (ctx-ui-channel ctx) ui-ch))
+
+(test-case "make-extension-ctx new fields default to #f for backward compat"
+  (define ctx
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)))
+  (check-false (ctx-session-store ctx))
+  (check-false (ctx-tool-registry ctx))
+  (check-false (ctx-command-registry ctx))
+  (check-false (ctx-ui-channel ctx)))
+
+(test-case "make-extension-ctx with mixed old and new fields"
+  (define bus (make-event-bus))
+  (define reg (make-extension-registry))
+  (define store (box 'store))
+  (define ctx
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus bus
+                        #:extension-registry reg
+                        #:model-name "gpt-4o"
+                        #:session-store store))
+  (check-equal? (ctx-session-id ctx) "s")
+  (check-equal? (ctx-model ctx) "gpt-4o")
+  (check-eq? (ctx-session-store ctx) store)
+  ;; Others default to #f
+  (check-false (ctx-tool-registry ctx))
+  (check-false (ctx-command-registry ctx))
+  (check-false (ctx-ui-channel ctx)))
+
+(test-case "extension-ctx with new fields is still transparent"
+  (define bus (make-event-bus))
+  (define reg (make-extension-registry))
+  (define ui-ch (make-channel))
+  (define ctx1
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus bus
+                        #:extension-registry reg
+                        #:ui-channel ui-ch))
+  (define ctx2
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus bus
+                        #:extension-registry reg
+                        #:ui-channel ui-ch))
+  (check-equal? ctx1 ctx2))
+
+(test-case "ctx-session-store returns session store or #f"
+  (define store (box 'store))
+  (define ctx-with
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:session-store store))
+  (check-eq? (ctx-session-store ctx-with) store)
+  (define ctx-without
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)))
+  (check-false (ctx-session-store ctx-without)))
+
+(test-case "ctx-tool-registry returns tool registry or #f"
+  (define tools (box 'tools))
+  (define ctx-with
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry tools))
+  (check-eq? (ctx-tool-registry ctx-with) tools)
+  (define ctx-without
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)))
+  (check-false (ctx-tool-registry ctx-without)))
+
+(test-case "ctx-command-registry returns command registry or #f"
+  (define cmds (box 'cmds))
+  (define ctx-with
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:command-registry cmds))
+  (check-eq? (ctx-command-registry ctx-with) cmds)
+  (define ctx-without
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)))
+  (check-false (ctx-command-registry ctx-without)))
+
+(test-case "ctx-ui-channel returns channel or #f"
+  (define ui-ch (make-channel))
+  (define ctx-with
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:ui-channel ui-ch))
+  (check-eq? (ctx-ui-channel ctx-with) ui-ch)
+  (define ctx-without
+    (make-extension-ctx #:session-id "s"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)))
+  (check-false (ctx-ui-channel ctx-without)))
+
+(test-case "dispatch-hooks with #:ctx: handler can access new ctx fields"
+  (define reg (make-extension-registry))
+  (define store (box 'my-store))
+  (define ctx
+    (make-extension-ctx #:session-id "sess-new-fields"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry reg
+                        #:session-store store))
+  (define received-store (box #f))
+  (register-extension! reg
+                       (extension "store-reader"
+                                  "1"
+                                  "1"
+                                  (hasheq 'tool-call
+                                          (λ (c p)
+                                            (set-box! received-store (ctx-session-store c))
+                                            (hook-pass p)))))
+  (parameterize ([current-hook-timeout-ms #f])
+    (dispatch-hooks 'tool-call "payload" reg #:ctx ctx)
+    (check-eq? (unbox received-store) store)))
+
+;; ============================================================
+;; 3. backward compat — old tests continue below
+;; ============================================================
+
 (test-case "dispatch-hooks with #:ctx: cancelled token accessible via ctx-signal"
   (define reg (make-extension-registry))
   (define tok (make-cancellation-token))
