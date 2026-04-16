@@ -12,7 +12,8 @@
          "../tui/state.rkt"
          "../tui/render.rkt"
          "../tools/tool.rkt"
-         "../extensions/custom-ui-api.rkt")
+         "../extensions/custom-ui-api.rkt"
+         "../extensions/custom-renderer-registry.rkt")
 
 ;; ============================================================
 ;; #717: Custom header/footer
@@ -84,10 +85,13 @@
     (lambda (args) (list (styled-line (list (styled-segment (format "Calling: ~a" args) '(bold)))))))
   (define render-result
     (lambda (res) (list (styled-line (list (styled-segment (format "Done: ~a" res) '()))))))
-  (define t (make-tool "my-tool" "A test tool" (hasheq)
-                        (lambda (args) "ok")
-                        #:render-call render-call
-                        #:render-result render-result))
+  (define t
+    (make-tool "my-tool"
+               "A test tool"
+               (hasheq)
+               (lambda (args) "ok")
+               #:render-call render-call
+               #:render-result render-result))
   (check-equal? (tool-name t) "my-tool")
   (check-true (procedure? (tool-render-call t)))
   (check-true (procedure? (tool-render-result t))))
@@ -102,7 +106,8 @@
 ;; ============================================================
 
 (test-case "render-tool-call: uses custom renderer"
-  (define custom (list (custom-renderer "my-tool"
+  (define custom
+    (list (custom-renderer "my-tool"
                            (lambda (args)
                              (list (styled-line (list (styled-segment "CUSTOM CALL" '(bold))))))
                            #f)))
@@ -116,7 +121,8 @@
   (check-true (string-contains? (styled-line->text (car result)) "unknown-tool")))
 
 (test-case "render-tool-result: uses custom renderer"
-  (define custom (list (custom-renderer "my-tool"
+  (define custom
+    (list (custom-renderer "my-tool"
                            #f
                            (lambda (res)
                              (list (styled-line (list (styled-segment "CUSTOM RESULT" '()))))))))
@@ -134,9 +140,7 @@
 ;; ============================================================
 
 (test-case "custom-renderer struct: stores all fields"
-  (define r (custom-renderer "bash"
-              (lambda (a) '())
-              (lambda (r) '())))
+  (define r (custom-renderer "bash" (lambda (a) '()) (lambda (r) '())))
   (check-equal? (custom-renderer-tool-name r) "bash")
   (check-true (procedure? (custom-renderer-render-call r)))
   (check-true (procedure? (custom-renderer-render-result r))))
