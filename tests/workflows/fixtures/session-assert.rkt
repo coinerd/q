@@ -24,7 +24,8 @@
 
 (define (session-log-entries log-path)
   (if (file-exists? log-path)
-      (load-session-log log-path)
+      ;; #773: Filter out session-info (version header) entries
+      (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) (load-session-log log-path))
       '()))
 
 (define (entries-with-role entries role)
@@ -55,8 +56,8 @@
 ;; ============================================================
 
 (define (check-session-contains-turns log-path
-                                       #:user-turns [expected-user #f]
-                                       #:assistant-turns [expected-assistant #f])
+                                      #:user-turns [expected-user #f]
+                                      #:assistant-turns [expected-assistant #f])
   (define entries (session-log-entries log-path))
   (define user-entries (entries-with-role entries 'user))
   (define assistant-entries (entries-with-role entries 'assistant))
@@ -86,14 +87,15 @@
   (cond
     [(not (= (length tool-names) (length expected-tools)))
      (format "expected ~a tool calls ~a, got ~a tool calls ~a"
-             (length expected-tools) expected-tools
-             (length tool-names) tool-names)]
+             (length expected-tools)
+             expected-tools
+             (length tool-names)
+             tool-names)]
     [(for/and ([a (in-list tool-names)]
                [b (in-list expected-tools)])
        (equal? a b))
      #t]
-    [else
-     (format "expected tool sequence ~a, got ~a" expected-tools tool-names)]))
+    [else (format "expected tool sequence ~a, got ~a" expected-tools tool-names)]))
 
 ;; ============================================================
 ;; check-session-tree-structure
@@ -104,7 +106,9 @@
   (cond
     [(null? entries) #t]
     [else
-     (define ids (for/hash ([m (in-list entries)]) (values (message-id m) #t)))
+     (define ids
+       (for/hash ([m (in-list entries)])
+         (values (message-id m) #t)))
      (define first-parent (message-parent-id (first entries)))
      (cond
        [first-parent "first message should have #f parent"]

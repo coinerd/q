@@ -1098,9 +1098,7 @@
                                   ext-reg
                                   'model-name
                                   "test-model")))
-    ;; #771: ensure session directory exists for resume test
-    (make-directory* (build-path tmpdir (session-id sess)))
-    (with-output-to-file (build-path tmpdir (session-id sess) "session.jsonl") (lambda () (void)))
+    ;; #771: ensure-persisted! now creates directory and version header eagerly
     (define sid (session-id sess))
     ;; Resume it
     (define resumed
@@ -1138,9 +1136,7 @@
                                   (path->string tmpdir)
                                   'system-instructions
                                   instrs)))
-    ;; #771: ensure directory exists for resume test
-    (make-directory* (build-path (string->path (path->string tmpdir)) (session-id sess)))
-    (with-output-to-file (build-path tmpdir (session-id sess) "session.jsonl") (lambda () (void)))
+    ;; #771: ensure-persisted! now creates directory and version header eagerly
     (define sid (session-id sess))
     ;; Resume it
     (define resumed

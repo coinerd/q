@@ -12,49 +12,66 @@
          json
          "../llm/provider.rkt"
          (only-in "../llm/model.rkt"
-                  make-model-response model-response-content
-                  stream-chunk stream-chunk?
-                  stream-chunk-delta-text stream-chunk-delta-tool-call
-                  stream-chunk-usage stream-chunk-done?)
-         (only-in "../agent/event-bus.rkt"
-                  make-event-bus event-bus?
-                  subscribe! unsubscribe! publish!)
+                  make-model-response
+                  model-response-content
+                  stream-chunk
+                  stream-chunk?
+                  stream-chunk-delta-text
+                  stream-chunk-delta-tool-call
+                  stream-chunk-usage
+                  stream-chunk-done?)
+         (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
          (only-in "../util/protocol-types.rkt"
-                  make-event event-event event?
-                  message? message-id message-role message-content
-                  make-message make-text-part
-                  text-part? text-part-text
-                  loop-result? loop-result-termination-reason
-                  loop-result-messages loop-result-metadata
+                  make-event
+                  event-event
+                  event?
+                  message?
+                  message-id
+                  message-role
+                  message-content
+                  make-message
+                  make-text-part
+                  text-part?
+                  text-part-text
+                  loop-result?
+                  loop-result-termination-reason
+                  loop-result-messages
+                  loop-result-metadata
                   make-loop-result)
          (only-in "../tools/tool.rkt"
-                  make-tool-registry register-tool! make-tool
-                  tool-names tool?
+                  make-tool-registry
+                  register-tool!
+                  make-tool
+                  tool-names
+                  tool?
                   make-exec-context
-                  make-success-result make-error-result
-                  tool-result? tool-result-content tool-result-is-error?)
+                  make-success-result
+                  make-error-result
+                  tool-result?
+                  tool-result-content
+                  tool-result-is-error?)
          "../extensions/api.rkt"
          "../util/cancellation.rkt"
          "../util/jsonl.rkt"
          (prefix-in sdk: "../interfaces/sdk.rkt")
-         (only-in "../runtime/compactor.rkt"
-                  compaction-result?))
+         (only-in "../runtime/compactor.rkt" compaction-result?))
 
 ;; Import register-default-tools! from main.rkt (which wires all 9 tools)
-(require (only-in "../main.rkt"
-                  register-default-tools!
-                  make-event-bus))
+(require (only-in "../main.rkt" register-default-tools! make-event-bus))
 
-(require (only-in "helpers/mock-provider.rkt"
-                  make-simple-mock-provider
-                  make-tool-call-mock-provider))
+(require (only-in "helpers/mock-provider.rkt" make-simple-mock-provider make-tool-call-mock-provider))
 
 ;; ============================================================
 ;; Helpers
- ;; ============================================================
+;; ============================================================
 
 (define (make-temp-dir)
   (make-temporary-file "q-integ-~a" 'directory))
+
+;; Filter out session-info (version header) entries from raw JSONL hashes.
+;; Production session-history does this; raw JSONL readers must too.
+(define (filter-session-info entries)
+  (filter (lambda (e) (not (equal? (hash-ref e 'kind #f) "session-info"))) entries))
 
 (define (cleanup-dir dir)
   (when (directory-exists? dir)
@@ -102,15 +119,14 @@
   (define sid (hash-ref info 'session-id))
   (define log-path (build-path dir sid "session.jsonl"))
   (check-pred file-exists? log-path)
-  (define entries (jsonl-read-all-valid log-path))
+  (define entries (filter-session-info (jsonl-read-all-valid log-path)))
   (check >= (length entries) 2)
   ;; Verify content of entries: should have user then assistant
-  (check-equal? (hash-ref (first entries) 'role) "user"
-                "first entry should be user message")
+  (check-equal? (hash-ref (first entries) 'role) "user" "first entry should be user message")
   ;; Content in JSONL is a list of content-part hashes, not a raw string
-  (check-true (list? (hash-ref (first entries) 'content #f))
-              "user entry should have content list")
-  (check-equal? (hash-ref (second entries) 'role) "assistant"
+  (check-true (list? (hash-ref (first entries) 'content #f)) "user entry should have content list")
+  (check-equal? (hash-ref (second entries) 'role)
+                "assistant"
                 "second entry should be assistant message")
   (cleanup-dir dir))
 
@@ -132,16 +148,15 @@
 (test-case "integ: tool call → scheduler executes → result appended"
   (define dir (make-temp-dir))
   (define reg (make-tool-registry))
-  (register-tool! reg
-    (make-tool "echo" "Echo tool"
-               (hasheq 'type "object"
-                       'required '("text")
-                       'properties (hasheq 'text (hasheq 'type "string")))
-               (lambda (args ctx)
-                 (make-success-result (hash-ref args 'text "echo")))))
-  (define prov (make-tool-call-mock-provider
-                "echo" (hasheq 'text "hello world")
-                "Got the echo result"))
+  (register-tool!
+   reg
+   (make-tool
+    "echo"
+    "Echo tool"
+    (hasheq 'type "object" 'required '("text") 'properties (hasheq 'text (hasheq 'type "string")))
+    (lambda (args ctx) (make-success-result (hash-ref args 'text "echo")))))
+  (define prov
+    (make-tool-call-mock-provider "echo" (hasheq 'text "hello world") "Got the echo result"))
   (define rt (make-test-runtime prov #:session-dir dir #:tool-registry reg))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "echo hello"))
@@ -150,7 +165,7 @@
   (define info (sdk:session-info rt3))
   (define sid (hash-ref info 'session-id))
   (define log-path (build-path dir sid "session.jsonl"))
-  (define entries (jsonl-read-all-valid log-path))
+  (define entries (filter-session-info (jsonl-read-all-valid log-path)))
   (check >= (length entries) 2)
   ;; Verify content: should contain user, assistant(tool-call), tool-result, assistant(text)
   (define roles (map (lambda (e) (hash-ref e 'role #f)) entries))
@@ -160,10 +175,8 @@
 
 (test-case "integ: unknown tool → error result"
   (define dir (make-temp-dir))
-  (define reg (make-tool-registry))  ; empty registry
-  (define prov (make-tool-call-mock-provider
-                "nonexistent-tool" (hasheq)
-                "recovered"))
+  (define reg (make-tool-registry)) ; empty registry
+  (define prov (make-tool-call-mock-provider "nonexistent-tool" (hasheq) "recovered"))
   (define rt (make-test-runtime prov #:session-dir dir #:tool-registry reg))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "use bad tool"))
@@ -180,14 +193,10 @@
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
   (define events-received (box '()))
-  (subscribe! bus (lambda (evt)
-                    (set-box! events-received
-                              (append (unbox events-received)
-                                      (list (event-event evt))))))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:event-bus bus))
+  (subscribe! bus
+              (lambda (evt)
+                (set-box! events-received (append (unbox events-received) (list (event-event evt))))))
+  (define rt (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 _result) (sdk:run-prompt! rt2 "test"))
   (define events (unbox events-received))
@@ -205,10 +214,7 @@
   (define box-b (box 0))
   (subscribe! bus (lambda (evt) (set-box! box-a (add1 (unbox box-a)))))
   (subscribe! bus (lambda (evt) (set-box! box-b (add1 (unbox box-b)))))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:event-bus bus))
+  (define rt (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 _result) (sdk:run-prompt! rt2 "test"))
   (check > (unbox box-a) 0)
@@ -222,13 +228,9 @@
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
   (define box-count (box 0))
-  (define sub-id (subscribe! bus (lambda (evt)
-                                   (set-box! box-count (add1 (unbox box-count))))))
+  (define sub-id (subscribe! bus (lambda (evt) (set-box! box-count (add1 (unbox box-count))))))
   (unsubscribe! bus sub-id)
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:event-bus bus))
+  (define rt (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 _result) (sdk:run-prompt! rt2 "test"))
   (check-equal? (unbox box-count) 0)
@@ -243,10 +245,8 @@
   (define prov1 (make-simple-mock-provider "first response" "second response"))
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
-  (define rt1 (sdk:make-runtime #:provider prov1
-                                #:session-dir dir
-                                #:tool-registry reg
-                                #:event-bus bus))
+  (define rt1
+    (sdk:make-runtime #:provider prov1 #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt2 (sdk:open-session rt1))
   (define info1 (sdk:session-info rt2))
   (define sid (hash-ref info1 'session-id))
@@ -254,10 +254,8 @@
 
   ;; Resume with a new provider
   (define prov2 (make-simple-mock-provider "resumed response"))
-  (define rt4 (sdk:make-runtime #:provider prov2
-                                #:session-dir dir
-                                #:tool-registry reg
-                                #:event-bus bus))
+  (define rt4
+    (sdk:make-runtime #:provider prov2 #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt5 (sdk:open-session rt4 sid))
   (define info2 (sdk:session-info rt5))
   (check >= (hash-ref info2 'history-length) 2)
@@ -269,30 +267,28 @@
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
   (define prov1 (make-simple-mock-provider "first"))
-  (define rt1 (sdk:make-runtime #:provider prov1
-                                #:session-dir dir
-                                #:tool-registry reg
-                                #:event-bus bus))
+  (define rt1
+    (sdk:make-runtime #:provider prov1 #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt2 (sdk:open-session rt1))
   (define sid (hash-ref (sdk:session-info rt2) 'session-id))
   (sdk:run-prompt! rt2 "prompt 1")
 
   (define prov2 (make-simple-mock-provider "second"))
-  (define rt3 (sdk:make-runtime #:provider prov2
-                                #:session-dir dir
-                                #:tool-registry reg
-                                #:event-bus bus))
+  (define rt3
+    (sdk:make-runtime #:provider prov2 #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt4 (sdk:open-session rt3 sid))
   (sdk:run-prompt! rt4 "prompt 2")
 
   (define log-path (build-path dir sid "session.jsonl"))
-  (define entries (jsonl-read-all-valid log-path))
+  (define entries (filter-session-info (jsonl-read-all-valid log-path)))
   (check >= (length entries) 4)
   ;; Verify content: should have multiple user and assistant messages from both prompts
   (define roles (map (lambda (e) (hash-ref e 'role #f)) entries))
-  (check-equal? (length (filter (lambda (r) (equal? r "user")) roles)) 2
+  (check-equal? (length (filter (lambda (r) (equal? r "user")) roles))
+                2
                 "should have 2 user messages from two prompts")
-  (check-equal? (length (filter (lambda (r) (equal? r "assistant")) roles)) 2
+  (check-equal? (length (filter (lambda (r) (equal? r "assistant")) roles))
+                2
                 "should have 2 assistant messages from two prompts")
   (cleanup-dir dir))
 
@@ -300,8 +296,7 @@
   (define dir (make-temp-dir))
   (define prov (make-simple-mock-provider "x"))
   (define rt (make-test-runtime prov #:session-dir dir))
-  (check-exn exn:fail?
-             (lambda () (sdk:open-session rt "nonexistent-session-id")))
+  (check-exn exn:fail? (lambda () (sdk:open-session rt "nonexistent-session-id")))
   (cleanup-dir dir))
 
 ;; ============================================================
@@ -318,8 +313,7 @@
   (check-true (sdk:runtime? forked))
   (define orig-info (sdk:session-info rt2))
   (define fork-info (sdk:session-info forked))
-  (check-equal? (hash-ref fork-info 'history-length)
-                (hash-ref orig-info 'history-length))
+  (check-equal? (hash-ref fork-info 'history-length) (hash-ref orig-info 'history-length))
   (cleanup-dir dir))
 
 (test-case "integ: fork → new prompt on fork leaves original unchanged"
@@ -327,19 +321,14 @@
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
   (define prov (make-simple-mock-provider "original response" "fork response"))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:event-bus bus))
+  (define rt (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (sdk:run-prompt! rt2 "prompt 1")
   (define orig-history-len (hash-ref (sdk:session-info rt2) 'history-length))
   (define forked (sdk:fork-session! rt2))
   (sdk:run-prompt! forked "prompt on fork")
-  (check-equal? (hash-ref (sdk:session-info rt2) 'history-length)
-                orig-history-len)
-  (check > (hash-ref (sdk:session-info forked) 'history-length)
-         orig-history-len)
+  (check-equal? (hash-ref (sdk:session-info rt2) 'history-length) orig-history-len)
+  (check > (hash-ref (sdk:session-info forked) 'history-length) orig-history-len)
   (cleanup-dir dir))
 
 ;; ============================================================
@@ -352,13 +341,11 @@
   (define rt (make-test-runtime prov #:session-dir dir))
   (define rt2 (sdk:open-session rt))
   (sdk:run-prompt! rt2 "prompt")
-  (define log-path (build-path dir
-                               (hash-ref (sdk:session-info rt2) 'session-id)
-                               "session.jsonl"))
-  (define entries-before (length (jsonl-read-all-valid log-path)))
+  (define log-path (build-path dir (hash-ref (sdk:session-info rt2) 'session-id) "session.jsonl"))
+  (define entries-before (length (filter-session-info (jsonl-read-all-valid log-path))))
   (define-values (rt3 comp-result) (sdk:compact-session! rt2 #:persist? #f))
   (check-pred compaction-result? comp-result)
-  (define entries-after (length (jsonl-read-all-valid log-path)))
+  (define entries-after (length (filter-session-info (jsonl-read-all-valid log-path))))
   (check-equal? entries-before entries-after)
   (cleanup-dir dir))
 
@@ -368,13 +355,11 @@
   (define rt (make-test-runtime prov #:session-dir dir))
   (define rt2 (sdk:open-session rt))
   (sdk:run-prompt! rt2 "prompt for persist")
-  (define log-path (build-path dir
-                               (hash-ref (sdk:session-info rt2) 'session-id)
-                               "session.jsonl"))
-  (define entries-before (length (jsonl-read-all-valid log-path)))
+  (define log-path (build-path dir (hash-ref (sdk:session-info rt2) 'session-id) "session.jsonl"))
+  (define entries-before (length (filter-session-info (jsonl-read-all-valid log-path))))
   (define-values (rt3 comp-result) (sdk:compact-session! rt2 #:persist? #t))
   (check-pred compaction-result? comp-result)
-  (define entries-after (length (jsonl-read-all-valid log-path)))
+  (define entries-after (length (filter-session-info (jsonl-read-all-valid log-path))))
   (check >= entries-after entries-before)
   (cleanup-dir dir))
 
@@ -400,15 +385,14 @@
   (define reg (make-tool-registry))
   (define tok (make-cancellation-token))
   (define events (box '()))
-  (subscribe! bus (lambda (evt)
-                    (set-box! events (append (unbox events)
-                                             (list (event-event evt))))))
+  (subscribe! bus (lambda (evt) (set-box! events (append (unbox events) (list (event-event evt))))))
   (cancel-token! tok)
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:event-bus bus
-                               #:cancellation-token tok))
+  (define rt
+    (sdk:make-runtime #:provider prov
+                      #:session-dir dir
+                      #:tool-registry reg
+                      #:event-bus bus
+                      #:cancellation-token tok))
   (define rt2 (sdk:open-session rt))
   (sdk:run-prompt! rt2 "test")
   (check-not-false (member "turn.cancelled" (unbox events)))
@@ -459,11 +443,10 @@
   (define dir (make-temp-dir))
   (define reg (make-tool-registry))
   (register-tool! reg
-    (make-tool "ping" "ping tool"
-               (hasheq 'type "object"
-                       'required '()
-                       'properties (hasheq))
-               (lambda (args ctx) (make-success-result "pong"))))
+                  (make-tool "ping"
+                             "ping tool"
+                             (hasheq 'type "object" 'required '() 'properties (hasheq))
+                             (lambda (args ctx) (make-success-result "pong"))))
   ;; Provider always returns tool-call via stream
   (define ever-calling-prov
     (make-provider
@@ -471,28 +454,16 @@
      (lambda () (hash 'streaming #t 'token-counting #t))
      (lambda (req)
        (make-model-response
-        (list (hash 'type "tool-call"
-                    'id "tc-loop"
-                    'name "ping"
-                    'arguments (hasheq)))
+        (list (hash 'type "tool-call" 'id "tc-loop" 'name "ping" 'arguments (hasheq)))
         (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
         "mock"
         'tool-calls))
      (lambda (req)
-       (list (stream-chunk
-              #f
-              (hasheq 'id "tc-loop"
-                      'name "ping"
-                      'arguments "{}")
-              #f #f)
-             (stream-chunk
-              #f #f
-              (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
-              #t)))))
-  (define rt (make-test-runtime ever-calling-prov
-                                #:session-dir dir
-                                #:tool-registry reg
-                                #:max-iterations 1))
+       (list
+        (stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
+        (stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t)))))
+  (define rt
+    (make-test-runtime ever-calling-prov #:session-dir dir #:tool-registry reg #:max-iterations 1))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "loop"))
   (check-equal? (loop-result-termination-reason result) 'max-iterations-exceeded)
