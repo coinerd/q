@@ -620,7 +620,31 @@
                    [streaming-text "partial..."]))
       (define evt (make-test-event "model.stream.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
-      (check-false (ui-state-streaming-text s1) "model.stream.completed clears streaming-text"))))
+      (check-false (ui-state-streaming-text s1) "model.stream.completed clears streaming-text"))
+
+    ;; ============================================================
+    ;; W4: BUG-37,38 — UX polish
+    ;; ============================================================
+
+    (test-case "BUG-38: tool.call.started guards against pending overwrite"
+      ;; If a tool is already pending, don't overwrite its name
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [busy? #t]
+                   [pending-tool-name "read"]))
+      (define evt (make-test-event "tool.call.started"
+                   (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
+      (define s1 (apply-event-to-state s0 evt))
+      ;; pending-tool-name should stay as the original "read"
+      (check-equal? (ui-state-pending-tool-name s1) "read" "pending-tool-name not overwritten")
+      ;; But the tool-start entry should still be added
+      (check-true (> (length (ui-state-transcript s1)) 0) "tool-start entry added"))
+
+    (test-case "BUG-38: tool.call.started sets name when no tool pending"
+      (define s0 (initial-ui-state))
+      (define evt (make-test-event "tool.call.started"
+                   (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-equal? (ui-state-pending-tool-name s1) "bash" "pending-tool-name set"))))
 
 (run-tests state-tests)
 

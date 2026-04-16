@@ -272,22 +272,19 @@
 
     [("tool.call.started")
      ;; Show tool started with arguments, mark busy
-     (define name (hash-ref payload 'name "?"))
-     (define args-raw (hash-ref payload 'arguments #f))
-     (define arg-summary
-       (if args-raw
-           (extract-arg-summary args-raw)
-           ""))
-     (define text
-       (if (string=? arg-summary "")
-           (format "[TOOL: ~a]" name)
-           (format "[TOOL: ~a] ~a" name arg-summary)))
-     (define ts (event-time evt))
-     (define meta (hasheq 'name name 'arguments (or args-raw "")))
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'tool-start text ts meta))
-                  [busy? #t]
-                  [pending-tool-name name])]
+     (let* ([name (hash-ref payload 'name "?")]
+            [args-raw (hash-ref payload 'arguments #f)]
+            [arg-summary (if args-raw (extract-arg-summary args-raw) "")]
+            [text (if (string=? arg-summary "")
+                      (format "[TOOL: ~a]" name)
+                      (format "[TOOL: ~a] ~a" name arg-summary))]
+            [ts (event-time evt)]
+            [meta (hasheq 'name name 'arguments (or args-raw ""))]
+            [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+       ;; BUG-38 fix: don't overwrite pending-tool-name if one is already set
+       (if (ui-state-pending-tool-name state)
+           (struct-copy ui-state new-state (busy? #t))
+           (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))]
 
     [("tool.call.completed")
      ;; Show tool completed with result summary
