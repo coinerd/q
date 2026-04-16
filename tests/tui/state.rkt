@@ -808,3 +808,42 @@
                    "render should show new content, not stale cached content")
   (check-false (string-contains? rendered-text "Old content")
                "render should NOT show stale old content"))
+
+;; ============================================================
+;; W0.2: BUG-27 — scrollback save on crash (tui-init.rkt)
+;; Tests for the state-level guarantee; tui-init is tested via integration
+;; ============================================================
+
+(test-case "W0.2: save-scrollback succeeds with valid entries"
+  (define tmpdir (make-temporary-file "scrollback-save-~a" 'directory))
+  (define path (build-path tmpdir "scrollback.jsonl"))
+  (define entries
+    (list (make-entry 'assistant "test" 1000 (hash))
+          (make-entry 'system "info" 1001 (hash))))
+  ;; save-scrollback should succeed
+  (save-scrollback entries path)
+  (check-true (file-exists? path))
+  (define loaded (load-scrollback path))
+  (check-equal? (length loaded) 2)
+  (delete-directory/files tmpdir))
+
+;; ============================================================
+;; W0.3: BUG-28 — session.start vs session.started naming
+;; ============================================================
+
+(test-case "W0.3: session.started event updates session-id"
+  (define s0 (initial-ui-state))
+  (define evt (make-test-event "session.started" (hash 'sessionId "new-sess-1")))
+  (define s1 (apply-event-to-state s0 evt))
+  (check-equal? (ui-state-session-id s1) "new-sess-1")
+  (check-equal? (length (ui-state-transcript s1)) 1)
+  (check-not-false
+   (string-contains? (transcript-entry-text (first (ui-state-transcript s1)))
+                      "new-sess-1")))
+
+(test-case "W0.3: session.started with reason in payload"
+  (define s0 (initial-ui-state))
+  (define evt (make-test-event "session.started"
+                               (hash 'sessionId "sess-2" 'reason 'resume)))
+  (define s1 (apply-event-to-state s0 evt))
+  (check-equal? (ui-state-session-id s1) "sess-2"))
