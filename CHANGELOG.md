@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.2] — 2026-04-16
+
+### Fixed
+- **BUG-55**: Show mock provider warning in TUI status bar — \#[No API key] displayed when using fallback provider
+- **BUG-56**: Fix terminal state corruption on crash — mouse tracking now disabled in all exit paths
+- **BUG-57**: Fix mouse selection offset in large terminals — padding accounted for in coordinate mapping
+
 ## [0.10.1] — 2026-04-16
 
 ### Bug Fixes
