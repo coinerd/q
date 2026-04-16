@@ -275,6 +275,11 @@
 ;; ============================================================
 
 (define (fork-session sess [parent-entry-id #f])
+  ;; Guard — refuse fork on closed session
+  (unless (session-active? sess)
+    (raise (exn:fail (format "fork-session: session ~a is closed"
+                             (agent-session-session-id sess))
+                     (current-continuation-marks))))
   ;; #669: Dispatch 'session-before-fork hook — extensions can block fork
   (let* ([ext-reg (agent-session-extension-registry sess)]
          [fork-payload (hasheq 'session-id (agent-session-session-id sess)
@@ -587,6 +592,11 @@
 ;; ============================================================
 
 (define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
+  ;; B4: Guard — refuse operations on closed sessions
+  (unless (session-active? sess)
+    (raise (exn:fail (format "run-prompt!: session ~a is closed"
+                             (agent-session-session-id sess))
+                     (current-continuation-marks))))
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
@@ -667,17 +677,19 @@
   (agent-session-active? sess))
 
 (define (close-session! sess)
-  (emit-session-event! (agent-session-event-bus sess)
-                       (agent-session-session-id sess)
-                       "session.closed"
-                       (hasheq 'sessionId (agent-session-session-id sess)))
-  ;; Dispatch 'session-shutdown hook (R2-7: payload with session-id and duration)
-  (define session-duration (- (now-seconds) (agent-session-start-time sess)))
-  (define shutdown-payload
-    (hasheq 'session-id (agent-session-session-id sess) 'duration session-duration))
-  (define-values (_shutdown-payload _shutdown-res)
-    (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-shutdown shutdown-payload))
-  (set-agent-session-active?! sess #f))
+  ;; B5: Idempotency guard — only close once
+  (when (session-active? sess)
+    (emit-session-event! (agent-session-event-bus sess)
+                         (agent-session-session-id sess)
+                         "session.closed"
+                         (hasheq 'sessionId (agent-session-session-id sess)))
+    ;; Dispatch 'session-shutdown hook (R2-7: payload with session-id and duration)
+    (define session-duration (- (now-seconds) (agent-session-start-time sess)))
+    (define shutdown-payload
+      (hasheq 'session-id (agent-session-session-id sess) 'duration session-duration))
+    (define-values (_shutdown-payload _shutdown-res)
+      (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-shutdown shutdown-payload))
+    (set-agent-session-active?! sess #f)))
 
 ;; ============================================================
 ;; Event bus wiring — handle fork/compact requests from TUI/CLI
