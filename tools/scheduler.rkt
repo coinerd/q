@@ -87,6 +87,7 @@
                                      'error-message msg))])
             (define result (hook-dispatcher 'tool-call tc))
             (cond
+              [(not result) tc]  ; no handler → pass through
               [(hook-result? result)
                (case (hook-result-action result)
                  [(block) 'blocked]
