@@ -18,6 +18,7 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
+         "../llm/provider.rkt"
          "../runtime/session-index.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt")
@@ -75,20 +76,27 @@
   (define base-state
     (initial-ui-state #:session-id (session-id sess)
                       #:model-name (hash-ref rt-config 'model-name #f)))
+  ;; BUG-55: Detect mock provider and set warning flag
+  (define prov (hash-ref rt-config 'provider #f))
+  (define mock? (and prov (provider? prov) (equal? (provider-name prov) "mock")))
+  (define base-state-with-mock
+    (if mock?
+        (struct-copy ui-state base-state [mock-provider? #t])
+        base-state))
 
   ;; Add welcome message for first-run users
   (define init-state
     (let* ([state (if scrollback-path
                       (let ([loaded (load-scrollback scrollback-path)])
                         (if (null? loaded)
-                            base-state
+                            base-state-with-mock
                             (let ([max-id (for/fold ([m -1]) ([e (in-list loaded)])
                                             (max m (or (transcript-entry-id e) -1)))])
                               (struct-copy ui-state
-                                           base-state
+                                           base-state-with-mock
                                            [transcript loaded]
                                            [next-entry-id (add1 max-id)]))))
-                      base-state)]
+                      base-state-with-mock)]
            [welcome-entries (if (and first-run? (null? (ui-state-transcript state)))
                                 (list (make-entry 'system
                                                   "Welcome to q! Type a message to get started."

@@ -925,3 +925,37 @@
     ))
 
 (run-tests bug57-tests)
+
+;; ============================================================
+;; BUG-55: Mock provider warning in status bar
+;; ============================================================
+
+(define bug55-tests
+  (test-suite "BUG-55: Mock provider status bar warning"
+
+    (test-case "status bar without mock provider has no warning"
+      (define s (initial-ui-state #:session-id "s1" #:model-name "gpt-4"))
+      (define line (render-status-bar s 80))
+      (define text (styled-line->text line))
+      (check-false (string-contains? text "No API key")
+                   "no warning when not mock provider"))
+
+    (test-case "status bar with mock provider shows No API key warning"
+      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1")
+                             [mock-provider? #t]))
+      (define line (render-status-bar s 80))
+      (define text (styled-line->text line))
+      (check-not-false (string-contains? text "No API key")
+                       "warning shown when mock provider is active"))
+
+    (test-case "status bar mock warning is visible in right section"
+      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1")
+                             [mock-provider? #t]))
+      (define line (render-status-bar s 80))
+      (define text (styled-line->text line))
+      ;; The warning should contain "[No API key]"
+      (check-not-false (string-contains? text "[No API key]")
+                       "formatted warning visible"))
+    ))
+
+(run-tests bug55-tests)

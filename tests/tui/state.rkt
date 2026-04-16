@@ -959,3 +959,16 @@
   (define s1 (apply-event-to-state s0 evt))
   (check-equal? (ui-state-session-id s1) "sess-2"))
 
+
+;; ============================================================
+;; BUG-55: Mock provider warning state
+;; ============================================================
+
+(test-case "BUG-55: initial-ui-state has mock-provider? field defaulting to #f"
+  (define s (initial-ui-state))
+  (check-false (ui-state-mock-provider? s) "mock-provider? defaults to #f"))
+
+(test-case "BUG-55: mock-provider? can be set via struct-copy"
+  (define s0 (initial-ui-state))
+  (define s1 (struct-copy ui-state s0 [mock-provider? #t]))
+  (check-true (ui-state-mock-provider? s1) "mock-provider? set to #t"))

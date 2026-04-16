@@ -121,18 +121,19 @@
          extension-widgets ; hash — maps (cons ext-name key) → (listof styled-line)
          custom-header ; (or/c #f (listof styled-line)) — extension-provided header
          custom-footer ; (or/c #f (listof styled-line)) — extension-provided footer
+         mock-provider? ; boolean — #t when using mock/fallback provider (BUG-55)
          )
   #:transparent)
 
 ;; Overlay state for modal/popup UI elements (command palette, etc.)
 (struct overlay-state
-        (type      ; symbol — 'command-palette | other overlay types
-         content   ; (listof styled-line) — overlay render content
-         input     ; string — current input for the overlay
-         anchor    ; symbol — 'top-left | 'center | 'bottom-right (default 'top-left)
-         width     ; (or/c integer? #f) — explicit width override
-         height    ; (or/c integer? #f) — explicit height override
-         margin    ; integer — margin around overlay (default 0)
+        (type ; symbol — 'command-palette | other overlay types
+         content ; (listof styled-line) — overlay render content
+         input ; string — current input for the overlay
+         anchor ; symbol — 'top-left | 'center | 'bottom-right (default 'top-left)
+         width ; (or/c integer? #f) — explicit width override
+         height ; (or/c integer? #f) — explicit height override
+         margin ; integer — margin around overlay (default 0)
          )
   #:transparent)
 
@@ -186,7 +187,8 @@
         ;; Remove oldest entries (lowest keys)
         (let ([sorted-keys (sort (hash-keys new-cache) <)])
           (for/fold ([c new-cache])
-                    ([k (in-list (take sorted-keys (- (hash-count new-cache) RENDER-CACHE-MAX-SIZE)))])
+                    ([k (in-list (take sorted-keys
+                                       (- (hash-count new-cache) RENDER-CACHE-MAX-SIZE)))])
             (hash-remove c k)))))
   (struct-copy ui-state state [rendered-cache pruned-cache]))
 
@@ -236,6 +238,7 @@
             (hash) ; extension-widgets
             #f ; custom-header
             #f ; custom-footer
+            #f ; mock-provider?
             ))
 
 ;; ============================================================
@@ -274,7 +277,9 @@
      ;; Show tool started with arguments, mark busy
      (let* ([name (hash-ref payload 'name "?")]
             [args-raw (hash-ref payload 'arguments #f)]
-            [arg-summary (if args-raw (extract-arg-summary args-raw) "")]
+            [arg-summary (if args-raw
+                             (extract-arg-summary args-raw)
+                             "")]
             [text (if (string=? arg-summary "")
                       (format "[TOOL: ~a]" name)
                       (format "[TOOL: ~a] ~a" name arg-summary))]
@@ -348,13 +353,15 @@
 
     ;; Agent starts processing — mark busy
     ;; BUG-30 fix: clear stale state from previous turn
-    [("turn.started") (struct-copy ui-state state [busy? #t] [pending-tool-name #f] [streaming-text #f])]
+    [("turn.started")
+     (struct-copy ui-state state [busy? #t] [pending-tool-name #f] [streaming-text #f])]
 
     ;; Agent done processing — mark not busy, clear streaming-text
     ;; Bug B2 fix: clear streaming-text on turn.completed as defense-in-depth
     ;; so stale streaming text doesn't contaminate next turn.
     ;; BUG-31 fix: also clear pending-tool-name as defense-in-depth
-    [("turn.completed") (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f])]
+    [("turn.completed")
+     (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f])]
 
     [("turn.cancelled")
      ;; Agent turn was cancelled — clear busy state
@@ -397,22 +404,20 @@
                                             (hasheq 'name name)))
                   [pending-tool-name #f])]
 
-    [("queue.status-update")
-     (struct-copy ui-state state [queue-counts payload])]
+    [("queue.status-update") (struct-copy ui-state state [queue-counts payload])]
 
     ;; BUG-33 fix: auto-retry event from runtime/iteration.rkt
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
      (define max-attempts (hash-ref payload 'maxAttempts "?"))
-     (append-entry
-      state
-      (make-entry 'system
-                  (format "[retry: attempt ~a/~a]" attempt max-attempts)
-                  (event-time evt) (hash)))]
+     (append-entry state
+                   (make-entry 'system
+                               (format "[retry: attempt ~a/~a]" attempt max-attempts)
+                               (event-time evt)
+                               (hash)))]
 
     ;; BUG-34 fix: model.stream.completed clears streaming text
-    [("model.stream.completed")
-     (struct-copy ui-state state [streaming-text #f])]
+    [("model.stream.completed") (struct-copy ui-state state [streaming-text #f])]
 
     [else state])) ;; Ignore unknown events
 
@@ -446,13 +451,17 @@
 (define (scroll-up state [amount 1])
   (define actual (+ (ui-state-scroll-offset state) amount))
   (define next (struct-copy ui-state state [scroll-offset actual]))
-  (if (has-selection? next) (clear-selection next) next))
+  (if (has-selection? next)
+      (clear-selection next)
+      next))
 
 ;; Scroll down (see newer entries)
 (define (scroll-down state [amount 1])
   (define new-offset (max 0 (- (ui-state-scroll-offset state) amount)))
   (define next (struct-copy ui-state state [scroll-offset new-offset]))
-  (if (has-selection? next) (clear-selection next) next))
+  (if (has-selection? next)
+      (clear-selection next)
+      next))
 
 ;; Scroll to bottom (latest entries)
 (define (scroll-to-bottom state)
@@ -515,10 +524,8 @@
         (cond
           [(and (> steering 0) (> followup 0))
            (format " | \u2691~a steer, ~a follow" steering followup)]
-          [(> steering 0)
-           (format " | \u2691~a steer" steering)]
-          [(> followup 0)
-           (format " | \u2691~a follow" followup)]
+          [(> steering 0) (format " | \u2691~a steer" steering)]
+          [(> followup 0) (format " | \u2691~a follow" followup)]
           [else ""]))))
 
 ;; ============================================================
@@ -546,29 +553,30 @@
 (define ANCHOR-BOTTOM-RIGHT 'bottom-right)
 
 (define (anchor? v)
-  (and (symbol? v)
-       (or (eq? v ANCHOR-TOP-LEFT)
-           (eq? v ANCHOR-CENTER)
-           (eq? v ANCHOR-BOTTOM-RIGHT))))
+  (and (symbol? v) (or (eq? v ANCHOR-TOP-LEFT) (eq? v ANCHOR-CENTER) (eq? v ANCHOR-BOTTOM-RIGHT))))
 
 ;; ============================================================
 ;; Overlay helpers (#643)
 ;; ============================================================
 
-(define (show-overlay state type content [input ""] #:anchor [anchor ANCHOR-TOP-LEFT]
-                                                          #:width [width #f]
-                                                          #:height [height #f]
-                                                          #:margin [margin 0])
+(define (show-overlay state
+                      type
+                      content
+                      [input ""]
+                      #:anchor [anchor ANCHOR-TOP-LEFT]
+                      #:width [width #f]
+                      #:height [height #f]
+                      #:margin [margin 0])
   ;; Show an overlay with the given type, content lines, input, and positioning
-  (struct-copy ui-state state
+  (struct-copy ui-state
+               state
                [active-overlay (overlay-state type content input anchor width height margin)]))
 
 (define (update-overlay-input state input)
   ;; Update the overlay input text (e.g., as user types in palette)
   (define ov (ui-state-active-overlay state))
   (if ov
-      (struct-copy ui-state state
-                   [active-overlay (struct-copy overlay-state ov [input input])])
+      (struct-copy ui-state state [active-overlay (struct-copy overlay-state ov [input input])])
       state))
 
 (define (dismiss-overlay state)
@@ -588,15 +596,13 @@
 (define (set-extension-widget state ext-name key lines)
   (define widgets (ui-state-extension-widgets state))
   (define widget-key (cons ext-name key))
-  (struct-copy ui-state state
-               [extension-widgets (hash-set widgets widget-key lines)]))
+  (struct-copy ui-state state [extension-widgets (hash-set widgets widget-key lines)]))
 
 ;; Remove a specific widget by extension name and key.
 (define (remove-extension-widget state ext-name key)
   (define widgets (ui-state-extension-widgets state))
   (define widget-key (cons ext-name key))
-  (struct-copy ui-state state
-               [extension-widgets (hash-remove widgets widget-key)]))
+  (struct-copy ui-state state [extension-widgets (hash-remove widgets widget-key)]))
 
 ;; Remove all widgets for a given extension (for unload/disposal).
 (define (remove-all-extension-widgets state ext-name)
