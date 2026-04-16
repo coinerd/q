@@ -463,7 +463,15 @@
          'completed
          (hasheq 'turnId turn-id 'usage (or effective-usage (hasheq)) 'model "streamed"))]
        [else
-        ;; Tool calls detected -- emit tool.call.started for each
+        ;; Tool calls detected -- commit assistant text FIRST, then emit tool.call.started
+        ;; Bug B1 fix: emit assistant.message.completed before tool.call.started
+        ;; so the TUI commits streaming text to permanent transcript.
+        (emit! bus
+               session-id
+               turn-id
+               "assistant.message.completed"
+               (hasheq 'messageId assistant-msg-id 'content (text-part-text final-text-part))
+               #:state state)
         (for ([tc (in-list tool-call-parts)])
           (emit! bus
                  session-id
