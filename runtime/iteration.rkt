@@ -89,7 +89,10 @@
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
-         (only-in "../runtime/auto-retry.rkt" with-auto-retry retryable-error?)
+         (only-in "../runtime/auto-retry.rkt"
+                  with-auto-retry
+                  retryable-error?
+                  context-overflow-error?)
          ;; FEAT-61: message injection support
          (only-in "../extensions/message-inject.rkt" injection-event-topic))
 
@@ -344,6 +347,34 @@
 
   ;; Return updated context for next iteration
   (append ctx-with-steering new-msgs validated-msgs))
+
+;; ============================================================
+;; FEAT-66: Context overflow recovery
+;; ============================================================
+
+;; Handle context overflow by compacting the context and retrying once.
+;; Returns the result of the retry, or re-raises if not an overflow error.
+(define (call-with-overflow-recovery thunk ctx bus session-id)
+  (with-handlers ([context-overflow-error?
+                   (lambda (e)
+                     (emit-session-event! bus
+                                          session-id
+                                          "context.overflow.detected"
+                                          (hasheq 'error (exn-message e)))
+                     ;; Compact and retry
+                     (define compacted
+                       (build-tiered-context-with-hooks
+                        (takef ctx (lambda (m) (not (eq? (message-role m) 'system))))
+                        (hasheq 'max-messages 10)))
+                     (emit-session-event! bus
+                                          session-id
+                                          "context.overflow.compacted"
+                                          (hasheq 'original-size
+                                                  (length ctx)
+                                                  'compacted-size
+                                                  (length (tiered-context->message-list compacted))))
+                     (thunk))])
+    (thunk)))
 
 ;; ============================================================
 ;; FEAT-61: Message injection drain

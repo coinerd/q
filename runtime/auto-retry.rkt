@@ -9,17 +9,17 @@
          racket/string
          "../util/protocol-types.rkt")
 
-(provide
- ;; Predicates
- retryable-error?
- ;; Retry execution
- with-auto-retry
- ;; Configuration
- default-max-retries
- default-base-delay-ms
- default-max-delay-ms
- ;; Struct for retry stats
- (struct-out retry-stats))
+;; Predicates
+(provide retryable-error?
+         context-overflow-error?
+         ;; Retry execution
+         with-auto-retry
+         ;; Configuration
+         default-max-retries
+         default-base-delay-ms
+         default-max-delay-ms
+         ;; Struct for retry stats
+         (struct-out retry-stats))
 
 ;; ============================================================
 ;; Configuration
@@ -43,11 +43,40 @@
 (define (retryable-error? exn)
   (define msg (exn-message exn))
   (define retryable-patterns
-    '("429" "rate" "overloaded" "quota" "too many"
-      "500" "502" "503" "504" "server error"
-      "timeout" "timed out" "connection" "network"
-      "retry" "backoff"))
+    '("429" "rate"
+            "overloaded"
+            "quota"
+            "too many"
+            "500"
+            "502"
+            "503"
+            "504"
+            "server error"
+            "timeout"
+            "timed out"
+            "connection"
+            "network"
+            "retry"
+            "backoff"))
   (for/or ([pattern (in-list retryable-patterns)])
+    (string-contains? (string-downcase msg) pattern)))
+
+;; FEAT-66: Check if an error is a context overflow / token limit error.
+;; These errors indicate the context was too long for the model.
+(define CONTEXT_OVERFLOW_PATTERNS
+  '("context_length" "context length"
+                     "maximum context"
+                     "too many tokens"
+                     "token limit"
+                     "max_tokens"
+                     "input is too long"
+                     "request too large"
+                     "reduce the length"
+                     "exceeds the maximum"))
+
+(define (context-overflow-error? exn)
+  (define msg (exn-message exn))
+  (for/or ([pattern (in-list CONTEXT_OVERFLOW_PATTERNS)])
     (string-contains? (string-downcase msg) pattern)))
 
 ;; ============================================================
@@ -58,21 +87,21 @@
 ;; Returns the thunk result on success, or re-raises on non-retryable
 ;; error or after max-retries exhausted.
 (define (with-auto-retry thunk
-                          #:max-retries [max-retries default-max-retries]
-                          #:base-delay-ms [base-delay-ms default-base-delay-ms]
-                          #:max-delay-ms [max-delay-ms default-max-delay-ms]
-                          #:on-retry [on-retry #f])
-  (let loop ([attempt 0] [delay-ms 0])
-    (with-handlers
-        ([exn:fail?
-          (lambda (exn)
-            (cond
-              [(and (retryable-error? exn) (< attempt max-retries))
-               (define next-delay (min (* base-delay-ms (expt 2 attempt)) max-delay-ms))
-               ;; Call retry callback if provided
-               (when on-retry
-                 (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
-               (sleep (/ next-delay 1000.0))
-               (loop (add1 attempt) next-delay)]
-              [else (raise exn)]))])
+                         #:max-retries [max-retries default-max-retries]
+                         #:base-delay-ms [base-delay-ms default-base-delay-ms]
+                         #:max-delay-ms [max-delay-ms default-max-delay-ms]
+                         #:on-retry [on-retry #f])
+  (let loop ([attempt 0]
+             [delay-ms 0])
+    (with-handlers ([exn:fail?
+                     (lambda (exn)
+                       (cond
+                         [(and (retryable-error? exn) (< attempt max-retries))
+                          (define next-delay (min (* base-delay-ms (expt 2 attempt)) max-delay-ms))
+                          ;; Call retry callback if provided
+                          (when on-retry
+                            (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
+                          (sleep (/ next-delay 1000.0))
+                          (loop (add1 attempt) next-delay)]
+                         [else (raise exn)]))])
       (thunk))))
