@@ -1,6 +1,19 @@
 #!/usr/bin/env racket
 #lang racket/base
 
+;; lint-version.rkt — Version-consistency linter.
+;;
+;; Canonical source: util/version.rkt  (define q-version "X.Y.Z")
+;;
+;; Checks:
+;;   1. info.rkt version matches canonical
+;;   2. README.md version badge matches canonical
+;;   3. README.md verify snippet matches canonical
+;;   4. All .md files have consistent version strings
+;;
+;; Exit 0 if clean, 1 if any mismatch found.
+;; Run from the q/ directory.
+
 (require racket/file
          racket/list
          racket/path
@@ -8,133 +21,177 @@
          racket/port)
 
 ;; ---------------------------------------------------------------------------
-;; Version-consistency linter — cross-checks info.rkt and util/version.rkt
-;; versions against each other and against all .md files.
-;; Exit 0 if clean, 1 if any version mismatch found.
+;; Parsing helpers
 ;; ---------------------------------------------------------------------------
-
-;;; --- helpers ---
 
 (define VERSION-PAT #rx"[0-9]+\\.[0-9]+\\.[0-9]+")
 
+;; Parse `(define q-version "X.Y.Z")` from util/version.rkt content.
+(define (parse-q-version content)
+  (define m (regexp-match #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
+  (and m (cadr m)))
+
 ;; Parse `(define version "X.Y.Z")` from info.rkt content.
-(define (parse-canonical-version content)
+(define (parse-info-version content)
   (define lines (string-split content "\n"))
   (for/or ([line (in-list lines)])
     (define trimmed (string-trim line))
     (cond
-      [(and (string-prefix? trimmed "(define version")
-            (string-suffix? trimmed ")"))
+      [(and (string-prefix? trimmed "(define version") (string-suffix? trimmed ")"))
        (define m (regexp-match #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"" trimmed))
        (and m (cadr m))]
       [else #f])))
 
-;; Predicate: skip compiled/ directories and .zo files.
+;; ---------------------------------------------------------------------------
+;; File scanning
+;; ---------------------------------------------------------------------------
+
 (define (skip-path? p)
   (define s (path->string p))
   (or (string-contains? s "/compiled/")
       (string-contains? s "/.git/")
-      (and (filename-extension p)
-           (equal? (bytes->string/utf-8 (filename-extension p)) "zo"))))
+      (and (filename-extension p) (equal? (bytes->string/utf-8 (filename-extension p)) "zo"))))
 
-;; Collect all .md files under base-dir, excluding compiled/ and .zo.
 (define (collect-md-files base-dir)
-  (sort
-   (for/list ([f (in-directory base-dir)]
-              #:when (and (not (skip-path? f))
-                         (let ([ext (filename-extension f)])
-                           (and ext (equal? (bytes->string/utf-8 ext) "md")))))
-     f)
-   path<?))
+  (sort (for/list ([f (in-directory base-dir)]
+                   #:when (and (not (skip-path? f))
+                               (let ([ext (filename-extension f)])
+                                 (and ext (equal? (bytes->string/utf-8 ext) "md")))))
+          f)
+        path<?))
 
 ;; Return list of (list line-num version-string) for each non-matching version.
 (define (find-mismatched-versions lines canonical-version filename)
-  (define fname (path->string (file-name-from-path filename)))
+  (define fname
+    (if (path? filename)
+        (path->string (file-name-from-path filename))
+        filename))
   (define skip-file?
     (or (equal? fname "CHANGELOG.md")
         (equal? fname "releasing.md")
         (equal? fname "why-q.md")
-        (string-contains? (path->string filename) "docs/tutorials/")))  ; tutorials contain example version strings
+        (string-contains? (if (path? filename)
+                              (path->string filename)
+                              filename)
+                          "docs/tutorials/")))
   ;; Skip historical release lines like "**v0.6.3** — ..."
   (define historical-line? (lambda (line) (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line))))
-  (append*
-   (for/list ([line (in-list lines)]
-              [lineno (in-naturals 1)])
-     (define matches (regexp-match* VERSION-PAT line))
-     (for/list ([v (in-list matches)]
-                #:when (and (not (equal? v canonical-version))
-                            (not skip-file?)
-                            (not (historical-line? line))))
-       (list lineno v)))))
+  (append* (for/list ([line (in-list lines)]
+                      [lineno (in-naturals 1)])
+             (define matches (regexp-match* VERSION-PAT line))
+             (for/list ([v (in-list matches)]
+                        #:when (and (not (equal? v canonical-version))
+                                    (not skip-file?)
+                                    (not (historical-line? line))))
+               (list lineno v)))))
 
-;; Parse `(define q-version "X.Y.Z")` from util/version.rkt content.
-(define (parse-util-version content)
-  (define lines (string-split content "\n"))
-  (for/or ([line (in-list lines)])
-    (define trimmed (string-trim line))
-    (cond
-      [(and (string-prefix? trimmed "(define q-version")
-            (string-suffix? trimmed ")"))
-       (define m (regexp-match #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"" trimmed))
-       (and m (cadr m))]
-      [else #f])))
+;; ---------------------------------------------------------------------------
+;; Checks
+;; ---------------------------------------------------------------------------
 
-;;; --- main ---
+(define (check-info-rkt canonical)
+  (define info-path (build-path (current-directory) "info.rkt"))
+  (cond
+    [(not (file-exists? info-path))
+     (displayln "  WARN: info.rkt not found")
+     '()]
+    [else
+     (define info-content (file->string info-path))
+     (define info-v (parse-info-version info-content))
+     (cond
+       [(not info-v)
+        (displayln "  ERROR: info.rkt — could not parse version")
+        (list (list info-path 0 "<unparseable>" canonical))]
+       [(equal? info-v canonical)
+        (printf "  info.rkt: OK (~a)~n" info-v)
+        '()]
+       [else
+        (printf "  ERROR: info.rkt: ~a ≠ canonical ~a~n" info-v canonical)
+        (list (list info-path 0 info-v canonical))])]))
+
+(define (check-readme-badge canonical)
+  (define readme-path (build-path (current-directory) "README.md"))
+  (cond
+    [(not (file-exists? readme-path))
+     (displayln "  WARN: README.md not found")
+     '()]
+    [else
+     (define content (file->string readme-path))
+     (define badge-m (regexp-match #rx"badge/version-([0-9]+\\.[0-9]+\\.[0-9]+)" content))
+     (define badge-v (and badge-m (cadr badge-m)))
+     (define verify-m (regexp-match #rx"q version ([0-9]+\\.[0-9]+\\.[0-9]+)" content))
+     (define verify-v (and verify-m (cadr verify-m)))
+     (append (if (and badge-v (not (equal? badge-v canonical)))
+                 (begin
+                   (printf "  ERROR: README badge: ~a ≠ canonical ~a~n" badge-v canonical)
+                   (list (list readme-path 0 badge-v canonical)))
+                 (begin
+                   (when badge-v
+                     (printf "  README badge: OK (~a)~n" badge-v))
+                   '()))
+             (if (and verify-v (not (equal? verify-v canonical)))
+                 (begin
+                   (printf "  ERROR: README verify: ~a ≠ canonical ~a~n" verify-v canonical)
+                   (list (list readme-path 0 verify-v canonical)))
+                 (begin
+                   (when verify-v
+                     (printf "  README verify: OK (~a)~n" verify-v))
+                   '())))]))
+
+(define (check-md-files canonical)
+  (define md-files (collect-md-files (current-directory)))
+  (append* (for/list ([f (in-list md-files)])
+             (define lines (string-split (file->string f) "\n"))
+             (define mismatches (find-mismatched-versions lines canonical f))
+             (for/list ([m (in-list mismatches)])
+               (printf "  ERROR: ~a:~a: \"~a\" ≠ canonical ~a~n"
+                       (path->string f)
+                       (first m)
+                       (second m)
+                       canonical)
+               (list f (first m) (second m))))))
+
+;; ---------------------------------------------------------------------------
+;; Main
+;; ---------------------------------------------------------------------------
 
 (define (main)
-  (define info-path (build-path (current-directory) "info.rkt"))
-  (unless (file-exists? info-path)
-    (displayln "ERROR: info.rkt not found in current directory")
+  ;; --- Read canonical version from util/version.rkt ---
+  (define util-path (build-path (current-directory) "util" "version.rkt"))
+  (unless (file-exists? util-path)
+    (displayln "ERROR: util/version.rkt not found in current directory")
     (exit 1))
 
-  (define info-content (file->string info-path))
-  (define canonical (parse-canonical-version info-content))
+  (define util-content (file->string util-path))
+  (define canonical (parse-q-version util-content))
   (unless canonical
-    (displayln "ERROR: could not parse version from info.rkt")
+    (displayln "ERROR: could not parse q-version from util/version.rkt")
     (exit 1))
 
-  ;; --- Cross-check util/version.rkt ---
-  (define util-version-path (build-path (current-directory) "util" "version.rkt"))
-  (define util-version-errors
-    (if (file-exists? util-version-path)
-        (let ([util-v (parse-util-version (file->string util-version-path))])
-          (cond
-            [(not util-v)
-             (list (list util-version-path 0 "<unparseable>" canonical))]
-            [(not (equal? util-v canonical))
-             (list (list util-version-path 0 util-v canonical))]
-            [else '()]))
-        '()))
+  (printf "Canonical version: ~a (from util/version.rkt)~n~n" canonical)
 
-  ;; --- Cross-check .md files ---
-  (define md-files (collect-md-files (current-directory)))
-  (define md-errors
-    (append*
-     (for/list ([f (in-list md-files)])
-       (define lines (string-split (file->string f) "\n"))
-       (define mismatches (find-mismatched-versions lines canonical f))
-       (for/list ([m (in-list mismatches)])
-         (list f (first m) (second m))))))
+  ;; --- Run all checks ---
+  (displayln "Checking info.rkt ...")
+  (define info-errors (check-info-rkt canonical))
 
-  (define errors (append util-version-errors md-errors))
+  (displayln "Checking README.md ...")
+  (define readme-errors (check-readme-badge canonical))
 
-  ;; Report errors
-  (for ([e (in-list errors)])
-    (printf "ERROR: ~a:~a: version \"~a\" does not match info.rkt version \"~a\"~n"
-            (path->string (first e))
-            (second e)
-            (third e)
-            canonical))
+  (displayln "Checking .md files ...")
+  (define md-errors (check-md-files canonical))
 
-  ;; Summary
+  (define errors (append info-errors readme-errors md-errors))
+
+  ;; --- Report ---
   (displayln "---")
-  (printf "Version: ~a (from info.rkt)~n" canonical)
-  (when (file-exists? util-version-path)
-    (printf "util/version.rkt: ~a~n" (or (parse-util-version (file->string util-version-path)) "<unparseable>")))
-  (printf "Scanned: ~a .md files~n" (length md-files))
+  (printf "Version: ~a (from util/version.rkt)~n" canonical)
   (printf "Errors: ~a~n" (length errors))
   (if (null? errors)
-      (displayln "Version lint PASSED")
-      (begin (displayln "Version lint FAILED") (exit 1))))
+      (begin
+        (displayln "Version lint PASSED")
+        (exit 0))
+      (begin
+        (displayln "Version lint FAILED")
+        (exit 1))))
 
 (main)
