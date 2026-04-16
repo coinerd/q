@@ -11,7 +11,7 @@
 (require racket/contract
          "../interfaces/rpc-mode.rkt")
 
-(provide (contract-out [make-core-rpc-handlers (-> hash? hash?)]))
+(provide (contract-out [make-core-rpc-handlers (-> hash? (hash/c symbol? procedure?))]))
 
 ;; Sentinel for missing deps
 (define sentinel (gensym 'missing))
@@ -52,30 +52,30 @@
     (let ([v (hash-ref deps 'subscribe-fn sentinel)]) (if (eq? v sentinel) default-subscribe v)))
 
   (make-hash ;; ---- Abort ----
-             (list (cons 'abort
-                         (lambda (params)
-                           (cancel-token)
-                           (hasheq 'status "aborted")))
-                   ;; ---- Subscribe ----
-                   (cons 'subscribe
-                         (lambda (params)
-                           (define filter (hash-ref params 'filter #f))
-                           (define sub-id (subscribe-fn filter))
-                           (hasheq 'subscriptionId sub-id)))
-                   ;; ---- Session Info ----
-                   (cons 'session_info
-                         (lambda (params)
-                           (define info (session-info-fn))
-                           (if info
-                               info
-                               (hasheq 'status "error" 'message "no active session"))))
-                   ;; ---- Compact ----
-                   (cons 'compact
-                         (lambda (params)
-                           (define result (compact-fn))
-                           result))
-                   ;; ---- Fork ----
-                   (cons 'fork
-                         (lambda (params)
-                           (define entry-id (hash-ref params 'entryId #f))
-                           (fork-fn entry-id))))))
+   (list (cons 'abort
+               (lambda (params)
+                 (cancel-token)
+                 (hasheq 'status "aborted")))
+         ;; ---- Subscribe ----
+         (cons 'subscribe
+               (lambda (params)
+                 (define filter (hash-ref params 'filter #f))
+                 (define sub-id (subscribe-fn filter))
+                 (hasheq 'subscriptionId sub-id)))
+         ;; ---- Session Info ----
+         (cons 'session_info
+               (lambda (params)
+                 (define info (session-info-fn))
+                 (if info
+                     info
+                     (hasheq 'status "error" 'message "no active session"))))
+         ;; ---- Compact ----
+         (cons 'compact
+               (lambda (params)
+                 (define result (compact-fn))
+                 result))
+         ;; ---- Fork ----
+         (cons 'fork
+               (lambda (params)
+                 (define entry-id (hash-ref params 'entryId #f))
+                 (fork-fn entry-id))))))

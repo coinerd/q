@@ -40,20 +40,24 @@
                   (let loop ()
                     (define req (channel-get ui-ch))
                     (when req
-                      (define request-id (format "ui-~a" (eq-hash-code req)))
-                      (define response-ch (ui-request-response-ch req))
-                      ;; Record mapping so the response handler can deliver
-                      (hash-set! pending-requests request-id response-ch)
-                      (define notif
-                        (rpc-notification (string->symbol (format "ui.~a" (ui-request-type req)))
-                                          (hasheq 'requestId
-                                                  request-id
-                                                  'type
-                                                  (symbol->string (ui-request-type req))
-                                                  'prompt
-                                                  (ui-request-prompt req))))
-                      (displayln (rpc-notification->json notif) output-port)
-                      (flush-output output-port)
+                      (with-handlers ([exn:fail? (lambda (e)
+                                                   (displayln (format "rpc-ui-bridge error: ~a"
+                                                                      (exn-message e))
+                                                              (current-error-port)))])
+                        (define request-id (format "ui-~a" (eq-hash-code req)))
+                        (define response-ch (ui-request-response-ch req))
+                        ;; Record mapping so the response handler can deliver
+                        (hash-set! pending-requests request-id response-ch)
+                        (define notif
+                          (rpc-notification (string->symbol (format "ui.~a" (ui-request-type req)))
+                                            (hasheq 'requestId
+                                                    request-id
+                                                    'type
+                                                    (symbol->string (ui-request-type req))
+                                                    'prompt
+                                                    (ui-request-prompt req))))
+                        (displayln (rpc-notification->json notif) output-port)
+                        (flush-output output-port))
                       (loop)))))))
 
 ;; ============================================================

@@ -73,6 +73,29 @@
       (define all (dequeue-all-followups! q))
       (check-equal? (length all) 2)
       (check-equal? (car all) "step 1")
-      (check-equal? (cadr all) "step 2"))))
+      (check-equal? (cadr all) "step 2"))
+
+    ;; ============================================================
+    ;; Edge cases
+    ;; ============================================================
+    (test-case "steer! with empty string message"
+      (define rt (make-runtime #:provider (make-mock-provider)))
+      (define rt-open (open-session rt))
+      (define rt-steered (steer! rt-open ""))
+      (define sess (runtime-rt-session rt-steered))
+      (define q (agent-session-queue sess))
+      (define msg (dequeue-steering! q))
+      (check-not-false msg)
+      (check-equal? msg ""))
+
+    (test-case "follow-up! with empty string"
+      (define rt (make-runtime #:provider (make-mock-provider)))
+      (define rt-open (open-session rt))
+      (define rt-followed (follow-up! rt-open ""))
+      (define sess (runtime-rt-session rt-followed))
+      (define q (agent-session-queue sess))
+      (define msg (dequeue-followup! q))
+      (check-not-false msg)
+      (check-equal? msg ""))))
 
 (run-tests steer-tests)

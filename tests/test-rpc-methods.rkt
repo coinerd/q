@@ -122,6 +122,21 @@
       (define req (rpc-request "req-1" 'session_info (hasheq 'sessionId "s1")))
       (define resp (dispatch-rpc-request req handlers))
       (check-false (rpc-response-error resp))
-      (check-not-false (hash-ref (rpc-response-result resp) 'session-id #f)))))
+      (check-not-false (hash-ref (rpc-response-result resp) 'session-id #f)))
+
+    ;; ============================================================
+    ;; Default implementations (no deps)
+    ;; ============================================================
+    (test-case "abort with default cancel-token returns status"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (define handler (hash-ref handlers 'abort))
+      (define result (handler (hasheq)))
+      (check-equal? (hash-ref result 'status) "aborted"))
+
+    (test-case "fork default returns error"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (define handler (hash-ref handlers 'fork))
+      (define result (handler (hasheq 'entryId "entry-1")))
+      (check-equal? (hash-ref result 'status) "error"))))
 
 (run-tests rpc-method-tests)
