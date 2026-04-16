@@ -34,6 +34,9 @@ jobs:
           /usr/local/racket/bin/raco pkg install --auto --batch
           /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
+      - name: Version consistency check
+        run: /usr/local/racket/bin/racket scripts/lint-version.rkt
+
       - name: Run tests
         run: /usr/local/racket/bin/raco test tests/
 
@@ -43,34 +46,58 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install Racket
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+
+      - name: Install dependencies
+        run: |
+          /usr/local/racket/bin/raco pkg install --auto --batch
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Verify version consistency
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CANONICAL=$(/usr/local/racket/bin/racket -e '(require "util/version.rkt") (display q-version)')
+          echo "Tag version: $VERSION"
+          echo "Canonical:   $CANONICAL"
+          [ "$VERSION" = "$CANONICAL" ]
+
       - name: Build tarball
         run: |
-          mkdir -p /tmp/q-${{ steps.version.outputs.VERSION }}
-          cp -r . /tmp/q-${{ steps.version.outputs.VERSION }}/
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir -p /tmp/q-${VERSION}
+          cp -r . /tmp/q-${VERSION}/
           cd /tmp
-          tar czf /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz \
+          tar czf /tmp/q-${VERSION}.tar.gz \
             --exclude='.git' \
             --exclude='compiled' \
             --exclude='*.zo' \
-            q-${{ steps.version.outputs.VERSION }}/
+            q-${VERSION}/
+
+      - name: Generate release manifest
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          /usr/local/racket/bin/racket scripts/gen-release-manifest.rkt /tmp/q-${VERSION}.tar.gz > /tmp/release-manifest.json
+          cp /tmp/release-manifest.json .
+          cat /tmp/release-manifest.json
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          /usr/local/racket/bin/racket scripts/gen-release-notes.rkt "${VERSION}" > /tmp/release-notes.md
+          echo "Generated release notes:"
+          cat /tmp/release-notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
-          files: /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
-          body: |
-            ## q v${{ steps.version.outputs.VERSION }}
-
-            See [CHANGELOG.md](https://github.com/coinerd/q/blob/main/CHANGELOG.md) for details.
-
-            ### Installation
-            ```bash
-            tar xzf q-${{ steps.version.outputs.VERSION }}.tar.gz
-            cd q-${{ steps.version.outputs.VERSION }}
-            raco pkg install
-            ```
+          body_path: /tmp/release-notes.md
+          files: |
+            /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
+            release-manifest.json

@@ -1,0 +1,68 @@
+name: Post-Release Smoke Test
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release tarball
+        uses: actions/download-artifact@v5
+        with:
+          name: q-release-tarball
+        continue-on-error: true
+
+      - name: Download from release assets
+        id: download
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          # Download tarball from release assets
+          curl -sL -o "q-${VERSION}.tar.gz" \
+            "https://github.com/${{ github.repository }}/releases/download/${TAG}/q-${VERSION}.tar.gz"
+          ls -la "q-${VERSION}.tar.gz"
+
+      - name: Install Racket
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
+
+      - name: Extract and install
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          tar xzf "q-${VERSION}.tar.gz"
+          cd "q-${VERSION}"
+          raco pkg install --auto --batch
+          echo "Q_DIR=$(pwd)" >> $GITHUB_ENV
+
+      - name: Verify q --version
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          cd "q-${VERSION}"
+          OUTPUT=$(racket main.rkt --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "version ${VERSION}"
+
+      - name: Verify manifest
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          cd "q-${VERSION}"
+          if [ -f release-manifest.json ]; then
+            python3 -c "
+          import json, sys
+          m = json.load(open('release-manifest.json'))
+          assert m['version'] == '${VERSION}', f\"manifest version {m['version']} != expected ${VERSION}\"
+          print(f'Manifest OK: version={m[\"version\"]}')
+          "
+          else
+            echo "No release-manifest.json found (optional)"
+          fi
+
+      - name: Run full test suite
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          cd "q-${VERSION}"
+          racket scripts/run-tests.rkt
