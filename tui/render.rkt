@@ -35,6 +35,10 @@
          styled-line->ansi
          styles->sgr
          wrap-styled-line
+
+         ;; FEAT-69: markdown rendering internals
+         theme->style
+         md-token->segment
          wrap-text
          wrap-single-line)
 
