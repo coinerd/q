@@ -309,9 +309,12 @@
     [("runtime.error")
      (define err (hash-ref payload 'error "unknown error"))
      (define ts (event-time evt))
+     ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
      (struct-copy ui-state
                   (append-entry state (make-entry 'error (format "Error: ~a" err) ts (hash)))
-                  [busy? #f])]
+                  [busy? #f]
+                  [pending-tool-name #f]
+                  [streaming-text #f])]
 
     [("session.started")
      (define sid (hash-ref payload 'sessionId ""))
@@ -334,12 +337,14 @@
      (struct-copy ui-state state [streaming-text new-streaming] [busy? #t])]
 
     ;; Agent starts processing — mark busy
-    [("turn.started") (struct-copy ui-state state [busy? #t])]
+    ;; BUG-30 fix: clear stale state from previous turn
+    [("turn.started") (struct-copy ui-state state [busy? #t] [pending-tool-name #f] [streaming-text #f])]
 
     ;; Agent done processing — mark not busy, clear streaming-text
     ;; Bug B2 fix: clear streaming-text on turn.completed as defense-in-depth
     ;; so stale streaming text doesn't contaminate next turn.
-    [("turn.completed") (struct-copy ui-state state [busy? #f] [streaming-text #f])]
+    ;; BUG-31 fix: also clear pending-tool-name as defense-in-depth
+    [("turn.completed") (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f])]
 
     [("turn.cancelled")
      ;; Agent turn was cancelled — clear busy state

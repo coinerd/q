@@ -533,7 +533,60 @@
     (test-case "extract-arg-summary: long value is truncated"
       (define long-val (make-string 100 #\x))
       (define result (extract-arg-summary (format "{\"cmd\":\"~a\"}" long-val)))
-      (check-true (<= (string-length result) 60) "long value truncated to 60 chars"))))
+      (check-true (<= (string-length result) 60) "long value truncated to 60 chars"))
+
+    ;; ============================================================
+    ;; W1: BUG-29,30,31 — State machine leak fixes
+    ;; ============================================================
+
+    (test-case "BUG-29: runtime.error clears pending-tool-name"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [busy? #t]
+                   [pending-tool-name "bash"]))
+      (define evt (make-test-event "runtime.error" (hash 'error "crash")))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-pending-tool-name s1) "runtime.error clears pending-tool-name")
+      (check-false (ui-state-busy? s1) "runtime.error clears busy?"))
+
+    (test-case "BUG-29: runtime.error clears streaming-text"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [busy? #t]
+                   [streaming-text "partial response..."]))
+      (define evt (make-test-event "runtime.error" (hash 'error "crash")))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-streaming-text s1) "runtime.error clears streaming-text"))
+
+    (test-case "BUG-30: turn.started clears stale pending-tool-name"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [pending-tool-name "old-tool"]))
+      (define evt (make-test-event "turn.started" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-pending-tool-name s1) "turn.started clears pending-tool-name")
+      (check-true (ui-state-busy? s1) "turn.started sets busy?"))
+
+    (test-case "BUG-30: turn.started clears stale streaming-text"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [streaming-text "stale stream text"]))
+      (define evt (make-test-event "turn.started" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-streaming-text s1) "turn.started clears streaming-text"))
+
+    (test-case "BUG-31: turn.completed clears pending-tool-name"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [busy? #t]
+                   [pending-tool-name "read"]))
+      (define evt (make-test-event "turn.completed" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-pending-tool-name s1) "turn.completed clears pending-tool-name")
+      (check-false (ui-state-busy? s1) "turn.completed clears busy?"))
+
+    (test-case "BUG-31: turn.completed clears streaming-text"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [busy? #t]
+                   [streaming-text "leftover stream"]))
+      (define evt (make-test-event "turn.completed" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))))
 
 (run-tests state-tests)
 
@@ -847,3 +900,4 @@
                                (hash 'sessionId "sess-2" 'reason 'resume)))
   (define s1 (apply-event-to-state s0 evt))
   (check-equal? (ui-state-session-id s1) "sess-2"))
+
