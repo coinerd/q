@@ -499,8 +499,10 @@
   (define busy-marker (if busy? "*" " "))
   (define scroll-indicator (if (> (ui-state-scroll-offset state) 0) " ↑" ""))
   (define thinking-indicator (if thinking? " [thinking...]" ""))
+  ;; BUG-55: Show mock provider warning in status bar
+  (define mock-warning (if (ui-state-mock-provider? state) " [No API key]" ""))
   (define left (format " ~a q | ~a | ~a " busy-marker session model))
-  (define right (format "~a~a~a " status thinking-indicator scroll-indicator))
+  (define right (format "~a~a~a~a " status mock-warning thinking-indicator scroll-indicator))
   ;; Pad to width
   (define pad-len (max 0 (- width (string-visible-width left) (string-visible-width right))))
   (define padded (string-append left (make-string pad-len #\ ) right))
