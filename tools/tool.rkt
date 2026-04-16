@@ -32,11 +32,12 @@
 ;; ── Tool struct ──
 (provide (struct-out tool)
          tool?
-         (contract-out [make-tool (->* (string? string? hash? procedure?)
-                                        (#:prompt-snippet (or/c string? #f)
-                                         #:render-call (or/c procedure? #f)
-                                         #:render-result (or/c procedure? #f))
-                                        tool?)]
+         (contract-out [make-tool
+                        (->* (string? string? hash? procedure?)
+                             (#:prompt-snippet (or/c string? #f)
+                                               #:render-call (or/c procedure? #f)
+                                               #:render-result (or/c procedure? #f))
+                             tool?)]
                        [validate-tool-args (-> tool? hash? any/c)])
          tool-name
          tool-description
@@ -55,8 +56,8 @@
          tool-result-content
          tool-result-details
          tool-result-is-error?
-         tool-result->jsexpr          ; reserved for SDK consumers
-         jsexpr->tool-result           ; reserved for SDK consumers
+         tool-result->jsexpr ; reserved for SDK consumers
+         jsexpr->tool-result ; reserved for SDK consumers
 
          ;; ── Execution context ──
          make-exec-context
@@ -67,7 +68,8 @@
          exec-context-runtime-settings
          exec-context-call-id
          exec-context-session-metadata
-
+         exec-context-progress-callback
+         emit-progress!
          ;; ── Tool-call struct (re-exported from agent/types.rkt) ──
          tool-call
          tool-call?
@@ -85,11 +87,22 @@
          make-tool-registry
          tool-registry?
          register-tool!
-         unregister-tool!             ; reserved for SDK consumers
+         unregister-tool! ; reserved for SDK consumers
          lookup-tool
          list-tools
          list-tools-jsexpr
          tool-names)
+
+;; ============================================================
+;; Progress emission
+;; ============================================================
+
+;; emit-progress! calls the progress-callback if available.
+;; Tools should call this to report incremental progress.
+(define (emit-progress! ctx percentage message)
+  (define cb (exec-context-progress-callback ctx))
+  (when cb
+    (cb percentage message)))
 
 ;; ============================================================
 ;; Tool struct
@@ -97,9 +110,13 @@
 
 (struct tool (name description schema execute prompt-snippet render-call render-result) #:transparent)
 
-(define (make-tool name description schema execute #:prompt-snippet [prompt-snippet #f]
-                                                           #:render-call [render-call #f]
-                                                           #:render-result [render-result #f])
+(define (make-tool name
+                   description
+                   schema
+                   execute
+                   #:prompt-snippet [prompt-snippet #f]
+                   #:render-call [render-call #f]
+                   #:render-result [render-result #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -149,15 +166,18 @@
     (for/hash ([t (in-list ext-tools)])
       (values (hash-ref (hash-ref t 'function) 'name) t)))
   ;; Extension tools override base tools with same name
-  (define merged (for/fold ([h base-hash]) ([(k v) (in-hash ext-hash)])
-                   (hash-set h k v)))
+  (define merged
+    (for/fold ([h base-hash]) ([(k v) (in-hash ext-hash)])
+      (hash-set h k v)))
   ;; Preserve base order, append new extension tools at end
-  (define base-names (for/list ([t (in-list base-tools)])
-                       (hash-ref (hash-ref t 'function) 'name)))
-  (define ext-only-names (filter (lambda (n) (not (member n base-names)))
-                                 (hash-keys ext-hash)))
-  (append (for/list ([n (in-list base-names)]) (hash-ref merged n))
-          (for/list ([n (in-list ext-only-names)]) (hash-ref merged n))))
+  (define base-names
+    (for/list ([t (in-list base-tools)])
+      (hash-ref (hash-ref t 'function) 'name)))
+  (define ext-only-names (filter (lambda (n) (not (member n base-names))) (hash-keys ext-hash)))
+  (append (for/list ([n (in-list base-names)])
+            (hash-ref merged n))
+          (for/list ([n (in-list ext-only-names)])
+            (hash-ref merged n))))
 
 ;; ============================================================
 ;; JSON-serializability validation
@@ -212,7 +232,8 @@
                            event-publisher
                            runtime-settings
                            call-id
-                           session-metadata)
+                           session-metadata
+                           progress-callback)
   #:transparent)
 
 (define (make-exec-context #:working-directory [working-directory (current-directory)]
@@ -220,13 +241,15 @@
                            #:event-publisher [event-publisher #f]
                            #:runtime-settings [runtime-settings #f]
                            #:call-id [call-id ""]
-                           #:session-metadata [session-metadata #f])
+                           #:session-metadata [session-metadata #f]
+                           #:progress-callback [progress-callback #f])
   (exec-context working-directory
                 cancellation-token
                 event-publisher
                 runtime-settings
                 call-id
-                session-metadata))
+                session-metadata
+                progress-callback))
 
 ;; ============================================================
 ;; Tool registry
@@ -258,9 +281,7 @@
 ;; Output: {"type":"function","function":{"name":"...","description":"...","parameters":{...}}}
 (define (tool->jsexpr t)
   (define base-fn
-    (hasheq 'name (tool-name t)
-            'description (tool-description t)
-            'parameters (tool-schema t)))
+    (hasheq 'name (tool-name t) 'description (tool-description t) 'parameters (tool-schema t)))
   (define fn-with-snippet
     (if (tool-prompt-snippet t)
         (hash-set base-fn 'promptSnippet (tool-prompt-snippet t))
