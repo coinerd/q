@@ -70,7 +70,8 @@
 (define (format-entry entry [width 200])
   ;; Returns (listof styled-line) — usually 1 line, but could be multi-line
   (define kind (transcript-entry-kind entry))
-  (define text (transcript-entry-text entry))
+  ;; BUG-26 fix: guard #f text — replace with empty string
+  (define text (or (transcript-entry-text entry) ""))
   (case kind
     ;; Parse markdown and render as styled-lines
     [(assistant) (md-format-assistant text width)]

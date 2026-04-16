@@ -713,3 +713,42 @@
       (check-true (string-suffix? ansi "\x1b[0m")))))
 
 (run-tests cjk-wrapping-tests)
+
+;; ============================================================
+;; BUG-26: #f text in render pipeline must not crash
+;; ============================================================
+
+(define bug26-tests
+  (test-suite "BUG-26: #f text guard in render pipeline"
+
+    (test-case "render-transcript with #f text entry does not crash"
+      (define state0 (initial-ui-state))
+      (define entry-with-#f (transcript-entry 'assistant #f 1000 (hash) #f))
+      (define state1 (struct-copy ui-state state0 [transcript (list entry-with-#f)]))
+      ;; Must not crash — previously threw string=? contract violation
+      (define-values (lines _st) (render-transcript state1 24 80))
+      ;; Empty text → 0 rendered lines (no crash)
+      (check-equal? (length lines) 0 "#f text renders zero lines (no crash)"))
+
+    (test-case "format-entry with #f text for assistant returns empty list"
+      (define entry (transcript-entry 'assistant #f 1000 (hash) #f))
+      ;; Must not crash — returns 0 lines since empty text has no markdown tokens
+      (define lines (format-entry entry 80))
+      (check-equal? (length lines) 0))
+
+    (test-case "format-entry with empty string text for assistant works"
+      (define entry (make-entry 'assistant "" 1000 (hash)))
+      (define lines (format-entry entry 80))
+      (check-equal? (length lines) 0))
+
+    (test-case "format-entry with #f text for tool-start does not crash"
+      (define entry (transcript-entry 'tool-start #f 1000 (hash) #f))
+      (define lines (format-entry entry 80))
+      (check-equal? (length lines) 1))
+
+    (test-case "format-entry with #f text for system does not crash"
+      (define entry (transcript-entry 'system #f 1000 (hash) #f))
+      (define lines (format-entry entry 80))
+      (check-equal? (length lines) 1))))
+
+(run-tests bug26-tests)

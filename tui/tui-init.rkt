@@ -109,7 +109,15 @@
   (tui-ctx-init-terminal! ctx)
   (with-handlers ([exn:break? (lambda (e) (void))]
                   [exn:fail? (lambda (e)
-                               ;; Try cleanup before re-raising
+                               ;; BUG-27 fix: Save scrollback BEFORE re-raising
+                               ;; so that crash doesn't lose the transcript.
+                               (with-handlers ([exn:fail? (lambda (_) (void))])
+                                 (when scrollback-path
+                                   (let* ([state (unbox (tui-ctx-ui-state-box ctx))]
+                                          [transcript (ui-state-transcript state)])
+                                     (when (not (null? transcript))
+                                       (save-scrollback transcript scrollback-path)))))
+                               ;; Cleanup terminal
                                (with-handlers ([exn:fail? (lambda (_) (void))])
                                  (tui-term-close (unbox (tui-ctx-term-box ctx))))
                                (raise e))])

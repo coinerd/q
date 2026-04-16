@@ -97,7 +97,7 @@
   (define evts (unbox captured))
   (check-equal? (length evts) 1)
   (define evt (car evts))
-  (check-equal? (event-ev evt) "session.start")
+  (check-equal? (event-ev evt) "session.started")
   (check-equal? (hash-ref (event-payload evt) 'session-id) "session-1")
   (check-equal? (hash-ref (event-payload evt) 'reason) 'new))
 
@@ -155,7 +155,7 @@
 
   ;; Should have session.start event only (no teardown for new)
   (define evts (unbox captured))
-  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session.start")) evts))
+  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session.started")) evts))
   (define shutdown-evts (filter (lambda (e) (string=? (event-ev e) "session.shutdown")) evts))
   (check-equal? (length start-evts) 1)
   (check-equal? (length shutdown-evts) 0))
@@ -182,7 +182,7 @@
 
   ;; Should have both shutdown and start events
   (define evts (unbox captured))
-  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session.start")) evts))
+  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session.started")) evts))
   (define shutdown-evts (filter (lambda (e) (string=? (event-ev e) "session.shutdown")) evts))
   (check-equal? (length shutdown-evts) 1)
   (check-equal? (length start-evts) 1)

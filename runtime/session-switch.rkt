@@ -145,7 +145,7 @@
               'reason reason
               'previous-session-id prev-id
               'session-dir session-dir))
-    (publish! bus (make-event "session.start"
+    (publish! bus (make-event "session.started"
                               (current-seconds)
                               session-id
                               #f
