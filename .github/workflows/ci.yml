@@ -49,7 +49,7 @@ jobs:
           test -f main.rkt && echo "main.rkt found at repo root"
 
       - name: Run tests
-        run: raco test tests/
+        run: racket scripts/run-tests.rkt
 
       - name: Coverage report
         if: runner.os == 'Linux'
