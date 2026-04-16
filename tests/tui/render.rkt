@@ -841,3 +841,87 @@
       (check-true (> (length lines) 0) "non-empty entry renders lines"))))
 
 (run-tests bug37-tests)
+
+;; ============================================================
+;; BUG-57: Selection offset must account for transcript padding
+;; ============================================================
+
+
+;; ============================================================
+;; BUG-57: Selection offset must account for transcript padding
+;; ============================================================
+
+(define bug57-tests
+  (test-suite "BUG-57: Selection padding offset"
+
+    (test-case "apply-selection-highlight with pad-count=0 (baseline)"
+      ;; 5 lines, selection on line 2, trans-start=1, pad-count=0
+      (define lines
+        (for/list ([i (in-range 5)])
+          (styled-line (list (styled-segment (format "Line ~a" i) '())))))
+      ;; Select line at screen row 2 (trans-start=1, so line idx=1)
+      (define anchor (cons 0 2))
+      (define end (cons 5 2))
+      (define result (apply-selection-highlight lines anchor end 1 0))
+      ;; Line at index 1 should be highlighted
+      (define highlighted-line (list-ref result 1))
+      (check-not-false
+       (for/or ([seg (styled-line-segments highlighted-line)])
+         (member 'inverse (styled-segment-style seg)))
+       "line at index 1 should be highlighted when pad-count=0"))
+
+    (test-case "apply-selection-highlight with pad-count=12 (user scenario)"
+      ;; Simulate user's case: 25 content lines in 37-row transcript area
+      ;; Content lines drawn starting at row (trans-y + pad-count) = 1 + 12 = 13
+      ;; User clicks screen row 13 -> line index 0
+      (define lines
+        (for/list ([i (in-range 5)])
+          (styled-line (list (styled-segment (format "Line ~a" i) '())))))
+      (define anchor (cons 0 13))
+      (define end (cons 5 13))
+      ;; With pad-count=12, screen row 13 maps to line index 0
+      (define result (apply-selection-highlight lines anchor end 1 12))
+      (define highlighted-line (list-ref result 0))
+      (check-not-false
+       (for/or ([seg (styled-line-segments highlighted-line)])
+         (member 'inverse (styled-segment-style seg)))
+       "line at index 0 should be highlighted with pad-count=12"))
+
+    (test-case "apply-selection-highlight with pad-count=5"
+      ;; 3 lines in 8-row area -> pad-count=5
+      ;; Content starts at screen row (trans-y + 5) = 6
+      ;; Click screen row 7 -> line index 1
+      (define lines
+        (for/list ([i (in-range 3)])
+          (styled-line (list (styled-segment (format "Line ~a" i) '())))))
+      (define anchor (cons 0 7))
+      (define end (cons 5 7))
+      (define result (apply-selection-highlight lines anchor end 1 5))
+      (define highlighted-line (list-ref result 1))
+      (check-not-false
+       (for/or ([seg (styled-line-segments highlighted-line)])
+         (member 'inverse (styled-segment-style seg)))
+       "line at index 1 should be highlighted with pad-count=5"))
+
+    (test-case "click in padding area (above content) highlights nothing"
+      (define lines
+        (for/list ([i (in-range 3)])
+          (styled-line (list (styled-segment (format "Line ~a" i) '())))))
+      ;; Click screen row 2 which is in padding area (trans-y=1, pad-count=5)
+      (define anchor (cons 0 2))
+      (define end (cons 5 2))
+      ;; Should NOT crash, selection in padding is gracefully handled
+      (define result (apply-selection-highlight lines anchor end 1 5))
+      (check-equal? (length result) 3 "returns all lines unmodified"))
+
+    (test-case "no selection returns lines unchanged regardless of pad-count"
+      (define lines
+        (for/list ([i (in-range 3)])
+          (styled-line (list (styled-segment (format "Line ~a" i) '())))))
+      (define result (apply-selection-highlight lines #f #f 1 5))
+      (check-equal? (map styled-line->text result)
+                    (map styled-line->text lines)
+                    "no selection passes through unchanged"))
+    ))
+
+(run-tests bug57-tests)

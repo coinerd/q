@@ -83,11 +83,13 @@
 (define (assert-line-width! line-text max-width)
   (define vw (string-visible-width line-text))
   (when (> vw max-width)
-    (define msg (format "width overflow: ~a cols in ~a-col terminal (line: ~a)"
-                        vw max-width
-                        (if (> (string-length line-text) 60)
-                            (string-append (substring line-text 0 60) "...")
-                            line-text)))
+    (define msg
+      (format "width overflow: ~a cols in ~a-col terminal (line: ~a)"
+              vw
+              max-width
+              (if (> (string-length line-text) 60)
+                  (string-append (substring line-text 0 60) "...")
+                  line-text)))
     (if (current-assert-width)
         (raise (exn:fail msg (current-continuation-marks)))
         (log-warning msg)))
@@ -198,10 +200,10 @@
   ;; Pad rest with spaces
   (when (> remaining-width 0)
     (ubuf-putstring! ubuf col row (make-string remaining-width #\space))))
-  ;; Width overflow protection: draw-styled-line! truncates per-segment
-  ;; and pads to exactly 'width'. Upstream wrap-styled-line handles word wrap.
-  ;; The assert-line-width! function is available for external callers to
-  ;; validate line widths before they reach this function.)
+;; Width overflow protection: draw-styled-line! truncates per-segment
+;; and pads to exactly 'width'. Upstream wrap-styled-line handles word wrap.
+;; The assert-line-width! function is available for external callers to
+;; validate line widths before they reach this function.)
 
 ;; ============================================================
 ;; Frame rendering
@@ -247,28 +249,28 @@
   ;; Build frame-lines for diffing
   (define frame-vec (make-vector rows ""))
   ;; Header: store ANSI-encoded (inverse video) for correct incremental diff
-  (vector-set! frame-vec header-y
-                (string-append "\x1b[0m\x1b[30;47m" header-text "\x1b[0m"))
+  (vector-set! frame-vec header-y (string-append "\x1b[0m\x1b[30;47m" header-text "\x1b[0m"))
 
   ;; 3. Draw transcript entries (with render cache)
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))
-  ;; Apply selection highlight if selection is active
+  ;; Determine visible lines and padding BEFORE selection (BUG-57)
+  (define visible-lines-raw
+    (if (> (length trans-lines-raw) transcript-height)
+        (take-right trans-lines-raw transcript-height)
+        trans-lines-raw))
+  (define pad-count (- transcript-height (length visible-lines-raw)))
+  ;; Apply selection highlight with pad-count for correct coordinate mapping
   (define sel-anchor (ui-state-sel-anchor ui-state))
   (define sel-end (ui-state-sel-end ui-state))
   (define trans-lines
     (if (and sel-anchor sel-end)
-        (apply-selection-highlight trans-lines-raw sel-anchor sel-end trans-y)
-        trans-lines-raw))
-  (define visible-lines
-    (if (> (length trans-lines) transcript-height)
-        (take-right trans-lines transcript-height)
-        trans-lines))
-  (define pad-count (- transcript-height (length visible-lines)))
+        (apply-selection-highlight visible-lines-raw sel-anchor sel-end trans-y pad-count)
+        visible-lines-raw))
   (for ([i (in-range pad-count)])
     (define blank (make-string cols #\space))
     (ubuf-putstring! ubuf 0 (+ trans-y i) blank)
     (vector-set! frame-vec (+ trans-y i) blank))
-  (for ([line (in-list visible-lines)]
+  (for ([line (in-list trans-lines)]
         [i (in-naturals)])
     (define line-ansi (styled-line->ansi line))
     (assert-line-width! (styled-line->text line) cols)
@@ -304,9 +306,10 @@
   (define overlay (ui-state-active-overlay ui-state))
   (when overlay
     (define ov-content (overlay-state-content overlay))
-    (define ov-lines (if (> (length ov-content) transcript-height)
-                         (take-right ov-content transcript-height)
-                         ov-content))
+    (define ov-lines
+      (if (> (length ov-content) transcript-height)
+          (take-right ov-content transcript-height)
+          ov-content))
     ;; Clear overlay background
     (for ([i (in-range transcript-height)])
       (ubuf-putstring! ubuf 0 (+ trans-y i) (make-string cols #\space) #:bg 8))
@@ -338,17 +341,14 @@
 ;; Input line is NOT wrapped as a component because it changes every keystroke
 ;; and receives separate input-state not available through ui-state.
 (define (make-render-components)
-  (render-components
-   ;; Transcript component
-   (make-q-component
-    (lambda (st w)
-      (define-values (lines _st) (render-transcript st 1000 w))
-      lines)
-    #:id 'transcript)
-   ;; Status bar component
-   (make-q-component
-    (lambda (st w) (list (render-status-bar st w)))
-    #:id 'status-bar)))
+  ;; Transcript component
+  (render-components (make-q-component (lambda (st w)
+                                         (define-values (lines _st) (render-transcript st 1000 w))
+                                         lines)
+                                       #:id 'transcript)
+                     ;; Status bar component
+                     (make-q-component (lambda (st w) (list (render-status-bar st w)))
+                                       #:id 'status-bar)))
 
 ;; Render transcript zone through component. Returns (values lines ui-state).
 (define (render-components-transcript comps state height width)
