@@ -34,12 +34,28 @@
          (only-in racket/string string-trim)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
-                  message? message-id message-role message-content
-                  make-message make-tool-result-part make-text-part
-                  tool-call-part? tool-call-part-id tool-call-part-name tool-call-part-arguments
-                  make-tool-call tool-call-id tool-call-name
-                  make-loop-result loop-result-termination-reason loop-result-messages loop-result-metadata
-                  make-event)
+                  message?
+                  message-id
+                  message-role
+                  message-content
+                  make-message
+                  make-tool-result-part
+                  make-text-part
+                  tool-call-part?
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part-arguments
+                  make-tool-call
+                  tool-call-id
+                  tool-call-name
+                  make-loop-result
+                  loop-result-termination-reason
+                  loop-result-messages
+                  loop-result-metadata
+                  make-event
+                  ;; FEAT-61: needed by injected-message collector
+                  event-ev
+                  event-payload)
          "../agent/event-bus.rkt"
          (only-in "../agent/queue.rkt"
                   dequeue-steering!
@@ -53,7 +69,8 @@
          (only-in "../tools/tool.rkt"
                   make-exec-context
                   make-error-result
-                  tool-result-content tool-result-is-error?
+                  tool-result-content
+                  tool-result-is-error?
                   list-tools-jsexpr
                   merge-tool-lists)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
@@ -66,21 +83,23 @@
          "../extensions/hooks.rkt"
          "../runtime/session-store.rkt"
          (only-in "../runtime/compactor.rkt"
-                  build-tiered-context-with-hooks tiered-context->message-list)
+                  build-tiered-context-with-hooks
+                  tiered-context->message-list)
          "../util/ids.rkt"
-         (only-in "../util/cancellation.rkt"
-                  cancellation-token? cancellation-token-cancelled?)
+         (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
-         (only-in "../util/hook-types.rkt"
-                  hook-result-action hook-result-payload hook-result?)
-         (only-in "../runtime/auto-retry.rkt"
-                  with-auto-retry retryable-error?))
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
+         (only-in "../runtime/auto-retry.rkt" with-auto-retry retryable-error?)
+         ;; FEAT-61: message injection support
+         (only-in "../extensions/message-inject.rkt" injection-event-topic))
 
 (provide run-iteration-loop
          emit-session-event!
          maybe-dispatch-hooks
          ensure-hash-args ;; for testing
-         )
+         ;; FEAT-61: message injection support
+         make-injected-collector!
+         drain-injected-messages!)
 
 ;; ============================================================
 ;; Shared helpers
@@ -118,14 +137,15 @@
   (for/list ([tc (in-list tool-calls)]
              [tr (in-list results)])
     (define msg-id (generate-id))
-    (make-message msg-id parent-msg-id 'tool 'tool-result
-                  (list (make-tool-result-part
-                         (tool-call-id tc)
-                         (tool-result-content tr)
-                         (tool-result-is-error? tr)))
+    (make-message msg-id
+                  parent-msg-id
+                  'tool
+                  'tool-result
+                  (list (make-tool-result-part (tool-call-id tc)
+                                               (tool-result-content tr)
+                                               (tool-result-is-error? tr)))
                   (now-seconds)
-                  (hasheq 'toolCallId (tool-call-id tc)
-                          'isError (tool-result-is-error? tr)))))
+                  (hasheq 'toolCallId (tool-call-id tc) 'isError (tool-result-is-error? tr)))))
 
 ;; ============================================================
 ;; Queue helpers
@@ -160,32 +180,32 @@
 
   ;; Build tiered context with hook support
   (define-values (tc assembly-hook-result)
-    (build-tiered-context-with-hooks
-     ctx-to-use
-     #:hook-dispatcher ctx-assembly-hook-dispatcher
-     #:tier-b-count tier-b-count
-     #:tier-c-count tier-c-count
-     #:max-tokens max-tokens))
+    (build-tiered-context-with-hooks ctx-to-use
+                                     #:hook-dispatcher ctx-assembly-hook-dispatcher
+                                     #:tier-b-count tier-b-count
+                                     #:tier-c-count tier-c-count
+                                     #:max-tokens max-tokens))
 
   ;; Handle block action from context-assembly hook
-  (when (and assembly-hook-result
-             (eq? (hook-result-action assembly-hook-result) 'block))
-    (emit-session-event! bus session-id "context.assembly.blocked"
-                         (hasheq 'reason "extension-block"))
-    (raise (exn:fail "Context assembly blocked by extension"
-                     (current-continuation-marks))))
+  (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
+    (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
+    (raise (exn:fail "Context assembly blocked by extension" (current-continuation-marks))))
 
   (define ctx-assembled (tiered-context->message-list tc))
 
   ;; Emit context.assembled event
-  (emit-session-event! bus session-id "context.assembled"
-                       (hasheq 'iteration iteration
-                               'total-messages (length ctx-to-use)
-                               'assembled-messages (length ctx-assembled)))
+  (emit-session-event! bus
+                       session-id
+                       "context.assembled"
+                       (hasheq 'iteration
+                               iteration
+                               'total-messages
+                               (length ctx-to-use)
+                               'assembled-messages
+                               (length ctx-assembled)))
 
   ;; Dispatch 'context hook — extensions can amend final context
-  (define-values (ctx-final _ctx-hook)
-    (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
+  (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
 
   ctx-final)
 
@@ -194,61 +214,72 @@
 (define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token)
   ;; Dispatch 'before-provider-request hook (informational)
   (define-values (_bpr-payload _bpr-res)
-    (maybe-dispatch-hooks ext-reg 'before-provider-request
-                              (hasheq 'session-id session-id 'turn-id turn-id)))
+    (maybe-dispatch-hooks ext-reg
+                          'before-provider-request
+                          (hasheq 'session-id session-id 'turn-id turn-id)))
 
   ;; Get tools from registry for the LLM request
   (define base-tools (and reg (list-tools-jsexpr reg)))
 
   ;; #673: Merge extension-provided tools into the tool list
   (define tools
-    (let ([ext-tools
-           (and ext-reg
-                (let ()
-                  (define-values (amended hook-res)
-                    (maybe-dispatch-hooks ext-reg 'register-tools (hasheq)))
-                  (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
-                      (hash-ref (hook-result-payload hook-res) 'tools '())
-                      '())))])
+    (let ([ext-tools (and ext-reg
+                          (let ()
+                            (define-values (amended hook-res)
+                              (maybe-dispatch-hooks ext-reg 'register-tools (hasheq)))
+                            (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
+                                (hash-ref (hook-result-payload hook-res) 'tools '())
+                                '())))])
       (if (and base-tools (pair? ext-tools))
           (merge-tool-lists base-tools ext-tools)
           base-tools)))
 
   (with-auto-retry
    (lambda ()
-     (run-agent-turn ctx-final prov bus
+     (run-agent-turn ctx-final
+                     prov
+                     bus
                      #:session-id session-id
                      #:turn-id turn-id
                      #:tools tools
                      #:cancellation-token token))
    #:max-retries 2
    #:base-delay-ms 1000
-   #:on-retry (lambda (attempt max-retries delay-ms error-msg)
-                (publish! bus
-                          (make-event "auto-retry.start"
-                                                (current-inexact-milliseconds)
-                                                session-id turn-id
-                                                (hasheq 'attempt attempt
-                                                        'max-retries max-retries
-                                                        'delay-ms delay-ms
-                                                        'error error-msg))))))
+   #:on-retry
+   (lambda (attempt max-retries delay-ms error-msg)
+     (publish!
+      bus
+      (make-event
+       "auto-retry.start"
+       (current-inexact-milliseconds)
+       session-id
+       turn-id
+       (hasheq 'attempt attempt 'max-retries max-retries 'delay-ms delay-ms 'error error-msg))))))
 
 ;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
 ;; and return (values tool-result-messages updated-ctx) for the next loop iteration.
-(define (handle-tool-calls-pending new-msgs ctx-with-steering ext-reg reg bus session-id
-                                    log-path token config)
+(define (handle-tool-calls-pending new-msgs
+                                   ctx-with-steering
+                                   ext-reg
+                                   reg
+                                   bus
+                                   session-id
+                                   log-path
+                                   token
+                                   config)
   ;; Extract tool calls from assistant messages
   (define tool-calls (extract-tool-calls-from-messages new-msgs))
 
   ;; Find assistant message ID for tool-result parent
   (define assistant-msg-id
     (let ([asst-msgs (filter (lambda (m) (eq? (message-role m) 'assistant)) new-msgs)])
-      (if (null? asst-msgs) #f (message-id (last asst-msgs)))))
+      (if (null? asst-msgs)
+          #f
+          (message-id (last asst-msgs)))))
 
   ;; Dispatch 'tool-call hook (F2: renamed from 'before-tool-execution)
   (define-values (tool-calls-to-run tool-call-blocked?)
-    (let-values ([(amended hook-res)
-                  (maybe-dispatch-hooks ext-reg 'tool-call tool-calls)])
+    (let-values ([(amended hook-res) (maybe-dispatch-hooks ext-reg 'tool-call tool-calls)])
       (if (and hook-res (eq? (hook-result-action hook-res) 'block))
           (values '() #t)
           (values amended #f))))
@@ -257,17 +288,18 @@
   (define sched-result
     (if tool-call-blocked?
         (scheduler-result '() '() #f)
-        (let ([hook-dispatcher-fn
-               (and ext-reg
-                    (lambda (hook-point payload)
-                      (dispatch-hooks hook-point payload ext-reg)))])
-          (run-tool-batch tool-calls-to-run reg
+        (let ([hook-dispatcher-fn (and ext-reg
+                                       (lambda (hook-point payload)
+                                         (dispatch-hooks hook-point payload ext-reg)))])
+          (run-tool-batch tool-calls-to-run
+                          reg
                           #:hook-dispatcher hook-dispatcher-fn
                           #:exec-context (make-exec-context
                                           #:working-directory (path-only log-path)
                                           #:cancellation-token token
-                                          #:event-publisher (lambda (event-type payload)
-                                                              (emit-session-event! bus session-id event-type payload))
+                                          #:event-publisher
+                                          (lambda (event-type payload)
+                                            (emit-session-event! bus session-id event-type payload))
                                           #:call-id (generate-id)
                                           #:session-metadata (hasheq 'session-id session-id))
                           #:parallel? (hash-ref config 'parallel-tools #f)))))
@@ -276,12 +308,14 @@
   (for ([tc (in-list tool-calls-to-run)]
         [tr (in-list (scheduler-result-results sched-result))])
     (if (tool-result-is-error? tr)
-        (emit-session-event! bus session-id "tool.call.failed"
-                             (hasheq 'name (tool-call-name tc)
-                                     'error (tool-result-content tr)))
-        (emit-session-event! bus session-id "tool.call.completed"
-                             (hasheq 'name (tool-call-name tc)
-                                     'result (tool-result-content tr)))))
+        (emit-session-event! bus
+                             session-id
+                             "tool.call.failed"
+                             (hasheq 'name (tool-call-name tc) 'error (tool-result-content tr)))
+        (emit-session-event! bus
+                             session-id
+                             "tool.call.completed"
+                             (hasheq 'name (tool-call-name tc) 'result (tool-result-content tr)))))
 
   ;; Convert scheduler results to tool-result messages.
   ;; When blocked, synthesize error results for ALL original tool calls
@@ -290,9 +324,8 @@
     (if tool-call-blocked?
         (make-tool-result-messages tool-calls
                                    (for/list ([tc (in-list tool-calls)])
-                                     (make-error-result
-                                      (format "Tool call '~a' blocked by extension"
-                                              (tool-call-name tc))))
+                                     (make-error-result (format "Tool call '~a' blocked by extension"
+                                                                (tool-call-name tc))))
                                    assistant-msg-id)
         (make-tool-result-messages tool-calls-to-run
                                    (scheduler-result-results sched-result)
@@ -300,11 +333,8 @@
 
   ;; Dispatch 'tool-result hook (F2: renamed from 'after-tool-execution)
   (define tool-result-msgs-amended
-    (let-values ([(amended hook-res)
-                  (maybe-dispatch-hooks ext-reg 'tool-result tool-result-msgs)])
-      (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-          tool-result-msgs
-          amended)))
+    (let-values ([(amended hook-res) (maybe-dispatch-hooks ext-reg 'tool-result tool-result-msgs)])
+      (if (and hook-res (eq? (hook-result-action hook-res) 'block)) tool-result-msgs amended)))
 
   ;; F1: Validate — filter to only message? values
   (define validated-msgs (filter message? tool-result-msgs-amended))
@@ -316,23 +346,70 @@
   (append ctx-with-steering new-msgs validated-msgs))
 
 ;; ============================================================
+;; FEAT-61: Message injection drain
+;; ============================================================
+
+;; Drain all pending injected messages from the event bus.
+;; Subscribes to "message.injected" events on first call (per bus+box pair).
+;; Returns a list of message? structs ready for context inclusion.
+(define (drain-injected-messages! bus injected-box session-id)
+  (define msgs (unbox injected-box))
+  (if (null? msgs)
+      '()
+      (begin
+        (set-box! injected-box '())
+        (filter message? msgs))))
+
+;; Create an injected-message collector: subscribes to message.injected events
+;; on the bus and accumulates them in a box.
+(define (make-injected-collector! bus)
+  (define collected (box '()))
+  (subscribe! bus
+              (lambda (evt)
+                (when (equal? (event-ev evt) injection-event-topic)
+                  (define payload (event-payload evt))
+                  (define msg (hash-ref payload 'message #f))
+                  (when msg
+                    ;; Thread-safe append using box swap
+                    (let loop ()
+                      (define old (unbox collected))
+                      (unless (box-cas! collected old (append old (list msg)))
+                        (loop))))))
+              #:filter (lambda (evt) (equal? (event-ev evt) injection-event-topic)))
+  collected)
+
+;; ============================================================
 ;; Iteration loop
 ;; ============================================================
 
-(define (run-iteration-loop context prov bus reg ext-reg log-path session-id max-iterations
-                              #:cancellation-token [token #f]
-                              #:config [config (hash)]
-                              #:queue [steering-queue #f]
-                              #:follow-up-delivery-mode [follow-up-mode 'all])
+(define (run-iteration-loop context
+                            prov
+                            bus
+                            reg
+                            ext-reg
+                            log-path
+                            session-id
+                            max-iterations
+                            #:cancellation-token [token #f]
+                            #:config [config (hash)]
+                            #:queue [steering-queue #f]
+                            #:follow-up-delivery-mode [follow-up-mode 'all]
+                            ;; FEAT-61: injected message collector box (created by caller)
+                            #:injected-box [injected-box #f])
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
   (define agent-start-payload
-    (hasheq 'session-id session-id
-            'max-iterations max-iterations
-            'context-message-count (length context)))
+    (hasheq 'session-id
+            session-id
+            'max-iterations
+            max-iterations
+            'context-message-count
+            (length context)))
   (define-values (amended-start start-hook-res)
     (maybe-dispatch-hooks ext-reg 'before-agent-start agent-start-payload))
   (when (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
-    (emit-session-event! bus session-id "agent.blocked"
+    (emit-session-event! bus
+                         session-id
+                         "agent.blocked"
                          (hasheq 'reason "extension-block" 'hook 'before-agent-start)))
   (if (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
       (make-loop-result '() 'completed (hasheq 'reason "extension-block"))
@@ -340,28 +417,42 @@
                  [iteration 0])
 
         ;; ── Cooperative cancellation check (between iterations) ──
-        ;; R2-5: Check steering queue for injected messages.
+        ;; R2-5 + FEAT-61: Check steering queue + drain injected messages.
         (define ctx-with-steering
           (if steering-queue
               (let ([steering-msgs (dequeue-all-steering! steering-queue)])
                 ;; #664: Emit queue-status event for TUI status bar
                 (let ([qs (queue-status steering-queue)])
-                  (when (or (> (hash-ref qs 'steering 0) 0)
-                            (> (hash-ref qs 'followup 0) 0))
+                  (when (or (> (hash-ref qs 'steering 0) 0) (> (hash-ref qs 'followup 0) 0))
                     (emit-session-event! bus session-id "queue.status-update" qs)))
                 (if (null? steering-msgs)
                     ctx
                     (append ctx steering-msgs)))
               ctx))
 
+        ;; FEAT-61: Drain any extension-injected messages
+        (define ctx-with-injected
+          (if injected-box
+              (let ([injected (drain-injected-messages! bus injected-box session-id)])
+                (if (null? injected)
+                    ctx-with-steering
+                    (begin
+                      (emit-session-event! bus
+                                           session-id
+                                           "message.injected.drain"
+                                           (hasheq 'count (length injected)))
+                      (append ctx-with-steering injected))))
+              ctx-with-steering))
+
         (cond
           [(and token (cancellation-token-cancelled? token))
-           (emit-session-event! bus session-id "turn.cancelled"
-                                (hasheq 'reason "cancellation-token"
-                                        'iteration iteration))
-           (make-loop-result (append ctx-with-steering '()) 'cancelled
-                             (hasheq 'reason "cancellation-token"
-                                     'iteration iteration))]
+           (emit-session-event! bus
+                                session-id
+                                "turn.cancelled"
+                                (hasheq 'reason "cancellation-token" 'iteration iteration))
+           (make-loop-result (append ctx-with-injected '())
+                             'cancelled
+                             (hasheq 'reason "cancellation-token" 'iteration iteration))]
 
           [else
            (define turn-id (generate-id))
@@ -369,16 +460,15 @@
            ;; Dispatch 'turn-start hook — extensions can amend context or block
            (define-values (ctx-to-use turn-blocked?)
              (let-values ([(amended-ctx hook-res)
-                           (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-steering)])
+                           (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-injected)])
                (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-                   (values ctx-with-steering #t)
+                   (values ctx-with-injected #t)
                    (values amended-ctx #f))))
 
            (cond
              ;; ── Turn blocked by extension ──
              [turn-blocked?
-              (emit-session-event! bus session-id "turn.blocked"
-                                   (hasheq 'reason "extension-block"))
+              (emit-session-event! bus session-id "turn.blocked" (hasheq 'reason "extension-block"))
               (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
 
              [else
@@ -400,58 +490,71 @@
                  ;; Dispatch 'turn-end hook
                  (let-values ([(amended-result after-hook-res)
                                (maybe-dispatch-hooks ext-reg 'turn-end result)])
-                   (let ([effective-result
-                          (if (and after-hook-res
-                                   (eq? (hook-result-action after-hook-res) 'amend))
-                              amended-result
-                              result)])
+                   (let ([effective-result (if (and after-hook-res
+                                                    (eq? (hook-result-action after-hook-res) 'amend))
+                                               amended-result
+                                               result)])
                      ;; #662: Drain follow-up queue — if follow-ups exist,
                      ;; inject as user messages and continue the loop.
                      ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
                      (if steering-queue
-                         (let ([followups
-                                (if (eq? follow-up-mode 'one-at-a-time)
-                                    (let ([one (dequeue-followup! steering-queue)])
-                                      (if one (list one) '()))
-                                    (dequeue-all-followups! steering-queue))])
+                         (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
+                                              (let ([one (dequeue-followup! steering-queue)])
+                                                (if one
+                                                    (list one)
+                                                    '()))
+                                              (dequeue-all-followups! steering-queue))])
                            (if (null? followups)
                                effective-result
-                               (let ([followup-msgs
-                                      (for/list ([fu (in-list followups)])
-                                        (make-message
-                                         (generate-id) #f 'user 'text
-                                         (list (make-text-part fu))
-                                         (now-seconds)
-                                         (hasheq 'source "followup")))])
-                                 (emit-session-event!
-                                  bus session-id "followup.injected"
-                                  (hasheq 'count (length followups)
-                                          'mode (symbol->string follow-up-mode)))
+                               (let ([followup-msgs (for/list ([fu (in-list followups)])
+                                                      (make-message (generate-id)
+                                                                    #f
+                                                                    'user
+                                                                    'text
+                                                                    (list (make-text-part fu))
+                                                                    (now-seconds)
+                                                                    (hasheq 'source "followup")))])
+                                 (emit-session-event! bus
+                                                      session-id
+                                                      "followup.injected"
+                                                      (hasheq 'count
+                                                              (length followups)
+                                                              'mode
+                                                              (symbol->string follow-up-mode)))
                                  (append-entries! log-path followup-msgs)
-                                 (loop (append ctx-with-steering
-                                               new-msgs followup-msgs)
+                                 (loop (append ctx-with-injected new-msgs followup-msgs)
                                        (add1 iteration)))))
                          effective-result)))]
 
                 ;; ── Max iterations reached: append and stop ──
-                [(and (eq? termination 'tool-calls-pending)
-                      (>= (add1 iteration) max-iterations))
+                [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations))
                  (append-entries! log-path new-msgs)
-                 (emit-session-event! bus session-id "runtime.error"
-                                      (hasheq 'error "max-iterations-exceeded"
-                                              'iteration iteration
-                                              'maxIterations max-iterations))
+                 (emit-session-event! bus
+                                      session-id
+                                      "runtime.error"
+                                      (hasheq 'error
+                                              "max-iterations-exceeded"
+                                              'iteration
+                                              iteration
+                                              'maxIterations
+                                              max-iterations))
                  (make-loop-result new-msgs
                                    'max-iterations-exceeded
-                                   (hash-set (loop-result-metadata result)
-                                             'maxIterationsReached #t))]
+                                   (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
                  (append-entries! log-path new-msgs)
                  (define updated-ctx
-                   (handle-tool-calls-pending new-msgs ctx-with-steering ext-reg reg
-                                              bus session-id log-path token config))
+                   (handle-tool-calls-pending new-msgs
+                                              ctx-with-injected
+                                              ext-reg
+                                              reg
+                                              bus
+                                              session-id
+                                              log-path
+                                              token
+                                              config))
                  (loop updated-ctx (add1 iteration))]
 
                 ;; ── Unknown termination: append and return ──

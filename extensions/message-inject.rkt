@@ -22,15 +22,13 @@
          "../util/ids.rkt"
          "../util/protocol-types.rkt")
 
-(provide
- (contract-out
-  [inject-system-message!    (-> event-bus? string? string? any/c)]
-  [inject-user-message!      (-> event-bus? string? string? any/c)]
-  [inject-assistant-message! (-> event-bus? string? string? any/c)])
- ;; Low-level: create injection message
- make-injection-message
- ;; Event topic constant
- injection-event-topic)
+(provide (contract-out [inject-system-message! (-> event-bus? string? string? any/c)]
+                       [inject-user-message! (-> event-bus? string? string? any/c)]
+                       [inject-assistant-message! (-> event-bus? string? string? any/c)])
+         ;; Low-level: create injection message
+         make-injection-message
+         ;; Event topic constant
+         injection-event-topic)
 
 ;; ============================================================
 ;; Constants
@@ -62,12 +60,12 @@
 ;; text: message content
 (define (inject-system-message! bus session-id text)
   (define msg (make-injection-message 'system text))
-  (publish! bus (make-event injection-event-topic
-                            (current-seconds)
-                            session-id
-                            #f
-                            (hasheq 'role 'system
-                                    'message msg))))
+  (publish! bus
+            (make-event injection-event-topic
+                        (current-seconds)
+                        session-id
+                        #f
+                        (hasheq 'role 'system 'message msg))))
 
 ;; ============================================================
 ;; inject-user-message! : event-bus? string? string? -> event?
@@ -76,12 +74,12 @@
 ;; Inject a user message into the conversation.
 (define (inject-user-message! bus session-id text)
   (define msg (make-injection-message 'user text))
-  (publish! bus (make-event injection-event-topic
-                            (current-seconds)
-                            session-id
-                            #f
-                            (hasheq 'role 'user
-                                    'message msg))))
+  (publish! bus
+            (make-event injection-event-topic
+                        (current-seconds)
+                        session-id
+                        #f
+                        (hasheq 'role 'user 'message msg))))
 
 ;; ============================================================
 ;; inject-assistant-message! : event-bus? string? string? -> event?
@@ -90,9 +88,9 @@
 ;; Inject an assistant message into the conversation.
 (define (inject-assistant-message! bus session-id text)
   (define msg (make-injection-message 'assistant text))
-  (publish! bus (make-event injection-event-topic
-                            (current-seconds)
-                            session-id
-                            #f
-                            (hasheq 'role 'assistant
-                                    'message msg))))
+  (publish! bus
+            (make-event injection-event-topic
+                        (current-seconds)
+                        session-id
+                        #f
+                        (hasheq 'role 'assistant 'message msg))))

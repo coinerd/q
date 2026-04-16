@@ -110,8 +110,7 @@
               (lambda (evt)
                 (when (equal? (event-ev evt) "message.injected")
                   (set-box! ext-a-received evt)))
-              #:filter (lambda (evt)
-                         (equal? (event-ev evt) "message.injected")))
+              #:filter (lambda (evt) (equal? (event-ev evt) "message.injected")))
   ;; Ext B injects a message
   (inject-system-message! bus "shared-session" "injected by B")
   (check-not-false (unbox ext-a-received))
@@ -147,3 +146,54 @@
     (check-equal? (message-role msg) role)
     (check-true (and (message-id msg) (string? (message-id msg))))
     (check-true (exact-integer? (message-timestamp msg)))))
+
+;; ============================================================
+;; FEAT-61: Iteration loop integration
+;; ============================================================
+
+(require "../runtime/iteration.rkt")
+
+(test-case "make-injected-collector! creates a box that collects injected messages"
+  (define bus (make-event-bus))
+  (define box (make-injected-collector! bus))
+  ;; Inject a message
+  (inject-system-message! bus "sess-61a" "injected via collector")
+  ;; Check the box collected it
+  (define msgs (unbox box))
+  (check-equal? (length msgs) 1)
+  (check-equal? (message-role (car msgs)) 'system))
+
+(test-case "drain-injected-messages! returns collected messages and clears box"
+  (define bus (make-event-bus))
+  (define box (make-injected-collector! bus))
+  (inject-system-message! bus "sess-61b" "drain me")
+  (inject-user-message! bus "sess-61b" "drain me too")
+  (define drained (drain-injected-messages! bus box "sess-61b"))
+  (check-equal? (length drained) 2)
+  ;; Box should be empty now
+  (check-equal? (unbox box) '()))
+
+(test-case "drain-injected-messages! on empty box returns empty list"
+  (define bus (make-event-bus))
+  (define box (make-injected-collector! bus))
+  (define drained (drain-injected-messages! bus box "sess-61c"))
+  (check-equal? drained '()))
+
+(test-case "injected messages carry source=extension-inject metadata"
+  (define bus (make-event-bus))
+  (define box (make-injected-collector! bus))
+  (inject-system-message! bus "sess-61d" "check meta")
+  (define msgs (unbox box))
+  (check-equal? (hash-ref (message-meta (car msgs)) 'source) 'extension-inject))
+
+(test-case "multiple injections batch correctly via collector"
+  (define bus (make-event-bus))
+  (define box (make-injected-collector! bus))
+  (for ([i (in-range 5)])
+    (inject-user-message! bus "sess-61e" (format "msg ~a" i)))
+  (define drained (drain-injected-messages! bus box "sess-61e"))
+  (check-equal? (length drained) 5)
+  ;; After drain, injecting more works
+  (inject-user-message! bus "sess-61e" "after drain")
+  (define second-drain (drain-injected-messages! bus box "sess-61e"))
+  (check-equal? (length second-drain) 1))
