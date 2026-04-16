@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1] — 2026-04-16
+
+### Bug Fixes
+- **BUG-39**: `build-session-context` includes buffered user message when `idx=#f`
+- **BUG-40**: `close-session!` calls `ensure-persisted!` before deactivating session
+- **BUG-41**: Remove dead `#:strategy` parameter from compactor API
+- **BUG-42**: `session-log-entries` filters session-info header entries
+- **BUG-48,50,51,52**: Raw JSONL readers in tests filter session-info entries
+- **BUG-54**: Extension-context critical hook expectation corrected (`'block` not `'pass`)
+- **Eager persistence**: `make-agent-session` calls `ensure-persisted!` so resume works immediately
+- **Parent-ID fix**: Session-info entries skipped in parent-id calculation (index and log paths)
+
+### Internal
+- Centralized `filter-session-info` helper in `tests/helpers/fixtures.rkt`
+- Centralized `LOW-TOKEN-CONFIG` in `tests/helpers/compaction-helpers.rkt`
+- New `test-compaction-contracts.rkt` — 5 compaction API contract tests
+- New `test-session-lifecycle-smoke.rkt` — 3 create/close/resume lifecycle tests
+- 4432/4434 tests pass (99.95%)
+
+
 ## [0.10.0] — 2026-04-16
 
 ### Bug Fixes

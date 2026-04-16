@@ -41,7 +41,9 @@
                       (check-pred compaction-result? result)
                       (check-pred exact-nonnegative-integer? (compaction-result-removed-count result))
                       (check-pred list? (compaction-result-kept-messages result))
-                      (check-true (or (message? (compaction-result-summary-message result)) (not (compaction-result-summary-message result))) "summary should be message? or #f"))
+                      (check-true (or (message? (compaction-result-summary-message result))
+                                      (not (compaction-result-summary-message result)))
+                                  "summary should be message? or #f"))
                     (lambda () (delete-directory/files tmpdir #:must-exist? #f))))
 
     ;; Contract: removed-count + kept-count = original-count
