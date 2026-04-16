@@ -32,7 +32,8 @@
          (only-in "../llm/token-budget.rkt" estimate-turn-tokens)
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
-         (only-in "../util/content-helpers.rkt" result-content->string))
+         (only-in "../util/content-helpers.rkt" result-content->string)
+         "streaming-message.rkt")
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -183,30 +184,27 @@
                               state
                               hook-dispatcher
                               cancellation-token)
-  (define accumulated-text (box ""))
-  (define accumulated-tool-calls (box '()))
-  (define all-chunks (box '()))
-  (define cancelled-during-stream (box #f))
-  (define stream-blocked (box #f))
-  (define message-started (box #f))
-  (define message-id (format "msg-~a-~a" turn-id (current-inexact-milliseconds)))
+  (define sm (make-streaming-message (format "msg-~a-~a" turn-id (current-inexact-milliseconds))))
+  (define message-id (streaming-message-message-id sm))
 
   (define stream-gen (provider-stream provider req))
 
   (let stream-loop ()
     (define chunk (stream-gen))
     (when (and chunk (not (eq? chunk #f)))
-      (set-box! all-chunks (cons chunk (unbox all-chunks)))
+      (streaming-message-append-chunk! sm chunk)
       (when (stream-chunk-delta-text chunk)
         ;; Emit message.start on first text delta
-        (unless (unbox message-started)
-          (set-box! message-started #t)
-          (emit! bus session-id turn-id "message.start"
+        (unless (streaming-message-message-started? sm)
+          (streaming-message-set-message-started! sm)
+          (emit! bus
+                 session-id
+                 turn-id
+                 "message.start"
                  (hasheq 'message-id message-id)
                  #:state state))
         ;; Text delta
-        (set-box! accumulated-text
-                  (string-append (unbox accumulated-text) (stream-chunk-delta-text chunk)))
+        (streaming-message-append-text! sm (stream-chunk-delta-text chunk))
         (emit! bus
                session-id
                turn-id
@@ -214,9 +212,11 @@
                (hasheq 'delta (stream-chunk-delta-text chunk))
                #:state state)
         ;; Emit message.delta with message-id for extension consumption
-        (emit! bus session-id turn-id "message.delta"
-               (hasheq 'text (stream-chunk-delta-text chunk)
-                       'message-id message-id)
+        (emit! bus
+               session-id
+               turn-id
+               "message.delta"
+               (hasheq 'text (stream-chunk-delta-text chunk) 'message-id message-id)
                #:state state)
         ;; Dispatch message-update hook for text delta
         (when hook-dispatcher
@@ -231,11 +231,11 @@
                                      'delta-tool-call
                                      #f)))
           (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
-            (set-box! stream-blocked #t))))
+            (streaming-message-set-blocked! sm))))
       (when (stream-chunk-delta-tool-call chunk)
         ;; Tool call delta
         (define tc-delta (stream-chunk-delta-tool-call chunk))
-        (set-box! accumulated-tool-calls (append (unbox accumulated-tool-calls) (list tc-delta)))
+        (streaming-message-append-tool-call! sm tc-delta)
         (emit! bus
                session-id
                turn-id
@@ -255,7 +255,7 @@
                                      'delta-tool-call
                                      tc-delta)))
           (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
-            (set-box! stream-blocked #t))))
+            (streaming-message-set-blocked! sm))))
       (when (stream-chunk-done? chunk)
         ;; Stream completed
         (emit! bus
@@ -265,38 +265,34 @@
                (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
                #:state state)
         ;; Emit message.end if we started a message
-        (when (unbox message-started)
-          (emit! bus session-id turn-id "message.end"
-                 (hasheq 'message-id message-id
-                         'usage (or (stream-chunk-usage chunk) (hasheq)))
+        (when (streaming-message-message-started? sm)
+          (emit! bus
+                 session-id
+                 turn-id
+                 "message.end"
+                 (hasheq 'message-id message-id 'usage (or (stream-chunk-usage chunk) (hasheq)))
                  #:state state)))
       ;; Check cancellation after processing chunk
       (cond
         [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
-         (set-box! cancelled-during-stream #t)
+         (streaming-message-set-cancelled! sm)
          (emit! bus
                 session-id
                 turn-id
                 "turn.cancelled"
                 (hasheq 'reason "cancellation-token")
                 #:state state)]
-        [(unbox stream-blocked)
+        [(streaming-message-blocked? sm)
          ;; message-update hook blocked -- emit model.stream.completed then stop streaming
-         (emit! bus session-id turn-id "model.stream.completed"
+         (emit! bus
+                session-id
+                turn-id
+                "model.stream.completed"
                 (hasheq 'usage (hasheq))
                 #:state state)]
         [else (stream-loop)])))
 
-  (hasheq 'text
-          (unbox accumulated-text)
-          'tool-calls
-          (unbox accumulated-tool-calls)
-          'all-chunks
-          (unbox all-chunks)
-          'cancelled?
-          (unbox cancelled-during-stream)
-          'stream-blocked?
-          (unbox stream-blocked)))
+  (streaming-message->hash sm))
 
 ;; ============================================================
 ;; Extracted helper: handle-cancellation
@@ -307,10 +303,9 @@
 (define (handle-cancellation bus session-id turn-id state #:hook-dispatcher [hook-dispatcher #f])
   ;; #667: Dispatch agent-end hook on cancellation
   (when hook-dispatcher
-    (hook-dispatcher 'agent-end
-                     (hasheq 'session-id (loop-state-session-id state)
-                             'turn-id turn-id
-                             'termination 'cancelled)))
+    (hook-dispatcher
+     'agent-end
+     (hasheq 'session-id (loop-state-session-id state) 'turn-id turn-id 'termination 'cancelled)))
   (emit! bus
          session-id
          turn-id
@@ -455,9 +450,7 @@
         ;; #667: Dispatch agent-end hook on completed turn
         (when hook-dispatcher
           (hook-dispatcher 'agent-end
-                           (hasheq 'session-id session-id
-                                   'turn-id turn-id
-                                   'termination 'completed)))
+                           (hasheq 'session-id session-id 'turn-id turn-id 'termination 'completed)))
         (make-loop-result
          (loop-state-messages state)
          'completed
@@ -493,10 +486,9 @@
                #:state state)
         ;; #667: Dispatch agent-end hook on tool-calls-pending turn
         (when hook-dispatcher
-          (hook-dispatcher 'agent-end
-                           (hasheq 'session-id session-id
-                                   'turn-id turn-id
-                                   'termination 'tool-calls-pending)))
+          (hook-dispatcher
+           'agent-end
+           (hasheq 'session-id session-id 'turn-id turn-id 'termination 'tool-calls-pending)))
         (make-loop-result (loop-state-messages state)
                           'tool-calls-pending
                           (hasheq 'turnId
@@ -542,10 +534,9 @@
 
   ;; #667: Dispatch 'agent-start hook at LLM call begin
   (when hook-dispatcher
-    (hook-dispatcher 'agent-start
-                     (hasheq 'session-id session-id
-                             'turn-id turn-id
-                             'message-count (length context))))
+    (hook-dispatcher
+     'agent-start
+     (hasheq 'session-id session-id 'turn-id turn-id 'message-count (length context))))
 
   ;; 2. Build normalized model context (pure function)
   (define raw-messages (build-raw-messages context))
@@ -578,7 +569,10 @@
     [(and (hook-result? pre-hook-result) (eq? (hook-result-action pre-hook-result) 'block))
      ;; Hook blocked the request -- emit turn.completed then return early
      (emit! bus session-id turn-id "model.request.blocked" (hasheq 'reason "hook"))
-     (emit! bus session-id turn-id "turn.completed"
+     (emit! bus
+            session-id
+            turn-id
+            "turn.completed"
             (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "model-request-pre-blocked"))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [else
@@ -610,7 +604,10 @@
      (cond
        [(and (hook-result? msg-start-result) (eq? (hook-result-action msg-start-result) 'block))
         (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
-        (emit! bus session-id turn-id "turn.completed"
+        (emit! bus
+               session-id
+               turn-id
+               "turn.completed"
                (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "message-start-blocked"))
         (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
        [else
@@ -627,7 +624,8 @@
 
         ;; -- Cancellation fast-path --
         (cond
-          [(hash-ref stream-data 'cancelled?) (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
+          [(hash-ref stream-data 'cancelled?)
+           (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
           [else
            ;; 8-9. Build final result from stream data
            (build-stream-result stream-data
