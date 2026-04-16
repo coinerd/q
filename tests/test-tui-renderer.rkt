@@ -607,6 +607,93 @@
                   "all entries preserved in transcript"))
 
    ;; ============================================================
+   ;; Wave 7: TUI render combination tests
+   ;; ============================================================
+
+   ;; T12: render-transcript with streaming + non-zero scroll-offset
+   ;; Risk: Streaming text hidden from scrolled user
+   (test-case
+    "render with streaming text and scroll offset"
+    ;; Build transcript with many entries
+    (define s0
+      (for/fold ([s (initial-ui-state)]) ([i (in-range 30)])
+        (add-transcript-entry s (make-entry 'assistant (format "Line ~a" i) 0 (hash)))))
+    ;; Add streaming text and scroll
+    (define state (struct-copy ui-state s0
+                               [streaming-text "Streaming..."]
+                               [scroll-offset 10]))
+    ;; render-status-bar should include scroll indicator
+    (define status-line (render-status-bar state 80))
+    (define status-text (styled-line->text status-line))
+    (check-true (string-contains? status-text "↑") "scroll indicator in status bar")
+    ;; render-transcript should not error with streaming + scroll
+    (define-values (lines _st) (render-transcript state 20 80))
+    (check-true (positive? (length lines))
+                "render-transcript produces lines"))
+
+   ;; T13: render-status-bar with status-message + busy + pending-tool-name
+   ;; Risk: Status message hides tool name
+   (test-case
+    "status bar with status-message + busy + pending-tool-name all set"
+    (define state (struct-copy ui-state (initial-ui-state)
+                               [busy? #t]
+                               [pending-tool-name "read"]
+                               [status-message "Compacting..."]))
+    (define line (render-status-bar state 80))
+    (define text (styled-line->text line))
+    ;; status-message should take priority in ui-status-text
+    (check-true (string-contains? text "Compacting...")
+                "status message appears")
+    (check-true (string-contains? text "*") "busy marker visible"))
+
+   ;; T14: render-status-bar with queue-counts
+   ;; Risk: Multi-queue display formatting
+   (test-case
+    "status bar with queue-counts shows queue info"
+    (define state (struct-copy ui-state (initial-ui-state)
+                               [queue-counts (hasheq 'steering 3 'followup 1)]))
+    (define line (render-status-bar state 80))
+    (define text (styled-line->text line))
+    (check-true (or (string-contains? text "steering")
+                    (string-contains? text "3")
+                    (string-contains? text "followup")
+                    (string-contains? text "1"))
+                "queue counts visible in status bar"))
+
+   ;; T15: Overlay rendering with content exceeding transcript height
+   ;; Risk: Content truncation
+   (test-case
+    "overlay rendering with content exceeding transcript height"
+    (define ubuf (make-mock-ubuf 40 8))
+    ;; Create overlay with many content lines
+    (define overlay-content
+      (for/list ([i (in-range 20)])
+        (styled-line (list (styled-segment (format "Option ~a" i) '())))))
+    (define state (show-overlay (initial-ui-state)
+                                'command-palette overlay-content ""))
+    (define input-st (initial-input-state))
+    (define layout (compute-layout 40 8))
+    ;; Should render without error even when overlay exceeds height
+    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
+
+   ;; T16: Widget lines overflow past status row
+   ;; Risk: Widget silently dropped
+   (test-case
+    "extension widgets render without error even with many lines"
+    (define ubuf (make-mock-ubuf 80 24))
+    ;; Create state with extension widgets
+    (define widgets
+      (hasheq (cons 'ext 'key)
+              (for/list ([i (in-range 10)])
+                (styled-line (list (styled-segment (format "Widget line ~a" i) '()))))))
+    (define state (struct-copy ui-state (initial-ui-state)
+                               [extension-widgets widgets]))
+    (define input-st (initial-input-state))
+    (define layout (compute-layout 80 24))
+    ;; Should render without error (widgets may be truncated)
+    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
+
+   ;; ============================================================
    ;; Run tests
    ;; ============================================================
 
