@@ -36,6 +36,7 @@ q/docs/
 │   ├── 0006-extension-hook-model.md
 │   └── 0007-sandboxing-boundary.md
 ├── demos/             ← demo scripts and walkthroughs
+├── sdk-rpc-catalog.md ← SDK/RPC interface reference
 └── tutorials/         ← builder and team setup guides
     ├── builder-tutorials.md
     └── team-setup.md
