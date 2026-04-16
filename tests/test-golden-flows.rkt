@@ -15,28 +15,46 @@
          json
          "../llm/provider.rkt"
          (only-in "../llm/model.rkt"
-                  make-model-response model-response-content
-                  stream-chunk stream-chunk?
-                  stream-chunk-delta-text stream-chunk-delta-tool-call
-                  stream-chunk-usage stream-chunk-done?)
-         (only-in "../agent/event-bus.rkt"
-                  make-event-bus event-bus?
-                  subscribe! unsubscribe! publish!)
+                  make-model-response
+                  model-response-content
+                  stream-chunk
+                  stream-chunk?
+                  stream-chunk-delta-text
+                  stream-chunk-delta-tool-call
+                  stream-chunk-usage
+                  stream-chunk-done?)
+         (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! unsubscribe! publish!)
          (only-in "../util/protocol-types.rkt"
-                  make-event event-event event-ev event?
+                  make-event
+                  event-event
+                  event-ev
+                  event?
                   event-payload
-                  message? message-id message-role message-content
-                  make-message make-text-part
-                  text-part? text-part-text
-                  loop-result? loop-result-termination-reason
-                  loop-result-messages loop-result-metadata
+                  message?
+                  message-id
+                  message-role
+                  message-content
+                  make-message
+                  make-text-part
+                  text-part?
+                  text-part-text
+                  loop-result?
+                  loop-result-termination-reason
+                  loop-result-messages
+                  loop-result-metadata
                   make-loop-result)
          (only-in "../tools/tool.rkt"
-                  make-tool-registry register-tool! make-tool
-                  tool-names tool?
+                  make-tool-registry
+                  register-tool!
+                  make-tool
+                  tool-names
+                  tool?
                   make-exec-context
-                  make-success-result make-error-result
-                  tool-result? tool-result-content tool-result-is-error?)
+                  make-success-result
+                  make-error-result
+                  tool-result?
+                  tool-result-content
+                  tool-result-is-error?)
          "../extensions/api.rkt"
          "../util/cancellation.rkt"
          "../util/jsonl.rkt"
@@ -45,21 +63,31 @@
                   compaction-result?
                   compaction-result-removed-count
                   compaction-result-kept-messages
-                  compaction-result->message-list)
+                  compaction-result->message-list
+                  compact-and-persist!)
+         (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         (only-in "../runtime/agent-session.rkt" session-history)
          (only-in "../interfaces/cli.rkt"
-                  parse-cli-args cli-config
-                  cli-config-command cli-config-mode
-                  cli-config-prompt cli-config-model
-                  cli-config-session-id cli-config-max-turns
-                  cli-config-no-tools? cli-config-tools
+                  parse-cli-args
+                  cli-config
+                  cli-config-command
+                  cli-config-mode
+                  cli-config-prompt
+                  cli-config-model
+                  cli-config-session-id
+                  cli-config-max-turns
+                  cli-config-no-tools?
+                  cli-config-tools
                   cli-config->runtime-config
                   parse-slash-command)
          (only-in "../interfaces/json-mode.rkt"
-                  parse-json-intent intent-type intent-payload
-                  intent? intent
+                  parse-json-intent
+                  intent-type
+                  intent-payload
+                  intent?
+                  intent
                   event->json-line)
-         (only-in "../runtime/session-store.rkt"
-                  load-session-log))
+         (only-in "../runtime/session-store.rkt" load-session-log))
 
 ;; ============================================================
 ;; Helpers
@@ -68,6 +96,10 @@
 (define (make-temp-dir)
   (make-temporary-file "q-golden-~a" 'directory))
 
+;; Filter out session-info (version header) entries from raw JSONL hashes.
+(define (filter-session-info entries)
+  (filter (lambda (e) (not (equal? (hash-ref e 'kind #f) "session-info"))) entries))
+
 (define (cleanup-dir dir)
   (when (directory-exists? dir)
     (delete-directory/files dir)))
@@ -75,10 +107,8 @@
 ;; Event collector: returns a handler proc and a getter for captured events
 (define (make-event-collector)
   (define events (box '()))
-  (values
-   (lambda (evt)
-     (set-box! events (append (unbox events) (list (event-event evt)))))
-   (lambda () (unbox events))))
+  (values (lambda (evt) (set-box! events (append (unbox events) (list (event-event evt)))))
+          (lambda () (unbox events))))
 
 ;; Mock provider that returns fixed text responses in sequence
 (define (make-sequential-mock-provider . texts)
@@ -89,20 +119,24 @@
    (lambda (req)
      (define i (unbox idx))
      (set-box! idx (add1 i))
-     (define text (if (< i (length texts)) (list-ref texts i) "done"))
-     (make-model-response
-      (list (hasheq 'type "text" 'text text))
-      (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-      "mock-model"
-      'stop))
+     (define text
+       (if (< i (length texts))
+           (list-ref texts i)
+           "done"))
+     (make-model-response (list (hasheq 'type "text" 'text text))
+                          (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                          "mock-model"
+                          'stop))
    (lambda (req)
      (define i (unbox idx))
      (set-box! idx (add1 i))
-     (define text (if (< i (length texts)) (list-ref texts i) "done"))
-     (list (stream-chunk text #f #f #f)
-           (stream-chunk #f #f
-                         (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-                         #t)))))
+     (define text
+       (if (< i (length texts))
+           (list-ref texts i)
+           "done"))
+     (list
+      (stream-chunk text #f #f #f)
+      (stream-chunk #f #f (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15) #t)))))
 
 ;; Single-response mock provider (most common case)
 (define (make-single-mock-provider [text "Mock response"])
@@ -110,13 +144,13 @@
 
 ;; Build a minimal SDK runtime for golden tests
 (define (make-golden-runtime prov
-                              #:session-dir [session-dir #f]
-                              #:max-iterations [max-iter 10]
-                              #:tool-registry [tool-reg #f]
-                              #:event-bus [bus #f]
-                              #:cancellation-token [tok #f]
-                              #:model-name [model-name #f]
-                              #:system-instructions [instrs '()])
+                             #:session-dir [session-dir #f]
+                             #:max-iterations [max-iter 10]
+                             #:tool-registry [tool-reg #f]
+                             #:event-bus [bus #f]
+                             #:cancellation-token [tok #f]
+                             #:model-name [model-name #f]
+                             #:system-instructions [instrs '()])
   (define dir (or session-dir (make-temp-dir)))
   (define reg (or tool-reg (make-tool-registry)))
   (sdk:make-runtime #:provider prov
@@ -239,8 +273,7 @@
   (check-false (parse-json-intent "{\"intent\":\"unknown\"}")))
 
 (test-case "golden-json: event->json-line produces valid JSON with newline"
-  (define test-evt (make-event "test.event" 1234567890 "sess-1" #f
-                                (hasheq 'key "value")))
+  (define test-evt (make-event "test.event" 1234567890 "sess-1" #f (hasheq 'key "value")))
   (define json-line (event->json-line test-evt "sess-override"))
   (check-true (string-suffix? json-line "\n"))
   (define parsed (string->jsexpr (string-trim json-line)))
@@ -253,7 +286,9 @@
 
 (test-case "golden-session: full lifecycle — create, info, prompt, close"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "Hello!"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     ;; No session yet
@@ -279,7 +314,7 @@
     (define sid (hash-ref info3 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
     (check-pred file-exists? log-path)
-    (define entries (jsonl-read-all-valid log-path))
+    (define entries (filter-session-info (jsonl-read-all-valid log-path)))
     (check-true (>= (length entries) 2) "log should have at least user + assistant messages")
     ;; Verify entry structure: first is user message
     (define first-entry (car entries))
@@ -288,7 +323,9 @@
 
 (test-case "golden-session: multiple prompts build history"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-sequential-mock-provider "One" "Two" "Three"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
@@ -303,13 +340,14 @@
 
 (test-case "golden-session: resume preserves full history"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define prov1 (make-sequential-mock-provider "First reply" "Second reply"))
     (define reg (make-tool-registry))
     ;; Phase 1: create session, run two prompts
-    (define rt1 (make-golden-runtime prov1 #:session-dir dir
-                                     #:event-bus bus #:tool-registry reg))
+    (define rt1 (make-golden-runtime prov1 #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt1))
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define-values (rt3 _r1) (sdk:run-prompt! rt2 "prompt A"))
@@ -317,8 +355,7 @@
     (define len-before (hash-ref (sdk:session-info rt4) 'history-length))
     ;; Phase 2: resume on fresh runtime
     (define prov2 (make-single-mock-provider "Resumed reply"))
-    (define rt5 (make-golden-runtime prov2 #:session-dir dir
-                                     #:event-bus bus #:tool-registry reg))
+    (define rt5 (make-golden-runtime prov2 #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt6 (sdk:open-session rt5 sid))
     (define info-resumed (sdk:session-info rt6))
     (check-equal? (hash-ref info-resumed 'session-id) sid)
@@ -331,7 +368,9 @@
 
 (test-case "golden-session: resume nonexistent session → error"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (check-exn exn:fail?
@@ -345,7 +384,9 @@
 
 (test-case "golden-fork: fork preserves history exactly"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-sequential-mock-provider "Alpha" "Beta"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
@@ -356,18 +397,20 @@
     (define forked (sdk:fork-session! rt2))
     (check-true (sdk:runtime? forked))
     (define fork-info (sdk:session-info forked))
-    (check-equal? (hash-ref fork-info 'history-length) orig-len
+    (check-equal? (hash-ref fork-info 'history-length)
+                  orig-len
                   "fork should have same history as original")
     (cleanup-dir dir)))
 
 (test-case "golden-fork: fork diverges — new prompt on fork leaves original unchanged"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-sequential-mock-provider "orig-1" "orig-2" "fork-only"))
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg))
+    (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "shared history")
     (define orig-len (hash-ref (sdk:session-info rt2) 'history-length))
@@ -375,7 +418,8 @@
     (define forked (sdk:fork-session! rt2))
     (define-values (fork-rt _) (sdk:run-prompt! forked "fork diverge"))
     ;; Original unchanged
-    (check-equal? (hash-ref (sdk:session-info rt2) 'history-length) orig-len
+    (check-equal? (hash-ref (sdk:session-info rt2) 'history-length)
+                  orig-len
                   "original session should not grow from fork activity")
     ;; Fork grew
     (check-true (> (hash-ref (sdk:session-info fork-rt) 'history-length) orig-len)
@@ -384,7 +428,9 @@
 
 (test-case "golden-fork: forked session has different session-id"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
@@ -392,13 +438,14 @@
     (define orig-sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define forked (sdk:fork-session! rt2))
     (define fork-sid (hash-ref (sdk:session-info forked) 'session-id))
-    (check-not-equal? fork-sid orig-sid
-                      "forked session must have a different ID")
+    (check-not-equal? fork-sid orig-sid "forked session must have a different ID")
     (cleanup-dir dir)))
 
 (test-case "golden-fork: fork emits session.forked event"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define prov (make-single-mock-provider))
     (define-values (handler get-events) (make-event-collector))
@@ -408,8 +455,7 @@
     (sdk:run-prompt! rt2 "before fork")
     (define forked (sdk:fork-session! rt2))
     (define event-list (get-events))
-    (check-not-false (member "session.forked" event-list)
-                     "fork should emit session.forked event")
+    (check-not-false (member "session.forked" event-list) "fork should emit session.forked event")
     (cleanup-dir dir)))
 
 ;; ============================================================
@@ -418,42 +464,40 @@
 
 (test-case "golden-events: full event sequence for a prompt turn"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-single-mock-provider "eventful"))
     (define-values (handler get-events) (make-event-collector))
     (subscribe! bus handler)
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg))
+    (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 _) (sdk:run-prompt! rt2 "trigger events"))
     (define evts (get-events))
     ;; Verify the golden event sequence
-    (check-not-false (member "session.started" evts)
-                     "session.started should be emitted")
-    (check-not-false (member "turn.started" evts)
-                     "turn.started should be emitted")
+    (check-not-false (member "session.started" evts) "session.started should be emitted")
+    (check-not-false (member "turn.started" evts) "turn.started should be emitted")
     (check-not-false (member "model.stream.delta" evts)
                      "model.stream.delta should be emitted during mock response")
     (check-not-false (member "model.stream.completed" evts)
                      "model.stream.completed should be emitted")
-    (check-not-false (member "turn.completed" evts)
-                     "turn.completed should be emitted")
-    (check-not-false (member "session.updated" evts)
-                     "session.updated should be emitted after turn")
+    (check-not-false (member "turn.completed" evts) "turn.completed should be emitted")
+    (check-not-false (member "session.updated" evts) "session.updated should be emitted after turn")
     (cleanup-dir dir)))
 
 (test-case "golden-events: subscriber receives all events in order"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-single-mock-provider "ordered"))
     (define-values (handler get-events) (make-event-collector))
     (subscribe! bus handler)
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg))
+    (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "order test")
     (define evts (get-events))
@@ -463,13 +507,14 @@
     (define turn-end-idx (index-of evts "turn.completed"))
     (check-true (< session-start-idx turn-start-idx)
                 "session.started should come before turn.started")
-    (check-true (< turn-start-idx turn-end-idx)
-                "turn.started should come before turn.completed")
+    (check-true (< turn-start-idx turn-end-idx) "turn.started should come before turn.completed")
     (cleanup-dir dir)))
 
 (test-case "golden-events: filter excludes unwanted events"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-single-mock-provider "filtered"))
@@ -478,19 +523,15 @@
     (subscribe! bus
                 (lambda (evt)
                   (set-box! filtered-events
-                            (append (unbox filtered-events)
-                                    (list (event-event evt)))))
-                #:filter (lambda (evt)
-                           (string-prefix? (event-event evt) "turn.")))
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg))
+                            (append (unbox filtered-events) (list (event-event evt)))))
+                #:filter (lambda (evt) (string-prefix? (event-event evt) "turn.")))
+    (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "filter test")
     (define evts (unbox filtered-events))
     ;; All received events should start with "turn."
     (for ([e (in-list evts)])
-      (check-true (string-prefix? e "turn.")
-                  (format "Expected turn.* event, got: ~a" e)))
+      (check-true (string-prefix? e "turn.") (format "Expected turn.* event, got: ~a" e)))
     ;; But should have at least turn.started and turn.completed
     (check-not-false (member "turn.started" evts))
     (check-not-false (member "turn.completed" evts))
@@ -498,30 +539,29 @@
 
 (test-case "golden-events: unsubscribe stops delivery"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-single-mock-provider "unsub"))
     (define events (box '()))
     (define sub-id
       (subscribe! bus
-                  (lambda (evt)
-                    (set-box! events
-                              (append (unbox events)
-                                      (list (event-event evt)))))))
+                  (lambda (evt) (set-box! events (append (unbox events) (list (event-event evt)))))))
     ;; Unsubscribe before any activity
     (unsubscribe! bus sub-id)
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg))
+    (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "unsub test")
-    (check-equal? (unbox events) '()
-                  "unsubscribed handler should receive no events")
+    (check-equal? (unbox events) '() "unsubscribed handler should receive no events")
     (cleanup-dir dir)))
 
 (test-case "golden-events: multiple subscribers all receive events"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-single-mock-provider "multi"))
@@ -529,19 +569,19 @@
     (define box-b (box 0))
     (subscribe! bus (lambda (evt) (set-box! box-a (add1 (unbox box-a)))))
     (subscribe! bus (lambda (evt) (set-box! box-b (add1 (unbox box-b)))))
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg))
+    (define rt (make-golden-runtime prov #:session-dir dir #:event-bus bus #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "multi test")
     (check-true (> (unbox box-a) 0) "subscriber A should receive events")
     (check-true (> (unbox box-b) 0) "subscriber B should receive events")
-    (check-equal? (unbox box-a) (unbox box-b)
-                  "both subscribers should receive same event count")
+    (check-equal? (unbox box-a) (unbox box-b) "both subscribers should receive same event count")
     (cleanup-dir dir)))
 
 (test-case "golden-events: sdk subscribe-events! receives events"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "sdk-sub"))
     (define-values (handler get-events) (make-event-collector))
     (define rt (make-golden-runtime prov #:session-dir dir))
@@ -560,15 +600,17 @@
 
 (test-case "golden-tools: tool call → execute → result in history"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define reg (make-tool-registry))
-    (register-tool! reg
-      (make-tool "greet" "Greet someone"
-                 (hasheq 'type "object"
-                         'required '("name")
-                         'properties (hasheq 'name (hasheq 'type "string")))
-                 (lambda (args ctx)
-                   (make-success-result (format "Hello, ~a!" (hash-ref args 'name "world"))))))
+    (register-tool!
+     reg
+     (make-tool
+      "greet"
+      "Greet someone"
+      (hasheq 'type "object" 'required '("name") 'properties (hasheq 'name (hasheq 'type "string")))
+      (lambda (args ctx) (make-success-result (format "Hello, ~a!" (hash-ref args 'name "world"))))))
     ;; Provider: first call returns tool-call, second returns text
     (define call-count (box 0))
     (define prov
@@ -578,32 +620,40 @@
        (lambda (req)
          (set-box! call-count (add1 (unbox call-count)))
          (if (= (unbox call-count) 1)
-             (make-model-response
-              (list (hasheq 'type "tool-call"
-                            'id "tc-golden-1"
-                            'name "greet"
-                            'arguments (hasheq 'name "Alice")))
-              (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-              "mock"
-              'tool-calls)
-             (make-model-response
-              (list (hasheq 'type "text" 'text "Greeted Alice!"))
-              (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
-              "mock"
-              'stop)))
+             (make-model-response (list (hasheq 'type
+                                                "tool-call"
+                                                'id
+                                                "tc-golden-1"
+                                                'name
+                                                "greet"
+                                                'arguments
+                                                (hasheq 'name "Alice")))
+                                  (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                                  "mock"
+                                  'tool-calls)
+             (make-model-response (list (hasheq 'type "text" 'text "Greeted Alice!"))
+                                  (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
+                                  "mock"
+                                  'stop)))
        (lambda (req)
          (set-box! call-count (add1 (unbox call-count)))
          (if (<= (unbox call-count) 1)
              (list (stream-chunk #f
-                                 (hasheq 'id "tc-golden-1"
-                                         'name "greet"
-                                         'arguments (jsexpr->string (hasheq 'name "Alice")))
-                                 #f #f)
-                   (stream-chunk #f #f
+                                 (hasheq 'id
+                                         "tc-golden-1"
+                                         'name
+                                         "greet"
+                                         'arguments
+                                         (jsexpr->string (hasheq 'name "Alice")))
+                                 #f
+                                 #f)
+                   (stream-chunk #f
+                                 #f
                                  (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
                                  #t))
              (list (stream-chunk "Greeted Alice!" #f #f #f)
-                   (stream-chunk #f #f
+                   (stream-chunk #f
+                                 #f
                                  (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
                                  #t))))))
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg))
@@ -613,15 +663,16 @@
     ;; Log should have: user, assistant(tool-call), tool-result, assistant(text)
     (define sid (hash-ref (sdk:session-info rt3) 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
-    (define entries (jsonl-read-all-valid log-path))
-    (check-true (>= (length entries) 4)
-                "tool call flow should produce >= 4 log entries")
+    (define entries (filter-session-info (jsonl-read-all-valid log-path)))
+    (check-true (>= (length entries) 4) "tool call flow should produce >= 4 log entries")
     (cleanup-dir dir)))
 
 (test-case "golden-tools: unknown tool → error result, loop continues"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
-    (define reg (make-tool-registry))  ;; empty — no tools registered
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
+    (define reg (make-tool-registry)) ;; empty — no tools registered
     (define call-count (box 0))
     (define prov
       (make-provider
@@ -631,31 +682,23 @@
          (set-box! call-count (add1 (unbox call-count)))
          (if (= (unbox call-count) 1)
              (make-model-response
-              (list (hasheq 'type "tool-call"
-                            'id "tc-unk"
-                            'name "nonexistent"
-                            'arguments (hasheq)))
+              (list (hasheq 'type "tool-call" 'id "tc-unk" 'name "nonexistent" 'arguments (hasheq)))
               (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
               "mock"
               'tool-calls)
-             (make-model-response
-              (list (hasheq 'type "text" 'text "Handled the error"))
-              (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
-              "mock"
-              'stop)))
+             (make-model-response (list (hasheq 'type "text" 'text "Handled the error"))
+                                  (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
+                                  "mock"
+                                  'stop)))
        (lambda (req)
          (set-box! call-count (add1 (unbox call-count)))
          (if (<= (unbox call-count) 1)
-             (list (stream-chunk #f
-                                 (hasheq 'id "tc-unk"
-                                         'name "nonexistent"
-                                         'arguments "{}")
-                                 #f #f)
-                   (stream-chunk #f #f
-                                 (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
-                                 #t))
+             (list
+              (stream-chunk #f (hasheq 'id "tc-unk" 'name "nonexistent" 'arguments "{}") #f #f)
+              (stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t))
              (list (stream-chunk "Handled the error" #f #f #f)
-                   (stream-chunk #f #f
+                   (stream-chunk #f
+                                 #f
                                  (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
                                  #t))))))
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg))
@@ -671,26 +714,29 @@
 
 (test-case "golden-compaction: advisory compact returns result without modifying log"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "compact-me"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "build history")
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
-    (define entries-before (length (jsonl-read-all-valid log-path)))
+    (define entries-before (length (filter-session-info (jsonl-read-all-valid log-path))))
     ;; Advisory compact (default)
     (define-values (rt3 comp-res) (sdk:compact-session! rt2 #:persist? #f))
     (check-pred compaction-result? comp-res)
     ;; Log should NOT have changed
-    (define entries-after (length (jsonl-read-all-valid log-path)))
-    (check-equal? entries-after entries-before
-                  "advisory compaction must not modify the log")
+    (define entries-after (length (filter-session-info (jsonl-read-all-valid log-path))))
+    (check-equal? entries-after entries-before "advisory compaction must not modify the log")
     (cleanup-dir dir)))
 
 (test-case "golden-compaction: persist compact appends summary entry"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "persist-me"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
@@ -700,14 +746,16 @@
       (set! rt2 next-rt))
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
-    (define entries-before (length (jsonl-read-all-valid log-path)))
-    ;; Persist compact
-    (define-values (rt3 comp-res) (sdk:compact-session! rt2 #:persist? #t))
+    (define entries-before (length (filter-session-info (jsonl-read-all-valid log-path))))
+    ;; Persist compact with low token budget so compaction actually triggers
+    (define history (session-history (sdk:runtime-rt-session rt2)))
+    (define low-tc (token-compaction-config 10 5 20))
+    (define comp-res (compact-and-persist! history log-path #:token-config low-tc))
     (check-pred compaction-result? comp-res)
     (check-true (> (compaction-result-removed-count comp-res) 0)
                 "should remove some messages with 25+ entries")
     ;; Log should have a new compaction-summary entry
-    (define entries-after (jsonl-read-all-valid log-path))
+    (define entries-after (filter-session-info (jsonl-read-all-valid log-path)))
     (check-true (> (length entries-after) entries-before)
                 "persist compaction should add summary entry")
     (define has-summary?
@@ -718,7 +766,9 @@
 
 (test-case "golden-compaction: compact-session! without session returns 'no-active-session"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (check-equal? (sdk:compact-session! rt) 'no-active-session)
@@ -730,7 +780,9 @@
 
 (test-case "golden-cancel: pre-cancelled token → immediate cancellation"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "cancelled"))
     (define tok (make-cancellation-token))
     (cancel-token! tok)
@@ -742,7 +794,9 @@
 
 (test-case "golden-cancel: cancel emits turn.cancelled event"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define bus (make-event-bus))
     (define reg (make-tool-registry))
     (define prov (make-single-mock-provider "cancel-event"))
@@ -750,9 +804,12 @@
     (cancel-token! tok)
     (define-values (handler get-events) (make-event-collector))
     (subscribe! bus handler)
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:event-bus bus #:tool-registry reg
-                                    #:cancellation-token tok))
+    (define rt
+      (make-golden-runtime prov
+                           #:session-dir dir
+                           #:event-bus bus
+                           #:tool-registry reg
+                           #:cancellation-token tok))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "test")
     (check-not-false (member "turn.cancelled" (get-events))
@@ -761,19 +818,24 @@
 
 (test-case "golden-cancel: interrupt! cancels runtime token"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
     (check-false (cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2)))
     (sdk:interrupt! rt2)
-    (check-pred cancellation-token-cancelled? (sdk:runtime-rt-cancellation-token rt2)
+    (check-pred cancellation-token-cancelled?
+                (sdk:runtime-rt-cancellation-token rt2)
                 "interrupt! should cancel the token")
     (cleanup-dir dir)))
 
 (test-case "golden-cancel: uncancelled token → normal completion"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "normal"))
     (define tok (make-cancellation-token))
     (define rt (make-golden-runtime prov #:session-dir dir #:cancellation-token tok))
@@ -789,7 +851,9 @@
 
 (test-case "golden-error: run-prompt! without session returns 'no-active-session"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define-values (rt2 result) (sdk:run-prompt! rt "orphan prompt"))
@@ -798,7 +862,9 @@
 
 (test-case "golden-error: fork without session returns 'no-active-session"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (check-equal? (sdk:fork-session! rt) 'no-active-session)
@@ -806,7 +872,9 @@
 
 (test-case "golden-error: session-info without session returns #f"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (check-false (sdk:session-info rt))
@@ -814,14 +882,15 @@
 
 (test-case "golden-error: max-iterations=1 stops after first tool call"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define reg (make-tool-registry))
     (register-tool! reg
-      (make-tool "ping" "ping"
-                 (hasheq 'type "object"
-                         'required '()
-                         'properties (hasheq))
-                 (lambda (args ctx) (make-success-result "pong"))))
+                    (make-tool "ping"
+                               "ping"
+                               (hasheq 'type "object" 'required '() 'properties (hasheq))
+                               (lambda (args ctx) (make-success-result "pong"))))
     ;; Provider always returns a tool-call
     (define prov
       (make-provider
@@ -829,25 +898,15 @@
        (lambda () (hash 'streaming #t 'token-counting #t))
        (lambda (req)
          (make-model-response
-          (list (hasheq 'type "tool-call"
-                        'id "tc-loop"
-                        'name "ping"
-                        'arguments (hasheq)))
+          (list (hasheq 'type "tool-call" 'id "tc-loop" 'name "ping" 'arguments (hasheq)))
           (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
           "mock"
           'tool-calls))
        (lambda (req)
-         (list (stream-chunk #f
-                             (hasheq 'id "tc-loop"
-                                     'name "ping"
-                                     'arguments "{}")
-                             #f #f)
-               (stream-chunk #f #f
-                             (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
-                             #t)))))
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:tool-registry reg
-                                    #:max-iterations 1))
+         (list
+          (stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
+          (stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t)))))
+    (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg #:max-iterations 1))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "loop test"))
     (check-equal? (loop-result-termination-reason result) 'max-iterations-exceeded)
@@ -859,11 +918,12 @@
 
 (test-case "golden-system: system instructions stored and reflected in session-info"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define instrs '("You are a helpful assistant." "Be concise."))
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:system-instructions instrs))
+    (define rt (make-golden-runtime prov #:session-dir dir #:system-instructions instrs))
     (define rt2 (sdk:open-session rt))
     (define info (sdk:session-info rt2))
     (check-equal? (hash-ref info 'system-instructions) instrs)
@@ -878,10 +938,11 @@
 
 (test-case "golden-model: model-name stored in session-info"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
-    (define rt (make-golden-runtime prov #:session-dir dir
-                                    #:model-name "test-model-v1"))
+    (define rt (make-golden-runtime prov #:session-dir dir #:model-name "test-model-v1"))
     (define rt2 (sdk:open-session rt))
     (define info (sdk:session-info rt2))
     (check-equal? (hash-ref info 'model-name) "test-model-v1")
@@ -893,7 +954,9 @@
 
 (test-case "golden-immutability: open-session does not mutate original"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (check-false (sdk:runtime-rt-session rt))
@@ -906,7 +969,9 @@
 
 (test-case "golden-immutability: fork returns new runtime, original unchanged"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
@@ -925,7 +990,9 @@
 
 (test-case "golden-log: all log entries are valid JSON"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-sequential-mock-provider "one" "two"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
@@ -933,7 +1000,7 @@
     (sdk:run-prompt! rt2 "prompt 2")
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
-    (define entries (jsonl-read-all-valid log-path))
+    (define entries (filter-session-info (jsonl-read-all-valid log-path)))
     (check-true (>= (length entries) 4))
     ;; Every entry must have required fields
     (for ([e (in-list entries)])
@@ -943,19 +1010,20 @@
 
 (test-case "golden-log: log entries have correct roles in sequence"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider "reply"))
     (define rt (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt))
     (sdk:run-prompt! rt2 "hello")
     (define sid (hash-ref (sdk:session-info rt2) 'session-id))
     (define log-path (build-path dir sid "session.jsonl"))
-    (define entries (jsonl-read-all-valid log-path))
+    (define entries (filter-session-info (jsonl-read-all-valid log-path)))
     (define roles (map (lambda (e) (hash-ref e 'role)) entries))
     ;; First should be user, second should be assistant
     (check-equal? (car roles) "user")
-    (check-not-false (member "assistant" roles)
-                     "log should contain an assistant message")
+    (check-not-false (member "assistant" roles) "log should contain an assistant message")
     (cleanup-dir dir)))
 
 ;; ============================================================
@@ -964,15 +1032,16 @@
 
 (test-case "golden-isolation: two sessions on same runtime have different IDs"
   (define dir (make-temp-dir))
-  (with-handlers ([exn:fail? (lambda (e) (cleanup-dir dir) (raise e))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir dir)
+                               (raise e))])
     (define prov (make-single-mock-provider))
     (define rt1 (make-golden-runtime prov #:session-dir dir))
     (define rt2 (sdk:open-session rt1))
     (define rt3 (sdk:open-session rt1))
     (define sid2 (hash-ref (sdk:session-info rt2) 'session-id))
     (define sid3 (hash-ref (sdk:session-info rt3) 'session-id))
-    (check-not-equal? sid2 sid3
-                      "two sessions must have different IDs")
+    (check-not-equal? sid2 sid3 "two sessions must have different IDs")
     ;; Each should be independent
     (sdk:run-prompt! rt2 "session A message")
     (sdk:run-prompt! rt3 "session B message")

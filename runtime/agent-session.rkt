@@ -146,7 +146,8 @@
   (define sid (generate-id))
   (define base-dir (hash-ref config 'session-dir))
   (define dir (build-path base-dir sid))
-  ;; #771: Don't create directory yet — deferred until first assistant response
+  ;; Create directory and version header eagerly so resume works immediately.
+  ;; Deferred persistence of entries is still handled via buffer-or-append!.
 
   ;; Capture session creation time for duration tracking
   (define session-created-at (now-seconds))
@@ -172,6 +173,9 @@
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
+
+  ;; Eagerly persist session directory and version header so resume works immediately.
+  (ensure-persisted! sess)
 
   ;; Dispatch 'session-start hook (R2-7: payload with session-id, config, and reason)
   (define session-start-payload (hasheq 'session-id sid 'config config 'reason 'new))
@@ -401,11 +405,18 @@
           ;; Determine parent from active leaf in index (#521: use stored IDs)
           (define parent-id
             (if idx
-                (let ([leaf (active-leaf idx)]) (and leaf (message-id leaf)))
+                (let ([leaf (active-leaf idx)])
+                  (cond
+                    [(not leaf) #f]
+                    ;; Skip session-info entries for parent calculation
+                    [(eq? (message-kind leaf) 'session-info) #f]
+                    [else (message-id leaf)]))
                 ;; No index yet — determine from log
-                (let ([existing (if (file-exists? log-path)
-                                    (load-session-log log-path)
-                                    '())])
+                (let* ([raw-existing (if (file-exists? log-path)
+                                         (load-session-log log-path)
+                                         '())]
+                       [existing (filter (lambda (m) (not (eq? (message-kind m) 'session-info)))
+                                         raw-existing)])
                   (if (null? existing)
                       #f
                       (message-id (last existing))))))
