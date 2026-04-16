@@ -191,7 +191,7 @@
   ;; FEAT-73: emit tool.execution.start lifecycle event
   (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
   (when ev-pub
-    (ev-pub 'tool.execution.start (hasheq 'tool-name tc-name 'tool-call-id tc-id)))
+    (ev-pub "tool.execution.start" (hasheq 'tool-name tc-name 'tool-call-id tc-id)))
 
   (define pre-payload (hasheq 'tool-name tc-name 'args tc-args 'entry-id tc-id))
 

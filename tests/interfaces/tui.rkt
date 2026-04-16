@@ -849,18 +849,20 @@
                   "decode-mouse-x10: cb=67 is release (button=3 regardless of motion)")))
 (test-case "selection-text P1 fix: first transcript row extracts text"
   (let ()
-    ;; selection-text with P1 fix — row mapping uses (sub1 trans-y)
-    ;; trans-y = 2 (1-based). First transcript line is at screen row 1 (0-based).
-    ;; So selecting screen row 1 should give line index 0.
+    ;; selection-text with bottom-aligned rendering.
+    ;; With 80x24 terminal: trans-y=1, trans-height=21.
+    ;; 2 content lines → pad-count=19, so content starts at row 1+19=20.
+    ;; First content line ("first line") is at screen row 20.
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     ;; Add two entries so we have multiple lines
     (define state2 (add-transcript-entry state (make-entry 'user "first line" 0 (hash))))
     (define state3 (add-transcript-entry state2 (make-entry 'assistant "second line" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state3)
-    ;; Select first transcript line (screen row 1 = first line after header)
-    (define state-sel (set-selection-anchor state3 0 1))
-    (define state-sel2 (set-selection-end state-sel 5 1))
+    ;; Content is bottom-aligned: pad-count=19, first content at row 20
+    (define content-row (+ 1 (- 21 2))) ; trans-y + (trans-height - content-count)
+    (define state-sel (set-selection-anchor state3 0 content-row))
+    (define state-sel2 (set-selection-end state-sel 5 content-row))
     (define text (selection-text ctx state-sel2))
     ;; Should extract text from the first rendered line, not empty
     (check-true (and (string? text) (> (string-length text) 0))
@@ -986,16 +988,20 @@
 (test-case "Resize polling tests (BUG: TUI not resized on terminal resize)"
   (let ()
     ;; Release copies correct text (from drag selection, not release position)
+    ;; With 80x24 terminal: trans-y=1, trans-height=21.
+    ;; 1 content line → pad-count=20, content at row 1+20=21.
     (define ctx (make-tui-ctx))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (define state2
       (add-transcript-entry state (make-entry 'assistant "Alpha Beta Gamma Delta" 0 (hash))))
     (set-box! (tui-ctx-ui-state-box ctx) state2)
+    ;; Content is bottom-aligned: pad-count=20, content at row 21
+    (define content-row (+ 1 (- 21 1))) ; trans-y + (trans-height - content-count)
     ;; Select first 5 chars ("Alpha") — drag to col 4 (0..4 = 5 chars)
-    (handle-mouse ctx '(click 0 0 1))
-    (handle-mouse ctx '(drag 4 1))
+    (handle-mouse ctx `(click 0 0 ,content-row))
+    (handle-mouse ctx `(drag 4 ,content-row))
     ;; Release at position 20 — should still copy "Alpha", not "Alpha Beta Gamma D"
-    (handle-mouse ctx '(release 20 1))
+    (handle-mouse ctx `(release 20 ,content-row))
     (define state-after (unbox (tui-ctx-ui-state-box ctx)))
     (define text (selection-text ctx state-after))
     (check-true (and (string? text) (string=? text "Alpha"))
