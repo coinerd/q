@@ -10,6 +10,36 @@ on:
     branches: [main]
 
 jobs:
+  version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Racket
+        uses: ./.github/actions/setup-racket
+
+      - name: Version sync check (dry-run)
+        run: racket scripts/sync-version.rkt
+
+      - name: Version lint (cross-check all surfaces)
+        run: racket scripts/lint-version.rkt
+
+      - name: Verify CLI --version matches canonical
+        run: |
+          CANONICAL=$(racket -e '(require "util/version.rkt") (display q-version)')
+          CLI_OUTPUT=$(racket main.rkt --version | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "Canonical: $CANONICAL"
+          echo "CLI:       $CLI_OUTPUT"
+          [ "$CANONICAL" = "$CLI_OUTPUT" ]
+
+      - name: Verify info.rkt version matches canonical
+        run: |
+          CANONICAL=$(racket -e '(require "util/version.rkt") (display q-version)')
+          INFO=$(grep -oP '(?<=\(define version ")[^"]+' info.rkt)
+          echo "Canonical: $CANONICAL"
+          echo "info.rkt:  $INFO"
+          [ "$CANONICAL" = "$INFO" ]
+
   test:
     strategy:
       matrix:

@@ -1,5 +1,8 @@
 #lang info
 
+;; Version: keep in sync with util/version.rkt (canonical source).
+;; Run `racket scripts/sync-version.rkt --write` after bumping util/version.rkt.
+
 (define collection "q")
 (define pkg-name "q")
 (define version "0.10.2")
