@@ -11,7 +11,9 @@
          "../tui/layout.rkt"
          "../tui/state.rkt"
          "../tui/input.rkt"
-         "../tui/char-width.rkt")
+         "../tui/char-width.rkt"
+         "../util/protocol-types.rkt"
+         "tui/event-simulator.rkt")
 
 ;; ============================================================
 ;; Mock ubuf implementation for testing
@@ -527,9 +529,86 @@
       ;; Should not raise — render wraps/truncates
       (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))))
 
-;; ============================================================
-;; Run tests
-;; ============================================================
+   ;; ============================================================
+   ;; Render-level transition tests (Wave 2, sub-issue #803)
+   ;; ============================================================
+
+   (test-case
+    "render shows assistant text + tool messages after full cycle"
+    (define ubuf (make-mock-ubuf 80 24))
+    ;; Build state with: assistant text, tool-start, tool-end
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "CL answer"))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "CL answer"))
+            (make-test-event "tool.call.started"
+                             (hasheq 'id "tc-1" 'name "read"
+                                     'arguments "/tmp/x"))
+            (make-test-event "tool.call.completed"
+                             (hasheq 'name "read" 'result "file data"))))
+    (define state (simulate-events s0 events))
+    (define input-st (initial-input-state))
+    (define layout (compute-layout 80 24))
+    ;; Should not raise
+    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+    ;; Verify transcript has all 3 entries
+    (check-equal? (transcript-types state) '(assistant tool-start tool-end)))
+
+   (test-case
+    "render shows streaming text below committed entries"
+    (define ubuf (make-mock-ubuf 80 24))
+    ;; Build state with: tool-start in transcript + streaming text active
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "Previous answer"))
+            (make-test-event "tool.call.started"
+                             (hasheq 'id "tc-1" 'name "bash"
+                                     'arguments "ls"))))
+    ;; Add streaming text to simulate mid-stream state
+    (define state (struct-copy ui-state (simulate-events s0 events)
+                                [streaming-text "New answer streaming"]))
+    (define input-st (initial-input-state))
+    (define layout (compute-layout 80 24))
+    ;; Should not raise — streaming text renders below committed entries
+    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+    ;; Verify state has streaming text
+    (check-equal? (ui-state-streaming-text state) "New answer streaming"))
+
+   (test-case
+    "render does not lose content with many tool messages"
+    (define ubuf (make-mock-ubuf 40 5))
+    ;; Build state with many tool entries + 1 assistant entry
+    (define s0 (initial-ui-state))
+    (define base-events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "Answer"))))
+    ;; Add 10 tool entries
+    (define tool-events
+      (for*/list ([i (in-range 5)])
+        (list (make-test-event "tool.call.started"
+                               (hasheq 'id (format "tc-~a" i)
+                                       'name "read"
+                                       'arguments (format "/tmp/f~a" i)))
+              (make-test-event "tool.call.completed"
+                               (hasheq 'name "read"
+                                       'result (format "data-~a" i))))))
+    (define state (simulate-events s0 (append base-events (apply append tool-events))))
+    (define input-st (initial-input-state))
+    (define layout (compute-layout 40 5))
+    ;; Should not raise even with small transcript area
+    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+    ;; Verify transcript has all entries
+    (check-equal? (transcript-length state) 11 ; 1 assistant + 5 tool-start + 5 tool-end
+                  "all entries preserved in transcript"))
+
+   ;; ============================================================
+   ;; Run tests
+   ;; ============================================================
 
 (module+ main
   (run-tests renderer-tests))
