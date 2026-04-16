@@ -49,7 +49,7 @@
    ;; ------------------------------------------------------------------
 
    (test-case
-    "BUG: streaming text NOT committed when tool.call.started follows (no assistant.message.completed)"
+    "FIXED: streaming text cleared on turn.completed when tool.call.started follows (no assistant.message.completed)"
     ;; This test FAILS before the fix, demonstrating the bug.
     ;; After Wave 1 fix (adding assistant.message.completed to loop.rkt),
     ;; the agent loop will emit the event and this scenario won't occur.
@@ -101,11 +101,10 @@
                                                              'turnId "turn-1"))))
     (check-false (ui-state-busy? s6) "turn.completed → not busy")
 
-    ;; BUG ASSERTION: streaming-text is STILL not cleared on turn.completed
-    ;; (Bug B2 — turn.completed doesn't clear streaming-text)
-    ;; The answer "The answer is 42." is lost from display on next turn
-    (check-equal? (ui-state-streaming-text s6) "The answer is 42."
-                   "BUG B2 PRESENT: streaming-text persists after turn.completed"))
+    ;; After B2 fix: turn.completed NOW clears streaming-text
+    ;; (defense-in-depth so stale text doesn't contaminate next turn)
+    (check-false (ui-state-streaming-text s6)
+                 "B2 FIXED: streaming-text cleared on turn.completed"))
 
    ;; ------------------------------------------------------------------
    ;; CORRECT BEHAVIOR: When assistant.message.completed IS emitted,
@@ -173,7 +172,7 @@
                   "no cross-turn accumulation after proper completion"))
 
    (test-case
-    "BUG: streaming text accumulates across turns when assistant.message.completed missing"
+    "FIXED: streaming text does not accumulate across turns when assistant.message.completed missing"
     ;; This is the actual worst case: no assistant.message.completed AND no
     ;; streaming-text cleanup on turn.completed
     (define s0 (initial-ui-state))
@@ -189,18 +188,18 @@
                                                           (hasheq 'termination 'tool-calls-pending
                                                                  'turnId "turn-1"))))
 
-    ;; BUG: streaming-text still has "Leftover "
-    (check-equal? (ui-state-streaming-text s4) "Leftover "
-                  "BUG B2: streaming-text persists across turn boundary")
+    ;; B2 FIX: turn.completed NOW clears streaming-text
+    (check-false (ui-state-streaming-text s4)
+                 "B2 FIXED: streaming-text cleared on turn.completed even without assistant.message.completed")
 
-    ;; Turn 2: stream new text
+    ;; Turn 2: stream new text — no contamination
     (define s5 (apply-event-to-state s4 (make-test-event "turn.started" (hasheq) #:turn-id "turn-2")))
     (define s6 (apply-event-to-state s5 (make-test-event "model.stream.delta" (hasheq 'delta "New text")
                                                           #:turn-id "turn-2")))
 
-    ;; BUG: streaming-text is "Leftover New text" — contaminated!
-    (check-equal? (ui-state-streaming-text s6) "Leftover New text"
-                  "BUG CONFIRMED: cross-turn contamination from uncleared streaming-text"))))
+    ;; FIXED: streaming-text is just "New text" — no contamination
+    (check-equal? (ui-state-streaming-text s6) "New text"
+                  "B2 FIXED: no cross-turn contamination"))))
 
 (module+ main
   (run-tests streaming-tool-bug-tests))

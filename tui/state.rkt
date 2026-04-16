@@ -336,8 +336,10 @@
     ;; Agent starts processing — mark busy
     [("turn.started") (struct-copy ui-state state [busy? #t])]
 
-    ;; Agent done processing — mark not busy
-    [("turn.completed") (struct-copy ui-state state [busy? #f])]
+    ;; Agent done processing — mark not busy, clear streaming-text
+    ;; Bug B2 fix: clear streaming-text on turn.completed as defense-in-depth
+    ;; so stale streaming text doesn't contaminate next turn.
+    [("turn.completed") (struct-copy ui-state state [busy? #f] [streaming-text #f])]
 
     [("turn.cancelled")
      ;; Agent turn was cancelled — clear busy state
