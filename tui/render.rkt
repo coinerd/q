@@ -7,7 +7,8 @@
          "input.rkt"
          "char-width.rkt"
          "theme.rkt"
-         "../util/markdown.rkt")
+         "../util/markdown.rkt"
+         (only-in "../extensions/custom-renderer-registry.rkt" lookup-custom-renderer-for-tool))
 
 ;; Types
 (provide (struct-out styled-line)
@@ -35,6 +36,10 @@
          styled-line->ansi
          styles->sgr
          wrap-styled-line
+
+         ;; FEAT-69: markdown rendering internals
+         theme->style
+         md-token->segment
          wrap-text
          wrap-single-line)
 
@@ -78,9 +83,24 @@
      (if (string=? (string-trim text) "")
          '() ;; empty/whitespace → no lines
          (md-format-assistant text width))]
-    [(tool-start) (list (styled-line (list (styled-segment text (theme->style 'tool-title)))))]
-    [(tool-end) (list (styled-line (list (styled-segment text (theme->style 'success)))))]
-    [(tool-fail) (list (styled-line (list (styled-segment text (theme->style 'error)))))]
+    [(tool-start)
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name #f))
+     (define custom-render (and tool-name (lookup-custom-renderer-for-tool tool-name 'call)))
+     (if custom-render
+         (custom-render (hash-ref (transcript-entry-meta entry) 'args text))
+         (list (styled-line (list (styled-segment text (theme->style 'tool-title))))))]
+    [(tool-end)
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name #f))
+     (define custom-render (and tool-name (lookup-custom-renderer-for-tool tool-name 'result)))
+     (if custom-render
+         (custom-render text)
+         (list (styled-line (list (styled-segment text (theme->style 'success))))))]
+    [(tool-fail)
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name #f))
+     (define custom-render (and tool-name (lookup-custom-renderer-for-tool tool-name 'result)))
+     (if custom-render
+         (custom-render text)
+         (list (styled-line (list (styled-segment text (theme->style 'error))))))]
     [(system)
      (list (styled-line (list (styled-segment (string-append "[SYS] " text) (theme->style 'muted)))))]
     [(error)
