@@ -439,7 +439,20 @@
               ([e (in-list entries)])
       (define eid (transcript-entry-id e))
       (define cached (and eid (rendered-cache-ref st eid)))
-      (if cached
+      ;; Defense-in-depth: verify cached entry matches current entry text.
+      ;; If there's an ID collision (e.g. scrollback + runtime entries sharing IDs),
+      ;; the fingerprint won't match and we re-render instead of showing stale content.
+      (define cache-valid?
+        (and cached
+             (let ([entry-text (transcript-entry-text e)])
+               (and (string? entry-text)
+                    (> (string-length entry-text) 0)
+                    (> (length cached) 0)
+                    (let* ([first-line (styled-line->text (car cached))]
+                           [prefix-len (min 20 (string-length entry-text))]
+                           [prefix (substring entry-text 0 prefix-len)])
+                      (string-contains? first-line prefix))))))
+      (if cache-valid?
           (values (append lines cached) st)
           (let ([fmt (format-entry e width)])
             (if eid

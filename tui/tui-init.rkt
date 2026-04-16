@@ -82,7 +82,11 @@
                       (let ([loaded (load-scrollback scrollback-path)])
                         (if (null? loaded)
                             base-state
-                            (struct-copy ui-state base-state [transcript loaded])))
+                            (let ([max-id (for/fold ([m -1]) ([e (in-list loaded)])
+                                            (max m (or (transcript-entry-id e) -1)))])
+                              (struct-copy ui-state base-state
+                                           [transcript loaded]
+                                           [next-entry-id (add1 max-id)]))))
                       base-state)]
            [welcome-entries (if (and first-run? (null? (ui-state-transcript state)))
                                 (list (make-entry 'system
