@@ -72,9 +72,12 @@
   (define kind (transcript-entry-kind entry))
   ;; BUG-26 fix: guard #f text — replace with empty string
   (define text (or (transcript-entry-text entry) ""))
+  ;; BUG-37 fix: skip whitespace-only assistant entries
   (case kind
-    ;; Parse markdown and render as styled-lines
-    [(assistant) (md-format-assistant text width)]
+    [(assistant)
+     (if (string=? (string-trim text) "")
+         '()  ;; empty/whitespace → no lines
+         (md-format-assistant text width))]
     [(tool-start) (list (styled-line (list (styled-segment text (theme->style 'tool-title)))))]
     [(tool-end) (list (styled-line (list (styled-segment text (theme->style 'success)))))]
     [(tool-fail) (list (styled-line (list (styled-segment text (theme->style 'error)))))]

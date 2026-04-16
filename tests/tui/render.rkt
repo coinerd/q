@@ -822,3 +822,22 @@
       (check-equal? (map styled-line->text lines1) (map styled-line->text lines2) "cached render same content"))))
 
 (run-tests bug36-tests)
+
+;; ============================================================
+;; BUG-37: Skip empty assistant entries in render
+;; ============================================================
+
+(define bug37-tests
+  (test-suite "BUG-37: Empty assistant entries"
+
+    (test-case "format-entry skips whitespace-only assistant text"
+      (define entry (make-entry 'assistant "   " 1000 (hash)))
+      (define lines (format-entry entry 80))
+      (check-equal? (length lines) 0 "whitespace-only entry renders 0 lines"))
+
+    (test-case "format-entry renders non-empty assistant text"
+      (define entry (make-entry 'assistant "Hello world" 1000 (hash)))
+      (define lines (format-entry entry 80))
+      (check-true (> (length lines) 0) "non-empty entry renders lines"))))
+
+(run-tests bug37-tests)
