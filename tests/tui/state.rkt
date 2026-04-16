@@ -697,3 +697,114 @@
   ;; Transcript and other state preserved
   (check-equal? (ui-state-transcript s2) '())
   (check-equal? (ui-state-scroll-offset s2) 0))
+
+;; ============================================================
+;; W0.3: Scrollback ID collision regression tests
+;; ============================================================
+
+(test-case "W0.3: scrollback load with entries advances next-entry-id"
+  ;; Simulate loading scrollback entries with IDs 0-4
+  (reset-scrollback-id-counter!)
+  (define tmpdir (make-temporary-file "scrollback-id-test-~a" 'directory))
+  (define path (build-path tmpdir "scrollback.jsonl"))
+  ;; Write 5 entries to scrollback
+  (define entries-to-save
+    (for/list ([i (in-range 5)])
+      (make-entry 'assistant (format "Old message ~a" i) (+ 1000 i) (hash))))
+  (save-scrollback entries-to-save path)
+  ;; Load them (assigns IDs from scrollback-id-counter: 0,1,2,3,4)
+  (define loaded (load-scrollback path))
+  (check-equal? (length loaded) 5)
+  ;; Simulate the fix: advance next-entry-id past max loaded ID
+  (define max-id (for/fold ([m -1]) ([e (in-list loaded)])
+                   (max m (or (transcript-entry-id e) -1))))
+  (check-equal? max-id 4 "max scrollback ID should be 4")
+  (define base-state (initial-ui-state))
+  (define fixed-state
+    (struct-copy ui-state base-state
+                 [transcript loaded]
+                 [next-entry-id (add1 max-id)]))
+  (check-equal? (ui-state-next-entry-id fixed-state) 5
+                "next-entry-id should be 5 after loading 5 entries")
+  ;; Add a new event and verify the new entry gets ID >= 5
+  (define evt (make-test-event "assistant.message.completed" (hash 'content "New message")))
+  (define s1 (apply-event-to-state fixed-state evt))
+  (define new-entry (last (ui-state-transcript s1)))
+  (check-equal? (transcript-entry-id new-entry) 5
+                "new entry should get ID 5 (not colliding with scrollback IDs 0-4)")
+  (delete-directory/files tmpdir))
+
+(test-case "W0.3: scrollback load then events — all IDs unique"
+  (reset-scrollback-id-counter!)
+  (define tmpdir (make-temporary-file "scrollback-id-test2-~a" 'directory))
+  (define path (build-path tmpdir "scrollback.jsonl"))
+  ;; Write 3 scrollback entries
+  (define entries-to-save
+    (list (make-entry 'assistant "Scrollback 1" 1000 (hash))
+          (make-entry 'tool-start "[TOOL: bash]" 1001 (hash))
+          (make-entry 'tool-end "[OK: bash]" 1002 (hash))))
+  (save-scrollback entries-to-save path)
+  (define loaded (load-scrollback path))
+  ;; Apply the fix: advance next-entry-id
+  (define max-id (for/fold ([m -1]) ([e (in-list loaded)])
+                   (max m (or (transcript-entry-id e) -1))))
+  (define base-state (initial-ui-state))
+  (define fixed-state
+    (struct-copy ui-state base-state
+                 [transcript loaded]
+                 [next-entry-id (add1 max-id)]))
+  ;; Apply 3 more events
+  (define s1 (apply-event-to-state fixed-state
+                                    (make-test-event "assistant.message.completed"
+                                                     (hash 'content "New response"))))
+  (define s2 (apply-event-to-state s1
+                                    (make-test-event "tool.call.started" (hash 'name "read"))))
+  (define s3 (apply-event-to-state s2
+                                    (make-test-event "tool.call.completed" (hash 'name "read"))))
+  ;; Collect all IDs
+  (define all-ids (map transcript-entry-id (ui-state-transcript s3)))
+  ;; All IDs should be unique: 3 scrollback + 3 runtime = 6
+  (check-equal? (length all-ids) 6 "should have 6 entries total")
+  (check-equal? (length (remove-duplicates all-ids)) 6 "all IDs should be unique")
+  ;; Scrollback entries: 0, 1, 2; runtime entries: 3, 4, 5
+  (check-equal? (take all-ids 3) '(0 1 2) "scrollback IDs 0-2")
+  (check-equal? (drop all-ids 3) '(3 4 5) "runtime IDs 3-5")
+  (delete-directory/files tmpdir))
+
+(test-case "W0.3: empty scrollback load — next-entry-id stays 0"
+  (reset-scrollback-id-counter!)
+  (define tmpdir (make-temporary-file "scrollback-id-test3-~a" 'directory))
+  (define path (build-path tmpdir "scrollback.jsonl"))
+  ;; No file → empty load
+  (define loaded (load-scrollback path))
+  (check-equal? loaded '() "no file → empty scrollback")
+  ;; Fix: with empty loaded, max-id stays -1, next-entry-id = 0
+  (define max-id (for/fold ([m -1]) ([e (in-list loaded)])
+                   (max m (or (transcript-entry-id e) -1))))
+  (check-equal? max-id -1 "empty scrollback: max-id = -1")
+  (check-equal? (add1 max-id) 0 "empty scrollback: next-entry-id = 0")
+  (delete-directory/files tmpdir))
+
+(test-case "W0.3: render cache collision defense — stale content not returned"
+  ;; Create a state with an entry that has ID 0 and text "Old content"
+  (reset-scrollback-id-counter!)
+  (define base (initial-ui-state))
+  ;; Add entry with ID 0
+  (define-values (entry0 s0)
+    (assign-entry-id (make-entry 'assistant "Old content" 1000 (hash)) base))
+  (define s1 (struct-copy ui-state s0 [transcript (list entry0)]))
+  ;; Render to populate cache
+  (define-values (rendered1 s1r) (render-transcript s1 24 80))
+  (check-not-false rendered1 "first render succeeds")
+  ;; Now simulate ID collision: replace the entry text but keep the same ID
+  (define colliding-entry (transcript-entry 'assistant "New content" 1001 (hash) 0))
+  (define s2 (struct-copy ui-state s1 [transcript (list colliding-entry)]))
+  ;; Render again — the cache has ID 0 → lines for "Old content"
+  ;; The defense-in-depth in render.rkt should detect the mismatch and re-render
+  (define-values (rendered2 s2r) (render-transcript s2 24 80))
+  (define rendered-text (apply string-append (map styled-line->text rendered2)))
+  ;; The rendered output should contain "New content", not "Old content"
+  (check-not-false (string-contains? rendered-text "New content")
+                   "render should show new content, not stale cached content")
+  (check-false (string-contains? rendered-text "Old content")
+               "render should NOT show stale old content"))
