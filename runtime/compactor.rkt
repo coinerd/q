@@ -257,8 +257,7 @@
 ;; Check if a message contains tool-call parts.
 (define (has-tool-calls? msg)
   (define content (message-content msg))
-  (and (list? content)
-       (ormap tool-call-part? content)))
+  (and (list? content) (ormap tool-call-part? content)))
 
 ;; Check if a message is a tool-result.
 (define (tool-result-message? msg)
@@ -307,7 +306,6 @@
 ;;         iterative compaction.
 ;; v0.9.1 (#636): Hook blocking now actually prevents compaction.
 (define (compact-history messages
-                         #:strategy [strategy (default-strategy)]
                          #:summarize-fn [summarize-fn default-summarize]
                          #:provider [provider #f]
                          #:model-name [model-name #f]
@@ -319,8 +317,7 @@
   ;; #769: Hook can provide custom summary via amend action.
   (define hook-res
     (and hook-dispatcher
-         (hook-dispatcher 'session-before-compact
-                          (hasheq 'message-count (length messages) 'strategy strategy))))
+         (hook-dispatcher 'session-before-compact (hasheq 'message-count (length messages)))))
   (cond
     [(and (hook-result? hook-res) (eq? (hook-result-action hook-res) 'block))
      ;; Hook blocked compaction — return identity result immediately
@@ -363,7 +360,8 @@
                   (llm-summarize adjusted-old
                                  provider
                                  model-name
-                                 #:previous-summary (or prev-summary (find-previous-summary adjusted-recent))
+                                 #:previous-summary
+                                 (or prev-summary (find-previous-summary adjusted-recent))
                                  #:file-tracker cumulative-ft)
                   (summarize-fn adjusted-old))))
         ;; Append turn prefix to summary if split-turn detected
@@ -383,14 +381,17 @@
               (message-id (car adjusted-recent))
               #f))
         (define summary-msg
-          (make-message
-           (format "compaction-~a" (current-inexact-milliseconds))
-           #f ; no parent — compaction summaries are root-level context
-           'system
-           'compaction-summary
-           (list (make-text-part summary-text))
-           (current-seconds)
-           (hash-set (hash-set (hash-set file-tracker-meta 'type "compaction") 'removedCount (length adjusted-old)) 'firstKeptEntryId first-kept-id)))
+          (make-message (format "compaction-~a" (current-inexact-milliseconds))
+                        #f ; no parent — compaction summaries are root-level context
+                        'system
+                        'compaction-summary
+                        (list (make-text-part summary-text))
+                        (current-seconds)
+                        (hash-set (hash-set (hash-set file-tracker-meta 'type "compaction")
+                                            'removedCount
+                                            (length adjusted-old))
+                                  'firstKeptEntryId
+                                  first-kept-id)))
         (compaction-result summary-msg (length adjusted-old) adjusted-recent)])]))
 
 ;; ============================================================
@@ -415,7 +416,6 @@
 ;; the filesystem. Equivalent to `compact-history` but named to make
 ;; the advisory contract crystal clear.
 (define (compact-history-advisory messages
-                                  #:strategy [strategy (default-strategy)]
                                   #:summarize-fn [summarize-fn default-summarize]
                                   #:provider [provider #f]
                                   #:model-name [model-name #f]
@@ -423,7 +423,6 @@
                                   #:hook-dispatcher [hook-dispatcher #f]
                                   #:token-config [token-config (default-token-compaction-config)])
   (compact-history messages
-                   #:strategy strategy
                    #:summarize-fn summarize-fn
                    #:provider provider
                    #:model-name model-name
@@ -444,7 +443,6 @@
 ;; instead of replaying the full history.
 (define (compact-and-persist! messages
                               session-log-path
-                              #:strategy [strategy (default-strategy)]
                               #:summarize-fn [summarize-fn default-summarize]
                               #:provider [provider #f]
                               #:model-name [model-name #f]
@@ -453,7 +451,6 @@
                               #:token-config [token-config (default-token-compaction-config)])
   (define result
     (compact-history messages
-                     #:strategy strategy
                      #:summarize-fn summarize-fn
                      #:provider provider
                      #:model-name model-name
