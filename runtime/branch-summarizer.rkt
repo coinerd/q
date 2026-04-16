@@ -8,14 +8,13 @@
 
 (require racket/contract
          racket/string
-         (only-in "../util/protocol-types.rkt"
-                  message? message-role message-content)
-         (only-in "../runtime/compactor.rkt"
-                  llm-summarize))
+         (only-in "../util/protocol-types.rkt" message? message-role message-content)
+         (only-in "../llm/provider.rkt" provider?)
+         (only-in "../runtime/compactor.rkt" llm-summarize))
 
-(provide
- (contract-out
-  [summarize-branch (->* (list? procedure?) ((or/c string? #f)) (or/c string? #f))]))
+(provide (contract-out
+          [summarize-branch
+           (->* (list? (or/c provider? procedure?)) ((or/c string? #f)) (or/c string? #f))]))
 
 ;; ============================================================
 ;; summarize-branch : messages provider [model-name] -> (or/c string? #f)
@@ -33,5 +32,7 @@
        [(string? summary) summary]
        [(message? summary)
         (define c (message-content summary))
-        (if (string? c) c (format "~a" c))]
+        (if (string? c)
+            c
+            (format "~a" c))]
        [else (format "~a" summary)])]))

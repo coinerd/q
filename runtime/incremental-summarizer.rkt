@@ -7,20 +7,12 @@
 ;; for efficient context updates.
 
 (require racket/contract
-         racket/string
-         (only-in "../util/protocol-types.rkt"
-                  message? message-role message-content)
-         (only-in "../runtime/compactor.rkt"
-                  llm-summarize
-                  format-messages-for-summary
-                  extract-file-tracker
-                  find-previous-file-tracker))
+         (only-in "../llm/provider.rkt" provider?)
+         (only-in "../runtime/compactor.rkt" llm-summarize))
 
-(provide
- (contract-out
-  [incremental-summarize (->* (list? string? procedure?)
-                              ((or/c string? #f))
-                              string?)]))
+(provide (contract-out
+          [incremental-summarize
+           (->* (list? string? (or/c provider? procedure?)) ((or/c string? #f)) string?)]))
 
 ;; ============================================================
 ;; incremental-summarize : messages previous-summary provider [model-name] -> string
@@ -34,13 +26,15 @@
     [(string=? previous-summary "")
      ;; No previous summary — generate fresh
      (define result (llm-summarize new-messages provider model-name))
-     (if (string? result) result (format "~a" result))]
-    [(null? new-messages)
-     ;; No new messages — return previous unchanged
-     previous-summary]
+     (if (string? result)
+         result
+         (format "~a" result))]
+    ;; No new messages — return previous unchanged
+    [(null? new-messages) previous-summary]
     [else
      ;; Incremental update
      (define result
-       (llm-summarize new-messages provider model-name
-                      #:previous-summary previous-summary))
-     (if (string? result) result (format "~a" result))]))
+       (llm-summarize new-messages provider model-name #:previous-summary previous-summary))
+     (if (string? result)
+         result
+         (format "~a" result))]))
