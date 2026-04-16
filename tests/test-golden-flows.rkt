@@ -97,9 +97,8 @@
 (define (make-temp-dir)
   (make-temporary-file "q-golden-~a" 'directory))
 
-;; Filter out session-info (version header) entries from raw JSONL hashes.
-(define (filter-session-info entries)
-  (filter (lambda (e) (not (equal? (hash-ref e 'kind #f) "session-info"))) entries))
+;; filter-session-info imported from helpers/fixtures.rkt
+(require (only-in "helpers/fixtures.rkt" filter-session-info))
 
 (define (cleanup-dir dir)
   (when (directory-exists? dir)
