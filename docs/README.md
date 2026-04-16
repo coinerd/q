@@ -20,8 +20,10 @@ This directory (`q/docs/`) is the **canonical source** for all q documentation.
 ```
 q/docs/
 ├── README.md          ← you are here
+├── api-stability.md   ← API stability tier definitions
 ├── install.md         ← installation guide (canonical)
 ├── releasing.md       ← release process
+├── sdk-rpc-catalog.md ← SDK/RPC interface reference
 ├── security.md        ← security model
 ├── style-guide.md     ← code style conventions
 ├── trust-model.md     ← trust boundaries
@@ -36,7 +38,8 @@ q/docs/
 │   ├── 0006-extension-hook-model.md
 │   └── 0007-sandboxing-boundary.md
 ├── demos/             ← demo scripts and walkthroughs
-├── sdk-rpc-catalog.md ← SDK/RPC interface reference
+├── migration/         ← migration guides for version bumps
+│   └── TEMPLATE.md    ← template for new migration guides
 └── tutorials/         ← builder and team setup guides
     ├── builder-tutorials.md
     └── team-setup.md
