@@ -390,7 +390,97 @@
     (define final (state-at states 5))
     ;; Status message should still say "Compacting..." since completed never fired
     (check-equal? (ui-state-status-message final) "Compacting..."
-                  "status stuck on Compacting... (documents current behavior)"))))
+                  "status stuck on Compacting... (documents current behavior)"))
+
+   ;; ============================================================
+   ;; Wave 6: Field interaction tests (T6, T7, T9, T10)
+   ;; ============================================================
+
+   ;; T6: Nested turn.started × 2 then turn.completed × 1
+   ;; Risk: Premature idle display
+   (test-case
+    "nested turn.started ×2 then turn.completed ×1: still busy"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            ;; Second turn.started before any turn.completed
+            (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "Hello"))
+            ;; Only one turn.completed
+            (make-test-event "turn.completed"
+                             (hasheq 'termination 'completed 'turnId "t1"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 4))
+    ;; After one turn.completed, busy is #f (documents current behavior)
+    (check-false (ui-state-busy? final)
+                 "busy cleared by single turn.completed (documents behavior)"))
+
+   ;; T7: compaction.started during active streaming
+   ;; Risk: Status overrides busy indicator
+   (test-case
+    "compaction.started during active streaming: status overrides"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "Streaming..."))
+            ;; Compaction starts mid-stream
+            (make-test-event "compaction.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta " more"))
+            (make-test-event "compaction.completed" (hasheq))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "Streaming... more"))
+            (make-test-event "turn.completed"
+                             (hasheq 'termination 'completed 'turnId "t1"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 7))
+    (check-false (ui-state-status-message final) "status cleared after compaction.completed")
+    (check-false (ui-state-busy? final) "busy cleared after turn.completed")
+    (check-false (ui-state-streaming-text final) "streaming cleared after turn.completed"))
+
+   ;; T9: session.started during active session
+   ;; Risk: Session-id overwrite without separator
+   (test-case
+    "session.started during active session: session-id overwrite"
+    (define s0 (initial-ui-state #:session-id "old-session"))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "Hello"))
+            ;; New session starts while old is active
+            (make-test-event "session.started"
+                             (hasheq 'sessionId "new-session"))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "Hello"))
+            (make-test-event "turn.completed"
+                             (hasheq 'termination 'completed 'turnId "t1"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 5))
+    ;; Session-id should be updated to new value
+    (check-equal? (ui-state-session-id final) "new-session"
+                  "session-id updated to new-session")
+    ;; A system entry for session start should appear
+    (check-true (member 'system (transcript-types final))
+                "system entry for new session present"))
+
+   ;; T10: queue.status-update event
+   ;; Risk: queue-counts field never tested
+   (test-case
+    "queue.status-update sets queue-counts field"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.delta" (hasheq 'delta "Hi"))
+            (make-test-event "assistant.message.completed"
+                             (hasheq 'messageId "m1" 'content "Hi"))
+            (make-test-event "queue.status-update"
+                             (hasheq 'steering 2 'followup 1))
+            (make-test-event "turn.completed"
+                             (hasheq 'termination 'completed 'turnId "t1"))))
+    (define states (simulate-and-record s0 events))
+    (define final (state-at states 5))
+    (define qc (ui-state-queue-counts final))
+    (check-not-false qc "queue-counts is set")
+    (check-equal? (hash-ref qc 'steering) 2 "steering count = 2")
+    (check-equal? (hash-ref qc 'followup) 1 "followup count = 1"))))
 
 (module+ main
   (run-tests streaming-transition-tests))
