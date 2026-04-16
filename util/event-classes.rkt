@@ -9,45 +9,47 @@
 (require racket/contract
          "protocol-types.rkt")
 
-(provide
- ;; Event class predicates
- stream-text-event?
- stream-tool-call-event?
- stream-thinking-event?
- tool-start-event?
- tool-end-event?
- iteration-start-event?
- iteration-end-event?
- interrupt-event?
- error-event?
- compaction-started-event?
- compaction-completed-event?
-
- ;; Event class constructors
- make-stream-text-event
- make-stream-tool-call-event
- make-stream-thinking-event
- make-tool-start-event
- make-tool-end-event
- make-iteration-start-event
- make-iteration-end-event
- make-interrupt-event
- make-error-event
- make-compaction-started-event
- make-compaction-completed-event
-
- ;; Event topic constants
- TOPIC-STREAM-TEXT
- TOPIC-STREAM-TOOL-CALL
- TOPIC-STREAM-THINKING
- TOPIC-TOOL-START
- TOPIC-TOOL-END
- TOPIC-ITERATION-START
- TOPIC-ITERATION-END
- TOPIC-INTERRUPT
- TOPIC-ERROR
- TOPIC-COMPACTION-STARTED
- TOPIC-COMPACTION-COMPLETED)
+(provide (contract-out
+          ;; Predicates
+          [stream-text-event? (-> any/c boolean?)]
+          [stream-tool-call-event? (-> any/c boolean?)]
+          [stream-thinking-event? (-> any/c boolean?)]
+          [tool-start-event? (-> any/c boolean?)]
+          [tool-end-event? (-> any/c boolean?)]
+          [iteration-start-event? (-> any/c boolean?)]
+          [iteration-end-event? (-> any/c boolean?)]
+          [interrupt-event? (-> any/c boolean?)]
+          [error-event? (-> any/c boolean?)]
+          [compaction-started-event? (-> any/c boolean?)]
+          [compaction-completed-event? (-> any/c boolean?)]
+          ;; Constructors with optional #:turn-id keyword
+          [make-stream-text-event (->* (string? any/c) (#:turn-id (or/c string? #f)) event?)]
+          [make-stream-tool-call-event (->* (string? any/c) (#:turn-id (or/c string? #f)) event?)]
+          [make-stream-thinking-event (->* (string? any/c) (#:turn-id (or/c string? #f)) event?)]
+          ;; Constructors with no optional args
+          [make-tool-start-event (-> string? string? string? event?)]
+          [make-tool-end-event (-> string? string? string? event?)]
+          [make-iteration-start-event (-> string? string? event?)]
+          [make-iteration-end-event (-> string? string? string? event?)]
+          [make-interrupt-event (-> string? event?)]
+          ;; Error event with optional #:turn-id
+          [make-error-event (->* (string? string?) (#:turn-id (or/c string? #f)) event?)]
+          ;; Compaction events with optional #:persist?
+          [make-compaction-started-event (->* (string?) (#:persist? boolean?) event?)]
+          [make-compaction-completed-event
+           (->* (string? exact-nonnegative-integer?) (#:persist? boolean?) event?)])
+         ;; Topic constants (no contracts needed)
+         TOPIC-STREAM-TEXT
+         TOPIC-STREAM-TOOL-CALL
+         TOPIC-STREAM-THINKING
+         TOPIC-TOOL-START
+         TOPIC-TOOL-END
+         TOPIC-ITERATION-START
+         TOPIC-ITERATION-END
+         TOPIC-INTERRUPT
+         TOPIC-ERROR
+         TOPIC-COMPACTION-STARTED
+         TOPIC-COMPACTION-COMPLETED)
 
 ;; ============================================================
 ;; Topic constants
@@ -126,33 +128,49 @@
   (make-event TOPIC-STREAM-THINKING (current-time-seconds) session-id turn-id payload))
 
 (define (make-tool-start-event session-id tool-name tool-call-id)
-  (make-event TOPIC-TOOL-START (current-time-seconds) session-id #f
+  (make-event TOPIC-TOOL-START
+              (current-time-seconds)
+              session-id
+              #f
               (hasheq 'tool-name tool-name 'tool-call-id tool-call-id)))
 
 (define (make-tool-end-event session-id tool-name tool-call-id)
-  (make-event TOPIC-TOOL-END (current-time-seconds) session-id #f
+  (make-event TOPIC-TOOL-END
+              (current-time-seconds)
+              session-id
+              #f
               (hasheq 'tool-name tool-name 'tool-call-id tool-call-id)))
 
 (define (make-iteration-start-event session-id turn-id)
-  (make-event TOPIC-ITERATION-START (current-time-seconds) session-id turn-id
+  (make-event TOPIC-ITERATION-START
+              (current-time-seconds)
+              session-id
+              turn-id
               (hasheq 'sessionId session-id)))
 
 (define (make-iteration-end-event session-id turn-id reason)
-  (make-event TOPIC-ITERATION-END (current-time-seconds) session-id turn-id
+  (make-event TOPIC-ITERATION-END
+              (current-time-seconds)
+              session-id
+              turn-id
               (hasheq 'sessionId session-id 'reason reason)))
 
 (define (make-interrupt-event session-id)
-  (make-event TOPIC-INTERRUPT (current-time-seconds) session-id #f
-              (hasheq 'sessionId session-id)))
+  (make-event TOPIC-INTERRUPT (current-time-seconds) session-id #f (hasheq 'sessionId session-id)))
 
 (define (make-error-event session-id message #:turn-id [turn-id #f])
-  (make-event TOPIC-ERROR (current-time-seconds) session-id turn-id
-              (hasheq 'message message)))
+  (make-event TOPIC-ERROR (current-time-seconds) session-id turn-id (hasheq 'message message)))
 
 (define (make-compaction-started-event session-id #:persist? [persist? #f])
-  (make-event TOPIC-COMPACTION-STARTED (current-time-seconds) session-id #f
+  (make-event TOPIC-COMPACTION-STARTED
+              (current-time-seconds)
+              session-id
+              #f
               (hasheq 'sessionId session-id 'persist? persist?)))
 
 (define (make-compaction-completed-event session-id removed-count #:persist? [persist? #f])
-  (make-event TOPIC-COMPACTION-COMPLETED (current-time-seconds) session-id #f
+  (make-event TOPIC-COMPACTION-COMPLETED
+              (current-time-seconds)
+              session-id
+              #f
               (hasheq 'sessionId session-id 'persist? persist? 'removedCount removed-count)))
