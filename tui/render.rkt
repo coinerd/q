@@ -434,31 +434,32 @@
         state
         (rendered-cache-set-width (rendered-cache-clear state) width)))
   ;; Format entries using cache where possible
+  ;; BUG-36 fix: cons lines in reverse order, then reverse at the end
   (define-values (formatted-lines state1)
-    (for/fold ([lines '()]
-               [st state0])
-              ([e (in-list entries)])
-      (define eid (transcript-entry-id e))
-      (define cached (and eid (rendered-cache-ref st eid)))
-      ;; Defense-in-depth: verify cached entry matches current entry text.
-      ;; If there's an ID collision (e.g. scrollback + runtime entries sharing IDs),
-      ;; the fingerprint won't match and we re-render instead of showing stale content.
-      (define cache-valid?
-        (and cached
-             (let ([entry-text (transcript-entry-text e)])
-               (and (string? entry-text)
-                    (> (string-length entry-text) 0)
-                    (> (length cached) 0)
-                    (let* ([first-line (styled-line->text (car cached))]
-                           [prefix-len (min 20 (string-length entry-text))]
-                           [prefix (substring entry-text 0 prefix-len)])
-                      (string-contains? first-line prefix))))))
-      (if cache-valid?
-          (values (append lines cached) st)
-          (let ([fmt (format-entry e width)])
-            (if eid
-                (values (append lines fmt) (rendered-cache-set st eid fmt))
-                (values (append lines fmt) st))))))
+    (let loop ([entries entries] [rev-lines '()] [st state0])
+      (if (null? entries)
+          (values (reverse rev-lines) st)
+          (let* ([e (car entries)]
+                 [eid (transcript-entry-id e)]
+                 [cached (and eid (rendered-cache-ref st eid))]
+                 [entry-text (transcript-entry-text e)]
+                 [cache-valid?
+                  (and cached
+                       (string? entry-text)
+                       (> (string-length entry-text) 0)
+                       (> (length cached) 0)
+                       (let* ([first-line (styled-line->text (car cached))]
+                              [prefix-len (min 20 (string-length entry-text))]
+                              [prefix (substring entry-text 0 prefix-len)])
+                         (string-contains? first-line prefix)))])
+            (if cache-valid?
+                (loop (cdr entries)
+                      (foldl (lambda (l acc) (cons l acc)) rev-lines cached)
+                      st)
+                (let ([fmt (format-entry e width)])
+                  (loop (cdr entries)
+                        (foldl (lambda (l acc) (cons l acc)) rev-lines fmt)
+                        (if eid (rendered-cache-set st eid fmt) st))))))))
   ;; If streaming, append the partial streaming text (not cached)
   (define streaming (ui-state-streaming-text state))
   (define all-lines

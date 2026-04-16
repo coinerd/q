@@ -752,3 +752,73 @@
       (check-equal? (length lines) 1))))
 
 (run-tests bug26-tests)
+
+;; ============================================================
+;; BUG-35: Render cache eviction
+;; ============================================================
+
+(define bug35-tests
+  (test-suite "BUG-35: Render cache eviction"
+
+    (test-case "cache evicts old entries beyond limit"
+      (define s0 (initial-ui-state))
+      ;; Add 150 entries to the cache
+      (define s1
+        (for/fold ([s s0])
+                  ([i (in-range 150)])
+          (rendered-cache-set s i (list (styled-line (list (styled-segment (format "entry ~a" i) (hash))))))))
+      ;; Cache should be bounded (not 150 entries)
+      (define cache-size (hash-count (ui-state-rendered-cache s1)))
+      (check-true (< cache-size 150) "cache should be bounded")
+      ;; Most recent entries should still be there
+      (check-not-false (rendered-cache-ref s1 149) "recent entry 149 present")
+      (check-not-false (rendered-cache-ref s1 100) "entry 100 present"))
+
+    (test-case "cache preserves entries below limit"
+      (define s0 (initial-ui-state))
+      (define s1
+        (for/fold ([s s0])
+                  ([i (in-range 50)])
+          (rendered-cache-set s i (list (styled-line (list (styled-segment (format "entry ~a" i) (hash))))))))
+      (define cache-size (hash-count (ui-state-rendered-cache s1)))
+      (check-equal? cache-size 50 "cache keeps 50 entries under limit"))))
+
+(run-tests bug35-tests)
+
+;; ============================================================
+;; BUG-36: O(n^2) render performance — use cons+reverse
+;; ============================================================
+
+(define bug36-tests
+  (test-suite "BUG-36: Render performance"
+
+    (test-case "render-transcript produces correct output with many entries"
+      (define state0 (initial-ui-state))
+      ;; Create state with 50 entries
+      (define entries
+        (for/list ([i (in-range 50)])
+          (make-entry 'assistant (format "Line ~a" i) (* i 1000) (hash))))
+      (define s1 (struct-copy ui-state state0 [transcript entries]))
+      (define-values (lines _st) (render-transcript s1 200 80))
+      ;; Should render all 50 entries
+      (check-true (> (length lines) 0) "renders output")
+      ;; Output should be in order (first entry first)
+      (define all-text (string-join (map styled-line->text lines) " "))
+      (check-not-false (string-contains? all-text "Line 0") "first entry present")
+      (check-not-false (string-contains? all-text "Line 49") "last entry present"))
+
+    (test-case "render-transcript with mixed cached and uncached entries"
+      ;; Pre-populate cache for some entries
+      (define state0 (initial-ui-state))
+      (define entries
+        (for/list ([i (in-range 10)])
+          (make-entry 'assistant (format "Entry ~a" i) (* i 1000) (hash))))
+      (define s1 (struct-copy ui-state state0 [transcript entries]))
+      ;; First render populates cache
+      (define-values (lines1 s1r) (render-transcript s1 200 80))
+      ;; Second render should use cache and produce same output
+      (define-values (lines2 s2r) (render-transcript s1r 200 80))
+      (check-equal? (length lines1) (length lines2) "cached render same length")
+      (check-equal? (map styled-line->text lines1) (map styled-line->text lines2) "cached render same content"))))
+
+(run-tests bug36-tests)
