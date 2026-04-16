@@ -422,7 +422,7 @@
                                          (generate-id) #f 'user 'text
                                          (list (make-text-part fu))
                                          (now-seconds)
-                                         (hasheq 'source 'followup)))])
+                                         (hasheq 'source "followup")))])
                                  (emit-session-event!
                                   bus session-id "followup.injected"
                                   (hasheq 'count (length followups)
