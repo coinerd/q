@@ -233,13 +233,13 @@
      (cond
        [(equal? delta-type "text_delta")
         (define text (hash-ref delta 'text ""))
-        (set! results (cons (stream-chunk text #f #f #f) results))]
+        (set! results (cons (make-stream-chunk text #f #f #f) results))]
        [(equal? delta-type "input_json_delta")
         ;; Partial JSON for tool input — emit as tool-call delta
         (define partial-json (hash-ref delta 'partial_json ""))
         (set!
          results
-         (cons (stream-chunk #f
+         (cons (make-stream-chunk #f
                              (hasheq 'index
                                      (unbox tool-index-box)
                                      'id
@@ -268,7 +268,7 @@
      (define stop-reason (hash-ref delta 'stop_reason #f))
      (define out-tokens (hash-ref usage-raw 'output_tokens 0))
      (define usage (hasheq 'completion_tokens out-tokens))
-     (set! results (cons (stream-chunk #f #f usage #t) results))]
+     (set! results (cons (make-stream-chunk #f #f usage #t) results))]
 
     ;; message_start: extract initial usage
     [(equal? type "message_start")
@@ -276,7 +276,7 @@
      (define usage-raw (hash-ref message 'usage (hasheq)))
      (define in-tokens (hash-ref usage-raw 'input_tokens 0))
      (when (> in-tokens 0)
-       (set! results (cons (stream-chunk #f #f (hasheq 'prompt_tokens in-tokens) #f) results)))]
+       (set! results (cons (make-stream-chunk #f #f (hasheq 'prompt_tokens in-tokens) #f) results)))]
 
     [else (void)])
   (reverse results))

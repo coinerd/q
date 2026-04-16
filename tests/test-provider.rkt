@@ -60,14 +60,14 @@
 
 (test-case
  "stream-chunk basic fields"
- (define sc-1 (stream-chunk "Hello" #f #f #f))
+ (define sc-1 (make-stream-chunk "Hello" #f #f #f))
  (check-pred stream-chunk? sc-1)
  (check-equal? (stream-chunk-delta-text sc-1) "Hello")
  (check-false (stream-chunk-done? sc-1)))
 
 (test-case
  "stream-chunk done with usage"
- (define sc-done (stream-chunk #f #f (hash 'total_tokens 20) #t))
+ (define sc-done (make-stream-chunk #f #f (hash 'total_tokens 20) #t))
  (check-pred stream-chunk-done? sc-done)
  (check-true (hash? (stream-chunk-usage sc-done))))
 
@@ -326,7 +326,7 @@
 
 (test-case
  "stream-chunk with all fields populated"
- (define sc-full (stream-chunk "delta"
+ (define sc-full (make-stream-chunk "delta"
                                (hash 'index 0 'id "c1" 'function (hash 'name "read"))
                                (hash 'total_tokens 10)
                                #f))

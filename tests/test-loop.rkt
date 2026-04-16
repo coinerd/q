@@ -142,10 +142,10 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk "Hel" #f #f #f)
-            (stream-chunk "lo " #f #f #f)
-            (stream-chunk "world" #f #f #f)
-            (stream-chunk #f #f #f #t)))))
+      (list (make-stream-chunk "Hel" #f #f #f)
+            (make-stream-chunk "lo " #f #f #f)
+            (make-stream-chunk "world" #f #f #f)
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))
@@ -169,13 +169,13 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk
+      (list (make-stream-chunk
              #f
              (hasheq 'id "tc-1" 'index 0
                      'function (hasheq 'name "bash"
                                        'arguments "{\"command\":\"ls\"}"))
              #f #f)
-            (stream-chunk #f #f #f #t)))))
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "run bash"))
                                  1000 '#hash())))
@@ -202,14 +202,14 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk "Thinking..." #f #f #f)
-            (stream-chunk
+      (list (make-stream-chunk "Thinking..." #f #f #f)
+            (make-stream-chunk
              #f
              (hasheq 'id "tc-2" 'index 0
                      'function (hasheq 'name "read"
                                        'arguments "{\"path\":\"foo.rkt\"}"))
              #f #f)
-            (stream-chunk #f #f #f #t)))))
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "do stuff"))
                                  1000 '#hash())))
@@ -240,8 +240,8 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk "text" #f #f #f)
-            (stream-chunk #f #f #f #t)))))
+      (list (make-stream-chunk "text" #f #f #f)
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))
@@ -259,7 +259,7 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk #f #f #f #t)))))
+      (list (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))
@@ -286,8 +286,8 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk "hi" #f #f #f)
-            (stream-chunk #f #f #f #t)))))
+      (list (make-stream-chunk "hi" #f #f #f)
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hello"))
                                  1000 '#hash())))
@@ -320,7 +320,7 @@
     (lambda () "mock")
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
-    (lambda (req) (list (stream-chunk #f #f #f #t)))))
+    (lambda (req) (list (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))
@@ -350,7 +350,7 @@
     (lambda () "mock")
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
-    (lambda (req) (list (stream-chunk #f #f #f #t)))))
+    (lambda (req) (list (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))
@@ -386,8 +386,8 @@
     (lambda (req) (error 'send "not used"))
     (lambda (req)
       ;; Emit one text delta, then done
-      (list (stream-chunk "hello" #f #f #f)
-            (stream-chunk #f #f #f #t)))))
+      (list (make-stream-chunk "hello" #f #f #f)
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))
@@ -410,9 +410,9 @@
     (lambda () (hasheq 'streaming #t))
     (lambda (req) (error 'send "not used"))
     (lambda (req)
-      (list (stream-chunk "Hello" #f #f #f)
-            (stream-chunk " world" #f #f #f)
-            (stream-chunk #f #f #f #t)))))
+      (list (make-stream-chunk "Hello" #f #f #f)
+            (make-stream-chunk " world" #f #f #f)
+            (make-stream-chunk #f #f #f #t)))))
  (define ctx (list (make-message "m-1" #f 'user 'message
                                  (list (make-text-part "hi"))
                                  1000 '#hash())))

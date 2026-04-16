@@ -102,21 +102,21 @@
                                 'index 0
                                 'function (hasheq 'name (hash-ref entry 'name "unknown")
                                                   'arguments args-str)))
-       (list (stream-chunk #f tc-delta #f #f)
-             (stream-chunk #f #f usage #t))]
+       (list (make-stream-chunk #f tc-delta #f #f)
+             (make-stream-chunk #f #f usage #t))]
       [(equal? typ "text")
        (define text (hash-ref entry 'text ""))
        (if (string=? text "")
-           (list (stream-chunk #f #f usage #t))
-           (list (stream-chunk text #f #f #f)
-                 (stream-chunk #f #f usage #t)))]
+           (list (make-stream-chunk #f #f usage #t))
+           (list (make-stream-chunk text #f #f #f)
+                 (make-stream-chunk #f #f usage #t)))]
       [(equal? typ "error")
        (define msg (format "Error: ~a" (hash-ref entry 'message "unknown")))
-       (list (stream-chunk msg #f #f #f)
-             (stream-chunk #f #f usage #t))]
+       (list (make-stream-chunk msg #f #f #f)
+             (make-stream-chunk #f #f usage #t))]
       [else
-       (list (stream-chunk (format "~a" entry) #f #f #f)
-             (stream-chunk #f #f usage #t))]))
+       (list (make-stream-chunk (format "~a" entry) #f #f #f)
+             (make-stream-chunk #f #f usage #t))]))
 
   (make-provider (lambda () name)
                  (lambda () (hash 'streaming #t 'token-counting #t))

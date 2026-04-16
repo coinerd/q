@@ -310,7 +310,7 @@
       [(hash-has-key? part 'text)
        (let* ([text (hash-ref part 'text "")])
          (when (and (string? text) (> (string-length text) 0))
-           (set! results (cons (stream-chunk text #f #f #f) results))))]
+           (set! results (cons (make-stream-chunk text #f #f #f) results))))]
       [(hash-has-key? part 'functionCall)
        (let* ([fc (hash-ref part 'functionCall)]
               [tc-id (gemini-gen-tool-id)]
@@ -323,7 +323,7 @@
                 tc-id
                 'function
                 (hasheq 'name (hash-ref fc 'name "") 'arguments (hash-ref fc 'args (hasheq))))])
-         (set! results (cons (stream-chunk #f tc-delta #f #f) results)))]
+         (set! results (cons (make-stream-chunk #f tc-delta #f #f) results)))]
       [else (void)]))
 
   ;; Emit done chunk on finish reason or usage in last event
@@ -337,13 +337,13 @@
                                'total_tokens
                                (hash-ref usage-raw 'totalTokenCount 0))
                        (hasheq))])
-       (set! results (cons (stream-chunk #f #f usage #t) results)))]
+       (set! results (cons (make-stream-chunk #f #f usage #t) results)))]
     [(and usage-raw (not finish-reason))
      ;; Usage-only event without finish — emit usage chunk
      (let* ([prompt-tokens (hash-ref usage-raw 'promptTokenCount 0)])
        (when (> prompt-tokens 0)
          (set! results
-               (cons (stream-chunk #f #f (hasheq 'prompt_tokens prompt-tokens) #f) results))))])
+               (cons (make-stream-chunk #f #f (hasheq 'prompt_tokens prompt-tokens) #f) results))))])
 
   (reverse results))
 

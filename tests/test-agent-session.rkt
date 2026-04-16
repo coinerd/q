@@ -598,7 +598,7 @@
       ;; stream: capture the messages sent to the model
       (lambda (req)
         (set-box! captured-context (model-request-messages req))
-        (list (stream-chunk "Response" #f #f #t)))))
+        (list (make-stream-chunk "Response" #f #f #t)))))
    (define instrs '("You are a coding expert."))
    (define sess
      (make-agent-session (hash-set (make-test-config dir bus prov) 'system-instructions instrs)))
@@ -914,11 +914,11 @@
         (cond
           [(= i 0)
            ;; First turn: return a tool call
-           (list (stream-chunk "calling tool" #f #f #f)
-                 (stream-chunk #f (hasheq 'id "tc-1" 'name "echo" 'arguments "{}") #f #f)
-                 (stream-chunk #f #f (hasheq) #t))]
+           (list (make-stream-chunk "calling tool" #f #f #f)
+                 (make-stream-chunk #f (hasheq 'id "tc-1" 'name "echo" 'arguments "{}") #f #f)
+                 (make-stream-chunk #f #f (hasheq) #t))]
           ;; Second turn: text response
-          [else (list (stream-chunk "final text" #f #f #f) (stream-chunk #f #f (hasheq) #t))]))))
+          [else (list (make-stream-chunk "final text" #f #f #f) (make-stream-chunk #f #f (hasheq) #t))]))))
 
    ;; Use tool-call hook to cancel the token between iterations
    (define ext-reg (make-extension-registry))

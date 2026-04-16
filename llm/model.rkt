@@ -12,62 +12,61 @@
 
 (require racket/contract)
 
-(provide
- ;; model-request
- (struct-out model-request)
- make-model-request
- model-request->jsexpr
- jsexpr->model-request
+;; model-request
+(provide (struct-out model-request)
+         make-model-request
+         model-request->jsexpr
+         jsexpr->model-request
 
- ;; model-response
- (struct-out model-response)
- make-model-response
- model-response->jsexpr
- jsexpr->model-response
+         ;; model-response
+         (struct-out model-response)
+         make-model-response
+         model-response->jsexpr
+         jsexpr->model-response
 
- ;; stream-chunk
- (struct-out stream-chunk))
+         ;; stream-chunk
+         (struct-out stream-chunk)
+         make-stream-chunk)
 
 ;; ============================================================
 ;; model-request
 ;; ============================================================
 
-(struct model-request (messages tools settings)
-  #:transparent)
+(struct model-request (messages tools settings) #:transparent)
 
 (define (make-model-request messages tools settings)
   (model-request messages tools settings))
 
 ;; Serialize to jsexpr
 (define (model-request->jsexpr req)
-  (define h (hasheq 'messages (model-request-messages req)
-                    'settings (model-request-settings req)))
+  (define h (hasheq 'messages (model-request-messages req) 'settings (model-request-settings req)))
   (if (model-request-tools req)
       (hash-set h 'tools (model-request-tools req))
       h))
 
 ;; Deserialize from jsexpr
 (define (jsexpr->model-request h)
-  (make-model-request (hash-ref h 'messages)
-                      (hash-ref h 'tools #f)
-                      (hash-ref h 'settings)))
+  (make-model-request (hash-ref h 'messages) (hash-ref h 'tools #f) (hash-ref h 'settings)))
 
 ;; ============================================================
 ;; model-response
 ;; ============================================================
 
-(struct model-response (content usage model stop-reason)
-  #:transparent)
+(struct model-response (content usage model stop-reason) #:transparent)
 
 (define (make-model-response content usage model stop-reason)
   (model-response content usage model stop-reason))
 
 ;; Serialize to jsexpr
 (define (model-response->jsexpr resp)
-  (hasheq 'content (model-response-content resp)
-          'usage (model-response-usage resp)
-          'model (model-response-model resp)
-          'stopReason (symbol->string (model-response-stop-reason resp))))
+  (hasheq 'content
+          (model-response-content resp)
+          'usage
+          (model-response-usage resp)
+          'model
+          (model-response-model resp)
+          'stopReason
+          (symbol->string (model-response-stop-reason resp))))
 
 ;; Deserialize from jsexpr
 (define (jsexpr->model-response h)
@@ -80,5 +79,8 @@
 ;; stream-chunk
 ;; ============================================================
 
-(struct stream-chunk (delta-text delta-tool-call usage done?)
-  #:transparent)
+(struct stream-chunk (delta-text delta-tool-call delta-thinking usage done?) #:transparent)
+
+;; Convenience constructor: 4-arg form (backward compat, delta-thinking defaults to #f)
+(define (make-stream-chunk delta-text delta-tool-call usage done?)
+  (stream-chunk delta-text delta-tool-call #f usage done?))

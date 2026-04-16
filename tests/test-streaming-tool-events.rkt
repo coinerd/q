@@ -38,14 +38,14 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk "Reading file..." #f #f #f)
-               (stream-chunk
+         (list (make-stream-chunk "Reading file..." #f #f #f)
+               (make-stream-chunk
                 #f
                 (hasheq 'id "tc-1" 'index 0
                         'function (hasheq 'name "read"
                                           'arguments "{\"path\":\"foo.rkt\"}"))
                 #f #f)
-               (stream-chunk #f #f #f #t)))))
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "read foo"))
@@ -63,13 +63,13 @@
 
     ;; Verify event sequence
     (define events (unbox captured))
-    (check-equal? events
-                  '("turn.started"
-                    "model.stream.delta"
-                    "assistant.message.completed"
-                    "tool.call.started"
-                    "turn.completed")
-                  "events must be: turn.started, delta, assistant.completed, tool.started, turn.completed")
+    ;; FEAT-71: more events are now emitted (context.built, message.start/end, etc.)
+    ;; Verify key events are present in correct relative order
+    (check-not-false (member "turn.started" events))
+    (check-not-false (member "model.stream.delta" events))
+    (check-not-false (member "assistant.message.completed" events))
+    (check-not-false (member "tool.call.started" events))
+    (check-not-false (member "turn.completed" events))
 
     ;; Specifically verify B1: assistant.message.completed comes before tool.call.started
     (define amc-idx (index-of events "assistant.message.completed"))
@@ -94,9 +94,9 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk "Hello" #f #f #f)
-               (stream-chunk " world" #f #f #f)
-               (stream-chunk #f #f #f #t)))))
+         (list (make-stream-chunk "Hello" #f #f #f)
+               (make-stream-chunk " world" #f #f #f)
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "hi"))
@@ -131,20 +131,20 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk "Need info" #f #f #f)
-               (stream-chunk
+         (list (make-stream-chunk "Need info" #f #f #f)
+               (make-stream-chunk
                 #f
                 (hasheq 'id "tc-1" 'index 0
                         'function (hasheq 'name "read"
                                           'arguments "{\"path\":\"a\"}"))
                 #f #f)
-               (stream-chunk
+               (make-stream-chunk
                 #f
                 (hasheq 'id "tc-2" 'index 1
                         'function (hasheq 'name "bash"
                                           'arguments "{\"command\":\"ls\"}"))
                 #f #f)
-               (stream-chunk #f #f #f #t)))))
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "go"))
@@ -190,13 +190,13 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk
+         (list (make-stream-chunk
                 #f
                 (hasheq 'id "tc-1" 'index 0
                         'function (hasheq 'name "bash"
                                           'arguments "{\"command\":\"ls\"}"))
                 #f #f)
-               (stream-chunk #f #f #f #t)))))
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "go"))
@@ -235,14 +235,14 @@
        (lambda () (hasheq 'streaming #t))
        (lambda (req) (error 'send "not used"))
        (lambda (req)
-         (list (stream-chunk "Answer" #f #f #f)
-               (stream-chunk
+         (list (make-stream-chunk "Answer" #f #f #f)
+               (make-stream-chunk
                 #f
                 (hasheq 'id "tc-42" 'index 0
                         'function (hasheq 'name "read"
                                           'arguments "{\"path\":\"x\"}"))
                 #f #f)
-               (stream-chunk #f #f #f #t)))))
+               (make-stream-chunk #f #f #f #t)))))
 
     (define ctx (list (make-message "m-1" #f 'user 'message
                                     (list (make-text-part "go"))

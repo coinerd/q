@@ -119,7 +119,7 @@
    (lambda () (hash 'streaming #t 'token-counting #t))
    (lambda (req)
      (make-model-response (list (hash 'type "text" 'text response-text)) (hash) "mock" 'stop))
-   (lambda (req) (list (stream-chunk response-text #f #f #t)))))
+   (lambda (req) (list (make-stream-chunk response-text #f #f #t)))))
 
 ;; ============================================================
 ;; Session Tree Generator (deterministic)

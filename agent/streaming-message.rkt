@@ -16,6 +16,7 @@
          ;; Accumulators
          streaming-message-append-text!
          streaming-message-append-tool-call!
+         streaming-message-append-thinking!
          streaming-message-append-chunk!
          streaming-message-set-cancelled!
          streaming-message-set-blocked!
@@ -26,6 +27,7 @@
          ;; Accessors
          streaming-message-text
          streaming-message-tool-calls
+         streaming-message-thinking
          streaming-message-chunks
          streaming-message-cancelled?
          streaming-message-blocked?
@@ -41,6 +43,7 @@
 (struct streaming-message
         (text-box ; (box string) — accumulated text
          tool-calls-box ; (box (listof tool-call-delta)) — accumulated tool calls
+         thinking-box ; (box string) — accumulated thinking/reasoning (FEAT-72)
          chunks-box ; (box (listof stream-chunk)) — all chunks for replay
          cancelled-box ; (box boolean)
          blocked-box ; (box boolean)
@@ -54,7 +57,7 @@
 ;; ============================================================
 
 (define (make-streaming-message message-id)
-  (streaming-message (box "") (box '()) (box '()) (box #f) (box #f) (box #f) message-id))
+  (streaming-message (box "") (box '()) (box "") (box '()) (box #f) (box #f) (box #f) message-id))
 
 ;; ============================================================
 ;; Accumulator operations
@@ -67,6 +70,10 @@
 (define (streaming-message-append-tool-call! sm tc)
   (define b (streaming-message-tool-calls-box sm))
   (set-box! b (append (unbox b) (list tc))))
+
+(define (streaming-message-append-thinking! sm text)
+  (define b (streaming-message-thinking-box sm))
+  (set-box! b (string-append (unbox b) text)))
 
 (define (streaming-message-append-chunk! sm chunk)
   (define b (streaming-message-chunks-box sm))
@@ -90,6 +97,9 @@
 
 (define (streaming-message-tool-calls sm)
   (unbox (streaming-message-tool-calls-box sm)))
+
+(define (streaming-message-thinking sm)
+  (unbox (streaming-message-thinking-box sm)))
 
 (define (streaming-message-chunks sm)
   (unbox (streaming-message-chunks-box sm)))
@@ -129,7 +139,9 @@
                 (hasheq 'cancelled?
                         (streaming-message-cancelled? sm)
                         'stream-blocked?
-                        (streaming-message-blocked? sm))))
+                        (streaming-message-blocked? sm)
+                        'thinking
+                        (streaming-message-thinking sm))))
 
 ;; streaming-message->hash : streaming-message? -> hash?
 ;; Convert to the hash format that loop.rkt previously returned,
@@ -139,6 +151,8 @@
           (streaming-message-text sm)
           'tool-calls
           (streaming-message-tool-calls sm)
+          'thinking
+          (streaming-message-thinking sm)
           'all-chunks
           (streaming-message-chunks sm)
           'cancelled?
