@@ -305,7 +305,7 @@
                                             (emit-session-event! bus session-id event-type payload))
                                           #:call-id (generate-id)
                                           #:session-metadata (hasheq 'session-id session-id))
-                          #:parallel? (hash-ref config 'parallel-tools #f)))))
+                          #:parallel? (hash-ref config 'parallel-tools #t)))))
 
   ;; Emit tool.call.completed / tool.call.failed events (only for executed calls)
   (for ([tc (in-list tool-calls-to-run)]
