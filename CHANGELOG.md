@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] — 2026-04-16
+
+### Bug Fixes
+- **BUG-26**: Guard `#f` text in render pipeline (TUI crash fix)
+- **BUG-27**: Save scrollback on crash before re-raising exception
+- **BUG-28**: Fix `session.start` → `session.started` event naming
+- **BUG-29**: `runtime.error` clears `pending-tool-name` and `streaming-text`
+- **BUG-30**: `turn.started` clears stale `pending-tool-name` and `streaming-text`
+- **BUG-31**: `turn.completed` clears `pending-tool-name` (defense-in-depth)
+- **BUG-32**: Add `compaction.start`/`end` handlers matching runtime event names
+- **BUG-33**: Add `auto-retry.start` handler for retry status display
+- **BUG-34**: `model.stream.completed` clears streaming text
+- **BUG-35**: Render cache eviction (max 100 entries, prevents unbounded growth)
+- **BUG-36**: O(n²) → O(n) render loop using cons+reverse
+- **BUG-37**: Skip whitespace-only assistant entries in render
+- **BUG-38**: Guard `tool.call.started` against `pending-tool-name` overwrite
+
+### Internal
+- 21 new regression tests across TUI state, render, and session-switch modules
+- All v0.9.x milestone issues closed
+
 ## [0.9.1] — 2026-04-13
 
 ### Added — Wave 0: Test Infrastructure Cleanup
