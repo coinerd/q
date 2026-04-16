@@ -66,6 +66,7 @@
                   compaction-result->message-list
                   compact-and-persist!)
          (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         "helpers/compaction-helpers.rkt"
          (only-in "../runtime/agent-session.rkt" session-history)
          (only-in "../interfaces/cli.rkt"
                   parse-cli-args
@@ -749,7 +750,7 @@
     (define entries-before (length (filter-session-info (jsonl-read-all-valid log-path))))
     ;; Persist compact with low token budget so compaction actually triggers
     (define history (session-history (sdk:runtime-rt-session rt2)))
-    (define low-tc (token-compaction-config 10 5 20))
+    (define low-tc LOW-TOKEN-CONFIG)
     (define comp-res (compact-and-persist! history log-path #:token-config low-tc))
     (check-pred compaction-result? comp-res)
     (check-true (> (compaction-result-removed-count comp-res) 0)

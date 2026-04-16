@@ -19,6 +19,7 @@
                   compact-and-persist!
                   compact-history)
          (only-in "../../../runtime/token-compaction.rkt" token-compaction-config)
+         "../../helpers/compaction-helpers.rkt"
          (only-in "../../../runtime/agent-session.rkt" session-history)
          "../fixtures/mock-provider.rkt"
          "../fixtures/temp-project.rkt"
@@ -88,7 +89,7 @@
 
         ;; Compact with persist — use low token config so compaction actually triggers
         (define history (session-history (sdk:runtime-rt-session final-rt)))
-        (define low-tc (token-compaction-config 10 5 20))
+        (define low-tc LOW-TOKEN-CONFIG)
         (define compaction-res (compact-and-persist! history log-path #:token-config low-tc))
 
         ;; ── Outcome: compaction result has removed-count > 0 ──
@@ -176,7 +177,7 @@
 
         ;; Advisory compaction — use low token config so compaction triggers
         (define history (session-history (sdk:runtime-rt-session final-rt)))
-        (define low-tc (token-compaction-config 10 5 20))
+        (define low-tc LOW-TOKEN-CONFIG)
         (define compaction-res (compact-history history #:token-config low-tc))
 
         ;; Result should still report removed-count > 0

@@ -24,6 +24,7 @@
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"
          (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         "helpers/compaction-helpers.rkt"
          "../agent/event-bus.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
@@ -660,7 +661,7 @@
 
    ;; Compact history
    (define loaded (load-session-log path))
-   (define low-tc (token-compaction-config 10 5 20))
+   (define low-tc LOW-TOKEN-CONFIG)
    (compact-and-persist! loaded path #:token-config low-tc)
 
    ;; Get IDs after compaction
@@ -684,7 +685,7 @@
 
    ;; Compact
    (define loaded (load-session-log path))
-   (define low-tc (token-compaction-config 10 5 20))
+   (define low-tc LOW-TOKEN-CONFIG)
    (compact-and-persist! loaded path #:token-config low-tc)
 
    (define count-after (count-entries path))
@@ -706,7 +707,7 @@
 
    ;; Compact
    (define loaded (load-session-log path))
-   (define low-tc (token-compaction-config 10 5 20))
+   (define low-tc LOW-TOKEN-CONFIG)
    (compact-and-persist! loaded path #:token-config low-tc)
 
    ;; Rebuild index after compaction
@@ -736,7 +737,7 @@
 
    ;; Compact
    (define loaded (load-session-log path))
-   (define low-tc (token-compaction-config 10 5 20))
+   (define low-tc LOW-TOKEN-CONFIG)
    (compact-and-persist! loaded path #:token-config low-tc)
 
    ;; Build tree after
@@ -760,7 +761,7 @@
 
    ;; Compact
    (define loaded (load-session-log path))
-   (define low-tc (token-compaction-config 10 5 20))
+   (define low-tc LOW-TOKEN-CONFIG)
    (compact-and-persist! loaded path #:token-config low-tc)
 
    ;; Replay after compaction
@@ -785,7 +786,7 @@
 
    ;; Compact
    (define loaded (load-session-log path))
-   (define low-tc (token-compaction-config 10 5 20))
+   (define low-tc LOW-TOKEN-CONFIG)
    (define result (compact-and-persist! loaded path #:token-config low-tc))
 
    ;; Load and find summary

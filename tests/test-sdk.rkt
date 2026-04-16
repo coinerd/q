@@ -20,6 +20,7 @@
                   register-extension!)
          (only-in "../runtime/compactor.rkt" compaction-result-removed-count compact-and-persist!)
          (only-in "../runtime/token-compaction.rkt" token-compaction-config)
+         "helpers/compaction-helpers.rkt"
          (only-in "../runtime/agent-session.rkt" agent-session-system-instructions session-history)
          (only-in "../runtime/settings.rkt" default-session-dir)
          (only-in "../util/jsonl.rkt" jsonl-read-all-valid)
@@ -697,7 +698,7 @@
     (define sid (hash-ref (session-info rt2) 'session-id))
     (define log-file (build-path tmp sid "session.jsonl"))
     (define history (session-history (runtime-rt-session rt2)))
-    (define low-tc (token-compaction-config 10 5 20))
+    (define low-tc LOW-TOKEN-CONFIG)
     (define comp-res (compact-and-persist! history log-file #:token-config low-tc))
     (check-pred compaction-result? comp-res)
     ;; Compaction should have removed some messages
