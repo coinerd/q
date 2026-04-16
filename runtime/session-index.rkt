@@ -28,6 +28,7 @@
          "../runtime/session-store.rkt")
 
 (provide session-index?
+         session-index
          session-index-by-id
          session-index-entry-order
          session-index-bookmarks
@@ -54,6 +55,17 @@
          bookmark?
          bookmark-id
          bookmark-entry-id
+         ;; FEAT-64: navigation
+         navigate-result
+         navigate-result?
+         navigate-result-entry
+         navigate-result-branch
+         navigate-result-children
+         navigate-result-leaf?
+         navigate-to-entry!
+         navigate-to-leaf!
+         navigate-next-leaf!
+         navigate-prev-leaf!
          bookmark-label
          bookmark-timestamp
          make-bookmark
@@ -235,6 +247,62 @@
       #f))
 
 ;; ============================================================
+;; FEAT-64: Leaf pointer navigation
+;; ============================================================
+
+;; navigate-result : entry branch children leaf?
+(struct navigate-result (entry branch children leaf?) #:transparent)
+
+(define (navigate-to-entry! idx entry-id)
+  (define entry (lookup-entry idx entry-id))
+  (if (not entry)
+      #f
+      (let* ([branch (or (get-branch idx entry-id) '())]
+             [children (hash-ref (session-index-children idx) entry-id '())]
+             [is-leaf (null? children)])
+        (set-box! (session-index-active-leaf-id idx) entry-id)
+        (navigate-result entry branch children is-leaf))))
+
+(define (navigate-to-leaf! idx entry-id)
+  (define result (navigate-to-entry! idx entry-id))
+  (if (and result (navigate-result-leaf? result)) result #f))
+
+(define (navigate-next-leaf! idx)
+  (define leaves (leaf-nodes idx))
+  (if (null? leaves)
+      #f
+      (let* ([current-id (unbox (session-index-active-leaf-id idx))]
+             [leaf-ids (map message-id leaves)]
+             [current-pos (if current-id
+                              (or (for/first ([id (in-list leaf-ids)]
+                                              [i (in-naturals)]
+                                              #:when (equal? id current-id))
+                                    i)
+                                  -1)
+                              -1)]
+             [next-pos (modulo (add1 current-pos) (length leaves))]
+             [next-entry (list-ref leaves next-pos)])
+        (navigate-to-entry! idx (message-id next-entry)))))
+
+(define (navigate-prev-leaf! idx)
+  (define leaves (leaf-nodes idx))
+  (if (null? leaves)
+      #f
+      (let* ([current-id (unbox (session-index-active-leaf-id idx))]
+             [leaf-ids (map message-id leaves)]
+             [n (length leaves)]
+             [current-pos (if current-id
+                              (or (for/first ([id (in-list leaf-ids)]
+                                              [i (in-naturals)]
+                                              #:when (equal? id current-id))
+                                    i)
+                                  0)
+                              0)]
+             [prev-pos (modulo (sub1 current-pos) n)]
+             [prev-entry (list-ref leaves prev-pos)])
+        (navigate-to-entry! idx (message-id prev-entry)))))
+
+;; ============================================================
 ;; Tree operations (#496)
 ;; ============================================================
 
@@ -304,21 +372,23 @@
 
 ;; Build a set of all ancestors of a given entry (inclusive)
 (define (ancestor-set idx id)
-  (let loop ([current id] [acc (set)])
+  (let loop ([current id]
+             [acc (set)])
     (cond
       [(not current) acc]
       [(set-member? acc current) acc]
       [else
        (define msg (hash-ref (session-index-by-id idx) current #f))
-       (loop (and msg (message-parent-id msg))
-             (set-add acc current))])))
+       (loop (and msg (message-parent-id msg)) (set-add acc current))])))
 
 ;; Collect entries along the path from old-leaf-id towards ancestor-id.
 ;; Stops at ancestor-id or when token budget is exhausted.
 ;; Returns (listof message) in chronological order (oldest first).
 ;; session-index? string? string? integer? -> (listof message)
 (define (collect-branch-entries idx old-leaf-id ancestor-id token-budget)
-  (let loop ([current old-leaf-id] [acc '()] [tokens-used 0])
+  (let loop ([current old-leaf-id]
+             [acc '()]
+             [tokens-used 0])
     (cond
       [(not current) acc]
       [(equal? current ancestor-id) acc]
@@ -329,17 +399,15 @@
          [(not msg) acc]
          [else
           (define cost (estimate-entry-tokens msg))
-          (loop (message-parent-id msg)
-                (cons msg acc)
-                (+ tokens-used cost))])])))
+          (loop (message-parent-id msg) (cons msg acc) (+ tokens-used cost))])])))
 
 ;; Rough token estimate for a message (~4 chars per token)
 (define (estimate-entry-tokens msg)
   (define content (message-content msg))
   (for/sum ([part (in-list content)])
-    (cond
-      [(text-part? part) (quotient (string-length (text-part-text part)) 4)]
-      [else 10]))) ; rough estimate for non-text parts
+           (cond
+             [(text-part? part) (quotient (string-length (text-part-text part)) 4)]
+             [else 10]))) ; rough estimate for non-text parts
 
 (require racket/set)
 
