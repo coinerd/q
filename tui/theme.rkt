@@ -5,7 +5,8 @@
 ;; Replaces hardcoded ANSI colors with named semantic slots.
 ;; Default dark theme matches the original hardcoded colors.
 
-(require racket/contract)
+(require racket/contract
+         racket/string)
 
 (provide tui-theme
          tui-theme?
@@ -45,8 +46,11 @@
          default-light-theme
          current-tui-theme
          theme-ref
+         theme-color
          theme-color->sgr
-         theme-color->sgr-bg)
+         theme-color->sgr-bg
+         theme-style->sgr
+         register-theme!)
 
 ;; ============================================================
 ;; Theme struct — all fields are ANSI color names or #f for default
@@ -269,6 +273,49 @@
        [(bright-white) "107"]
        [else #f])]
     [else #f]))
+
+;; ============================================================
+;; FEAT-68: Convenience functions
+;; ============================================================
+
+;; theme-color : symbol? -> (or/c string? #f)
+;; Convenience: resolve a semantic name through the current theme to an SGR code.
+;; E.g. (theme-color 'error) => "31" (red in dark theme)
+(define (theme-color semantic-name)
+  (define c (theme-ref semantic-name))
+  (if c
+      (theme-color->sgr c)
+      #f))
+
+;; theme-style->sgr : (listof symbol?) -> string?
+;; Convert a styled-segment style list to a complete SGR escape sequence.
+;; Merges theme-aware color resolution with text attributes.
+(define (theme-style->sgr styles)
+  (define params '())
+  (for ([s (in-list styles)])
+    (case s
+      [(bold) (set! params (cons "1" params))]
+      [(italic) (set! params (cons "3" params))]
+      [(underline) (set! params (cons "4" params))]
+      [(inverse) (set! params (cons "7" params))]
+      [(dim) (set! params (cons "2" params))]
+      [else
+       ;; Try theme resolution for color names
+       (define sgr (theme-color->sgr s))
+       (when sgr
+         (set! params (cons sgr params)))]))
+  (if (null? params)
+      ""
+      (string-append "\033[" (string-join (reverse params) ";") "m")))
+
+;; register-theme! : symbol? tui-theme? -> void?
+;; Register a named theme for lookup by name.
+;; Currently stores in a module-local hash.
+(define registered-themes
+  (make-hash (list (cons 'dark default-dark-theme) (cons 'light default-light-theme))))
+
+(define (register-theme! name theme)
+  (hash-set! registered-themes name theme))
 
 (define (string-prefix? s prefix)
   (and (>= (string-length s) (string-length prefix))

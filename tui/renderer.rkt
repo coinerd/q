@@ -8,7 +8,8 @@
          "state.rkt"
          "input.rkt"
          "char-width.rkt"
-         "component.rkt")
+         "component.rkt"
+         (only-in "theme.rkt" current-tui-theme theme-ref theme-color->sgr))
 ;;
 ;; Renders styled-lines to a tui-ubuf buffer.
 ;; No terminal I/O directly — all output goes through ubuf.
@@ -111,7 +112,19 @@
     [(cyan) 6]
     [(white) 7]
     [(dim-gray dark-gray) 8]
+    [(bright-black) 8]
+    [(bright-red) 9]
+    [(bright-green) 10]
+    [(bright-yellow) 11]
+    [(bright-blue) 12]
+    [(bright-magenta) 13]
+    [(bright-cyan) 14]
+    [(bright-white) 15]
     [else 7]))
+
+;; FEAT-68: Resolve a theme color value to a ubuf color number.
+(define (theme-color-name->number c)
+  (color-name->number c))
 
 ;; Resolve a list of style symbols into ubuf keyword arguments.
 ;; Returns (values kw-list val-list) for keyword-apply.
