@@ -586,7 +586,41 @@
                    [streaming-text "leftover stream"]))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
-      (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))))
+      (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))
+
+    ;; ============================================================
+    ;; W2: BUG-32,33,34 — Event naming and missing handler fixes
+    ;; ============================================================
+
+    (test-case "BUG-32: compaction.start sets status message"
+      (define s0 (initial-ui-state))
+      (define evt (make-test-event "compaction.start" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-equal? (ui-state-status-message s1) "Compacting..."))
+
+    (test-case "BUG-32: compaction.end clears status message"
+      (define s0 (struct-copy ui-state (initial-ui-state) [status-message "Compacting..."]))
+      (define evt (make-test-event "compaction.end" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-status-message s1)))
+
+    (test-case "BUG-33: auto-retry.start adds system entry"
+      (define s0 (initial-ui-state))
+      (define evt (make-test-event "auto-retry.start" (hash 'attempt 2 'maxAttempts 3)))
+      (define s1 (apply-event-to-state s0 evt))
+      (define entries (ui-state-transcript s1))
+      (check > (length entries) 0 "auto-retry.start adds an entry")
+      (define last-entry (last entries))
+      (check-equal? (transcript-entry-kind last-entry) 'system)
+      (check-not-false (string-contains? (transcript-entry-text last-entry) "retry")))
+
+    (test-case "BUG-34: model.stream.completed clears streaming-text"
+      (define s0 (struct-copy ui-state (initial-ui-state)
+                   [busy? #t]
+                   [streaming-text "partial..."]))
+      (define evt (make-test-event "model.stream.completed" (hash)))
+      (define s1 (apply-event-to-state s0 evt))
+      (check-false (ui-state-streaming-text s1) "model.stream.completed clears streaming-text"))))
 
 (run-tests state-tests)
 

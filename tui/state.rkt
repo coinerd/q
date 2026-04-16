@@ -363,8 +363,12 @@
       (make-entry 'system (format "[session forked: ~a]" new-sid) (event-time evt) (hash)))]
 
     [("compaction.started") (struct-copy ui-state state [status-message "Compacting..."])]
+    ;; BUG-32 fix: runtime emits compaction.start (not compaction.started)
+    [("compaction.start") (struct-copy ui-state state [status-message "Compacting..."])]
 
     [("compaction.completed") (struct-copy ui-state state [status-message #f])]
+    ;; BUG-32 fix: runtime emits compaction.end (not compaction.completed)
+    [("compaction.end") (struct-copy ui-state state [status-message #f])]
 
     ;; Model request initiated — mark busy if not already
     [("model.request.started") (struct-copy ui-state state [busy? #t])]
@@ -385,6 +389,20 @@
 
     [("queue.status-update")
      (struct-copy ui-state state [queue-counts payload])]
+
+    ;; BUG-33 fix: auto-retry event from runtime/iteration.rkt
+    [("auto-retry.start")
+     (define attempt (hash-ref payload 'attempt "?"))
+     (define max-attempts (hash-ref payload 'maxAttempts "?"))
+     (append-entry
+      state
+      (make-entry 'system
+                  (format "[retry: attempt ~a/~a]" attempt max-attempts)
+                  (event-time evt) (hash)))]
+
+    ;; BUG-34 fix: model.stream.completed clears streaming text
+    [("model.stream.completed")
+     (struct-copy ui-state state [streaming-text #f])]
 
     [else state])) ;; Ignore unknown events
 
