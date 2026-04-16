@@ -43,9 +43,7 @@
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"
-         (only-in "../extensions/api.rkt"
-                  extension-name
-                  list-extensions)
+         (only-in "../extensions/api.rkt" extension-name list-extensions)
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
          "../util/ids.rkt"
@@ -127,8 +125,7 @@
 (define (buffer-or-append! sess entry)
   (if (agent-session-persisted? sess)
       (append-entry! (session-log-path (agent-session-session-dir sess)) entry)
-      (set-agent-session-pending-entries!
-       sess (cons entry (agent-session-pending-entries sess)))))
+      (set-agent-session-pending-entries! sess (cons entry (agent-session-pending-entries sess)))))
 
 (define (session-index-path dir)
   (build-path dir "session.index"))
@@ -188,14 +185,15 @@
 
   ;; #668: Emit resources.discover event — extensions can discover skill/prompt/theme paths
   (let ([ext-reg (hash-ref config 'extension-registry #f)])
-    (emit-session-event!
-     (agent-session-event-bus sess)
-     sid
-     "resources.discover"
-     (hasheq 'session-id sid
-             'extensions (if ext-reg
-                             (map extension-name (list-extensions ext-reg))
-                             '()))))
+    (emit-session-event! (agent-session-event-bus sess)
+                         sid
+                         "resources.discover"
+                         (hasheq 'session-id
+                                 sid
+                                 'extensions
+                                 (if ext-reg
+                                     (map extension-name (list-extensions ext-reg))
+                                     '()))))
 
   sess)
 
@@ -261,9 +259,7 @@
 
   ;; Dispatch 'session-start hook with reason 'resume
   (define resume-start-payload (hasheq 'session-id session-id 'config config 'reason 'resume))
-  (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
-                        'session-start
-                        resume-start-payload)
+  (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start resume-start-payload)
 
   ;; Subscribe to fork/compact events from TUI/CLI
   (wire-session-event-handlers! sess)
@@ -277,14 +273,16 @@
 (define (fork-session sess [parent-entry-id #f])
   ;; Guard — refuse fork on closed session
   (unless (session-active? sess)
-    (raise (exn:fail (format "fork-session: session ~a is closed"
-                             (agent-session-session-id sess))
+    (raise (exn:fail (format "fork-session: session ~a is closed" (agent-session-session-id sess))
                      (current-continuation-marks))))
   ;; #669: Dispatch 'session-before-fork hook — extensions can block fork
   (let* ([ext-reg (agent-session-extension-registry sess)]
-         [fork-payload (hasheq 'session-id (agent-session-session-id sess)
-                               'parent-entry-id parent-entry-id
-                               'reason "user-fork")])
+         [fork-payload (hasheq 'session-id
+                               (agent-session-session-id sess)
+                               'parent-entry-id
+                               parent-entry-id
+                               'reason
+                               "user-fork")])
     (maybe-dispatch-hooks ext-reg 'session-before-fork fork-payload)
     ;; For now: proceed with fork (block support would short-circuit here)
     (fork-session-internal sess parent-entry-id)))
@@ -368,11 +366,10 @@
 
   ;; Dispatch 'session-start hook with reason 'fork
   (when (agent-session-extension-registry sess)
-    (maybe-dispatch-hooks (agent-session-extension-registry sess)
-                          'session-start
-                          (hasheq 'session-id new-id
-                                  'reason 'fork
-                                  'parent-session-id (agent-session-session-id sess))))
+    (maybe-dispatch-hooks
+     (agent-session-extension-registry sess)
+     'session-start
+     (hasheq 'session-id new-id 'reason 'fork 'parent-session-id (agent-session-session-id sess))))
 
   new-sess)
 
@@ -394,8 +391,7 @@
   ;; Ensure index exists (build if first time)
   (unless (agent-session-index sess)
     (when (file-exists? log-path)
-      (set-agent-session-index!
-       sess (build-index! log-path idx-path))))
+      (set-agent-session-index! sess (build-index! log-path idx-path))))
   (define idx (agent-session-index sess))
 
   ;; Convert string to message struct if needed
@@ -405,8 +401,7 @@
           ;; Determine parent from active leaf in index (#521: use stored IDs)
           (define parent-id
             (if idx
-                (let ([leaf (active-leaf idx)])
-                  (and leaf (message-id leaf)))
+                (let ([leaf (active-leaf idx)]) (and leaf (message-id leaf)))
                 ;; No index yet — determine from log
                 (let ([existing (if (file-exists? log-path)
                                     (load-session-log log-path)
@@ -435,7 +430,16 @@
     (if idx
         (context-builder:build-session-context idx)
         ;; Fallback: no index — use linear history (backward compat)
-        (load-session-log log-path)))
+        (let ([existing (if (file-exists? log-path)
+                            (load-session-log log-path)
+                            '())])
+          ;; BUG-39: Include buffered user message in context.
+          ;; On first prompt, the user message was buffered by buffer-or-append!
+          ;; but not yet persisted. Without this, context is empty → 0 tokens →
+          ;; should-compact? returns #f → compaction/hooks never fire on turn 1.
+          (if (null? existing)
+              (list user-msg)
+              (append existing (list user-msg))))))
 
   ;; Extract settings from path entries (#522)
   (define settings (extract-path-settings context-messages))
@@ -459,15 +463,12 @@
 ;;   model-change and thinking-level-change entries.
 ;;   Returns a hash with 'model and 'thinking-level keys.
 (define (extract-path-settings messages)
-  (for/fold ([settings (hasheq)])
-            ([msg (in-list messages)])
+  (for/fold ([settings (hasheq)]) ([msg (in-list messages)])
     (define kind (message-kind msg))
     (cond
-      [(and (eq? kind 'model-change)
-            (hash? (message-meta msg)))
+      [(and (eq? kind 'model-change) (hash? (message-meta msg)))
        (hash-set settings 'model (hash-ref (message-meta msg) 'model #f))]
-      [(and (eq? kind 'thinking-level-change)
-            (hash? (message-meta msg)))
+      [(and (eq? kind 'thinking-level-change) (hash? (message-meta msg)))
        (hash-set settings 'thinking-level (hash-ref (message-meta msg) 'level #f))]
       [else settings])))
 
@@ -494,24 +495,34 @@
      (cond
        [(and last-compact (< (- now-ms last-compact) 2000))
         context-with-system] ; too soon after last compaction
-       [(agent-session-compacting? sess)
-        context-with-system] ; recursive compaction guard
+       [(agent-session-compacting? sess) context-with-system] ; recursive compaction guard
        [else
         (set-agent-session-compacting?! sess #t)
-        (emit-session-event! bus sid "compaction.start"
+        (emit-session-event! bus
+                             sid
+                             "compaction.start"
                              (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
         (dynamic-wind
          (lambda () (void))
          (lambda ()
-           (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid))
+           (maybe-compact-context-internal sess
+                                           context-with-system
+                                           token-count
+                                           token-budget-threshold
+                                           bus
+                                           sid))
          (lambda ()
            (set-agent-session-compacting?! sess #f)
            (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
-           (emit-session-event! bus sid "compaction.end"
-                                (hasheq 'tokenCount token-count))))])]))
+           (emit-session-event! bus sid "compaction.end" (hasheq 'tokenCount token-count))))])]))
 
 ;; Internal compaction logic (extracted from maybe-compact-context for dynamic-wind)
-(define (maybe-compact-context-internal sess context-with-system token-count token-budget-threshold bus sid)
+(define (maybe-compact-context-internal sess
+                                        context-with-system
+                                        token-count
+                                        token-budget-threshold
+                                        bus
+                                        sid)
   ;; Dispatch 'session-before-compact hook
   (define compact-payload
     (hasheq 'session-id
@@ -529,15 +540,20 @@
   (cond
     [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block)) context-with-system]
     [else
-     (emit-session-event! bus sid "compaction.warning"
+     (emit-session-event! bus
+                          sid
+                          "compaction.warning"
                           (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
      (define compact-result (compact-history context-with-system))
-     (emit-session-event! bus sid "compaction.completed"
+     (emit-session-event! bus
+                          sid
+                          "compaction.completed"
                           (hasheq 'removedCount
                                   (compaction-result-removed-count compact-result)
                                   'keptCount
                                   (length (compaction-result-kept-messages compact-result))
-                                  'tokenCount token-count))
+                                  'tokenCount
+                                  token-count))
      (compaction-result->message-list compact-result)]))
 
 ;; dispatch-iteration — model-select hook + iteration loop dispatch.
@@ -594,8 +610,7 @@
 (define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
   ;; B4: Guard — refuse operations on closed sessions
   (unless (session-active? sess)
-    (raise (exn:fail (format "run-prompt!: session ~a is closed"
-                             (agent-session-session-id sess))
+    (raise (exn:fail (format "run-prompt!: session ~a is closed" (agent-session-session-id sess))
                      (current-continuation-marks))))
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
@@ -607,8 +622,7 @@
   ;; #666: Dispatch 'input hook — intercept/transform user input before processing
   (define ext-reg (agent-session-extension-registry sess))
   (define-values (_processed-input input-hook-res)
-    (maybe-dispatch-hooks ext-reg 'input
-                          (hasheq 'session-id sid 'message user-message)))
+    (maybe-dispatch-hooks ext-reg 'input (hasheq 'session-id sid 'message user-message)))
   (cond
     [(and input-hook-res (eq? (hook-result-action input-hook-res) 'block))
      ;; Input blocked by extension
@@ -669,8 +683,7 @@
   (define log-path (session-log-path (agent-session-session-dir sess)))
   (if (file-exists? log-path)
       ;; #773: Filter out session-info (version header) entries
-      (filter (lambda (m) (not (eq? (message-kind m) 'session-info)))
-              (load-session-log log-path))
+      (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) (load-session-log log-path))
       '()))
 
 (define (session-active? sess)
@@ -679,6 +692,10 @@
 (define (close-session! sess)
   ;; B5: Idempotency guard — only close once
   (when (session-active? sess)
+    ;; BUG-40: Flush buffered entries before deactivating.
+    ;; Without this, entries buffered via buffer-or-append! are lost
+    ;; and resume-agent-session fails with "directory not found".
+    (ensure-persisted! sess)
     (emit-session-event! (agent-session-event-bus sess)
                          (agent-session-session-id sess)
                          "session.closed"
@@ -688,7 +705,9 @@
     (define shutdown-payload
       (hasheq 'session-id (agent-session-session-id sess) 'duration session-duration))
     (define-values (_shutdown-payload _shutdown-res)
-      (maybe-dispatch-hooks (agent-session-extension-registry sess) 'session-shutdown shutdown-payload))
+      (maybe-dispatch-hooks (agent-session-extension-registry sess)
+                            'session-shutdown
+                            shutdown-payload))
     (set-agent-session-active?! sess #f)))
 
 ;; ============================================================
@@ -733,8 +752,7 @@
          (define log-path (session-log-path (agent-session-session-dir sess)))
          (when (file-exists? log-path)
            (define history (load-session-log log-path))
-           (when (and (not (null? history))
-                      (not (agent-session-compacting? sess)))
+           (when (and (not (null? history)) (not (agent-session-compacting? sess)))
              (set-agent-session-compacting?! sess #t)
              (define compact-result (compact-history history))
              (set-agent-session-compacting?! sess #f)

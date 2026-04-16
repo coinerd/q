@@ -126,9 +126,7 @@
 
   (test-case "compact-history reduces message count"
     (define msgs (make-n-messages 30))
-    (define strategy (compaction-strategy 20 5))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     ;; With tiny-tc (keep-recent=5 tokens), only ~1 message fits in keep-recent
@@ -140,9 +138,7 @@
 
   (test-case "compact-history summary message is a system message"
     (define msgs (make-n-messages 10))
-    (define strategy (compaction-strategy 8 2))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (define summary (compaction-result-summary-message result))
@@ -151,9 +147,7 @@
 
   (test-case "compact-history summary contains information from summarized messages"
     (define msgs (make-n-messages 10))
-    (define strategy (compaction-strategy 8 2))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (define summary (compaction-result-summary-message result))
@@ -166,9 +160,7 @@
 
   (test-case "compact-history preserves recent messages verbatim"
     (define msgs (make-n-messages 10))
-    (define strategy (compaction-strategy 8 2))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (define kept (compaction-result-kept-messages result))
@@ -180,9 +172,7 @@
   (test-case "compact-history does not modify original messages"
     (define msgs (make-n-messages 10))
     (define msgs-before (map msg-id msgs))
-    (define strategy (compaction-strategy 8 2))
     (compact-history msgs
-                     #:strategy strategy
                      #:summarize-fn test-summarize
                      #:token-config tiny-tc)
     ;; Original list unchanged
@@ -193,9 +183,7 @@
   (test-case "compact-history with too few messages returns identity"
     ;; If total messages <= keep-recent-count, nothing to compact
     (define msgs (make-n-messages 5))
-    (define strategy (compaction-strategy 50 20))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize))
     ;; No compaction happens — all messages are "recent"
     (check-equal? (compaction-result-removed-count result) 0)
@@ -205,7 +193,6 @@
 
   (test-case "compact-history with empty messages returns empty result"
     (define result (compact-history '()
-                                     #:strategy (compaction-strategy 50 20)
                                      #:summarize-fn test-summarize))
     (check-equal? (compaction-result-removed-count result) 0)
     (check-equal? (compaction-result-kept-messages result) '())
@@ -213,9 +200,7 @@
 
   (test-case "compact-history produces valid shorter message list"
     (define msgs (make-n-messages 50))
-    (define strategy (compaction-strategy 30 10))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (define compacted-list (compaction-result->message-list result))
@@ -232,11 +217,9 @@
 
   (test-case "custom summarize function is used"
     (define msgs (make-n-messages 10))
-    (define strategy (compaction-strategy 8 2))
     (define (custom-summarize ms)
       (format "CUSTOM: ~a messages summarized" (length ms)))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn custom-summarize
                                      #:token-config tiny-tc))
     (define summary (compaction-result-summary-message result))
@@ -249,9 +232,7 @@
 
   (test-case "compaction-result->message-list returns summary + kept"
     (define msgs (make-n-messages 15))
-    (define strategy (compaction-strategy 10 5))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (define merged (compaction-result->message-list result))
@@ -262,9 +243,7 @@
 
   (test-case "compaction-result->message-list with no compaction returns kept only"
     (define msgs (make-n-messages 5))
-    (define strategy (compaction-strategy 50 20))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize))
     (define merged (compaction-result->message-list result))
     (check-equal? (length merged) 5)
@@ -283,9 +262,7 @@
                                               (format "Original ~a" i))))
     ;; Run compaction
     (define msgs (load-session-log path))
-    (define strategy (compaction-strategy 6 4))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     ;; Write compaction entry
@@ -308,9 +285,7 @@
     (append-entries! path original-msgs)
     ;; Compact
     (define msgs (load-session-log path))
-    (define strategy (compaction-strategy 6 4))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (write-compaction-entry! path result)
@@ -327,9 +302,7 @@
     (define path (session-path dir))
     (append-entries! path (make-n-messages 10))
     (define msgs (load-session-log path))
-    (define strategy (compaction-strategy 6 4))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize
                                      #:token-config tiny-tc))
     (write-compaction-entry! path result)
@@ -344,9 +317,7 @@
     (define path (session-path dir))
     (append-entries! path (make-n-messages 3))
     (define msgs (load-session-log path))
-    (define strategy (compaction-strategy 50 20))
     (define result (compact-history msgs
-                                     #:strategy strategy
                                      #:summarize-fn test-summarize))
     (write-compaction-entry! path result)
     ;; No compaction happened — log should still have 3 entries
@@ -388,9 +359,7 @@
     (define loaded (load-session-log path))
     (check-equal? (length loaded) 30)
     ;; Compact and persist
-    (define strategy (compaction-strategy 20 5))
     (define result (compact-and-persist! loaded path
-                                          #:strategy strategy
                                           #:summarize-fn test-summarize
                                           #:token-config tiny-tc))
     ;; Log should now have 30 originals + 1 compaction summary = 31
@@ -413,9 +382,7 @@
     (for ([m (in-list msgs)])
       (append-entry! path m))
     (define loaded (load-session-log path))
-    (define strategy (compaction-strategy 20 5))
     (define result (compact-and-persist! loaded path
-                                          #:strategy strategy
                                           #:summarize-fn test-summarize
                                           #:token-config tiny-tc))
     (check-pred compaction-result? result)
@@ -432,9 +399,7 @@
     (for ([m (in-list msgs)])
       (append-entry! path m))
     (define loaded (load-session-log path))
-    (define strategy (compaction-strategy 50 20))
     (define result (compact-and-persist! loaded path
-                                          #:strategy strategy
                                           #:summarize-fn test-summarize))
     ;; removed-count is 0, no summary entry written
     (check-equal? (compaction-result-removed-count result) 0)
@@ -450,13 +415,10 @@
 
   (test-case "compact-history-advisory is advisory-only (alias for compact-history)"
     (define msgs (make-n-messages 30))
-    (define strategy (compaction-strategy 20 5))
     (define r1 (compact-history msgs
-                                #:strategy strategy
                                 #:summarize-fn test-summarize
                                 #:token-config tiny-tc))
     (define r2 (compact-history-advisory msgs
-                                          #:strategy strategy
                                           #:summarize-fn test-summarize
                                           #:token-config tiny-tc))
     ;; Both return the same removed-count and kept-count
@@ -482,9 +444,7 @@
     (check-equal? (length entries-before) 10)
     ;; Run advisory compaction
     (define loaded (load-session-log path))
-    (define strategy (compaction-strategy 6 4))
     (compact-history loaded
-                     #:strategy strategy
                      #:summarize-fn test-summarize
                      #:token-config tiny-tc)
     ;; Verify log is unchanged
