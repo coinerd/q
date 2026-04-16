@@ -5,96 +5,147 @@
 ;; Provides two FIFO queues for user input during agent execution:
 ;;   - Steering: input intended to affect the currently running task
 ;;   - Follow-up: input intended for the next task after completion
+;;
+;; FEAT-67: O(1) enqueue/dequeue via two-list queue + queue.update events.
 
 (require racket/contract)
 
-(provide
- ;; Agent steering/followup message queue
- make-queue
- queue?
- enqueue-steering!
- enqueue-followup!
- dequeue-steering!
- dequeue-followup!
- dequeue-all-followups!
- queue-empty?
- queue-status)
+;; Agent steering/followup message queue
+(provide make-queue
+         queue?
+         enqueue-steering!
+         enqueue-followup!
+         dequeue-steering!
+         dequeue-followup!
+         dequeue-all-followups!
+         queue-empty?
+         queue-status
+         ;; FEAT-67: event emission callback
+         queue-set-event-callback!)
 
 ;; ============================================================
-;; Queue struct — two mutable lists (head/tail for FIFO)
+;; Queue struct — two-list FIFO for O(1) amortized ops
 ;; ============================================================
 
-(struct queue (steering-box followup-box semaphore)
-  #:transparent)
+;; Each sub-queue uses head (front) and tail (reversed back) lists.
+;; Enqueue conses onto tail: O(1)
+;; Dequeue pops from head, reverses tail if head empty: amortized O(1)
+
+(struct sub-queue (head-box tail-box) #:transparent)
+
+(struct queue (steering followup semaphore event-callback-box) #:transparent)
 
 ;; ============================================================
 ;; Constructor
 ;; ============================================================
 
 (define (make-queue)
-  (queue (box '()) (box '()) (make-semaphore 1)))
+  (queue (sub-queue (box '()) (box '())) (sub-queue (box '()) (box '())) (make-semaphore 1) (box #f)))
 
 ;; ============================================================
-;; Internal FIFO helpers
+;; FEAT-67: Event callback
 ;; ============================================================
 
-;; Enqueue: add to end
-(define (box-enqueue! b v)
-  (set-box! b (append (unbox b) (list v))))
+(define (queue-set-event-callback! q cb)
+  (set-box! (queue-event-callback-box q) cb))
 
-;; Dequeue: remove from front, return #f if empty
-(define (box-dequeue! b)
-  (define lst (unbox b))
-  (if (null? lst)
+(define (emit-queue-event! q event-type details)
+  (define cb (unbox (queue-event-callback-box q)))
+  (when cb
+    (cb event-type details)))
+
+;; ============================================================
+;; Internal O(1) two-list queue operations
+;; ============================================================
+
+(define (sq-enqueue! sq v)
+  (set-box! (sub-queue-tail-box sq) (cons v (unbox (sub-queue-tail-box sq)))))
+
+(define (sq-dequeue! sq)
+  (when (null? (unbox (sub-queue-head-box sq)))
+    ;; Reverse tail into head
+    (set-box! (sub-queue-head-box sq) (reverse (unbox (sub-queue-tail-box sq))))
+    (set-box! (sub-queue-tail-box sq) '()))
+  (define head (unbox (sub-queue-head-box sq)))
+  (if (null? head)
       #f
       (begin
-        (set-box! b (cdr lst))
-        (car lst))))
+        (set-box! (sub-queue-head-box sq) (cdr head))
+        (car head))))
 
-;; Check empty
-(define (box-empty? b)
-  (null? (unbox b)))
+(define (sq-empty? sq)
+  (and (null? (unbox (sub-queue-head-box sq))) (null? (unbox (sub-queue-tail-box sq)))))
+
+(define (sq-count sq)
+  (+ (length (unbox (sub-queue-head-box sq))) (length (unbox (sub-queue-tail-box sq)))))
 
 ;; ============================================================
 ;; Public API
 ;; ============================================================
 
 (define (enqueue-steering! q input)
-  (call-with-semaphore (queue-semaphore q)
-    (lambda () (box-enqueue! (queue-steering-box q) input))))
+  (call-with-semaphore
+   (queue-semaphore q)
+   (lambda ()
+     (sq-enqueue! (queue-steering q) input)
+     (emit-queue-event!
+      q
+      'queue.update
+      (hasheq 'action 'enqueue 'queue 'steering 'count (sq-count (queue-steering q)))))))
 
 (define (enqueue-followup! q input)
-  (call-with-semaphore (queue-semaphore q)
-    (lambda () (box-enqueue! (queue-followup-box q) input))))
+  (call-with-semaphore
+   (queue-semaphore q)
+   (lambda ()
+     (sq-enqueue! (queue-followup q) input)
+     (emit-queue-event!
+      q
+      'queue.update
+      (hasheq 'action 'enqueue 'queue 'followup 'count (sq-count (queue-followup q)))))))
 
 (define (dequeue-steering! q)
-  (call-with-semaphore (queue-semaphore q)
-    (lambda () (box-dequeue! (queue-steering-box q)))))
+  (call-with-semaphore
+   (queue-semaphore q)
+   (lambda ()
+     (define v (sq-dequeue! (queue-steering q)))
+     (emit-queue-event!
+      q
+      'queue.update
+      (hasheq 'action 'dequeue 'queue 'steering 'count (sq-count (queue-steering q))))
+     v)))
 
 (define (dequeue-followup! q)
-  (call-with-semaphore (queue-semaphore q)
-    (lambda () (box-dequeue! (queue-followup-box q)))))
+  (call-with-semaphore
+   (queue-semaphore q)
+   (lambda ()
+     (define v (sq-dequeue! (queue-followup q)))
+     (emit-queue-event!
+      q
+      'queue.update
+      (hasheq 'action 'dequeue 'queue 'followup 'count (sq-count (queue-followup q))))
+     v)))
 
 (define (queue-empty? q)
   (call-with-semaphore (queue-semaphore q)
-    (lambda ()
-      (and (box-empty? (queue-steering-box q))
-           (box-empty? (queue-followup-box q))))))
+                       (lambda ()
+                         (and (sq-empty? (queue-steering q)) (sq-empty? (queue-followup q))))))
 
-;; Dequeue all follow-up messages (returns list, empty if none)
 (define (dequeue-all-followups! q)
-  (call-with-semaphore (queue-semaphore q)
-    (lambda ()
-      (let loop ([acc '()])
-        (define msg (box-dequeue! (queue-followup-box q)))
-        (if msg
-            (loop (append acc (list msg)))
-            acc)))))
+  (call-with-semaphore
+   (queue-semaphore q)
+   (lambda ()
+     (define sq (queue-followup q))
+     ;; Reverse tail into head
+     (when (null? (unbox (sub-queue-head-box sq)))
+       (set-box! (sub-queue-head-box sq) (reverse (unbox (sub-queue-tail-box sq))))
+       (set-box! (sub-queue-tail-box sq) '()))
+     (define head (unbox (sub-queue-head-box sq)))
+     (set-box! (sub-queue-head-box sq) '())
+     (emit-queue-event! q 'queue.update (hasheq 'action 'dequeue-all 'queue 'followup 'count 0))
+     head)))
 
-;; Return queue status as hash for TUI/events
-;; Keys: 'steering, 'followup — each a count
 (define (queue-status q)
-  (call-with-semaphore (queue-semaphore q)
-    (lambda ()
-      (hasheq 'steering (length (unbox (queue-steering-box q)))
-              'followup (length (unbox (queue-followup-box q)))))))
+  (call-with-semaphore
+   (queue-semaphore q)
+   (lambda ()
+     (hasheq 'steering (sq-count (queue-steering q)) 'followup (sq-count (queue-followup q))))))
