@@ -20,9 +20,12 @@ This directory (`q/docs/`) is the **canonical source** for all q documentation.
 ```
 q/docs/
 ├── README.md          ← you are here
-├── api-stability.md   ← API stability tier definitions
-├── install.md         ← installation guide (canonical)
-├── releasing.md       ← release process
+├── api-stability.md        ← API stability tier definitions
+├── compatibility-matrix.md ← version/provider compatibility table
+├── install.md              ← installation guide (canonical)
+├── package-registry-spec.md ← extension package format spec
+├── publish-verify-workflow.md ← extension publishing guide
+├── releasing.md            ← release process
 ├── sdk-rpc-catalog.md ← SDK/RPC interface reference
 ├── security.md        ← security model
 ├── style-guide.md     ← code style conventions
