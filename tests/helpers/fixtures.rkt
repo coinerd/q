@@ -5,32 +5,44 @@
 ;; Provides `with-temp-dir` and `with-env-var` macros for safe,
 ;; deterministic test cleanup via dynamic-wind.
 
-(require racket/file)
+(require racket/file
+         (only-in "../../util/protocol-types.rkt" message? message-kind))
 
 (provide with-temp-dir
-         with-env-var)
+         with-env-var
+         filter-session-info)
 
 ;; Create a temporary directory, pass it to body, guarantee cleanup.
 ;; Uses dynamic-wind so cleanup runs even if the test throws.
 (define-syntax-rule (with-temp-dir dir-id body ...)
   (let ([dir-id (make-temporary-file "q-test-~a" 'directory)])
-    (dynamic-wind
-      void
-      (lambda () body ...)
-      (lambda ()
-        (when (directory-exists? dir-id)
-          (delete-directory/files dir-id #:must-exist? #f))))))
+    (dynamic-wind void
+                  (lambda ()
+                    body ...)
+                  (lambda ()
+                    (when (directory-exists? dir-id)
+                      (delete-directory/files dir-id #:must-exist? #f))))))
 
 ;; Save current env var value, set new value, restore on exit.
 ;; Uses dynamic-wind so restoration happens even if the test throws.
 (define-syntax-rule (with-env-var var-name new-value body ...)
   (let ([old-value (getenv var-name)])
-    (dynamic-wind
-      void
-      (lambda ()
-        (putenv var-name new-value)
-        body ...)
-      (lambda ()
-        (if old-value
-            (putenv var-name old-value)
-            (putenv var-name ""))))))
+    (dynamic-wind void
+                  (lambda ()
+                    (putenv var-name new-value)
+                    body ...)
+                  (lambda ()
+                    (if old-value
+                        (putenv var-name old-value)
+                        (putenv var-name ""))))))
+
+;; Filter out session-info header entries from a list of message structs or raw JSONL hasheqs.
+;; Production session-history filters these; test helpers should too.
+;; Works with both message? structs (message-kind) and hash? (key "kind").
+(define (filter-session-info entries)
+  (filter (lambda (m)
+            (cond
+              [(message? m) (not (eq? (message-kind m) 'session-info))]
+              [(hash? m) (not (equal? (hash-ref m 'kind #f) "session-info"))]
+              [else #t]))
+          entries))
