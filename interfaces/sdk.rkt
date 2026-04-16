@@ -15,66 +15,59 @@
 (require racket/contract
          racket/math
          "../llm/provider.rkt"
-         (only-in "../tools/tool.rkt"
-                  make-tool-registry
-                  tool-registry?)
+         (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt"
          (prefix-in session: "../runtime/agent-session.rkt")
          (only-in "../runtime/compactor.rkt"
-                  compact-history compact-and-persist!
-                  compaction-result-removed-count compaction-result?)
-         (only-in "../runtime/settings.rkt"
-                  default-session-dir)
-         (only-in "../llm/token-budget.rkt"
-                  DEFAULT-TOKEN-BUDGET-THRESHOLD)
-         (only-in "../extensions/api.rkt"
-                  list-extensions)
+                  compact-history
+                  compact-and-persist!
+                  compaction-result-removed-count
+                  compaction-result?)
+         (only-in "../runtime/settings.rkt" default-session-dir)
+         (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
+         (only-in "../extensions/api.rkt" list-extensions)
+         (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
          "../util/cancellation.rkt")
 
-(provide
- ;; Structs
- (struct-out runtime-config)
- (struct-out runtime)
- runtime?
+;; Structs
+(provide (struct-out runtime-config)
+         (struct-out runtime)
+         runtime?
 
- ;; Cancellation token
- make-cancellation-token
- cancellation-token?
- cancellation-token-cancelled?
- cancel-token!
+         ;; Cancellation token
+         make-cancellation-token
+         cancellation-token?
+         cancellation-token-cancelled?
+         cancel-token!
 
- ;; API
- (contract-out
-  [make-runtime (->* (#:provider any/c)
-                      (#:session-dir (or/c path-string? path? #f)
-                       #:tool-registry any/c
-                       #:extension-registry any/c
-                       #:event-bus any/c
-                       #:model-name (or/c string? #f)
-                       #:max-iterations exact-positive-integer?
-                       #:system-instructions (listof string?)
-                       #:token-budget-threshold exact-positive-integer?
-                       #:cancellation-token any/c)
-                      runtime?)]
-  [open-session (->* (runtime?)
-                      ((or/c string? #f))
-                      runtime?)]
-  [run-prompt! (runtime? string? . -> . (values runtime? any/c))]
-  [subscribe-events! (->* (runtime? procedure?)
-                           ((or/c procedure? #f))
-                           exact-nonnegative-integer?)]
-  [interrupt! (runtime? . -> . runtime?)]
-  [fork-session! (->* (runtime?)
-                      ((or/c string? #f))
-                      (or/c runtime? 'no-active-session))]
-  [compact-session! (->* (runtime?)
-                         (#:persist? boolean?)
-                         any)]
-  [session-info (runtime? . -> . (or/c #f hash?))])
+         ;; API
+         (contract-out [make-runtime
+                        (->* (#:provider any/c)
+                             (#:session-dir (or/c path-string? path? #f)
+                                            #:tool-registry any/c
+                                            #:extension-registry any/c
+                                            #:event-bus any/c
+                                            #:model-name (or/c string? #f)
+                                            #:max-iterations exact-positive-integer?
+                                            #:system-instructions (listof string?)
+                                            #:token-budget-threshold exact-positive-integer?
+                                            #:cancellation-token any/c)
+                             runtime?)]
+                       [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
+                       [run-prompt! (runtime? string? . -> . (values runtime? any/c))]
+                       [subscribe-events!
+                        (->* (runtime? procedure?) ((or/c procedure? #f)) exact-nonnegative-integer?)]
+                       [interrupt! (runtime? . -> . runtime?)]
+                       [fork-session!
+                        (->* (runtime?) ((or/c string? #f)) (or/c runtime? 'no-active-session))]
+                       [compact-session! (->* (runtime?) (#:persist? boolean?) any)]
+                       [session-info (runtime? . -> . (or/c #f hash?))]
+                       [steer! (runtime? string? . -> . runtime?)]
+                       [follow-up! (runtime? string? . -> . runtime?)])
 
- ;; Compaction types
- compaction-result?)
+         ;; Compaction types
+         compaction-result?)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt
@@ -88,15 +81,15 @@
 
 ;; Runtime configuration — all the components needed to run
 (struct runtime-config
-  (provider           ; provider? — the LLM provider
-   tool-registry      ; tool-registry? — registered tools
-   extension-registry ; extension-registry? or #f
-   event-bus          ; event-bus? — shared event bus
-   session-dir        ; path — base directory for sessions
-   model-name         ; string or #f — default model
-   max-iterations     ; integer — max tool-call loops (default 10)
-   system-instructions ; (listof string) — injected system prompts
-   token-budget-threshold) ; integer — token budget warning threshold
+        (provider ; provider? — the LLM provider
+         tool-registry ; tool-registry? — registered tools
+         extension-registry ; extension-registry? or #f
+         event-bus ; event-bus? — shared event bus
+         session-dir ; path — base directory for sessions
+         model-name ; string or #f — default model
+         max-iterations ; integer — max tool-call loops (default 10)
+         system-instructions ; (listof string) — injected system prompts
+         token-budget-threshold) ; integer — token budget warning threshold
   #:transparent)
 
 ;; Runtime handle — wraps all configured components + active session
@@ -110,36 +103,38 @@
 ;; Internal helpers
 ;; ============================================================
 
-(define (rt-cfg rt) (runtime-rt-config rt))
-(define (rt-sess rt) (runtime-rt-session rt))
-(define (rt-token rt) (runtime-rt-cancellation-token rt))
+(define (rt-cfg rt)
+  (runtime-rt-config rt))
+(define (rt-sess rt)
+  (runtime-rt-session rt))
+(define (rt-token rt)
+  (runtime-rt-cancellation-token rt))
 
 ;; ============================================================
 ;; make-runtime
 ;; ============================================================
 
 (define (make-runtime #:provider provider
-                       #:session-dir [session-dir (default-session-dir)]
-                       #:tool-registry [tool-registry (make-tool-registry)]
-                       #:extension-registry [extension-registry #f]
-                       #:event-bus [event-bus (make-event-bus)]
-                       #:model-name [model-name #f]
-                       #:max-iterations [max-iterations 10]
-                       #:system-instructions [system-instructions '()]
-                       #:token-budget-threshold [token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD]
-                       #:cancellation-token [cancellation-token #f])
-  (make-runtime-internal
-   (runtime-config provider
-                   tool-registry
-                   extension-registry
-                   event-bus
-                   session-dir
-                   model-name
-                   max-iterations
-                   system-instructions
-                   token-budget-threshold)
-   #f
-   (or cancellation-token (make-cancellation-token))))
+                      #:session-dir [session-dir (default-session-dir)]
+                      #:tool-registry [tool-registry (make-tool-registry)]
+                      #:extension-registry [extension-registry #f]
+                      #:event-bus [event-bus (make-event-bus)]
+                      #:model-name [model-name #f]
+                      #:max-iterations [max-iterations 10]
+                      #:system-instructions [system-instructions '()]
+                      #:token-budget-threshold [token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD]
+                      #:cancellation-token [cancellation-token #f])
+  (make-runtime-internal (runtime-config provider
+                                         tool-registry
+                                         extension-registry
+                                         event-bus
+                                         session-dir
+                                         model-name
+                                         max-iterations
+                                         system-instructions
+                                         token-budget-threshold)
+                         #f
+                         (or cancellation-token (make-cancellation-token))))
 
 ;; ============================================================
 ;; open-session
@@ -148,16 +143,26 @@
 (define (open-session rt [session-id #f])
   (define cfg (rt-cfg rt))
   (define agent-cfg
-    (hasheq 'provider      (runtime-config-provider cfg)
-            'tool-registry  (runtime-config-tool-registry cfg)
-            'event-bus      (runtime-config-event-bus cfg)
-            'session-dir    (runtime-config-session-dir cfg)
-            'max-iterations (runtime-config-max-iterations cfg)
-            'extension-registry (runtime-config-extension-registry cfg)
-            'model-name     (runtime-config-model-name cfg)
-            'system-instructions (runtime-config-system-instructions cfg)
-            'token-budget-threshold (runtime-config-token-budget-threshold cfg)
-            'cancellation-token (rt-token rt)))
+    (hasheq 'provider
+            (runtime-config-provider cfg)
+            'tool-registry
+            (runtime-config-tool-registry cfg)
+            'event-bus
+            (runtime-config-event-bus cfg)
+            'session-dir
+            (runtime-config-session-dir cfg)
+            'max-iterations
+            (runtime-config-max-iterations cfg)
+            'extension-registry
+            (runtime-config-extension-registry cfg)
+            'model-name
+            (runtime-config-model-name cfg)
+            'system-instructions
+            (runtime-config-system-instructions cfg)
+            'token-budget-threshold
+            (runtime-config-token-budget-threshold cfg)
+            'cancellation-token
+            (rt-token rt)))
   (define sess
     (if session-id
         (session:resume-agent-session session-id agent-cfg)
@@ -171,14 +176,11 @@
 (define (run-prompt! rt prompt)
   (define sess (rt-sess rt))
   (cond
-    [(not sess)
-     (values rt 'no-active-session)]
+    [(not sess) (values rt 'no-active-session)]
     [else
      (define-values (updated-sess result)
-       (session:run-prompt! sess prompt
-                          #:max-iterations (runtime-config-max-iterations (rt-cfg rt))))
-     (values (make-runtime-internal (rt-cfg rt) updated-sess (rt-token rt))
-             result)]))
+       (session:run-prompt! sess prompt #:max-iterations (runtime-config-max-iterations (rt-cfg rt))))
+     (values (make-runtime-internal (rt-cfg rt) updated-sess (rt-token rt)) result)]))
 
 ;; ============================================================
 ;; subscribe-events!
@@ -219,8 +221,7 @@
 (define (fork-session! rt [entry-id #f])
   (define sess (rt-sess rt))
   (cond
-    [(not sess)
-     'no-active-session]
+    [(not sess) 'no-active-session]
     [else
      (define forked (session:fork-session sess entry-id))
      (make-runtime-internal (rt-cfg rt) forked (rt-token rt))]))
@@ -245,8 +246,7 @@
 (define (compact-session! rt #:persist? [persist? #f])
   (define sess (rt-sess rt))
   (cond
-    [(not sess)
-     'no-active-session]
+    [(not sess) 'no-active-session]
     [else
      (define bus (runtime-config-event-bus (rt-cfg rt)))
      (define sid (session:session-id sess))
@@ -256,13 +256,13 @@
                            (exact-truncate (/ (current-inexact-milliseconds) 1000))
                            sid
                            #f
-                           (hasheq 'sessionId sid
-                                   'persist? persist?)))
+                           (hasheq 'sessionId sid 'persist? persist?)))
      ;; Get history and compact
      (define history (session:session-history sess))
-     (define log-path (build-path (runtime-config-session-dir (rt-cfg rt))
-                                    (session:session-id sess)
-                                    "session.jsonl"))
+     (define log-path
+       (build-path (runtime-config-session-dir (rt-cfg rt))
+                   (session:session-id sess)
+                   "session.jsonl"))
      (define compaction-res
        (if persist?
            (compact-and-persist! history log-path)
@@ -273,9 +273,12 @@
                            (exact-truncate (/ (current-inexact-milliseconds) 1000))
                            sid
                            #f
-                           (hasheq 'sessionId sid
-                                   'persist? persist?
-                                   'removedCount (compaction-result-removed-count compaction-res))))
+                           (hasheq 'sessionId
+                                   sid
+                                   'persist?
+                                   persist?
+                                   'removedCount
+                                   (compaction-result-removed-count compaction-res))))
      ;; Return (values runtime compaction-result)
      ;; The caller can use compaction-result->message-list for the compacted view
      (values rt compaction-res)]))
@@ -290,14 +293,48 @@
   (cond
     [(not sess) #f]
     [else
-     (hasheq 'session-id        (session:session-id sess)
-             'active?           (session:session-active? sess)
-             'history-length    (length (session:session-history sess))
-             'model-name        (runtime-config-model-name cfg)
-             'extension-registry-count (let ([reg (runtime-config-extension-registry cfg)])
-                                            (if reg
-                                                (length (list-extensions reg))
-                                                0))
-             'system-instructions (runtime-config-system-instructions cfg)
-             'max-iterations (runtime-config-max-iterations cfg)
-             'token-budget-threshold (runtime-config-token-budget-threshold cfg))]))
+     (hasheq 'session-id
+             (session:session-id sess)
+             'active?
+             (session:session-active? sess)
+             'history-length
+             (length (session:session-history sess))
+             'model-name
+             (runtime-config-model-name cfg)
+             'extension-registry-count
+             (let ([reg (runtime-config-extension-registry cfg)])
+               (if reg
+                   (length (list-extensions reg))
+                   0))
+             'system-instructions
+             (runtime-config-system-instructions cfg)
+             'max-iterations
+             (runtime-config-max-iterations cfg)
+             'token-budget-threshold
+             (runtime-config-token-budget-threshold cfg))]))
+
+;; ============================================================
+;; steer!
+;; ============================================================
+
+(define (steer! rt message)
+  (define sess (rt-sess rt))
+  (cond
+    [(not sess) rt]
+    [else
+     (define q (session:agent-session-queue sess))
+     (enqueue-steering! q message)
+     rt]))
+
+;; ============================================================
+;; follow-up!
+;; ============================================================
+
+(define (follow-up! rt message)
+  (define sess (rt-sess rt))
+  (cond
+    [(not sess) rt]
+    [else
+     (define q (session:agent-session-queue sess))
+     (enqueue-followup! q message)
+     rt]))
