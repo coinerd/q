@@ -49,6 +49,8 @@
 ;;   ordered-list : (listof extension?) in registration order
 ;;   hash         : (hash/c string? extension?) for O(1) lookup
 
+;;; make-extension-registry : -> extension-registry?
+;;; Creates a new empty thread-safe extension registry.
 (define (make-extension-registry)
   (make-extension-registry-internal (box (cons '() (hasheq))) (make-semaphore 1)))
 
@@ -56,6 +58,11 @@
 ;; register-extension! : extension-registry? extension? -> void?
 ;; ============================================================
 
+;;; register-extension! : extension-registry? extension? -> void?
+;;;
+;;; Registers an extension. If an extension with the same name exists, it
+;;; is replaced (overwrite semantics). New entries are appended to preserve
+;;; insertion order. Thread-safe.
 (define (register-extension! registry ext)
   (call-with-semaphore (extension-registry-semaphore registry)
     (λ ()
@@ -75,6 +82,9 @@
 ;; unregister-extension! : extension-registry? string? -> void?
 ;; ============================================================
 
+;;; unregister-extension! : extension-registry? string? -> void?
+;;; Removes an extension by name from both the ordered list and the hash.
+;;; Thread-safe.
 (define (unregister-extension! registry name)
   (call-with-semaphore (extension-registry-semaphore registry)
     (λ ()
@@ -90,6 +100,8 @@
 ;; lookup-extension : extension-registry? string? -> (or/c extension? #f)
 ;; ============================================================
 
+;;; lookup-extension : extension-registry? string? -> (or/c #f extension?)
+;;; O(1) lookup by name. Returns the extension or #f. Thread-safe.
 (define (lookup-extension registry name)
   (call-with-semaphore (extension-registry-semaphore registry)
     (lambda ()
@@ -100,6 +112,8 @@
 ;; list-extensions : extension-registry? -> (listof extension?)
 ;; ============================================================
 
+;;; list-extensions : extension-registry? -> (listof extension?)
+;;; Returns all extensions in registration (insertion) order. Thread-safe.
 (define (list-extensions registry)
   (call-with-semaphore (extension-registry-semaphore registry)
     (lambda ()
@@ -111,6 +125,10 @@
 ;; in registration order.
 ;; ============================================================
 
+;;; handlers-for-point : extension-registry? symbol? -> (listof pair?)
+;;;
+;;; Returns (extension-name . handler) pairs for all extensions that have
+;;; a hook registered for the given hook point symbol, in registration order.
 (define (handlers-for-point registry hook-point)
   (define exts (list-extensions registry))
   (for*/list ([ext exts]

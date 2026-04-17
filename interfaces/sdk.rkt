@@ -131,6 +131,12 @@
 ;; make-runtime
 ;; ============================================================
 
+;;; make-runtime : #:provider any/c [#:session-dir ...] [#:tool-registry ...]
+;;;               ... -> runtime?
+;;;
+;;; Constructs a runtime handle with sensible defaults. Creates a new tool
+;;; registry, event bus, session directory, and cancellation token if not
+;;; provided. The runtime wraps all components needed for agent execution.
 (define (make-runtime #:provider provider
                       #:session-dir [session-dir (default-session-dir)]
                       #:tool-registry [tool-registry (make-tool-registry)]
@@ -157,6 +163,11 @@
 ;; open-session
 ;; ============================================================
 
+;;; open-session : runtime? [(or/c string? #f)] -> runtime?
+;;;
+;;; Creates a new agent session or resumes an existing one by ID.
+;;; Returns a new runtime with the session attached. If session-id is
+;;; #f, creates a fresh session; otherwise resumes the session with that ID.
 (define (open-session rt [session-id #f])
   (define cfg (rt-cfg rt))
   (define agent-cfg
@@ -203,6 +214,12 @@
 ;; subscribe-events!
 ;; ============================================================
 
+;;; subscribe-events! : (runtime? procedure? [(or/c procedure? #f)])
+;;;                     -> exact-nonnegative-integer?
+;;;
+;;; Registers an event handler on the runtime's event bus. Optional filter
+;;; predicate narrows which events are delivered. Returns subscription ID
+;;; for later unsubscription.
 (define (subscribe-events! rt handler [filter #f])
   (define bus (runtime-config-event-bus (rt-cfg rt)))
   (if filter
@@ -213,6 +230,9 @@
 ;; interrupt!
 ;; ============================================================
 
+;;; interrupt! : runtime? -> runtime?
+;;; Cancels the runtime's cancellation token and emits an interrupt.requested
+;;; event. Returns the same runtime for chaining.
 (define (interrupt! rt)
   (define sess (rt-sess rt))
   (define bus (runtime-config-event-bus (rt-cfg rt)))
@@ -235,6 +255,12 @@
 ;; fork-session!
 ;; ============================================================
 
+;;; fork-session! : (runtime? [(or/c string? #f)])
+;;;               -> (or/c runtime? 'no-active-session)
+;;;
+;;; Forks the active session, optionally at a specific entry ID. Returns
+;;; a new runtime with the forked session, or 'no-active-session if no
+;;; session is currently open.
 (define (fork-session! rt [entry-id #f])
   (define sess (rt-sess rt))
   (cond
@@ -260,6 +286,11 @@
 ;;   - Original messages remain in the log (append-only)
 ;;   - Future context assembly can use summary + recent messages
 
+;;; compact-session! : (runtime? [#:persist? boolean?]) -> any
+;;;
+;;; Compacts session history. With #:persist? #f (default) is advisory-only;
+;;; with #:persist? #t appends a summary entry to the session log.
+;;; Returns (values rt compaction-result).
 (define (compact-session! rt #:persist? [persist? #f])
   (define sess (rt-sess rt))
   (cond
@@ -304,6 +335,11 @@
 ;; session-info
 ;; ============================================================
 
+;;; session-info : runtime? -> (or/c #f hash?)
+;;;
+;;; Returns a hash with session metadata (session-id, active?, history-length,
+;;; model-name, extension-registry-count, system-instructions, max-iterations,
+;;; token-budget-threshold), or #f if no session is open.
 (define (session-info rt)
   (define sess (rt-sess rt))
   (define cfg (rt-cfg rt))
@@ -334,6 +370,9 @@
 ;; steer!
 ;; ============================================================
 
+;;; steer! : runtime? string? -> runtime?
+;;; Enqueues a steering message into the session's agent queue for
+;;; mid-turn guidance. No-op if no session is active.
 (define (steer! rt message)
   (define sess (rt-sess rt))
   (cond
@@ -347,6 +386,9 @@
 ;; follow-up!
 ;; ============================================================
 
+;;; follow-up! : runtime? string? -> runtime?
+;;; Enqueues a follow-up message into the session's agent queue for
+;;; post-turn continuation. No-op if no session is active.
 (define (follow-up! rt message)
   (define sess (rt-sess rt))
   (cond

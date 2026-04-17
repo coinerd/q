@@ -111,6 +111,10 @@
   (build-path dir "session.jsonl"))
 
 ;; #771: Ensure session directory exists and flush pending entries.
+;; ensure-persisted! : agent-session? -> void?
+;; Idempotently creates the session directory, writes the version header,
+;; and flushes all buffered pending-entries to session.jsonl. No-op if
+;; already persisted.
 ;; Called before the first write to the session log.
 ;; Idempotent — no-op if already persisted.
 (define (ensure-persisted! sess)
@@ -127,6 +131,9 @@
       (set-agent-session-pending-entries! sess '()))))
 
 ;; #771: Buffer an entry for later persistence, or write immediately if already persisted.
+;; buffer-or-append! : agent-session? message? -> void?
+;; If the session is already persisted, appends the entry to session.jsonl
+;; immediately. Otherwise, pushes it onto pending-entries for later flush.
 (define (buffer-or-append! sess entry)
   (if (agent-session-persisted? sess)
       (append-entry! (session-log-path (agent-session-session-dir sess)) entry)
@@ -147,6 +154,14 @@
 ;;   'max-iterations → integer (optional, default 10)
 ;;   'token-budget-threshold → integer (optional, default 100000)
 
+;;; make-agent-session : (hash/c symbol? any/c) -> agent-session?
+;;;
+;;; Creates a new agent session from a config hash. Required keys:
+;;;   'provider, 'tool-registry, 'event-bus, 'session-dir
+;;; Optional keys: 'max-iterations, 'token-budget-threshold, 'model-name,
+;;;   'system-instructions, 'extension-registry
+;;; Generates a unique session ID, emits session.started, dispatches
+;;; 'session-start hook, wires event handlers, and emits resources.discover.
 (define (make-agent-session config)
   (define sid (generate-id))
   (define base-dir (hash-ref config 'session-dir))
@@ -210,6 +225,12 @@
 ;; resume-agent-session
 ;; ============================================================
 
+;;; resume-agent-session : string? (hash/c symbol? any/c) -> agent-session?
+;;;
+;;; Resumes an existing session by ID. Validates directory exists,
+;;; rebuilds session index from log, dispatches 'session-before-switch hook
+;;; (extensions can block), emits session.resumed, dispatches 'session-start
+;;; with reason 'resume, and wires event handlers.
 (define (resume-agent-session session-id config)
   (define base-dir (hash-ref config 'session-dir))
   (define dir (build-path base-dir session-id))
@@ -279,6 +300,12 @@
 ;; fork-session
 ;; ============================================================
 
+;;; fork-session : agent-session? [(or/c string? #f)] -> agent-session?
+;;;
+;;; Forks the session at a given entry ID (or latest point). Creates a new
+;;; session directory, copies log entries up to fork point, builds fresh
+;;; index, emits session.forked, dispatches 'session-before-fork and
+;;; 'session-start hooks. Raises error if source session is closed.
 (define (fork-session sess [parent-entry-id #f])
   ;; Guard — refuse fork on closed session
   (unless (session-active? sess)
@@ -491,6 +518,14 @@
 ;; maybe-compact-context — token budget check and compaction triggering.
 ;;   May mutate context (return a compacted version). Returns the
 ;;   (possibly compacted) context message list.
+;;; maybe-compact-context : agent-session? (listof message?) integer?
+;;;                        -> (listof message?)
+;;;
+;;; Checks if context token count exceeds budget threshold. If so (and
+;;; not in recursive-compaction guard or stale-usage cooldown), dispatches
+;;; 'session-before-compact hook, runs compact-history, emits compaction
+;;; events, and returns compacted message list. Otherwise returns input
+;;; unchanged.
 (define (maybe-compact-context sess context-with-system token-budget-threshold)
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
@@ -623,6 +658,16 @@
 ;; run-prompt!
 ;; ============================================================
 
+;;; run-prompt! : agent-session? (or/c string? message?)
+;;;              [#:max-iterations (or/c integer? #f)]
+;;;              -> (values agent-session? loop-result?)
+;;;
+;;; Main entry point for running a user prompt. Guards against closed
+;;; sessions, dispatches 'input hook (extensions can block/amend input),
+;;; builds context from history + system instructions, checks token budget
+;;; and compacts if needed, ensures persistence, dispatches 'model-select
+;;; hook and runs the iteration loop, rebuilds session index, emits
+;;; session.updated. Returns updated session and loop-result.
 (define (run-prompt! sess user-message #:max-iterations [max-iter-override #f])
   ;; B4: Guard — refuse operations on closed sessions
   (unless (session-active? sess)
@@ -660,6 +705,8 @@
 ;; Accessors
 ;; ============================================================
 
+;; session-id : agent-session? -> string?
+;; Returns the session's unique ID string.
 (define (session-id sess)
   (agent-session-session-id sess))
 
@@ -695,6 +742,10 @@
 
   (values sess final-result))
 
+;; session-history : agent-session? -> (listof message?)
+;; Loads and returns the full message history from session.jsonl,
+;; filtering out session-info (version header) entries. Returns '() if
+;; no log file exists.
 (define (session-history sess)
   (define log-path (session-log-path (agent-session-session-dir sess)))
   (if (file-exists? log-path)
@@ -702,9 +753,16 @@
       (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) (load-session-log log-path))
       '()))
 
+;; session-active? : agent-session? -> boolean?
+;; Returns #t if the session has not been closed.
 (define (session-active? sess)
   (agent-session-active? sess))
 
+;;; close-session! : agent-session? -> void?
+;;;
+;;; Closes/deactivates the session. Flushes pending entries, emits
+;;; session.closed, dispatches 'session-shutdown hook with duration,
+;;; and sets active? to #f. Idempotent — no-op if already closed.
 (define (close-session! sess)
   ;; B5: Idempotency guard — only close once
   (when (session-active? sess)
@@ -785,6 +843,9 @@
 
 ;; set-model! : agent-session? string? -> void?
 ;; Switch the active model for this session.
+;;; set-model! : agent-session? string? -> void?
+;;; Sets the active model name for the session.
+;;; Raises argument-error if model-name is not a string.
 (define (set-model! sess model-name)
   (unless (string? model-name)
     (raise-argument-error 'set-model! "string?" model-name))
@@ -793,6 +854,9 @@
 ;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
 ;; Cycle to the next available model. Returns the new model name, or #f if
 ;; no models are available.
+;;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
+;;; Cycles to the next model in the registry's available models list
+;;; (wrapping around). Returns the new model name, or #f if no models.
 (define (cycle-model! sess registry)
   (define models (available-models registry))
   (if (null? models)
