@@ -17,7 +17,9 @@
          valid-hook-actions-for
          validate-hook-result
          ;; Hook point names (#1148)
-         hook-point-names)
+         hook-point-names
+         ;; #1149: expose schemas for testing
+         hook-action-schemas)
 
 (struct hook-result (action payload) #:transparent)
 
@@ -81,7 +83,58 @@
           '(pass amend)
           ;; Resource discovery hooks (#1148)
           'resources-discover
-          '(pass amend block)))
+          '(pass amend block)
+          ;; ============================================================
+          ;; #1149: Fine-grained lifecycle events
+          ;; ============================================================
+          ;; Tool lifecycle (fine-grained)
+          'tool.execution.start
+          '(pass)
+          'tool.execution.update
+          '(amend)
+          'tool.execution.end
+          '(pass)
+          ;; Message lifecycle (fine-grained)
+          'message.update
+          '(amend)
+          'message.stream.delta
+          '(pass)
+          ;; Context events
+          'context.window.changed
+          '(pass)
+          'context.tokens.used
+          '(amend)
+          ;; Provider events
+          'provider.response.after
+          '(amend)
+          'provider.stream.delta
+          '(pass)
+          'provider.error
+          '(pass)
+          ;; Model events
+          'model.selected
+          '(pass)
+          'model.changed
+          '(pass)
+          ;; Session lifecycle additions
+          'session.created
+          '(pass)
+          'session.loaded
+          '(pass)
+          'session.compacted
+          '(pass)
+          ;; Extension lifecycle
+          'extension.loaded
+          '(pass)
+          'extension.unloaded
+          '(pass)
+          ;; Agent lifecycle
+          'agent.started
+          '(pass)
+          'agent.idle
+          '(pass)
+          'agent.error
+          '(pass)))
 
 ;; valid-hook-actions-for : symbol? -> (listof symbol?)
 ;; Returns the valid actions for a given hook-point.
