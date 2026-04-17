@@ -28,6 +28,14 @@
          (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
          (only-in "../extensions/api.rkt" list-extensions)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
+         (only-in "../runtime/session-store.rkt"
+                  make-in-memory-session-manager
+                  in-memory-session-manager?
+                  in-memory-append!
+                  in-memory-append-entries!
+                  in-memory-load
+                  in-memory-list-sessions
+                  in-memory-fork!)
          "../util/cancellation.rkt")
 
 ;; Structs
@@ -67,7 +75,16 @@
                        [follow-up! (runtime? string? . -> . runtime?)])
 
          ;; Compaction types
-         compaction-result?)
+         compaction-result?
+
+         ;; In-memory session manager (GC-18)
+         make-in-memory-session-manager
+         in-memory-session-manager?
+         in-memory-append!
+         in-memory-append-entries!
+         in-memory-load
+         in-memory-list-sessions
+         in-memory-fork!)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt

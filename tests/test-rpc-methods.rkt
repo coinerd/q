@@ -137,6 +137,118 @@
       (define handlers (make-core-rpc-handlers (hasheq)))
       (define handler (hash-ref handlers 'fork))
       (define result (handler (hasheq 'entryId "entry-1")))
-      (check-equal? (hash-ref result 'status) "error"))))
+      (check-equal? (hash-ref result 'status) "error"))
+
+    ;; ============================================================
+    ;; GC-17: New RPC methods
+    ;; ============================================================
+
+    (test-case "registry includes new GC-17 methods"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (for ([method (in-list '(prompt steer follow_up navigate send_message))])
+        (check-not-false (hash-ref handlers method #f) (format "method ~a missing" method))))
+
+    (test-case "prompt with message delegates to prompt-fn"
+      (define received (box #f))
+      (define handlers
+        (make-core-rpc-handlers (hasheq 'prompt-fn
+                                        (lambda (msg)
+                                          (set-box! received msg)
+                                          (hasheq 'status "ok" 'turn-id "t1")))))
+      (define handler (hash-ref handlers 'prompt))
+      (define result (handler (hasheq 'message "Hello")))
+      (check-equal? (hash-ref result 'status) "ok")
+      (check-equal? (unbox received) "Hello"))
+
+    (test-case "prompt without message returns error"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (define handler (hash-ref handlers 'prompt))
+      (define result (handler (hasheq)))
+      (check-equal? (hash-ref result 'status) "error"))
+
+    (test-case "steer with message delegates to steer-fn"
+      (define received (box #f))
+      (define handlers
+        (make-core-rpc-handlers (hasheq 'steer-fn
+                                        (lambda (msg)
+                                          (set-box! received msg)
+                                          (hasheq 'status "steered")))))
+      (define handler (hash-ref handlers 'steer))
+      (define result (handler (hasheq 'message "Change approach")))
+      (check-equal? (hash-ref result 'status) "steered")
+      (check-equal? (unbox received) "Change approach"))
+
+    (test-case "steer without message returns error"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (define handler (hash-ref handlers 'steer))
+      (define result (handler (hasheq)))
+      (check-equal? (hash-ref result 'status) "error"))
+
+    (test-case "follow_up with message delegates to follow-up-fn"
+      (define received (box #f))
+      (define handlers
+        (make-core-rpc-handlers (hasheq 'follow-up-fn
+                                        (lambda (msg)
+                                          (set-box! received msg)
+                                          (hasheq 'status "queued")))))
+      (define handler (hash-ref handlers 'follow_up))
+      (define result (handler (hasheq 'message "Next question")))
+      (check-equal? (hash-ref result 'status) "queued")
+      (check-equal? (unbox received) "Next question"))
+
+    (test-case "navigate with target delegates to navigate-fn"
+      (define received (box #f))
+      (define handlers
+        (make-core-rpc-handlers (hasheq 'navigate-fn
+                                        (lambda (target)
+                                          (set-box! received target)
+                                          (hasheq 'status "ok" 'target target)))))
+      (define handler (hash-ref handlers 'navigate))
+      (define result (handler (hasheq 'target "entry-5")))
+      (check-equal? (hash-ref result 'status) "ok")
+      (check-equal? (unbox received) "entry-5"))
+
+    (test-case "navigate without target returns error"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (define handler (hash-ref handlers 'navigate))
+      (define result (handler (hasheq)))
+      (check-equal? (hash-ref result 'status) "error"))
+
+    (test-case "send_message with role and text delegates"
+      (define received-role (box #f))
+      (define received-text (box #f))
+      (define handlers
+        (make-core-rpc-handlers (hasheq 'send-message-fn
+                                        (lambda (role text)
+                                          (set-box! received-role role)
+                                          (set-box! received-text text)
+                                          (hasheq 'status "ok")))))
+      (define handler (hash-ref handlers 'send_message))
+      (define result (handler (hasheq 'role "user" 'text "Injected")))
+      (check-equal? (hash-ref result 'status) "ok")
+      (check-equal? (unbox received-role) "user")
+      (check-equal? (unbox received-text) "Injected"))
+
+    (test-case "send_message without required params returns error"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (define handler (hash-ref handlers 'send_message))
+      (define result1 (handler (hasheq 'role "user")))
+      (check-equal? (hash-ref result1 'status) "error")
+      (define result2 (handler (hasheq 'text "hello")))
+      (check-equal? (hash-ref result2 'status) "error"))
+
+    (test-case "new methods default to error when no deps provided"
+      (define handlers (make-core-rpc-handlers (hasheq)))
+      (for ([method (in-list '(prompt steer follow_up navigate send_message))])
+        (define handler (hash-ref handlers method))
+        (define params
+          (case method
+            [(prompt steer follow_up) (hasheq 'message "test")]
+            [(navigate) (hasheq 'target "t")]
+            [(send_message) (hasheq 'role "user" 'text "test")]))
+        (define result (handler params))
+        (check-equal? (hash-ref result 'status)
+                      "error"
+                      (format "~a should error without handler" method))))))
 
 (run-tests rpc-method-tests)

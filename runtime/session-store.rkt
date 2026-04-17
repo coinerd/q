@@ -42,7 +42,15 @@
          ;; Session forking (#500)
          fork-session!
          ;; Session naming
-         write-session-name!)
+         write-session-name!
+         ;; In-memory session manager (GC-18)
+         in-memory-session-manager?
+         make-in-memory-session-manager
+         in-memory-append!
+         in-memory-append-entries!
+         in-memory-load
+         in-memory-list-sessions
+         in-memory-fork!)
 
 ;; ── Write-ahead marker ──
 
@@ -476,3 +484,54 @@
              to-version
              (length entries)
              bak-path)))
+
+;; ============================================================
+;; In-memory session manager (GC-18)
+;; ============================================================
+
+;; In-memory store: maps session-id -> (box (listof message?))
+;; Provides the same interface as file-backed storage but no disk I/O.
+;; Useful for SDK unit tests and extension testing.
+
+(struct in-memory-session-manager (sessions-box) #:transparent)
+
+(define (make-in-memory-session-manager)
+  (in-memory-session-manager (box (hash))))
+
+;; Append a message to an in-memory session.
+(define (in-memory-append! mgr session-id msg)
+  (define box (in-memory-session-manager-sessions-box mgr))
+  (define sessions (unbox box))
+  (define existing (hash-ref sessions session-id '()))
+  (set-box! box (hash-set sessions session-id (append existing (list msg)))))
+
+;; Append multiple messages atomically.
+(define (in-memory-append-entries! mgr session-id msgs)
+  (for ([msg (in-list msgs)])
+    (in-memory-append! mgr session-id msg)))
+
+;; Load all messages from an in-memory session.
+(define (in-memory-load mgr session-id)
+  (define sessions (unbox (in-memory-session-manager-sessions-box mgr)))
+  (hash-ref sessions session-id '()))
+
+;; List all session IDs.
+(define (in-memory-list-sessions mgr)
+  (hash-keys (unbox (in-memory-session-manager-sessions-box mgr))))
+
+;; Fork: copy entries up to entry-id (or all) into a new session.
+(define (in-memory-fork! mgr src-id dest-id [entry-id #f])
+  (define entries (in-memory-load mgr src-id))
+  (define to-copy
+    (if entry-id
+        (let loop ([es entries]
+                   [acc '()])
+          (cond
+            [(null? es) (reverse acc)]
+            [(equal? (message-id (car es)) entry-id) (reverse (cons (car es) acc))]
+            [else (loop (cdr es) (cons (car es) acc))]))
+        entries))
+  (define box (in-memory-session-manager-sessions-box mgr))
+  (define sessions (unbox box))
+  (set-box! box (hash-set sessions dest-id to-copy))
+  dest-id)
