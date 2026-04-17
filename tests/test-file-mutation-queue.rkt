@@ -22,17 +22,16 @@
   tmp)
 
 (define (increment-file path-str)
-  (with-file-mutation-queue
-   path-str
-   (lambda ()
-     ;; read-modify-write
-     (define val
-       (with-input-from-file (string->path path-str)
-         (lambda () (string->number (port->string)))))
-     (sleep 0.01) ;; simulate latency to make races more likely
-     (with-output-to-file (string->path path-str)
-       (lambda () (display (add1 val)))
-       #:exists 'replace))))
+  (with-file-mutation-queue path-str
+                            (lambda ()
+                              ;; read-modify-write
+                              (define val
+                                (with-input-from-file (string->path path-str)
+                                                      (lambda () (string->number (port->string)))))
+                              (sleep 0.01) ;; simulate latency to make races more likely
+                              (with-output-to-file (string->path path-str)
+                                                   (lambda () (display (add1 val)))
+                                                   #:exists 'replace))))
 
 ;; ============================================================
 ;; Tests
@@ -46,8 +45,7 @@
     (for/list ([_ (in-range 10)])
       (thread (lambda () (increment-file path-str)))))
   (for-each thread-wait threads)
-  (define final
-    (with-input-from-file tmp (lambda () (string->number (port->string)))))
+  (define final (with-input-from-file tmp (lambda () (string->number (port->string)))))
   (check-equal? final 10 "all 10 increments should be preserved")
   (delete-file tmp))
 
@@ -63,8 +61,7 @@
   (thread-wait t2)
   (define elapsed (- (current-inexact-milliseconds) started))
   ;; If truly parallel, should be ~10ms, not ~20ms
-  (check-true (< elapsed 50)
-              (format "two different files should run in parallel, took ~ams" elapsed))
+  (check-true (< elapsed 50) (format "two different files should run in parallel, took ~ams" elapsed))
   (delete-file tmp1)
   (delete-file tmp2))
 
@@ -83,18 +80,19 @@
   (define tmp (make-temp-file))
   (define path-str (path->string tmp))
   (define ch (make-channel))
-  (thread
-   (lambda ()
-     (with-file-mutation-queue
-      path-str
-      (lambda ()
-        (channel-put ch 'started)
-        (sleep 0.05)
-        'done))))
+  (thread (lambda ()
+            (with-file-mutation-queue path-str
+                                      (lambda ()
+                                        (channel-put ch 'started)
+                                        (sleep 0.05)
+                                        'done))))
   (channel-get ch) ;; wait for start
-  (check-true (positive? (mutation-queue-stats))
-              "should have 1 active lock during operation")
-  (sleep 0.1) ;; wait for completion
+  (check-true (positive? (mutation-queue-stats)) "should have 1 active lock during operation")
+  ;; Poll until stats drop to zero (replaces fragile sleep)
+  (let poll ([attempts 0])
+    (when (and (< attempts 50) (positive? (mutation-queue-stats)))
+      (sync/timeout 0.02 never-evt)
+      (poll (add1 attempts))))
   (check-equal? (mutation-queue-stats) 0 "active lock cleaned up after completion")
   (delete-file tmp))
 
@@ -103,14 +101,16 @@
   (define path-str (path->string tmp))
   (define link-path "/tmp/mq-test-link")
   (with-handlers ([exn:fail? (lambda (_) (void))])
-    (when (file-exists? link-path) (delete-file link-path))
+    (when (file-exists? link-path)
+      (delete-file link-path))
     (make-file-or-directory-link tmp link-path)
     (define t1 (thread (lambda () (increment-file path-str))))
     (define t2 (thread (lambda () (increment-file link-path))))
     (thread-wait t1)
     (thread-wait t2)
-    (define final
-      (with-input-from-file tmp (lambda () (string->number (port->string)))))
+    (define final (with-input-from-file tmp (lambda () (string->number (port->string)))))
     (check-equal? final 2 "symlink and real path should share the same lock")
-    (when (file-exists? link-path) (delete-file link-path)))
-  (when (file-exists? tmp) (delete-file tmp)))
+    (when (file-exists? link-path)
+      (delete-file link-path)))
+  (when (file-exists? tmp)
+    (delete-file tmp)))

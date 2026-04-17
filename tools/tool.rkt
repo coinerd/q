@@ -28,6 +28,11 @@
 ;;;                                   plus make-error-result, make-success-result, serialization)
 ;;;   - exec-context struct (execution context for tool invocations)
 ;;;   - tool-registry (register, lookup, list, unregister)
+;;;
+;;; ARCH-04 NOTE: At 373 lines this module is still cohesive. If tool contracts
+;;; and execution contexts grow independently, consider splitting into
+;;; tools/tool-contract.rkt (tool struct, validation) and
+;;; tools/tool-registry.rkt (registry, lookup). Current size is manageable.
 
 ;; ── Tool struct ──
 (provide (struct-out tool)
