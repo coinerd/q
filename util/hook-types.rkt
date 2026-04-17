@@ -15,7 +15,9 @@
          hook-block
          ;; FEAT-63: Per-hook-point validation
          valid-hook-actions-for
-         validate-hook-result)
+         validate-hook-result
+         ;; Hook point names (#1148)
+         hook-point-names)
 
 (struct hook-result (action payload) #:transparent)
 
@@ -76,7 +78,10 @@
           '(pass amend)
           ;; Steering/queue hooks
           'before-send
-          '(pass amend)))
+          '(pass amend)
+          ;; Resource discovery hooks (#1148)
+          'resources-discover
+          '(pass amend block)))
 
 ;; valid-hook-actions-for : symbol? -> (listof symbol?)
 ;; Returns the valid actions for a given hook-point.
@@ -98,3 +103,12 @@
                              hook-point
                              valid-actions))
         #f)))
+
+;; ============================================================
+;; Hook point names (#1148)
+;; ============================================================
+
+;; Returns a list of all registered hook-point symbols.
+;; Useful for testing and introspection.
+(define (hook-point-names)
+  (hash-keys hook-action-schemas))

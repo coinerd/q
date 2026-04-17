@@ -48,6 +48,13 @@
          ANCHOR-BOTTOM-RIGHT
          anchor?
 
+         ;; Overlay config (#1145)
+         (struct-out overlay-config)
+         overlay-config?
+         make-overlay-config
+         show-overlay-with-config
+         overlay-compute-bounds
+
          ;; Event reduction (pure)
          apply-event-to-state
 
@@ -590,6 +597,59 @@
 
 (define (anchor? v)
   (and (symbol? v) (or (eq? v ANCHOR-TOP-LEFT) (eq? v ANCHOR-CENTER) (eq? v ANCHOR-BOTTOM-RIGHT))))
+
+;; ============================================================
+;; Overlay config (#1145)
+;; ============================================================
+
+;; Richer overlay configuration with percentage-based sizing
+(struct overlay-config (anchor width-spec height-spec margin) #:transparent)
+;; width-spec: (or/c exact-positive-integer? (cons 'pct real?))
+;; height-spec: same
+
+(define make-overlay-config overlay-config)
+
+;; Show overlay using an overlay-config struct
+(define (show-overlay-with-config state config type content [input ""])
+  (struct-copy ui-state
+               state
+               [active-overlay
+                (overlay-state type
+                               content
+                               input
+                               (overlay-config-anchor config)
+                               (overlay-config-width-spec config)
+                               (overlay-config-height-spec config)
+                               (overlay-config-margin config))]))
+
+;; Compute overlay bounds from overlay-state and terminal dimensions.
+;; Returns (values x y w h) — position and size of overlay.
+(define (overlay-compute-bounds ov term-width term-height)
+  (define w-spec (overlay-state-width ov))
+  (define h-spec (overlay-state-height ov))
+  (define margin (overlay-state-margin ov))
+  (define w
+    (if (pair? w-spec)
+        (inexact->exact (floor (* (cdr w-spec) term-width)))
+        w-spec))
+  (define h
+    (if (pair? h-spec)
+        (inexact->exact (floor (* (cdr h-spec) term-height)))
+        h-spec))
+  (define anchor (overlay-state-anchor ov))
+  (define-values (x y)
+    (case anchor
+      [(top-left) (values margin margin)]
+      [(top-center) (values (quotient (- term-width w) 2) margin)]
+      [(top-right) (values (max 0 (- term-width w margin)) margin)]
+      [(mid-left) (values margin (quotient (- term-height h) 2))]
+      [(mid-center center) (values (quotient (- term-width w) 2) (quotient (- term-height h) 2))]
+      [(mid-right) (values (max 0 (- term-width w margin)) (quotient (- term-height h) 2))]
+      [(bottom-left) (values margin (max 0 (- term-height h margin)))]
+      [(bottom-center) (values (quotient (- term-width w) 2) (max 0 (- term-height h margin)))]
+      [(bottom-right) (values (max 0 (- term-width w margin)) (max 0 (- term-height h margin)))]
+      [else (values margin margin)]))
+  (values x y w h))
 
 ;; ============================================================
 ;; Overlay helpers (#643)

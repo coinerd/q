@@ -52,7 +52,10 @@
          in-memory-append-entries!
          in-memory-load
          in-memory-list-sessions
-         in-memory-fork!)
+         in-memory-fork!
+         ;; Custom entry helpers (#1147)
+         append-custom-entry!
+         load-custom-entries)
 
 ;; ── Write-ahead marker ──
 
@@ -586,3 +589,23 @@
   (define sessions (unbox box))
   (set-box! box (hash-set sessions dest-id to-copy))
   dest-id)
+
+;; ============================================================
+;; Custom entry helpers (#1147)
+;; ============================================================
+
+;; Append a custom entry to an in-memory session.
+;; extension-name, key, data are stored in the message meta field.
+(define (append-custom-entry! mgr session-id extension-name key data)
+  (define entry (make-custom-entry extension-name key data))
+  (in-memory-append! mgr session-id entry))
+
+;; Load custom entries for a specific extension from an in-memory session.
+;; Optionally filter by key.
+(define (load-custom-entries mgr session-id extension-name [key #f])
+  (define entries (in-memory-load mgr session-id))
+  (filter (lambda (e)
+            (and (custom-entry? e)
+                 (equal? (custom-entry-extension e) extension-name)
+                 (or (not key) (equal? (custom-entry-key e) key))))
+          entries))

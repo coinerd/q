@@ -25,8 +25,8 @@
          "manifest.rkt"
          "quarantine.rkt")
 
-(provide ;; Extension loading errors
-         extension-load-error
+;; Extension loading errors
+(provide extension-load-error
          extension-load-error?
          extension-load-error-path
          extension-load-error-message
@@ -35,7 +35,10 @@
          discover-extensions
          load-extension!
          try-load-extension
-         get-extension-name-from-path)
+         get-extension-name-from-path
+         ;; Hot reload (#1146)
+         reload-extensions!
+         discover-extension-files)
 
 ;; ============================================================
 ;; extension-load-error struct
@@ -82,17 +85,17 @@
       (if timeout-secs
           ;; Run with timeout to prevent hanging on slow extensions
           (let ([chan (make-channel)])
-            (define thd (thread
-                          (lambda ()
-                            (channel-put chan (try-load-extension path)))))
+            (define thd (thread (lambda () (channel-put chan (try-load-extension path)))))
             (define maybe-result (sync/timeout timeout-secs chan))
-            (unless maybe-result (kill-thread thd))  ; #447: prevent thread leak
+            (unless maybe-result
+              (kill-thread thd)) ; #447: prevent thread leak
             (if maybe-result
                 maybe-result
-                (extension-load-error
-                 (if (path? path) (path->string path) path)
-                 (format "extension startup timed out after ~as" timeout-secs)
-                 'timeout)))
+                (extension-load-error (if (path? path)
+                                          (path->string path)
+                                          path)
+                                      (format "extension startup timed out after ~as" timeout-secs)
+                                      'timeout)))
           ;; No timeout — direct call
           (try-load-extension path)))
     (cond
@@ -108,13 +111,13 @@
                                ""
                                #f
                                (hasheq 'path
-                                     (if (path? path)
-                                         (path->string path)
-                                         path)
-                                     'error
-                                     (extension-load-error-message result)
-                                     'category
-                                     (extension-load-error-category result)))))]
+                                       (if (path? path)
+                                           (path->string path)
+                                           path)
+                                       'error
+                                       (extension-load-error-message result)
+                                       'category
+                                       (extension-load-error-category result)))))]
       [(and result (extension? result)) (register-extension! registry result)]))
   (void))
 
@@ -143,11 +146,11 @@
     (when (file-exists? manifest-path)
       (define raw (with-input-from-file manifest-path read-json))
       (when (hash? raw)
-        (define-values (valid? errors)
-          (validate-manifest (qpm-manifest-from-hash raw)))
+        (define-values (valid? errors) (validate-manifest (qpm-manifest-from-hash raw)))
         (unless valid?
           (raise (extension-load-error (path->string path)
-                                       (format "manifest validation failed: ~a" (string-join errors ", "))
+                                       (format "manifest validation failed: ~a"
+                                               (string-join errors ", "))
                                        'api-mismatch)))
         ;; SEC-05: Integrity hash verification
         (define ext-dir (path-only-with-default mod-path))
@@ -158,13 +161,15 @@
            ;; First load: store the integrity hash
            (hash-set! raw 'integrity current-hash)
            (call-with-output-file manifest-path
-             (lambda (out) (write-json raw out) (newline out))
-             #:exists 'replace)]
+                                  (lambda (out)
+                                    (write-json raw out)
+                                    (newline out))
+                                  #:exists 'replace)]
           [(not (equal? stored-hash current-hash))
-           (raise (extension-load-error (path->string path)
-                                        (format "integrity hash mismatch: expected ~a, got ~a"
-                                                stored-hash current-hash)
-                                        'api-mismatch))])))
+           (raise (extension-load-error
+                   (path->string path)
+                   (format "integrity hash mismatch: expected ~a, got ~a" stored-hash current-hash)
+                   'api-mismatch))])))
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))
 
@@ -175,13 +180,12 @@
 
 ;; Helper: construct qpm-manifest from a raw JSON hash
 (define (qpm-manifest-from-hash h)
-  (make-qpm-manifest
-   #:name (hash-ref h 'name "unknown")
-   #:version (hash-ref h 'version "0.0.0")
-   #:api-version (hash-ref h 'api-version "1")
-   #:type (string->symbol (hash-ref h 'type "extension"))
-   #:description (hash-ref h 'description "")
-   #:author (hash-ref h 'author "unknown")))
+  (make-qpm-manifest #:name (hash-ref h 'name "unknown")
+                     #:version (hash-ref h 'version "0.0.0")
+                     #:api-version (hash-ref h 'api-version "1")
+                     #:type (string->symbol (hash-ref h 'type "extension"))
+                     #:description (hash-ref h 'description "")
+                     #:author (hash-ref h 'author "unknown")))
 
 ;; SEC-05: Compute SHA256 hash of all files listed in the manifest.
 ;; Warns and includes a special marker for missing files (instead of
@@ -198,12 +202,9 @@
               (define full-path (build-path ext-dir f))
               (cond
                 [(file-exists? full-path)
-                 (call-with-input-file full-path
-                   (lambda (in) (display (port->string in) out)))]
+                 (call-with-input-file full-path (lambda (in) (display (port->string in) out)))]
                 [else
-                 (log-warning
-                  "extension manifest: declared file missing: ~a (in ~a)"
-                  f ext-dir)
+                 (log-warning "extension manifest: declared file missing: ~a (in ~a)" f ext-dir)
                  ;; Include a special marker so the hash changes when files
                  ;; are missing — prevents a "missing files = no change" exploit
                  (display (format "[MISSING:~a]" f) out)]))))))))
@@ -242,3 +243,51 @@
             (path->string dir)
             "unknown"))
       base))
+
+;; ============================================================
+;; Hot reload (#1146)
+;; ============================================================
+
+;; discover-extension-files : (listof path-string?) -> (listof (cons/c string? path?))
+;; Returns (extension-name . file-path) pairs for all .rkt files found in
+;; the given directory paths.
+(define (discover-extension-files paths)
+  (for*/list ([dir (in-list paths)]
+              #:when (directory-exists? dir)
+              [f (in-directory dir)]
+              #:when (file-exists? f)
+              #:when (regexp-match? #rx"\\.rkt$" (path->string f)))
+    (cons (path->string (path-replace-suffix (file-name-from-path f) #"")) f)))
+
+;; reload-extensions! : extension-registry? (listof path-string?) -> (listof string?)
+;; Reload extensions from configured paths.
+;; 1. Discover all .rkt files in extension-paths
+;; 2. For each file, try dynamic-require of 'the-extension
+;; 3. If new extension (not in registry), register it
+;; 4. If extension file removed, unregister it
+;; 5. Return list of names loaded
+(define (reload-extensions! registry extension-paths)
+  (define discovered (discover-extension-files extension-paths))
+  (define existing-names (map extension-name (list-extensions registry)))
+  (define discovered-names (map car discovered))
+  ;; Unregister removed extensions
+  (for ([name (in-list existing-names)]
+        #:unless (member name discovered-names))
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning
+                                  (format "Failed to unregister ~a: ~a" name (exn-message e))))])
+      (unregister-extension! registry name)))
+  ;; Register new extensions
+  (define loaded '())
+  (for ([pair (in-list discovered)])
+    (define name (car pair))
+    (define path (cdr pair))
+    (unless (member name existing-names)
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (log-warning
+                                    (format "Failed to load ~a: ~a" name (exn-message e))))])
+        (define ext (dynamic-require (path->complete-path path) 'the-extension))
+        (when (extension? ext)
+          (register-extension! registry ext)
+          (set! loaded (cons name loaded))))))
+  (reverse loaded))

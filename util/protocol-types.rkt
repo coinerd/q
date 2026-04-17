@@ -34,6 +34,12 @@
          message->jsexpr
          jsexpr->message
 
+         ;; Custom entry for extension state persistence (#1147)
+         make-custom-entry
+         custom-entry?
+         custom-entry-extension
+         custom-entry-key
+         custom-entry-data
          ;; Entry kind predicates (#497)
          message-entry?
          model-change-entry?
@@ -171,6 +177,37 @@
                 (map jsexpr->content-part (hash-ref h 'content))
                 (hash-ref h 'timestamp)
                 (hash-ref h 'meta)))
+
+;; ============================================================
+;; Custom entry for extension state persistence (#1147)
+;; ============================================================
+
+;; Creates a message struct with kind 'custom-message and extension
+;; metadata in the meta field. Used by extensions to persist state.
+(define (make-custom-entry extension-name key data)
+  (make-message (format "custom-~a-~a-~a" extension-name key (current-inexact-milliseconds))
+                #f
+                'system
+                'custom-message
+                '()
+                (current-seconds)
+                (hasheq 'extension extension-name 'key key 'data data)))
+
+;; Predicate: is this message a custom entry?
+(define (custom-entry? msg)
+  (and (message? msg) (eq? (message-kind msg) 'custom-message)))
+
+;; Accessor: get extension name from a custom entry
+(define (custom-entry-extension msg)
+  (hash-ref (message-meta msg) 'extension #f))
+
+;; Accessor: get key from a custom entry
+(define (custom-entry-key msg)
+  (hash-ref (message-meta msg) 'key #f))
+
+;; Accessor: get data from a custom entry
+(define (custom-entry-data msg)
+  (hash-ref (message-meta msg) 'data #f))
 
 ;; ============================================================
 ;; Entry kind predicates (#497)
