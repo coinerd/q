@@ -19,13 +19,23 @@
 
 (define (hardcoded-home-path? str)
   ;; strings containing /home/ or /Users/ — always a portability problem
-  (or (string-contains? str "/home/")
-      (string-contains? str "/Users/")))
+  (or (string-contains? str "/home/") (string-contains? str "/Users/")))
 
 (define allowed-abs-prefixes
-  '("/tmp/" "/tmp" "/dev/null" "/usr/" "/etc/" "/proc/" "/sys/"
-    "/bin/" "/sbin/" "/lib/" "/var/" "/opt/" "/run/" "/boot/"
-    "/forbidden"))
+  '("/tmp/" "/tmp"
+            "/dev/null"
+            "/usr/"
+            "/etc/"
+            "/proc/"
+            "/sys/"
+            "/bin/"
+            "/sbin/"
+            "/lib/"
+            "/var/"
+            "/opt/"
+            "/run/"
+            "/boot/"
+            "/forbidden"))
 
 (define (cli-command? str)
   ;; Single-segment /words like /help /quit /exit — not paths
@@ -48,7 +58,9 @@
   (or (string-contains? str "nonexistent")
       (string-contains? str "no-such")
       (string-contains? str "no/such")
-      (string-contains? str "/my/project")))
+      (string-contains? str "/my/project")
+      (string-contains? str "/src/bar.rkt")
+      (string-contains? str "/foo/bar.txt")))
 
 (define (absolute-path-pattern? str)
   ;; matches #rx"^/[a-z]" but NOT allowed prefixes, CLI commands, or test fixtures
@@ -61,31 +73,36 @@
 
 (define (extract-strings-from-line line)
   ;; pull out double-quoted string literals from a line (best-effort)
-  (let loop ([chars (string->list line)] [acc '()] [in-string #f] [buf '()])
+  (let loop ([chars (string->list line)]
+             [acc '()]
+             [in-string #f]
+             [buf '()])
     (cond
       [(null? chars)
-       (if in-string (cons (list->string (reverse buf)) acc) acc)]
+       (if in-string
+           (cons (list->string (reverse buf)) acc)
+           acc)]
       [else
-       (let ([c (car chars)] [rest (cdr chars)])
+       (let ([c (car chars)]
+             [rest (cdr chars)])
          (cond
-           [(and in-string (char=? c #\"))
-            (loop rest (cons (list->string (reverse buf)) acc) #f '())]
-           [in-string
-            (loop rest acc #t (cons c buf))]
-           [(char=? c #\")
-            (loop rest acc #t '())]
-           [else
-            (loop rest acc #f '())]))])))
+           [(and in-string (char=? c #\")) (loop rest (cons (list->string (reverse buf)) acc) #f '())]
+           [in-string (loop rest acc #t (cons c buf))]
+           [(char=? c #\") (loop rest acc #t '())]
+           [else (loop rest acc #f '())]))])))
 
 ;;; --- state ---
 
-(define errors   '())
+(define errors '())
 (define warnings '())
-(define infos    '())
+(define infos '())
 
-(define (add-error!   msg) (set! errors   (cons msg errors)))
-(define (add-warning! msg) (set! warnings (cons msg warnings)))
-(define (add-info!    msg) (set! infos    (cons msg infos)))
+(define (add-error! msg)
+  (set! errors (cons msg errors)))
+(define (add-warning! msg)
+  (set! warnings (cons msg warnings)))
+(define (add-info! msg)
+  (set! infos (cons msg infos)))
 
 ;;; --- checks per file ---
 
@@ -95,13 +112,9 @@
     (unless (comment-line? line)
       (for ([str (in-list (extract-strings-from-line line))])
         (when (hardcoded-home-path? str)
-          (add-error!
-           (format "ERROR: ~a:~a: hardcoded path \"~a\""
-                   filepath lineno str)))
+          (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))
         (when (absolute-path-pattern? str)
-          (add-error!
-           (format "ERROR: ~a:~a: hardcoded path \"~a\""
-                   filepath lineno str)))))))
+          (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))))))
 
 (define (check-cwd-assumptions filepath lines)
   (define uses-current-directory? #f)
@@ -119,9 +132,9 @@
       (when (and (not (comment-line? line))
                  (string-contains? line "current-directory")
                  (not (string-contains? line "define-runtime-path")))
-        (add-warning!
-         (format "WARNING: ~a:~a: current-directory used without define-runtime-path"
-                 filepath lineno))
+        (add-warning! (format "WARNING: ~a:~a: current-directory used without define-runtime-path"
+                              filepath
+                              lineno))
         ;; only report the first occurrence per file
         (set! uses-current-directory? #f)))))
 
@@ -129,26 +142,27 @@
   (for ([line (in-list lines)]
         [lineno (in-naturals 1)])
     (unless (comment-line? line)
-      (when (or (string-contains? line "hash-keys")
-                (string-contains? line "hash-values"))
+      (when (or (string-contains? line "hash-keys") (string-contains? line "hash-values"))
         (unless (string-contains? line "sort")
-          (define which (cond [(string-contains? line "hash-keys") "hash-keys"]
-                              [else "hash-values"]))
-          (add-info!
-           (format "INFO: ~a:~a: ~a without sort (ordering may be nondeterministic)"
-                   filepath lineno which)))))))
+          (define which
+            (cond
+              [(string-contains? line "hash-keys") "hash-keys"]
+              [else "hash-values"]))
+          (add-info! (format "INFO: ~a:~a: ~a without sort (ordering may be nondeterministic)"
+                             filepath
+                             lineno
+                             which)))))))
 
 ;;; --- main ---
 
-(define tests-dir
-  (build-path (current-directory) "tests"))
+(define tests-dir (build-path (current-directory) "tests"))
 
 (define (lint-file filepath)
   (define lines (file->lines filepath))
-  (define rel  (path->string (find-relative-path (current-directory) filepath)))
+  (define rel (path->string (find-relative-path (current-directory) filepath)))
   (check-hardcoded-paths rel lines)
-  (check-cwd-assumptions  rel lines)
-  (check-hash-ordering    rel lines))
+  (check-cwd-assumptions rel lines)
+  (check-hash-ordering rel lines))
 
 (define (main)
   (unless (directory-exists? tests-dir)
@@ -156,26 +170,31 @@
     (exit 2))
 
   (define rkt-files
-    (sort
-     (for/list ([f (in-directory tests-dir)]
-                #:when (string-suffix? (path->string f) ".rkt"))
-       f)
-     path<?))
+    (sort (for/list ([f (in-directory tests-dir)]
+                     #:when (string-suffix? (path->string f) ".rkt"))
+            f)
+          path<?))
 
   (for ([f (in-list rkt-files)])
     (lint-file f))
 
   ;; Print results in order: errors, warnings, infos
-  (for ([e (reverse errors)])   (displayln e))
-  (for ([w (reverse warnings)]) (displayln w))
-  (for ([i (reverse infos)])    (displayln i))
+  (for ([e (reverse errors)])
+    (displayln e))
+  (for ([w (reverse warnings)])
+    (displayln w))
+  (for ([i (reverse infos)])
+    (displayln i))
 
   (displayln "---")
-  (printf "~a errors, ~a warnings, ~a infos\n"
-          (length errors) (length warnings) (length infos))
+  (printf "~a errors, ~a warnings, ~a infos\n" (length errors) (length warnings) (length infos))
 
   (if (null? errors)
-      (begin (displayln "Lint PASSED") (exit 0))
-      (begin (displayln "Lint FAILED") (exit 1))))
+      (begin
+        (displayln "Lint PASSED")
+        (exit 0))
+      (begin
+        (displayln "Lint FAILED")
+        (exit 1))))
 
 (main)

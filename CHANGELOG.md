@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.6] — 2026-04-17
+
+### Added — SDK/RPC Completeness & Feature Polish
+- **G1**: RPC method wiring — `run-json-rpc.rkt` uses `make-core-rpc-handlers` for all 10 core methods (#1106)
+- **G2**: SDK `navigate!` — wraps `switch-session-leaf!` for in-place tree navigation (#1107)
+- **G3**: Thinking block rendering — TUI renders model thinking with distinct dim styling (#1109)
+- **G4**: Session import — `import-session!` in session store with JSONL validation (#1113)
+- **G5**: Dynamic provider registration — `provider-registry` field in `extension-ctx` (#1114)
+- **G6**: Centralized output truncation — `truncate-to-n-chars` in `util/truncation.rkt` (#1115)
+- **G7**: Configurable keybindings — `~/.q/keybindings.json` loaded/merged with defaults, `--keybindings` CLI flag (#1116)
+- **Mouse fix**: Switch from X10 (`?1002h`) to SGR (`?1006h`) mouse protocol, bridge tui-term mouse structs (#1119)
+- **Error guard**: `handle-mouse` and `selection-text` wrapped in error handlers (#1121)
+
+### Fixed
+- CI lint-tests false positives for test fixture paths (#1122)
+- Version synced across `util/version.rkt`, `info.rkt`, `README.md` (#1122)
+
+### Internal
+- All 25 pi adoption items (P0–P5) now COMPLETE
+- ~4800+ tests passing
+
 ## [0.10.4] — 2026-04-17
 
 ### Fixed — Platform Gap Closure (GC-23–GC-27)

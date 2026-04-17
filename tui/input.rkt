@@ -8,7 +8,8 @@
 (require racket/string
          racket/list
          "char-width.rkt"
-         "command-parse.rkt")
+         "command-parse.rkt"
+         "terminal.rkt")
 
 ;; Structs
 (provide (struct-out input-state)
@@ -72,7 +73,8 @@
          normalize-selection-range
 
          ;; X10 mouse decoding
-         decode-mouse-x10)
+         decode-mouse-x10
+         decode-mouse-tui-term)
 
 ;; Maximum undo stack depth
 (define MAX-UNDO-STACK 100)
@@ -593,6 +595,37 @@
     ;; Click (press): no motion, no scroll
     [(and (<= button 2) (not motion?)) (list 'mouse 'click button x y)]
     [else #f]))
+
+;; Decode a tui-term tmousemsg struct into q's internal mouse event format.
+;; Returns (list 'mouse action [button] x y) or #f for unknown events.
+;; tui-term mouse events have kind: 'press, 'release, 'move, 'wheel-up, 'wheel-down, 'leave
+;; pos is a tpoint with x,y (0-based). left/right/middle are booleans.
+(define (decode-mouse-tui-term msg)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define kind (tmousemsg-kind msg))
+    (define x (tmousemsg-pos-x msg))
+    (define y (tmousemsg-pos-y msg))
+    (define left (tmousemsg-left? msg))
+    (case kind
+      [(wheel-up) (list 'mouse 'scroll-up x y)]
+      [(wheel-down) (list 'mouse 'scroll-down x y)]
+      [(press)
+       ;; Map button: left=0, middle=1, right=2
+       (define button
+         (cond
+           [(tmousemsg-left? msg) 0]
+           [(tmousemsg-middle? msg) 1]
+           [(tmousemsg-right? msg) 2]
+           [else 0]))
+       (list 'mouse 'click button x y)]
+      [(release) (list 'mouse 'release x y)]
+      [(move)
+       ;; Move with button held = drag
+       (if (or left (tmousemsg-right? msg) (tmousemsg-middle? msg))
+           (list 'mouse 'drag x y)
+           #f)] ;; plain move without button — ignore
+      [(leave) #f] ;; mouse left window — ignore
+      [else #f])))
 
 ;; Slash commands
 (define (input-slash-command text)
