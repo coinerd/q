@@ -2,6 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.4] — 2026-04-17
+
+### Fixed — Platform Gap Closure (GC-23–GC-27)
+- **GC-23**: Session tree navigation tests — leaf pointer operations, branch traversal, edge cases (#1061)
+- **GC-24**: `branch-with-summary!` tests — branch switch with summary persistence (#1062)
+- **GC-25**: JSON theme loading + truncation wiring — theme files loaded from `~/.q/themes/` (#1063, #1068)
+- **GC-26**: AGENTS.md walk-up-from-cwd + context-files tests — context discovery from project root (#1064, #1069)
+- **GC-27**: Context overflow recovery tests + bugfix — auto-compact + retry on context overflow (#1065, #1070)
+
+### Internal
+- 5 new test files for gap closure items
+- All 4553 tests passing in fast suite
+
+## [0.10.3] — 2026-04-17
+
+### Added — Extension Platform (FEAT-58–FEAT-81)
+- **FEAT-58**: Rich extension-ctx with session-store, tool-registry, command-registry, ui-channel (#974)
+- **FEAT-59**: Channel-based UI interaction for extensions (#978)
+- **FEAT-60**: Extension slash command registration (#979)
+- **FEAT-61**: Wire message-inject into iteration loop (#975)
+- **FEAT-62**: Dynamic tool registration from extensions (#977)
+- **FEAT-63**: Per-hook-point result validation (#976)
+- **FEAT-64**: Leaf pointer navigation in session tree (#980)
+- **FEAT-65**: Runtime model cycling (`set-model!` / `cycle-model!`) (#981)
+- **FEAT-66**: Context overflow recovery (auto-compact + retry) (#982)
+- **FEAT-67**: Queue event emission (`queue.update`) + O(1) deque (#983)
+- **FEAT-68**: Theme system with semantic color mapping (#984)
+- **FEAT-69**: Markdown rendering in TUI transcript (#985, #986)
+- **FEAT-71**: Structured streaming accumulator (#987)
+- **FEAT-72**: Thinking delta events for reasoning models (#988)
+- **FEAT-73**: Parallel tool execution by default (#989)
+- **FEAT-74**: Tool progress callbacks (#990)
+- **FEAT-75**: Register core RPC methods (#991)
+- **FEAT-76**: `steer!`/`follow-up!` in SDK (#992)
+- **FEAT-77**: Typed event classes for SDK/RPC (#993)
+- **FEAT-78**: `waitForIdle` in SDK (#994)
+- **FEAT-79**: Branch summarization (#995)
+- **FEAT-80**: Extension UI over RPC (#996)
+- **FEAT-81**: Incremental summarization (#997)
+
+### Added — Repo Coherence & Release Hygiene
+- **Wave 0**: Single-source version & CI guard
+- **Wave 1**: Release pipeline hardening
+- **Wave 2**: Docs coherence & SDK catalog
+- **Wave 3**: API stability tiers & migration template
+- **Wave 4**: Package ecosystem docs
+- **GC-02**: Wire sandbox/limits settings into bash tool execution (#1032)
+- **GC-17/GC-18**: RPC methods + in-memory session manager (#1051, #1052)
+
+### Added — Infrastructure
+- Parallel test runner (`run-tests.rkt`) — 4x speedup: 4m20s → 1m10s (#1000)
+- Wave 5 review fixes: contracts, real tests, e2e coverage (#998)
+- Wave 5 nice-to-fix: layer placement, contracts, edge cases (#999)
+
+### Fixed
+- Scheduler symbol→string event name + TUI selection test coordinates (BUG-26/27)
+- Exclude reference docs from version lint
+
 ## [0.10.2] — 2026-04-16
 
 ### Fixed
@@ -244,8 +302,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed CONTRIBUTING.md from `.gitattributes` export-ignore (#356)
 - Removed stale `dist/` tarballs (#355)
 
-## [0.8.2] — 2026-04-14
-[0.8.1] — 2026-04-13
+## [0.8.1] — 2026-04-13
 
 ### Added — Wave 1: Test-Case Conversion
 - Converted 105 bare `let` blocks to `test-case` forms in tests/interfaces/tui.rkt (#283)
@@ -875,7 +932,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.10.4...HEAD
+[0.10.4]: https://github.com/coinerd/q/compare/v0.10.3...v0.10.4
+[0.10.3]: https://github.com/coinerd/q/compare/v0.10.2...v0.10.3
+[0.10.2]: https://github.com/coinerd/q/compare/v0.10.1...v0.10.2
 [0.8.2]: https://github.com/coinerd/q/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/coinerd/q/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/coinerd/q/compare/v0.7.9...v0.8.0
