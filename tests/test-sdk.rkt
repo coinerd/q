@@ -24,6 +24,7 @@
          (only-in "../runtime/agent-session.rkt" agent-session-system-instructions session-history)
          (only-in "../runtime/settings.rkt" default-session-dir)
          (only-in "../util/jsonl.rkt" jsonl-read-all-valid)
+         (only-in "../runtime/session-index.rkt" navigate-result?)
          "../interfaces/sdk.rkt")
 
 ;; ============================================================
@@ -851,6 +852,78 @@
   (check-exn exn:fail:contract?
              (lambda () (session-info 'bad))
              "session-info should enforce runtime? contract"))
+
+;; ============================================================
+
+;; ============================================================
+;; Test suite: navigate! (Issue #1108)
+;; ============================================================
+
+(test-case "navigate! with no session returns 'no-active-session"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (check-equal? (navigate! rt "some-id") 'no-active-session)
+    (check-equal? (navigate! rt 1) 'no-active-session)
+    (check-equal? (navigate! rt -1) 'no-active-session)
+    (cleanup-dir tmp)))
+
+(test-case "navigate! with session returns navigate-result for entry ID"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (define rt2 (open-session rt))
+    ;; Run a prompt to create history + index
+    (define-values (rt3 _) (run-prompt! rt2 "Hello navigation"))
+    ;; Get an entry ID from history
+    (define hist (session-history (runtime-rt-session rt3)))
+    (when (null? hist)
+      (fail "Expected non-empty history after run-prompt!"))
+    (define entry-id (message-id (car hist)))
+    ;; Navigate to that entry ID
+    (define result (navigate! rt3 entry-id))
+    (check-pred navigate-result? result "navigate! with valid entry ID should return navigate-result")
+    (cleanup-dir tmp)))
+
+(test-case "navigate! with invalid entry ID returns #f"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (define rt2 (open-session rt))
+    ;; Run a prompt to create history + index
+    (define-values (rt3 _) (run-prompt! rt2 "Hello"))
+    ;; Navigate to a nonexistent entry ID
+    (define result (navigate! rt3 "nonexistent-id"))
+    (check-equal? result
+                  'invalid-target
+                  "navigate! with invalid entry ID should return 'invalid-target")
+    (cleanup-dir tmp)))
+
+(test-case "navigate! contract: rejects non-runtime first arg"
+  (check-exn exn:fail:contract?
+             (lambda () (navigate! "not-a-runtime" "id"))
+             "navigate! should enforce runtime? contract on first arg"))
+
+(test-case "navigate! contract: rejects invalid target type"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (check-exn exn:fail:contract?
+               (lambda () (navigate! rt 3.14))
+               "navigate! should reject non-integer/non-string target")
+    (cleanup-dir tmp)))
 
 ;; ============================================================
 
