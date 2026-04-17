@@ -4,7 +4,9 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../tui/theme.rkt")
+         "../../tui/theme.rkt"
+         json
+         racket/file)
 
 (define theme-tests
   (test-suite "TUI Theme"
@@ -119,6 +121,70 @@
                    'bright-black))
       (register-theme! 'custom custom)
       (parameterize ([current-tui-theme custom])
-        (check-equal? (theme-color 'accent) "35")))))
+        (check-equal? (theme-color 'accent) "35")))
+
+    ;; -------------------------------------------------------
+    ;; JSON theme loading (GC-25)
+    ;; -------------------------------------------------------
+    (test-case "tui-theme-field-names has 32 entries"
+      (check-equal? (length tui-theme-field-names) 32)
+      (check-equal? (car tui-theme-field-names) 'text)
+      (check-equal? (last tui-theme-field-names) 'border-muted))
+
+    (test-case "validate-color-value handles all types"
+      (check-false (validate-color-value #f))
+      (check-false (validate-color-value 'null))
+      (check-equal? (validate-color-value "white") "white")
+      (check-equal? (validate-color-value 'cyan) 'cyan)
+      (check-false (validate-color-value 42)))
+
+    (test-case "load-theme-from-json returns #f for missing file"
+      (check-false (load-theme-from-json "/nonexistent/path/theme.json")))
+
+    (test-case "load-theme-from-json returns #f for invalid JSON"
+      (define tmp (make-temporary-file "theme-test-~a"))
+      (call-with-output-file tmp (lambda (out) (displayln "{broken json!!!" out)) #:exists 'replace)
+      (check-false (load-theme-from-json tmp))
+      (delete-file tmp))
+
+    (test-case "load-theme-from-json loads valid theme"
+      (define tmp (make-temporary-file "theme-test-~a"))
+      (call-with-output-file tmp
+                             (lambda (out) (write-json (hasheq 'text "white" 'accent "cyan") out))
+                             #:exists 'replace)
+      (define t (load-theme-from-json tmp))
+      (check-not-false t)
+      (when t
+        (check-equal? (tui-theme-text t) "white")
+        (check-equal? (tui-theme-accent t) "cyan")
+        ;; Unspecified fields inherit from default-dark-theme
+        (check-equal? (tui-theme-border t) (tui-theme-border default-dark-theme)))
+      (delete-file tmp))
+
+    (test-case "load-theme-from-json: null values inherit from base"
+      (define tmp (make-temporary-file "theme-test-~a"))
+      (call-with-output-file tmp
+                             (lambda (out) (write-json (hasheq 'text 'null) out))
+                             #:exists 'replace)
+      (define t (load-theme-from-json tmp))
+      (check-not-false t)
+      (when t
+        (check-equal? (tui-theme-text t) (tui-theme-text default-dark-theme)))
+      (delete-file tmp))
+
+    (test-case "json-hash->theme merges partial hash"
+      (define h (make-hasheq '((text . "bright-white") (error . "red"))))
+      (define t (json-hash->theme h))
+      (check-equal? (tui-theme-text t) "bright-white")
+      (check-equal? (tui-theme-error t) "red")
+      ;; Unspecified fields inherit from default-dark-theme
+      (check-equal? (tui-theme-accent t) (tui-theme-accent default-dark-theme)))
+
+    (test-case "theme-field-accessor returns correct accessor"
+      (check-equal? ((theme-field-accessor 'text) default-dark-theme)
+                    (tui-theme-text default-dark-theme))
+      (check-equal? ((theme-field-accessor 'accent) default-dark-theme)
+                    (tui-theme-accent default-dark-theme))
+      (check-equal? ((theme-field-accessor 'nonexistent) default-dark-theme) #f))))
 
 (run-tests theme-tests)
