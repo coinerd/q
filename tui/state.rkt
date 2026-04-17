@@ -109,6 +109,7 @@
          status-message ; string or #f — temporary status
          pending-tool-name ; string or #f — name of tool currently executing
          streaming-text ; string or #f — partial streaming text (during model.stream.delta)
+         streaming-thinking ; string or #f — accumulated thinking text (during model.stream.thinking)
          current-branch ; string or #f — current branch node id
          visible-branches ; (listof branch-info) — cached branch list for display
          sel-anchor ; (cons col row) or #f — mouse selection start
@@ -226,6 +227,7 @@
             #f ; status-message
             #f ; pending-tool-name
             #f ; streaming-text
+            #f ; streaming-thinking
             #f ; current-branch
             '() ; visible-branches
             #f ; sel-anchor
@@ -354,18 +356,33 @@
     ;; Agent starts processing — mark busy
     ;; BUG-30 fix: clear stale state from previous turn
     [("turn.started")
-     (struct-copy ui-state state [busy? #t] [pending-tool-name #f] [streaming-text #f])]
+     (struct-copy ui-state
+                  state
+                  [busy? #t]
+                  [pending-tool-name #f]
+                  [streaming-text #f]
+                  [streaming-thinking #f])]
 
     ;; Agent done processing — mark not busy, clear streaming-text
     ;; Bug B2 fix: clear streaming-text on turn.completed as defense-in-depth
     ;; so stale streaming text doesn't contaminate next turn.
     ;; BUG-31 fix: also clear pending-tool-name as defense-in-depth
     [("turn.completed")
-     (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f])]
+     (struct-copy ui-state
+                  state
+                  [busy? #f]
+                  [streaming-text #f]
+                  [streaming-thinking #f]
+                  [pending-tool-name #f])]
 
     [("turn.cancelled")
      ;; Agent turn was cancelled — clear busy state
-     (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f])]
+     (struct-copy ui-state
+                  state
+                  [busy? #f]
+                  [streaming-text #f]
+                  [streaming-thinking #f]
+                  [pending-tool-name #f])]
 
     [("compaction.warning")
      (define tc (hash-ref payload 'tokenCount "?"))
@@ -416,8 +433,16 @@
                                (event-time evt)
                                (hash)))]
 
+    [("model.stream.thinking")
+     ;; Accumulate thinking/reasoning text from the model
+     (define delta (hash-ref payload 'delta ""))
+     (define current-thinking (ui-state-streaming-thinking state))
+     (define new-thinking (string-append (or current-thinking "") delta))
+     (struct-copy ui-state state [streaming-thinking new-thinking] [busy? #t])]
+
     ;; BUG-34 fix: model.stream.completed clears streaming text
-    [("model.stream.completed") (struct-copy ui-state state [streaming-text #f])]
+    [("model.stream.completed")
+     (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])]
 
     [else state])) ;; Ignore unknown events
 

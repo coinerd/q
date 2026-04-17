@@ -486,216 +486,239 @@
     ;; ──────────────────────────────
 
     (test-case "assert-line-width! passes for narrow line"
-      (check-not-exn
-       (lambda () (assert-line-width! "hello" 80))))
+      (check-not-exn (lambda () (assert-line-width! "hello" 80))))
 
     (test-case "assert-line-width! passes for exact-width line"
-      (check-not-exn
-       (lambda () (assert-line-width! (make-string 80 #\x) 80))))
+      (check-not-exn (lambda () (assert-line-width! (make-string 80 #\x) 80))))
 
     (test-case "assert-line-width! raises in strict mode on overflow"
       (parameterize ([current-assert-width #t])
-        (check-exn
-         exn:fail?
-         (lambda () (assert-line-width! (make-string 100 #\x) 80)))))
+        (check-exn exn:fail? (lambda () (assert-line-width! (make-string 100 #\x) 80)))))
 
     (test-case "assert-line-width! does not raise in default mode on overflow"
-      (check-not-exn
-       (lambda () (assert-line-width! (make-string 100 #\x) 80))))
+      (check-not-exn (lambda () (assert-line-width! (make-string 100 #\x) 80))))
 
     (test-case "draw-styled-line! truncates overflow to buffer width"
       (define ubuf (make-mock-ubuf 40 4))
-      (define long-line
-        (styled-line (list (styled-segment (make-string 200 #\A) '()))))
+      (define long-line (styled-line (list (styled-segment (make-string 200 #\A) '()))))
       (parameterize ([current-ubuf-putstring mock-ubuf-putstring!])
-        (check-not-exn
-         (lambda ()
-           (draw-styled-line! ubuf long-line 0 40)))
-        (check-equal? (mock-ubuf-row-string ubuf 0)
-                      (make-string 40 #\A))))
+        (check-not-exn (lambda () (draw-styled-line! ubuf long-line 0 40)))
+        (check-equal? (mock-ubuf-row-string ubuf 0) (make-string 40 #\A))))
 
     (test-case "render-frame! survives wide content"
       (define ubuf (make-mock-ubuf 40 10))
       ;; Create state with a very long user message
       (define state
-        (struct-copy ui-state (initial-ui-state)
+        (struct-copy ui-state
+                     (initial-ui-state)
                      [transcript
-                      (list (transcript-entry 'user
-                                              (make-string 500 #\X)
-                                              0
-                                              (hasheq) #f))]))
+                      (list (transcript-entry 'user (make-string 500 #\X) 0 (hasheq) #f))]))
       (define input-st (initial-input-state))
       (define layout (compute-layout 40 10))
       ;; Should not raise — render wraps/truncates
       (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))))
 
-   ;; ============================================================
-   ;; Render-level transition tests (Wave 2, sub-issue #803)
-   ;; ============================================================
+;; ============================================================
+;; Render-level transition tests (Wave 2, sub-issue #803)
+;; ============================================================
 
-   (test-case
-    "render shows assistant text + tool messages after full cycle"
-    (define ubuf (make-mock-ubuf 80 24))
-    ;; Build state with: assistant text, tool-start, tool-end
+(test-case "render shows assistant text + tool messages after full cycle"
+  (define ubuf (make-mock-ubuf 80 24))
+  ;; Build state with: assistant text, tool-start, tool-end
+  (define s0 (initial-ui-state))
+  (define events
+    (list (make-test-event "turn.started" (hasheq))
+          (make-test-event "model.stream.delta" (hasheq 'delta "CL answer"))
+          (make-test-event "assistant.message.completed"
+                           (hasheq 'messageId "m1" 'content "CL answer"))
+          (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "read" 'arguments "/tmp/x"))
+          (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "file data"))))
+  (define state (simulate-events s0 events))
+  (define input-st (initial-input-state))
+  (define layout (compute-layout 80 24))
+  ;; Should not raise
+  (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+  ;; Verify transcript has all 3 entries
+  (check-equal? (transcript-types state) '(assistant tool-start tool-end)))
+
+(test-case "render shows streaming text below committed entries"
+  (define ubuf (make-mock-ubuf 80 24))
+  ;; Build state with: tool-start in transcript + streaming text active
+  (define s0 (initial-ui-state))
+  (define events
+    (list (make-test-event "turn.started" (hasheq))
+          (make-test-event "assistant.message.completed"
+                           (hasheq 'messageId "m1" 'content "Previous answer"))
+          (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "bash" 'arguments "ls"))))
+  ;; Add streaming text to simulate mid-stream state
+  (define state
+    (struct-copy ui-state (simulate-events s0 events) [streaming-text "New answer streaming"]))
+  (define input-st (initial-input-state))
+  (define layout (compute-layout 80 24))
+  ;; Should not raise — streaming text renders below committed entries
+  (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+  ;; Verify state has streaming text
+  (check-equal? (ui-state-streaming-text state) "New answer streaming"))
+
+(test-case "render does not lose content with many tool messages"
+  (define ubuf (make-mock-ubuf 40 5))
+  ;; Build state with many tool entries + 1 assistant entry
+  (define s0 (initial-ui-state))
+  (define base-events
+    (list (make-test-event "turn.started" (hasheq))
+          (make-test-event "assistant.message.completed" (hasheq 'messageId "m1" 'content "Answer"))))
+  ;; Add 10 tool entries
+  (define tool-events
+    (for*/list ([i (in-range 5)])
+      (list
+       (make-test-event "tool.call.started"
+                        (hasheq 'id (format "tc-~a" i) 'name "read" 'arguments (format "/tmp/f~a" i)))
+       (make-test-event "tool.call.completed" (hasheq 'name "read" 'result (format "data-~a" i))))))
+  (define state (simulate-events s0 (append base-events (apply append tool-events))))
+  (define input-st (initial-input-state))
+  (define layout (compute-layout 40 5))
+  ;; Should not raise even with small transcript area
+  (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+  ;; Verify transcript has all entries
+  (check-equal? (transcript-length state)
+                11 ; 1 assistant + 5 tool-start + 5 tool-end
+                "all entries preserved in transcript"))
+
+;; ============================================================
+;; Wave 7: TUI render combination tests
+;; ============================================================
+
+;; T12: render-transcript with streaming + non-zero scroll-offset
+;; Risk: Streaming text hidden from scrolled user
+(test-case "render with streaming text and scroll offset"
+  ;; Build transcript with many entries
+  (define s0
+    (for/fold ([s (initial-ui-state)]) ([i (in-range 30)])
+      (add-transcript-entry s (make-entry 'assistant (format "Line ~a" i) 0 (hash)))))
+  ;; Add streaming text and scroll
+  (define state (struct-copy ui-state s0 [streaming-text "Streaming..."] [scroll-offset 10]))
+  ;; render-status-bar should include scroll indicator
+  (define status-line (render-status-bar state 80))
+  (define status-text (styled-line->text status-line))
+  (check-true (string-contains? status-text "↑") "scroll indicator in status bar")
+  ;; render-transcript should not error with streaming + scroll
+  (define-values (lines _st) (render-transcript state 20 80))
+  (check-true (positive? (length lines)) "render-transcript produces lines"))
+
+;; T13: render-status-bar with status-message + busy + pending-tool-name
+;; Risk: Status message hides tool name
+(test-case "status bar with status-message + busy + pending-tool-name all set"
+  (define state
+    (struct-copy ui-state
+                 (initial-ui-state)
+                 [busy? #t]
+                 [pending-tool-name "read"]
+                 [status-message "Compacting..."]))
+  (define line (render-status-bar state 80))
+  (define text (styled-line->text line))
+  ;; status-message should take priority in ui-status-text
+  (check-true (string-contains? text "Compacting...") "status message appears")
+  (check-true (string-contains? text "*") "busy marker visible"))
+
+;; T14: render-status-bar with queue-counts
+;; Risk: Multi-queue display formatting
+(test-case "status bar with queue-counts shows queue info"
+  (define state
+    (struct-copy ui-state (initial-ui-state) [queue-counts (hasheq 'steering 3 'followup 1)]))
+  (define line (render-status-bar state 80))
+  (define text (styled-line->text line))
+  (check-true (or (string-contains? text "steering")
+                  (string-contains? text "3")
+                  (string-contains? text "followup")
+                  (string-contains? text "1"))
+              "queue counts visible in status bar"))
+
+;; T15: Overlay rendering with content exceeding transcript height
+;; Risk: Content truncation
+(test-case "overlay rendering with content exceeding transcript height"
+  (define ubuf (make-mock-ubuf 40 8))
+  ;; Create overlay with many content lines
+  (define overlay-content
+    (for/list ([i (in-range 20)])
+      (styled-line (list (styled-segment (format "Option ~a" i) '())))))
+  (define state (show-overlay (initial-ui-state) 'command-palette overlay-content ""))
+  (define input-st (initial-input-state))
+  (define layout (compute-layout 40 8))
+  ;; Should render without error even when overlay exceeds height
+  (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
+
+;; T16: Widget lines overflow past status row
+;; Risk: Widget silently dropped
+(test-case "extension widgets render without error even with many lines"
+  (define ubuf (make-mock-ubuf 80 24))
+  ;; Create state with extension widgets
+  (define widgets
+    (hasheq (cons 'ext 'key)
+            (for/list ([i (in-range 10)])
+              (styled-line (list (styled-segment (format "Widget line ~a" i) '()))))))
+  (define state (struct-copy ui-state (initial-ui-state) [extension-widgets widgets]))
+  (define input-st (initial-input-state))
+  (define layout (compute-layout 80 24))
+  ;; Should render without error (widgets may be truncated)
+  (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
+
+  ;; ============================================================
+  ;; Wave v0.10.6: Thinking block rendering
+  ;; ============================================================
+
+  (test-case "model.stream.thinking accumulates thinking text"
     (define s0 (initial-ui-state))
     (define events
       (list (make-test-event "turn.started" (hasheq))
-            (make-test-event "model.stream.delta" (hasheq 'delta "CL answer"))
-            (make-test-event "assistant.message.completed"
-                             (hasheq 'messageId "m1" 'content "CL answer"))
-            (make-test-event "tool.call.started"
-                             (hasheq 'id "tc-1" 'name "read"
-                                     'arguments "/tmp/x"))
-            (make-test-event "tool.call.completed"
-                             (hasheq 'name "read" 'result "file data"))))
+            (make-test-event "model.stream.thinking" (hasheq 'delta "Let me think"))
+            (make-test-event "model.stream.thinking" (hasheq 'delta " about this"))))
+    (define state (simulate-events s0 events))
+    (check-equal? (ui-state-streaming-thinking state) "Let me think about this")
+    (check-true (ui-busy? state)))
+
+  (test-case "thinking text renders in transcript without error"
+    (define ubuf (make-mock-ubuf 80 24))
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.thinking" (hasheq 'delta "Reasoning step 1"))
+            (make-test-event "model.stream.thinking" (hasheq 'delta " step 2"))))
     (define state (simulate-events s0 events))
     (define input-st (initial-input-state))
     (define layout (compute-layout 80 24))
-    ;; Should not raise
-    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
-    ;; Verify transcript has all 3 entries
-    (check-equal? (transcript-types state) '(assistant tool-start tool-end)))
+    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
 
-   (test-case
-    "render shows streaming text below committed entries"
-    (define ubuf (make-mock-ubuf 80 24))
-    ;; Build state with: tool-start in transcript + streaming text active
+  (test-case "turn.completed clears streaming-thinking"
     (define s0 (initial-ui-state))
     (define events
       (list (make-test-event "turn.started" (hasheq))
-            (make-test-event "assistant.message.completed"
-                             (hasheq 'messageId "m1" 'content "Previous answer"))
-            (make-test-event "tool.call.started"
-                             (hasheq 'id "tc-1" 'name "bash"
-                                     'arguments "ls"))))
-    ;; Add streaming text to simulate mid-stream state
-    (define state (struct-copy ui-state (simulate-events s0 events)
-                                [streaming-text "New answer streaming"]))
-    (define input-st (initial-input-state))
-    (define layout (compute-layout 80 24))
-    ;; Should not raise — streaming text renders below committed entries
-    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
-    ;; Verify state has streaming text
-    (check-equal? (ui-state-streaming-text state) "New answer streaming"))
+            (make-test-event "model.stream.thinking" (hasheq 'delta "thinking"))
+            (make-test-event "turn.completed" (hasheq))))
+    (define state (simulate-events s0 events))
+    (check-false (ui-state-streaming-thinking state))
+    (check-false (ui-busy? state)))
 
-   (test-case
-    "render does not lose content with many tool messages"
-    (define ubuf (make-mock-ubuf 40 5))
-    ;; Build state with many tool entries + 1 assistant entry
+  (test-case "turn.cancelled clears streaming-thinking"
     (define s0 (initial-ui-state))
-    (define base-events
+    (define events
       (list (make-test-event "turn.started" (hasheq))
-            (make-test-event "assistant.message.completed"
-                             (hasheq 'messageId "m1" 'content "Answer"))))
-    ;; Add 10 tool entries
-    (define tool-events
-      (for*/list ([i (in-range 5)])
-        (list (make-test-event "tool.call.started"
-                               (hasheq 'id (format "tc-~a" i)
-                                       'name "read"
-                                       'arguments (format "/tmp/f~a" i)))
-              (make-test-event "tool.call.completed"
-                               (hasheq 'name "read"
-                                       'result (format "data-~a" i))))))
-    (define state (simulate-events s0 (append base-events (apply append tool-events))))
-    (define input-st (initial-input-state))
-    (define layout (compute-layout 40 5))
-    ;; Should not raise even with small transcript area
-    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout)))
-    ;; Verify transcript has all entries
-    (check-equal? (transcript-length state) 11 ; 1 assistant + 5 tool-start + 5 tool-end
-                  "all entries preserved in transcript"))
+            (make-test-event "model.stream.thinking" (hasheq 'delta "thinking"))
+            (make-test-event "turn.cancelled" (hasheq))))
+    (define state (simulate-events s0 events))
+    (check-false (ui-state-streaming-thinking state)))
 
-   ;; ============================================================
-   ;; Wave 7: TUI render combination tests
-   ;; ============================================================
+  (test-case "model.stream.completed clears streaming-thinking"
+    (define s0 (initial-ui-state))
+    (define events
+      (list (make-test-event "turn.started" (hasheq))
+            (make-test-event "model.stream.thinking" (hasheq 'delta "thinking"))
+            (make-test-event "model.stream.completed" (hasheq))))
+    (define state (simulate-events s0 events))
+    (check-false (ui-state-streaming-thinking state))))
 
-   ;; T12: render-transcript with streaming + non-zero scroll-offset
-   ;; Risk: Streaming text hidden from scrolled user
-   (test-case
-    "render with streaming text and scroll offset"
-    ;; Build transcript with many entries
-    (define s0
-      (for/fold ([s (initial-ui-state)]) ([i (in-range 30)])
-        (add-transcript-entry s (make-entry 'assistant (format "Line ~a" i) 0 (hash)))))
-    ;; Add streaming text and scroll
-    (define state (struct-copy ui-state s0
-                               [streaming-text "Streaming..."]
-                               [scroll-offset 10]))
-    ;; render-status-bar should include scroll indicator
-    (define status-line (render-status-bar state 80))
-    (define status-text (styled-line->text status-line))
-    (check-true (string-contains? status-text "↑") "scroll indicator in status bar")
-    ;; render-transcript should not error with streaming + scroll
-    (define-values (lines _st) (render-transcript state 20 80))
-    (check-true (positive? (length lines))
-                "render-transcript produces lines"))
-
-   ;; T13: render-status-bar with status-message + busy + pending-tool-name
-   ;; Risk: Status message hides tool name
-   (test-case
-    "status bar with status-message + busy + pending-tool-name all set"
-    (define state (struct-copy ui-state (initial-ui-state)
-                               [busy? #t]
-                               [pending-tool-name "read"]
-                               [status-message "Compacting..."]))
-    (define line (render-status-bar state 80))
-    (define text (styled-line->text line))
-    ;; status-message should take priority in ui-status-text
-    (check-true (string-contains? text "Compacting...")
-                "status message appears")
-    (check-true (string-contains? text "*") "busy marker visible"))
-
-   ;; T14: render-status-bar with queue-counts
-   ;; Risk: Multi-queue display formatting
-   (test-case
-    "status bar with queue-counts shows queue info"
-    (define state (struct-copy ui-state (initial-ui-state)
-                               [queue-counts (hasheq 'steering 3 'followup 1)]))
-    (define line (render-status-bar state 80))
-    (define text (styled-line->text line))
-    (check-true (or (string-contains? text "steering")
-                    (string-contains? text "3")
-                    (string-contains? text "followup")
-                    (string-contains? text "1"))
-                "queue counts visible in status bar"))
-
-   ;; T15: Overlay rendering with content exceeding transcript height
-   ;; Risk: Content truncation
-   (test-case
-    "overlay rendering with content exceeding transcript height"
-    (define ubuf (make-mock-ubuf 40 8))
-    ;; Create overlay with many content lines
-    (define overlay-content
-      (for/list ([i (in-range 20)])
-        (styled-line (list (styled-segment (format "Option ~a" i) '())))))
-    (define state (show-overlay (initial-ui-state)
-                                'command-palette overlay-content ""))
-    (define input-st (initial-input-state))
-    (define layout (compute-layout 40 8))
-    ;; Should render without error even when overlay exceeds height
-    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
-
-   ;; T16: Widget lines overflow past status row
-   ;; Risk: Widget silently dropped
-   (test-case
-    "extension widgets render without error even with many lines"
-    (define ubuf (make-mock-ubuf 80 24))
-    ;; Create state with extension widgets
-    (define widgets
-      (hasheq (cons 'ext 'key)
-              (for/list ([i (in-range 10)])
-                (styled-line (list (styled-segment (format "Widget line ~a" i) '()))))))
-    (define state (struct-copy ui-state (initial-ui-state)
-                               [extension-widgets widgets]))
-    (define input-st (initial-input-state))
-    (define layout (compute-layout 80 24))
-    ;; Should render without error (widgets may be truncated)
-    (check-not-exn (lambda () (run-render-frame! ubuf state input-st layout))))
-
-   ;; ============================================================
-   ;; Run tests
-   ;; ============================================================
+;; ============================================================
+;; Run tests
+;; ============================================================
 
 (module+ main
   (run-tests renderer-tests))
