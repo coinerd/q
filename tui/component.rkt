@@ -16,26 +16,40 @@
          "render.rkt"
          "state.rkt")
 
-(provide
- ;; Struct
- (struct-out q-component)
- ;; Constructor
- make-q-component
- ;; Operations
- component-render
- component-invalidate!
- component-compose
- ;; Cache query
- component-cached-width)
+;; Struct
+(provide (struct-out q-component)
+         ;; Constructor
+         make-q-component
+         ;; Operations
+         component-render
+         component-invalidate!
+         component-compose
+         ;; Cache query
+         component-cached-width
+         ;; Input handling
+         component-handle-input
+         input-consumed
+         input-bubble
+         input-action
+         input-consumed?
+         input-bubble?
+         input-action?
+         input-action-data
+         ;; Focus
+         focusable-components
+         cycle-focus)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Struct
 ;; ═══════════════════════════════════════════════════════════════════
 
-(struct q-component (render-fn    ; ui-state width → (listof styled-line)
-                     invalidate-fn ; → void
-                     cache-box    ; (boxof (or/c #f (cons width lines)))
-                     id)          ; symbol
+(struct q-component
+        (render-fn ; ui-state width → (listof styled-line)
+         invalidate-fn ; → void
+         cache-box ; (boxof (or/c #f (cons width lines)))
+         id ; symbol
+         handle-input-fn ; (or/c #f (data ui-state → (values ui-state input-result)))
+         wants-focus?) ; boolean — whether this component can receive focus
   #:transparent)
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -43,9 +57,11 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (make-q-component render-fn
-                           #:id [id 'anonymous]
-                           #:invalidate-fn [invalidate-fn void])
-  (q-component render-fn invalidate-fn (box #f) id))
+                          #:id [id 'anonymous]
+                          #:invalidate-fn [invalidate-fn void]
+                          #:handle-input [handle-input-fn #f]
+                          #:wants-focus? [wants-focus? #f])
+  (q-component render-fn invalidate-fn (box #f) id handle-input-fn wants-focus?))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Operations
@@ -57,9 +73,8 @@
 (define (component-render comp state width)
   (define cache (unbox (q-component-cache-box comp)))
   (cond
-    [(and cache (= (car cache) width))
-     ;; Cache hit — same width, return cached lines
-     (cdr cache)]
+    ;; Cache hit — same width, return cached lines
+    [(and cache (= (car cache) width)) (cdr cache)]
     [else
      ;; Cache miss — compute, cache, return
      (define lines ((q-component-render-fn comp) state width))
@@ -80,3 +95,56 @@
 (define (component-cached-width comp)
   (define cache (unbox (q-component-cache-box comp)))
   (and cache (car cache)))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Input result constructors
+;; ═══════════════════════════════════════════════════════════════════
+
+(define (input-consumed)
+  '(consumed))
+(define (input-bubble)
+  '(bubble))
+(define (input-action action-data)
+  (list 'action action-data))
+
+(define (input-consumed? r)
+  (equal? r '(consumed)))
+(define (input-bubble? r)
+  (and (pair? r) (eq? (car r) 'bubble)))
+(define (input-action? r)
+  (and (pair? r) (eq? (car r) 'action)))
+(define (input-action-data r)
+  (cadr r))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Input dispatch
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Dispatch input to a component. If component has no handle-input-fn,
+;; return (values state 'bubble).
+(define (component-handle-input comp data state)
+  (define fn (q-component-handle-input-fn comp))
+  (if fn
+      (fn data state)
+      (values state (input-bubble))))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Focus management
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Find focusable components in a list
+(define (focusable-components components)
+  (filter (lambda (c) (q-component-wants-focus? c)) components))
+
+;; Cycle focus to next focusable component
+(define (cycle-focus components current-id [direction 1])
+  (define focusable (focusable-components components))
+  (if (null? focusable)
+      #f
+      (let* ([idx (for/first ([c focusable]
+                              [i (in-naturals)]
+                              #:when (eq? (q-component-id c) current-id))
+                    i)]
+             [current (or idx -1)]
+             [next (modulo (+ current direction) (length focusable))])
+        (q-component-id (list-ref focusable next)))))

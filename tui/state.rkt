@@ -82,6 +82,10 @@
          clear-custom-header
          clear-custom-footer
 
+         ;; Focus management
+         set-focused-component
+         clear-focused-component
+
          ;; Selection
          set-selection-anchor
          set-selection-end
@@ -123,6 +127,7 @@
          custom-header ; (or/c #f (listof styled-line)) — extension-provided header
          custom-footer ; (or/c #f (listof styled-line)) — extension-provided footer
          mock-provider? ; boolean — #t when using mock/fallback provider (BUG-55)
+         focused-component ; (or/c #f symbol?) — id of component with focus
          )
   #:transparent)
 
@@ -241,6 +246,7 @@
             #f ; custom-header
             #f ; custom-footer
             #f ; mock-provider?
+            #f ; focused-component
             ))
 
 ;; ============================================================
@@ -670,6 +676,16 @@
 
 (define (clear-custom-footer state)
   (struct-copy ui-state state [custom-footer #f]))
+
+;; ============================================================
+;; Focus management
+;; ============================================================
+
+(define (set-focused-component state component-id)
+  (struct-copy ui-state state [focused-component component-id]))
+
+(define (clear-focused-component state)
+  (struct-copy ui-state state [focused-component #f]))
 
 ;; ============================================================
 ;; String helpers
