@@ -41,6 +41,8 @@
          migrate-session-log!
          ;; Session forking (#500)
          fork-session!
+         ;; Session import (#1113)
+         import-session!
          ;; Session naming
          write-session-name!
          ;; In-memory session manager (GC-18)
@@ -341,6 +343,55 @@
 ;; ============================================================
 ;; Session naming
 ;; ============================================================
+
+;; ============================================================
+;; Session import (#1113)
+;; ============================================================
+
+(define (import-session! source-path dest-session-dir)
+  ;; Import a session from an external JSONL file into a new session directory.
+  ;; Validates source JSONL line-by-line, generates a new session ID,
+  ;; copies valid entries to a new session file with a version header.
+  ;; Returns the new session ID.
+  ;;
+  ;; source-path: path to source JSONL file
+  ;; dest-session-dir: directory for the new session
+  (cond
+    [(not (file-exists? source-path))
+     (error 'import-session! "Source file not found: ~a" source-path)]
+    [else
+     ;; Validate source JSONL
+     (define-values (raw corrupted-count) (jsonl-read-all-valid-with-count source-path))
+     (when (> corrupted-count 0)
+       (fprintf (current-error-port)
+                "WARNING: ~a corrupted lines skipped during import from ~a\n"
+                corrupted-count
+                source-path))
+     (when (null? raw)
+       (error 'import-session! "No valid entries found in source: ~a" source-path))
+     ;; Generate new session ID
+     (define new-session-id (format "imported-~a" (current-inexact-milliseconds)))
+     ;; Create destination directory
+     (define dest-path (build-path dest-session-dir (format "~a.jsonl" new-session-id)))
+     (ensure-parent-dirs* dest-path)
+     ;; Write version header + imported entries
+     (define header-msg
+       (make-message (format "session-version-header-~a" (current-inexact-milliseconds))
+                     #f
+                     'system
+                     'session-info
+                     '()
+                     (current-seconds)
+                     (hasheq 'version
+                             CURRENT-SESSION-VERSION
+                             'imported-from
+                             (path->string source-path)
+                             'imported-at
+                             (current-seconds))))
+     (define messages (map jsexpr->message raw))
+     (define all-entries (cons header-msg messages))
+     (jsonl-append-entries! dest-path (map message->jsexpr all-entries))
+     new-session-id]))
 
 (define (write-session-name! log-path name)
   ;; Persist session name as a session-info entry.

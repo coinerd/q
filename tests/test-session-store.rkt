@@ -8,7 +8,8 @@
          racket/list
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
-         "../runtime/session-index.rkt")
+         "../runtime/session-index.rkt"
+         "../util/jsonl.rkt")
 
 ;; ── Helpers ──
 
@@ -772,6 +773,53 @@
     (check-equal? (length original) 2)
     (delete-directory/files dir #:must-exist? #f))
   )
+
+ ;; ============================================================
+ ;; Session import tests (#1113)
+ ;; ============================================================
+
+ (test-case
+  "import-session! imports valid JSONL into new session"
+  (define dir (make-temporary-file "q-import-test-~a" 'directory #f))
+  (define source-path (build-path dir "source.jsonl"))
+  (define dest-dir (build-path dir "sessions"))
+  (make-directory dest-dir)
+  ;; Write a valid source JSONL
+  (define msg1 (make-message "m1" #f 'user 'text (list (make-text-part "Hello")) (current-seconds) (hash)))
+  (define msg2 (make-message "m2" #f 'assistant 'text (list (make-text-part "World")) (current-seconds) (hash)))
+  (jsonl-append-entries! source-path (map message->jsexpr (list msg1 msg2)))
+  ;; Import
+  (define new-id (import-session! source-path dest-dir))
+  (check-true (string? new-id))
+  (check-true (string-contains? new-id "imported-"))
+  ;; Verify imported file
+  (define dest-path (build-path dest-dir (format "~a.jsonl" new-id)))
+  (check-true (file-exists? dest-path))
+  (define loaded (load-session-log dest-path))
+  ;; Should have header + 2 entries = 3
+  (check-equal? (length loaded) 3)
+  ;; First imported entry should be msg1 (header is entry 0)
+  (check-equal? (message-role (second loaded)) 'user)
+  (check-equal? (message-role (third loaded)) 'assistant)
+  (delete-directory/files dir #:must-exist? #f))
+
+ (test-case
+  "import-session! errors on missing source"
+  (define dir (make-temporary-file "q-import-test-~a" 'directory #f))
+  (check-exn exn:fail?
+             (lambda ()
+               (import-session! "/nonexistent/path.jsonl" dir)))
+  (delete-directory/files dir #:must-exist? #f))
+
+ (test-case
+  "import-session! errors on empty source"
+  (define dir (make-temporary-file "q-import-test-~a" 'directory #f))
+  (define source-path (build-path dir "empty.jsonl"))
+  (call-with-output-file source-path void #:exists 'truncate)
+  (check-exn exn:fail?
+             (lambda ()
+               (import-session! source-path dir)))
+  (delete-directory/files dir #:must-exist? #f))
 
 ;; Run
 (run-tests test-session-store)

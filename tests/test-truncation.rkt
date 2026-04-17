@@ -7,7 +7,9 @@
          "../util/truncation.rkt")
 
 (define (make-lines n)
-  (string-join (for/list ([i (in-range n)]) (format "Line ~a" i)) "\n"))
+  (string-join (for/list ([i (in-range n)])
+                 (format "Line ~a" i))
+               "\n"))
 
 (define (make-bytes n)
   (make-string n #\x))
@@ -56,4 +58,17 @@
 
 (test-case "constants have expected values"
   (check-equal? MAX-OUTPUT-BYTES 50000)
-  (check-equal? MAX-OUTPUT-LINES 2000))
+  (check-equal? MAX-OUTPUT-LINES 2000)
+  (check-equal? MAX-OUTPUT-CHARS 50000))
+
+(test-case "truncate-to-n-chars unchanged when within limit"
+  (check-equal? (truncate-to-n-chars "hello" 10) "hello"))
+
+(test-case "truncate-to-n-chars truncates and appends notice"
+  (define result (truncate-to-n-chars (make-string 100 #\x) 50))
+  (check-equal? (string-length result) 65) ; 50 + "\n...(truncated)" (15 chars)
+  (check-true (string-contains? result "...(truncated)")))
+
+(test-case "truncate-to-n-chars exact length passes through"
+  (define s (make-string 50 #\a))
+  (check-equal? (truncate-to-n-chars s 50) s))
