@@ -34,6 +34,7 @@
 
          default-keymap
          load-user-keymap
+         load-keybindings
          shortcut-specs->keymap)
 
 ;; ============================================================
@@ -269,6 +270,31 @@
 ;; Convert a list of shortcut hash descriptors to a keymap.
 ;; Each hash should have keys: "key" (string), "action" (string).
 ;; Returns a keymap with all extension shortcuts bound.
+;; ============================================================
+;; Public keybindings loading API (#1117)
+;; ============================================================
+
+;; Load keybindings from a specific path or the default location.
+;; Returns a merged keymap (default + user overrides).
+;; If path is #f, uses ~/.q/keybindings.json.
+;; If the file doesn't exist or is invalid, returns default keymap only.
+(define (load-keybindings [path #f])
+  (define base (default-keymap))
+  (define kb-path (or path (build-path (global-config-dir) "keybindings.json")))
+  (define user-bindings
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-warning (format "keymap: failed to load ~a: ~a" kb-path (exn-message e)))
+                       #f)])
+      (and (file-exists? kb-path) (load-keybindings-file kb-path))))
+  (when user-bindings
+    (define user-km (make-keymap))
+    (for ([b (in-list user-bindings)])
+      (when (and b (pair? b))
+        (keymap-add! user-km (car b) (cdr b))))
+    (keymap-merge base user-km))
+  base)
+
 (define (shortcut-specs->keymap specs)
   (define km (make-keymap))
   (for ([spec (in-list specs)])

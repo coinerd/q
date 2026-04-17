@@ -21,7 +21,8 @@
          "../llm/provider.rkt"
          "../runtime/session-index.rkt"
          "../tui/tui-keybindings.rkt"
-         "../tui/tui-render-loop.rkt")
+         "../tui/tui-render-loop.rkt"
+         "../cli/args.rkt")
 
 (provide run-tui
          run-tui-with-runtime
@@ -50,6 +51,12 @@
   ;; cli-cfg is a cli-config struct
   (define bus (hash-ref rt-config 'event-bus #f))
   (define sess (make-agent-session rt-config))
+
+  ;; Wire custom keybindings path if specified (#1118)
+  (define kb-path (and (cli-config? cli-cfg) (cli-config-keybindings-path cli-cfg)))
+  (when kb-path
+    (current-keybindings-path kb-path)
+    (reload-keymap!))
 
   ;; Determine session dir before creating TUI context (Fix #513)
   (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))

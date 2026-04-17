@@ -44,12 +44,13 @@
          session-dir ; path-string or #f
          sessions-subcommand ; symbol: 'list | 'info | 'delete | #f
          sessions-args ; list of string (subcommand args)
+         keybindings-path ; path-string or #f — custom keybindings file (#1118)
          )
   #:transparent)
 
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
-  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '()))
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f))
 
 ;; ============================================================
 ;; Flag definition table (QUAL-12)
@@ -102,7 +103,8 @@
                      (max-turns . 10)
                      (no-tools? . #f)
                      (tools . ())
-                     (session-dir . #f)))
+                     (session-dir . #f)
+                     (keybindings-path . #f)))
 
 ;; Construct a cli-config from an accumulator alist.
 (define (acc->cli-config acc)
@@ -139,7 +141,8 @@
               (reverse (acc-ref acc 'tools))
               (acc-ref acc 'session-dir)
               #f ; sessions-subcommand
-              '())) ; sessions-args
+              '() ; sessions-args
+              (acc-ref acc 'keybindings-path)))
 
 ;; ============================================================
 ;; Flag table — all option definitions
@@ -253,7 +256,15 @@
                   'mode
                   "RPC mode (stdin/stdout JSONL protocol)"
                   #f
-                  (lambda (val acc) (acc-set acc 'mode 'rpc)))))
+                  (lambda (val acc) (acc-set acc 'mode 'rpc)))
+        ;; --keybindings <path>
+        (flag-def "keybindings"
+                  #f
+                  "keybindings"
+                  'string
+                  "Path to custom keybindings JSON file"
+                  #f
+                  (lambda (val acc) (acc-set acc 'keybindings-path val)))))
 
 ;; Build lookup tables for fast matching
 (define long-flag-table
@@ -316,7 +327,7 @@
        (cond
          [(eq? result 'help) (make-help-config)]
          [(eq? result 'version)
-          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '())]
+          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f)]
          [else (loop (add1 i) result)]))]
     [(or (eq? t 'string) (eq? t 'integer) (eq? t 'accumulate))
      (if (< (add1 i) n)
@@ -354,7 +365,7 @@
            (if sub-sym
                (let ([rest (for/list ([j (in-range (+ i 2) n)])
                              (vector-ref vec j))])
-                 (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f sub-sym rest))
+                 (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f sub-sym rest #f))
                (make-help-config)))
          (make-help-config))]
     ;; Default: treat as prompt

@@ -60,7 +60,10 @@
          input-yank
          input-cursor-word-left
          input-cursor-word-right
-         input-insert-string)
+         input-insert-string
+         ;; ── Keybindings config (#1117) ──
+         reload-keymap!
+         current-keybindings-path)
 
 ;; ============================================================
 ;; TUI context
@@ -196,16 +199,25 @@
 ;; Cached merged keymap (default + user overrides)
 (define cached-keymap #f)
 
+;; Parameter for custom keybindings file path (#1117)
+(define current-keybindings-path (make-parameter #f))
+
 (define (get-active-keymap)
   ;; Return the merged keymap (default + user overrides).
-  ;; Loads and caches on first call.
+  ;; Loads and caches on first call. Uses current-keybindings-path
+  ;; if set, otherwise defaults to ~/.q/keybindings.json.
   (cond
     [cached-keymap cached-keymap]
     [else
-     (define base (default-keymap))
-     (define user (load-user-keymap))
-     (when user
-       (keymap-merge base user))
+     (define base
+       (if (current-keybindings-path)
+           (load-keybindings (current-keybindings-path))
+           (default-keymap)))
+     ;; If using default-keymap, also merge user keybindings from default location
+     (when (not (current-keybindings-path))
+       (define user (load-user-keymap))
+       (when user
+         (keymap-merge base user)))
      (set! cached-keymap base)
      base]))
 
