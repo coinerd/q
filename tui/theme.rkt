@@ -6,7 +6,10 @@
 ;; Default dark theme matches the original hardcoded colors.
 
 (require racket/contract
-         racket/string)
+         racket/string
+         racket/port
+         json
+         racket/file)
 
 (provide tui-theme
          tui-theme?
@@ -50,7 +53,12 @@
          theme-color->sgr
          theme-color->sgr-bg
          theme-style->sgr
-         register-theme!)
+         register-theme!
+         tui-theme-field-names
+         validate-color-value
+         load-theme-from-json
+         json-hash->theme
+         theme-field-accessor)
 
 ;; ============================================================
 ;; Theme struct — all fields are ANSI color names or #f for default
@@ -320,3 +328,117 @@
 (define (string-prefix? s prefix)
   (and (>= (string-length s) (string-length prefix))
        (string=? (substring s 0 (string-length prefix)) prefix)))
+
+;; ============================================================
+;; JSON theme loading (GC-25)
+;; ============================================================
+
+;; Canonical field names for JSON serialization (in struct order)
+(define tui-theme-field-names
+  '(text accent
+         muted
+         error
+         success
+         warning
+         tool-title
+         md-heading
+         md-code
+         md-code-block-bg
+         md-bold
+         md-italic
+         md-link
+         md-blockquote
+         md-list-bullet
+         md-hr
+         status-bg
+         selection-bg
+         input-prompt
+         border
+         md-code-block-border
+         md-quote-border
+         tool-diff-added
+         tool-diff-removed
+         tool-diff-context
+         syntax-comment
+         syntax-keyword
+         syntax-string
+         syntax-number
+         thinking-indicator
+         border-accent
+         border-muted))
+
+;; Validate a color value from JSON
+;; Returns the validated value or #f
+(define (validate-color-value v)
+  (cond
+    [(not v) #f]
+    [(eq? v 'null) #f]
+    [(string? v) v]
+    [(symbol? v) v]
+    [else #f]))
+
+;; Load a theme from a JSON file.
+;; Returns a tui-theme, or #f if the file doesn't exist or is invalid.
+;; JSON format: {"text": "white", "accent": "cyan", ...}
+;; Color values: "white", "bright-black", "38;5;202", or null for default.
+(define (load-theme-from-json path)
+  (with-handlers ([exn:fail:filesystem? (lambda (e) #f)]
+                  [exn:fail:read? (lambda (e) #f)]
+                  [exn:fail? (lambda (e) #f)])
+    (if (not (file-exists? path))
+        #f
+        (call-with-input-file path
+                              (lambda (in)
+                                (define data (read-json in))
+                                (if (hash? data)
+                                    (json-hash->theme data)
+                                    #f))))))
+
+;; Convert a JSON hash to a tui-theme.
+;; Unspecified fields inherit from default-dark-theme.
+(define (json-hash->theme h)
+  (define base default-dark-theme)
+  (apply tui-theme
+         (for/list ([field (in-list tui-theme-field-names)])
+           (define json-key field)
+           (if (hash-has-key? h json-key)
+               (let ([v (validate-color-value (hash-ref h json-key))])
+                 (or v ((theme-field-accessor field) base)))
+               ((theme-field-accessor field) base)))))
+
+;; Get accessor for a theme field by name
+(define (theme-field-accessor field-name)
+  (case field-name
+    [(text) tui-theme-text]
+    [(accent) tui-theme-accent]
+    [(muted) tui-theme-muted]
+    [(error) tui-theme-error]
+    [(success) tui-theme-success]
+    [(warning) tui-theme-warning]
+    [(tool-title) tui-theme-tool-title]
+    [(md-heading) tui-theme-md-heading]
+    [(md-code) tui-theme-md-code]
+    [(md-code-block-bg) tui-theme-md-code-block-bg]
+    [(md-bold) tui-theme-md-bold]
+    [(md-italic) tui-theme-md-italic]
+    [(md-link) tui-theme-md-link]
+    [(md-blockquote) tui-theme-md-blockquote]
+    [(md-list-bullet) tui-theme-md-list-bullet]
+    [(md-hr) tui-theme-md-hr]
+    [(status-bg) tui-theme-status-bg]
+    [(selection-bg) tui-theme-selection-bg]
+    [(input-prompt) tui-theme-input-prompt]
+    [(border) tui-theme-border]
+    [(md-code-block-border) tui-theme-md-code-block-border]
+    [(md-quote-border) tui-theme-md-quote-border]
+    [(tool-diff-added) tui-theme-tool-diff-added]
+    [(tool-diff-removed) tui-theme-tool-diff-removed]
+    [(tool-diff-context) tui-theme-tool-diff-context]
+    [(syntax-comment) tui-theme-syntax-comment]
+    [(syntax-keyword) tui-theme-syntax-keyword]
+    [(syntax-string) tui-theme-syntax-string]
+    [(syntax-number) tui-theme-syntax-number]
+    [(thinking-indicator) tui-theme-thinking-indicator]
+    [(border-accent) tui-theme-border-accent]
+    [(border-muted) tui-theme-border-muted]
+    [else (lambda (t) #f)]))
