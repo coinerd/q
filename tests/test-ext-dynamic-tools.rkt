@@ -184,3 +184,100 @@
   (define fn (hash-ref (car tools) 'function))
   (check-equal? (hash-ref fn 'name) "ext_tool")
   (check-equal? (hash-ref fn 'description) "Extension tool"))
+
+;; ============================================================
+;; ext-register-tool! with #:prompt-guidelines
+;; ============================================================
+
+(test-case "ext-register-tool! with #:prompt-guidelines stores guidelines"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "s-pg"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg))
+  (ext-register-tool! ctx
+                      "guided_tool"
+                      "A tool with guidelines"
+                      (hasheq 'type "object")
+                      (lambda (args) (make-success-result "ok"))
+                      #:prompt-guidelines "Always call this tool before responding.")
+  (define t (lookup-tool reg "guided_tool"))
+  (check-not-false t)
+  (check-equal? (tool-prompt-guidelines t) "Always call this tool before responding."))
+
+(test-case "ext-register-tool! without #:prompt-guidelines defaults to #f"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "s-no-pg"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg))
+  (ext-register-tool! ctx
+                      "no_guide"
+                      "No guidelines"
+                      (hasheq 'type "object")
+                      (lambda (args) (make-success-result "ok")))
+  (define t (lookup-tool reg "no_guide"))
+  (check-not-false t)
+  (check-false (tool-prompt-guidelines t)))
+
+(test-case "ext-register-tool! #:prompt-guidelines appears in jsexpr"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "s-pg-js"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg))
+  (ext-register-tool! ctx
+                      "js_guide"
+                      "Tool with guideline in jsexpr"
+                      (hasheq 'type "object")
+                      (lambda (args) (make-success-result "ok"))
+                      #:prompt-guidelines "Use this tool for search.")
+  (define tools (list-tools-jsexpr reg))
+  (check-equal? (length tools) 1)
+  (define fn (hash-ref (car tools) 'function))
+  (check-equal? (hash-ref fn 'promptGuidelines) "Use this tool for search."))
+
+;; ============================================================
+;; ext-set-active-tools!
+;; ============================================================
+
+(test-case "ext-set-active-tools! restricts visible tools"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "s-active"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg))
+  (ext-register-tool! ctx
+                      "tool_alpha"
+                      "Alpha"
+                      (hasheq 'type "object")
+                      (lambda (args) (make-success-result "a")))
+  (ext-register-tool! ctx
+                      "tool_beta"
+                      "Beta"
+                      (hasheq 'type "object")
+                      (lambda (args) (make-success-result "b")))
+  ;; Both visible initially
+  (check-equal? (length (list-tools-jsexpr reg)) 2)
+  ;; Restrict to only tool_alpha
+  (ext-set-active-tools! ctx '("tool_alpha"))
+  (check-equal? (length (list-tools-jsexpr reg)) 1)
+  (check-equal? (hash-ref (hash-ref (car (list-tools-jsexpr reg)) 'function) 'name) "tool_alpha")
+  ;; Both tools still registered
+  (check-not-false (lookup-tool reg "tool_beta")))
+
+(test-case "ext-set-active-tools! errors when tool-registry is #f"
+  (define ctx
+    (make-extension-ctx #:session-id "s-no-reg-active"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)))
+  (check-exn exn:fail? (lambda () (ext-set-active-tools! ctx '("some_tool")))))

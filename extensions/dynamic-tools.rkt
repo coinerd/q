@@ -16,14 +16,15 @@
          "../tools/tool.rkt")
 
 (provide (contract-out [ext-register-tool!
-                        (-> extension-ctx?
-                            string? ; name
-                            string? ; description
-                            hash? ; schema (JSON Schema)
-                            procedure? ; handler (hash? -> tool-result?)
-                            void?)]
+                        (->* (extension-ctx? string? ; name
+                                             string? ; description
+                                             hash? ; schema (JSON Schema)
+                                             procedure?) ; handler (hash? -> tool-result?)
+                             (#:prompt-guidelines (or/c string? #f))
+                             void?)]
                        [ext-unregister-tool! (-> extension-ctx? string? void?)]
-                       [ext-list-dynamic-tools (-> extension-ctx? (listof string?))]))
+                       [ext-list-dynamic-tools (-> extension-ctx? (listof string?))]
+                       [ext-set-active-tools! (-> extension-ctx? (listof string?) void?)]))
 
 ;; ============================================================
 ;; ext-register-tool! : extension-ctx? string? string? hash? procedure? -> void?
@@ -31,14 +32,19 @@
 
 ;; Register a tool dynamically from an extension.
 ;; The tool-registry in the extension context must be set (not #f).
-(define (ext-register-tool! ctx name description schema handler)
+(define (ext-register-tool! ctx
+                            name
+                            description
+                            schema
+                            handler
+                            #:prompt-guidelines [prompt-guidelines #f])
   (define reg (ctx-tool-registry ctx))
   (unless reg
     (error
      'ext-register-tool!
      "no tool-registry available in extension context. \
             Ensure #:tool-registry is set when creating the context."))
-  (define t (make-tool name description schema handler))
+  (define t (make-tool name description schema handler #:prompt-guidelines prompt-guidelines))
   (register-tool! reg t))
 
 ;; ============================================================
@@ -62,3 +68,14 @@
   (if reg
       (tool-names reg)
       '()))
+
+;; ============================================================
+;; ext-set-active-tools! : extension-ctx? (listof string?) -> void?
+;; ============================================================
+
+;; Restrict active tools to the named set.
+(define (ext-set-active-tools! ctx active-names)
+  (define reg (ctx-tool-registry ctx))
+  (unless reg
+    (error 'ext-set-active-tools! "no tool-registry available in extension context"))
+  (set-active-tools! reg active-names))

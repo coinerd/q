@@ -2,6 +2,7 @@
 
 (require racket/contract
          racket/hash
+         racket/set
          (only-in racket/string string-trim)
          json
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
@@ -41,7 +42,8 @@
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)
                                                #:render-call (or/c procedure? #f)
-                                               #:render-result (or/c procedure? #f))
+                                               #:render-result (or/c procedure? #f)
+                                               #:prompt-guidelines (or/c string? #f))
                              tool?)]
                        [validate-tool-args (-> tool? hash? any/c)])
          tool-name
@@ -49,6 +51,7 @@
          tool-schema
          tool-execute
          tool-prompt-snippet
+         tool-prompt-guidelines
          tool->jsexpr
          merge-tool-lists
          validate-tool-schema
@@ -93,6 +96,10 @@
          tool-registry?
          register-tool!
          unregister-tool! ; reserved for SDK consumers
+         set-active-tools!
+         tool-active?
+         list-active-tools
+         list-active-tools-jsexpr
          lookup-tool
          list-tools
          list-tools-jsexpr
@@ -113,7 +120,9 @@
 ;; Tool struct
 ;; ============================================================
 
-(struct tool (name description schema execute prompt-snippet render-call render-result) #:transparent)
+(struct tool
+        (name description schema execute prompt-snippet prompt-guidelines render-call render-result)
+  #:transparent)
 
 (define (make-tool name
                    description
@@ -121,7 +130,8 @@
                    execute
                    #:prompt-snippet [prompt-snippet #f]
                    #:render-call [render-call #f]
-                   #:render-result [render-result #f])
+                   #:render-result [render-result #f]
+                   #:prompt-guidelines [prompt-guidelines #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -130,7 +140,7 @@
     (raise-argument-error 'make-tool "hash?" schema))
   (unless (procedure? execute)
     (raise-argument-error 'make-tool "procedure?" execute))
-  (tool name description schema execute prompt-snippet render-call render-result))
+  (tool name description schema execute prompt-snippet prompt-guidelines render-call render-result))
 
 ;; ============================================================
 ;; Tool schema validation (#672)
@@ -260,10 +270,10 @@
 ;; Tool registry
 ;; ============================================================
 
-(struct tool-registry (tools-box) #:transparent)
+(struct tool-registry (tools-box active-set-box) #:transparent)
 
 (define (make-tool-registry)
-  (tool-registry (make-hash)))
+  (tool-registry (make-hash) (box #f)))
 
 (define (register-tool! reg t)
   (unless (tool? t)
@@ -291,12 +301,37 @@
     (if (tool-prompt-snippet t)
         (hash-set base-fn 'promptSnippet (tool-prompt-snippet t))
         base-fn))
-  (hasheq 'type "function" 'function fn-with-snippet))
+  (define fn-with-guidelines
+    (if (tool-prompt-guidelines t)
+        (hash-set fn-with-snippet 'promptGuidelines (tool-prompt-guidelines t))
+        fn-with-snippet))
+  (hasheq 'type "function" 'function fn-with-guidelines))
 
 ;; list-tools-jsexpr : tool-registry? -> (listof hash?)
 ;; Return all registered tools serialized to the OpenAI normalized JSON format.
+;; ── Active tool management ──
+
+;; Set which tools are active. #f means all tools are active.
+;; active-names is (or/c #f (listof string?))
+(define (set-active-tools! reg active-names)
+  (set-box! (tool-registry-active-set-box reg) (and active-names (list->set active-names))))
+
+;; Check if a tool is active.
+(define (tool-active? reg name)
+  (define active-set (unbox (tool-registry-active-set-box reg)))
+  (or (not active-set) (set-member? active-set name)))
+
+;; List only active tools.
+(define (list-active-tools reg)
+  (filter (lambda (t) (tool-active? reg (tool-name t))) (hash-values (tool-registry-tools-box reg))))
+
+;; List active tools in jsexpr format.
+(define (list-active-tools-jsexpr reg)
+  (map tool->jsexpr (list-active-tools reg)))
+
+;; list-tools-jsexpr now respects the active set.
 (define (list-tools-jsexpr reg)
-  (map tool->jsexpr (hash-values (tool-registry-tools-box reg))))
+  (map tool->jsexpr (list-active-tools reg)))
 
 (define (list-tools reg)
   (hash-values (tool-registry-tools-box reg)))
