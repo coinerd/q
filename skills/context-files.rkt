@@ -10,23 +10,21 @@
          racket/string
          racket/match
          racket/list
-         (only-in "resource-loader.rkt" try-read-file))
+         (only-in "resource-loader.rkt" try-read-file)
+         racket/path)
 
-(provide
- ;; Struct
- (struct-out agent-context)
- agent-context?
-
- ;; Accessoren
- agent-context-name
- agent-context-description
- agent-context-instructions
- agent-context-examples
- agent-context-tool-preferences
-
- ;; Parser-Funktionen
- load-agent-context
- parse-agent-file)
+(provide (struct-out agent-context)
+         agent-context?
+         agent-context-name
+         agent-context-description
+         agent-context-instructions
+         agent-context-examples
+         agent-context-tool-preferences
+         load-agent-context
+         parse-agent-file
+         discover-agents-files
+         merge-agent-contexts
+         find-git-root)
 
 ;; ============================================================
 ;; Structs
@@ -34,11 +32,11 @@
 
 ;; Repräsentiert einen geparsten Agenten-Kontext aus einer AGENTS.md Datei
 (struct agent-context
-  (name           ; string — Name/Titel des Agenten
-   description    ; string — Kurzbeschreibung
-   instructions   ; string — System-Instruktionen
-   examples       ; (listof hash) — Beispiel-Konversationen
-   tool-preferences) ; (listof hash) — Tool-Präferenzen
+        (name ; string — Name/Titel des Agenten
+         description ; string — Kurzbeschreibung
+         instructions ; string — System-Instruktionen
+         examples ; (listof hash) — Beispiel-Konversationen
+         tool-preferences) ; (listof hash) — Tool-Präferenzen
   #:transparent)
 
 ;; ============================================================
@@ -61,17 +59,17 @@
 ;; Extrahiert den Text einer Überschrift (ohne #)
 (define (heading-text line)
   (define trimmed (string-trim line))
-  (string-trim
-   (cond
-     [(string-prefix? trimmed "# ") (substring trimmed 2)]
-     [(string-prefix? trimmed "## ") (substring trimmed 3)]
-     [(string-prefix? trimmed "### ") (substring trimmed 4)]
-     [(string-prefix? trimmed "#### ") (substring trimmed 5)]
-     [else trimmed])))
+  (string-trim (cond
+                 [(string-prefix? trimmed "# ") (substring trimmed 2)]
+                 [(string-prefix? trimmed "## ") (substring trimmed 3)]
+                 [(string-prefix? trimmed "### ") (substring trimmed 4)]
+                 [(string-prefix? trimmed "#### ") (substring trimmed 5)]
+                 [else trimmed])))
 
 ;; Findet den Index einer Zeile die einem Prädikat entspricht
 (define (find-index lines pred)
-  (let loop ([i 0] [ls lines])
+  (let loop ([i 0]
+             [ls lines])
     (cond
       [(null? ls) #f]
       [(pred (car ls)) i]
@@ -79,7 +77,8 @@
 
 ;; Nimmt Zeilen bis zu einem Prädikat (exklusive)
 (define (take-until lines pred)
-  (let loop ([acc '()] [ls lines])
+  (let loop ([acc '()]
+             [ls lines])
     (cond
       [(null? ls) (reverse acc)]
       [(pred (car ls)) (reverse acc)]
@@ -94,22 +93,18 @@
 
 ;; Extrahiert den Inhalt einer Sektion (von ## Überschrift bis zur nächsten ## oder ###)
 (define (extract-section lines section-name)
-  (define section-heading
-    (string-downcase (string-trim section-name)))
+  (define section-heading (string-downcase (string-trim section-name)))
   (define start-idx
     (find-index lines
                 (λ (l)
                   (and (= (or (heading-level l) 0) 2)
-                       (string=? (string-downcase (heading-text l))
-                                 section-heading)))))
+                       (string=? (string-downcase (heading-text l)) section-heading)))))
   (cond
     [(not start-idx) ""]
     [else
      (define after-heading (list-tail lines (add1 start-idx)))
      (define content-lines
-       (take-until after-heading
-                   (λ (l) (and (heading-level l)
-                               (<= (heading-level l) 2)))))
+       (take-until after-heading (λ (l) (and (heading-level l) (<= (heading-level l) 2)))))
      (string-trim (string-join content-lines "\n"))]))
 
 ;; Extrahiert alle Beispiele aus der Examples-Sektion
@@ -125,13 +120,12 @@
 
   ;; Finde alle ### Example X Überschriften
   (define example-indices
-    (filter-map
-     (λ (line idx)
-       (and (= (or (heading-level line) 0) 3)
-            (regexp-match? #rx"(?i:example)" (heading-text line))
-            idx))
-     lines
-     (range (length lines))))
+    (filter-map (λ (line idx)
+                  (and (= (or (heading-level line) 0) 3)
+                       (regexp-match? #rx"(?i:example)" (heading-text line))
+                       idx))
+                lines
+                (range (length lines))))
 
   (if (null? example-indices)
       '()
@@ -139,22 +133,16 @@
         (define title (heading-text (list-ref lines start-idx)))
         (define after-heading (list-tail lines (add1 start-idx)))
         (define end-idx
-          (or (find-index after-heading
-                          (λ (l) (= (or (heading-level l) 0) 3)))
+          (or (find-index after-heading (λ (l) (= (or (heading-level l) 0) 3)))
               (length after-heading)))
         (define content-lines (take after-heading end-idx))
         (define content (string-trim (string-join content-lines "\n")))
 
         ;; Parse User: und Agent: Zeilen
-        (define user-text
-          (extract-role-content content "User"))
-        (define agent-text
-          (extract-role-content content "Agent"))
+        (define user-text (extract-role-content content "User"))
+        (define agent-text (extract-role-content content "Agent"))
 
-        (hasheq 'title title
-              'user user-text
-              'agent agent-text
-              'raw content))))
+        (hasheq 'title title 'user user-text 'agent agent-text 'raw content))))
 
 ;; Extrahiert Text für eine Rolle (User oder Agent) aus Beispiel-Content
 ;; Unterstützt sowohl "User: text" (inline) als auch "User:\n text" (multiline)
@@ -162,10 +150,15 @@
   (define lines (string-split content "\n"))
   (define role-pattern (regexp (format "^~a[ \t]*:[ \t]*(.*)$" role)))
 
-  (let loop ([ls lines] [inline-text #f] [acc '()])
+  (let loop ([ls lines]
+             [inline-text #f]
+             [acc '()])
     (cond
       [(null? ls)
-       (string-trim (string-join (reverse (if inline-text (cons inline-text acc) acc)) "\n"))]
+       (string-trim (string-join (reverse (if inline-text
+                                              (cons inline-text acc)
+                                              acc))
+                                 "\n"))]
       [else
        (define line (car ls))
        (define rest (cdr ls))
@@ -176,12 +169,10 @@
           (define txt (string-trim (cadr m)))
           (loop rest (if (string=? txt "") #f txt) '())]
          ;; Found another role — stop
-         [(and inline-text
-               (regexp-match? #rx"^(User|Agent)[ \t]*:" (string-trim line)))
+         [(and inline-text (regexp-match? #rx"^(User|Agent)[ \t]*:" (string-trim line)))
           (string-trim (string-join (reverse (cons inline-text acc)) "\n"))]
          ;; Accumulate continuation lines (including blank lines)
-         [inline-text
-          (loop rest inline-text (cons line acc))]
+         [inline-text (loop rest inline-text (cons line acc))]
          ;; Skip lines before our role
          [else (loop rest #f '())])])))
 
@@ -196,35 +187,44 @@
 (define (parse-tool-preferences section-text)
   (define lines (string-split section-text "\n"))
 
-  (let loop ([acc '()] [ls lines] [current-pref #f])
+  (let loop ([acc '()]
+             [ls lines]
+             [current-pref #f])
     (cond
       [(null? ls)
-       (reverse (if current-pref (cons current-pref acc) acc))]
+       (reverse (if current-pref
+                    (cons current-pref acc)
+                    acc))]
       [else
        (define line (car ls))
        (define rest (cdr ls))
        (cond
          ;; Neues Tool: - tool: name
          [(regexp-match #rx"^-[ \t]*tool:[ \t]*(.+)$" (string-trim line))
-          => (λ (m)
-               (define tool-name (cadr m))
-               (loop (if current-pref (cons current-pref acc) acc)
-                     rest
-                     (hasheq 'tool tool-name 'when "" 'description "")))]
+          =>
+          (λ (m)
+            (define tool-name (cadr m))
+            (loop (if current-pref
+                      (cons current-pref acc)
+                      acc)
+                  rest
+                  (hasheq 'tool tool-name 'when "" 'description "")))]
          ;; When: condition
          [(regexp-match #rx"^[ \t]+when:[ \t]*(.+)$" line)
-          => (λ (m)
-               (define when-text (cadr m))
-               (if current-pref
-                   (loop acc rest (hash-set current-pref 'when when-text))
-                   (loop acc rest current-pref)))]
+          =>
+          (λ (m)
+            (define when-text (cadr m))
+            (if current-pref
+                (loop acc rest (hash-set current-pref 'when when-text))
+                (loop acc rest current-pref)))]
          ;; Description: text
          [(regexp-match #rx"^[ \t]+description:[ \t]*(.+)$" line)
-          => (λ (m)
-               (define desc-text (cadr m))
-               (if current-pref
-                   (loop acc rest (hash-set current-pref 'description desc-text))
-                   (loop acc rest current-pref)))]
+          =>
+          (λ (m)
+            (define desc-text (cadr m))
+            (if current-pref
+                (loop acc rest (hash-set current-pref 'description desc-text))
+                (loop acc rest current-pref)))]
          ;; Weitere Beschreibungszeilen
          [(and current-pref
                (string-prefix? (string-trim line) "-")
@@ -240,8 +240,7 @@
                 line
                 (string-append existing-desc "\n" line)))
           (loop acc rest (hash-set current-pref 'description (string-trim new-desc)))]
-         [else
-          (loop acc rest current-pref)])])))
+         [else (loop acc rest current-pref)])])))
 
 ;; ============================================================
 ;; Öffentliche API
@@ -256,22 +255,17 @@
   (define name
     (cond
       [(null? lines) "Unnamed Agent"]
-      [(= (or (heading-level (car lines)) 0) 1)
-       (heading-text (car lines))]
+      [(= (or (heading-level (car lines)) 0) 1) (heading-text (car lines))]
       [else "Unnamed Agent"]))
 
   ;; Finde Beschreibung (Text nach erster Überschrift bis zur nächsten ##)
   (define description
-    (let ([after-header
-           (if (and (not (null? lines))
-                    (= (or (heading-level (car lines)) 0) 1))
-               (cdr lines)
-               lines)])
-      (define non-empty-lines
-        (dropf after-header (λ (l) (string=? (string-trim l) ""))))
+    (let ([after-header (if (and (not (null? lines)) (= (or (heading-level (car lines)) 0) 1))
+                            (cdr lines)
+                            lines)])
+      (define non-empty-lines (dropf after-header (λ (l) (string=? (string-trim l) ""))))
       (define desc-lines
-        (take-until non-empty-lines
-                    (λ (l) (and (heading-level l) (<= (heading-level l) 2)))))
+        (take-until non-empty-lines (λ (l) (and (heading-level l) (<= (heading-level l) 2)))))
       (string-trim (string-join desc-lines "\n"))))
 
   ;; Extrahiere Sektionen
@@ -287,3 +281,60 @@
   (define agents-path (build-path dir "AGENTS.md"))
   (define content (try-read-file agents-path))
   (and content (parse-agent-file content)))
+
+;; ============================================================
+;; Walk-up-from-cwd discovery (GC-26)
+;; ============================================================
+
+;; Find the git repository root by walking up from start-dir.
+;; Returns the directory containing .git, or #f if not found.
+(define (find-git-root start-dir)
+  (let loop ([dir (simplify-path start-dir)])
+    (cond
+      [(directory-exists? (build-path dir ".git"))
+       ;; Strip trailing separator that simplify-path adds for existing dirs
+       (let ([s (path->string dir)])
+         (if (and (> (string-length s) 1) (char=? (string-ref s (sub1 (string-length s))) #\/))
+             (string->path (substring s 0 (sub1 (string-length s))))
+             dir))]
+      ;; filesystem root — when parent equals self
+      [(equal? (path->directory-path dir)
+               (path->directory-path (simplify-path (build-path dir ".."))))
+       #f]
+      [else (loop (simplify-path (build-path dir "..")))])))
+
+;; Discover all AGENTS.md files by walking from start-dir up to git root.
+;; Returns a list of paths in order: root → ... → start-dir (closest last).
+;; Checks for AGENTS.md and .agents/AGENTS.md at each level.
+(define (discover-agents-files [start-dir (current-directory)])
+  (define git-root (or (find-git-root start-dir) start-dir))
+  ;; Walk up collecting paths from root to start-dir
+  (let walk ([dir (simplify-path start-dir)])
+    (define candidates
+      (filter file-exists?
+              (list (build-path dir "AGENTS.md") (build-path dir ".agents" "AGENTS.md"))))
+    (cond
+      [(equal? (path->directory-path dir) (path->directory-path git-root)) candidates]
+      [(equal? (path->directory-path dir)
+               (path->directory-path (simplify-path (build-path dir ".."))))
+       candidates]
+      [else (append (walk (simplify-path (build-path dir ".."))) candidates)])))
+
+;; Merge multiple agent-contexts into one.
+;; Last context wins for name/description.
+;; Instructions are concatenated (root first, local last).
+;; Examples and tool-preferences are appended.
+(define (merge-agent-contexts contexts)
+  (cond
+    [(null? contexts) (agent-context "Default" "" "" '() '())]
+    [(null? (cdr contexts)) (car contexts)]
+    [else
+     (agent-context (agent-context-name (last contexts)) ; last wins
+                    (agent-context-description (last contexts)) ; last wins
+                    (string-join (filter-map (lambda (c)
+                                               (define inst (agent-context-instructions c))
+                                               (and (not (string=? inst "")) inst))
+                                             contexts)
+                                 "\n\n") ; all instructions
+                    (apply append (map agent-context-examples contexts))
+                    (apply append (map agent-context-tool-preferences contexts)))]))

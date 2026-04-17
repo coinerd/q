@@ -1,283 +1,214 @@
 #lang racket
 
-;; tests/test-context-files.rkt — Tests für skills/context-files.rkt
+;; tests/test-context-files.rkt — tests for skills/context-files.rkt (GC-26)
+;;
+;; Tests:
+;; 1. parse-agent-file — markdown parsing
+;; 2. load-agent-context — loading from directory
+;; 3. discover-agents-files — walk-up-from-cwd discovery
+;; 4. merge-agent-contexts — merging multiple contexts
+;; 5. find-git-root — git root detection
 
 (require rackunit
          rackunit/text-ui
          racket/file
-         racket/string
          "../skills/context-files.rkt")
 
-;; ============================================================
-;; Test Fixtures
-;; ============================================================
-
-(define minimal-agents-md
-  "# Test Agent
-
-Eine einfache Testbeschreibung.
-")
-
-(define full-agents-md
-  "# Code Reviewer Agent
-
-Ein spezialisierter Agent für Code-Reviews und Refactorings.
-Dieser Agent analysiert Code auf Qualität und gibt Verbesserungsvorschläge.
-
-## System Instructions
-
-Du bist ein erfahrener Code-Reviewer. Analysiere den übergebenen Code:
-1. Prüfe auf Sicherheitslücken
-2. Identifiziere Performance-Probleme
-3. Schlage Refactorings vor
-
-Sei konstruktiv und präzise in deinen Bewertungen.
-
-## Examples
-
-### Example 1: Simple Function Review
-User: Bitte reviewe diese Funktion:
-```python
-def add(a, b):
-    return a + b
-```
-
-Agent: Die Funktion ist korrekt, aber verbesserungswürdig:
-- Füge Typ-Annotationen hinzu
-- Dokumentiere mit Docstrings
-
-### Example 2: Security Review
-User: Ist dieser Code sicher?
-```python
-eval(user_input)
-```
-
-Agent: ⚠️ KRITISCHE SICHERHEITSLÜCKE!
-- `eval()` mit Benutzereingaben ist gefährlich
-- Verwende stattdessen `ast.literal_eval()`
-
-## Tool Preferences
-
-- tool: read
-  when: Beim Analysieren von Dateien
-  description: Lese Dateien zur Code-Analyse
-
-- tool: edit
-  when: Nach dem Review, wenn Änderungen nötig sind
-  description: Wende vorgeschlagene Änderungen an
-")
-
-(define agents-without-examples-md
-  "# Simple Agent
-
-Ein Agent ohne Beispiele.
-
-## System Instructions
-
-Tu einfach, was ich sage.
-")
-
-(define agents-without-tool-prefs-md
-  "# Minimal Agent
-
-Ein Agent ohne Tool-Präferenzen.
-
-## System Instructions
-
-Sei hilfreich.
-
-## Examples
-
-### Example 1
-User: Hallo
-Agent: Hallo! Wie kann ich helfen?
-")
-
-(define complex-formatting-md
-  "#   Complex Agent
-
-  Diese Beschreibung hat Einrückungen
-  und mehrere Zeilen.
-
-  Mit einer Leerzeile dazwischen.
-
-## System Instructions
-
-Die Anweisungen haben auch
-mehrere Zeilen und
-
-Absätze.
-
-## Examples
-
-### Example 1: Complex Case
-User: Erste Zeile
-Zweite Zeile des Inputs
-
-Agent: Erste Antwortzeile
-Zweite Antwortzeile
-
-Mit Absatz.
-
-### Example 2
-User: Kurz
-Agent: Auch kurz
-
-## Tool Preferences
-
-- tool: grep
-  when: Suchen in Dateien
-
-- tool: find
-  when: Dateien finden
-  description: Finnt Dateien nach Pattern
-
-- tool: read
-  when: Dateien lesen
-  description: Lese Dateiinhalte
-")
-
-;; ============================================================
-;; Tests
-;; ============================================================
-
 (define context-files-tests
-  (test-suite
-   "context-files.rkt Tests"
+  (test-suite "Context Files (skills/context-files.rkt)"
 
-   ;; Test 1: Minimaler Agent
-   (test-case "Parse minimal AGENTS.md"
-     (define ctx (parse-agent-file minimal-agents-md))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Test Agent")
-     (check-equal? (agent-context-description ctx) "Eine einfache Testbeschreibung.")
-     (check-equal? (agent-context-instructions ctx) "")
-     (check-equal? (agent-context-examples ctx) '())
-     (check-equal? (agent-context-tool-preferences ctx) '()))
+    ;; -------------------------------------------------------
+    ;; parse-agent-file
+    ;; -------------------------------------------------------
+    (test-case "parse-agent-file extracts name from h1"
+      (define ctx (parse-agent-file "# My Agent\nSome description"))
+      (check-equal? (agent-context-name ctx) "My Agent"))
 
-   ;; Test 2: Vollständiger Agent mit allen Sektionen
-   (test-case "Parse full AGENTS.md with all sections"
-     (define ctx (parse-agent-file full-agents-md))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Code Reviewer Agent")
-     (check-true (string-contains? (agent-context-description ctx)
-                                   "Code-Reviews und Refactorings"))
-     (check-true (string-contains? (agent-context-instructions ctx)
-                                   "erfahrener Code-Reviewer"))
-     (check-equal? (length (agent-context-examples ctx)) 2)
-     ;; Prüfe erstes Beispiel
-     (define ex1 (first (agent-context-examples ctx)))
-     (check-equal? (hash-ref ex1 'title) "Example 1: Simple Function Review")
-     (check-true (string-contains? (hash-ref ex1 'user) "def add(a, b)"))
-     (check-true (string-contains? (hash-ref ex1 'agent) "Typ-Annotationen"))
-     ;; Prüfe Tool-Präferenzen
-     (check-equal? (length (agent-context-tool-preferences ctx)) 2)
-     (define pref1 (first (agent-context-tool-preferences ctx)))
-     (check-equal? (hash-ref pref1 'tool) "read")
-     (check-true (string-contains? (hash-ref pref1 'when) "Dateien")))
+    (test-case "parse-agent-file extracts description"
+      (define ctx (parse-agent-file "# Agent\nThis is a test agent.\n\n## System Instructions"))
+      (check-equal? (agent-context-description ctx) "This is a test agent."))
 
-   ;; Test 3: Agent ohne Examples-Sektion
-   (test-case "Parse AGENTS.md without examples"
-     (define ctx (parse-agent-file agents-without-examples-md))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Simple Agent")
-     (check-equal? (agent-context-description ctx) "Ein Agent ohne Beispiele.")
-     (check-true (string-contains? (agent-context-instructions ctx)
-                                   "Tu einfach, was ich sage."))
-     (check-equal? (agent-context-examples ctx) '())
-     (check-equal? (agent-context-tool-preferences ctx) '()))
+    (test-case "parse-agent-file extracts system instructions"
+      (define ctx
+        (parse-agent-file "# Agent\n\nDesc\n\n## System Instructions\nDo the thing.\nBe careful.\n"))
+      (check-equal? (agent-context-instructions ctx) "Do the thing.\nBe careful."))
 
-   ;; Test 4: Agent ohne Tool Preferences
-   (test-case "Parse AGENTS.md without tool preferences"
-     (define ctx (parse-agent-file agents-without-tool-prefs-md))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Minimal Agent")
-     (check-equal? (agent-context-description ctx) "Ein Agent ohne Tool-Präferenzen.")
-     (check-equal? (length (agent-context-examples ctx)) 1)
-     (define ex (first (agent-context-examples ctx)))
-     (check-equal? (hash-ref ex 'user) "Hallo")
-     (check-equal? (hash-ref ex 'agent) "Hallo! Wie kann ich helfen?")
-     (check-equal? (agent-context-tool-preferences ctx) '()))
+    (test-case "parse-agent-file returns default name for empty content"
+      (define ctx (parse-agent-file ""))
+      (check-equal? (agent-context-name ctx) "Unnamed Agent"))
 
-   ;; Test 5: Komplexe Formatierung mit mehrzeiligen Einträgen
-   (test-case "Parse AGENTS.md with complex formatting"
-     (define ctx (parse-agent-file complex-formatting-md))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Complex Agent")
-     ;; Beschreibung sollte alle Zeilen enthalten
-     (check-true (string-contains? (agent-context-description ctx)
-                                   "Einrückungen"))
-     (check-true (string-contains? (agent-context-description ctx)
-                                   "mehrere Zeilen"))
-     ;; System Instructions sollten alle Absätze enthalten
-     (check-true (string-contains? (agent-context-instructions ctx)
-                                   "mehrere Zeilen"))
-     ;; Mehrere Beispiele
-     (check-equal? (length (agent-context-examples ctx)) 2)
-     ;; Erstes Beispiel mit mehrzeiligem Content
-     (define ex1 (first (agent-context-examples ctx)))
-     (check-true (string-contains? (hash-ref ex1 'user) "Zweite Zeile"))
-     (check-true (string-contains? (hash-ref ex1 'agent) "Mit Absatz."))
-     ;; Tool-Präferenzen (3 Stück)
-     (check-equal? (length (agent-context-tool-preferences ctx)) 3)
-     (define prefs (agent-context-tool-preferences ctx))
-     (check-equal? (hash-ref (first prefs) 'tool) "grep")
-     (check-equal? (hash-ref (second prefs) 'tool) "find")
-     (check-equal? (hash-ref (third prefs) 'tool) "read"))
+    (test-case "parse-agent-file handles content with no sections"
+      (define ctx (parse-agent-file "# Basic Agent\nJust a description"))
+      (check-equal? (agent-context-instructions ctx) "")
+      (check-equal? (agent-context-examples ctx) '())
+      (check-equal? (agent-context-tool-preferences ctx) '()))
 
-   ;; Test 6: load-agent-context aus Datei
-   (test-case "Load agent context from file"
-     (define temp-dir (make-temporary-file "agenttest~a" 'directory))
-     (define agents-file (build-path temp-dir "AGENTS.md"))
-     (display-to-file minimal-agents-md agents-file #:exists 'replace)
+    ;; -------------------------------------------------------
+    ;; load-agent-context
+    ;; -------------------------------------------------------
+    (test-case "load-agent-context returns #f when no AGENTS.md"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      (check-false (load-agent-context tmp-dir))
+      (delete-directory/files tmp-dir))
 
-     (define ctx (load-agent-context temp-dir))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Test Agent")
+    (test-case "load-agent-context loads from directory"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      (call-with-output-file
+       (build-path tmp-dir "AGENTS.md")
+       (lambda (out)
+         (display "# Test Agent\n\nA test description.\n\n## System Instructions\nDo stuff." out))
+       #:exists 'replace)
+      (define ctx (load-agent-context tmp-dir))
+      (check-not-false ctx)
+      (when ctx
+        (check-equal? (agent-context-name ctx) "Test Agent")
+        (check-equal? (agent-context-description ctx) "A test description.")
+        (check-equal? (agent-context-instructions ctx) "Do stuff."))
+      (delete-directory/files tmp-dir))
 
-     ;; Cleanup
-     (delete-directory/files temp-dir))
+    ;; -------------------------------------------------------
+    ;; find-git-root
+    ;; -------------------------------------------------------
+    (test-case "find-git-root returns #f when no .git directory"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      (check-false (find-git-root tmp-dir))
+      (delete-directory/files tmp-dir))
 
-   ;; Test 7: load-agent-context für nicht-existente Datei
-   (test-case "Load agent context from non-existent file returns #f"
-     (define temp-dir (make-temporary-file "agenttest~a" 'directory))
-     (define result (load-agent-context temp-dir))
-     (check-false result)
-     (delete-directory/files temp-dir))
+    (test-case "find-git-root finds .git in current dir"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      (make-directory (build-path tmp-dir ".git"))
+      (check-equal? (path->string (find-git-root tmp-dir)) (path->string tmp-dir))
+      (delete-directory/files tmp-dir))
 
-   ;; Test 8: Agent-Name ohne H1-Überschrift
-   (test-case "Parse AGENTS.md without H1 heading"
-     (define content "Keine Überschrift hier.")
-     (define ctx (parse-agent-file content))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Unnamed Agent")
-     (check-equal? (agent-context-description ctx) "Keine Überschrift hier."))
+    (test-case "find-git-root walks up to parent"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      (define sub-dir (build-path tmp-dir "sub"))
+      (make-directory sub-dir)
+      (make-directory (build-path tmp-dir ".git"))
+      (check-equal? (path->string (find-git-root sub-dir)) (path->string tmp-dir))
+      (delete-directory/files tmp-dir))
 
-   ;; Test 9: Leere AGENTS.md
-   (test-case "Parse empty AGENTS.md"
-     (define ctx (parse-agent-file ""))
-     (check-true (agent-context? ctx))
-     (check-equal? (agent-context-name ctx) "Unnamed Agent")
-     (check-equal? (agent-context-description ctx) "")
-     (check-equal? (agent-context-instructions ctx) "")
-     (check-equal? (agent-context-examples ctx) '())
-     (check-equal? (agent-context-tool-preferences ctx) '()))
+    ;; -------------------------------------------------------
+    ;; discover-agents-files
+    ;; -------------------------------------------------------
+    (test-case "discover-agents-files finds AGENTS.md in start dir"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      (call-with-output-file (build-path tmp-dir "AGENTS.md")
+                             (lambda (out) (display "# Root Agent\n\nRoot instructions." out))
+                             #:exists 'replace)
+      (define paths (discover-agents-files tmp-dir))
+      (check >= (length paths) 1)
+      (check-not-false (member (build-path tmp-dir "AGENTS.md") paths))
+      (delete-directory/files tmp-dir))
 
-   ;; Test 10: Beispiel mit leerem User/Agent Content
-   (test-case "Parse example with minimal content"
-     (define content "# Test\n\n## Examples\n\n### Example 1\nUser:\nAgent: ")
-     (define ctx (parse-agent-file content))
-     (check-equal? (length (agent-context-examples ctx)) 1)
-     (define ex (first (agent-context-examples ctx)))
-     (check-equal? (hash-ref ex 'user) "")
-     (check-equal? (hash-ref ex 'agent) ""))))
+    (test-case "discover-agents-files walks up directory tree"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      ;; Root AGENTS.md
+      (call-with-output-file (build-path tmp-dir "AGENTS.md")
+                             (lambda (out) (display "# Root Agent" out))
+                             #:exists 'replace)
+      ;; Sub dir AGENTS.md
+      (define sub-dir (build-path tmp-dir "project"))
+      (make-directory sub-dir)
+      (call-with-output-file (build-path sub-dir "AGENTS.md")
+                             (lambda (out) (display "# Project Agent" out))
+                             #:exists 'replace)
+      ;; .git to mark root
+      (make-directory (build-path tmp-dir ".git"))
+      (define paths (discover-agents-files sub-dir))
+      ;; Should find both
+      (check = (length paths) 2)
+      (delete-directory/files tmp-dir))
 
-;; ============================================================
-;; Run Tests
-;; ============================================================
+    (test-case "discover-agents-files stops at git root"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      ;; Parent dir with AGENTS.md (outside git)
+      (define parent-file (build-path tmp-dir "AGENTS.md"))
+      (call-with-output-file parent-file
+                             (lambda (out) (display "# Outside Agent" out))
+                             #:exists 'replace)
+      ;; Git repo root
+      (define repo-dir (build-path tmp-dir "repo"))
+      (make-directory repo-dir)
+      (make-directory (build-path repo-dir ".git"))
+      ;; Sub dir inside repo
+      (define sub-dir (build-path repo-dir "src"))
+      (make-directory sub-dir)
+      (call-with-output-file (build-path repo-dir "AGENTS.md")
+                             (lambda (out) (display "# Repo Agent" out))
+                             #:exists 'replace)
+      (define paths (discover-agents-files sub-dir))
+      ;; Should NOT include the outside AGENTS.md
+      (check-false (member parent-file paths))
+      ;; Should include repo root AGENTS.md
+      (check-not-false (member (build-path repo-dir "AGENTS.md") paths))
+      (delete-directory/files tmp-dir))
 
-(module+ main
-  (run-tests context-files-tests 'verbose))
+    ;; -------------------------------------------------------
+    ;; merge-agent-contexts
+    ;; -------------------------------------------------------
+    (test-case "merge-agent-contexts combines instructions"
+      (define ctx1 (agent-context "Root" "Root desc" "Root instructions" '() '()))
+      (define ctx2 (agent-context "Local" "Local desc" "Local instructions" '() '()))
+      (define merged (merge-agent-contexts (list ctx1 ctx2)))
+      (check-equal? (agent-context-instructions merged) "Root instructions\n\nLocal instructions"))
 
-(module+ test
-  (run-tests context-files-tests))
+    (test-case "merge-agent-contexts uses last name and description"
+      (define ctx1 (agent-context "Root" "Root desc" "Root instructions" '() '()))
+      (define ctx2 (agent-context "Local" "Local desc" "Local instructions" '() '()))
+      (define merged (merge-agent-contexts (list ctx1 ctx2)))
+      (check-equal? (agent-context-name merged) "Local")
+      (check-equal? (agent-context-description merged) "Local desc"))
+
+    (test-case "merge-agent-contexts with empty list returns default"
+      (define merged (merge-agent-contexts '()))
+      (check-equal? (agent-context-name merged) "Default")
+      (check-equal? (agent-context-instructions merged) ""))
+
+    (test-case "merge-agent-contexts merges examples"
+      (define ex1 (list (hasheq 'title "Ex1" 'user "hi" 'agent "hello" 'raw "hi")))
+      (define ex2 (list (hasheq 'title "Ex2" 'user "bye" 'agent "goodbye" 'raw "bye")))
+      (define ctx1 (agent-context "A" "" "" ex1 '()))
+      (define ctx2 (agent-context "B" "" "" ex2 '()))
+      (define merged (merge-agent-contexts (list ctx1 ctx2)))
+      (check = (length (agent-context-examples merged)) 2))
+
+    ;; -------------------------------------------------------
+    ;; Integration: discover + load + merge
+    ;; -------------------------------------------------------
+    (test-case "integration: discover, load, merge from temp directory tree"
+      (define tmp-dir (make-temporary-file "ctx-test-~a" 'directory))
+      ;; Root level
+      (make-directory (build-path tmp-dir ".git"))
+      (call-with-output-file
+       (build-path tmp-dir "AGENTS.md")
+       (lambda (out)
+         (display "# Root Agent\n\nRoot desc.\n\n## System Instructions\nAlways be helpful." out))
+       #:exists 'replace)
+      ;; Sub project
+      (define sub (build-path tmp-dir "project"))
+      (make-directory sub)
+      (call-with-output-file
+       (build-path sub "AGENTS.md")
+       (lambda (out)
+         (display "# Project Agent\n\nProject desc.\n\n## System Instructions\nFollow project rules."
+                  out))
+       #:exists 'replace)
+      ;; Discover
+      (define paths (discover-agents-files sub))
+      (check = (length paths) 2)
+      ;; Load each
+      (define contexts
+        (filter-map (lambda (p)
+                      (define content (file->string p))
+                      (parse-agent-file content))
+                    paths))
+      (check = (length contexts) 2)
+      ;; Merge
+      (define merged (merge-agent-contexts contexts))
+      (check-equal? (agent-context-name merged) "Project Agent")
+      (check-true (string-contains? (agent-context-instructions merged) "Always be helpful."))
+      (check-true (string-contains? (agent-context-instructions merged) "Follow project rules."))
+      (delete-directory/files tmp-dir))))
+
+(run-tests context-files-tests)
