@@ -102,7 +102,9 @@
          ensure-hash-args ;; for testing
          ;; FEAT-61: message injection support
          make-injected-collector!
-         drain-injected-messages!)
+         drain-injected-messages!
+         ;; FEAT-66: overflow recovery (for testing)
+         call-with-overflow-recovery)
 
 ;; ============================================================
 ;; Shared helpers
@@ -362,10 +364,9 @@
                                           "context.overflow.detected"
                                           (hasheq 'error (exn-message e)))
                      ;; Compact and retry
-                     (define compacted
+                     (define-values (compacted _extra)
                        (build-tiered-context-with-hooks
-                        (takef ctx (lambda (m) (not (eq? (message-role m) 'system))))
-                        (hasheq 'max-messages 10)))
+                        (takef ctx (lambda (m) (not (eq? (message-role m) 'system))))))
                      (emit-session-event! bus
                                           session-id
                                           "context.overflow.compacted"
