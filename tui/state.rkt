@@ -327,11 +327,13 @@
      (define err (hash-ref payload 'error "unknown error"))
      (define ts (event-time evt))
      ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
+     ;; Also clear streaming-thinking for complete state reset on error
      (struct-copy ui-state
                   (append-entry state (make-entry 'error (format "Error: ~a" err) ts (hash)))
                   [busy? #f]
                   [pending-tool-name #f]
-                  [streaming-text #f])]
+                  [streaming-text #f]
+                  [streaming-thinking #f])]
 
     [("session.started")
      (define sid (hash-ref payload 'sessionId ""))
@@ -427,11 +429,14 @@
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
      (define max-attempts (hash-ref payload 'maxAttempts "?"))
-     (append-entry state
-                   (make-entry 'system
-                               (format "[retry: attempt ~a/~a]" attempt max-attempts)
-                               (event-time evt)
-                               (hash)))]
+     (struct-copy ui-state
+                  (append-entry state
+                                (make-entry 'system
+                                            (format "[retry: attempt ~a/~a]" attempt max-attempts)
+                                            (event-time evt)
+                                            (hash)))
+                  [streaming-text #f]
+                  [streaming-thinking #f])]
 
     [("model.stream.thinking")
      ;; Accumulate thinking/reasoning text from the model

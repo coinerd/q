@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.8] — 2026-04-17
+
+### Fixed
+
+- **TUI rendering overlap after timeout+retry** (#1136): `auto-retry.start` event handler now clears `streaming-text` and `streaming-thinking`, preventing stale streaming content from bleeding into the prompt line during retry backoff.
+- **runtime.error clears streaming-thinking** (#1136): `runtime.error` handler now also clears `streaming-thinking` for complete state reset on errors.
+
+### Added
+
+- **Error recovery tests** (#1135): 13 new tests covering streaming state clearing across auto-retry, runtime.error, turn.cancelled, model.stream.completed, consecutive retries, and stress scenarios.
+
 ## [0.10.7] — 2026-04-17
 
 ### Fixed
