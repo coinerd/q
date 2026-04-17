@@ -118,56 +118,59 @@
 ;; Extract plain text from the current selection.
 ;; Uses rendered lines to map screen coordinates to text.
 (define (selection-text ctx state)
-  (define anchor (ui-state-sel-anchor state))
-  (define end (ui-state-sel-end state))
-  (and anchor
-       end
-       (let ()
-         ;; Normalize so start <= end
-         (define-values (start-col start-row end-col end-row) (normalize-selection-range anchor end))
-         ;; Get rendered lines for the transcript area
-         (define-values (cols rows) (tui-screen-size))
-         (define layout (compute-layout cols rows))
-         (define trans-y (tui-layout-transcript-start-row layout))
-         (define trans-height (tui-layout-transcript-height layout))
-         (define-values (all-lines _state*) (render-transcript state trans-height cols))
-         ;; BUG-57: Compute pad-count for correct coordinate mapping
-         (define visible-lines
-           (if (> (length all-lines) trans-height)
-               (take-right all-lines trans-height)
-               all-lines))
-         (define pad-count (- trans-height (length visible-lines)))
-         ;; Map screen rows to line indices (account for padding)
-         ;; Mouse y is 0-based: row 0 = header, row 1 = first transcript line.
-         ;; Content starts at (trans-y + pad-count). So:
-         ;;   line-index = screen-row - trans-y - pad-count
-         (define start-idx (max 0 (- start-row trans-y pad-count)))
-         (define end-idx (min (sub1 (length visible-lines)) (- end-row trans-y pad-count)))
-         (if (> start-idx end-idx)
-             ""
-             (string-join
-              (for/list ([i (in-range start-idx (add1 end-idx))])
-                (define line (list-ref visible-lines i))
-                (define text (styled-line->text line))
-                (cond
-                  [(= i start-idx end-idx)
-                   ;; Single line: extract column range (display-col→string-offset)
-                   (substring text
-                              (min (display-col->string-offset text start-col) (string-length text))
-                              (min (display-col->string-offset text (add1 end-col))
-                                   (string-length text)))]
-                  ;; First line: from start-col to end
-                  [(= i start-idx)
-                   (substring text
-                              (min (display-col->string-offset text start-col) (string-length text)))]
-                  ;; Last line: from 0 to end-col
-                  [(= i end-idx)
-                   (substring text
-                              0
-                              (min (display-col->string-offset text (add1 end-col))
-                                   (string-length text)))]
-                  [else text]))
-              "\n")))))
+  ;; Bounds validation (#1121): guard against out-of-range indices
+  (with-handlers ([exn:fail? (lambda (e) "")])
+    (define anchor (ui-state-sel-anchor state))
+    (define end (ui-state-sel-end state))
+    (and
+     anchor
+     end
+     (let ()
+       ;; Normalize so start <= end
+       (define-values (start-col start-row end-col end-row) (normalize-selection-range anchor end))
+       ;; Get rendered lines for the transcript area
+       (define-values (cols rows) (tui-screen-size))
+       (define layout (compute-layout cols rows))
+       (define trans-y (tui-layout-transcript-start-row layout))
+       (define trans-height (tui-layout-transcript-height layout))
+       (define-values (all-lines _state*) (render-transcript state trans-height cols))
+       ;; BUG-57: Compute pad-count for correct coordinate mapping
+       (define visible-lines
+         (if (> (length all-lines) trans-height)
+             (take-right all-lines trans-height)
+             all-lines))
+       (define pad-count (- trans-height (length visible-lines)))
+       ;; Map screen rows to line indices (account for padding)
+       ;; Mouse y is 0-based: row 0 = header, row 1 = first transcript line.
+       ;; Content starts at (trans-y + pad-count). So:
+       ;;   line-index = screen-row - trans-y - pad-count
+       (define start-idx (max 0 (- start-row trans-y pad-count)))
+       (define end-idx (min (sub1 (length visible-lines)) (- end-row trans-y pad-count)))
+       (if (> start-idx end-idx)
+           ""
+           (string-join
+            (for/list ([i (in-range start-idx (add1 end-idx))])
+              (define line (list-ref visible-lines i))
+              (define text (styled-line->text line))
+              (cond
+                [(= i start-idx end-idx)
+                 ;; Single line: extract column range (display-col→string-offset)
+                 (substring text
+                            (min (display-col->string-offset text start-col) (string-length text))
+                            (min (display-col->string-offset text (add1 end-col))
+                                 (string-length text)))]
+                ;; First line: from start-col to end
+                [(= i start-idx)
+                 (substring text
+                            (min (display-col->string-offset text start-col) (string-length text)))]
+                ;; Last line: from 0 to end-col
+                [(= i end-idx)
+                 (substring text
+                            0
+                            (min (display-col->string-offset text (add1 end-col))
+                                 (string-length text)))]
+                [else text]))
+            "\n"))))))
 
 ;; ============================================================
 ;; Slash command processing
@@ -477,39 +480,44 @@
 ;; msg-data is (list type x y) or (list type button x y)
 ;; Returns 'continue.
 (define (handle-mouse ctx msg-data)
-  (define state (unbox (tui-ctx-ui-state-box ctx)))
-  (define mouse-type (car msg-data))
-  (mark-dirty! ctx)
-  (case mouse-type
-    [(scroll-up)
-     (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 3))
-     'continue]
-    [(scroll-down)
-     (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 3))
-     'continue]
-    [(click)
-     ;; Start selection: set anchor at click position
-     (define button (cadr msg-data))
-     (define x (caddr msg-data))
-     (define y (cadddr msg-data))
-     (when (= button 0) ;; left click only
-       (set-box! (tui-ctx-ui-state-box ctx) (set-selection-anchor state x y)))
-     'continue]
-    [(drag)
-     ;; Update selection end during drag
-     (define x (cadr msg-data))
-     (define y (caddr msg-data))
-     (when (has-selection? state)
-       (set-box! (tui-ctx-ui-state-box ctx) (set-selection-end state x y)))
-     'continue]
-    [(release)
-     ;; Copy selection to clipboard (platform tool + OSC 52 fallback).
-     ;; Do NOT call set-selection-end here — the drag handler already
-     ;; tracks sel-end correctly, and right-click releases would
-     ;; corrupt the selection if we moved the endpoint.
-     (when (has-selection? state)
-       (define text (selection-text ctx state))
-       (when (and text (not (string=? text "")))
-         (copy-text! text)))
-     'continue]
-    [else 'continue]))
+  ;; Error guard (#1121): catch any exception from mouse handling
+  ;; to prevent crashes from corrupt or unexpected mouse data.
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "TUI: mouse handler error: ~a" (exn-message e)))
+                               'continue)])
+    (define state (unbox (tui-ctx-ui-state-box ctx)))
+    (define mouse-type (car msg-data))
+    (mark-dirty! ctx)
+    (case mouse-type
+      [(scroll-up)
+       (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 3))
+       'continue]
+      [(scroll-down)
+       (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 3))
+       'continue]
+      [(click)
+       ;; Start selection: set anchor at click position
+       (define button (cadr msg-data))
+       (define x (caddr msg-data))
+       (define y (cadddr msg-data))
+       (when (= button 0) ;; left click only
+         (set-box! (tui-ctx-ui-state-box ctx) (set-selection-anchor state x y)))
+       'continue]
+      [(drag)
+       ;; Update selection end during drag
+       (define x (cadr msg-data))
+       (define y (caddr msg-data))
+       (when (has-selection? state)
+         (set-box! (tui-ctx-ui-state-box ctx) (set-selection-end state x y)))
+       'continue]
+      [(release)
+       ;; Copy selection to clipboard (platform tool + OSC 52 fallback).
+       ;; Do NOT call set-selection-end here — the drag handler already
+       ;; tracks sel-end correctly, and right-click releases would
+       ;; corrupt the selection if we moved the endpoint.
+       (when (has-selection? state)
+         (define text (selection-text ctx state))
+         (when (and text (not (string=? text "")))
+           (copy-text! text)))
+       'continue]
+      [else 'continue])))

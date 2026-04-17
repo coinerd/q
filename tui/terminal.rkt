@@ -108,6 +108,14 @@
          tmousemsg-cb
          tmousemsg-cx
          tmousemsg-cy
+         ;; Mouse events — tui-term struct adapters (#1120)
+         tmousemsg-tui-term?
+         tmousemsg-kind
+         tmousemsg-pos-x
+         tmousemsg-pos-y
+         tmousemsg-left?
+         tmousemsg-middle?
+         tmousemsg-right?
 
          ;; Key helpers
          tui-key-char?
@@ -439,19 +447,19 @@
     (flush-output)))
 
 ;; ============================================================
-;; Mouse tracking — X10 protocol
+;; Mouse tracking — SGR protocol (#1120)
 ;; ============================================================
 
 (define (enable-mouse-tracking)
-  ;; Button-event tracking (mode 1002): reports press, drag, and release.
-  ;; This is needed for text selection via click-drag.
-  ;; We do NOT use SGR-Pixel (1006) — only X10 format is decoded.
+  ;; SGR extended mouse mode (mode 1006): reports press, drag, release, scroll.
+  ;; Required for tui-term which decodes SGR format exclusively.
+  ;; Previous X10 mode (1002) caused protocol mismatch crashes (#1119).
   (display "\x1b[?1000h") ;; basic tracking as fallback
-  (display "\x1b[?1002h") ;; button-event tracking (press + drag + release)
+  (display "\x1b[?1006h") ;; SGR extended mouse mode
   (flush-output))
 
 (define (disable-mouse-tracking)
-  (display "\x1b[?1002l")
+  (display "\x1b[?1006l")
   (display "\x1b[?1000l")
   (flush-output))
 

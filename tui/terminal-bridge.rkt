@@ -36,7 +36,16 @@
          tsizemsg-cols ;; adapter accessor
          tsizemsg-rows ;; adapter accessor
          tcmdmsg? ;; adapter predicate
-         tcmdmsg-cmd) ;; adapter accessor
+         tcmdmsg-cmd ;; adapter accessor
+
+         ;; Mouse message adapters (#1120)
+         tmousemsg-tui-term? ;; true for tui-term struct mouse msgs
+         tmousemsg-kind      ;; kind accessor (press/release/move/wheel-up/wheel-down)
+         tmousemsg-pos-x     ;; x coordinate (0-based)
+         tmousemsg-pos-y     ;; y coordinate (0-based)
+         tmousemsg-left?     ;; left button held?
+         tmousemsg-middle?   ;; middle button held?
+         tmousemsg-right?)   ;; right button held?
 
 ;; ============================================================
 ;; Dynamic require: detect tui-term availability
@@ -131,6 +140,48 @@
   (and tui-term-available?
        (with-handlers ([exn:fail? (lambda (e) #f)])
          (dynamic-require 'tui/term/messages 'tcmdmsg-cmd))))
+
+;; Mouse message dynamic requires (#1120)
+(define tmousemsg?-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term/messages 'tmousemsg?))))
+
+(define tmousemsg-kind-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term/messages 'tmousemsg-kind))))
+
+(define tmousemsg-pos-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term/messages 'tmousemsg-pos))))
+
+(define tmousemsg-left-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term/messages 'tmousemsg-left))))
+
+(define tmousemsg-middle-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term/messages 'tmousemsg-middle))))
+
+(define tmousemsg-right-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term/messages 'tmousemsg-right))))
+
+;; tpoint accessors for pos field
+(define tpoint-x-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term 'tpoint-x))))
+
+(define tpoint-y-fn
+  (and tui-term-available?
+       (with-handlers ([exn:fail? (lambda (e) #f)])
+         (dynamic-require 'tui/term 'tpoint-y))))
 
 ;; ============================================================
 ;; Stub implementations (when tui-term not available)
@@ -249,3 +300,49 @@
   (if (and tcmdmsg-cmd-fn (tcmdmsg?-fn msg))
       (tcmdmsg-cmd-fn msg)
       (vector-ref msg 1)))
+
+;; ============================================================
+;; Mouse message adapters (#1120)
+;; tui-term returns actual tmousemsg structs (not vectors).
+;; These adapters detect struct vs vector and dispatch accordingly.
+;; ============================================================
+
+(define (tmousemsg-tui-term? msg)
+  ;; True if msg is a tui-term tmousemsg struct (not a vector).
+  (and tmousemsg?-fn (tmousemsg?-fn msg)))
+
+(define (tmousemsg-kind msg)
+  ;; Returns kind symbol: 'press, 'release, 'move, 'wheel-up, 'wheel-down, 'leave
+  (if (tmousemsg-tui-term? msg)
+      (tmousemsg-kind-fn msg)
+      'unknown))
+
+(define (tmousemsg-pos-x msg)
+  ;; Returns 0-based x coordinate
+  (if (and (tmousemsg-tui-term? msg) tmousemsg-pos-fn tpoint-x-fn)
+      (tpoint-x-fn (tmousemsg-pos-fn msg))
+      0))
+
+(define (tmousemsg-pos-y msg)
+  ;; Returns 0-based y coordinate
+  (if (and (tmousemsg-tui-term? msg) tmousemsg-pos-fn tpoint-y-fn)
+      (tpoint-y-fn (tmousemsg-pos-fn msg))
+      0))
+
+(define (tmousemsg-left? msg)
+  ;; True if left button is held
+  (if (and (tmousemsg-tui-term? msg) tmousemsg-left-fn)
+      (tmousemsg-left-fn msg)
+      #f))
+
+(define (tmousemsg-middle? msg)
+  ;; True if middle button is held
+  (if (and (tmousemsg-tui-term? msg) tmousemsg-middle-fn)
+      (tmousemsg-middle-fn msg)
+      #f))
+
+(define (tmousemsg-right? msg)
+  ;; True if right button is held
+  (if (and (tmousemsg-tui-term? msg) tmousemsg-right-fn)
+      (tmousemsg-right-fn msg)
+      #f))

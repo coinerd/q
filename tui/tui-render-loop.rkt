@@ -47,7 +47,8 @@
          drain-events!
          ;; ── Re-exports ──
          fix-sgr-bg-black
-         decode-mouse-x10)
+         decode-mouse-x10
+         decode-mouse-tui-term)
 
 ;; ============================================================
 ;; Ubuf FFI/stubs
@@ -197,8 +198,7 @@
          [(write)
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1)) ; ANSI is 1-based
           (display "\x1b[2K" (current-output-port)) ; clear line
-          (display (fix-sgr-bg-black (diff-cmd-content cmd))
-                   (current-output-port))]
+          (display (fix-sgr-bg-black (diff-cmd-content cmd)) (current-output-port))]
          [(clear-from)
           ;; Clear from given row to end of screen
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1))
@@ -237,8 +237,7 @@
     ;; No input available
     [(not msg) #f]
     ;; Paste event (bracketed paste DEC 2004)
-    [(paste-event? msg)
-     (list 'paste (vector-ref msg 1))]
+    [(paste-event? msg) (list 'paste (vector-ref msg 1))]
     ;; Key message
     [(tkeymsg? msg)
      (define keycode (tui-keycode msg))
@@ -247,8 +246,12 @@
          #f)]
     ;; Resize message
     [(tsizemsg? msg) (list 'resize (tsizemsg-cols msg) (tsizemsg-rows msg))]
-    ;; Mouse message — decode from X10 protocol bytes
-    [(tmousemsg? msg) (decode-mouse-x10 (tmousemsg-cb msg) (tmousemsg-cx msg) (tmousemsg-cy msg))]
+    ;; Mouse message — dual-path dispatch (#1120)
+    ;; tui-term returns actual structs, fallback path uses X10 vectors
+    [(tmousemsg? msg)
+     (if (tmousemsg-tui-term? msg)
+         (decode-mouse-tui-term msg)
+         (decode-mouse-x10 (tmousemsg-cb msg) (tmousemsg-cx msg) (tmousemsg-cy msg)))]
     ;; Command message (redraw, etc.)
     [(tcmdmsg? msg)
      (case (tcmdmsg-cmd msg)
@@ -283,9 +286,8 @@
          ;; Re-check in case resize happened during sleep
          (when (unbox (tui-ctx-needs-redraw-box ctx))
            (render-frame! ctx))]
-        [else
-         ;; Enough time elapsed — render immediately
-         (render-frame! ctx)]))
+        ;; Enough time elapsed — render immediately
+        [else (render-frame! ctx)]))
 
     (when (unbox (tui-ctx-running-box ctx))
       ;; Get next message from terminal (adapter pattern)
