@@ -72,6 +72,13 @@
          ;; Selection helpers
          normalize-selection-range
 
+         ;; IME cursor markers (#1151)
+         CURSOR_MARKER
+         cursor-marker-string
+         strip-cursor-markers
+         has-cursor-markers?
+         insert-cursor-marker
+
          ;; X10 mouse decoding
          decode-mouse-x10
          decode-mouse-tui-term)
@@ -626,6 +633,31 @@
            #f)] ;; plain move without button — ignore
       [(leave) #f] ;; mouse left window — ignore
       [else #f])))
+
+;; ============================================================
+;; IME cursor markers (#1151)
+;; ============================================================
+
+;; IME cursor marker — special Unicode character used to position
+;; the IME composition window at the current cursor position.
+;; Terminals recognize this marker and position the IME popup accordingly.
+(define CURSOR_MARKER #\u200B) ; Zero-width space as cursor anchor
+
+(define (cursor-marker-string)
+  (string CURSOR_MARKER))
+
+;; Strip cursor markers from input string
+(define (strip-cursor-markers str)
+  (string-replace str (cursor-marker-string) ""))
+
+;; Check if string contains cursor markers
+(define (has-cursor-markers? str)
+  (string-contains? str (cursor-marker-string)))
+
+;; Insert cursor marker at position in string
+(define (insert-cursor-marker str pos)
+  (define safe-pos (min pos (string-length str)))
+  (string-append (substring str 0 safe-pos) (cursor-marker-string) (substring str safe-pos)))
 
 ;; Slash commands
 (define (input-slash-command text)

@@ -93,6 +93,10 @@
          set-focused-component
          clear-focused-component
 
+         ;; Custom editor component (#1150)
+         set-editor-component
+         clear-editor-component
+
          ;; Selection
          set-selection-anchor
          set-selection-end
@@ -135,6 +139,7 @@
          custom-footer ; (or/c #f (listof styled-line)) — extension-provided footer
          mock-provider? ; boolean — #t when using mock/fallback provider (BUG-55)
          focused-component ; (or/c #f symbol?) — id of component with focus
+         editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
          )
   #:transparent)
 
@@ -254,6 +259,7 @@
             #f ; custom-footer
             #f ; mock-provider?
             #f ; focused-component
+            #f ; editor-component
             ))
 
 ;; ============================================================
@@ -746,6 +752,16 @@
 
 (define (clear-focused-component state)
   (struct-copy ui-state state [focused-component #f]))
+
+;; ============================================================
+;; Custom editor component (#1150)
+;; ============================================================
+
+(define (set-editor-component state comp)
+  (struct-copy ui-state state [editor-component comp]))
+
+(define (clear-editor-component state)
+  (struct-copy ui-state state [editor-component #f]))
 
 ;; ============================================================
 ;; String helpers
