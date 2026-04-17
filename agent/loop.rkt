@@ -109,6 +109,14 @@
 ;; build-raw-messages : (listof message?) -> (listof hash?)
 ;; PURE function — converts a list of message? structs into raw OpenAI-format
 ;; hash messages. No side effects, no bus/state needed.
+;;; build-raw-messages : (listof message?) -> (listof hash?)
+;;;
+;;; Converts internal message structs to raw OpenAI-format message hashes.
+;;; Handles all roles:
+;;;   'user     -> {role: "user", content: <text>}
+;;;   'assistant -> {role: "assistant", content: <text>, tool_calls: [...]}
+;;;   'tool     -> {role: "tool", tool_call_id: ..., content: ...}
+;;; Pure function — no side effects.
 (define (build-raw-messages context)
   (append*
    (for/list ([msg (in-list context)])
@@ -176,6 +184,14 @@
 ;;   'all-chunks      — list of all stream chunks
 ;;   'cancelled?      — boolean
 ;;   'stream-blocked? — boolean (from message-update hook block)
+;;; stream-from-provider : provider? model-request? event-bus? string? string?
+;;;                         loop-state? (or/c procedure? #f) (or/c cancellation-token? #f)
+;;;                         -> hash?
+;;;
+;;; Wraps the streaming loop. Pulls chunks from the provider's stream
+;;; generator, emits message.start/delta/end events, supports cancellation
+;;; via token and blocking via message-update hook. Returns a hash with
+;;; keys: 'text, 'tool-calls, 'all-chunks, 'cancelled?, 'stream-blocked?.
 (define (stream-from-provider provider
                               req
                               bus
@@ -309,6 +325,11 @@
 
 ;; handle-cancellation : event-bus string string loop-state -> loop-result?
 ;; Emits turn.cancelled and turn.completed events, returns a cancelled loop-result.
+;;; handle-cancellation : event-bus? string? string? loop-state? -> loop-result?
+;;;
+;;; Cancellation cleanup helper. Dispatches agent-end hook with 'cancelled
+;;; termination, emits turn.completed with 'cancelled, and returns a
+;;; loop-result with status 'cancelled.
 (define (handle-cancellation bus session-id turn-id state #:hook-dispatcher [hook-dispatcher #f])
   ;; #667: Dispatch agent-end hook on cancellation
   (when hook-dispatcher
@@ -338,6 +359,15 @@
 ;;   - message-end hook (amend/block)
 ;;   - Building the final assistant message
 ;;   - Checking for tool calls → completed vs tool-calls-pending
+;;; build-stream-result : hash? (listof hash?) event-bus? string? string?
+;;;                       loop-state? (or/c (listof hash?) #f) provider?
+;;;                       (or/c procedure? #f) -> loop-result?
+;;;
+;;; Post-stream result builder. Extracts text and tool calls from stream
+;;; data, resolves usage, dispatches model-response-post and message-end
+;;; hooks, builds the final assistant message, and emits completion events.
+;;; Returns 'completed if no tool calls, or 'tool-calls-pending if tools
+;;; need execution.
 (define (build-stream-result stream-data
                              raw-messages
                              bus
@@ -521,6 +551,23 @@
 ;;                  #:cancellation-token (or/c cancellation-token? #f)
 ;;                  #:hook-dispatcher (or/c procedure? #f)
 ;;               -> loop-result?
+;;; run-agent-turn : (listof message?) provider? event-bus?
+;;;                  #:session-id string?
+;;;                  #:turn-id string?
+;;;                  #:state (or/c loop-state? #f)
+;;;                  #:tools (or/c (listof hash?) #f)
+;;;                  #:cancellation-token (or/c cancellation-token? #f)
+;;;                  #:hook-dispatcher (or/c procedure? #f)
+;;;                  -> loop-result?
+;;;
+;;; Main entry point for a single agent turn. Orchestrates the pipeline:
+;;;   1. Emits turn.started event
+;;;   2. Dispatches agent-start hook
+;;;   3. Builds normalized model context via build-raw-messages
+;;;   4. Emits context.built event
+;;;   5. Streams from provider via stream-from-provider
+;;;   6. On cancellation: handle-cancellation
+;;;   7. Otherwise: build-stream-result for final assembly
 (define (run-agent-turn context
                         provider
                         bus

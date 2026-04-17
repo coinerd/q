@@ -34,6 +34,9 @@
 ;; ============================================================
 
 ;; Ensure the model-request has a 'model setting; if missing, set it to default-model.
+;;; ensure-model-setting : model-request? string? -> model-request?
+;;; If the request has no 'model key in its settings, returns a new request
+;;; with default-model set; otherwise returns the request unchanged.
 (define (ensure-model-setting req default-model)
   (if (hash-has-key? (model-request-settings req) 'model)
       req
@@ -47,6 +50,11 @@
 
 ;; Validates that the API key is present and non-empty.
 ;; Raises exn:fail with a provider-specific message if missing.
+;;; validate-api-key! : string? string? hash? -> void?
+;;;
+;;; Takes (provider-name env-var config). Checks that config['api-key] is
+;;; a non-empty string; raises exn:fail with a setup message if missing.
+;;; Used by provider implementations to fail fast on missing credentials.
 (define (validate-api-key! provider-name env-var config)
   (define api-key (hash-ref config 'api-key ""))
   (when (or (not api-key) (not (string? api-key)) (string=? (string-trim api-key) ""))
@@ -70,17 +78,26 @@
 ;; Generic interface
 ;; ============================================================
 
+;; provider-name : provider? -> string?
+;; Returns the provider's display name.
 (define (provider-name p)
   ((provider-dispatch p) 'name))
 
+;; provider-send : provider? model-request? -> any/c
+;; Sends a non-streaming request. Returns a model-response.
 (define (provider-send p req)
   (define send-proc ((provider-dispatch p) 'send))
   (send-proc req))
 
+;; provider-stream : provider? model-request? -> any/c
+;; Sends a streaming request. Returns a generator that yields
+;; stream-chunk? values then #f.
 (define (provider-stream p req)
   (define stream-proc ((provider-dispatch p) 'stream))
   (stream-proc req))
 
+;; provider-capabilities : provider? -> hash?
+;; Returns the provider's capability map (e.g., #hasheq((streaming . #t))).
 (define (provider-capabilities p)
   ((provider-dispatch p) 'capabilities))
 
@@ -109,6 +126,15 @@
             "expected generator or list of stream-chunks, got: ~a"
             result)]))
 
+;;; make-provider : procedure? procedure? procedure? procedure? -> provider?
+;;;
+;;; Creates a provider from four procedures:
+;;;   name-proc  : thunk -> string (display name)
+;;;   caps-proc  : thunk -> hash (capability map)
+;;;   send-proc  : model-request -> model-response (non-streaming)
+;;;   stream-proc: model-request -> generator-or-list (streaming)
+;;; The stream result is automatically wrapped in a generator if a list is
+;;; returned.
 (define (make-provider name-proc caps-proc send-proc stream-proc)
   (provider (lambda (op)
               (case op
@@ -125,6 +151,9 @@
 
 ;; Returns #f for providers that don't support token counting,
 ;; or an integer count for providers that do.
+;; provider-count-tokens : provider? any/c -> (or/c #f integer?)
+;; Returns token count for the given request, or #f if the provider
+;; doesn't support counting. Default implementation returns #f.
 (define (provider-count-tokens p req)
   (define count-proc ((provider-dispatch p) 'count-tokens))
   (count-proc req))
@@ -133,6 +162,13 @@
 ;; Mock provider (for testing)
 ;; ============================================================
 
+;;; make-mock-provider : any/c [#:name string?] [#:stream-chunks (or/c #f list?)]
+;;;                    -> provider?
+;;;
+;;; Creates a mock provider for testing. Always returns the given response
+;;; for send. For stream, yields either the provided #:stream-chunks or
+;;; auto-generated chunks derived from the response content text parts,
+;;; followed by a final chunk with usage + done?.
 (define (make-mock-provider response #:name [name "mock"] #:stream-chunks [stream-chunks #f])
   (define chunks
     (or stream-chunks
