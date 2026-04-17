@@ -47,6 +47,13 @@
          ;; Destructive command warning
          warn-on-destructive?
 
+         ;; Sandbox settings
+         sandbox-enabled?
+         sandbox-timeout
+         sandbox-memory-limit
+         sandbox-max-output
+         sandbox-max-processes
+
          ;; Defaults and derived paths
          default-session-dir
          default-project-dir
@@ -96,18 +103,24 @@
       [(and (hash? left-v) (hash? v)) (hash-set acc k (deep-merge-hash left-v v))]
       [else (hash-set acc k v)])))
 
+;; Sentinel for distinguishing "not found" from "found #f"
+(define NOT-FOUND (gensym 'not-found))
+
+(define (not-found? v)
+  (eq? v NOT-FOUND))
+
 ;; Walk a nested hash using a list of keys.
-;; Returns #f if any intermediate step fails.
+;; Returns NOT-FOUND if any intermediate step fails.
 (define (hash-nested-ref h key-path)
   (cond
-    [(null? key-path) #f]
+    [(null? key-path) NOT-FOUND]
     ;; last key — look up directly
-    [(null? (cdr key-path)) (hash-ref h (car key-path) #f)]
+    [(null? (cdr key-path)) (hash-ref h (car key-path) NOT-FOUND)]
     [else
-     (define next (hash-ref h (car key-path) #f))
+     (define next (hash-ref h (car key-path) NOT-FOUND))
      (if (hash? next)
          (hash-nested-ref next (cdr key-path))
-         #f)]))
+         NOT-FOUND)]))
 
 ;; ============================================================
 ;; Loading
@@ -171,7 +184,7 @@
     [(null? key-path) default]
     [else
      (define result (hash-nested-ref (q-settings-merged settings) key-path))
-     (if result result default)]))
+     (if (not-found? result) default result)]))
 
 ;; Get a specific provider's config hash.
 ;; Returns #f if provider not configured.
@@ -209,6 +222,35 @@
 ;; Defaults to #f (no warning).
 (define (warn-on-destructive? settings)
   (setting-ref settings 'warn-on-destructive #f))
+
+;; ============================================================
+;; Sandbox settings
+;; ============================================================
+
+;; Whether sandboxing is enabled for bash tool execution.
+;; Reads 'tools.use-sandbox' from merged settings, defaults to #t.
+(define (sandbox-enabled? settings)
+  (setting-ref* settings '(tools use-sandbox) #t))
+
+;; Sandbox timeout in seconds. Reads 'tools.sandbox-timeout'.
+;; Defaults to 120 seconds.
+(define (sandbox-timeout settings)
+  (setting-ref* settings '(tools sandbox-timeout) 120))
+
+;; Sandbox memory limit in bytes. Reads 'tools.sandbox-memory'.
+;; Defaults to 536870912 (512 MB).
+(define (sandbox-memory-limit settings)
+  (setting-ref* settings '(tools sandbox-memory) 536870912))
+
+;; Sandbox max output in bytes. Reads 'tools.sandbox-max-output'.
+;; Defaults to 1048576 (1 MB).
+(define (sandbox-max-output settings)
+  (setting-ref* settings '(tools sandbox-max-output) 1048576))
+
+;; Sandbox max concurrent processes. Reads 'tools.sandbox-max-processes'.
+;; Defaults to 10.
+(define (sandbox-max-processes settings)
+  (setting-ref* settings '(tools sandbox-max-processes) 10))
 
 ;; ============================================================
 ;; Defaults and derived paths

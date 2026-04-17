@@ -465,8 +465,8 @@
   (define q-dir (build-path tmp ".q"))
   (make-directory q-dir)
   (call-with-output-file (build-path q-dir "config.json")
-    (λ (out) (display "NOT VALID JSON!!!" out))
-    #:exists 'replace)
+                         (λ (out) (display "NOT VALID JSON!!!" out))
+                         #:exists 'replace)
   ;; Capture stderr to verify warning
   (define err-port (open-output-string))
   (define result
@@ -503,3 +503,55 @@
   (define stderr-output (get-output-string err-port))
   (check-false (string-contains? stderr-output "WARNING") "missing file should not produce warning")
   (cleanup-dir tmp))
+
+;; ============================================================
+;; GC-02: Sandbox settings
+;; ============================================================
+
+(test-case "sandbox-enabled? defaults to #t"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-equal? (sandbox-enabled? settings) #t))
+
+(test-case "sandbox-enabled? reads tools.use-sandbox"
+  (define settings (q-settings (hash) (hash) (hash 'tools (hash 'use-sandbox #f))))
+  (check-equal? (sandbox-enabled? settings) #f))
+
+(test-case "sandbox-timeout defaults to 120"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-equal? (sandbox-timeout settings) 120))
+
+(test-case "sandbox-timeout reads tools.sandbox-timeout"
+  (define settings (q-settings (hash) (hash) (hash 'tools (hash 'sandbox-timeout 30))))
+  (check-equal? (sandbox-timeout settings) 30))
+
+(test-case "sandbox-memory-limit defaults to 536870912"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-equal? (sandbox-memory-limit settings) 536870912))
+
+(test-case "sandbox-memory-limit reads tools.sandbox-memory"
+  (define settings (q-settings (hash) (hash) (hash 'tools (hash 'sandbox-memory 134217728))))
+  (check-equal? (sandbox-memory-limit settings) 134217728))
+
+(test-case "sandbox-max-output defaults to 1048576"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-equal? (sandbox-max-output settings) 1048576))
+
+(test-case "sandbox-max-output reads tools.sandbox-max-output"
+  (define settings (q-settings (hash) (hash) (hash 'tools (hash 'sandbox-max-output 65536))))
+  (check-equal? (sandbox-max-output settings) 65536))
+
+(test-case "sandbox-max-processes defaults to 10"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (check-equal? (sandbox-max-processes settings) 10))
+
+(test-case "sandbox-max-processes reads tools.sandbox-max-processes"
+  (define settings (q-settings (hash) (hash) (hash 'tools (hash 'sandbox-max-processes 3))))
+  (check-equal? (sandbox-max-processes settings) 3))
+
+(test-case "sandbox settings merge with project override"
+  (define global (hash 'tools (hash 'sandbox-timeout 60 'sandbox-memory 256)))
+  (define project (hash 'tools (hash 'sandbox-timeout 30)))
+  (define merged (merge-settings global project))
+  (define settings (q-settings global project merged))
+  (check-equal? (sandbox-timeout settings) 30) ; project wins
+  (check-equal? (sandbox-memory-limit settings) 256)) ; global inherited
