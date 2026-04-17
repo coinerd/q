@@ -427,7 +427,10 @@
                             #:queue [steering-queue #f]
                             #:follow-up-delivery-mode [follow-up-mode 'all]
                             ;; FEAT-61: injected message collector box (created by caller)
-                            #:injected-box [injected-box #f])
+                            #:injected-box [injected-box #f]
+                            ;; #1158: shutdown check thunks (avoid circular dep on agent-session)
+                            #:shutdown-check [shutdown-check #f]
+                            #:force-shutdown-check [force-shutdown-check #f])
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
   (define agent-start-payload
     (hasheq 'session-id
@@ -477,6 +480,16 @@
               ctx-with-steering))
 
         (cond
+          ;; #1158: Forced shutdown (double Ctrl+C) — immediate abort
+          [(and force-shutdown-check (force-shutdown-check))
+           (emit-session-event! bus
+                                session-id
+                                "turn.cancelled"
+                                (hasheq 'reason "force-shutdown" 'iteration iteration))
+           (make-loop-result (append ctx-with-injected '())
+                             'cancelled
+                             (hasheq 'reason "force-shutdown" 'iteration iteration))]
+
           [(and token (cancellation-token-cancelled? token))
            (emit-session-event! bus
                                 session-id
@@ -485,6 +498,16 @@
            (make-loop-result (append ctx-with-injected '())
                              'cancelled
                              (hasheq 'reason "cancellation-token" 'iteration iteration))]
+
+          ;; #1158: Graceful shutdown — finish after current iteration
+          [(and shutdown-check (shutdown-check))
+           (emit-session-event! bus
+                                session-id
+                                "turn.cancelled"
+                                (hasheq 'reason "graceful-shutdown" 'iteration iteration))
+           (make-loop-result (append ctx-with-injected '())
+                             'completed
+                             (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
 
           [else
            (define turn-id (generate-id))

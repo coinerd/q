@@ -84,7 +84,15 @@
          thinking-level?
          thinking-level->budget
          agent-session-thinking-level
-         set-thinking-level!)
+         set-thinking-level!
+         ;; Graceful shutdown (#1158)
+         agent-session-shutdown-requested?
+         agent-session-force-shutdown?
+         request-shutdown!
+         force-shutdown!
+         shutdown-requested?
+         force-shutdown-requested?
+         reset-shutdown-flags!)
 
 ;; ============================================================
 ;; Internal struct
@@ -108,7 +116,9 @@
          [last-compaction-time #:mutable] ; integer or #f — timestamp of last compaction
          [persisted? #:mutable] ; boolean — #f until directory + first write
          [pending-entries #:mutable] ; (listof message?) — buffered before persistence
-         [thinking-level #:mutable]) ; symbol — one of thinking-levels (#1153)
+         [thinking-level #:mutable] ; symbol — one of thinking-levels (#1153)
+         [shutdown-requested? #:mutable] ; boolean — graceful shutdown flag (#1158)
+         [force-shutdown? #:mutable]) ; boolean — immediate shutdown flag (#1158)
   #:transparent)
 
 ;; ============================================================
@@ -198,7 +208,9 @@
                    #f ; last-compaction-time
                    #f ; persisted?
                    '() ; pending-entries
-                   (hash-ref config 'thinking-level 'medium))) ; thinking-level (#1153)
+                   (hash-ref config 'thinking-level 'medium) ; thinking-level (#1153)
+                   #f ; shutdown-requested? (#1158)
+                   #f)) ; force-shutdown? (#1158)
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
@@ -289,7 +301,9 @@
                    #f ; last-compaction-time
                    #t ; persisted? (resumed sessions already have directory)
                    '() ; pending-entries
-                   (hash-ref config 'thinking-level 'medium))) ; thinking-level (#1153)
+                   (hash-ref config 'thinking-level 'medium) ; thinking-level (#1153)
+                   #f ; shutdown-requested? (#1158)
+                   #f)) ; force-shutdown? (#1158)
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
@@ -398,7 +412,9 @@
                    #f ; last-compaction-time
                    #t ; persisted? (fork already created directory and wrote entries)
                    '() ; pending-entries
-                   (agent-session-thinking-level sess))) ; inherit thinking-level (#1153)
+                   (agent-session-thinking-level sess) ; inherit thinking-level (#1153)
+                   #f ; shutdown-requested? (#1158)
+                   #f)) ; force-shutdown? (#1158)
 
   ;; Emit session.forked on original session's bus
   (emit-session-event! (agent-session-event-bus sess)
@@ -663,7 +679,9 @@
                         sid
                         max-iterations
                         #:cancellation-token cancellation-tok
-                        #:config cfg)))
+                        #:config cfg
+                        #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
+                        #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess)))))
 
 ;; ============================================================
 ;; run-prompt!
@@ -924,3 +942,33 @@
   (unless (thinking-level? level)
     (raise-argument-error 'set-thinking-level! "thinking level" level))
   (set-agent-session-thinking-level! sess level))
+
+;; ============================================================
+;; Graceful shutdown (#1158)
+;; ============================================================
+
+;; request-shutdown! : agent-session? -> void?
+;; Request graceful shutdown — agent exits after current turn completes.
+(define (request-shutdown! sess)
+  (set-agent-session-shutdown-requested?! sess #t))
+
+;; force-shutdown! : agent-session? -> void?
+;; Force immediate shutdown — for double Ctrl+C.
+(define (force-shutdown! sess)
+  (set-agent-session-force-shutdown?! sess #t))
+
+;; shutdown-requested? : agent-session? -> boolean?
+;; Check if a graceful shutdown has been requested.
+(define (shutdown-requested? sess)
+  (agent-session-shutdown-requested? sess))
+
+;; force-shutdown-requested? : agent-session? -> boolean?
+;; Check if a forced shutdown has been requested.
+(define (force-shutdown-requested? sess)
+  (agent-session-force-shutdown? sess))
+
+;; reset-shutdown-flags! : agent-session? -> void?
+;; Reset both shutdown flags (primarily for testing).
+(define (reset-shutdown-flags! sess)
+  (set-agent-session-shutdown-requested?! sess #f)
+  (set-agent-session-force-shutdown?! sess #f))
