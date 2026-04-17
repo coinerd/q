@@ -48,7 +48,8 @@
 
       ;; 2. Start the bridge
       (start-rpc-ui-bridge! ui-ch out)
-      (sleep 0.05) ; let thread start
+      ;; Yield to let bridge thread start (replaces sleep 0.05)
+      (sync/timeout 0.05 never-evt)
 
       ;; 3. Create a ui-request with a response channel
       (define resp-ch (make-channel))
@@ -56,7 +57,8 @@
 
       ;; 4. Send request onto the ui-channel
       (thread (lambda () (channel-put ui-ch req)))
-      (sleep 0.1) ; let bridge thread process
+      ;; Yield to let bridge thread process (replaces sleep 0.1)
+      (sync/timeout 0.1 never-evt)
 
       ;; 5. Read from the output port and verify JSON notification
       (define output (get-output-string out))
@@ -90,13 +92,13 @@
       (define ui-ch (make-ui-channel))
       (define out (open-output-string))
       (start-rpc-ui-bridge! ui-ch out)
-      (sleep 0.05)
+      (sync/timeout 0.05 never-evt)
 
       (define resp-ch (make-channel))
       (define req
         (ui-select-request 'select resp-ch "Pick one:" '(("a" . "Option A") ("b" . "Option B")) #f))
       (thread (lambda () (channel-put ui-ch req)))
-      (sleep 0.1)
+      (sync/timeout 0.1 never-evt)
 
       (define output (get-output-string out))
       (define parsed (read-json (open-input-string output)))
