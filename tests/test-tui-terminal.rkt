@@ -270,10 +270,9 @@
 
     (test-case "disable-mouse-tracking emits correct escape sequences"
       (define output (with-output-to-string disable-mouse-tracking))
-      ;; Should contain ESC[?1002l and ESC[?1000l
-      (check-not-false (string-contains? output "\x1b[?1002l")
-                       "disables button-event tracking (mode 1002)")
-      (check-not-false (string-contains? output "\x1b[?1000l") "disables basic tracking (mode 1000)"))
+      ;; Should contain ESC[?1006l (SGR extended mouse mode)
+      (check-not-false (string-contains? output "\x1b[?1006l")
+                       "disables SGR extended mouse mode (1006)"))
 
     (test-case "tui-term-close output includes mouse disable sequences"
       ;; Verify that tui-term-close calls disable-mouse-tracking
@@ -293,11 +292,14 @@
     (test-case "enable then disable produces symmetric sequences"
       (define enable-output (with-output-to-string enable-mouse-tracking))
       (define disable-output (with-output-to-string disable-mouse-tracking))
-      ;; Enable sets modes, disable resets them
-      (check-not-false (string-contains? enable-output "\x1b[?1000h"))
-      (check-not-false (string-contains? enable-output "\x1b[?1002h"))
-      (check-not-false (string-contains? disable-output "\x1b[?1000l"))
-      (check-not-false (string-contains? disable-output "\x1b[?1002l")))))
+      ;; Enable sets SGR mode 1006, disable resets it
+      (check-not-false (string-contains? enable-output "\x1b[?1006h"))
+      (check-not-false (string-contains? disable-output "\x1b[?1006l"))
+      ;; Should NOT contain old X10 mode sequences
+      (check-false (string-contains? enable-output "\x1b[?1000h"))
+      (check-false (string-contains? enable-output "\x1b[?1002h"))
+      (check-false (string-contains? disable-output "\x1b[?1000l"))
+      (check-false (string-contains? disable-output "\x1b[?1002l")))))
 
 (define all-tests
   (test-suite "All TUI Terminal Tests"

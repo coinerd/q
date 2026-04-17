@@ -452,15 +452,13 @@
 
 (define (enable-mouse-tracking)
   ;; SGR extended mouse mode (mode 1006): reports press, drag, release, scroll.
-  ;; Required for tui-term which decodes SGR format exclusively.
-  ;; Previous X10 mode (1002) caused protocol mismatch crashes (#1119).
-  (display "\x1b[?1000h") ;; basic tracking as fallback
-  (display "\x1b[?1006h") ;; SGR extended mouse mode
+  ;; Decoded by decode-sgr-mouse in terminal-input.rkt.
+  ;; Previous X10 mode (1002) caused protocol mismatch (#1119).
+  (display "\x1b[?1006h")
   (flush-output))
 
 (define (disable-mouse-tracking)
   (display "\x1b[?1006l")
-  (display "\x1b[?1000l")
   (flush-output))
 
 ;; Bracketed paste mode (DEC 2004)
