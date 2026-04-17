@@ -25,7 +25,16 @@
                   compaction-result-removed-count
                   compaction-result?)
          (only-in "../runtime/settings.rkt" default-session-dir)
-         (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
+         (only-in "../llm/token-budget.rkt"
+                  DEFAULT-TOKEN-BUDGET-THRESHOLD
+                  estimate-context-tokens
+                  get-context-usage
+                  context-usage?
+                  context-usage-total-tokens
+                  context-usage-max-tokens
+                  context-usage-usage-percent
+                  context-usage-compaction-threshold
+                  context-usage-near-threshold?)
          (only-in "../extensions/api.rkt" list-extensions)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
          (only-in "../runtime/session-index.rkt"
@@ -96,7 +105,26 @@
          in-memory-append-entries!
          in-memory-load
          in-memory-list-sessions
-         in-memory-fork!)
+         in-memory-fork!
+
+         ;; Unified factory (#1152)
+         create-agent-session
+
+         ;; Thinking level (#1153) — re-exported from agent-session
+         session:thinking-levels
+         session:thinking-level?
+         session:thinking-level->budget
+         session:agent-session-thinking-level
+         session:set-thinking-level!
+
+         ;; Context usage (#1154) — re-exported from token-budget
+         context-usage?
+         context-usage-total-tokens
+         context-usage-max-tokens
+         context-usage-usage-percent
+         context-usage-compaction-threshold
+         get-context-usage
+         context-usage-near-threshold?)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt
@@ -431,3 +459,50 @@
        [(and (exact-integer? target) (> target 0)) (navigate-next-leaf! idx)]
        [(and (exact-integer? target) (< target 0)) (navigate-prev-leaf! idx)]
        [else 'invalid-target])]))
+
+;; ============================================================
+;; create-agent-session — unified factory (#1152)
+;; ============================================================
+
+;;; create-agent-session : #:provider any/c
+;;;                        [#:session-dir (or/c path-string? path? #f)]
+;;;                        [#:session-id (or/c string? #f)]
+;;;                        [#:model-name (or/c string? #f)]
+;;;                        [#:max-iterations exact-positive-integer?]
+;;;                        [#:system-instructions (listof string?)]
+;;;                        [#:token-budget-threshold exact-positive-integer?]
+;;;                        [#:tool-registry any/c]
+;;;                        [#:extension-registry any/c]
+;;;                        [#:event-bus any/c]
+;;;                        [#:thinking-level (or/c symbol? #f)]
+;;;                        -> runtime?
+;;;
+;;; Unified single-call entry point: creates a runtime AND opens a session
+;;; in one step. Delegates to make-runtime + open-session internally.
+;;; If #:thinking-level is provided, it is set on the session.
+(define (create-agent-session #:provider provider
+                              #:session-dir [session-dir (default-session-dir)]
+                              #:session-id [session-id #f]
+                              #:model-name [model-name #f]
+                              #:max-iterations [max-iterations 10]
+                              #:system-instructions [system-instructions '()]
+                              #:token-budget-threshold
+                              [token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD]
+                              #:tool-registry [tool-registry (make-tool-registry)]
+                              #:extension-registry [extension-registry #f]
+                              #:event-bus [event-bus (make-event-bus)]
+                              #:thinking-level [thinking-level #f])
+  (define rt
+    (make-runtime #:provider provider
+                  #:session-dir session-dir
+                  #:tool-registry tool-registry
+                  #:extension-registry extension-registry
+                  #:event-bus event-bus
+                  #:model-name model-name
+                  #:max-iterations max-iterations
+                  #:system-instructions system-instructions
+                  #:token-budget-threshold token-budget-threshold))
+  (define opened (open-session rt session-id))
+  (when (and thinking-level (runtime-rt-session opened))
+    (session:set-thinking-level! (runtime-rt-session opened) thinking-level))
+  opened)

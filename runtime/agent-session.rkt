@@ -78,7 +78,13 @@
          session-history
          session-active?
          close-session!
-         maybe-compact-context)
+         maybe-compact-context
+         ;; Thinking level control (#1153)
+         thinking-levels
+         thinking-level?
+         thinking-level->budget
+         agent-session-thinking-level
+         set-thinking-level!)
 
 ;; ============================================================
 ;; Internal struct
@@ -101,7 +107,8 @@
          [compacting? #:mutable] ; boolean — guard against recursive compaction
          [last-compaction-time #:mutable] ; integer or #f — timestamp of last compaction
          [persisted? #:mutable] ; boolean — #f until directory + first write
-         [pending-entries #:mutable]) ; (listof message?) — buffered before persistence
+         [pending-entries #:mutable] ; (listof message?) — buffered before persistence
+         [thinking-level #:mutable]) ; symbol — one of thinking-levels (#1153)
   #:transparent)
 
 ;; ============================================================
@@ -190,7 +197,8 @@
                    #f ; compacting?
                    #f ; last-compaction-time
                    #f ; persisted?
-                   '())) ; pending-entries
+                   '() ; pending-entries
+                   (hash-ref config 'thinking-level 'medium))) ; thinking-level (#1153)
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
@@ -280,7 +288,8 @@
                    #f ; compacting?
                    #f ; last-compaction-time
                    #t ; persisted? (resumed sessions already have directory)
-                   '())) ; pending-entries
+                   '() ; pending-entries
+                   (hash-ref config 'thinking-level 'medium))) ; thinking-level (#1153)
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
@@ -388,7 +397,8 @@
                    #f ; compacting?
                    #f ; last-compaction-time
                    #t ; persisted? (fork already created directory and wrote entries)
-                   '())) ; pending-entries
+                   '() ; pending-entries
+                   (agent-session-thinking-level sess))) ; inherit thinking-level (#1153)
 
   ;; Emit session.forked on original session's bus
   (emit-session-event! (agent-session-event-bus sess)
@@ -875,3 +885,42 @@
              [next-model (list-ref unique-names next-idx)])
         (set-agent-session-model-name! sess next-model)
         next-model)))
+
+;; ============================================================
+;; Thinking level control (#1153)
+;; ============================================================
+
+;; Valid thinking levels for reasoning models.
+;;   off     — no extended thinking
+;;   minimal — brief reasoning (1k tokens)
+;;   low     — light reasoning (4k tokens)
+;;   medium  — moderate reasoning (8k tokens, default)
+;;   high    — deep reasoning (16k tokens)
+;;   xhigh   — maximum reasoning (32k tokens)
+(define thinking-levels '(off minimal low medium high xhigh))
+
+;; thinking-level? : any/c -> boolean?
+;; Returns #t if v is a valid thinking level symbol.
+(define (thinking-level? v)
+  (and (symbol? v) (member v thinking-levels) #t))
+
+;; thinking-level->budget : symbol? -> exact-nonnegative-integer?
+;; Maps a thinking level to an approximate token budget for
+;; Anthropic-style extended thinking. Returns 0 for unknown levels.
+(define (thinking-level->budget level)
+  (case level
+    [(off) 0]
+    [(minimal) 1024]
+    [(low) 4096]
+    [(medium) 8192]
+    [(high) 16384]
+    [(xhigh) 32768]
+    [else 0]))
+
+;; set-thinking-level! : agent-session? symbol? -> void?
+;; Sets the thinking level for the session. Raises error if level
+;; is not valid.
+(define (set-thinking-level! sess level)
+  (unless (thinking-level? level)
+    (raise-argument-error 'set-thinking-level! "thinking level" level))
+  (set-agent-session-thinking-level! sess level))
