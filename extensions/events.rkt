@@ -18,17 +18,18 @@
          "../agent/types.rkt"
          "api.rkt")
 
-(provide
- (contract-out
-  [ext-subscribe!   (->* (event-bus? string? procedure?)
-                         (#:filter (or/c procedure? #f))
-                         exact-nonnegative-integer?)]
-  [ext-publish!     (-> event-bus? any/c any/c)]
-  [ext-unsubscribe! (-> event-bus? string? exact-nonnegative-integer? void?)])
- ;; Bulk cleanup
- ext-unsubscribe-all!
- ;; Query
- ext-subscription-ids)
+(define-logger ext-events)
+
+(provide (contract-out [ext-subscribe!
+                        (->* (event-bus? string? procedure?)
+                             (#:filter (or/c procedure? #f))
+                             exact-nonnegative-integer?)]
+                       [ext-publish! (-> event-bus? any/c any/c)]
+                       [ext-unsubscribe! (-> event-bus? string? exact-nonnegative-integer? void?)])
+         ;; Bulk cleanup
+         ext-unsubscribe-all!
+         ;; Query
+         ext-subscription-ids)
 
 ;; ============================================================
 ;; Per-extension subscription tracking
@@ -42,17 +43,17 @@
 ;; Track a subscription for an extension
 (define (track-subscription! ext-name sub-id)
   (call-with-semaphore ext-subscriptions-sem
-    (lambda ()
-      (define existing (hash-ref ext-subscriptions ext-name '()))
-      (hash-set! ext-subscriptions ext-name (cons sub-id existing)))))
+                       (lambda ()
+                         (define existing (hash-ref ext-subscriptions ext-name '()))
+                         (hash-set! ext-subscriptions ext-name (cons sub-id existing)))))
 
 ;; Remove a subscription from tracking
 (define (untrack-subscription! ext-name sub-id)
-  (call-with-semaphore ext-subscriptions-sem
-    (lambda ()
-      (define existing (hash-ref ext-subscriptions ext-name '()))
-      (hash-set! ext-subscriptions ext-name
-                 (filter (lambda (id) (not (= id sub-id))) existing)))))
+  (call-with-semaphore
+   ext-subscriptions-sem
+   (lambda ()
+     (define existing (hash-ref ext-subscriptions ext-name '()))
+     (hash-set! ext-subscriptions ext-name (filter (lambda (id) (not (= id sub-id))) existing)))))
 
 ;; ============================================================
 ;; ext-subscribe! : event-bus? string? procedure? #:filter -> sub-id
@@ -94,12 +95,16 @@
 (define (ext-unsubscribe-all! bus ext-name)
   (define ids
     (call-with-semaphore ext-subscriptions-sem
-      (lambda ()
-        (define ids (hash-ref ext-subscriptions ext-name '()))
-        (hash-remove! ext-subscriptions ext-name)
-        ids)))
+                         (lambda ()
+                           (define ids (hash-ref ext-subscriptions ext-name '()))
+                           (hash-remove! ext-subscriptions ext-name)
+                           ids)))
+  ;; Unsubscribe each tracked subscription; errors during cleanup
+  ;; (e.g., already-unsubscribed IDs) are logged but not propagated.
   (for ([id (in-list ids)])
-    (with-handlers ([exn:fail? (lambda (e) (void))])
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-ext-events-warning "unsubscribe cleanup id=~a: ~a" id (exn-message e)))])
       (unsubscribe! bus id))))
 
 ;; ============================================================
@@ -108,6 +113,4 @@
 
 ;; Return all tracked subscription IDs for an extension (for testing).
 (define (ext-subscription-ids ext-name)
-  (call-with-semaphore ext-subscriptions-sem
-    (lambda ()
-      (hash-ref ext-subscriptions ext-name '()))))
+  (call-with-semaphore ext-subscriptions-sem (lambda () (hash-ref ext-subscriptions ext-name '()))))

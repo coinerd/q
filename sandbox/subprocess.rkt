@@ -10,6 +10,8 @@
          racket/string
          "limits.rkt")
 
+(define-logger subprocess)
+
 (provide (struct-out subprocess-result)
          run-subprocess
          kill-subprocess!
@@ -38,11 +40,15 @@
 (define (read-available-bounded p max-bytes)
   (if (or (not p) (port-closed? p))
       ""
-      (with-handlers ([exn:fail? (lambda (_) "")])
+      ;; Non-blocking read: swallow port errors (port may close
+      ;; mid-read due to custodian shutdown during timeout).
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (log-subprocess-warning "read-available-bounded: ~a"
+                                                           (exn-message e))
+                                   "")])
         (define acc (open-output-bytes))
         (let loop ([remaining max-bytes])
-          (when (and (> remaining 0)
-                     (sync/timeout 0 p))
+          (when (and (> remaining 0) (sync/timeout 0 p))
             (define buf-size (min 4096 remaining))
             (define bs (read-bytes buf-size p))
             (cond
@@ -61,8 +67,12 @@
         (define buf-size (min 4096 remaining))
         (if (<= remaining 0)
             ;; Output hit the byte budget — drain rest and mark truncated
+            ;; Discard remainder past byte budget; port may already be
+            ;; closed by custodian, so silently swallow errors.
             (begin
-              (with-handlers ([exn:fail? void])
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (log-subprocess-warning "read-port-bounded discard: ~a"
+                                                                   (exn-message e)))])
                 (copy-port p (open-output-bytes))) ; discard remainder
               (string-append (get-output-string acc)
                              (format "\n[output truncated at ~a bytes]" max-bytes)))
@@ -192,14 +202,22 @@
       ;; Timeout
       [(not evt-result)
        ;; Collect partial output BEFORE killing — ports are still readable
+       ;; Collect partial output before killing; ports may be closed
+       ;; by the OS if the process already exited.
        (define partial-out
-         (with-handlers ([exn:fail? (lambda (_) "")])
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-subprocess-warning "partial stdout: ~a" (exn-message e))
+                                      "")])
            (read-available-bounded stdout-in max-output)))
        (define partial-err
-         (with-handlers ([exn:fail? (lambda (_) "")])
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-subprocess-warning "partial stderr: ~a" (exn-message e))
+                                      "")])
            (read-available-bounded stderr-in max-output)))
-       ;; Kill the subprocess explicitly before shutting custodian
-       (with-handlers ([exn:fail? void])
+       ;; Kill the subprocess explicitly before shutting custodian.
+       ;; May fail if process already dead.
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-subprocess-warning "subprocess-kill: ~a" (exn-message e)))])
          (subprocess-kill sp))
        (define end-ms (current-inexact-milliseconds))
        (custodian-shutdown-all cust)
@@ -219,9 +237,12 @@
        (define err-str (read-port-bounded stderr-in max-output))
        (define exit-code (subprocess-status sp))
 
-       (with-handlers ([exn:fail? void])
+       ;; Close ports; may already be closed by custodian shutdown.
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-subprocess-warning "close stdout: ~a" (exn-message e)))])
          (close-input-port stdout-in))
-       (with-handlers ([exn:fail? void])
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-subprocess-warning "close stderr: ~a" (exn-message e)))])
          (close-input-port stderr-in))
        (custodian-shutdown-all cust)
 
