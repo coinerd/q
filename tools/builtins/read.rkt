@@ -6,16 +6,13 @@
          racket/list
          racket/dict
          (only-in "../tool.rkt" make-success-result make-error-result)
-         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines expand-home-path)
-         (only-in "../../util/truncation.rkt" truncate-output))
+         (only-in "../../util/path-helpers.rkt"
+                  contains-null-bytes?
+                  bytes->display-lines
+                  expand-home-path)
+         (only-in "../../util/truncation.rkt" truncate-output MAX-OUTPUT-BYTES MAX-OUTPUT-LINES))
 
 (provide tool-read)
-
-;; Default maximum number of lines to return
-(define DEFAULT-MAX-LINES 2000)
-
-;; Maximum total bytes for output content
-(define DEFAULT-MAX-BYTES 50000)
 
 ;; Format a single numbered line
 (define (format-line n text)
@@ -59,7 +56,7 @@
 
              [else
               ;; 5. Apply offset/limit
-              (define max-lines (or limit DEFAULT-MAX-LINES))
+              (define max-lines (or limit MAX-OUTPUT-LINES))
               (define start-idx (max 0 (sub1 offset)))
               (define end-idx (min total-lines (+ start-idx max-lines)))
 
@@ -80,11 +77,10 @@
 
                  (define joined (string-join formatted "\n"))
                  (define result-text
-                   (if (> (string-length joined) DEFAULT-MAX-BYTES)
-                       (string-append (substring joined 0 DEFAULT-MAX-BYTES)
-                                      "\n[SYS] Output truncated at "
-                                      (number->string DEFAULT-MAX-BYTES)
-                                      " bytes]")
+                   (if (> (string-length joined) MAX-OUTPUT-BYTES)
+                       (string-append (substring joined 0 MAX-OUTPUT-BYTES)
+                                      (format "\n[Output truncated. ~a bytes omitted]"
+                                              (- (string-length joined) MAX-OUTPUT-BYTES)))
                        joined))
 
                  (make-success-result (list (string-append result-text "\n"))

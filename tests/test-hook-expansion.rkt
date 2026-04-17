@@ -166,7 +166,7 @@
                                   (hasheq 'turn-start
                                           (lambda (ctx payload)
                                             (hook-amend (format "ctx:~a" (ctx-session-id ctx)))))))
-  (define ctx (extension-ctx "s42" "/tmp" (make-event-bus) reg #f #f #f #f #f #f #f))
+  (define ctx (extension-ctx "s42" "/tmp" (make-event-bus) reg #f #f #f #f #f #f #f #f))
   (define result (dispatch-hooks 'turn-start "hello" reg #:ctx ctx))
   (check-equal? (hook-result-payload result) "ctx:s42"))
 

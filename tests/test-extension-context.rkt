@@ -484,3 +484,29 @@
   (parameterize ([current-hook-timeout-ms #f])
     (dispatch-hooks 'tool-call "payload" reg #:ctx ctx)
     (check-true (unbox checked-cancelled))))
+
+;; ============================================================
+;; Provider registry accessor (#1114)
+;; ============================================================
+
+(test-case "ctx-provider-registry returns #f when not provided"
+  (define bus (make-event-bus))
+  (define reg (make-extension-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "sess-prov-1"
+                        #:session-dir "/tmp"
+                        #:event-bus bus
+                        #:extension-registry reg))
+  (check-false (ctx-provider-registry ctx)))
+
+(test-case "ctx-provider-registry returns provider registry when provided"
+  (define bus (make-event-bus))
+  (define reg (make-extension-registry))
+  (define fake-provider-reg 'some-provider-registry)
+  (define ctx
+    (make-extension-ctx #:session-id "sess-prov-2"
+                        #:session-dir "/tmp"
+                        #:event-bus bus
+                        #:extension-registry reg
+                        #:provider-registry fake-provider-reg))
+  (check-equal? (ctx-provider-registry ctx) 'some-provider-registry))

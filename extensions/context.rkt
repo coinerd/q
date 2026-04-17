@@ -34,7 +34,9 @@
          ctx-session-store
          ctx-tool-registry
          ctx-command-registry
-         ctx-ui-channel)
+         ctx-ui-channel
+         ;; Accessor (#1114: provider registry access for extensions)
+         ctx-provider-registry)
 
 ;; ============================================================
 ;; extension-ctx struct
@@ -52,7 +54,8 @@
          session-store ; (or/c any/c #f) — read-only session access
          tool-registry ; (or/c any/c #f) — dynamic tool registration
          command-registry ; (or/c any/c #f) — slash command registration
-         ui-channel) ; (or/c channel? #f) — user interaction requests
+         ui-channel ; (or/c channel? #f) — user interaction requests
+         provider-registry) ; (or/c provider-registry? #f) — LLM provider access (#1114)
   #:transparent)
 
 ;; ============================================================
@@ -70,7 +73,8 @@
                             #:session-store [session-store #f]
                             #:tool-registry [tool-registry #f]
                             #:command-registry [command-registry #f]
-                            #:ui-channel [ui-channel #f])
+                            #:ui-channel [ui-channel #f]
+                            #:provider-registry [provider-registry #f])
   (extension-ctx session-id
                  session-dir
                  event-bus
@@ -81,7 +85,8 @@
                  session-store
                  tool-registry
                  command-registry
-                 ui-channel))
+                 ui-channel
+                 provider-registry))
 
 ;; ============================================================
 ;; Accessor aliases — short, ergonomic names
@@ -99,3 +104,5 @@
 (define ctx-tool-registry extension-ctx-tool-registry)
 (define ctx-command-registry extension-ctx-command-registry)
 (define ctx-ui-channel extension-ctx-ui-channel)
+;; #1114: provider registry accessor alias
+(define ctx-provider-registry extension-ctx-provider-registry)
