@@ -492,12 +492,24 @@
                             st))))))))
   ;; If streaming, append the partial streaming text (not cached)
   (define streaming (ui-state-streaming-text state))
-  (define all-lines
+  (define with-streaming
     (if (and streaming (not (string=? streaming "")))
         (append formatted-lines
                 (for/list ([line (in-list (wrap-text streaming width))])
                   (styled-line (list (styled-segment line (theme->style 'muted))))))
         formatted-lines))
+  ;; If thinking, append the thinking block (not cached)
+  (define thinking-text (ui-state-streaming-thinking state))
+  (define all-lines
+    (if (and thinking-text (not (string=? thinking-text "")))
+        (append with-streaming
+                (list (styled-line (list (styled-segment "  ┄ thinking "
+                                                         (theme->style 'muted '(dim))))))
+                (for/list ([line (in-list (wrap-text thinking-text (max 1 (- width 4))))])
+                  (styled-line (list (styled-segment (string-append "  │ " line)
+                                                     (theme->style 'muted '(dim))))))
+                (list (styled-line (list (styled-segment "  ┄" (theme->style 'muted '(dim)))))))
+        with-streaming))
   (define total (length all-lines))
   (define sliced-lines
     (if (<= total transcript-height)
@@ -515,10 +527,15 @@
   (define status (ui-status-text state))
   (define busy? (ui-busy? state))
   (define streaming-text (ui-state-streaming-text state))
-  (define thinking? (and busy? (not streaming-text)))
+  (define streaming-thinking (ui-state-streaming-thinking state))
+  (define thinking? (and busy? (not streaming-text) (not streaming-thinking)))
+  (define actively-thinking? (and streaming-thinking (not (string=? streaming-thinking ""))))
   (define busy-marker (if busy? "*" " "))
   (define scroll-indicator (if (> (ui-state-scroll-offset state) 0) " ↑" ""))
-  (define thinking-indicator (if thinking? " [thinking...]" ""))
+  (define thinking-indicator
+    (cond
+      [(or actively-thinking? thinking?) " [thinking...]"]
+      [else ""]))
   ;; BUG-55: Show mock provider warning in status bar
   (define mock-warning (if (ui-state-mock-provider? state) " [No API key]" ""))
   (define left (format " ~a q | ~a | ~a " busy-marker session model))
