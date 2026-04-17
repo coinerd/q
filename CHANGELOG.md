@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.7] — 2026-04-17
+
+### Fixed
+
+- **SGR mouse event decoding** (#1130): Mouse selection in TUI now works correctly. Previously, SGR mouse events (mode 1006) were not decoded — `ESC[<` sequences fell through the CSI decoder as escape key + garbage characters, mangling the terminal display.
+- **Mouse enable/disable simplified** (#1130): Removed redundant X10 mode 1000h from enable sequence. Now uses SGR mode 1006 exclusively.
+- **Test assertions corrected** (#1131): Mouse mode tests now assert correct SGR mode 1006 (previously asserted obsolete X10 mode 1002).
+- **Mouse cleanup robustness** (#1132): Verified defense-in-depth cleanup in all exit paths (normal, error, signal).
+
+### Added
+
+- `decode-sgr-mouse` in `terminal-input.rkt`: Decodes SGR mouse events (`ESC[<button;x;yM/m`) into X10-compatible `tmousemsg` vectors so the existing dual-path mouse dispatch works unchanged.
+- 12 new SGR mouse decode tests covering press, release, scroll, drag, high coordinates, incomplete sequences, and X10 backward compatibility.
+
 ## [0.10.6] — 2026-04-17
 
 ### Added — SDK/RPC Completeness & Feature Polish

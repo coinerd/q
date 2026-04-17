@@ -13,6 +13,7 @@
 
 ;; Raw stdin reading (used by facade for input selection)
 (provide real-stdin-read-msg
+         decode-sgr-mouse
          stub-byte-ready?
          buffered-read-byte
          input-buffer-reset!
@@ -225,6 +226,8 @@
     [(= b 54) (decode-csi-tilled in 54)]
     [(= b 50) (decode-csi-tilled in 50)]
     [(= b 51) (decode-csi-tilled in 51)]
+    ;; ESC[< — SGR mouse event (mode 1006)
+    [(= b 60) (decode-sgr-mouse in)]
     [(= b 77) ;; ESC[M — X10 mouse event
      (define cb (buffered-read-byte in 0.01))
      (define cx (buffered-read-byte in 0.01))
@@ -509,6 +512,75 @@
               (set! input-buffer-data (cons 0 n))
               (buffered-read-byte in 0)] ;; recursive call to consume
              [else #f])))]))
+
+;; ============================================================
+;; SGR mouse decoding (mode 1006)
+;; ============================================================
+
+;; Decode an SGR-encoded mouse event from a port.
+;; Called when decode-csi-sequence sees ESC[< (byte 60).
+;; SGR format: ESC[<button;x;yM (press/drag/scroll) or ESC[<button;x;ym (release)
+;; Button codes: 0=left, 1=middle, 2=right, 32+button=drag, 64=wheel-up, 65=wheel-down
+;; Coordinates are 1-based.
+;; Returns: tmousemsg vector with X10-compatible cb byte so existing
+;; decode-mouse-x10 in input.rkt handles the rest.
+;; Returns (make-tkeymsg-raw 'escape) on decode failure.
+(define (decode-sgr-mouse in)
+  ;; Read SGR params: button;x;y terminated by M or m
+  (define (read-sgr-param acc)
+    (define b (buffered-read-byte in 0.01))
+    (cond
+      [(not b)
+       (values (if (null? acc)
+                   #f
+                   (string->number (list->string (reverse acc))))
+               #f)]
+      ;; digit
+      [(and (>= b 48) (<= b 57)) (read-sgr-param (cons (integer->char b) acc))]
+      [(= b 59) ;; semicolon — end of param
+       (values (if (null? acc)
+                   0
+                   (string->number (list->string (reverse acc))))
+               'cont)]
+      [else
+       (values (if (null? acc)
+                   #f
+                   (string->number (list->string (reverse acc))))
+               b)]))
+  (define-values (sgr-button rest1) (read-sgr-param '()))
+  (cond
+    [(not sgr-button) (make-tkeymsg-raw 'escape)]
+    ;; No semicolon after button — incomplete SGR
+    [(not (eq? rest1 'cont)) (make-tkeymsg-raw 'escape)]
+    [else
+     (define-values (sgr-x rest2) (read-sgr-param '()))
+     (cond
+       [(not sgr-x) (make-tkeymsg-raw 'escape)]
+       ;; No semicolon after x — incomplete SGR
+       [(not (eq? rest2 'cont)) (make-tkeymsg-raw 'escape)]
+       [else
+        (define-values (sgr-y final-byte) (read-sgr-param '()))
+        (cond
+          [(not sgr-y) (make-tkeymsg-raw 'escape)]
+          [(not final-byte) (make-tkeymsg-raw 'escape)]
+          [else
+           ;; final-byte: 77 = 'M' (press/drag/scroll), 109 = 'm' (release)
+           (define release? (= final-byte 109))
+           ;; Convert SGR button to X10 cb byte:
+           ;; SGR uses same encoding as X10 but with text params instead of bytes+32
+           ;; X10 cb = 32 + button_code
+           ;; button_code: bits 0-1 = button (0/1/2), bit 5 (32) = motion, bit 6 (64) = wheel
+           ;; SGR release: same button code but terminated with 'm' instead of 'M'
+           ;; In X10, release = cb=32+3=35 (button bits=3 means release)
+           ;; So for SGR release, synthesize X10 cb = 32 + 3 = 35
+           (define cb
+             (if release?
+                 35 ;; X10 release code: button=3, no motion, no shift
+                 (+ 32 sgr-button)))
+           ;; Convert coordinates: SGR is 1-based, X10 is 1-based+32
+           (define cx (+ sgr-x 32))
+           (define cy (+ sgr-y 32))
+           (make-tmousemsg-raw cb cx cy)])])]))
 
 ;; ============================================================
 ;; Raw stdin reading (when tui-term is unavailable)

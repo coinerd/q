@@ -290,9 +290,7 @@
 
 (test-case "real-stdin-read-msg decodes bracketed paste (ESC[200~textESC[201~)"
   ;; Simulate: ESC[200~helloESC[201~
-  (define paste-bytes
-    (bytes-append
-     #"\x1b[200~hello\x1b[201~"))
+  (define paste-bytes (bytes-append #"\x1b[200~hello\x1b[201~"))
   (define in (open-input-bytes paste-bytes))
   (parameterize ([current-input-port in])
     (input-buffer-reset!)
@@ -308,10 +306,7 @@
 (test-case "real-stdin-read-msg decodes bracketed paste with multi-byte UTF-8"
   ;; Simulate: ESC[200~日本語ESC[201~
   (define paste-bytes
-    (bytes-append
-     #"\x1b[200~"
-     (string->bytes/utf-8 "\u65e5\u672c\u8a9e")
-     #"\x1b[201~"))
+    (bytes-append #"\x1b[200~" (string->bytes/utf-8 "\u65e5\u672c\u8a9e") #"\x1b[201~"))
   (define in (open-input-bytes paste-bytes))
   (parameterize ([current-input-port in])
     (input-buffer-reset!)
@@ -331,3 +326,135 @@
     (check-true (vector? result))
     (check-equal? (vector-ref result 0) 'tkeymsg)
     (check-equal? (vector-ref result 1) 'page-up)))
+
+;; ============================================================
+;; SGR mouse decoding (mode 1006) — v0.10.7
+;; ============================================================
+
+(test-case "SGR mouse: left click press (ESC[<0;5;3M)"
+  ;; SGR: ESC[<0;5;3M  button=0 (left), x=5, y=3, M=press
+  ;; X10 equivalent: cb=32+0=32, cx=5+32=37, cy=3+32=35
+  (define in (open-input-bytes (bytes 27 91 60 48 59 53 59 51 77)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 32 "cb = 32 (left press)")
+      (check-equal? (tmousemsg-cx result) 37 "cx = 5+32")
+      (check-equal? (tmousemsg-cy result) 35 "cy = 3+32"))))
+
+(test-case "SGR mouse: left click release (ESC[<0;5;3m)"
+  ;; SGR: ESC[<0;5;3m  button=0, x=5, y=3, m=release
+  ;; X10 release: cb=35 (button=3), cx=37, cy=35
+  (define in (open-input-bytes (bytes 27 91 60 48 59 53 59 51 109)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 35 "cb = 35 (release)")
+      (check-equal? (tmousemsg-cx result) 37)
+      (check-equal? (tmousemsg-cy result) 35))))
+
+(test-case "SGR mouse: scroll up (ESC[<64;10;5M)"
+  ;; SGR: ESC[<64;10;5M  button=64 (wheel-up), x=10, y=5
+  ;; X10: cb=32+64=96, cx=10+32=42, cy=5+32=37
+  (define in (open-input-bytes (bytes 27 91 60 54 52 59 49 48 59 53 77)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 96 "cb = 96 (scroll up)")
+      (check-equal? (tmousemsg-cx result) 42)
+      (check-equal? (tmousemsg-cy result) 37))))
+
+(test-case "SGR mouse: scroll down (ESC[<65;10;5M)"
+  ;; SGR: ESC[<65;10;5M  button=65 (wheel-down), x=10, y=5
+  ;; X10: cb=32+65=97, cx=42, cy=37
+  (define in (open-input-bytes (bytes 27 91 60 54 53 59 49 48 59 53 77)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 97 "cb = 97 (scroll down)")
+      (check-equal? (tmousemsg-cx result) 42)
+      (check-equal? (tmousemsg-cy result) 37))))
+
+(test-case "SGR mouse: drag (ESC[<32;8;4M)"
+  ;; SGR: ESC[<32;8;4M  button=32+0 (motion+left), x=8, y=4
+  ;; X10: cb=32+32=64, cx=40, cy=36
+  (define in (open-input-bytes (bytes 27 91 60 51 50 59 56 59 52 77)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 64 "cb = 64 (drag)")
+      (check-equal? (tmousemsg-cx result) 40)
+      (check-equal? (tmousemsg-cy result) 36))))
+
+(test-case "SGR mouse: high coordinates (ESC[<0;300;200M)"
+  ;; SGR: ESC[<0;300;200M  button=0, x=300, y=200
+  ;; X10: cb=32, cx=332, cy=232
+  (define sgr-bytes (bytes-append #"\x1b[<0;300;200M"))
+  (define in (open-input-bytes sgr-bytes))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 32)
+      (check-equal? (tmousemsg-cx result) 332)
+      (check-equal? (tmousemsg-cy result) 232))))
+
+(test-case "SGR mouse: incomplete sequence returns escape"
+  ;; ESC[<0;5  with no terminator — should fall back to escape
+  (define in (open-input-bytes (bytes 27 91 60 48 59 53)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (vector? result))
+    (check-equal? (vector-ref result 0) 'tkeymsg "incomplete SGR returns key msg")
+    (check-equal? (vector-ref result 1) 'escape "incomplete SGR = escape")))
+
+(test-case "X10 mouse still works (ESC[M cb cx cy)"
+  ;; Ensure existing X10 path is not broken
+  ;; ESC[M  cb=32(left), cx=38(col 5), cy=36(row 3)
+  (define in (open-input-bytes (bytes 27 91 77 32 38 36)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 32)
+      (check-equal? (tmousemsg-cx result) 38)
+      (check-equal? (tmousemsg-cy result) 36))))
+
+(test-case "SGR mouse: right click press (ESC[<2;10;5M)"
+  ;; SGR: ESC[<2;10;5M  button=2 (right), x=10, y=5
+  ;; X10: cb=32+2=34, cx=42, cy=37
+  (define in (open-input-bytes (bytes 27 91 60 50 59 49 48 59 53 77)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 34 "cb = 34 (right press)")
+      (check-equal? (tmousemsg-cx result) 42)
+      (check-equal? (tmousemsg-cy result) 37))))
+
+(test-case "SGR mouse: middle click press (ESC[<1;10;5M)"
+  ;; SGR: ESC[<1;10;5M  button=1 (middle), x=10, y=5
+  ;; X10: cb=32+1=33, cx=42, cy=37
+  (define in (open-input-bytes (bytes 27 91 60 49 59 49 48 59 53 77)))
+  (parameterize ([current-input-port in])
+    (input-buffer-reset!)
+    (define result (real-stdin-read-msg #:timeout 0.1))
+    (check-true (tmousemsg? result) "should be a mouse message")
+    (when (tmousemsg? result)
+      (check-equal? (tmousemsg-cb result) 33 "cb = 33 (middle press)")
+      (check-equal? (tmousemsg-cx result) 42)
+      (check-equal? (tmousemsg-cy result) 37))))
