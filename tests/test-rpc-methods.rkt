@@ -251,4 +251,110 @@
                       "error"
                       (format "~a should error without handler" method))))))
 
+;; ============================================================
+;; Wired handler integration tests (Issue #1107)
+;; ============================================================
+
+(define (make-wired-handlers)
+  ;; Simulate the wiring done in run-json-rpc.rkt
+  (define core-deps
+    (hasheq 'cancel-token
+            (lambda () (void))
+            'session-info-fn
+            (lambda () (hasheq 'session-id "s-default" 'active? #t))
+            'compact-fn
+            (lambda () (hasheq 'status 'not-implemented))
+            'fork-fn
+            (lambda (entry-id) (hasheq 'newSessionId "forked-1" 'status "ok"))
+            'subscribe-fn
+            (lambda (filter) 1)
+            'prompt-fn
+            (lambda (msg) (hasheq 'status "ok" 'message msg))
+            'steer-fn
+            (lambda (msg) (hasheq 'status "steered"))
+            'follow-up-fn
+            (lambda (msg) (hasheq 'status "queued"))
+            'navigate-fn
+            (lambda (target) (hasheq 'status 'not-implemented))
+            'send-message-fn
+            (lambda (role text) (hasheq 'status 'not-implemented))))
+  (define core (make-core-rpc-handlers core-deps))
+  ;; Add session management + utility handlers
+  (define extra
+    (make-hash
+     (list (cons 'ping (lambda (params) (hasheq 'pong #t)))
+           (cons 'shutdown (lambda (params) (hasheq 'status "shutting-down")))
+           (cons 'session.open (lambda (params) (hasheq 'sessionId "new-1")))
+           (cons 'session.list (lambda (params) (hasheq 'sessions '())))
+           (cons 'session.resume (lambda (params) (hasheq 'sessionId "s1" 'status "resumed")))
+           (cons 'session.close (lambda (params) (hasheq 'sessionId "s1" 'status "closed"))))))
+  (for/fold ([h core]) ([(k v) (in-hash extra)])
+    (hash-set! h k v)
+    h))
+
+(define wired-handler-tests
+  (test-suite "wired handler integration (Issue #1107)"
+
+    (test-case "wired handlers contain all expected method keys"
+      (define handlers (make-wired-handlers))
+      (define expected-methods
+        '(abort subscribe
+                session_info
+                compact
+                fork
+                prompt
+                steer
+                follow_up
+                navigate
+                send_message
+                ping
+                shutdown
+                session.open
+                session.list
+                session.resume
+                session.close))
+      (for ([method (in-list expected-methods)])
+        (check-not-false (hash-ref handlers method #f)
+                         (format "wired handlers missing method: ~a" method))))
+
+    (test-case "prompt via wired handler invokes deps function"
+      (define received (box #f))
+      (define deps
+        (hasheq 'prompt-fn
+                (lambda (msg)
+                  (set-box! received msg)
+                  (hasheq 'status "ok" 'message msg))))
+      (define core (make-core-rpc-handlers deps))
+      (define handler (hash-ref core 'prompt))
+      (define result (handler (hasheq 'message "hello world")))
+      (check-equal? (hash-ref result 'status) "ok")
+      (check-equal? (unbox received) "hello world"))
+
+    (test-case "steer via wired handler invokes deps function"
+      (define received (box #f))
+      (define deps
+        (hasheq 'steer-fn
+                (lambda (msg)
+                  (set-box! received msg)
+                  (hasheq 'status "steered"))))
+      (define core (make-core-rpc-handlers deps))
+      (define handler (hash-ref core 'steer))
+      (define result (handler (hasheq 'message "redirect")))
+      (check-equal? (hash-ref result 'status) "steered")
+      (check-equal? (unbox received) "redirect"))
+
+    (test-case "follow_up via wired handler invokes deps function"
+      (define received (box #f))
+      (define deps
+        (hasheq 'follow-up-fn
+                (lambda (msg)
+                  (set-box! received msg)
+                  (hasheq 'status "queued"))))
+      (define core (make-core-rpc-handlers deps))
+      (define handler (hash-ref core 'follow_up))
+      (define result (handler (hasheq 'message "next")))
+      (check-equal? (hash-ref result 'status) "queued")
+      (check-equal? (unbox received) "next"))))
+
 (run-tests rpc-method-tests)
+(run-tests wired-handler-tests)

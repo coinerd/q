@@ -53,6 +53,7 @@
 (provide agent-session?
          agent-session-session-dir
          agent-session-queue
+         agent-session-index
          agent-session-extension-registry
          agent-session-model-name
          ;; FEAT-65: runtime model control

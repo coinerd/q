@@ -28,6 +28,11 @@
          (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
          (only-in "../extensions/api.rkt" list-extensions)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
+         (only-in "../runtime/session-index.rkt"
+                  navigate-to-entry!
+                  navigate-next-leaf!
+                  navigate-prev-leaf!
+                  navigate-result?)
          (only-in "../runtime/session-store.rkt"
                   make-in-memory-session-manager
                   in-memory-session-manager?
@@ -72,10 +77,17 @@
                        [compact-session! (->* (runtime?) (#:persist? boolean?) any)]
                        [session-info (runtime? . -> . (or/c #f hash?))]
                        [steer! (runtime? string? . -> . runtime?)]
-                       [follow-up! (runtime? string? . -> . runtime?)])
+                       [follow-up! (runtime? string? . -> . runtime?)]
+                       [navigate!
+                        (-> runtime?
+                            (or/c string? exact-integer?)
+                            (or/c navigate-result? 'no-active-session 'invalid-target))])
 
          ;; Compaction types
          compaction-result?
+
+         ;; Navigation types
+         navigate-result?
 
          ;; In-memory session manager (GC-18)
          make-in-memory-session-manager
@@ -397,3 +409,25 @@
      (define q (session:agent-session-queue sess))
      (enqueue-followup! q message)
      rt]))
+
+;; ============================================================
+;; navigate!
+;; ============================================================
+
+;;; navigate! : runtime? (or/c string? exact-integer?)
+;;;           -> (or/c navigate-result? 'no-active-session 'invalid-target)
+;;;
+;;; Navigate the session tree. String target = entry ID;
+;;; positive integer = next leaf; negative integer = prev leaf.
+(define (navigate! rt target)
+  (define sess (rt-sess rt))
+  (cond
+    [(not sess) 'no-active-session]
+    [else
+     (define idx (session:agent-session-index sess))
+     (cond
+       [(not idx) 'no-active-session]
+       [(string? target) (or (navigate-to-entry! idx target) 'invalid-target)]
+       [(and (exact-integer? target) (> target 0)) (navigate-next-leaf! idx)]
+       [(and (exact-integer? target) (< target 0)) (navigate-prev-leaf! idx)]
+       [else 'invalid-target])]))
