@@ -124,7 +124,16 @@
          context-usage-usage-percent
          context-usage-compaction-threshold
          get-context-usage
-         context-usage-near-threshold?)
+         context-usage-near-threshold?
+
+         ;; #1196: Enriched SDK API aliases
+         q:create-session
+         q:session-send
+         q:session-subscribe
+         q:session-interrupt
+         q:session-fork
+         q:session-compact
+         q:session-info)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt
@@ -506,3 +515,32 @@
   (when (and thinking-level (runtime-rt-session opened))
     (session:set-thinking-level! (runtime-rt-session opened) thinking-level))
   opened)
+
+;; ============================================================
+;; #1196: Enriched SDK API — convenience aliases
+;; ============================================================
+
+;; q:create-session — factory with full config override
+;; Creates a runtime, opens a session, and returns the runtime.
+;; All parameters from create-agent-session are supported.
+(define q:create-session create-agent-session)
+
+;; q:session-send — send prompt and collect response programmatically
+;; Returns (values runtime result) where result is the assistant response.
+(define q:session-send run-prompt!)
+
+;; q:session-subscribe — event subscription for streaming tokens etc.
+;; Returns subscription ID for unsubscription.
+(define q:session-subscribe subscribe-events!)
+
+;; q:session-interrupt — cancel the current operation
+(define q:session-interrupt interrupt!)
+
+;; q:session-fork — fork the session at an entry
+(define q:session-fork fork-session!)
+
+;; q:session-compact — compact the session context
+(define q:session-compact compact-session!)
+
+;; q:session-info — get session metadata
+(define q:session-info session-info)

@@ -13,6 +13,7 @@
          "../llm/openai-compatible.rkt"
          "../llm/gemini.rkt"
          "../llm/anthropic.rkt"
+         "../llm/azure-openai.rkt"
          racket/string)
 
 (provide build-provider
@@ -36,6 +37,7 @@
   (cond
     [(equal? prov-name "gemini") (make-gemini-provider config)]
     [(equal? prov-name "anthropic") (make-anthropic-provider config)]
+    [(equal? prov-name "azure") (make-azure-openai-provider config)]
     [else (make-openai-compatible-provider config)]))
 
 ;; Helper: Check if a URL points to a local/self-hosted provider.

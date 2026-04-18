@@ -15,7 +15,8 @@
          "builtins/find.rkt"
          "builtins/ls.rkt"
          "builtins/date.rkt"
-         "builtins/firecrawl.rkt")
+         "builtins/firecrawl.rkt"
+         "builtins/spawn-subagent.rkt")
 
 (provide register-default-tools!)
 
@@ -161,4 +162,22 @@
                                              'timeout (hasheq 'type "integer"
                                                               'description "Timeout in seconds for crawl polling (default 30)")))
                  tool-firecrawl)))
+  (when (should-register? "spawn-subagent")
+    (register-tool! registry
+      (make-tool "spawn-subagent"
+                 "Spawn an isolated child agent to execute a delegated task"
+                 (hasheq 'type "object"
+                         'required '("task")
+                         'properties (hasheq 'task (hasheq 'type "string"
+                                                             'description "Task description for the child agent")
+                                             'role (hasheq 'type "string"
+                                                           'description "Role prompt to load")
+                                             'model (hasheq 'type "string"
+                                                            'description "Model override for child")
+                                             'max-turns (hasheq 'type "integer"
+                                                                'description "Max turns (default 5)")
+                                             'tools (hasheq 'type "array"
+                                                            'items (hasheq 'type "string")
+                                                            'description "Allowed tool names for child")))
+                 tool-spawn-subagent)))
   (void))
