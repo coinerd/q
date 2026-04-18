@@ -16,12 +16,22 @@
 (define MAX-SUMMARY-WORDS 500)
 
 ;; Helper: format file tracker section for inclusion in prompts
+;; Uses explicit XML tags for machine-readable file tracking.
 (define (file-tracker-section file-tracker)
   (if (and file-tracker (> (hash-count file-tracker) 0))
-      (format "\nFILES TRACKED:\n~a"
-              (string-join (for/list ([(k v) (in-hash file-tracker)])
-                             (format "- ~a: ~a" k v))
-                           "\n"))
+      (let ([reads (hash-ref file-tracker 'readFiles '())]
+            [writes (hash-ref file-tracker 'modifiedFiles '())])
+        (string-append
+         "\n<file-tracker>\n"
+         (if (pair? reads)
+             (format "<read-files>\n~a\n</read-files>\n"
+                     (string-join (for/list ([p (in-list reads)]) (format "  ~a" p)) "\n"))
+             "")
+         (if (pair? writes)
+             (format "<modified-files>\n~a\n</modified-files>\n"
+                     (string-join (for/list ([p (in-list writes)]) (format "  ~a" p)) "\n"))
+             "")
+         "</file-tracker>"))
       ""))
 
 ;; Prompt for initial summarization of messages
