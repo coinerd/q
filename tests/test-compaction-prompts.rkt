@@ -52,16 +52,16 @@
 
 (test-case "summary-prompt omits file tracker when #f"
   (define result (summary-prompt "msgs" #f))
-  (check-false (string-contains? result "FILES TRACKED")))
+  (check-false (string-contains? result "<file-tracker>")))
 
 (test-case "summary-prompt omits file tracker when empty hash"
   (define result (summary-prompt "msgs" (hasheq)))
-  (check-false (string-contains? result "FILES TRACKED")))
+  (check-false (string-contains? result "<file-tracker>")))
 
 (test-case "summary-prompt includes file tracker when present"
-  (define tracker (hasheq ' "/tmp/foo.rkt" "read"))
+  (define tracker (hasheq 'readFiles '("/tmp/foo.rkt") 'modifiedFiles '()))
   (define result (summary-prompt "msgs" tracker))
-  (check-true (string-contains? result "FILES TRACKED"))
+  (check-true (string-contains? result "<file-tracker>"))
   (check-true (string-contains? result "/tmp/foo.rkt")))
 
 ;; ============================================================
@@ -87,11 +87,11 @@
   (check-true (string-contains? result "Merge the new messages")))
 
 (test-case "iterative-update-prompt includes file tracker when present"
-  (define tracker (hasheq ' "/src/bar.rkt" "edited"))
+  (define tracker (hasheq 'readFiles '() 'modifiedFiles '("/src/bar.rkt")))
   (define result (iterative-update-prompt "old" "new" tracker))
-  (check-true (string-contains? result "FILES TRACKED"))
+  (check-true (string-contains? result "<file-tracker>"))
   (check-true (string-contains? result "/src/bar.rkt")))
 
 (test-case "iterative-update-prompt omits file tracker when #f"
   (define result (iterative-update-prompt "old" "new" #f))
-  (check-false (string-contains? result "FILES TRACKED")))
+  (check-false (string-contains? result "<file-tracker>")))

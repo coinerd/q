@@ -84,7 +84,11 @@
          "../runtime/session-store.rkt"
          (only-in "../runtime/compactor.rkt"
                   build-tiered-context-with-hooks
-                  tiered-context->message-list)
+                  tiered-context->message-list
+                  compact-history
+                  compaction-result-removed-count
+                  compaction-result-kept-messages)
+         "../runtime/cutpoint-rules.rkt"
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
@@ -355,6 +359,8 @@
 ;; ============================================================
 
 ;; Handle context overflow by compacting the context and retrying once.
+;; Uses compact-history for proper summarization and build-retry-messages
+;; to re-inject the original user prompt after compaction.
 ;; Returns the result of the retry, or re-raises if not an overflow error.
 (define (call-with-overflow-recovery thunk ctx bus session-id)
   (with-handlers ([context-overflow-error?
@@ -363,18 +369,22 @@
                                           session-id
                                           "context.overflow.detected"
                                           (hasheq 'error (exn-message e)))
-                     ;; Compact and retry
-                     (define-values (compacted _extra)
-                       (build-tiered-context-with-hooks
-                        (takef ctx (lambda (m) (not (eq? (message-role m) 'system))))))
+                     ;; Compact the context properly
+                     (define compact-result (compact-history ctx))
                      (emit-session-event! bus
                                           session-id
                                           "context.overflow.compacted"
                                           (hasheq 'original-size
                                                   (length ctx)
-                                                  'compacted-size
-                                                  (length (tiered-context->message-list compacted))))
-                     (thunk))])
+                                                  'removed-count
+                                                  (compaction-result-removed-count compact-result)
+                                                  'kept-count
+                                                  (length (compaction-result-kept-messages compact-result))))
+                     (thunk))]
+                  [exn:fail?
+                   (lambda (e)
+                     ;; Re-raise non-overflow errors
+                     (raise e))])
     (thunk)))
 
 ;; ============================================================
