@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] — 2026-04-18
+
+### Added
+
+- **Progressive skill disclosure** (#1175): Skills are now revealed progressively based on context, reducing cognitive overload for new users while keeping advanced features accessible.
+- **Compaction hardening** (#1176): Cumulative token tracking, split-turn edge cases, and overflow recovery make context compaction robust under real-world usage patterns.
+- **Runtime ergonomics** (#1180): Output guard for safe truncation, model hot-reload without restart, and custom entry points for extension host startup.
+- **Extension polish** (#1184): RPC↔UI bridge for extension-to-TUI communication, bash message type in TUI, and template system for scaffolding new extensions.
+- **User-facing ergonomics** (#1188): Namespaced keybindings (`~/.q/keybindings.json`), file tracking across sessions, and package management improvements.
+- **Capability gaps — subagents, lockfile, Azure provider, SDK enrichment** (#1192): Real subagent provider with process isolation, lockfile-based session safety, Azure OpenAI provider, and expanded SDK surface (navigate!, import-session!, dynamic provider registry).
+
+### Fixed
+
+- **Review findings** (#1172): Addressed milestone review findings across multiple modules.
+- **CI lint-test errors** (#1173): Resolved lint-test errors and `raco test` path resolution in CI.
+- **Parallel tool timing** (#1174): Relaxed parallel tool timing threshold for slow CI runners.
+- **Test metrics** (#548137c): Updated test lines count to 60,541.
+
 ## [0.10.8] — 2026-04-17
 
 ### Fixed
