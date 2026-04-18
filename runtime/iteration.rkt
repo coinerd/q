@@ -300,18 +300,21 @@
         (let ([hook-dispatcher-fn (and ext-reg
                                        (lambda (hook-point payload)
                                          (dispatch-hooks hook-point payload ext-reg)))])
-          (run-tool-batch tool-calls-to-run
-                          reg
-                          #:hook-dispatcher hook-dispatcher-fn
-                          #:exec-context (make-exec-context
-                                          #:working-directory (path-only log-path)
-                                          #:cancellation-token token
-                                          #:event-publisher
-                                          (lambda (event-type payload)
-                                            (emit-session-event! bus session-id event-type payload))
-                                          #:call-id (generate-id)
-                                          #:session-metadata (hasheq 'session-id session-id))
-                          #:parallel? (hash-ref config 'parallel-tools #t)))))
+          (run-tool-batch
+           tool-calls-to-run
+           reg
+           #:hook-dispatcher hook-dispatcher-fn
+           #:exec-context
+           (make-exec-context
+            #:working-directory (path-only log-path)
+            #:cancellation-token token
+            #:event-publisher (lambda (event-type payload)
+                                (emit-session-event! bus session-id event-type payload))
+            #:runtime-settings
+            (hasheq 'provider (hash-ref config 'provider #f) 'model (hash-ref config 'model-name #f))
+            #:call-id (generate-id)
+            #:session-metadata (hasheq 'session-id session-id))
+           #:parallel? (hash-ref config 'parallel-tools #t)))))
 
   ;; Emit tool.call.completed / tool.call.failed events (only for executed calls)
   (for ([tc (in-list tool-calls-to-run)]
@@ -379,12 +382,12 @@
                                                   'removed-count
                                                   (compaction-result-removed-count compact-result)
                                                   'kept-count
-                                                  (length (compaction-result-kept-messages compact-result))))
+                                                  (length (compaction-result-kept-messages
+                                                           compact-result))))
                      (thunk))]
-                  [exn:fail?
-                   (lambda (e)
-                     ;; Re-raise non-overflow errors
-                     (raise e))])
+                  [exn:fail? (lambda (e)
+                               ;; Re-raise non-overflow errors
+                               (raise e))])
     (thunk)))
 
 ;; ============================================================
