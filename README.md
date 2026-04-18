@@ -334,6 +334,8 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 **v0.10.6** — Mouse Selection Crash Fix. Configurable keybindings via JSON, session import, provider registry, truncation constants.
 
+**v0.10.5** — CHANGELOG Remediation & Docs. Backfilled CHANGELOG entries, API doc comments, per-method RPC rate limiting, test timing fixes.
+
 **v0.10.4** — Documentation & Release Pipeline. API stability tiers, migration templates, package ecosystem docs, SDK catalog, release pipeline hardening, single-source version + CI guard.
 
 **v0.10.3** — Release Pipeline Hardening & Docs. Single-source version, CI guard, API stability tiers, package ecosystem docs.

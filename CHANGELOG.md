@@ -48,6 +48,20 @@ All notable changes to this project will be documented in this file.
 - All 25 pi adoption items (P0–P5) now COMPLETE
 - ~4800+ tests passing
 
+## [0.10.5] — 2026-04-17
+
+### Added
+
+- **CHANGELOG remediation**: Backfilled CHANGELOG entries for v0.10.3 and v0.10.4, fixed duplicate v0.8.2 entry.
+- **API doc comments**: Added API doc comments to 5 core modules.
+- **Per-method RPC rate limiting**: Rate limiting for RPC methods with per-method isolation.
+- **Tool module documentation**: Documentation notes for tool module organization.
+
+### Fixed
+
+- **Test timing**: Fixed test timing and flaky test issues.
+
+
 ## [0.10.4] — 2026-04-17
 
 ### Fixed — Platform Gap Closure (GC-23–GC-27)
@@ -196,8 +210,6 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
 
 ## [0.9.0] — 2026-04-13
 
@@ -1049,7 +1061,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.10.4...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.10.8...HEAD
 [0.10.4]: https://github.com/coinerd/q/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/coinerd/q/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/coinerd/q/compare/v0.10.1...v0.10.2
