@@ -32,6 +32,13 @@
  load-project-resources
  merge-resources
 
+ ;; Progressive skill disclosure
+ skill-summary-text
+ skills-summary-section
+
+ ;; Parsing (exposed for testing)
+ parse-skill
+
  ;; File reading
  try-read-file)
 
@@ -243,6 +250,38 @@
        (hash-set acc k (deep-merge-hash left-v v))]
       [else
        (hash-set acc k v)])))
+
+;; ============================================================
+;; Progressive Skill Disclosure
+;; ============================================================
+
+;; Format a single skill as a one-line summary for the system prompt.
+;; Includes only name and description — never full content.
+(define (skill->summary-line skill)
+  (define name (hash-ref skill 'name "?"))
+  (define desc (hash-ref skill 'description ""))
+  (if (non-empty-string? desc)
+      (format "- **~a**: ~a" name desc)
+      (format "- **~a**" name)))
+
+;; Produce a compact summary text from a list of skills.
+;; Each skill gets one line: name + description only.
+;; Returns a string suitable for injection into system prompt.
+(define (skill-summary-text skills)
+  (string-join (map skill->summary-line skills) "\n"))
+
+;; Produce a full "Available Skills" section for the system prompt.
+;; Returns #f if no skills (so caller can skip injection entirely).
+;; Tells the agent to use `read` tool to load full SKILL.md on-demand.
+(define (skills-summary-section skills)
+  (cond
+    [(null? skills) #f]
+    [else
+     (define summary-lines (skill-summary-text skills))
+     (string-append
+      "## Available Skills\n\n"
+      "Skills provide specialized instructions. Load the full content with the `read` tool when needed.\n\n"
+      summary-lines)]))
 
 (define (merge-resources global-rs project-rs)
   ;; Merge global + project resources with project taking precedence.

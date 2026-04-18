@@ -20,6 +20,7 @@
                   close-session!)
          "../runtime/settings.rkt"
          "../skills/types.rkt"
+         (only-in "../skills/resource-loader.rkt" skills-summary-section)
          "../runtime/model-registry.rkt"
          (only-in "../runtime/provider-factory.rkt" build-provider)
          "../tools/tool.rkt"
@@ -79,6 +80,14 @@
   (define all-resources (merge-resources global-resources project-resources))
   (define system-instrs (resource-set-instructions all-resources))
 
+  ;; Progressive skill disclosure: inject skill summaries into system prompt
+  ;; Full SKILL.md content is available on-demand via the `read` tool
+  (define skill-section (skills-summary-section (resource-set-skills all-resources)))
+  (define final-system-instrs
+    (if skill-section
+        (append system-instrs (list skill-section))
+        system-instrs))
+
   ;; Provider uses the shared settings
   (define prov (build-provider base-config settings))
 
@@ -127,7 +136,7 @@
   (hash-set! base-config 'model-registry model-reg)
   (define effective-model-name (or model-name (default-model model-reg)))
   (hash-set! base-config 'model-name effective-model-name)
-  (hash-set! base-config 'system-instructions system-instrs)
+  (hash-set! base-config 'system-instructions final-system-instrs)
   (hash-set! base-config 'verbose? (cli-config-verbose? cfg))
   base-config)
 
