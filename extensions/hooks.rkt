@@ -41,7 +41,7 @@
 
 ;; Critical hooks default to 'block on error (safety-first).
 ;; Advisory hooks default to 'pass on error (liveness-first).
-(define critical-hooks '(tool-call session-before-fork session-before-compact input))
+(define critical-hooks '(tool-call session-before-switch session-before-fork session-before-compact input))
 
 (define (critical-hook? hook-point)
   (and (member hook-point critical-hooks) #t))
