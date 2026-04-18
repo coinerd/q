@@ -317,7 +317,7 @@
                          (displayln "(provide the-extension)")
                          (displayln "(define-q-extension loadable-ext")
                          (displayln "  #:version \"0.5.0\"")
-                         (displayln "  #:on session-start (λ (p) (hook-amend (cons 'loaded p))))")
+                        (displayln "  #:on session.created (λ (p) (hook-amend (cons 'loaded p))))")
                          (displayln "(define the-extension loadable-ext)")))
   (define reg (make-extension-registry))
   (load-extension! reg ext-file)

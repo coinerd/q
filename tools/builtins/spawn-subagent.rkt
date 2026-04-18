@@ -31,13 +31,8 @@
   (define max-turns (hash-ref args 'max-turns 5))
   (define allowed-tools (hash-ref args 'tools #f)) ;; optional list of tool names
 
-  (unless task
-    (return-error "task is required"))
-
-  ;; When task is #f, we already returned via return-error but Racket doesn't
-  ;; know that — use a conditional instead
   (if (not task)
-      (return-error "task is required")
+      (make-error-result "task is required")
       (run-subagent args role-prompt max-turns allowed-tools exec-ctx)))
 
 ;; Resolve the provider from exec-context runtime-settings.
@@ -59,8 +54,8 @@
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (return-error (format "subagent failed: ~a" (exn-message e))))])
+    (with-handlers ([exn:fail? (lambda (e)
+                               (make-error-result (format "subagent failed: ~a" (exn-message e))))])
     ;; #1204: Resolve real provider from parent's runtime-settings
     (define provider (resolve-provider exec-ctx))
     (define model-name (resolve-model-name exec-ctx args))
@@ -141,7 +136,3 @@
                          "mock-model"
                          'stop))
   (make-mock-provider mock-response #:name "subagent-mock"))
-
-;; Helper: return error result with proper content structure
-(define (return-error msg)
-  (make-tool-result (list (hasheq 'type "text" 'text msg)) (hasheq 'error #t) #t))

@@ -24,18 +24,14 @@
 ;; ============================================================
 
 ;; Create a mock provider that returns a specific response text.
-;; Tracks whether it was called for verification.
-(define (make-tracking-provider response-text #:name [prov-name "test-provider"])
-  (define called-box (box #f))
+(define (make-stub-provider response-text #:name [prov-name "test-provider"])
   (define mock-response
     (make-model-response
      (list (hasheq 'type "text" 'text response-text))
      (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)
      prov-name
      'stop))
-  (define prov
-    (make-mock-provider mock-response #:name prov-name))
-  (values prov called-box))
+  (make-mock-provider mock-response #:name prov-name))
 
 ;; Create a provider that raises on send (for error handling tests).
 (define (make-failing-provider)
@@ -72,7 +68,7 @@
 
 (test-case "#1204: subagent uses real provider from exec-context runtime-settings"
   (define response-text "Real provider response: analyzed the codebase")
-  (define-values (prov called?) (make-tracking-provider response-text))
+  (define prov (make-stub-provider response-text))
   (define ctx (make-test-exec-ctx prov))
   (define result (tool-spawn-subagent (hasheq 'task "Analyze codebase") ctx))
   (check-true (tool-result? result))
@@ -105,7 +101,7 @@
   (check-false (tool-result-is-error? result)))
 
 (test-case "#1204: subagent uses model name from runtime-settings"
-  (define-values (prov _) (make-tracking-provider "model test"))
+  (define prov (make-stub-provider "model test"))
   (define ctx (make-test-exec-ctx prov #:model "gpt-4o"))
   (define result (tool-spawn-subagent (hasheq 'task "test task") ctx))
   (check-true (tool-result? result))
@@ -131,7 +127,7 @@
               (format "error should mention 'subagent failed', got: ~v" text)))
 
 (test-case "#1204: subagent child has independent session ID"
-  (define-values (prov _) (make-tracking-provider "session test"))
+  (define prov (make-stub-provider "session test"))
   (define parent-session-id "parent-abc-123")
   (define ctx
     (make-exec-context
@@ -167,7 +163,7 @@
       (check-equal? (hash-ref details 'turns-used #f) 1))))
 
 (test-case "#1205: subagent with empty tool registry completes"
-  (define-values (prov _) (make-tracking-provider "done"))
+  (define prov (make-stub-provider "done"))
   (define ctx (make-test-exec-ctx prov))
   ;; No tools in registry — child can only do text completion
   (define result (tool-spawn-subagent (hasheq 'task "simple task" 'tools '()) ctx))
@@ -180,7 +176,7 @@
 
 (test-case "#1206: end-to-end spawn-subagent with provider in exec-context"
   (define response-text "Integration test complete")
-  (define-values (prov _) (make-tracking-provider response-text #:name "integration-prov"))
+  (define prov (make-stub-provider response-text #:name "integration-prov"))
   (define ctx (make-test-exec-ctx prov #:model "gpt-4o-mini"))
   (define result (tool-spawn-subagent
                   (hasheq 'task "Do the integration test"
@@ -203,7 +199,7 @@
 (test-case "#1206: spawn-subagent tool result contains provider response not mock"
   ;; This specifically tests that we're NOT getting the old mock response "Subagent task completed."
   (define unique-response "UNIQUE_RESPONSE_7f3a9c_not_in_mock")
-  (define-values (prov _) (make-tracking-provider unique-response))
+  (define prov (make-stub-provider unique-response))
   (define ctx (make-test-exec-ctx prov))
   (define result (tool-spawn-subagent (hasheq 'task "unique test") ctx))
   (check-false (tool-result-is-error? result))

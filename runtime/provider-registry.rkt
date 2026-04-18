@@ -139,12 +139,16 @@
 
 ;; Look up a provider by name. Returns provider-info or #f.
 (define (lookup-provider registry name)
-  (define providers (unbox (provider-registry-providers-box registry)))
-  (hash-ref providers name #f))
+  (with-lock registry
+    (lambda ()
+      (define providers (unbox (provider-registry-providers-box registry)))
+      (hash-ref providers name #f))))
 
 ;; List all registered providers.
 (define (list-providers registry)
-  (hash-values (unbox (provider-registry-providers-box registry))))
+  (with-lock registry
+    (lambda ()
+      (hash-values (unbox (provider-registry-providers-box registry))))))
 
 ;; ============================================================
 ;; #701: Model registration
@@ -178,10 +182,12 @@
 
 ;; List all models for a specific provider.
 (define (list-models-for-provider registry provider-name)
-  (define all-models (unbox (provider-registry-models-box registry)))
-  (for/list ([(k v) (in-hash all-models)]
-             #:when (string=? (registered-model-provider-name v) provider-name))
-    v))
+  (with-lock registry
+    (lambda ()
+      (define all-models (unbox (provider-registry-models-box registry)))
+      (for/list ([(k v) (in-hash all-models)]
+                 #:when (string=? (registered-model-provider-name v) provider-name))
+        v))))
 
 ;; ============================================================
 ;; #702: Model search
@@ -189,7 +195,10 @@
 
 ;; Find a single model by ID or name. Returns first match or #f.
 (define (find-model registry query)
-  (define all-models (hash-values (unbox (provider-registry-models-box registry))))
+  (define all-models
+    (with-lock registry
+      (lambda ()
+        (hash-values (unbox (provider-registry-models-box registry))))))
   (define q (string-downcase query))
   (or
    ;; Exact ID match
@@ -213,8 +222,10 @@
 
 ;; Find all models matching a query. Returns list of registered-model.
 (define (find-models registry query)
-  (define all-models (hash-values (unbox (provider-registry-models-box registry)))
-    )
+  (define all-models
+    (with-lock registry
+      (lambda ()
+        (hash-values (unbox (provider-registry-models-box registry))))))
   (define q (string-downcase query))
   (filter (lambda (m)
             (or (string-contains? (string-downcase (registered-model-id m)) q)

@@ -56,9 +56,8 @@
       (define ext
         (with-handlers ([exn:fail?
                          (lambda (e)
-                           (check-false (format "Load failed: ~a — ~a"
-                                                filename (exn-message e)))
-                           #f)])
+                           (fail (format "Load failed: ~a — ~a"
+                                         filename (exn-message e))))])
           (dynamic-require path 'the-extension)))
       (when ext
         ;; Verify it's an extension struct
@@ -139,7 +138,7 @@
       (define path (build-path examples-dir filename))
       (with-handlers ([exn:fail?
                        (lambda (e)
-                         (check-false (format "Registration failed: ~a — ~a"
+                         (fail (format "Registration failed: ~a — ~a"
                                               filename (exn-message e))))])
         (define ext (dynamic-require path 'the-extension))
         (when ext

@@ -166,7 +166,7 @@
                                   (hasheq 'turn-start
                                           (lambda (ctx payload)
                                             (hook-amend (format "ctx:~a" (ctx-session-id ctx)))))))
-  (define ctx (extension-ctx "s42" "/tmp" (make-event-bus) reg #f #f #f #f #f #f #f #f))
+  (define ctx (extension-ctx "s42" "/tmp" (make-event-bus) reg #f #f #f #f #f #f #f #f #f #f))
   (define result (dispatch-hooks 'turn-start "hello" reg #:ctx ctx))
   (check-equal? (hook-result-payload result) "ctx:s42"))
 
@@ -197,9 +197,9 @@
 (test-case "validate-hook-result returns #t for message-end + amend"
   (check-true (validate-hook-result 'message-end (hook-amend "new payload"))))
 
-(test-case "validate-hook-result returns #f for message-end + block (block not valid)"
-  ;; message-end only allows pass/amend, not block
-  (check-false (validate-hook-result 'message-end (hook-block "reason"))))
+(test-case "validate-hook-result returns #t for message-end + block"
+  ;; message-end allows pass/amend/block
+  (check-true (validate-hook-result 'message-end (hook-block "reason"))))
 
 (test-case "validate-hook-result returns #t for session-before-fork + pass"
   (check-true (validate-hook-result 'session-before-fork (hook-pass))))

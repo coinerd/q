@@ -18,7 +18,6 @@
 ;;   - Transparent struct for testability and debugging
 
 (require racket/contract
-         racket/list
          (only-in "../runtime/provider-registry.rkt"
                   register-provider!
                   unregister-provider!
@@ -142,12 +141,13 @@
 ;; ============================================================
 
 ;; Register a provider via the context's provider-registry.
-;; Returns 'registered or 'updated. Raises if no registry on context.
+;; Returns 'registered or 'updated on success.
+;; Returns (hasheq 'error #t 'message "...") when no registry on context.
 (define (ctx-register-provider! ctx name provider-instance #:config [config (hasheq)])
   (define reg (extension-ctx-provider-registry ctx))
-  (unless reg
-    (error 'ctx-register-provider! "No provider-registry on context"))
-  (register-provider! reg name provider-instance #:config config))
+  (if reg
+      (register-provider! reg name provider-instance #:config config)
+      (hasheq 'error #t 'message "No provider-registry on context")))
 
 ;; Unregister a provider via the context's provider-registry.
 (define (ctx-unregister-provider! ctx name)
