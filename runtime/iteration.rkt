@@ -293,6 +293,12 @@
           (values '() #t)
           (values amended #f))))
 
+  ;; #1208: Dispatch 'tool.execution.start hook before tool batch
+  (when (and ext-reg (not (null? tool-calls-to-run)))
+    (maybe-dispatch-hooks ext-reg 'tool.execution.start
+                          (hasheq 'tools (map tool-call-name tool-calls-to-run)
+                                  'count (length tool-calls-to-run))))
+
   ;; Run tool batch through scheduler (skip if blocked)
   (define sched-result
     (if tool-call-blocked?
@@ -315,6 +321,15 @@
             #:call-id (generate-id)
             #:session-metadata (hasheq 'session-id session-id))
            #:parallel? (hash-ref config 'parallel-tools #t)))))
+
+  ;; #1208: Dispatch 'tool.execution.end hook after tool batch
+  (when (and ext-reg (not tool-call-blocked?))
+    (maybe-dispatch-hooks ext-reg 'tool.execution.end
+                          (hasheq 'tools (for/list ([tc (in-list tool-calls-to-run)]
+                                                    [tr (in-list (scheduler-result-results sched-result))])
+                                           (hasheq 'name (tool-call-name tc)
+                                                   'status (if (tool-result-is-error? tr) 'error 'completed)))
+                                          'count (length tool-calls-to-run))))
 
   ;; Emit tool.call.completed / tool.call.failed events (only for executed calls)
   (for ([tc (in-list tool-calls-to-run)]

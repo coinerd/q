@@ -19,7 +19,9 @@
          ;; Hook point names (#1148)
          hook-point-names
          ;; #1149: expose schemas for testing
-         hook-action-schemas)
+         hook-action-schemas
+         ;; #1210: hook name validation
+         valid-hook-name?)
 
 (struct hook-result (action payload) #:transparent)
 
@@ -49,10 +51,18 @@
           '(pass amend)
           'message-end
           '(pass amend)
+          ;; #1208: message-update alias (hyphen form of message.update)
+          'message-update
+          '(amend)
           ;; Tool execution hooks
           'tool-call
           '(pass amend block)
           'tool-result
+          '(pass amend block)
+          ;; #1208: tool-call-pre / tool-result-post (dispatched from scheduler.rkt)
+          'tool-call-pre
+          '(pass amend block)
+          'tool-result-post
           '(pass amend block)
           ;; Turn lifecycle hooks
           'turn-start
@@ -68,6 +78,8 @@
           'context.assembly
           '(pass amend block)
           ;; Session hooks
+          'session-before-switch
+          '(pass block)
           'session-before-fork
           '(pass block)
           'session-before-compact
@@ -165,3 +177,13 @@
 ;; Useful for testing and introspection.
 (define (hook-point-names)
   (hash-keys hook-action-schemas))
+
+;; ============================================================
+;; #1210: Hook name validation
+;; ============================================================
+
+;; valid-hook-name? : symbol? -> boolean?
+;; Returns #t if the given symbol is a registered hook-point name.
+;; Used at extension registration time to catch typos early.
+(define (valid-hook-name? name)
+  (hash-has-key? hook-action-schemas name))
