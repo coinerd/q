@@ -12,7 +12,7 @@
 ;;   (telemetry-end timer) ; => telemetry-event with elapsed-ms
 ;;   (telemetry-report events) ; => summary hash
 
-(require racket/match)
+(require racket/base)
 
 (provide ;; Telemetry event struct
          (struct-out telemetry-event)

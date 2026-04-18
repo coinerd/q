@@ -13,7 +13,8 @@
 ;;     #:on hook-point handler
 ;;     ...)
 
-(require (for-syntax racket/base)
+(require (for-syntax racket/base
+                     (only-in "../util/hook-types.rkt" valid-hook-name?))
          "api.rkt")
 
 (provide define-q-extension)
@@ -59,6 +60,12 @@
                                        "expected handler after #:on hook-point"
                                        (cadr remaining)))
                  (define point-stx (cadr remaining))
+                 ;; H4: Validate hook-point name at macro expansion time
+                 (define point-sym (syntax-e point-stx))
+                 (unless (valid-hook-name? point-sym)
+                   (raise-syntax-error 'define-q-extension
+                                       (format "unknown hook point '~a'" point-sym)
+                                       point-stx))
                  (define handler-stx (caddr remaining))
                  (loop (cdddr remaining)
                        version api-version

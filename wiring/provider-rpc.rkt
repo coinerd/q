@@ -8,6 +8,10 @@
 ;;   providers/find   — find a model by ID or name query
 ;;
 ;; Each handler receives params (hash) and returns a result (hash).
+;;
+;; Error convention: handlers return (hasheq 'status "error" 'message "...")
+;; on failure rather than raising exceptions. This keeps RPC callers in
+;; control and avoids leaking internal exceptions across the wire.
 
 (require racket/list
          (only-in "../runtime/provider-registry.rkt"

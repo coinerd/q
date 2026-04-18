@@ -140,8 +140,8 @@
         (let ([valid? (validate-hook-result hook-point raw-result)])
           (if valid?
               raw-result
-              ;; Invalid action: warn but still return the result (permissive)
-              raw-result))
+              ;; M1: Invalid action — downgrade to 'pass instead of propagating
+              (hook-pass payload)))
         (begin
           (log-warning (format "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
                                ext-name

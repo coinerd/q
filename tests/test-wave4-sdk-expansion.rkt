@@ -17,7 +17,8 @@
          "../extensions/context.rkt"
          "../extensions/hooks.rkt"
          "../extensions/telemetry.rkt"
-         "../wiring/provider-rpc.rkt")
+         "../wiring/provider-rpc.rkt"
+         "../agent/event-bus.rkt")
 
 ;; ============================================================
 ;; Helpers
@@ -33,13 +34,8 @@
 (define (make-test-provider #:name [name "test-provider"])
   (make-mock-provider (make-mock-response) #:name name))
 
-;; Mock event bus for context creation
-(define (make-mock-event-bus)
-  (hasheq 'type 'event-bus))
-
-;; Mock extension registry
-(define (make-mock-ext-registry)
-  (hasheq 'type 'extension-registry))
+;; Real event bus and extension registry constructors
+;; (previously used fake hasheq stubs — H1 fix)
 
 ;; ============================================================
 ;; #1220: Provider Registration API
@@ -224,8 +220,8 @@
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:session-messages (list (hasheq 'role "user" 'content "hello")
                                           (hasheq 'role "assistant" 'content "hi"))))
     (define msgs (ctx-session-messages ctx))
@@ -236,16 +232,16 @@
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)))
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)))
     (check-equal? (ctx-session-messages ctx) '()))
 
   (test-case "ctx-session-token-count returns usage when set"
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:session-token-usage (hasheq 'input-tokens 100 'output-tokens 50)))
     (define usage (ctx-session-token-count ctx))
     (check-equal? (hash-ref usage 'input-tokens) 100)
@@ -255,16 +251,16 @@
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)))
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)))
     (check-equal? (ctx-session-token-count ctx) (hasheq)))
 
   (test-case "ctx-session-model returns model name"
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:model-name "gpt-4o"))
     (check-equal? (ctx-session-model ctx) "gpt-4o"))
 
@@ -272,8 +268,8 @@
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)))
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)))
     (check-false (ctx-session-model ctx)))
 
   (test-case "extension handler reads session state via ctx"
@@ -290,7 +286,7 @@
     (define ctx (make-extension-ctx
                  #:session-id "test-123"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
+                 #:event-bus (make-event-bus)
                  #:extension-registry reg
                  #:session-messages (list (hasheq 'role "user" 'content "test"))
                  #:session-token-usage (hasheq 'input-tokens 42)))
@@ -363,29 +359,30 @@
     (define ctx (make-extension-ctx
                  #:session-id "test"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:provider-registry reg))
     (define p (make-test-provider))
     (ctx-register-provider! ctx "openai" p)
     (check-true (provider-info? (lookup-provider reg "openai"))))
 
-  (test-case "ctx-register-provider! raises without registry"
+  (test-case "ctx-register-provider! returns error hash without registry"
     (define ctx (make-extension-ctx
                  #:session-id "test"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)))
-    (check-exn exn:fail?
-               (lambda () (ctx-register-provider! ctx "openai" (make-test-provider)))))
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)))
+    (define result (ctx-register-provider! ctx "openai" (make-test-provider)))
+    (check-true (hash-ref result 'error #f))
+    (check-true (string? (hash-ref result 'message #f))))
 
   (test-case "ctx-unregister-provider! removes provider"
     (define reg (make-provider-registry))
     (define ctx (make-extension-ctx
                  #:session-id "test"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:provider-registry reg))
     (ctx-register-provider! ctx "openai" (make-test-provider))
     (ctx-unregister-provider! ctx "openai")
@@ -396,8 +393,8 @@
     (define ctx (make-extension-ctx
                  #:session-id "test"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:provider-registry reg))
     (ctx-register-provider! ctx "openai" (make-test-provider))
     (ctx-register-provider! ctx "anthropic" (make-test-provider))
@@ -407,8 +404,8 @@
     (define ctx (make-extension-ctx
                  #:session-id "test"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)))
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)))
     (check-equal? (ctx-list-providers ctx) '()))
 
   (test-case "ctx-lookup-provider finds provider by name"
@@ -416,8 +413,8 @@
     (define ctx (make-extension-ctx
                  #:session-id "test"
                  #:session-dir "/tmp"
-                 #:event-bus (make-mock-event-bus)
-                 #:extension-registry (make-mock-ext-registry)
+                 #:event-bus (make-event-bus)
+                 #:extension-registry (make-extension-registry)
                  #:provider-registry reg))
     (ctx-register-provider! ctx "openai" (make-test-provider))
     (check-true (provider-info? (ctx-lookup-provider ctx "openai")))

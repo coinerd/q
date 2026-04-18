@@ -27,14 +27,14 @@
   (define-q-extension hooked-ext
     #:version "2.0"
     #:on before-send (λ (p) p)
-    #:on after-receive (λ (p) p))
+    #:on tool-result-post (λ (p) p))
   (check-true (hash-has-key? (extension-hooks hooked-ext) 'before-send))
-  (check-true (hash-has-key? (extension-hooks hooked-ext) 'after-receive)))
+  (check-true (hash-has-key? (extension-hooks hooked-ext) 'tool-result-post)))
 
 (test-case "define-q-extension hooks are callable"
   (define-q-extension callable-ext
-    #:on test-hook (λ (p) (string-append p "-modified")))
-  (define handler (hash-ref (extension-hooks callable-ext) 'test-hook))
+    #:on turn-start (λ (p) (string-append p "-modified")))
+  (define handler (hash-ref (extension-hooks callable-ext) 'turn-start))
   (check-equal? (handler "input") "input-modified"))
 
 (test-case "define-q-extension can be registered in registry"

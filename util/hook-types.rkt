@@ -48,9 +48,9 @@
           '(pass amend block)
           ;; Message hooks
           'message-start
-          '(pass amend)
+          '(pass amend block)
           'message-end
-          '(pass amend)
+          '(pass amend block)
           ;; #1208: message-update alias (hyphen form of message.update)
           'message-update
           '(amend)
@@ -166,7 +166,8 @@
   (if (member action valid-actions)
       #t
       (begin
-        (log-warning (format "Hook validation: ~a returned invalid action '~a for hook '~a. Valid: ~a"
+        (log-warning (format "Hook validation: ~a returned invalid action '~a' for hook '~a. Valid: ~a"
+                             result
                              action
                              hook-point
                              valid-actions))
