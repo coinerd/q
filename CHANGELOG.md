@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.1] — 2026-04-19
+
+### Added — Wave 0: Subagent Real Provider (#1203)
+- **Provider injection** (#1204): Parent LLM provider injected into subagent exec-context via `runtime-settings`, replacing mock fallback with real provider resolution.
+- **Scoped tools + max-turns** (#1205): Subagent sessions use parent provider with scoped tool access and configurable max-turns limit.
+- **Return-error fix** (#1206): Fixed `return-error` content structure bug — now returns proper `(list (hasheq 'type "text" 'text msg))` format.
+- 10 new integration tests for subagent provider wiring.
+
+### Added — Wave 1: Hook Catalog Expansion (#1207)
+- **Streaming hooks** (#1208): `tool.execution.start` and `tool.execution.end` hook dispatch wired in iteration loop; `tool-call-pre` and `tool-result-post` hook schemas; `message-update` alias (hyphen form) in schemas.
+- **Session lifecycle hooks** (#1209): `session-before-switch` added to `hook-action-schemas` and `critical-hooks` list.
+- **Hook validation** (#1210): `valid-hook-name?` predicate for hook name validation at registration time.
+- 22 new tests covering hook catalog expansion.
+
+### Added — Wave 2: Extension Example Gallery (#1211)
+- **12 canonical examples**: hello-world, custom-tool, custom-command, context-enricher, tool-guard, response-logger, session-lifecycle, streaming-observer, provider-hook, multi-hook, define-extension-dsl (macro DSL), error-handler.
+- **4 advanced examples** (#1215): custom-provider (`register-provider!`/`register-model!`), session-state (`append-custom-entry!`/`load-custom-entries`), tui-widget (`ctx-set-widget`/footer rendering), keyboard-shortcut (`register-shortcuts` hook).
+- `register-shortcuts` added to `hook-action-schemas`.
+- README.md with index and getting-started guide for all examples.
+- 70 tests validating all examples.
+
+### Added — Wave 3: Dynamic Provider Registration (#1219)
+- **Provider registration API** (#1220): `register-provider!` with validation and duplicate detection in `provider-registry.rkt`.
+- **Provider RPC endpoints** (#1221): `providers/list`, `models`, `find` RPC methods in new `wiring/provider-rpc.rkt`.
+- 36 new tests for provider registration and discovery.
+
+### Added — Wave 4: SDK Surface Expansion (#1219)
+- **Session state queries** (#1223): Extension-ctx exposes session state query API via expanded `extensions/context.rkt`.
+- **Extension telemetry** (#1224): Performance telemetry module `extensions/telemetry.rkt` for extension monitoring.
+- 36 new tests (shared with Wave 3 test suite).
+
+### Internal
+- 29 files changed, 2,259 insertions across 5 waves.
+- 138+ new tests, 5,100+ total tests passing.
+
 ## [0.11.0] — 2026-04-18
 
 ### Added
