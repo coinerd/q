@@ -35,7 +35,12 @@
     "provider-hook.rkt"
     "multi-hook.rkt"
     "define-extension-dsl.rkt"
-    "error-handler.rkt"))
+    "error-handler.rkt"
+    ;; Wave 3 (#1215-#1218)
+    "custom-provider.rkt"
+    "session-state.rkt"
+    "tui-widget.rkt"
+    "keyboard-shortcut.rkt"))
 
 ;; ============================================================
 ;; Validation tests
@@ -101,9 +106,29 @@
     (define ext (dynamic-require (build-path examples-dir "custom-command.rkt") 'the-extension))
     (check-not-false (hash-has-key? (extension-hooks ext) 'input)))
 
-  ;; Test that all 12 examples exist
-  (test-case "all 12 examples exist"
-    (check-equal? (length example-files) 12)))
+  ;; #1215: custom-provider has extension.loaded hook
+  (test-case "custom-provider registers extension.loaded"
+    (define ext (dynamic-require (build-path examples-dir "custom-provider.rkt") 'the-extension))
+    (check-not-false (hash-has-key? (extension-hooks ext) 'extension.loaded)))
+
+  ;; #1216: session-state has session.loaded hook
+  (test-case "session-state registers session.loaded"
+    (define ext (dynamic-require (build-path examples-dir "session-state.rkt") 'the-extension))
+    (check-not-false (hash-has-key? (extension-hooks ext) 'session.loaded)))
+
+  ;; #1217: tui-widget has turn-start hook
+  (test-case "tui-widget registers turn-start"
+    (define ext (dynamic-require (build-path examples-dir "tui-widget.rkt") 'the-extension))
+    (check-not-false (hash-has-key? (extension-hooks ext) 'turn-start)))
+
+  ;; #1218: keyboard-shortcut has register-shortcuts hook
+  (test-case "keyboard-shortcut registers register-shortcuts"
+    (define ext (dynamic-require (build-path examples-dir "keyboard-shortcut.rkt") 'the-extension))
+    (check-not-false (hash-has-key? (extension-hooks ext) 'register-shortcuts)))
+
+  ;; Test that all 16 examples exist
+  (test-case "all 16 examples exist"
+    (check-equal? (length example-files) 16)))
 
 (define-test-suite example-registration-tests
   ;; Test that examples can be registered in an extension registry
@@ -120,10 +145,10 @@
         (when ext
           (register-extension! reg ext)
           (set! loaded-names (cons (extension-name ext) loaded-names)))))
-    ;; Verify all 12 registered
+    ;; Verify all 16 registered
     (define all-exts (list-extensions reg))
-    (check-equal? (length all-exts) 12
-                  "All 12 extensions should register successfully")
+    (check-equal? (length all-exts) 16
+                  "All 16 extensions should register successfully")
     ;; Verify no duplicate names
     (define names (map extension-name all-exts))
     (define unique-names (remove-duplicates names))

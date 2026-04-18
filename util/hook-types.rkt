@@ -140,6 +140,9 @@
           '(pass)
           'extension.unloaded
           '(pass)
+          ;; Shortcut registration
+          'register-shortcuts
+          '(pass amend)
           ;; Agent lifecycle
           'agent.started
           '(pass)
