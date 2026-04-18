@@ -49,6 +49,8 @@
          session-info-entry?
          compaction-summary-entry?
          tool-result-entry?
+         bash-execution-entry?
+         any-tool-result-entry?
 
          ;; Event envelope
          (struct-out event)
@@ -246,6 +248,15 @@
 (define (tool-result-entry? msg)
   ;; Tool result entry
   (and (message? msg) (eq? (message-kind msg) 'tool-result)))
+
+(define (bash-execution-entry? msg)
+  ;; Bash execution entry — preserves command metadata (exit-code, duration, etc.)
+  (and (message? msg) (eq? (message-kind msg) 'bash-execution)))
+
+(define (any-tool-result-entry? msg)
+  ;; Matches both generic tool-result and bash-execution entries
+  (and (message? msg)
+       (memq (message-kind msg) '(tool-result bash-execution))))
 
 ;; ============================================================
 ;; Event envelope struct

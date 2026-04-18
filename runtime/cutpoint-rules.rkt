@@ -58,9 +58,9 @@
   (and (list? content)
        (ormap tool-call-part? content)))
 
-;; Check if a message is a tool-result.
+;; Check if a message is a tool-result or bash-execution.
 (define (tool-result-message? msg)
-  (eq? (message-kind msg) 'tool-result))
+  (memq (message-kind msg) '(tool-result bash-execution)))
 
 ;; Check if a message is a user message (valid cut point).
 (define (user-message? msg)

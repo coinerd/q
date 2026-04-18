@@ -259,9 +259,9 @@
   (define content (message-content msg))
   (and (list? content) (ormap tool-call-part? content)))
 
-;; Check if a message is a tool-result.
+;; Check if a message is a tool-result or bash-execution.
 (define (tool-result-message? msg)
-  (eq? (message-kind msg) 'tool-result))
+  (memq (message-kind msg) '(tool-result bash-execution)))
 
 ;; Check if placing a cut BEFORE index `idx` is valid.
 ;; A cut at N means messages[0..N) are old, messages[N..] are recent.
