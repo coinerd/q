@@ -29,7 +29,11 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
-         "../tui/terminal-input.rkt")
+         "../tui/terminal-input.rkt"
+         "../util/output-guard.rkt")
+
+(define (tui-output-port)
+  (or (guarded-real-output-port) (current-output-port)))
 
 ;; ── Ubuf/terminal lifecycle ──
 (provide render-ubuf-to-terminal!
@@ -118,7 +122,7 @@
   (define bs (get-output-bytes out))
   (define str (bytes->string/utf-8 bs))
   (terminal-sync-begin!)
-  (display (fix-sgr-bg-black str) (current-output-port))
+  (display (fix-sgr-bg-black str) (tui-output-port))
   (terminal-sync-end!))
 
 ;; ============================================================
@@ -197,12 +201,12 @@
        (case (diff-cmd-type cmd)
          [(write)
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1)) ; ANSI is 1-based
-          (display "\x1b[2K" (current-output-port)) ; clear line
-          (display (fix-sgr-bg-black (diff-cmd-content cmd)) (current-output-port))]
+          (display "\x1b[2K" (tui-output-port)) ; clear line
+          (display (fix-sgr-bg-black (diff-cmd-content cmd)) (tui-output-port))]
          [(clear-from)
           ;; Clear from given row to end of screen
           (tui-cursor 1 (+ (diff-cmd-row cmd) 1))
-          (display "\x1b[J" (current-output-port))]
+          (display "\x1b[J" (tui-output-port))]
          [else (void)]))
      (tui-flush)])
 
@@ -213,7 +217,7 @@
   (tui-cursor (+ cursor-col 1) (+ cursor-row 1))
   ;; Emit IME cursor marker for CJK input support
   ;; Uses APC protocol — silently ignored by terminals that don't understand it
-  (display CURSOR-MARKER (current-output-port))
+  (display CURSOR-MARKER (tui-output-port))
   (tui-cursor-show)
   (tui-flush)
   (set-box! last-render-ms (current-inexact-milliseconds))
