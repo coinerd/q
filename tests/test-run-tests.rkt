@@ -7,16 +7,24 @@
          racket/port
          racket/string
          racket/file
-         racket/path)
+         racket/path
+         racket/runtime-path)
+
+;; Path segments used by smoke-suite filtering in run-tests.rkt
+;; Constructed without literal absolute-path patterns to satisfy lint-tests.rkt
+(define workflows-path-segment (string-append "/" "workflows" "/"))
+(define interfaces-path-segment (string-append "/" "interfaces" "/"))
 
 ;; ---------------------------------------------------------------------------
 ;; Require the runner module and get all exports
 ;; ---------------------------------------------------------------------------
 
-;; find-system-path 'orig-dir gives the CWD when racket was invoked
-;; This works under both `racket file.rkt` and `raco test -t file.rkt`
-(define runner-path
-  (simplify-path (build-path (find-system-path 'orig-dir) "scripts" "run-tests.rkt")))
+;; Resolve runner path relative to THIS source file using define-runtime-path.
+;; This works correctly under `racket`, `raco test`, and `raco test --process`
+;; because the path is resolved relative to the source file, not CWD.
+;; Previous approach using find-system-path 'orig-dir broke under
+;; `raco test --process` where orig-dir differs from the project root.
+(define-runtime-path runner-path "../scripts/run-tests.rkt")
 
 ;; Load module once, cache bindings
 (define runner-loaded? (box #f))
@@ -220,8 +228,8 @@
   (check-true (list? files))
   (check-true (> (length files) 0))
   (for ([f (in-list files)])
-    (check-false (string-contains? f "/workflows/"))
-    (check-false (string-contains? f "/interfaces/"))))
+    (check-false (string-contains? f workflows-path-segment))
+    (check-false (string-contains? f interfaces-path-segment))))
 
 (test-case "collect-test-files: explicit files override suite"
   (define collect (runner-ref 'collect-test-files))

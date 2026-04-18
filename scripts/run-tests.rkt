@@ -92,10 +92,19 @@
       (let ([base (file-name-from-path f)])
         (and base (string-contains? (path->string base) "provider")))))
 
-;; Base directory for resolving test paths
-;; Under `racket scripts/run-tests.rkt` this is CWD
-;; Under `raco test` this is the original invocation directory
-(define base-dir (find-system-path 'orig-dir))
+;; Base directory for resolving test paths.
+;; orig-dir gives CWD when invoked directly, but under `raco test --process`
+;; it may point at the test file's directory. We detect which case we're in:
+;; if orig-dir has a tests/ subdirectory, it's the project root; otherwise
+;; try the parent (handles orig-dir = q/tests/ or q/scripts/).
+(define base-dir
+  (let ([orig (find-system-path 'orig-dir)])
+    (if (directory-exists? (build-path orig "tests"))
+        orig
+        (let ([parent (simplify-path (build-path orig ".."))])
+          (if (directory-exists? (build-path parent "tests"))
+              parent
+              orig)))))
 
 (define (collect-test-files suite #:extra-files [extra-files #f])
   (cond
