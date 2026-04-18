@@ -267,6 +267,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mouse selection text extraction uses display-column offsets for CJK-correct copy
 - Lazy session persistence: directory created on first message write
 
+## [0.8.3] — 2026-04-14
+
+### Added
+
+- **TUI render diffing** (#380-#383): Incremental render diffing for efficient screen updates.
+- **TUI layout indexing** (#377-#379): 0-based layout row indexing.
+- **TUI rendered-line caching** (#374-#376): Cache rendered lines for performance.
+- **TUI synchronized output** (#373): DEC 2026 synchronized output mode.
+- **TUI command registry** (#370-#372): Deduplicated command registry with aliases.
+- **CJK/wide-char support** (#366-#369): CJK and wide-character width awareness in TUI.
+
+### Fixed
+
+- CI path fixes for test-path-filters.rkt, macOS Racket installation, and project-automation token.
+
+### Changed
+
+- Architecture & code quality remediation: decomposed terminal.rkt, extracted HTTP helpers, shared test utilities.
+
+## [0.8.5] — 2026-04-14
+
+### Added
+
+- **Kitty keyboard protocol** (#410, #411): Full Kitty keyboard protocol support with configurable keybindings.
+- **Buffered stdin parsing** (#409, #412): Buffered stdin parsing with sync mode query.
+- **Markdown expansion** (#417): Markdown expansion, theme system, ANSI-aware wrapping.
+- **Grapheme-aware cursor** (#401-#403): Grapheme-aware cursor movement and bracketed paste support.
+- **Input editor power features** (#395-#400): Advanced input editor features.
+
+### Fixed
+
+- Incremental render diffing preserves ANSI styles (#391).
+- TUI crash on `#f` previous frame in diff-frames (#390).
+- Provider smoke tests + credential cleanup (#438).
+- CSI modifiers, zombie subprocess, width calculations (#439).
+
+### Changed
+
+- JSON keymap, test coverage improvements, manifest hash verification (#442).
+- Async hooks, circuit breaker, token estimation (#441).
+- Security: provider smoke CI, token-aware cmd filter, extension timeouts (#440).
+
+## [0.8.6] — 2026-04-14
+
+### Fixed
+
+- **Gemini streaming tool calls** (#443): Distinct sequential indices for tool call IDs.
+- **Circuit breaker, markdown, blocked tools, init CLI** (#444-#446, #455): Wave 1 fixes.
+- **Thread leak, dead cache, anchored regexps** (#447-#450): Wave 2 fixes.
+- **Pure fn rename, thread-local count, O(n) utf8, port leak** (#451-#454): Wave 3 fixes.
+
+## [0.8.7] — 2026-04-14
+
+### Added
+
+- **Themes, SGR perf, clipboard** (#468-#472): Theme system, SGR performance, cache, clipboard support.
+- **IME cursor, render debounce** (#464-#466): IME cursor markers, render debounce, incremental diff.
+- **TUI component abstraction** (#461-#462): Component abstraction with width safety net.
+- **OpenAI-compatible provider in init wizard** (#477): Provider setup via init wizard.
+
+### Fixed
+
+- Bytecode staleness auto-recovery wrapper and clean-compiled utility (#476).
+- chmod case-sensitivity bug + test gaps (#449, #454).
+
 ## [0.8.8] — 2026-04-13
 
 ### Added — TUI Correctness
@@ -889,6 +954,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Test metrics
 - 2699 tests, 0 failures (187 new: 112 Gemini adapter + 75 conformance suite)
 
+
+## [0.4.1] — 2026-04-09
+
+### Fixed
+
+- **TUI optional deps** (#44): Made tui-term/tui-ubuf optional dependencies — fixed broken build on Racket 8.10 where these packages aren't available.
 ## [0.4.2] — 2026-04-09
 
 ### Package Ecosystem Foundation
@@ -1016,6 +1087,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.2.0]: https://github.com/coinerd/q/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/coinerd/q/releases/tag/v0.1.0
 
+[0.8.3]: https://github.com/coinerd/q/compare/v0.8.2...v0.8.3
+[0.8.4]: https://github.com/coinerd/q/compare/v0.8.3...v0.8.4
+[0.8.5]: https://github.com/coinerd/q/compare/v0.8.4...v0.8.5
+[0.8.6]: https://github.com/coinerd/q/compare/v0.8.5...v0.8.6
+[0.8.7]: https://github.com/coinerd/q/compare/v0.8.6...v0.8.7
+[0.8.8]: https://github.com/coinerd/q/compare/v0.8.7...v0.8.8
+[0.8.9]: https://github.com/coinerd/q/compare/v0.8.8...v0.8.9
+[0.9.0]: https://github.com/coinerd/q/compare/v0.8.9...v0.9.0
+[0.9.1]: https://github.com/coinerd/q/compare/v0.9.0...v0.9.1
+[0.10.0]: https://github.com/coinerd/q/compare/v0.9.1...v0.10.0
+[0.10.1]: https://github.com/coinerd/q/compare/v0.10.0...v0.10.1
+[0.10.5]: https://github.com/coinerd/q/compare/v0.10.4...v0.10.5
+[0.10.6]: https://github.com/coinerd/q/compare/v0.10.5...v0.10.6
+[0.10.7]: https://github.com/coinerd/q/compare/v0.10.6...v0.10.7
+[0.10.8]: https://github.com/coinerd/q/compare/v0.10.7...v0.10.8
+[0.4.1]: https://github.com/coinerd/q/compare/v0.4.0...v0.4.1
 [#1]: https://github.com/coinerd/q/issues/1
 [#2]: https://github.com/coinerd/q/issues/2
 [#3]: https://github.com/coinerd/q/issues/3
