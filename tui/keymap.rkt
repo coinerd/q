@@ -35,7 +35,13 @@
          default-keymap
          load-user-keymap
          load-keybindings
-         shortcut-specs->keymap)
+         shortcut-specs->keymap
+
+         ;; #1189: Namespaced actions
+         namespaced-action?
+         namespace-action
+         migrate-action
+         parse-keybindings-content)
 
 ;; ============================================================
 ;; Key specification
@@ -70,6 +76,49 @@
        (eq? (key-spec-ctrl a) (key-spec-ctrl b))
        (eq? (key-spec-shift a) (key-spec-shift b))
        (eq? (key-spec-alt a) (key-spec-alt b))))
+
+;; ============================================================
+;; #1189: Namespaced actions with auto-migration
+;; ============================================================
+
+;; Check if an action symbol uses dot-namespace format (e.g. 'tui.editor.copy)
+(define (namespaced-action? action)
+  (and (symbol? action)
+       (regexp-match? #rx"^[a-z][a-z0-9-]*\\." (symbol->string action))))
+
+;; Build a namespaced action from parts: (namespace 'editor 'copy) → 'app.editor.copy
+(define (namespace-action . parts)
+  (string->symbol (string-join (map (lambda (p)
+                                      (if (symbol? p) (symbol->string p) p))
+                                    parts) ".")))
+
+;; Migration table: flat action → namespaced equivalent
+(define flat->namespaced
+  (hasheq 'history-up 'tui.navigation.history-up
+          'history-down 'tui.navigation.history-down
+          'page-up 'tui.navigation.page-up
+          'page-down 'tui.navigation.page-down
+          'home 'tui.navigation.home
+          'end 'tui.navigation.end
+          'scroll-up 'tui.navigation.scroll-up
+          'scroll-down 'tui.navigation.scroll-down
+          'submit 'tui.input.submit
+          'backspace 'tui.input.backspace
+          'delete 'tui.input.delete
+          'cancel 'tui.input.cancel
+          'word-left 'tui.editor.word-left
+          'word-right 'tui.editor.word-right
+          'copy 'tui.editor.copy
+          'cut 'tui.editor.cut
+          'paste 'tui.editor.paste
+          'select-all 'tui.editor.select-all
+          'clear-input 'tui.editor.clear-input
+          'clear-screen 'tui.display.clear-screen))
+
+;; Auto-migrate a flat action to its namespaced equivalent.
+;; Returns the namespaced symbol if a mapping exists, otherwise the original.
+(define (migrate-action action)
+  (hash-ref flat->namespaced action action))
 
 ;; ============================================================
 ;; Keymap data structure
@@ -126,38 +175,38 @@
 (define (default-keymap)
   (define km (make-keymap))
   ;; Navigation
-  (keymap-add! km (key-spec 'up #f #f #f) 'history-up)
-  (keymap-add! km (key-spec 'down #f #f #f) 'history-down)
-  (keymap-add! km (key-spec 'page-up #f #f #f) 'page-up)
-  (keymap-add! km (key-spec 'page-down #f #f #f) 'page-down)
-  (keymap-add! km (key-spec 'home #f #f #f) 'home)
-  (keymap-add! km (key-spec 'end #f #f #f) 'end)
+  (keymap-add! km (key-spec 'up #f #f #f) 'tui.navigation.history-up)
+  (keymap-add! km (key-spec 'down #f #f #f) 'tui.navigation.history-down)
+  (keymap-add! km (key-spec 'page-up #f #f #f) 'tui.navigation.page-up)
+  (keymap-add! km (key-spec 'page-down #f #f #f) 'tui.navigation.page-down)
+  (keymap-add! km (key-spec 'home #f #f #f) 'tui.navigation.home)
+  (keymap-add! km (key-spec 'end #f #f #f) 'tui.navigation.end)
   ;; Ctrl+up/down for scrolling
-  (keymap-add! km (key-spec 'up #t #f #f) 'scroll-up)
-  (keymap-add! km (key-spec 'down #t #f #f) 'scroll-down)
+  (keymap-add! km (key-spec 'up #t #f #f) 'tui.navigation.scroll-up)
+  (keymap-add! km (key-spec 'down #t #f #f) 'tui.navigation.scroll-down)
   ;; Input
-  (keymap-add! km (key-spec 'return #f #f #f) 'submit)
-  (keymap-add! km (key-spec 'backspace #f #f #f) 'backspace)
-  (keymap-add! km (key-spec 'delete #f #f #f) 'delete)
-  (keymap-add! km (key-spec 'escape #f #f #f) 'cancel)
+  (keymap-add! km (key-spec 'return #f #f #f) 'tui.input.submit)
+  (keymap-add! km (key-spec 'backspace #f #f #f) 'tui.input.backspace)
+  (keymap-add! km (key-spec 'delete #f #f #f) 'tui.input.delete)
+  (keymap-add! km (key-spec 'escape #f #f #f) 'tui.input.cancel)
   ;; Word navigation
-  (keymap-add! km (key-spec 'left #t #f #f) 'word-left)
-  (keymap-add! km (key-spec 'right #t #f #f) 'word-right)
+  (keymap-add! km (key-spec 'left #t #f #f) 'tui.editor.word-left)
+  (keymap-add! km (key-spec 'right #t #f #f) 'tui.editor.word-right)
   ;; Line navigation
-  (keymap-add! km (key-spec 'left #f #t #f) 'home)
-  (keymap-add! km (key-spec 'right #f #t #f) 'end)
+  (keymap-add! km (key-spec 'left #f #t #f) 'tui.navigation.home)
+  (keymap-add! km (key-spec 'right #f #t #f) 'tui.navigation.end)
   ;; Ctrl-C for copy
-  (keymap-add! km (key-spec #\c #t #f #f) 'copy)
+  (keymap-add! km (key-spec #\c #t #f #f) 'tui.editor.copy)
   ;; Ctrl-X for cut
-  (keymap-add! km (key-spec #\x #t #f #f) 'cut)
+  (keymap-add! km (key-spec #\x #t #f #f) 'tui.editor.cut)
   ;; Ctrl-V for paste
-  (keymap-add! km (key-spec #\v #t #f #f) 'paste)
+  (keymap-add! km (key-spec #\v #t #f #f) 'tui.editor.paste)
   ;; Ctrl-A for select-all
-  (keymap-add! km (key-spec #\a #t #f #f) 'select-all)
+  (keymap-add! km (key-spec #\a #t #f #f) 'tui.editor.select-all)
   ;; Ctrl-U for clear input
-  (keymap-add! km (key-spec #\u #t #f #f) 'clear-input)
+  (keymap-add! km (key-spec #\u #t #f #f) 'tui.editor.clear-input)
   ;; Ctrl-L for clear screen
-  (keymap-add! km (key-spec #\l #t #f #f) 'clear-screen)
+  (keymap-add! km (key-spec #\l #t #f #f) 'tui.display.clear-screen)
   km)
 
 ;; ============================================================
@@ -256,7 +305,7 @@
         (define key-str (hash-ref entry 'key #f))
         (define action-str (hash-ref entry 'action #f))
         (if (and (string? key-str) (string? action-str))
-            (cons (parse-key-string key-str) (string->symbol action-str))
+            (cons (parse-key-string key-str) (migrate-action (string->symbol action-str)))
             (begin
               (log-warning (format "keymap: skipping invalid entry in ~a: ~v" source-path entry))
               #f))))

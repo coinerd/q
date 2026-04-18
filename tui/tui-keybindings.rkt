@@ -248,58 +248,58 @@
 ;; or #f if not (falls through to hardcoded).
 (define (dispatch-keymap-action ctx inp state action)
   (case action
-    [(submit) #f] ;; Complex — fall through to hardcoded for proper submit flow
-    [(backspace)
+    [(tui.input.submit submit) #f] ;; Complex — fall through to hardcoded for proper submit flow
+    [(tui.input.backspace backspace)
      (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
      'handled]
-    [(delete)
+    [(tui.input.delete delete)
      (set-box! (tui-ctx-input-state-box ctx) (input-delete inp))
      'handled]
-    [(home)
+    [(tui.navigation.home home)
      (set-box! (tui-ctx-input-state-box ctx) (input-home inp))
      'handled]
-    [(end)
+    [(tui.navigation.end end)
      (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
      'handled]
-    [(history-up)
+    [(tui.navigation.history-up history-up)
      (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp))
      'handled]
-    [(history-down)
+    [(tui.navigation.history-down history-down)
      (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp))
      'handled]
-    [(word-left)
+    [(tui.editor.word-left word-left)
      (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-left inp))
      'handled]
-    [(word-right)
+    [(tui.editor.word-right word-right)
      (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-right inp))
      'handled]
-    [(clear-input)
+    [(tui.editor.clear-input clear-input)
      (set-box! (tui-ctx-input-state-box ctx) (input-kill-to-beginning inp))
      'handled]
-    [(clear-screen)
+    [(tui.display.clear-screen clear-screen)
      (mark-dirty! ctx)
      'handled]
-    [(copy) #f] ;; Complex — let hardcoded handle
-    [(cut) #f]
-    [(paste)
+    [(tui.editor.copy copy) #f] ;; Complex — let hardcoded handle
+    [(tui.editor.cut cut) #f]
+    [(tui.editor.paste paste)
      (define text (clipboard-paste))
      (when text
        (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text)))
      'handled]
-    [(select-all) #f] ;; Complex — let hardcoded handle
-    [(scroll-up)
+    [(tui.editor.select-all select-all) #f] ;; Complex — let hardcoded handle
+    [(tui.navigation.scroll-up scroll-up)
      (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 1))
      'handled]
-    [(scroll-down)
+    [(tui.navigation.scroll-down scroll-down)
      (set-box! (tui-ctx-ui-state-box ctx) (scroll-down state 1))
      'handled]
-    [(page-up)
+    [(tui.navigation.page-up page-up)
      (define-values (_cols rows) (tui-screen-size))
      (define layout (compute-layout _cols rows))
      (set-box! (tui-ctx-ui-state-box ctx)
                (scroll-up state (max 1 (tui-layout-transcript-height layout))))
      'handled]
-    [(page-down)
+    [(tui.navigation.page-down page-down)
      (define-values (_cols rows) (tui-screen-size))
      (define layout (compute-layout _cols rows))
      (set-box! (tui-ctx-ui-state-box ctx)
