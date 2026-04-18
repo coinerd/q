@@ -35,7 +35,10 @@
  find-models
  ;; Model info struct
  (struct-out provider-info)
- (struct-out registered-model))
+ (struct-out registered-model)
+ ;; #1220: Metadata and query helpers
+ provider-metadata
+ provider-summary)
 
 ;; ============================================================
 ;; Structs
@@ -90,8 +93,17 @@
 ;; ============================================================
 
 ;; Register a provider. Merges config with any existing entry.
+;; #1220: Validates that provider-instance satisfies provider? predicate.
+;; Raises exn:fail:contract if validation fails.
+;; Returns 'registered for new, 'updated for re-registration.
 (define (register-provider! registry name provider-instance
                              #:config [config (hasheq)])
+  ;; #1220: Provider validation — must be a valid provider? instance
+  (unless (provider? provider-instance)
+    (raise (exn:fail:contract
+            (format "register-provider!: expected provider? for provider-instance, got ~a"
+                    provider-instance)
+            (current-continuation-marks))))
   (define pinfo (provider-info name provider-instance config (current-seconds)))
   (with-lock registry
     (lambda ()
@@ -105,7 +117,9 @@
       (define merged-info (struct-copy provider-info pinfo
                                         [config merged-config]))
       (set-box! (provider-registry-providers-box registry)
-                (hash-set current name merged-info)))))
+                (hash-set current name merged-info))
+      ;; #1220: Return indicator for duplicate detection
+      (if existing 'updated 'registered))))
 
 ;; Unregister a provider and all its models.
 (define (unregister-provider! registry name)
@@ -206,6 +220,32 @@
             (or (string-contains? (string-downcase (registered-model-id m)) q)
                 (string-contains? (string-downcase (registered-model-name m)) q)))
           all-models))
+
+;; ============================================================
+;; #1220: Provider metadata and query helpers
+;; ============================================================
+
+;; Extract metadata from a provider-info for SDK/RPC consumption.
+;; Returns a hash with name, capabilities, registered-at, model-count.
+(define (provider-metadata pinfo)
+  (hasheq 'name (provider-info-name pinfo)
+          'config (provider-info-config pinfo)
+          'registered-at (provider-info-registered-at pinfo)
+          'provider-valid? (provider? (provider-info-provider pinfo))))
+
+;; Get full provider summary: metadata + model list for RPC/SDK.
+;; Returns a hash suitable for JSON serialization.
+(define (provider-summary registry name)
+  (define pinfo (lookup-provider registry name))
+  (if pinfo
+      (hasheq 'info (provider-metadata pinfo)
+              'models (for/list ([m (list-models-for-provider registry name)])
+                        (hasheq 'id (registered-model-id m)
+                                'name (registered-model-name m)
+                                'context-window (registered-model-context-window m)
+                                'max-tokens (registered-model-max-tokens m)
+                                'capabilities (registered-model-capabilities m))))
+      #f))
 
 ;; ============================================================
 ;; Helpers
