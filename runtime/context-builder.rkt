@@ -108,8 +108,8 @@
     [(eq? kind 'branch-summary) (transform-summary-to-user entry)]
     ;; Filter out metadata entries
     [(memq kind '(session-info model-change thinking-level-change)) #f]
-    ;; Tool results pass through
-    [(eq? kind 'tool-result) entry]
+    ;; Tool results and bash executions pass through
+    [(memq kind '(tool-result bash-execution)) entry]
     ;; System instructions pass through
     [(eq? kind 'system-instruction) entry]
     ;; Custom messages pass through

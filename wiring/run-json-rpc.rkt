@@ -22,6 +22,7 @@
          "../agent/event-bus.rkt"
          "../extensions/api.rkt"
          "./rpc-methods.rkt"
+         "./rpc-ui-adapter.rkt"
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
          (only-in "../util/cancellation.rkt" cancellation-token? cancel-token!))
 
@@ -164,6 +165,16 @@
                              (hash-remove! sessions sid)
                              (hasheq 'sessionId sid 'status "closed"))))))
 
-  ;; ---- Merge core + session/utility handlers ----
-  (define handlers (hash-union core-handlers session-handlers #:combine (lambda (a b) b)))
+  ;; ---- #1185: Extension UI bridge ----
+  ;; Create a UI channel for extensions and wire it to RPC notifications
+  (define ui-ch (make-channel))
+  (hash-set! rt-config 'ui-channel ui-ch)
+  (start-rpc-ui-bridge! ui-ch (current-output-port))
+  (define ui-response-handler (make-rpc-ui-response-handler ui-ch))
+
+  ;; ---- Merge core + session + UI handlers ----
+  (define ui-handlers
+    (make-hash (list (cons 'ui.respond ui-response-handler)
+                     (cons 'ui_response ui-response-handler))))
+  (define handlers (hash-union core-handlers session-handlers ui-handlers #:combine (lambda (a b) b)))
   (run-rpc-loop handlers))

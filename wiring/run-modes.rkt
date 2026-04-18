@@ -138,6 +138,8 @@
   (define effective-model-name (or model-name (default-model model-reg)))
   (hash-set! base-config 'model-name effective-model-name)
   (hash-set! base-config 'system-instructions final-system-instrs)
+  ;; #1187: Wire templates into runtime config for /template command
+  (hash-set! base-config 'templates (resource-set-templates all-resources))
   (hash-set! base-config 'verbose? (cli-config-verbose? cfg))
   base-config)
 
