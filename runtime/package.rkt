@@ -26,6 +26,7 @@
   [list-packages            (-> (listof qpm-package?))]
   [package-installed?       (-> string? boolean?)]
   [install-package-from-dir (-> path-string? (or/c qpm-package? string?))]
+  [install-package-from-git (-> string? (or/c qpm-package? string?))]
   [remove-package           (-> string? boolean?)]
   [package-info             (-> string? (or/c qpm-package? #f))]))
 
@@ -150,3 +151,46 @@
   (if (directory-exists? dir)
       (read-installed-package dir)
       #f))
+
+;; ============================================================
+;; #1191: Git-based package installation
+;; ============================================================
+
+;; Install a package from a git repository.
+;; repo-spec : string? — "git:repo-url" or "git:repo-url@tag"
+;; Returns (or/c qpm-package? string?) — package or error message.
+(define (install-package-from-git repo-spec)
+  (let/ec return
+    (define git-prefix "git:")
+    (unless (string-prefix? repo-spec git-prefix)
+      (return "error: repo spec must start with 'git:'"))
+    (define rest (substring repo-spec (string-length git-prefix)))
+    ;; Split repo-url and optional @tag
+    (define parts (regexp-match #rx"^(.+?)(?:@(.+))?$" rest))
+    (unless parts
+      (return "error: invalid git repo spec"))
+    (define repo-url (cadr parts))
+    (define tag (caddr parts))
+    ;; Clone to temp dir
+    (define tmp-dir (make-temporary-file "q-pkg-clone-~a" 'directory))
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (with-handlers ([exn:fail? void])
+                                   (delete-directory/files tmp-dir))
+                                 (return (format "error: git clone failed — ~a" (exn-message e))))])
+      (define clone-args (if tag
+                            (list "git" "clone" "--branch" tag "--depth" "1" repo-url (path->string tmp-dir))
+                            (list "git" "clone" "--depth" "1" repo-url (path->string tmp-dir))))
+      (define-values (sp out in err)
+        (apply subprocess #f #f #f #f clone-args))
+      (subprocess-wait sp)
+      (close-output-port in)
+      (close-input-port out)
+      (close-input-port err)
+      (unless (= (subprocess-status sp) 0)
+        (delete-directory/files tmp-dir #:must-exist? #f)
+        (return (format "error: git clone exited with status ~a" (subprocess-status sp)))))
+    ;; Delegate to dir-based install
+    (begin0
+      (install-package-from-dir tmp-dir)
+      (with-handlers ([exn:fail? void])
+        (delete-directory/files tmp-dir)))))
