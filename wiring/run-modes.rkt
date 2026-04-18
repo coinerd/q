@@ -40,6 +40,7 @@
 (provide build-runtime-from-cli
          load-extensions-from-dir!
          mode-for-config
+         reload-config!
          ;; Re-exported from run-interactive.rkt
          make-terminal-subscriber
          run-interactive
@@ -175,3 +176,27 @@
     [(init) 'init]
     [(sessions) 'sessions]
     [else (cli-config-mode cfg)]))
+
+;; ============================================================
+;; reload-config! (#1182)
+;; ============================================================
+
+;; Reload settings and model registry from disk without restarting.
+;; Takes a mutable base-config hash (from build-runtime-from-cli)
+;; and refreshes the settings + model-registry entries.
+;; Returns the new model-registry.
+(define (reload-config! base-config)
+  (define project-dir (hash-ref base-config 'project-dir #f))
+  (define home-dir (hash-ref base-config 'home-dir #f))
+  (define config-path (hash-ref base-config 'config-path #f))
+  ;; Re-read settings from disk
+  (define new-settings
+    (load-settings (or project-dir (current-directory))
+                   #:home-dir (or home-dir (find-system-path 'home))
+                   #:config-path config-path))
+  ;; Rebuild model registry from new merged config
+  (define new-reg (make-model-registry-from-config (q-settings-merged new-settings)))
+  ;; Swap into base-config
+  (hash-set! base-config 'settings new-settings)
+  (hash-set! base-config 'model-registry new-reg)
+  new-reg)
