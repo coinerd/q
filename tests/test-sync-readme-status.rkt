@@ -44,8 +44,8 @@
 
 (test-case "sync-readme-status: extracts current version"
   (define-values (out err) (run-script "--version"))
-  (check-true (string-contains? out "0.11.2")
-              (format "Expected version 0.11.2 in output, got: ~a~%err: ~a" out err)))
+  (check-true (string-contains? out "0.11.3")
+              (format "Expected version 0.11.3 in output, got: ~a~%err: ~a" out err)))
 
 (test-case "sync-readme-status: --check detects version mismatch"
   (define tmp-readme
@@ -72,7 +72,7 @@ EOF
 
 ## Status
 
-**v0.11.2** — Current version. Some description.
+**v0.11.3** — Current version. Some description.
 
 ## License
 MIT
@@ -98,8 +98,8 @@ EOF
   (define-values (out err) (run-script "--sync" (path->string tmp-readme)))
   (define updated (file->string tmp-readme))
   (delete-file tmp-readme)
-  (check-true (string-contains? updated "v0.11.2")
-              (format "Expected v0.11.2 in updated README, got: ~a" updated))
+  (check-true (string-contains? updated "v0.11.3")
+              (format "Expected v0.11.3 in updated README, got: ~a" updated))
   (check-false (string-contains? updated "v0.10.8") "Old version should be replaced"))
 
 (test-case "sync-readme-status: --sync preserves surrounding content"

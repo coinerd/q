@@ -1,6 +1,6 @@
 # Publishing Guide
 
-<!-- verified-against: v0.11.2 -->
+<!-- verified-against: v0.11.3 -->
 
 How to package, validate, and publish a q extension to the package
 index.
