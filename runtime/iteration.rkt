@@ -124,9 +124,9 @@
 
 ;; Safely dispatch hooks if extension-registry is present.
 ;; Returns (values amended-payload hook-result) or (values payload #f) if no registry.
-(define (maybe-dispatch-hooks ext-reg hook-point payload)
+(define (maybe-dispatch-hooks ext-reg hook-point payload #:ctx [ctx #f])
   (if ext-reg
-      (let ([result (dispatch-hooks hook-point payload ext-reg)])
+      (let ([result (dispatch-hooks hook-point payload ext-reg #:ctx ctx)])
         (values (hook-result-payload result) result))
       (values payload #f)))
 
