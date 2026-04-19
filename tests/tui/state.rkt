@@ -540,50 +540,42 @@
     ;; ============================================================
 
     (test-case "BUG-29: runtime.error clears pending-tool-name"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [busy? #t]
-                   [pending-tool-name "bash"]))
+      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "bash"]))
       (define evt (make-test-event "runtime.error" (hash 'error "crash")))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "runtime.error clears pending-tool-name")
       (check-false (ui-state-busy? s1) "runtime.error clears busy?"))
 
     (test-case "BUG-29: runtime.error clears streaming-text"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [busy? #t]
-                   [streaming-text "partial response..."]))
+      (define s0
+        (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "partial response..."]))
       (define evt (make-test-event "runtime.error" (hash 'error "crash")))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "runtime.error clears streaming-text"))
 
     (test-case "BUG-30: turn.started clears stale pending-tool-name"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [pending-tool-name "old-tool"]))
+      (define s0 (struct-copy ui-state (initial-ui-state) [pending-tool-name "old-tool"]))
       (define evt (make-test-event "turn.started" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "turn.started clears pending-tool-name")
       (check-true (ui-state-busy? s1) "turn.started sets busy?"))
 
     (test-case "BUG-30: turn.started clears stale streaming-text"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [streaming-text "stale stream text"]))
+      (define s0 (struct-copy ui-state (initial-ui-state) [streaming-text "stale stream text"]))
       (define evt (make-test-event "turn.started" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.started clears streaming-text"))
 
     (test-case "BUG-31: turn.completed clears pending-tool-name"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [busy? #t]
-                   [pending-tool-name "read"]))
+      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "read"]))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "turn.completed clears pending-tool-name")
       (check-false (ui-state-busy? s1) "turn.completed clears busy?"))
 
     (test-case "BUG-31: turn.completed clears streaming-text"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [busy? #t]
-                   [streaming-text "leftover stream"]))
+      (define s0
+        (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "leftover stream"]))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))
@@ -606,7 +598,7 @@
 
     (test-case "BUG-33: auto-retry.start adds system entry"
       (define s0 (initial-ui-state))
-      (define evt (make-test-event "auto-retry.start" (hash 'attempt 2 'maxAttempts 3)))
+      (define evt (make-test-event "auto-retry.start" (hash 'attempt 2 'max-retries 3)))
       (define s1 (apply-event-to-state s0 evt))
       (define entries (ui-state-transcript s1))
       (check > (length entries) 0 "auto-retry.start adds an entry")
@@ -615,9 +607,7 @@
       (check-not-false (string-contains? (transcript-entry-text last-entry) "retry")))
 
     (test-case "BUG-34: model.stream.completed clears streaming-text"
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [busy? #t]
-                   [streaming-text "partial..."]))
+      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "partial..."]))
       (define evt (make-test-event "model.stream.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "model.stream.completed clears streaming-text"))
@@ -628,11 +618,9 @@
 
     (test-case "BUG-38: tool.call.started guards against pending overwrite"
       ;; If a tool is already pending, don't overwrite its name
-      (define s0 (struct-copy ui-state (initial-ui-state)
-                   [busy? #t]
-                   [pending-tool-name "read"]))
-      (define evt (make-test-event "tool.call.started"
-                   (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
+      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "read"]))
+      (define evt
+        (make-test-event "tool.call.started" (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
       (define s1 (apply-event-to-state s0 evt))
       ;; pending-tool-name should stay as the original "read"
       (check-equal? (ui-state-pending-tool-name s1) "read" "pending-tool-name not overwritten")
@@ -641,8 +629,8 @@
 
     (test-case "BUG-38: tool.call.started sets name when no tool pending"
       (define s0 (initial-ui-state))
-      (define evt (make-test-event "tool.call.started"
-                   (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
+      (define evt
+        (make-test-event "tool.call.started" (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
       (define s1 (apply-event-to-state s0 evt))
       (check-equal? (ui-state-pending-tool-name s1) "bash" "pending-tool-name set"))))
 
@@ -827,21 +815,22 @@
   (define loaded (load-scrollback path))
   (check-equal? (length loaded) 5)
   ;; Simulate the fix: advance next-entry-id past max loaded ID
-  (define max-id (for/fold ([m -1]) ([e (in-list loaded)])
-                   (max m (or (transcript-entry-id e) -1))))
+  (define max-id
+    (for/fold ([m -1]) ([e (in-list loaded)])
+      (max m (or (transcript-entry-id e) -1))))
   (check-equal? max-id 4 "max scrollback ID should be 4")
   (define base-state (initial-ui-state))
   (define fixed-state
-    (struct-copy ui-state base-state
-                 [transcript loaded]
-                 [next-entry-id (add1 max-id)]))
-  (check-equal? (ui-state-next-entry-id fixed-state) 5
+    (struct-copy ui-state base-state [transcript loaded] [next-entry-id (add1 max-id)]))
+  (check-equal? (ui-state-next-entry-id fixed-state)
+                5
                 "next-entry-id should be 5 after loading 5 entries")
   ;; Add a new event and verify the new entry gets ID >= 5
   (define evt (make-test-event "assistant.message.completed" (hash 'content "New message")))
   (define s1 (apply-event-to-state fixed-state evt))
   (define new-entry (last (ui-state-transcript s1)))
-  (check-equal? (transcript-entry-id new-entry) 5
+  (check-equal? (transcript-entry-id new-entry)
+                5
                 "new entry should get ID 5 (not colliding with scrollback IDs 0-4)")
   (delete-directory/files tmpdir))
 
@@ -857,21 +846,19 @@
   (save-scrollback entries-to-save path)
   (define loaded (load-scrollback path))
   ;; Apply the fix: advance next-entry-id
-  (define max-id (for/fold ([m -1]) ([e (in-list loaded)])
-                   (max m (or (transcript-entry-id e) -1))))
+  (define max-id
+    (for/fold ([m -1]) ([e (in-list loaded)])
+      (max m (or (transcript-entry-id e) -1))))
   (define base-state (initial-ui-state))
   (define fixed-state
-    (struct-copy ui-state base-state
-                 [transcript loaded]
-                 [next-entry-id (add1 max-id)]))
+    (struct-copy ui-state base-state [transcript loaded] [next-entry-id (add1 max-id)]))
   ;; Apply 3 more events
-  (define s1 (apply-event-to-state fixed-state
-                                    (make-test-event "assistant.message.completed"
-                                                     (hash 'content "New response"))))
-  (define s2 (apply-event-to-state s1
-                                    (make-test-event "tool.call.started" (hash 'name "read"))))
-  (define s3 (apply-event-to-state s2
-                                    (make-test-event "tool.call.completed" (hash 'name "read"))))
+  (define s1
+    (apply-event-to-state fixed-state
+                          (make-test-event "assistant.message.completed"
+                                           (hash 'content "New response"))))
+  (define s2 (apply-event-to-state s1 (make-test-event "tool.call.started" (hash 'name "read"))))
+  (define s3 (apply-event-to-state s2 (make-test-event "tool.call.completed" (hash 'name "read"))))
   ;; Collect all IDs
   (define all-ids (map transcript-entry-id (ui-state-transcript s3)))
   ;; All IDs should be unique: 3 scrollback + 3 runtime = 6
@@ -890,8 +877,9 @@
   (define loaded (load-scrollback path))
   (check-equal? loaded '() "no file → empty scrollback")
   ;; Fix: with empty loaded, max-id stays -1, next-entry-id = 0
-  (define max-id (for/fold ([m -1]) ([e (in-list loaded)])
-                   (max m (or (transcript-entry-id e) -1))))
+  (define max-id
+    (for/fold ([m -1]) ([e (in-list loaded)])
+      (max m (or (transcript-entry-id e) -1))))
   (check-equal? max-id -1 "empty scrollback: max-id = -1")
   (check-equal? (add1 max-id) 0 "empty scrollback: next-entry-id = 0")
   (delete-directory/files tmpdir))
@@ -901,8 +889,7 @@
   (reset-scrollback-id-counter!)
   (define base (initial-ui-state))
   ;; Add entry with ID 0
-  (define-values (entry0 s0)
-    (assign-entry-id (make-entry 'assistant "Old content" 1000 (hash)) base))
+  (define-values (entry0 s0) (assign-entry-id (make-entry 'assistant "Old content" 1000 (hash)) base))
   (define s1 (struct-copy ui-state s0 [transcript (list entry0)]))
   ;; Render to populate cache
   (define-values (rendered1 s1r) (render-transcript s1 24 80))
@@ -929,8 +916,7 @@
   (define tmpdir (make-temporary-file "scrollback-save-~a" 'directory))
   (define path (build-path tmpdir "scrollback.jsonl"))
   (define entries
-    (list (make-entry 'assistant "test" 1000 (hash))
-          (make-entry 'system "info" 1001 (hash))))
+    (list (make-entry 'assistant "test" 1000 (hash)) (make-entry 'system "info" 1001 (hash))))
   ;; save-scrollback should succeed
   (save-scrollback entries path)
   (check-true (file-exists? path))
@@ -948,17 +934,14 @@
   (define s1 (apply-event-to-state s0 evt))
   (check-equal? (ui-state-session-id s1) "new-sess-1")
   (check-equal? (length (ui-state-transcript s1)) 1)
-  (check-not-false
-   (string-contains? (transcript-entry-text (first (ui-state-transcript s1)))
-                      "new-sess-1")))
+  (check-not-false (string-contains? (transcript-entry-text (first (ui-state-transcript s1)))
+                                     "new-sess-1")))
 
 (test-case "W0.3: session.started with reason in payload"
   (define s0 (initial-ui-state))
-  (define evt (make-test-event "session.started"
-                               (hash 'sessionId "sess-2" 'reason 'resume)))
+  (define evt (make-test-event "session.started" (hash 'sessionId "sess-2" 'reason 'resume)))
   (define s1 (apply-event-to-state s0 evt))
   (check-equal? (ui-state-session-id s1) "sess-2"))
-
 
 ;; ============================================================
 ;; BUG-55: Mock provider warning state
