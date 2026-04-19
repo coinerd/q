@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.2] — 2026-04-19
+
+### Added — Wave 5: Error Scenario Test Catalog (#1267)
+- **State assertion library** (#1268): `tests/tui/state-assertions.rkt` with 13 reusable assertion functions and 4 predicates for TUI state verification.
+- **Error scenario catalog** (#1269): `tests/tui/error-scenarios.rkt` with 6 pre-built failure event sequences (provider-timeout, rate-limit-retry, auth-failure, context-overflow, max-iterations, tool-failure).
+- 16 tests passing across both modules.
+
+### Added — Wave 6: Mock Failure Provider & Integration Tests (#1270)
+- **Mock failure provider** (#1271): `tests/helpers/mock-failure-provider.rkt` with configurable failure injection (6 modes: timeout, rate-limit, auth, context-overflow, partial-response, max-iterations).
+- **TUI error recovery integration tests** (#1272): 12 integration tests in `tests/workflows/test-provider-error-recovery.rkt` covering timeout retry, rate limit, auth failure, context overflow, max iterations, tool failure, partial response, retry resubmit, consecutive timeouts, streaming interrupt, error clears streaming, retry count display.
+
+### Internal
+- 28 tests added across Waves 5-6.
+- Mock failure provider supports `#:failure-mode`, `#:fail-times`, `#:timeout-secs`, `#:partial-chunks` parameters.
+- All 12 TUI error recovery tests pass.
+
 ## [0.11.1] — 2026-04-19
 
 ### Added — Wave 0: Subagent Real Provider (#1203)
@@ -1114,7 +1130,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session branching, forking, compaction
 - 2189 tests, 0 failures
 
-[Unreleased]: https://github.com/coinerd/q/compare/v0.10.8...HEAD
+[Unreleased]: https://github.com/coinerd/q/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/coinerd/q/compare/v0.11.1...v0.11.2
 [0.10.4]: https://github.com/coinerd/q/compare/v0.10.3...v0.10.4
 [0.10.3]: https://github.com/coinerd/q/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/coinerd/q/compare/v0.10.1...v0.10.2
