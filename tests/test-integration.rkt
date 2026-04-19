@@ -57,7 +57,7 @@
          (prefix-in sdk: "../interfaces/sdk.rkt")
          (only-in "../runtime/compactor.rkt" compaction-result?))
 
-;; Import register-default-tools! from main.rkt (which wires all 9 tools)
+;; Import register-default-tools! from main.rkt (which wires all 10 tools)
 (require (only-in "../main.rkt" register-default-tools! make-event-bus))
 
 (require (only-in "helpers/mock-provider.rkt" make-simple-mock-provider make-tool-call-mock-provider))
@@ -411,11 +411,11 @@
 ;; 8. CLI / tool registration integration
 ;; ============================================================
 
-(test-case "integ: register-default-tools! registers 9 tools"
+(test-case "integ: register-default-tools! registers 10 tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (tool-names reg))
-  (check-equal? (length names) 9)
+  (check-equal? (length names) 10)
   (check-not-false (member "read" names))
   (check-not-false (member "write" names))
   (check-not-false (member "edit" names))
@@ -458,9 +458,11 @@
         "mock"
         'tool-calls))
      (lambda (req)
-       (list
-        (make-stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
-        (make-stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t)))))
+       (list (make-stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
+             (make-stream-chunk #f
+                                #f
+                                (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
+                                #t)))))
   (define rt
     (make-test-runtime ever-calling-prov #:session-dir dir #:tool-registry reg #:max-iterations 1))
   (define rt2 (sdk:open-session rt))
