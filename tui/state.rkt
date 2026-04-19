@@ -318,7 +318,7 @@
      (define result-raw (hash-ref payload 'result #f))
      (define result-summary
        (if result-raw
-           (truncate-string (format "~a" result-raw) 80)
+           (string-replace (truncate-string (format "~a" result-raw) 80) "\n" " \u23ce ")
            ""))
      (define text
        (if (string=? result-summary "")
@@ -339,7 +339,7 @@
       ui-state
       (append-entry
        state
-       (make-entry 'tool-fail (format "[FAIL: ~a] ~a" name err) ts (hasheq 'name name 'error err)))
+       (make-entry 'tool-fail (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ") ts (hasheq 'name name 'error err)))
       [pending-tool-name #f])]
 
     [("runtime.error")

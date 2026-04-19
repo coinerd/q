@@ -76,7 +76,13 @@
   ;; Returns (listof styled-line) — usually 1 line, but could be multi-line
   (define kind (transcript-entry-kind entry))
   ;; BUG-26 fix: guard #f text — replace with empty string
-  (define text (or (transcript-entry-text entry) ""))
+  (define raw-text (or (transcript-entry-text entry) ""))
+  ;; BUG-NEWLINE-BLEED fix: sanitize newlines in tool results/errors
+  ;; Newlines in styled-line text cause terminal row overflow.
+  ;; Replace with ⏎ visual indicator.
+  (define text (if (memq kind '(tool-end tool-fail tool-start))
+                    (string-replace raw-text "\n" " \u23ce ")
+                    raw-text))
   ;; BUG-37 fix: skip whitespace-only assistant entries
   (case kind
     [(assistant)
@@ -141,7 +147,7 @@
   (define seen-styled? (box #f))
   (define parts
     (for/list ([seg (in-list (styled-line-segments sl))])
-      (define text (styled-segment-text seg))
+      (define text (string-replace (styled-segment-text seg) "\n" " "))
       (define styles (styled-segment-style seg))
       (cond
         [(null? styles)
