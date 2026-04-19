@@ -17,6 +17,7 @@
          json
          "../util/jsonl.rkt"
          "../runtime/settings.rkt"
+         "../runtime/session-store.rkt"
          (only-in "../cli/args.rkt"
                   cli-config?
                   cli-config-sessions-subcommand
@@ -57,9 +58,10 @@
             (define jsonl (build-path p "session.jsonl"))
             (define mtime
               (with-handlers ([exn:fail? (lambda (e)
-                              (log-warning "sessions: failed to get mtime for ~a: ~a"
-                                           jsonl (exn-message e))
-                              0)])
+                                           (log-warning "sessions: failed to get mtime for ~a: ~a"
+                                                        jsonl
+                                                        (exn-message e))
+                                           0)])
                 (file-or-directory-modify-seconds jsonl)))
             (list (path->string (file-name-from-path p)) p mtime)))
         (map (lambda (t) (list (car t) (cadr t))) (sort with-time > #:key caddr)))))
@@ -76,15 +78,16 @@
   (define mtime
     (with-handlers ([exn:fail? (lambda (e)
                                  (log-warning "sessions: failed to get mtime for ~a: ~a"
-                                              jsonl-path (exn-message e))
+                                              jsonl-path
+                                              (exn-message e))
                                  0)])
       (file-or-directory-modify-seconds jsonl-path)))
   ;; Count entries and extract model from first few messages
   (define entries
-    (with-handlers ([exn:fail? (lambda (e)
-                                 (log-warning "sessions: failed to read ~a: ~a"
-                                              jsonl-path (exn-message e))
-                                 '())])
+    (with-handlers ([exn:fail?
+                     (lambda (e)
+                       (log-warning "sessions: failed to read ~a: ~a" jsonl-path (exn-message e))
+                       '())])
       (jsonl-read-all-valid jsonl-path)))
   (define message-count (length entries))
   ;; Try to find model from first assistant message
@@ -184,10 +187,10 @@
      ;; Count tool calls from messages
      (define jsonl-path (build-path session-path "session.jsonl"))
      (define entries
-       (with-handlers ([exn:fail? (lambda (e)
-                                    (log-warning "sessions: failed to read ~a: ~a"
-                                                 jsonl-path (exn-message e))
-                                    '())])
+       (with-handlers ([exn:fail?
+                        (lambda (e)
+                          (log-warning "sessions: failed to read ~a: ~a" jsonl-path (exn-message e))
+                          '())])
          (jsonl-read-all-valid jsonl-path)))
      (define tool-call-count
        (for/sum ([e (in-list entries)])
@@ -332,4 +335,41 @@
              [(not-found) (displayln (format "Session not found: ~a" sid))]
              [(cancelled) (displayln "Cancelled.")]))
          (displayln "Usage: q sessions delete <id>"))]
-    [else (displayln "Usage: q sessions <list|info|delete> [args]")]))
+    [(verify)
+     ;; q sessions verify <path> [--repair]
+     ;; or q verify-session <path> [--repair]
+     (define path-arg
+       (if (>= (length args) 1)
+           (car args)
+           #f))
+     (define repair? (member "--repair" args))
+     (if path-arg
+         (let* ([log-path path-arg]
+                [chain-report (verify-hash-chain log-path)]
+                [struct-report (verify-session-integrity log-path)])
+           (printf "Session: ~a\n" path-arg)
+           (printf "  Entries: ~a\n" (hash-ref struct-report 'total-entries 0))
+           (printf "  Valid (structure): ~a\n" (hash-ref struct-report 'valid-entries 0))
+           (printf "  Hash chain: ~a\n" (if (hash-ref chain-report 'valid?) "OK" "BROKEN"))
+           (when (hash-ref chain-report 'has-hashes? #f)
+             (printf "  Chain length: ~a\n" (hash-ref chain-report 'chain-length 0))
+             (printf "  Broken links: ~a\n" (hash-ref chain-report 'broken-links 0)))
+           (cond
+             [(not (hash-ref chain-report 'has-hashes? #f))
+              (displayln "  (Legacy log — no hash chain)")
+              (exit 2)]
+             [(not (hash-ref chain-report 'valid?))
+              (if repair?
+                  (let ([rr (repair-session-log! log-path)])
+                    (displayln "  Repairing...")
+                    (printf "  Repaired: ~a kept, ~a removed\n"
+                            (hash-ref rr 'entries-kept 0)
+                            (hash-ref rr 'entries-removed 0))
+                    (exit 0))
+                  (exit 1))]
+             [else (exit 0)]))
+         (begin
+           (displayln "Usage: q verify-session <path> [--repair]")
+           (displayln "       q sessions verify <path> [--repair]")
+           (exit 1)))]
+    [else (displayln "Usage: q sessions <list|info|delete|verify> [args]")]))
