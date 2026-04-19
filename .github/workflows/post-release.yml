@@ -51,6 +51,10 @@ jobs:
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
           tar xzf "q-${VERSION}.tar.gz"
+          # Tarball may extract to q/ or q-${VERSION}/ — normalize to q/
+          if [ -d "q-${VERSION}" ]; then
+            mv "q-${VERSION}" q
+          fi
           cd q
           raco pkg install --auto --batch
           echo "Q_DIR=$(pwd)" >> $GITHUB_ENV
