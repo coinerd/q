@@ -337,9 +337,11 @@
      (define ts (event-time evt))
      (struct-copy
       ui-state
-      (append-entry
-       state
-       (make-entry 'tool-fail (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ") ts (hasheq 'name name 'error err)))
+      (append-entry state
+                    (make-entry 'tool-fail
+                                (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")
+                                ts
+                                (hasheq 'name name 'error err)))
       [pending-tool-name #f])]
 
     [("runtime.error")
@@ -447,7 +449,7 @@
     ;; BUG-33 fix: auto-retry event from runtime/iteration.rkt
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
-     (define max-attempts (hash-ref payload 'maxAttempts "?"))
+     (define max-attempts (hash-ref payload 'max-retries "?"))
      (struct-copy ui-state
                   (append-entry state
                                 (make-entry 'system

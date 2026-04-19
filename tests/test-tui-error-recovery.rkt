@@ -19,19 +19,19 @@
 
 (test-case "auto-retry.start clears streaming-text"
   (define state (state-with-streaming "Hello world"))
-  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3)))
+  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3)))
   (define next (apply-event-to-state state evt))
   (check-false (ui-state-streaming-text next) "auto-retry.start should clear streaming-text"))
 
 (test-case "auto-retry.start clears streaming-thinking"
   (define state (state-with-streaming))
-  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3)))
+  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3)))
   (define next (apply-event-to-state state evt))
   (check-false (ui-state-streaming-thinking next) "auto-retry.start should clear streaming-thinking"))
 
 (test-case "auto-retry.start preserves busy state"
   (define state (state-with-streaming))
-  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3)))
+  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3)))
   (define next (apply-event-to-state state evt))
   (check-true (ui-state-busy? next) "auto-retry.start should preserve busy state"))
 
@@ -41,7 +41,7 @@
   (define err-evt (make-test-event "runtime.error" (hasheq 'error "timeout")))
   (define after-error (apply-event-to-state state err-evt))
   ;; Error already clears streaming, but retry should keep it clear
-  (define retry-evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3)))
+  (define retry-evt (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3)))
   (define after-retry (apply-event-to-state after-error retry-evt))
   (check-false (ui-state-streaming-text after-retry)
                "streaming-text should remain clear after retry"))
@@ -65,19 +65,19 @@
 
 (test-case "multiple consecutive retries clear streaming each time"
   (define state0 (state-with-streaming "Streaming text 1"))
-  (define retry1 (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3)))
+  (define retry1 (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3)))
   (define state1 (apply-event-to-state state0 retry1))
   (check-false (ui-state-streaming-text state1))
   (define delta1 (make-test-event "model.stream.delta" (hasheq 'delta "Retry stream")))
   (define state2 (apply-event-to-state state1 delta1))
   (check-equal? (ui-state-streaming-text state2) "Retry stream")
-  (define retry2 (make-test-event "auto-retry.start" (hasheq 'attempt 2 'maxAttempts 3)))
+  (define retry2 (make-test-event "auto-retry.start" (hasheq 'attempt 2 'max-retries 3)))
   (define state3 (apply-event-to-state state2 retry2))
   (check-false (ui-state-streaming-text state3))
   (define delta2 (make-test-event "model.stream.delta" (hasheq 'delta "Retry 2 stream")))
   (define state4 (apply-event-to-state state3 delta2))
   (check-equal? (ui-state-streaming-text state4) "Retry 2 stream")
-  (define retry3 (make-test-event "auto-retry.start" (hasheq 'attempt 3 'maxAttempts 3)))
+  (define retry3 (make-test-event "auto-retry.start" (hasheq 'attempt 3 'max-retries 3)))
   (define state5 (apply-event-to-state state4 retry3))
   (check-false (ui-state-streaming-text state5))
   (check-false (ui-state-streaming-thinking state5)))
@@ -95,7 +95,7 @@
   (define s0 (state-with-streaming "text"))
   (define s1 (apply-event-to-state s0 (make-test-event "runtime.error" (hasheq 'error "timeout"))))
   (define s2
-    (apply-event-to-state s1 (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3))))
+    (apply-event-to-state s1 (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3))))
   (define s3 (apply-event-to-state s2 (make-test-event "turn.completed" (hasheq))))
   (check-false (ui-state-streaming-text s3))
   (check-false (ui-state-streaming-thinking s3))
@@ -119,7 +119,7 @@
 
 (test-case "auto-retry.start appends retry entry to transcript"
   (define state (initial-ui-state))
-  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 2 'maxAttempts 3)))
+  (define evt (make-test-event "auto-retry.start" (hasheq 'attempt 2 'max-retries 3)))
   (define next (apply-event-to-state state evt))
   (define entries (ui-state-transcript next))
   (check-equal? (length entries) 1)
@@ -135,7 +135,7 @@
   (define s1 (apply-event-to-state s0 (make-test-event "model.stream.delta" (hasheq 'delta "Hello"))))
   (check-equal? (ui-state-streaming-text s1) "Hello")
   (define s2
-    (apply-event-to-state s1 (make-test-event "auto-retry.start" (hasheq 'attempt 1 'maxAttempts 3))))
+    (apply-event-to-state s1 (make-test-event "auto-retry.start" (hasheq 'attempt 1 'max-retries 3))))
   (check-false (ui-state-streaming-text s2))
   (check-false (ui-state-streaming-thinking s2))
   (check-equal? (length (ui-state-transcript s2)) 101))
