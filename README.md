@@ -57,7 +57,7 @@ q is provider-agnostic: it ships with adapters for **OpenAI**, **Anthropic**, an
 - 🔌 **Provider-agnostic** — swap LLM providers without changing your workflow
 - 🧩 **Extensible** — hook system for custom behavior at every lifecycle point
 - 🖥️ **Multiple interfaces** — CLI, TUI (terminal UI), JSON mode, RPC, SDK
-- 🔧 **9 built-in tools** — read, write, edit, bash, grep, find, ls, date, firecrawl
+- 🔧 **10 built-in tools** — read, write, edit, bash, grep, find, ls, date, firecrawl, spawn-subagent
 - 🌿 **Session branching** — fork conversations, explore alternatives, merge back
 - 🏗️ **5-layer architecture** — clean separation from LLM to interfaces
 
@@ -67,7 +67,7 @@ q is provider-agnostic: it ships with adapters for **OpenAI**, **Anthropic**, an
 ┌─────────────────────────────────┐
 │          Interfaces             │  CLI · TUI · JSON · RPC · SDK
 ├─────────────────────────────────┤
-│       Tools & Extensions        │  9 built-in tools + hook system
+│       Tools & Extensions        │  10 built-in tools + hook system
 ├─────────────────────────────────┤
 │          Runtime                │  Session · Resources · Compaction
 ├─────────────────────────────────┤
@@ -258,7 +258,7 @@ q/
 ├── sandbox/        Subprocess management, execution limits
 ├── skills/         Skill loading, context files, prompt templates
 ├── tests/          Full test suite (120 files)
-├── tools/          Tool registry, scheduler, 9 built-in tools
+├── tools/          Tool registry, scheduler, 10 built-in tools
 ├── tui/            Terminal UI: rendering, input, state, clipboard
 ├── util/           JSONL, ANSI, markdown, IDs, cancellation, paths
 └── wiring/         Run modes: interactive, JSON-RPC, mode dispatch
@@ -405,7 +405,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 - ✅ Canonical types and utilities
 - ✅ JSONL session storage with tree indexing and forking
 - ✅ Provider abstraction and core agent loop
-- ✅ Tool system with 9 built-in tools
+- ✅ Tool system with 10 built-in tools
 - ✅ Runtime orchestration with compaction and extensions
 - ✅ 5 interfaces (CLI, TUI, JSON, RPC, SDK)
 - ✅ Sandboxing and hardening

@@ -109,7 +109,7 @@
   ;; Tarball path (optional)
   (define tarball-path
     (if (pair? args)
-        (let ([p (car args)]) (if (file-exists? p) p #f))
+        (let ([p (string->path (car args))]) (if (file-exists? p) p #f))
         #f))
 
   (emit-manifest version commit date tarball-path))

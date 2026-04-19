@@ -70,7 +70,7 @@
   (check-true (not (false? (member (provider-name (hash-ref rt 'provider))
                                    '("mock" "openai-compatible"))))))
 
-(test-case "tool-registry has all 9 built-in tools"
+(test-case "tool-registry has all 10 built-in tools"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (define reg (hash-ref rt 'tool-registry))

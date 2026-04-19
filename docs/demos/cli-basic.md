@@ -21,7 +21,7 @@ follows a layered design:
    queue, and state.
 2. **LLM layer** (`llm/`) — provider abstraction, OpenAI, Anthropic, and
    streaming.
-3. **Tools layer** (`tools/`) — a registry with 9 built-in tools (read,
+3. **Tools layer** (`tools/`) — a registry with 10 built-in tools (read,
    write, edit, bash, grep, find, ls, date, firecrawl).
 4. **Runtime layer** (`runtime/`) — session management, resource
    tracking, compaction, safe-mode, and extension loading.
