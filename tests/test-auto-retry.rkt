@@ -186,3 +186,44 @@
 (test-case "timeout-error?: negative cases"
   (check-false (timeout-error? (exn:fail "rate limit" (current-continuation-marks))))
   (check-false (timeout-error? (exn:fail "internal error" (current-continuation-marks)))))
+
+;; ============================================================
+;; Context reduction on timeout retry tests (v0.11.2 Wave 4)
+;; ============================================================
+
+(test-case "with-auto-retry: context-reducer called on timeout"
+  (define reduction-log (box '()))
+  (define call-count (box 0))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry
+                (lambda ()
+                  (set-box! call-count (add1 (unbox call-count)))
+                  (raise (exn:fail "HTTP read timeout" (current-continuation-marks))))
+                #:max-retries 2
+                #:base-delay-ms 1
+                #:context-reducer
+                (lambda (attempt)
+                  (set-box! reduction-log (cons attempt (unbox reduction-log)))
+                  ;; Return same thunk (context reduction is tested in iteration.rkt integration)
+                  (lambda ()
+                    (set-box! call-count (add1 (unbox call-count)))
+                    (raise (exn:fail "HTTP read timeout" (current-continuation-marks))))))))
+  ;; Context reducer should have been called for timeout errors
+  (check-equal? (reverse (unbox reduction-log)) '(1 2)))
+
+(test-case "with-auto-retry: context-reducer NOT called on non-timeout errors"
+  (define reduction-log (box '()))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry
+                (lambda () (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks))))
+                #:max-retries 1
+                #:base-delay-ms 1
+                #:context-reducer (lambda (attempt)
+                                    (set-box! reduction-log (cons attempt (unbox reduction-log)))
+                                    (lambda ()
+                                      (raise (exn:fail "HTTP 429 rate limit"
+                                                       (current-continuation-marks))))))))
+  ;; Context reducer should NOT have been called for rate-limit errors
+  (check-equal? (unbox reduction-log) '()))

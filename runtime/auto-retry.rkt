@@ -135,18 +135,25 @@
                          #:max-retries [max-retries default-max-retries]
                          #:base-delay-ms [base-delay-ms default-base-delay-ms]
                          #:max-delay-ms [max-delay-ms default-max-delay-ms]
-                         #:on-retry [on-retry #f])
+                         #:on-retry [on-retry #f]
+                         #:context-reducer [context-reducer #f])
   (let loop ([attempt 0]
-             [delay-ms 0])
+             [delay-ms 0]
+             [current-thunk thunk])
     (with-handlers ([exn:fail?
                      (lambda (exn)
                        (cond
                          [(and (retryable-error? exn) (< attempt max-retries))
                           (define next-delay (min (* base-delay-ms (expt 2 attempt)) max-delay-ms))
+                          ;; For timeout errors, apply context reduction if available
+                          (define next-thunk
+                            (if (and context-reducer (timeout-error? exn))
+                                (context-reducer (add1 attempt))
+                                current-thunk))
                           ;; Call retry callback if provided
                           (when on-retry
                             (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
                           (sleep (/ next-delay 1000.0))
-                          (loop (add1 attempt) next-delay)]
+                          (loop (add1 attempt) next-delay next-thunk)]
                          [else (raise exn)]))])
-      (thunk))))
+      (current-thunk))))

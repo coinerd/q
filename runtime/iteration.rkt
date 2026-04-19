@@ -74,9 +74,7 @@
                   list-tools-jsexpr
                   merge-tool-lists)
          ;; Settings struct for exec-context runtime-settings (#1240)
-         (only-in "../runtime/settings.rkt"
-                  make-minimal-settings
-                  setting-ref)
+         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
          ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
@@ -100,7 +98,8 @@
          (only-in "../runtime/auto-retry.rkt"
                   with-auto-retry
                   retryable-error?
-                  context-overflow-error?)
+                  context-overflow-error?
+                  timeout-error?)
          ;; FEAT-61: message injection support
          (only-in "../extensions/message-inject.rkt" injection-event-topic))
 
@@ -247,9 +246,11 @@
           (merge-tool-lists base-tools ext-tools)
           base-tools)))
 
+  (define ctx-for-retry (box ctx-final))
+
   (with-auto-retry
    (lambda ()
-     (run-agent-turn ctx-final
+     (run-agent-turn (unbox ctx-for-retry)
                      prov
                      bus
                      #:session-id session-id
@@ -258,6 +259,40 @@
                      #:cancellation-token token))
    #:max-retries 2
    #:base-delay-ms 1000
+   #:context-reducer
+   (lambda (attempt)
+     ;; On timeout retry: trim oldest non-system messages.
+     ;; Keep system prompt + last N messages to reduce payload.
+     (define ctx (unbox ctx-for-retry))
+     (define n (length ctx))
+     (define keep-count (max 4 (quotient n 2)))
+     (define system-msgs (filter (lambda (m) (eq? (message-role m) 'system)) ctx))
+     (define non-system-msgs (filter (lambda (m) (not (eq? (message-role m) 'system))) ctx))
+     (define trimmed-non-system (takef (reverse non-system-msgs) (lambda (_) #t)))
+     ;; Take last keep-count non-system messages
+     (define kept-non-system
+       (if (> (length trimmed-non-system) keep-count)
+           (take trimmed-non-system keep-count)
+           trimmed-non-system))
+     (define reduced-ctx (append system-msgs (reverse kept-non-system)))
+     (set-box! ctx-for-retry reduced-ctx)
+     ;; Emit context-reduced event for TUI visibility
+     (publish!
+      bus
+      (make-event
+       "auto-retry.context-reduced"
+       (current-inexact-milliseconds)
+       session-id
+       turn-id
+       (hasheq 'original-messages n 'reduced-messages (length reduced-ctx) 'attempt attempt)))
+     (lambda ()
+       (run-agent-turn (unbox ctx-for-retry)
+                       prov
+                       bus
+                       #:session-id session-id
+                       #:turn-id turn-id
+                       #:tools tools
+                       #:cancellation-token token)))
    #:on-retry
    (lambda (attempt max-retries delay-ms error-msg)
      (publish!
@@ -299,9 +334,10 @@
 
   ;; #1208: Dispatch 'tool.execution.start hook before tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
-    (maybe-dispatch-hooks ext-reg 'tool.execution.start
-                          (hasheq 'tools (map tool-call-name tool-calls-to-run)
-                                  'count (length tool-calls-to-run))))
+    (maybe-dispatch-hooks
+     ext-reg
+     'tool.execution.start
+     (hasheq 'tools (map tool-call-name tool-calls-to-run) 'count (length tool-calls-to-run))))
 
   ;; Run tool batch through scheduler (skip if blocked)
   (define sched-result
@@ -320,23 +356,25 @@
             #:cancellation-token token
             #:event-publisher (lambda (event-type payload)
                                 (emit-session-event! bus session-id event-type payload))
-            #:runtime-settings
-            (or (hash-ref config 'settings #f)
-                (make-minimal-settings
-                 #:provider (hash-ref config 'provider #f)
-                 #:model (hash-ref config 'model-name #f)))
+            #:runtime-settings (or (hash-ref config 'settings #f)
+                                   (make-minimal-settings #:provider (hash-ref config 'provider #f)
+                                                          #:model (hash-ref config 'model-name #f)))
             #:call-id (generate-id)
             #:session-metadata (hasheq 'session-id session-id))
            #:parallel? (hash-ref config 'parallel-tools #t)))))
 
   ;; #1208: Dispatch 'tool.execution.end hook after tool batch
   (when (and ext-reg (not tool-call-blocked?))
-    (maybe-dispatch-hooks ext-reg 'tool.execution.end
-                          (hasheq 'tools (for/list ([tc (in-list tool-calls-to-run)]
-                                                    [tr (in-list (scheduler-result-results sched-result))])
-                                           (hasheq 'name (tool-call-name tc)
-                                                   'status (if (tool-result-is-error? tr) 'error 'completed)))
-                                          'count (length tool-calls-to-run))))
+    (maybe-dispatch-hooks
+     ext-reg
+     'tool.execution.end
+     (hasheq
+      'tools
+      (for/list ([tc (in-list tool-calls-to-run)]
+                 [tr (in-list (scheduler-result-results sched-result))])
+        (hasheq 'name (tool-call-name tc) 'status (if (tool-result-is-error? tr) 'error 'completed)))
+      'count
+      (length tool-calls-to-run))))
 
   ;; Emit tool.call.completed / tool.call.failed events (only for executed calls)
   (for ([tc (in-list tool-calls-to-run)]

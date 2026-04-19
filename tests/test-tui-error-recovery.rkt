@@ -211,3 +211,21 @@
                   (string-contains? (transcript-entry-text e) "/retry")))
            entries))
   (check-not-false hint-entry "Should still generate hint via regex fallback"))
+
+;; ═══════════════════════════════════════════════════════════
+;; Wave 4: Context-reduced event for TUI visibility
+;; ═══════════════════════════════════════════════════════════
+
+(test-case "auto-retry.context-reduced appends system entry"
+  (define s0 (initial-ui-state))
+  (define evt
+    (make-test-event "auto-retry.context-reduced"
+                     (hasheq 'original-messages 20 'reduced-messages 8 'attempt 1)))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  (check-equal? (length entries) 1)
+  (define entry (car entries))
+  (check-equal? (transcript-entry-kind entry) 'system)
+  (check-true (string-contains? (transcript-entry-text entry) "20"))
+  (check-true (string-contains? (transcript-entry-text entry) "8"))
+  (check-true (string-contains? (transcript-entry-text entry) "reduced context")))

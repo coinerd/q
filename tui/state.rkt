@@ -484,6 +484,15 @@
                   [streaming-text #f]
                   [streaming-thinking #f])]
 
+    [("auto-retry.context-reduced")
+     (define original (hash-ref payload 'original-messages 0))
+     (define reduced (hash-ref payload 'reduced-messages 0))
+     (append-entry state
+                   (make-entry 'system
+                               (format "[retry: reduced context ~a -> ~a messages]" original reduced)
+                               (event-time evt)
+                               (hash)))]
+
     [("model.stream.thinking")
      ;; Accumulate thinking/reasoning text from the model
      (define delta (hash-ref payload 'delta ""))
