@@ -51,14 +51,14 @@ jobs:
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
           tar xzf "q-${VERSION}.tar.gz"
-          cd "q-${VERSION}"
+          cd q
           raco pkg install --auto --batch
           echo "Q_DIR=$(pwd)" >> $GITHUB_ENV
 
       - name: Verify q --version
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
-          cd "q-${VERSION}"
+          cd q
           OUTPUT=$(racket main.rkt --version)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "version ${VERSION}"
@@ -66,7 +66,7 @@ jobs:
       - name: Verify manifest
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
-          cd "q-${VERSION}"
+          cd q
           if [ -f release-manifest.json ]; then
             python3 -c "
           import json, sys
@@ -81,5 +81,5 @@ jobs:
       - name: Run full test suite
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
-          cd "q-${VERSION}"
+          cd q
           racket scripts/run-tests.rkt

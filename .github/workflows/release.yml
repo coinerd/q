@@ -70,14 +70,14 @@ jobs:
       - name: Build tarball
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          mkdir -p /tmp/q-${VERSION}
-          cp -r . /tmp/q-${VERSION}/
+          mkdir -p /tmp/q
+          cp -r . /tmp/q/
           cd /tmp
           tar czf /tmp/q-${VERSION}.tar.gz \
             --exclude='.git' \
             --exclude='compiled' \
             --exclude='*.zo' \
-            q-${VERSION}/
+            q/
 
       - name: Generate release manifest
         run: |
