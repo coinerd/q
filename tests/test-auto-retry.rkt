@@ -18,18 +18,21 @@
 (test-case "retryable-error?: server errors"
   (check-true (retryable-error? (exn:fail "HTTP 500 server error" (current-continuation-marks))))
   (check-true (retryable-error? (exn:fail "HTTP 502 bad gateway" (current-continuation-marks))))
-  (check-true (retryable-error? (exn:fail "HTTP 503 service unavailable" (current-continuation-marks))))
+  (check-true (retryable-error? (exn:fail "HTTP 503 service unavailable"
+                                          (current-continuation-marks))))
   (check-true (retryable-error? (exn:fail "HTTP 504 gateway timeout" (current-continuation-marks)))))
 
 (test-case "retryable-error?: timeout errors"
   (check-true (retryable-error? (exn:fail "connection timed out" (current-continuation-marks))))
-  (check-true (retryable-error? (exn:fail "timeout waiting for response" (current-continuation-marks))))
+  (check-true (retryable-error? (exn:fail "timeout waiting for response"
+                                          (current-continuation-marks))))
   (check-true (retryable-error? (exn:fail "network connection reset" (current-continuation-marks)))))
 
 (test-case "retryable-error?: non-retryable errors"
   (check-false (retryable-error? (exn:fail "invalid API key" (current-continuation-marks))))
   (check-false (retryable-error? (exn:fail "model not found" (current-continuation-marks))))
-  (check-false (retryable-error? (exn:fail "bad request: missing field" (current-continuation-marks)))))
+  (check-false (retryable-error? (exn:fail "bad request: missing field"
+                                           (current-continuation-marks)))))
 
 (test-case "retryable-error?: case insensitive"
   (check-true (retryable-error? (exn:fail "RATE LIMIT EXCEEDED" (current-continuation-marks))))
@@ -66,44 +69,38 @@
 
 (test-case "with-auto-retry: exhausts retries and re-raises"
   (define attempt (box 0))
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (with-auto-retry
-      (lambda ()
-        (set-box! attempt (add1 (unbox attempt)))
-        (raise (exn:fail "HTTP 503 service unavailable" (current-continuation-marks))))
-      #:max-retries 2
-      #:base-delay-ms 10)))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (exn:fail "HTTP 503 service unavailable"
+                                                   (current-continuation-marks))))
+                                #:max-retries 2
+                                #:base-delay-ms 10)))
   ;; Should have tried 3 times: initial + 2 retries
   (check-equal? (unbox attempt) 3))
 
 (test-case "with-auto-retry: non-retryable error raised immediately"
   (define attempt (box 0))
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (with-auto-retry
-      (lambda ()
-        (set-box! attempt (add1 (unbox attempt)))
-        (raise (exn:fail "invalid API key" (current-continuation-marks))))
-      #:max-retries 3
-      #:base-delay-ms 10)))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (set-box! attempt (add1 (unbox attempt)))
+                                  (raise (exn:fail "invalid API key" (current-continuation-marks))))
+                                #:max-retries 3
+                                #:base-delay-ms 10)))
   ;; Should only try once — non-retryable
   (check-equal? (unbox attempt) 1))
 
 (test-case "with-auto-retry: exponential backoff increases delay"
   (define delays (box '()))
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (with-auto-retry
-      (lambda ()
-        (raise (exn:fail "HTTP 503" (current-continuation-marks))))
-      #:max-retries 3
-      #:base-delay-ms 10
-      #:on-retry (lambda (attempt max-retries delay-ms error-msg)
-                   (set-box! delays (cons delay-ms (unbox delays)))))))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))
+                                #:max-retries 3
+                                #:base-delay-ms 10
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                             (set-box! delays (cons delay-ms (unbox delays)))))))
   ;; Delays should be: 10, 20, 40 (exponential with base 10ms)
   (define sorted-delays (reverse (unbox delays)))
   (check-equal? (length sorted-delays) 3)
@@ -113,18 +110,79 @@
 
 (test-case "with-auto-retry: delay capped at max-delay-ms"
   (define delays (box '()))
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (with-auto-retry
-      (lambda ()
-        (raise (exn:fail "HTTP 503" (current-continuation-marks))))
-      #:max-retries 5
-      #:base-delay-ms 100
-      #:max-delay-ms 200
-      #:on-retry (lambda (attempt max-retries delay-ms error-msg)
-                   (set-box! delays (cons delay-ms (unbox delays)))))))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))
+                                #:max-retries 5
+                                #:base-delay-ms 100
+                                #:max-delay-ms 200
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                             (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
   ;; Delays should be capped at 200: 100, 200, 200, 200, 200
   (for ([d (in-list sorted-delays)])
     (check-true (<= d 200) (format "delay ~a should be <= 200" d))))
+
+;; ============================================================
+;; classify-error tests (v0.11.2 Wave 3)
+;; ============================================================
+
+(test-case "classify-error: timeout errors"
+  (check-equal? (classify-error (exn:fail "connection timed out" (current-continuation-marks)))
+                'timeout)
+  (check-equal? (classify-error (exn:fail "HTTP read timeout after 30s" (current-continuation-marks)))
+                'timeout)
+  (check-equal? (classify-error (exn:fail "Connection reset by peer" (current-continuation-marks)))
+                'timeout))
+
+(test-case "classify-error: rate-limit errors"
+  (check-equal? (classify-error (exn:fail "HTTP 429 too many requests" (current-continuation-marks)))
+                'rate-limit)
+  (check-equal? (classify-error (exn:fail "Rate limit exceeded" (current-continuation-marks)))
+                'rate-limit)
+  (check-equal? (classify-error (exn:fail "Quota exceeded for API" (current-continuation-marks)))
+                'rate-limit)
+  (check-equal? (classify-error (exn:fail "Model overloaded" (current-continuation-marks)))
+                'rate-limit))
+
+(test-case "classify-error: auth errors"
+  (check-equal? (classify-error (exn:fail "401 Unauthorized" (current-continuation-marks))) 'auth)
+  (check-equal? (classify-error (exn:fail "403 Permission denied" (current-continuation-marks)))
+                'auth)
+  (check-equal? (classify-error (exn:fail "Authentication failed" (current-continuation-marks)))
+                'auth))
+
+(test-case "classify-error: context-overflow errors"
+  (check-equal? (classify-error (exn:fail "context_length exceeded" (current-continuation-marks)))
+                'context-overflow)
+  (check-equal? (classify-error (exn:fail "too many tokens in request" (current-continuation-marks)))
+                'context-overflow)
+  (check-equal? (classify-error (exn:fail "input is too long for model" (current-continuation-marks)))
+                'context-overflow)
+  (check-equal? (classify-error (exn:fail "exceeds the maximum number of tokens"
+                                          (current-continuation-marks)))
+                'context-overflow))
+
+(test-case "classify-error: max-iterations"
+  (check-equal? (classify-error (exn:fail "max.iterations reached" (current-continuation-marks)))
+                'max-iterations))
+
+(test-case "classify-error: generic provider errors"
+  (check-equal? (classify-error (exn:fail "Unknown internal error" (current-continuation-marks)))
+                'provider-error)
+  (check-equal? (classify-error (exn:fail "Something went wrong" (current-continuation-marks)))
+                'provider-error))
+
+;; ============================================================
+;; timeout-error? predicate tests
+;; ============================================================
+
+(test-case "timeout-error?: positive cases"
+  (check-true (timeout-error? (exn:fail "timeout" (current-continuation-marks))))
+  (check-true (timeout-error? (exn:fail "timed out" (current-continuation-marks))))
+  (check-true (timeout-error? (exn:fail "connection reset" (current-continuation-marks))))
+  (check-true (timeout-error? (exn:fail "broken pipe" (current-continuation-marks)))))
+
+(test-case "timeout-error?: negative cases"
+  (check-false (timeout-error? (exn:fail "rate limit" (current-continuation-marks))))
+  (check-false (timeout-error? (exn:fail "internal error" (current-continuation-marks)))))

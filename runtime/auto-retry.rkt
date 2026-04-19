@@ -12,6 +12,8 @@
 ;; Predicates
 (provide retryable-error?
          context-overflow-error?
+         classify-error
+         timeout-error?
          ;; Retry execution
          with-auto-retry
          ;; Configuration
@@ -78,6 +80,49 @@
   (define msg (exn-message exn))
   (for/or ([pattern (in-list CONTEXT_OVERFLOW_PATTERNS)])
     (string-contains? (string-downcase msg) pattern)))
+
+;; ============================================================
+;; Error classification (v0.11.2 Wave 3)
+;; ============================================================
+
+;; Timeout patterns — errors from HTTP read timeouts, connection drops, etc.
+(define TIMEOUT_PATTERNS '("timeout" "timed out" "connection reset" "broken pipe" "read error" "eof"))
+
+(define (timeout-error? exn)
+  (define msg (exn-message exn))
+  (for/or ([pattern (in-list TIMEOUT_PATTERNS)])
+    (string-contains? (string-downcase msg) pattern)))
+
+;; Classify an error into a symbolic type for recovery hint rendering.
+;; Returns one of: 'timeout, 'rate-limit, 'auth, 'context-overflow,
+;; 'max-iterations, 'provider-error
+(define (classify-error exn)
+  (define msg
+    (if (exn:fail? exn)
+        (exn-message exn)
+        (format "~a" exn)))
+  (define msg-down (string-downcase msg))
+  (cond
+    [(string-contains? msg-down "max.iterations") 'max-iterations]
+    [(string-contains? msg-down "429") 'rate-limit]
+    [(string-contains? msg-down "rate") 'rate-limit]
+    [(string-contains? msg-down "overloaded") 'rate-limit]
+    [(string-contains? msg-down "quota") 'rate-limit]
+    [(for/or ([p (in-list '("401" "403" "auth" "unauthorized" "permission"))])
+       (string-contains? msg-down p))
+     'auth]
+    [(for/or ([p (in-list '("context_length" "context length"
+                                             "too many tokens"
+                                             "token limit"
+                                             "max_tokens"
+                                             "input is too long"
+                                             "exceeds the maximum"))])
+       (string-contains? msg-down p))
+     'context-overflow]
+    [(for/or ([p (in-list TIMEOUT_PATTERNS)])
+       (string-contains? msg-down p))
+     'timeout]
+    [else 'provider-error]))
 
 ;; ============================================================
 ;; Retry logic

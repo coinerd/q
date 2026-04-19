@@ -347,16 +347,27 @@
     [("runtime.error")
      (define err (hash-ref payload 'error "unknown error"))
      (define ts (event-time evt))
-     ;; Recovery hint based on error content
+     ;; Use errorType from event payload (set by classify-error in auto-retry.rkt)
+     ;; Fall back to regex classification if errorType not present
+     (define error-type
+       (hash-ref
+        payload
+        'errorType
+        (lambda ()
+          (cond
+            [(regexp-match? #rx"[Tt]imeout|timed out" err) 'timeout]
+            [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) 'rate-limit]
+            [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err) 'auth]
+            [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
+            [else 'provider-error]))))
+     ;; Recovery hint based on classified error type
      (define hint
-       (cond
-         [(regexp-match? #rx"[Tt]imeout|timed out" err)
-          "Provider timed out. Type /retry to resubmit your prompt."]
-         [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) "Rate limited. Will retry automatically."]
-         [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err)
-          "API key error. Check ~/.q/config.json"]
-         [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err)
-          "Context too long. Use /compact to reduce, then /retry."]
+       (case error-type
+         [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
+         [(rate-limit) "Rate limited. Will retry automatically."]
+         [(auth) "API key error. Check ~/.q/config.json"]
+         [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
+         [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
          [else "Type /retry to resubmit your prompt."]))
      ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
      ;; Also clear streaming-thinking for complete state reset on error

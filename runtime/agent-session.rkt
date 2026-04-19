@@ -48,7 +48,8 @@
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
          "../util/ids.rkt"
-         (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks))
+         (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
+         (only-in "auto-retry.rkt" classify-error))
 
 (provide agent-session?
          agent-session-session-dir
@@ -660,13 +661,12 @@
   ;; Run the core agent loop with tool-call iteration
   (with-handlers ([exn:fail?
                    (lambda (e)
-                     ;; Emit runtime.error event
-                     (emit-session-event! bus sid "runtime.error" (hasheq 'error (exn-message e)))
-                     ;; Classify error: distinguish iteration limits from provider failures
-                     (define error-type
-                       (if (regexp-match? #rx"max.iterations" (exn-message e))
-                           'max-iterations-exceeded
-                           'provider-error))
+                     ;; Emit runtime.error event with classified error-type
+                     (define error-type (classify-error e))
+                     (emit-session-event! bus
+                                          sid
+                                          "runtime.error"
+                                          (hasheq 'error (exn-message e) 'errorType error-type))
                      (make-loop-result context-with-system
                                        'error
                                        (hasheq 'error (exn-message e) 'errorType error-type)))])
