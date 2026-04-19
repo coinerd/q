@@ -108,9 +108,13 @@
       (let* ([s (initial-ui-state)]
              [evt (make-test-event "runtime.error" (hash 'error "something broke"))]
              [s2 (apply-event-to-state s evt)])
-        (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'error)
-        (check-equal? (transcript-entry-text (first (ui-state-transcript s2)))
-                      "Error: something broke")
+        ;; Now produces 2 entries: error + recovery hint
+        (define entries (ui-state-transcript s2))
+        (check >= (length entries) 2 "runtime.error produces error + hint")
+        (check-equal? (transcript-entry-kind (first entries)) 'error)
+        (check-equal? (transcript-entry-text (first entries)) "Error: something broke")
+        (check-equal? (transcript-entry-kind (second entries)) 'system)
+        (check-not-false (string-contains? (transcript-entry-text (second entries)) "/retry"))
         (check-false (ui-state-busy? s2))))
 
     (test-case "apply-event: session.started"

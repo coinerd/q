@@ -347,14 +347,28 @@
     [("runtime.error")
      (define err (hash-ref payload 'error "unknown error"))
      (define ts (event-time evt))
+     ;; Recovery hint based on error content
+     (define hint
+       (cond
+         [(regexp-match? #rx"[Tt]imeout|timed out" err)
+          "Provider timed out. Type /retry to resubmit your prompt."]
+         [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) "Rate limited. Will retry automatically."]
+         [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err)
+          "API key error. Check ~/.q/config.json"]
+         [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err)
+          "Context too long. Use /compact to reduce, then /retry."]
+         [else "Type /retry to resubmit your prompt."]))
      ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
      ;; Also clear streaming-thinking for complete state reset on error
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'error (format "Error: ~a" err) ts (hash)))
-                  [busy? #f]
-                  [pending-tool-name #f]
-                  [streaming-text #f]
-                  [streaming-thinking #f])]
+     (define s1
+       (struct-copy ui-state
+                    state
+                    [busy? #f]
+                    [pending-tool-name #f]
+                    [streaming-text #f]
+                    [streaming-thinking #f]))
+     (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
+     (append-entry s2 (make-entry 'system hint ts (hash)))]
 
     [("session.started")
      (define sid (hash-ref payload 'sessionId ""))

@@ -18,33 +18,59 @@
 ;; e.g. "/help" → (cons 'help 'none), "/switch" → (cons 'switch 'required)
 
 (define (make-command-table)
-  (hash
-   ;; General
-   "/help"      (cons 'help 'none)
-   "/h"         (cons 'help 'none)
-   "/?"         (cons 'help 'none)
-   "/quit"      (cons 'quit 'none)
-   "/q"         (cons 'quit 'none)
-   "/exit"      (cons 'quit 'none)
-   "/clear"     (cons 'clear 'none)
-   "/cls"       (cons 'clear 'none)
-   ;; Session
-   "/compact"   (cons 'compact 'none)
-   "/interrupt" (cons 'interrupt 'none)
-   "/stop"      (cons 'interrupt 'none)
-   "/cancel"    (cons 'interrupt 'none)
-   "/branches"  (cons 'branches 'none)
-   "/leaves"    (cons 'leaves 'none)
-   "/switch"    (cons 'switch 'required)
-   "/children"  (cons 'children 'required)
-   "/history"   (cons 'history 'none)
-   "/fork"      (cons 'fork 'optional)
-   "/sessions"  (cons 'sessions 'optional)
-   ;; Model
-   "/tree"      (cons 'tree 'none)
-   "/name"      (cons 'name 'optional)
-   "/model"     (cons 'model 'optional)
-   "/m"         (cons 'model 'optional)))
+  ;; General
+  (hash "/help"
+        (cons 'help 'none)
+        "/h"
+        (cons 'help 'none)
+        "/?"
+        (cons 'help 'none)
+        "/quit"
+        (cons 'quit 'none)
+        "/q"
+        (cons 'quit 'none)
+        "/exit"
+        (cons 'quit 'none)
+        "/clear"
+        (cons 'clear 'none)
+        "/cls"
+        (cons 'clear 'none)
+        ;; Session
+        "/compact"
+        (cons 'compact 'none)
+        "/interrupt"
+        (cons 'interrupt 'none)
+        "/stop"
+        (cons 'interrupt 'none)
+        "/cancel"
+        (cons 'interrupt 'none)
+        "/branches"
+        (cons 'branches 'none)
+        "/leaves"
+        (cons 'leaves 'none)
+        "/switch"
+        (cons 'switch 'required)
+        "/children"
+        (cons 'children 'required)
+        "/history"
+        (cons 'history 'none)
+        "/fork"
+        (cons 'fork 'optional)
+        "/sessions"
+        (cons 'sessions 'optional)
+        ;; Model
+        "/tree"
+        (cons 'tree 'none)
+        "/name"
+        (cons 'name 'optional)
+        "/model"
+        (cons 'model 'optional)
+        "/m"
+        (cons 'model 'optional)
+        "/retry"
+        (cons 'retry 'none)
+        "/r"
+        (cons 'retry 'none)))
 
 ;; Parse a slash command string into a dispatch symbol + args list.
 ;; Returns: symbol | (list symbol args...) | #f
@@ -61,16 +87,14 @@
      (define entry (hash-ref table cmd #f))
      (cond
        [(not entry) 'unknown]
-       [(eq? (cdr entry) 'none)
-        (car entry)]
+       [(eq? (cdr entry) 'none) (car entry)]
        [(eq? (cdr entry) 'optional)
         (if (null? args)
             (car entry)
             `(,(car entry) ,(car args)))]
        [(eq? (cdr entry) 'required)
         (if (null? args)
-            (list (string->symbol
-                   (format "~a-error" (symbol->string (car entry))))
+            (list (string->symbol (format "~a-error" (symbol->string (car entry))))
                   (case (car entry)
                     [(switch) "Usage: /switch <branch-id>"]
                     [(children) "Usage: /children <node-id>"]

@@ -83,7 +83,7 @@
          ubuf-box ; (boxof any) — ubuf buffer for output
          model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
          previous-frame-box ; (boxof (or/c (listof string) #f)) — last rendered frame for diffing
-         )
+         last-prompt-box) ; (boxof (or/c string? #f)) — last user prompt for /retry
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
@@ -101,7 +101,8 @@
            (box #f) ; term-box - set when terminal opened
            (box #f) ; ubuf-box - set when buffer created
            (box reg) ; model-registry-box
-           (box #f))) ; previous-frame-box - #f means no previous frame
+           (box #f) ; previous-frame-box - #f means no previous frame
+           (box #f))) ; last-prompt-box - #f until first submit
 
 ;; ============================================================
 ;; mark-dirty!
@@ -185,7 +186,9 @@
                     (tui-ctx-event-bus ctx)
                     (tui-ctx-session-dir ctx)
                     (tui-ctx-needs-redraw-box ctx)
-                    (tui-ctx-model-registry-box ctx)))
+                    (tui-ctx-model-registry-box ctx)
+                    (tui-ctx-last-prompt-box ctx)
+                    (tui-ctx-session-runner ctx)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
