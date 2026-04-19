@@ -237,18 +237,18 @@
        [(equal? delta-type "input_json_delta")
         ;; Partial JSON for tool input — emit as tool-call delta
         (define partial-json (hash-ref delta 'partial_json ""))
-        (set!
-         results
-         (cons (make-stream-chunk #f
-                             (hasheq 'index
-                                     (unbox tool-index-box)
-                                     'id
-                                     (unbox tool-id-box)
-                                     'function
-                                     (hasheq 'name (unbox tool-name-box) 'arguments partial-json))
-                             #f
-                             #f)
-               results))]
+        (set! results
+              (cons (make-stream-chunk
+                     #f
+                     (hasheq 'index
+                             (unbox tool-index-box)
+                             'id
+                             (unbox tool-id-box)
+                             'function
+                             (hasheq 'name (unbox tool-name-box) 'arguments partial-json))
+                     #f
+                     #f)
+                    results))]
        [else (void)])]
 
     ;; Tool use block starts
@@ -381,8 +381,10 @@
     (define current-tool-name (box #f))
     (define current-tool-index (box 0))
     (generator ()
-               (let loop ()
-                 (define line (read-line/timeout raw-port))
+               (let loop ([first-read? #t])
+                 (define timeout-secs
+                   (if first-read? http-read-timeout-default http-stream-timeout-default))
+                 (define line (read-line/timeout raw-port #:timeout timeout-secs))
                  (cond
                    [(or (eq? line #f) (eof-object? line))
                     (close-input-port raw-port)
@@ -402,8 +404,8 @@
                                                        current-tool-index))
                        (for ([ch (in-list chunks)])
                          (yield ch))
-                       (loop)]
-                      [else (loop)])]))))
+                       (loop #f)]
+                      [else (loop #f)])]))))
 
   (make-provider (lambda () "anthropic")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))
