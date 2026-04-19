@@ -139,3 +139,75 @@
   (check-false (ui-state-streaming-text s2))
   (check-false (ui-state-streaming-thinking s2))
   (check-equal? (length (ui-state-transcript s2)) 101))
+
+;; ═══════════════════════════════════════════════════════════
+;; Wave 3: Error-type-specific recovery hints
+;; ═══════════════════════════════════════════════════════════
+
+(test-case "runtime.error with errorType=timeout shows timeout hint"
+  (define s0 (initial-ui-state))
+  (define evt
+    (make-test-event "runtime.error" (hasheq 'error "HTTP read timeout" 'errorType 'timeout)))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  ;; Should have error entry + system hint entry
+  (check-true (>= (length entries) 2))
+  (define hint-entry
+    (findf (lambda (e)
+             (and (eq? (transcript-entry-kind e) 'system)
+                  (string-contains? (transcript-entry-text e) "/retry")))
+           entries))
+  (check-not-false hint-entry "Should have a system hint with /retry")
+  (check-true (string-contains? (transcript-entry-text hint-entry) "timed out")
+              "Hint should mention timeout"))
+
+(test-case "runtime.error with errorType=auth shows auth hint"
+  (define s0 (initial-ui-state))
+  (define evt (make-test-event "runtime.error" (hasheq 'error "401 Unauthorized" 'errorType 'auth)))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  (define hint-entry
+    (findf (lambda (e)
+             (and (eq? (transcript-entry-kind e) 'system)
+                  (string-contains? (transcript-entry-text e) "config")))
+           entries))
+  (check-not-false hint-entry "Should have a system hint mentioning config.json"))
+
+(test-case "runtime.error with errorType=rate-limit shows rate-limit hint"
+  (define s0 (initial-ui-state))
+  (define evt
+    (make-test-event "runtime.error" (hasheq 'error "429 rate limited" 'errorType 'rate-limit)))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  (define hint-entry
+    (findf (lambda (e)
+             (and (eq? (transcript-entry-kind e) 'system)
+                  (string-contains? (transcript-entry-text e) "Rate")))
+           entries))
+  (check-not-false hint-entry "Should have a system hint about rate limiting"))
+
+(test-case "runtime.error with errorType=context-overflow shows compact hint"
+  (define s0 (initial-ui-state))
+  (define evt
+    (make-test-event "runtime.error" (hasheq 'error "too many tokens" 'errorType 'context-overflow)))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  (define hint-entry
+    (findf (lambda (e)
+             (and (eq? (transcript-entry-kind e) 'system)
+                  (string-contains? (transcript-entry-text e) "/compact")))
+           entries))
+  (check-not-false hint-entry "Should have a system hint with /compact"))
+
+(test-case "runtime.error without errorType falls back to regex classification"
+  (define s0 (initial-ui-state))
+  ;; No errorType field — should fall back to regex-based classification
+  (define evt (make-test-event "runtime.error" (hasheq 'error "timed out after 30s")))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  (define hint-entry
+    (findf (lambda (e)
+             (and (eq? (transcript-entry-kind e) 'system)
+                  (string-contains? (transcript-entry-text e) "/retry")))
+           entries))
+  (check-not-false hint-entry "Should still generate hint via regex fallback"))
