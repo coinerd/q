@@ -15,7 +15,6 @@
          racket/path
          racket/match
          racket/list
-         racket/system
          racket/port)
 
 ;; Backend struct
@@ -232,13 +231,25 @@
 (define (keychain-label provider-name)
   (format "q-agent: ~a" provider-name))
 
+;; Run secret-tool with argument vector (no shell interpolation).
+;; Returns (values exit-code stdout-string).
+(define (run-secret-tool args #:stdin [stdin-str #f])
+  (with-handlers ([exn:fail? (λ (e) (values 1 ""))])
+    (define-values (sp out-port in-port err-port)
+      (subprocess #f #f #f (find-executable-path "secret-tool") args))
+    (when stdin-str
+      (display stdin-str in-port)
+      (close-output-port in-port))
+    (define out (open-output-string))
+    (copy-port out-port out)
+    (close-input-port out-port)
+    (close-input-port err-port)
+    (values (subprocess-status sp) (get-output-string out))))
+
 (define (secret-tool-available?)
   (with-handlers ([exn:fail? (λ (e) #f)])
-    (define out (open-output-string))
-    (parameterize ([current-output-port out]
-                   [current-error-port (open-output-nowhere)])
-      (system "which secret-tool"))
-    (string-contains? (get-output-string out) "secret-tool")))
+    (define-values (status _) (run-secret-tool '("--version")))
+    (= status 0)))
 
 (define (make-keychain-credential-backend)
   (credential-backend "keychain"
@@ -257,34 +268,25 @@
   (unless (secret-tool-available?)
     (error 'keychain-store! "secret-tool not available"))
   (define attrs (keychain-attrs provider-name))
-  (define attr-args
-    (string-join (for/list ([a (in-list attrs)])
-                   (format "--~a '~a'" (car a) (shell-escape (cdr a))))
-                 " "))
-  (define cmd
-    (format "echo '~a' | secret-tool store --label '~a' ~a"
-            (shell-escape api-key)
-            (shell-escape (keychain-label provider-name))
-            attr-args))
-  (unless (system cmd)
+  (define args
+    (append* (list "store" "--label" (keychain-label provider-name))
+             (for/list ([a (in-list attrs)])
+               (list (format "--~a" (car a)) (cdr a)))))
+  (define-values (status _) (run-secret-tool args #:stdin (string-append api-key "\n")))
+  (unless (= status 0)
     (error 'keychain-store! "secret-tool store failed for ~a" provider-name)))
 
 (define (keychain-load provider-name)
   (unless (secret-tool-available?)
     #f)
   (define attrs (keychain-attrs provider-name))
-  (define attr-args
-    (string-join (for/list ([a (in-list attrs)])
-                   (format "--~a '~a'" (car a) (shell-escape (cdr a))))
-                 " "))
-  (define cmd (format "secret-tool lookup ~a 2>/dev/null" attr-args))
-  (define out (open-output-string))
-  (define ok
-    (parameterize ([current-output-port out]
-                   [current-error-port (open-output-nowhere)])
-      (system cmd)))
-  (define result (string-trim (get-output-string out)))
-  (if (and ok (non-empty-string? result))
+  (define args
+    (cons "lookup"
+          (append* (for/list ([a (in-list attrs)])
+                     (list (format "--~a" (car a)) (cdr a))))))
+  (define-values (status out) (run-secret-tool args))
+  (define result (string-trim out))
+  (if (and (= status 0) (non-empty-string? result))
       (hasheq 'api-key result 'source "keychain" 'provider provider-name)
       #f))
 
@@ -292,26 +294,20 @@
   (unless (secret-tool-available?)
     (void))
   (define attrs (keychain-attrs provider-name))
-  (define attr-args
-    (string-join (for/list ([a (in-list attrs)])
-                   (format "--~a '~a'" (car a) (shell-escape (cdr a))))
-                 " "))
-  (define cmd (format "secret-tool clear ~a 2>/dev/null" attr-args))
-  (system cmd)
+  (define args
+    (cons "clear"
+          (append* (for/list ([a (in-list attrs)])
+                     (list (format "--~a" (car a)) (cdr a))))))
+  (run-secret-tool args)
   (void))
 
 (define (keychain-list-providers)
   (unless (secret-tool-available?)
     '())
   ;; Search for all q-agent secrets
-  (define cmd "secret-tool search application q-agent 2>/dev/null")
-  (define out (open-output-string))
-  (parameterize ([current-output-port out]
-                 [current-error-port (open-output-nowhere)])
-    (system cmd))
-  (define output (get-output-string out))
+  (define-values (status out) (run-secret-tool '("search" "--all" "application" "q-agent")))
   ;; Parse provider names from output
-  (for/list ([line (in-list (string-split output "\n"))]
+  (for/list ([line (in-list (string-split out "\n"))]
              #:when (string-contains? line "provider"))
     (define m (regexp-match #rx"provider *= *(.+)" line))
     (if m

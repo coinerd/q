@@ -36,7 +36,11 @@
 
          ;; Index validation
          validate-index-entry
-         validate-index)
+         validate-index
+
+         ;; Version comparison
+         version<=?
+         version<?)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Configuration
@@ -292,9 +296,14 @@
 (define (file-sha256 path)
   (bytes->hex-string (sha256-bytes (open-input-file path))))
 
+(define (normalize-version-parts parts)
+  ;; Pad version segment list to exactly 3 elements with 0
+  (define padded (append parts (build-list (- 3 (min 3 (length parts))) (λ (_) 0))))
+  (take padded 3))
+
 (define (version<=? a b)
-  (define pa (map string->number (string-split a ".")))
-  (define pb (map string->number (string-split b ".")))
+  (define pa (normalize-version-parts (map string->number (string-split a "."))))
+  (define pb (normalize-version-parts (map string->number (string-split b "."))))
   (or (< (car pa) (car pb))
       (and (= (car pa) (car pb))
            (or (< (cadr pa) (cadr pb)) (and (= (cadr pa) (cadr pb)) (<= (caddr pa) (caddr pb)))))))

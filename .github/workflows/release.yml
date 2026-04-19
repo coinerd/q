@@ -44,7 +44,7 @@ jobs:
         run: /usr/local/racket/bin/racket scripts/lint-version.rkt
 
       - name: Run tests
-        run: /usr/local/racket/bin/raco test tests/
+        run: /usr/local/racket/bin/racket scripts/run-tests.rkt --suite fast --jobs 4
 
   release:
     needs: test
