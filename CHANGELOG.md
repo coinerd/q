@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.3] — 2026-04-19
+
+### Added — Wave 0: README & Metrics Consistency (#1283)
+- **README status block** (#1284): Auto-generated status block in README.md from release metadata via `scripts/sync-readme-status.rkt`.
+- **Metrics reconciliation** (#1285): `scripts/metrics.rkt --lint` and `--sync-readme` for single-source-of-truth metrics in README.
+- 6 tests for sync-readme-status.
+
+### Added — Wave 1: Security Foundations (#1286)
+- **Content trust policy** (#1287): Hash-verified JSONL session logs with genesis hash and chain integrity verification.
+- **Safe extension loading** (#1288): Manifest validation, API versioning, and integrity hash checks for extension packages.
+- **Extension quarantine** (#1289): Suspicious extension isolation with configurable trust levels and audit logging.
+- 24 tests across hash chain, extension loading, and quarantine.
+
+### Added — Wave 2: Secure Credential Backends (#1290)
+- **Pluggable credential backends** (#1291): Unified interface for file, environment, memory, OS keychain, and chained backends.
+- **OS keychain integration** (#1292): secret-tool (Linux) / security (macOS) integration for credential storage.
+- **Credential rotation** (#1293): API key rotation, migration between backends, and purge workflows.
+- 22 tests for credential backend operations.
+
+### Added — Wave 3: Package Registry MVP (#1294)
+- **Package index format** (#1295): Minimal remote package index with search, version resolution, and validation.
+- **Package install/verify** (#1296): Download, checksum verification, and installation of packages from registry.
+- **CI lint for package metadata** (#1297): `scripts/lint-pkg-metadata.rkt` for automated metadata validation.
+- 28 tests for registry, search, install, and validation.
+
+### Added — Wave 4: Ecosystem & Release Discipline (#1298)
+- **Publishing guide** (#1299): Extension publishing documentation with versioning and security guidelines.
+- **Verification workflow** (#1300): End-to-end package verification and trust model documentation.
+- **Release automation** (#1301): `scripts/gen-release-manifest.rkt` and `gen-release-notes.rkt` for release automation.
+- 10 tests for release manifest and notes generation.
+
+### Internal
+- 94 new tests across 5 waves (19 issues).
+- 4,454 lines added.
+- CI: parallel test runner via `scripts/run-tests.rkt`.
+- Post-release remediation (PR #1307): version comparison hardening, subprocess security, sorted-key hashing, lint-index early-return, 13 additional tests.
+
 ## [0.11.2] — 2026-04-19
 
 ### Added — Wave 5: Error Scenario Test Catalog (#1267)
