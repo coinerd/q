@@ -4,26 +4,43 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
       - name: Download release tarball
-        uses: actions/download-artifact@v5
-        with:
-          name: q-release-tarball
-        continue-on-error: true
-
-      - name: Download from release assets
         id: download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          # Download tarball from release assets
-          curl -sL -o "q-${VERSION}.tar.gz" \
-            "https://github.com/${{ github.repository }}/releases/download/${TAG}/q-${VERSION}.tar.gz"
+          # Retry: Release workflow may still be uploading the tarball
+          ASSET_URL=""
+          for i in $(seq 1 20); do
+            ASSET_URL=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" \
+              | jq -r '.assets[] | select(.name=="q-'"${VERSION}"'.tar.gz") | .url')
+            if [ -n "$ASSET_URL" ]; then
+              echo "Found tarball asset (attempt $i)"
+              break
+            fi
+            echo "Waiting for tarball asset (attempt $i)..."
+            sleep 15
+          done
+          if [ -z "$ASSET_URL" ]; then
+            echo "ERROR: tarball asset not found in release ${TAG} after 20 retries"
+            exit 1
+          fi
+          # Download using authenticated API endpoint
+          curl -sL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o "q-${VERSION}.tar.gz" "$ASSET_URL"
           ls -la "q-${VERSION}.tar.gz"
+          file "q-${VERSION}.tar.gz"
 
       - name: Install Racket
         run: |
