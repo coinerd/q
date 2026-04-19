@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] — 2026-04-19
+
+### Added — Wave 0: Event Taxonomy Foundation (#1308-#1313)
+- **Typed event structs** (#1308): 26 typed event structs in `agent/event-types.rkt` with JSON roundtrip serialization and event registry. Covers turn, message, tool execution, provider, session, input, model-select, agent, and context lifecycle.
+- **Extension context enrichment** (#1309): Extension context already has 14 typed fields (session-id, model-name, event-bus, etc.). Verified — no code changes needed.
+- **Hook point expansion** (#1310): 5 new hook points (47 total) in `util/hook-types.rkt`.
+- **Per-tool typed events** (#1311): Tool-specific structs (bash, edit, write, read, grep, find, custom) inheriting from tool-call-event.
+- **Hook dispatch context** (#1312): dispatch-hooks already accepts `#:ctx`. Verified — no code changes needed.
+- **Extension context factory** (#1313): make-extension-ctx factory already exists. Verified — no code changes needed.
+- 38 new tests in `tests/test-event-types.rkt`, 4 in `tests/test-hook-types.rkt`.
+
+### Added — Wave 1: Session Tree Model (#1314-#1316)
+- **Tree entry types** (#1314): `branch-entry`, `tree-navigation-entry`, `branch-summary-entry` with JSON roundtrip and predicates in `util/protocol-types.rkt`.
+- **Tree store operations** (#1315): `append-tree-entry!`, `load-tree`, `get-tree-branch`, `get-children`, `resolve-active-branch` in `runtime/session-store.rkt`.
+- **Navigation events** (#1316): `#:before-hook`/`#:after-hook` callbacks on `append-tree-entry!` for `session-before-tree`/`session-tree` events.
+- 13 tests in `tests/test-protocol-types.rkt`, 14 in `tests/test-session-tree.rkt`.
+
+### Added — Wave 2: Agent-session Tree Integration (#1317-#1319)
+- **Tree info function** (#1317): `tree-info` returns tree metadata (entries, branch-count, navigation-count, leaf-ids).
+- **Branch summaries** (#1318): `branch-summary-entry` roundtrips through JSONL with text, entry-range, token-count.
+- **SDK tree API** (#1319): `q:session-branch`, `q:session-navigate`, `q:session-tree-info` in `interfaces/sdk.rkt`.
+- 8 tests in `tests/test-agent-session-tree.rkt`.
+
+### Added — Wave 3: Resource Loader + Session Manager + SDK Examples (#1320-#1322)
+- **Resource loader injection** (#1320): `create-agent-session` accepts `#:resource-loader` and `#:session-manager`. `runtime-config` gains both fields.
+- **Session manager abstraction** (#1321): `runtime/session-manager.rkt` with unified interface (persistent + in-memory): `sm-append!`, `sm-load`, `sm-list`, `sm-fork!`.
+- **SDK examples** (#1322): 8 graduated examples in `examples/sdk/` (01-minimal through 08-full-control) with README.
+- 3 tests in `tests/test-sdk-resource-loader.rkt`, 8 in `tests/test-session-manager.rkt`.
+
+### Added — Wave 4: Typed Events + Per-tool Events + Extension Context (#1323-#1325)
+- **Typed event tests** (#1323): 5 tests for typed event construction, bus publishing, and payload inspection.
+- **Per-tool typed events** (#1324): Tests for all 7 per-tool typed events (bash, edit, write, read, grep, find, custom).
+- **Extension context in hooks** (#1325): `maybe-dispatch-hooks` accepts `#:ctx` keyword and passes through to `dispatch-hooks`.
+- 5 tests in `tests/test-loop-events.rkt`, 4 in `tests/test-extension-context-hooks.rkt`.
+
+### Added — Wave 5: Examples + Docs + Version Bump (#1326-#1328)
+- **Extension examples** (#1326): New `typed-event-observer.rkt` example demonstrating per-tool typed event observation.
+- **Documentation** (#1327): `docs/sdk-guide.md`, `docs/event-taxonomy.md`, `docs/session-tree.md`.
+- **Version bump** (#1328): Version bumped to 0.12.0.
+
+### Metrics
+- 216+ source modules, 309+ test files, 40568+ source lines, 67463+ test lines, 10618+ assertions.
+
 ## [0.11.3] — 2026-04-19
 
 ### Added — Wave 0: README & Metrics Consistency (#1283)
