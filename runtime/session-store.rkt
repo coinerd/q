@@ -58,6 +58,12 @@
          ;; Custom entry helpers (#1147)
          append-custom-entry!
          load-custom-entries
+         ;; Tree store operations (#1315)
+         append-tree-entry!
+         load-tree
+         get-tree-branch
+         get-children
+         resolve-active-branch
          ;; Hash chain (#1287)
          verify-hash-chain
          compute-event-hash
@@ -749,3 +755,104 @@
                  (equal? (custom-entry-extension e) extension-name)
                  (or (not key) (equal? (custom-entry-key e) key))))
           entries))
+
+;; ============================================================
+;; Tree store operations (#1315)
+;; ============================================================
+;; Tree operations work on top of the JSONL session log.
+;; Tree structure is derived from parentId fields.
+;; All tree entries are message structs with specific kinds.
+
+(define (append-tree-entry! path entry #:before-hook [before-hook #f] #:after-hook [after-hook #f])
+  ;; Append a tree entry (branch/navigation/summary) to the JSONL log.
+  ;; Uses the same append-entry! path for hash chain integrity.
+  ;; #:before-hook: (symbol? any/c -> void?) called before append; errors block the append.
+  ;; #:after-hook: (symbol? any/c -> void?) called after successful append.
+  (when before-hook
+    (before-hook 'session-before-tree
+                 (hasheq 'entry-type
+                         (message-kind entry)
+                         'entry-id
+                         (message-id entry)
+                         'parent-id
+                         (message-parent-id entry))))
+  (append-entry! path entry)
+  (when after-hook
+    (after-hook 'session-tree
+                (hasheq 'entry-type
+                        (message-kind entry)
+                        'entry-id
+                        (message-id entry)
+                        'parent-id
+                        (message-parent-id entry)))))
+
+(define (load-tree path)
+  ;; Load all entries from JSONL and build a tree map.
+  ;; Returns a hash with:
+  ;;   '%%entries%% -> (listof message?) — all entries in order
+  ;;   id -> (listof message?) — direct children of id
+  (define entries (load-session-log path))
+  (define children-map (make-hash))
+  ;; Initialize all IDs with empty children lists
+  (for ([e (in-list entries)])
+    (hash-set! children-map (message-id e) '()))
+  ;; Build parent -> children mapping
+  (for ([e (in-list entries)])
+    (define pid (message-parent-id e))
+    (when pid
+      (define existing (hash-ref children-map pid '()))
+      (hash-set! children-map pid (append existing (list e)))))
+  ;; Store raw entries for by-id lookup
+  (hash-set! children-map '%%entries%% entries)
+  children-map)
+
+(define (get-tree-branch tree target-id)
+  ;; Get the path from root to target-id (inclusive).
+  ;; Returns a list of messages from root to target.
+  (define entries (hash-ref tree '%%entries%% '()))
+  (define by-id (make-hash))
+  (for ([e (in-list entries)])
+    (hash-set! by-id (message-id e) e))
+  (define target (hash-ref by-id target-id #f))
+  (cond
+    [(not target) '()]
+    [else
+     (define (walk-up entry acc)
+       (define new-acc (cons entry acc))
+       (define pid (message-parent-id entry))
+       (cond
+         [(not pid) new-acc]
+         [else
+          (define parent (hash-ref by-id pid #f))
+          (if parent
+              (walk-up parent new-acc)
+              new-acc)]))
+     (walk-up target '())]))
+
+(define (get-children tree entry-id)
+  ;; Get direct children of an entry.
+  (hash-ref tree entry-id '()))
+
+(define (resolve-active-branch tree path)
+  ;; Find the active branch (path from root to the last entry).
+  ;; tree: the tree map from load-tree
+  ;; path: file path to the JSONL session log
+  (define entries (hash-ref tree '%%entries%% '()))
+  (cond
+    [(null? entries) '()]
+    [else
+     (define by-id (make-hash))
+     (for ([e (in-list entries)])
+       (hash-set! by-id (message-id e) e))
+     (define last-entry (list-ref entries (sub1 (length entries))))
+     (define (walk-up entry acc)
+       (define new-acc (cons entry acc))
+       (define pid (message-parent-id entry))
+       (cond
+         [(not pid) new-acc]
+         [else
+          (define parent (hash-ref by-id pid #f))
+          (if parent
+              (walk-up parent new-acc)
+              new-acc)]))
+     (walk-up last-entry '())]))
