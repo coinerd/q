@@ -49,7 +49,13 @@
                   in-memory-append-entries!
                   in-memory-load
                   in-memory-list-sessions
-                  in-memory-fork!)
+                  in-memory-fork!
+                  append-tree-entry!
+                  load-tree
+                  tree-info)
+         (prefix-in session: "../runtime/agent-session.rkt")
+         (prefix-in store: "../runtime/session-store.rkt")
+         (prefix-in pt: "../util/protocol-types.rkt")
          "../util/cancellation.rkt")
 
 ;; Structs
@@ -133,7 +139,10 @@
          q:session-interrupt
          q:session-fork
          q:session-compact
-         q:session-info)
+         q:session-info
+         q:session-branch
+         q:session-navigate
+         q:session-tree-info)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt
@@ -544,3 +553,56 @@
 
 ;; q:session-info — get session metadata
 (define q:session-info session-info)
+
+;; ============================================================
+;; #1319: SDK Tree API
+;; ============================================================
+
+;; q:session-branch — branch the session at an entry
+;; Creates a branch-entry in the session log.
+;; Returns 'no-active-session if no session is open.
+(define (q:session-branch rt [entry-id #f] [branch-name "unnamed"])
+  (define sess (rt-sess rt))
+  (cond
+    [(not sess) 'no-active-session]
+    [else
+     (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     (define target-id (or entry-id (session:session-id sess)))
+     (define branch
+       (make-branch-entry (format "branch-~a" (current-inexact-milliseconds)) target-id branch-name))
+     (store:append-tree-entry! log-path branch)
+     (hasheq 'branch-id (message-id branch) 'parent-entry-id target-id 'branch-name branch-name)]))
+
+;; q:session-navigate — navigate to an entry in the tree
+;; Creates a tree-navigation-entry in the session log.
+(define (q:session-navigate rt target-entry-id)
+  (define sess (rt-sess rt))
+  (cond
+    [(not sess) 'no-active-session]
+    [else
+     (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     (define nav
+       (make-tree-navigation-entry (format "nav-~a" (current-inexact-milliseconds))
+                                   (session:session-id sess)
+                                   target-entry-id))
+     (store:append-tree-entry! log-path nav)
+     (hasheq 'navigation-id
+             (message-id nav)
+             'from-entry-id
+             (session:session-id sess)
+             'target-entry-id
+             target-entry-id)]))
+
+;; q:session-tree-info — return tree structure metadata
+;; Returns a hash with total-entries, branch-count, navigation-count,
+;; summary-count, and leaf-ids.
+(define (q:session-tree-info rt)
+  (define sess (rt-sess rt))
+  (cond
+    [(not sess) 'no-active-session]
+    [else
+     (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     (cond
+       [(not (file-exists? log-path))
+        (hasheq 'total-entries 0 'branch-count 0 'navigation-count 0 'summary-count 0 'leaf-ids '())]
+       [else (store:tree-info (store:load-tree log-path))])]))

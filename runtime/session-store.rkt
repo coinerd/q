@@ -64,6 +64,7 @@
          get-tree-branch
          get-children
          resolve-active-branch
+         tree-info
          ;; Hash chain (#1287)
          verify-hash-chain
          compute-event-hash
@@ -856,3 +857,37 @@
               (walk-up parent new-acc)
               new-acc)]))
      (walk-up last-entry '())]))
+
+(define (tree-info tree)
+  ;; Return metadata about the tree structure.
+  ;; Returns a hash with:
+  ;;   'total-entries — total number of entries
+  ;;   'branch-count — number of branch entries
+  ;;   'navigation-count — number of navigation entries
+  ;;   'summary-count — number of summary entries
+  ;;   'leaf-ids — list of entry IDs with no children
+  (define entries (hash-ref tree '%%entries%% '()))
+  (define branch-count 0)
+  (define navigation-count 0)
+  (define summary-count 0)
+  (for ([e (in-list entries)])
+    (case (message-kind e)
+      [(branch) (set! branch-count (add1 branch-count))]
+      [(tree-navigation) (set! navigation-count (add1 navigation-count))]
+      [(branch-summary) (set! summary-count (add1 summary-count))]
+      [else (void)]))
+  ;; Leaf IDs: entries that have no children in the tree
+  (define leaf-ids
+    (for/list ([e (in-list entries)]
+               #:when (null? (hash-ref tree (message-id e) '())))
+      (message-id e)))
+  (hasheq 'total-entries
+          (length entries)
+          'branch-count
+          branch-count
+          'navigation-count
+          navigation-count
+          'summary-count
+          summary-count
+          'leaf-ids
+          leaf-ids))
