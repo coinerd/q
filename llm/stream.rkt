@@ -15,30 +15,30 @@
          racket/port
          racket/match)
 
-(provide
- ;; — SSE line-level helpers —
- parse-sse-lines
- parse-sse-line
- parse-sse-data-line
- sse-done?
- ;; — OpenAI chunk normalization —
- normalize-openai-chunks
- normalize-openai-chunk
- accumulate-tool-call-deltas
- ;; — Incremental SSE reading —
- read-sse-chunks
- ;; — Response body reading (bounded) —
- read-response-body
- read-response-body/timeout
- max-response-size
- ;; — Timeout infrastructure —
- read-line/timeout
- exn:fail:network:timeout
- exn:fail:network:timeout?
- http-read-timeout-default
- http-request-timeout-default
- current-http-request-timeout
- call-with-request-timeout)
+;; — SSE line-level helpers —
+(provide parse-sse-lines
+         parse-sse-line
+         parse-sse-data-line
+         sse-done?
+         ;; — OpenAI chunk normalization —
+         normalize-openai-chunks
+         normalize-openai-chunk
+         accumulate-tool-call-deltas
+         ;; — Incremental SSE reading —
+         read-sse-chunks
+         ;; — Response body reading (bounded) —
+         read-response-body
+         read-response-body/timeout
+         max-response-size
+         ;; — Timeout infrastructure —
+         read-line/timeout
+         exn:fail:network:timeout
+         exn:fail:network:timeout?
+         http-read-timeout-default
+         http-stream-timeout-default
+         http-request-timeout-default
+         current-http-request-timeout
+         call-with-request-timeout)
 
 ;; ============================================================
 ;; Timeout configuration
@@ -67,19 +67,17 @@
                                    #:cleanup [cleanup-thunk (lambda () (void))])
   (define ch (make-channel))
   (define th
-    (thread
-     (lambda ()
-       (with-handlers ([exn:fail?
-                        (lambda (e) (channel-put ch (cons 'exn e)))])
-         (channel-put ch (cons 'val (thunk)))))))
+    (thread (lambda ()
+              (with-handlers ([exn:fail? (lambda (e) (channel-put ch (cons 'exn e)))])
+                (channel-put ch (cons 'val (thunk)))))))
   (define result (sync/timeout timeout-secs ch))
   (cond
     [(eq? result #f)
      (kill-thread th)
-     (with-handlers ([exn:fail? void]) (cleanup-thunk))  ; #454: close ports
-     (raise (exn:fail:network:timeout
-             (format "HTTP request timeout (~a seconds)" timeout-secs)
-             (current-continuation-marks)))]
+     (with-handlers ([exn:fail? void])
+       (cleanup-thunk)) ; #454: close ports
+     (raise (exn:fail:network:timeout (format "HTTP request timeout (~a seconds)" timeout-secs)
+                                      (current-continuation-marks)))]
     [else
      (define tag (car result))
      (define payload (cdr result))
@@ -97,12 +95,10 @@
 ;; read-line/timeout : input-port? [#:timeout seconds] -> (or/c string? eof?)
 ;; Like read-line but with a timeout. Returns #f on timeout (caller should raise).
 (define (read-line/timeout port #:timeout [timeout-secs http-read-timeout-default])
-  (define result
-    (sync/timeout timeout-secs
-      (read-line-evt port 'any)))
+  (define result (sync/timeout timeout-secs (read-line-evt port 'any)))
   (cond
-    [(eq? result #f) #f]     ; timeout
-    [else result]))           ; string or eof
+    [(eq? result #f) #f] ; timeout
+    [else result])) ; string or eof
 
 ;; read-response-body/timeout : input-port? [#:timeout seconds] -> bytes?
 ;; Like read-response-body but with a per-chunk read timeout.
@@ -110,17 +106,14 @@
 (define (read-response-body/timeout port #:timeout [timeout-secs http-read-timeout-default])
   (define out (open-output-bytes))
   (define buf (make-bytes 8192))
-  (define deadline (+ (current-inexact-milliseconds)
-                      (* timeout-secs 1000.0)))
+  (define deadline (+ (current-inexact-milliseconds) (* timeout-secs 1000.0)))
   (let loop ([total 0])
     (define remaining (/ (- deadline (current-inexact-milliseconds)) 1000.0))
     (when (< remaining 0)
       (raise (exn:fail:network:timeout
               (format "HTTP read timeout (~a seconds) while reading response body" timeout-secs)
               (current-continuation-marks))))
-    (define n
-      (sync/timeout remaining
-        (read-bytes-avail!-evt buf port)))
+    (define n (sync/timeout remaining (read-bytes-avail!-evt buf port)))
     (cond
       [(eq? n #f)
        (raise (exn:fail:network:timeout
@@ -170,14 +163,13 @@
 (define (parse-sse-lines text)
   (define lines (string-split text "\n"))
   (define results
-    (for/fold ([acc '()])
-              ([line (in-list lines)])
+    (for/fold ([acc '()]) ([line (in-list lines)])
       (define data-str (parse-sse-data-line line))
       (cond
-        [(not data-str) acc]                                  ; non-data line
-        [(sse-done? data-str) acc]                            ; termination
+        [(not data-str) acc] ; non-data line
+        [(sse-done? data-str) acc] ; termination
         [else
-         (with-handlers ([exn:fail? (lambda (e) acc)])        ; skip malformed
+         (with-handlers ([exn:fail? (lambda (e) acc)]) ; skip malformed
            (define parsed (string->jsexpr data-str))
            (cons parsed acc))])))
   (reverse results))
@@ -192,9 +184,18 @@
   (for/list ([chunk (in-list raw-chunks)])
     (define choices (hash-ref chunk 'choices '()))
     (define usage (hash-ref chunk 'usage #f))
-    (define choice (if (null? choices) #f (car choices)))
-    (define delta (if choice (hash-ref choice 'delta #f) #f))
-    (define finish-reason (if choice (hash-ref choice 'finish_reason #f) #f))
+    (define choice
+      (if (null? choices)
+          #f
+          (car choices)))
+    (define delta
+      (if choice
+          (hash-ref choice 'delta #f)
+          #f))
+    (define finish-reason
+      (if choice
+          (hash-ref choice 'finish_reason #f)
+          #f))
 
     ;; Extract text delta
     (define delta-content
@@ -202,24 +203,18 @@
           (hash-ref delta 'content #f)
           #f))
     ;; JSON null is represented as 'null symbol in Racket - filter it out
-    (define delta-text
-      (if (string? delta-content)
-          delta-content
-          #f))
+    (define delta-text (if (string? delta-content) delta-content #f))
 
     ;; Extract tool-call delta
     (define delta-tool-call
       (if delta
           (let ([tcs (hash-ref delta 'tool_calls #f)])
             (if (and tcs (pair? tcs))
-                (car tcs)   ; first tool call delta
+                (car tcs) ; first tool call delta
                 #f))
           #f))
 
-    (make-stream-chunk delta-text
-                  delta-tool-call
-                  usage
-                  (and (string? finish-reason) #t))))
+    (make-stream-chunk delta-text delta-tool-call usage (and (string? finish-reason) #t))))
 
 ;; ============================================================
 ;; accumulate-tool-call-deltas
@@ -251,24 +246,19 @@
          (define prev-id (car existing))
          (define prev-name (cadr existing))
          (define prev-args (caddr existing))
-         (hash-set! groups idx
+         (hash-set! groups
+                    idx
                     (list (or maybe-id prev-id)
                           (or maybe-name prev-name)
                           (string-append prev-args args-delta)))]
-        [else
-         ;; New tool call
-         (hash-set! groups idx
-                    (list maybe-id
-                          maybe-name
-                          args-delta))])))
+        ;; New tool call
+        [else (hash-set! groups idx (list maybe-id maybe-name args-delta))])))
 
   ;; Build finalized tool calls in index order
   (define sorted-indices (sort (hash-keys groups) <))
   (for/list ([idx (in-list sorted-indices)])
     (define val (hash-ref groups idx))
-    (hasheq 'id (car val)
-            'name (cadr val)
-            'arguments (caddr val))))
+    (hasheq 'id (car val) 'name (cadr val) 'arguments (caddr val))))
 
 ;; ============================================================
 ;; parse-sse-line (incremental)
@@ -316,15 +306,29 @@
 (define (normalize-openai-chunk raw)
   (define choices (hash-ref raw 'choices '()))
   (define usage (hash-ref raw 'usage #f))
-  (define choice (if (null? choices) #f (car choices)))
-  (define delta (if choice (hash-ref choice 'delta #f) #f))
-  (define finish-reason (if choice (hash-ref choice 'finish_reason #f) #f))
-  (define delta-content (if delta (hash-ref delta 'content #f) #f))
+  (define choice
+    (if (null? choices)
+        #f
+        (car choices)))
+  (define delta
+    (if choice
+        (hash-ref choice 'delta #f)
+        #f))
+  (define finish-reason
+    (if choice
+        (hash-ref choice 'finish_reason #f)
+        #f))
+  (define delta-content
+    (if delta
+        (hash-ref delta 'content #f)
+        #f))
   (define delta-text (if (string? delta-content) delta-content #f))
   (define delta-tool-call
     (if delta
         (let ([tcs (hash-ref delta 'tool_calls #f)])
-          (if (and tcs (pair? tcs)) (car tcs) #f))
+          (if (and tcs (pair? tcs))
+              (car tcs)
+              #f))
         #f))
   (make-stream-chunk delta-text delta-tool-call usage (and (string? finish-reason) #t)))
 
@@ -332,27 +336,36 @@
 ;; read-sse-chunks (incremental generator)
 ;; ============================================================
 
-;; read-sse-chunks : input-port? [#:timeout seconds] -> generator?
+;; Default per-chunk timeout AFTER the first chunk has been received.
+;; Once streaming has started, chunks should arrive quickly.
+(define http-stream-timeout-default 30)
+
+;; read-sse-chunks : input-port? [#:initial-timeout seconds] [#:stream-timeout seconds] -> generator?
 ;; Returns a generator that yields stream-chunk? values as they arrive from the port.
 ;; Yields #f when the stream is complete ([DONE] received or EOF).
 ;; Raises exn:fail:network:timeout on read timeout.
+;; Uses #:initial-timeout for the first read (waiting for stream to start),
+;; then #:stream-timeout for subsequent reads (chunks should arrive fast).
 ;; The port is NOT closed by this function — the caller is responsible.
-(define (read-sse-chunks port #:timeout [timeout-secs http-read-timeout-default])
+(define (read-sse-chunks port
+                         #:initial-timeout [initial-secs http-read-timeout-default]
+                         #:stream-timeout [stream-secs http-stream-timeout-default])
   (generator ()
-    (let loop ()
-      (define line (read-line/timeout port #:timeout timeout-secs))
-      (cond
-        [(eq? line #f)
-         ;; Timeout — raise clean error
-         (raise (exn:fail:network:timeout
-                 (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
-                 (current-continuation-marks)))]
-        [(eof-object? line) (yield #f)]
-        [else
-         (define parsed (parse-sse-line line))
-         (cond
-           [(eq? parsed 'done) (yield #f)]
-           [(hash? parsed)
-            (yield (normalize-openai-chunk parsed))
-            (loop)]
-           [else (loop)])]))))
+             (let loop ([first-read? #t])
+               (define timeout-secs (if first-read? initial-secs stream-secs))
+               (define line (read-line/timeout port #:timeout timeout-secs))
+               (cond
+                 [(eq? line #f)
+                  ;; Timeout — raise clean error
+                  (raise (exn:fail:network:timeout
+                          (format "HTTP read timeout (~a seconds) waiting for SSE chunk" timeout-secs)
+                          (current-continuation-marks)))]
+                 [(eof-object? line) (yield #f)]
+                 [else
+                  (define parsed (parse-sse-line line))
+                  (cond
+                    [(eq? parsed 'done) (yield #f)]
+                    [(hash? parsed)
+                     (yield (normalize-openai-chunk parsed))
+                     (loop #f)]
+                    [else (loop #f)])]))))

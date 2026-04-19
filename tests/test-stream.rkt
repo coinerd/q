@@ -180,7 +180,7 @@
   (define-values (in out) (make-pipe))
   ;; Write one chunk but then stop — the second read should timeout
   (write-bytes #"data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n" out)
-  (define gen (read-sse-chunks in #:timeout 0.001))
+  (define gen (read-sse-chunks in #:initial-timeout 0.001 #:stream-timeout 0.001))
   (define c1 (gen))
   (check-pred stream-chunk? c1)
   (check-equal? (stream-chunk-delta-text c1) "Hi")
@@ -205,3 +205,52 @@
   (check-true (unbox cleanup-called)))
 
 (displayln "All stream incremental tests passed")
+
+;; ============================================================
+;; v0.11.2: Progressive SSE timeout tests
+;; ============================================================
+
+(test-case "v0.11.2: http-stream-timeout-default is less than http-read-timeout-default"
+  (check-true (and (number? http-stream-timeout-default)
+                   (> http-stream-timeout-default 0))
+             "stream timeout is a positive number")
+  (check-true (> http-stream-timeout-default 0))
+  (check-true (< http-stream-timeout-default http-read-timeout-default))
+  ;; Specific values: initial=120s, stream=30s
+  (check-equal? http-read-timeout-default 120)
+  (check-equal? http-stream-timeout-default 30))
+
+(test-case "v0.11.2: read-sse-chunks accepts #:initial-timeout and #:stream-timeout"
+  ;; Create a pipe with data available immediately
+  (define-values (in out) (make-pipe))
+  (write-string "data: {\"id\":\"test\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\ndata: [DONE]\n" out)
+  (close-output-port out)
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 1))
+  (define chunk (gen))
+  (check-pred stream-chunk? chunk)
+  (check-equal? (stream-chunk-delta-text chunk) "Hi")
+  ;; Next call should return #f (done)
+  (check-equal? (gen) #f))
+
+(test-case "v0.11.2: progressive timeout - first read uses initial-timeout"
+  ;; Test that initial timeout is used for first read
+  ;; Use a fast initial timeout to prove it's respected
+  (define-values (in out) (make-pipe))
+  (define gen (read-sse-chunks in #:initial-timeout 0.05 #:stream-timeout 10))
+  ;; Don't write anything — should timeout quickly (0.05s initial)
+  (check-exn exn:fail:network:timeout?
+    (lambda () (gen))))
+
+(test-case "v0.11.2: progressive timeout - after first chunk uses stream-timeout"
+  ;; After receiving first chunk, subsequent reads use shorter timeout
+  (define-values (in out) (make-pipe))
+  ;; Write first chunk immediately
+  (write-string "data: {\"id\":\"test\",\"choices\":[{\"delta\":{\"content\":\"X\"}}]}\n" out)
+  ;; Flush but don't close — next read will timeout with stream-timeout
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 0.05))
+  (define chunk (gen))
+  (check-pred stream-chunk? chunk)
+  ;; Now no more data — should timeout quickly (0.05s stream)
+  (check-exn exn:fail:network:timeout?
+    (lambda () (gen)))
+  (close-output-port out))

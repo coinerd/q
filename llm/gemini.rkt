@@ -448,8 +448,10 @@
       ;; Incremental SSE parsing — generator yields chunks one at a time
       (define raw-port response-port)
       (generator ()
-                 (let loop ()
-                   (define line (read-line/timeout raw-port))
+                 (let loop ([first-read? #t])
+                   (define timeout-secs
+                     (if first-read? http-read-timeout-default http-stream-timeout-default))
+                   (define line (read-line/timeout raw-port #:timeout timeout-secs))
                    (cond
                      [(or (eq? line #f) (eof-object? line))
                       (close-input-port raw-port)
@@ -464,8 +466,8 @@
                          (define chunks (gemini-parse-single-event parsed))
                          (for ([ch (in-list chunks)])
                            (yield ch))
-                         (loop)]
-                        [else (loop)])])))))
+                         (loop #f)]
+                        [else (loop #f)])])))))
 
   (make-provider (lambda () "gemini")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))
