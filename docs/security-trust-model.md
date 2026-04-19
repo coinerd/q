@@ -64,25 +64,27 @@ and `allowed-path?` before executing operations.
 
 ### Current state
 
-API keys for LLM providers are resolved by `q/runtime/auth-store.rkt`
-in the following priority order:
+API keys for LLM providers are resolved through a **pluggable backend
+system** (`q/runtime/credential-backend.rkt`) with the following
+priority chain:
 
-1. **Environment variables** — e.g. `OPENAI_API_KEY`,
-   `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
-2. **Config file** — `~/.q/config.json` provider entries with an
-   `api-key` field
+1. **Environment variables** — e.g. `Q_OPENAI_API_KEY`,
+   `Q_ANTHROPIC_API_KEY`, `Q_GEMINI_API_KEY` (read-only)
+2. **OS keychain** — `secret-tool` (Linux/libsecret) or `security`
+   (macOS Keychain) — encrypted at rest
 3. **Credential file** — `~/.q/credentials.json` (dedicated storage)
+4. **Config file** — `~/.q/config.json` provider entries with an
+   `api-key` field
+
+The original `q/runtime/auth-store.rkt` remains for backward
+compatibility. New code should use the backend abstraction.
 
 Credential files are written with **owner-only permissions (`0600`)**
 using atomic write (temp file + rename) to prevent corruption.
 
-**Plaintext storage:** API keys are stored as **plaintext on disk**.
-The `save-credential-file!` function in `auth-store.rkt` explicitly
-documents this limitation:
-
-> *API keys are stored as plaintext on disk. On shared systems,
-> consider using environment variables or a dedicated secrets manager
-> instead.*
+**Note on plaintext:** The file backend stores keys as plaintext on
+disk. On shared systems, use the OS keychain backend or environment
+variables. See `docs/getting-started/credentials.md` for full details.
 
 ### Display safety
 
@@ -104,8 +106,10 @@ credential to a `redacted-credential` for logging.
 | Owner-only file permissions (`0600`) | ✅ Enforced |
 | Environment variable fallback | ✅ Enforced |
 | Key masking in logs and display | ✅ Enforced |
-| OS keychain integration (macOS Keychain, libsecret) | 📋 Planned |
-| Encrypted credential backends | 📋 Planned |
+| Pluggable credential backend abstraction | ✅ Enforced |
+| OS keychain integration (secret-tool / macOS Keychain) | ✅ Enforced |
+| Chained backend resolution (env → keychain → file) | ✅ Enforced |
+| Encrypted credential backends (beyond OS keychain) | 📋 Planned |
 | Hardware security module (HSM) support | 📋 Planned |
 
 ---
