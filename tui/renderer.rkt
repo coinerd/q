@@ -3,6 +3,7 @@
 (require racket/keyword
          racket/list
          racket/logging
+         racket/string
          "render.rkt"
          "layout.rkt"
          "state.rkt"
@@ -196,7 +197,7 @@
   ;; Draw each segment
   (for ([seg (in-list (styled-line-segments line))])
     #:break (<= remaining-width 0)
-    (define text (styled-segment-text seg))
+    (define text (string-replace (styled-segment-text seg) "\n" " "))
     (define styles (styled-segment-style seg))
     ;; Truncate if necessary (use visible width for CJK support)
     (define visible-text
