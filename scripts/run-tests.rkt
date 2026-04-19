@@ -102,9 +102,7 @@
     (if (directory-exists? (build-path orig "tests"))
         orig
         (let ([parent (simplify-path (build-path orig ".."))])
-          (if (directory-exists? (build-path parent "tests"))
-              parent
-              orig)))))
+          (if (directory-exists? (build-path parent "tests")) parent orig)))))
 
 (define (collect-test-files suite #:extra-files [extra-files #f])
   (cond
@@ -326,7 +324,7 @@
     (for ([f (in-list failures)])
       (define path (test-file-result-path f))
       (define ec (test-file-result-exit-code f))
-      (printf "  %s %s (exit=%a, %a passed, %a failed, %a)~n"
+      (printf "  ~a ~a (exit=~a, ~a passed, ~a failed, ~a)~n"
               (if (= ec 2) "⏱" "✗")
               path
               ec

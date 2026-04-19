@@ -29,6 +29,9 @@
          load-global-settings
          load-project-settings
 
+         ;; Constructor
+         make-minimal-settings
+
          ;; Merging
          merge-settings
 
@@ -157,6 +160,20 @@
   (define project-hash (load-project-settings project-dir))
   (define merged-hash (merge-settings global-hash project-hash))
   (q-settings global-hash project-hash merged-hash))
+
+;; Create a minimal q-settings with defaults.
+;; Used when no config files exist (e.g., SDK path, tests).
+;; Returns a q-settings with empty global/project and merged hash
+;; containing only the provided overrides (or empty hash).
+(define (make-minimal-settings #:provider [provider #f]
+                               #:model [model #f]
+                               #:overrides [overrides (hash)])
+  (define merged
+    (for/fold ([acc (hash)]) ([(k v) (in-hash overrides)])
+      (if v (hash-set acc k v) acc)))
+  (define with-provider (if provider (hash-set merged 'default-provider provider) merged))
+  (define with-model (if model (hash-set with-provider 'default-model model) with-provider))
+  (q-settings (hash) (hash) with-model))
 
 ;; ============================================================
 ;; Merging

@@ -73,6 +73,10 @@
                   tool-result-is-error?
                   list-tools-jsexpr
                   merge-tool-lists)
+         ;; Settings struct for exec-context runtime-settings (#1240)
+         (only-in "../runtime/settings.rkt"
+                  make-minimal-settings
+                  setting-ref)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
          ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
@@ -317,7 +321,10 @@
             #:event-publisher (lambda (event-type payload)
                                 (emit-session-event! bus session-id event-type payload))
             #:runtime-settings
-            (hasheq 'provider (hash-ref config 'provider #f) 'model (hash-ref config 'model-name #f))
+            (or (hash-ref config 'settings #f)
+                (make-minimal-settings
+                 #:provider (hash-ref config 'provider #f)
+                 #:model (hash-ref config 'model-name #f)))
             #:call-id (generate-id)
             #:session-metadata (hasheq 'session-id session-id))
            #:parallel? (hash-ref config 'parallel-tools #t)))))

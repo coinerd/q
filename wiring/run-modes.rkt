@@ -135,6 +135,7 @@
   ;; Also persist model-registry for /model command
   (define model-reg (make-model-registry-from-config (q-settings-merged settings)))
   (hash-set! base-config 'model-registry model-reg)
+  (hash-set! base-config 'settings settings)
   (define effective-model-name (or model-name (default-model model-reg)))
   (hash-set! base-config 'model-name effective-model-name)
   (hash-set! base-config 'system-instructions final-system-instrs)

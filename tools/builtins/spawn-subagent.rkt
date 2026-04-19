@@ -16,7 +16,8 @@
          "../../llm/provider.rkt"
          "../../llm/model.rkt"
          "../../util/ids.rkt"
-         (only-in "../../util/protocol-types.rkt" make-message message-role message-content))
+         (only-in "../../util/protocol-types.rkt" make-message message-role message-content)
+         (only-in "../../runtime/settings.rkt" q-settings? setting-ref))
 
 (provide tool-spawn-subagent)
 
@@ -37,24 +38,34 @@
 
 ;; Resolve the provider from exec-context runtime-settings.
 ;; Returns the real provider if available, or falls back to a mock.
+;; Extract a value from runtime-settings which may be a q-settings struct or a plain hash.
+;; #1241: After settings-contract fix, runtime-settings is a q-settings struct.
+;; Fall back to hash access for backward compat (tests, SDK path).
+(define (rt-settings-ref rt key [default #f])
+  (cond
+    [(q-settings? rt) (setting-ref rt key default)]
+    [(hash? rt) (hash-ref rt key default)]
+    [else default]))
+
 ;; #1204: Provider injection from parent session.
 (define (resolve-provider exec-ctx)
   (define rt (and exec-ctx (exec-context-runtime-settings exec-ctx)))
-  (if (and rt (hash? rt) (hash-ref rt 'provider #f))
-      (hash-ref rt 'provider)
+  (define prov (and rt (rt-settings-ref rt 'provider #f)))
+  (if prov
+      prov
       (build-mock-provider-for-subagent)))
 
 ;; Resolve model name from exec-context or fall back to "mock-model".
 (define (resolve-model-name exec-ctx args)
   (or (hash-ref args 'model #f)
       (let ([rt (and exec-ctx (exec-context-runtime-settings exec-ctx))])
-        (and (hash? rt) (hash-ref rt 'model #f)))
+        (and rt (rt-settings-ref rt 'model #f)))
       "mock-model"))
 
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
-    (with-handlers ([exn:fail? (lambda (e)
+  (with-handlers ([exn:fail? (lambda (e)
                                (make-error-result (format "subagent failed: ~a" (exn-message e))))])
     ;; #1204: Resolve real provider from parent's runtime-settings
     (define provider (resolve-provider exec-ctx))
