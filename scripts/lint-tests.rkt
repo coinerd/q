@@ -60,7 +60,13 @@
       (string-contains? str "no/such")
       (string-contains? str "/my/project")
       (string-contains? str "/src/bar.rkt")
-      (string-contains? str "/foo/bar.txt")))
+      (string-contains? str "/src/main.rkt")
+      (string-contains? str "/src/util.rkt")
+      (string-contains? str "/foo/bar.txt")
+      ;; Single-char filenames like /a.rkt /b.rkt — clearly test fixtures
+      (regexp-match? #rx"^/[a-z]\\.rkt$" str)
+      ;; Multi-char fake test names /foo.rkt /bar.rkt
+      (regexp-match? #rx"^/(foo|bar)\\.rkt$" str)))
 
 (define (absolute-path-pattern? str)
   ;; matches #rx"^/[a-z]" but NOT allowed prefixes, CLI commands, or test fixtures

@@ -78,6 +78,10 @@
         (string-contains? (if (path? filename)
                               (path->string filename)
                               filename)
+                          "examples/README.md")
+        (string-contains? (if (path? filename)
+                              (path->string filename)
+                              filename)
                           "docs/tutorials/")))
   ;; Skip historical release lines like "**v0.6.3** — ..."
   (define historical-line? (lambda (line) (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line))))
