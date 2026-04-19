@@ -34,6 +34,12 @@ jobs:
           /usr/local/racket/bin/raco pkg install --auto --batch
           /usr/local/racket/bin/raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
 
+      - name: Sync README status block
+        run: /usr/local/racket/bin/racket scripts/sync-readme-status.rkt --sync
+
+      - name: Sync README metrics markers
+        run: /usr/local/racket/bin/racket scripts/metrics.rkt --sync-readme
+
       - name: Version consistency check
         run: /usr/local/racket/bin/racket scripts/lint-version.rkt
 

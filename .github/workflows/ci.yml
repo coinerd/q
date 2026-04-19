@@ -66,6 +66,12 @@ jobs:
       - name: Lint metrics consistency
         run: racket scripts/metrics.rkt --lint
 
+      - name: Lint prose metrics consistency
+        run: racket scripts/metrics.rkt --lint-prose
+
+      - name: Lint README status block version
+        run: racket scripts/sync-readme-status.rkt --check
+
       - name: Protocol consistency
         run: racket scripts/check-protocols.rkt
 
