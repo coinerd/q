@@ -18,7 +18,9 @@
            #f ;; event-bus
            #f ;; session-dir
            (box #f) ;; needs-redraw
-           #f)) ;; model-registry-box
+           #f ;; model-registry-box
+           (box #f) ;; last-prompt-box
+           #f)) ;; session-runner
 
 (define commands-tests
   (test-suite "TUI Commands"
@@ -124,6 +126,32 @@
       (check-equal? (length transcript) 1 "unknown: adds error entry")
       (check-equal? (transcript-entry-kind (first transcript)) 'error "unknown: entry is error kind")
       (check-true (string-contains? (transcript-entry-text (first transcript)) "Unknown")
-                  "unknown: mentions Unknown"))))
+                  "unknown: mentions Unknown"))
+
+    ;; ============================================================
+    ;; /retry command
+    ;; ============================================================
+
+    (test-case "/retry with no previous prompt shows error"
+      (define cctx (make-test-cctx))
+      (define result (process-slash-command cctx 'retry))
+      (check-equal? result 'continue)
+      (define state (unbox (cmd-ctx-state-box cctx)))
+      (define transcript (ui-state-transcript state))
+      (check-equal? (length transcript) 1)
+      (check-equal? (transcript-entry-kind (first transcript)) 'error)
+      (check-true (string-contains? (transcript-entry-text (first transcript)) "No previous")))
+
+    (test-case "/retry with stored prompt resubmits"
+      (define cctx (make-test-cctx))
+      ;; Store a last prompt
+      (set-box! (cmd-ctx-last-prompt-box cctx) "Hello world")
+      (define result (process-slash-command cctx 'retry))
+      (check-equal? result 'continue)
+      (define state (unbox (cmd-ctx-state-box cctx)))
+      (define transcript (ui-state-transcript state))
+      (check-equal? (length transcript) 1)
+      (check-equal? (transcript-entry-kind (first transcript)) 'system)
+      (check-true (string-contains? (transcript-entry-text (first transcript)) "retry")))))
 
 (run-tests commands-tests)

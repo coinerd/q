@@ -34,6 +34,8 @@
          cmd-ctx-session-dir
          cmd-ctx-needs-redraw-box
          cmd-ctx-model-registry-box
+         cmd-ctx-last-prompt-box
+         cmd-ctx-session-runner
 
          ;; Main command dispatcher
          process-slash-command)
@@ -50,7 +52,9 @@
          event-bus ; event-bus? or #f
          session-dir ; (or/c path-string? #f)
          needs-redraw-box ; (boxof boolean)
-         model-registry-box) ; (or/c (boxof (or/c model-registry? #f)) #f)
+         model-registry-box ; (or/c (boxof (or/c model-registry? #f)) #f)
+         last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
+         session-runner) ; (string -> void) or #f — for /retry resubmission
   #:transparent)
 
 ;; ============================================================
@@ -80,13 +84,14 @@
   (define dir (cmd-ctx-session-dir cctx))
   (if dir
       (with-handlers ([exn:fail? (lambda (e)
-                                    (fprintf (current-error-port) "WARNING: Failed to load session index: ~a~n" (exn-message e))
-                                    #f)])
+                                   (fprintf (current-error-port)
+                                            "WARNING: Failed to load session index: ~a~n"
+                                            (exn-message e))
+                                   #f)])
         (define state (unbox (cmd-ctx-state-box cctx)))
         (define sid (ui-state-session-id state))
         (if sid
-            (let ([index-path (build-path dir sid "session.index")])
-              (load-index index-path))
+            (let ([index-path (build-path dir sid "session.index")]) (load-index index-path))
             #f))
       #f))
 
@@ -490,6 +495,25 @@
        [(leaves) (handle-leaves-command cctx)]
        [(name) (handle-name-command cctx)]
        [(sessions) (handle-sessions-tui-command cctx #f)]
+       [(retry)
+        ;; /retry: resubmit last prompt
+        (define last-prompt (unbox (cmd-ctx-last-prompt-box cctx)))
+        (cond
+          [last-prompt
+           (define entry
+             (make-entry 'system
+                         (format "[retry: resubmitting]")
+                         (current-inexact-milliseconds)
+                         (hash)))
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           (define runner (cmd-ctx-session-runner cctx))
+           (when runner
+             (thread (lambda () (runner last-prompt))))]
+          [else
+           (define entry
+             (make-entry 'error "No previous prompt to retry." (current-inexact-milliseconds) (hash)))
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
+        'continue]
        [(quit)
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]
