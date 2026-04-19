@@ -149,6 +149,17 @@
           'agent.idle
           '(pass)
           'agent.error
+          '(pass)
+          ;; #1310: New hook points
+          'agent.end
+          '(pass)
+          'session-shutdown
+          '(pass)
+          'user-bash
+          '(pass amend block)
+          'session-before-tree
+          '(pass block)
+          'session-tree
           '(pass)))
 
 ;; valid-hook-actions-for : symbol? -> (listof symbol?)
@@ -166,11 +177,12 @@
   (if (member action valid-actions)
       #t
       (begin
-        (log-warning (format "Hook validation: ~a returned invalid action '~a' for hook '~a. Valid: ~a"
-                             result
-                             action
-                             hook-point
-                             valid-actions))
+        (log-warning
+         (format "Hook validation: ~a returned invalid action '~a' for hook '~a. Valid: ~a"
+                 result
+                 action
+                 hook-point
+                 valid-actions))
         #f)))
 
 ;; ============================================================
