@@ -36,8 +36,8 @@ jobs:
             echo "ERROR: tarball asset not found in release ${TAG} after 20 retries"
             exit 1
           fi
-          # Download using authenticated API endpoint
-          curl -sL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+          # Download using authenticated API endpoint (-f fails on HTTP errors)
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
             -o "q-${VERSION}.tar.gz" "$ASSET_URL"
           ls -la "q-${VERSION}.tar.gz"
           file "q-${VERSION}.tar.gz"
@@ -68,20 +68,26 @@ jobs:
           echo "$OUTPUT" | grep -q "version ${VERSION}"
 
       - name: Verify manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
+          TAG="${GITHUB_REF#refs/tags/}"
           cd q
-          if [ -f release-manifest.json ]; then
+          # Download manifest as a separate release asset
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o release-manifest.json \
+            "https://api.github.com/repos/${{ github.repository }}/releases/download/${TAG}/release-manifest.json" || true
+          if [ -f release-manifest.json ] && [ -s release-manifest.json ]; then
             python3 -c "
           import json, sys
           m = json.load(open('release-manifest.json'))
-          assert m['version'] == '${VERSION}', f\"manifest version {m['version']} != expected ${VERSION}\"
+          assert m['version'] == '${VERSION}', f"manifest version {m['version']} != expected ${VERSION}"
           print(f'Manifest OK: version={m[\"version\"]}')
           "
           else
             echo "No release-manifest.json found (optional)"
           fi
-
       - name: Run full test suite
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
