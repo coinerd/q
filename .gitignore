@@ -50,3 +50,6 @@ dist/
 # Internal planning — never push
 .planning/
 ../.planning/
+
+# Internal analysis — never push
+docs/COMPETITOR-ANALYSIS.md
