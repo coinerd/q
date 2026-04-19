@@ -21,14 +21,12 @@
 (test-case "undo-deep: 50 edits undo all the way back to empty"
   (define st0 (initial-input-state))
   (define st-final
-    (for/fold ([st st0])
-              ([i (in-range 50)])
+    (for/fold ([st st0]) ([i (in-range 50)])
       (input-insert-char st (integer->char (+ 65 (modulo i 26))))))
   (check > (string-length (input-state-buffer st-final)) 0)
   ;; Undo all 50 edits
   (define st-undo-all
-    (for/fold ([st st-final])
-              ([_ (in-range 50)])
+    (for/fold ([st st-final]) ([_ (in-range 50)])
       (input-undo st)))
   (check-equal? (input-state-buffer st-undo-all) "")
   (check-equal? (input-state-cursor st-undo-all) 0))
@@ -52,13 +50,11 @@
   (define st0 (initial-input-state))
   ;; Insert 150 characters
   (define st-full
-    (for/fold ([st st0])
-              ([i (in-range 150)])
+    (for/fold ([st st0]) ([i (in-range 150)])
       (input-insert-char st (integer->char (+ 65 (modulo i 26))))))
   ;; Can only undo 100 times (MAX-UNDO-STACK)
   (define st-at-cap
-    (for/fold ([st st-full])
-              ([_ (in-range 100)])
+    (for/fold ([st st-full]) ([_ (in-range 100)])
       (input-undo st)))
   ;; One more undo should do nothing (stack empty)
   (define st-noop (input-undo st-at-cap))
@@ -104,17 +100,16 @@
   (define st2 (input-cursor-word-left st1)) ;; cursor at end of "world "
   (define st3 (input-kill-word-backward st2)) ;; kills "world " backward
   (check >= (length (input-state-kill-ring st3)) 1)
-  (check-true (< (string-length (input-state-buffer st3))
-                  (string-length (input-state-buffer st2)))))
+  (check-true (< (string-length (input-state-buffer st3)) (string-length (input-state-buffer st2)))))
 
 (test-case "kill-ring: kill-to-end then yank restores text"
   (define st0 (initial-input-state))
   (define st1 (input-insert-string st0 "hello world"))
-  (define st2 (input-cursor-left (input-cursor-left
-                                   (input-cursor-left
-                                    (input-cursor-left
-                                     (input-cursor-left
-                                      (input-cursor-left st1))))))) ;; cursor before " world"
+  (define st2
+    (input-cursor-left
+     (input-cursor-left
+      (input-cursor-left
+       (input-cursor-left (input-cursor-left (input-cursor-left st1))))))) ;; cursor before " world"
   (define st3 (input-kill-to-end st2))
   (check-equal? (input-state-buffer st3) "hello")
   (check-equal? (input-state-kill-ring st3) '(" world"))
@@ -241,11 +236,11 @@
   (define st0 (initial-input-state))
   (define st1 (input-insert-string st0 "hello world"))
   ;; Move cursor to after "hello"
-  (define st2 (input-cursor-left (input-cursor-left
-                                   (input-cursor-left
-                                    (input-cursor-left
-                                     (input-cursor-left
-                                      (input-cursor-left st1))))))) ;; cursor at 5
+  (define st2
+    (input-cursor-left
+     (input-cursor-left
+      (input-cursor-left
+       (input-cursor-left (input-cursor-left (input-cursor-left st1))))))) ;; cursor at 5
   (check-equal? (input-state-cursor st2) 5)
   (define st3 (input-insert-string st2 " beautiful"))
   (check-equal? (input-state-buffer st3) "hello beautiful world"))
@@ -288,14 +283,14 @@
 (test-case "keymap: Ctrl-V mapped to paste"
   (define km (default-keymap))
   (define ctrl-v-spec (key-spec #\v #t #f #f))
-  (check-equal? (keymap-lookup km ctrl-v-spec) 'paste))
+  (check-equal? (keymap-lookup km ctrl-v-spec) 'tui.editor.paste))
 
 (test-case "keymap: Ctrl-Left/Right mapped to word navigation"
   (define km (default-keymap))
   (define ctrl-left-spec (key-spec 'left #t #f #f))
   (define ctrl-right-spec (key-spec 'right #t #f #f))
-  (check-equal? (keymap-lookup km ctrl-left-spec) 'word-left)
-  (check-equal? (keymap-lookup km ctrl-right-spec) 'word-right))
+  (check-equal? (keymap-lookup km ctrl-left-spec) 'tui.editor.word-left)
+  (check-equal? (keymap-lookup km ctrl-right-spec) 'tui.editor.word-right))
 
 (test-case "keymap: user override works"
   (define km (default-keymap))
@@ -325,8 +320,7 @@
   ;; Undo should undo the yank
   (define st-e (input-undo st-d))
   ;; Should be back to after kill
-  (check-true (not (string=? (input-state-buffer st-d)
-                             (input-state-buffer st-e)))))
+  (check-true (not (string=? (input-state-buffer st-d) (input-state-buffer st-e)))))
 
 (test-case "workflow: paste, edit, undo back to pre-paste"
   (define st0 (initial-input-state))
@@ -350,8 +344,7 @@
   ;; Delete forward from there
   (define st4 (input-delete st3))
   ;; Should have removed 't' from "two"
-  (check-true (not (string=? (input-state-buffer st1)
-                             (input-state-buffer st4)))))
+  (check-true (not (string=? (input-state-buffer st1) (input-state-buffer st4)))))
 
 (test-case "workflow: kill-ring yank cycle"
   ;; Kill two things, verify yank gives most recent

@@ -7,9 +7,7 @@
          racket/file
          json
          "../main.rkt"
-         (only-in "../extensions/api.rkt"
-                  extension-registry?
-                  list-extensions))
+         (only-in "../extensions/api.rkt" extension-registry? list-extensions))
 
 (define (capture-output thunk)
   (with-output-to-string thunk))
@@ -21,9 +19,7 @@
   (define dir (make-temp-project-dir))
   (define q-dir (build-path dir ".q"))
   (make-directory* q-dir)
-  (call-with-output-file (build-path q-dir "config.json")
-    (lambda (out)
-      (write-json config-hash out)))
+  (call-with-output-file (build-path q-dir "config.json") (lambda (out) (write-json config-hash out)))
   dir)
 
 (define (cleanup-temp-dir dir)
@@ -34,10 +30,10 @@
 ;; register-default-tools!
 ;; ============================================================
 
-(test-case "registers all 9 built-in tools"
+(test-case "registers all 10 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (check-equal? (length (list-tools reg)) 9))
+  (check-equal? (length (list-tools reg)) 10))
 
 (test-case "each tool is a valid tool struct with executable"
   (define reg (make-tool-registry))
@@ -50,7 +46,7 @@
 (test-case "registry has correct count"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (check-equal? (length (list-tools reg)) 9))
+  (check-equal? (length (list-tools reg)) 10))
 
 ;; ============================================================
 ;; build-runtime-from-cli
@@ -71,13 +67,14 @@
   (check-true (provider? (hash-ref rt 'provider)))
   ;; Provider name depends on whether ~/.q/config.json exists and has valid config
   ;; Could be "mock" (no config) or "openai-compatible" (config with credentials or local provider)
-  (check-true (not (false? (member (provider-name (hash-ref rt 'provider)) '("mock" "openai-compatible"))))))
+  (check-true (not (false? (member (provider-name (hash-ref rt 'provider))
+                                   '("mock" "openai-compatible"))))))
 
 (test-case "tool-registry has all 9 built-in tools"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (define reg (hash-ref rt 'tool-registry))
-  (check-equal? (length (list-tools reg)) 9))
+  (check-equal? (length (list-tools reg)) 10))
 
 (test-case "event-bus is valid"
   (define cfg (parse-cli-args #()))
@@ -168,153 +165,146 @@
 (test-case "build-provider: falls back to mock when no config exists anywhere"
   (define tmp-dir (make-temp-project-dir))
   ;; Use #:config-path with non-existent file to bypass global config
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config (make-hash (list (cons 'project-dir tmp-dir))))
-      (define settings (load-settings tmp-dir #:config-path "/nonexistent/config.json"))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "mock"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config (make-hash (list (cons 'project-dir tmp-dir))))
+                  (define settings (load-settings tmp-dir #:config-path "/nonexistent/config.json"))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "mock"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: falls back to mock when config has no providers"
-  (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'default-model "gpt-4o")))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config (make-hash (list (cons 'project-dir tmp-dir))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "mock"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+  (define tmp-dir (make-temp-project-with-config (hasheq 'default-model "gpt-4o")))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config (make-hash (list (cons 'project-dir tmp-dir))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "mock"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: falls back to mock when model not resolved"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o")
-                             'api-key-env "NONEXISTENT_KEY_FOR_TEST_12345")))))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "nonexistent-model"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "mock"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'openai
+                                                   (hasheq 'base-url
+                                                           "https://api.openai.com/v1"
+                                                           'models
+                                                           '("gpt-4o")
+                                                           'api-key-env
+                                                           "NONEXISTENT_KEY_FOR_TEST_12345")))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "nonexistent-model"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "mock"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: falls back to mock when no credentials found"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o")
-                             'api-key-env "Q_TEST_NONEXISTENT_KEY_XYZ")))))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "gpt-4o"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "mock"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'test-cloud-mock
+                                                   (hasheq 'base-url
+                                                           "https://api.example.com/v1"
+                                                           'models
+                                                           '("gpt-4o")
+                                                           'api-key-env
+                                                           "Q_TEST_NONEXISTENT_KEY_XYZ")))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "mock"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: creates real provider when config and credentials exist"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o")
-                             'api-key-env "Q_TEST_PROVIDER_BUILD_KEY")))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'openai
+                                                   (hasheq 'base-url
+                                                           "https://api.openai.com/v1"
+                                                           'models
+                                                           '("gpt-4o")
+                                                           'api-key-env
+                                                           "Q_TEST_PROVIDER_BUILD_KEY")))))
   (putenv "Q_TEST_PROVIDER_BUILD_KEY" "sk-test-key-12345")
   (define orig-val (getenv "Q_TEST_PROVIDER_BUILD_KEY"))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "gpt-4o"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (if orig-val
-          (putenv "Q_TEST_PROVIDER_BUILD_KEY" orig-val)
-          (putenv "Q_TEST_PROVIDER_BUILD_KEY" "")))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda ()
+                  (cleanup-temp-dir tmp-dir)
+                  (if orig-val
+                      (putenv "Q_TEST_PROVIDER_BUILD_KEY" orig-val)
+                      (putenv "Q_TEST_PROVIDER_BUILD_KEY" "")))))
 
 (test-case "build-provider: creates real provider with default model from config"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'default-model "gpt-4o"
-             'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o" "gpt-4o-mini")
-                             'default-model "gpt-4o"
-                             'api-key-env "Q_TEST_DEFAULT_MODEL_KEY")))))
+    (make-temp-project-with-config (hasheq 'default-model
+                                           "gpt-4o"
+                                           'providers
+                                           (hasheq 'openai
+                                                   (hasheq 'base-url
+                                                           "https://api.openai.com/v1"
+                                                           'models
+                                                           '("gpt-4o" "gpt-4o-mini")
+                                                           'default-model
+                                                           "gpt-4o"
+                                                           'api-key-env
+                                                           "Q_TEST_DEFAULT_MODEL_KEY")))))
   (putenv "Q_TEST_DEFAULT_MODEL_KEY" "sk-test-key-default")
   (define orig-val (getenv "Q_TEST_DEFAULT_MODEL_KEY"))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (if orig-val
-          (putenv "Q_TEST_DEFAULT_MODEL_KEY" orig-val)
-          (putenv "Q_TEST_DEFAULT_MODEL_KEY" "")))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config (make-hash (list (cons 'project-dir tmp-dir))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda ()
+                  (cleanup-temp-dir tmp-dir)
+                  (if orig-val
+                      (putenv "Q_TEST_DEFAULT_MODEL_KEY" orig-val)
+                      (putenv "Q_TEST_DEFAULT_MODEL_KEY" "")))))
 
 (test-case "build-provider: uses project-dir from config for settings loading"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'myprovider
-                     (hasheq 'base-url "https://example.com/v1"
-                             'models '("claude-3")
-                             'api-key-env "Q_TEST_PROJECT_DIR_KEY")))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'myprovider
+                                                   (hasheq 'base-url
+                                                           "https://example.com/v1"
+                                                           'models
+                                                           '("claude-3")
+                                                           'api-key-env
+                                                           "Q_TEST_PROJECT_DIR_KEY")))))
   (putenv "Q_TEST_PROJECT_DIR_KEY" "sk-test-project-dir")
   (define orig-val (getenv "Q_TEST_PROJECT_DIR_KEY"))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "claude-3"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (if orig-val
-          (putenv "Q_TEST_PROJECT_DIR_KEY" orig-val)
-          (putenv "Q_TEST_PROJECT_DIR_KEY" "")))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "claude-3"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda ()
+                  (cleanup-temp-dir tmp-dir)
+                  (if orig-val
+                      (putenv "Q_TEST_PROJECT_DIR_KEY" orig-val)
+                      (putenv "Q_TEST_PROJECT_DIR_KEY" "")))))
 
 ;; ============================================================
 ;; print helpers
@@ -341,14 +331,16 @@
 (test-case "build-runtime-from-cli: extension-registry is an extension-registry?"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-pred extension-registry? (hash-ref rt 'extension-registry)
+  (check-pred extension-registry?
+              (hash-ref rt 'extension-registry)
               "extension-registry value should satisfy extension-registry?"))
 
 (test-case "build-runtime-from-cli: extension-registry starts empty"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (define ext-reg (hash-ref rt 'extension-registry))
-  (check-equal? (length (list-extensions ext-reg)) 0
+  (check-equal? (length (list-extensions ext-reg))
+                0
                 "extension-registry should start with no extensions"))
 
 ;; ============================================================
@@ -359,7 +351,8 @@
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (check-true (hash-has-key? rt 'system-instructions))
-  (check-equal? (hash-ref rt 'system-instructions) '()
+  (check-equal? (hash-ref rt 'system-instructions)
+                '()
                 "system-instructions should be empty when no .q dir exists"))
 
 (test-case "build-runtime-from-cli: system-instructions loaded from .q/instructions.md"
@@ -367,20 +360,19 @@
   (define q-dir (build-path tmp-dir ".q"))
   (make-directory* q-dir)
   (call-with-output-file (build-path q-dir "instructions.md")
-    (lambda (out) (displayln "You are a helpful assistant." out)))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
-      (define rt (build-runtime-from-cli cfg))
-      (check-true (hash-has-key? rt 'system-instructions))
-      (define instrs (hash-ref rt 'system-instructions))
-      (check-true (and (list? instrs) (= (length instrs) 1))
-                  "should have one instruction from instructions.md")
-      (when (and (list? instrs) (not (null? instrs)))
-        (check-true (string-contains? (first instrs) "helpful assistant")
-                    "instruction should contain text from instructions.md")))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+                         (lambda (out) (displayln "You are a helpful assistant." out)))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
+                  (define rt (build-runtime-from-cli cfg))
+                  (check-true (hash-has-key? rt 'system-instructions))
+                  (define instrs (hash-ref rt 'system-instructions))
+                  (check-true (and (list? instrs) (= (length instrs) 1))
+                              "should have one instruction from instructions.md")
+                  (when (and (list? instrs) (not (null? instrs)))
+                    (check-true (string-contains? (first instrs) "helpful assistant")
+                                "instruction should contain text from instructions.md")))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 ;; ============================================================
 ;; build-runtime-from-cli: model-name
@@ -389,10 +381,8 @@
 (test-case "build-runtime-from-cli: includes model-name key when --model given"
   (define cfg (parse-cli-args #("--model" "gpt-4o")))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'model-name)
-              "runtime config should have model-name key")
-  (check-equal? (hash-ref rt 'model-name) "gpt-4o"
-                "model-name should match --model flag"))
+  (check-true (hash-has-key? rt 'model-name) "runtime config should have model-name key")
+  (check-equal? (hash-ref rt 'model-name) "gpt-4o" "model-name should match --model flag"))
 
 (test-case "build-runtime-from-cli: model-name resolves from config when --model not given"
   (define cfg (parse-cli-args #()))
@@ -400,8 +390,7 @@
   (check-true (hash-has-key? rt 'model-name))
   ;; When no --model flag, model-name is resolved from config default-model
   ;; (may be a string like "glm-5.1" or #f if no config/default found)
-  (check-true (or (string? (hash-ref rt 'model-name))
-                  (eq? (hash-ref rt 'model-name) #f))
+  (check-true (or (string? (hash-ref rt 'model-name)) (eq? (hash-ref rt 'model-name) #f))
               "model-name should be resolved from config or #f"))
 
 ;; ============================================================
@@ -492,22 +481,22 @@
   (define tmp-dir (make-temp-project-dir))
   (define q-ext-dir (build-path tmp-dir ".q" "extensions"))
   (make-directory* q-ext-dir)
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
-      (define rt (build-runtime-from-cli cfg))
-      (check-true (hash-has-key? rt 'extension-registry))
-      (define ext-reg (hash-ref rt 'extension-registry))
-      (check-equal? (length (list-extensions ext-reg)) 0))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
+                  (define rt (build-runtime-from-cli cfg))
+                  (check-true (hash-has-key? rt 'extension-registry))
+                  (define ext-reg (hash-ref rt 'extension-registry))
+                  (check-equal? (length (list-extensions ext-reg)) 0))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-runtime-from-cli: nonexistent extension dir is safe"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (check-true (hash-has-key? rt 'extension-registry))
   (define ext-reg (hash-ref rt 'extension-registry))
-  (check-equal? (length (list-extensions ext-reg)) 0
+  (check-equal? (length (list-extensions ext-reg))
+                0
                 "extension-registry should be empty when no extension dirs exist"))
 
 ;; ============================================================
@@ -516,54 +505,56 @@
 
 (test-case "build-runtime-from-cli: integration with real config"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o")
-                             'api-key-env "Q_TEST_INTEGRATION_BUILD_KEY")))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'openai
+                                                   (hasheq 'base-url
+                                                           "https://api.openai.com/v1"
+                                                           'models
+                                                           '("gpt-4o")
+                                                           'api-key-env
+                                                           "Q_TEST_INTEGRATION_BUILD_KEY")))))
   (putenv "Q_TEST_INTEGRATION_BUILD_KEY" "sk-test-integration-key")
   (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir)
-                                          "--model" "gpt-4o")))
-      (define rt (build-runtime-from-cli cfg))
-      (check-true (hash-has-key? rt 'provider))
-      (check-true (provider? (hash-ref rt 'provider)))
-      (check-equal? (provider-name (hash-ref rt 'provider)) "openai-compatible")
-      (check-equal? (hash-ref rt 'model-name) "gpt-4o")
-      (check-true (hash-has-key? rt 'session-dir))
-      (check-true (hash-has-key? rt 'tool-registry))
-      (check-true (hash-has-key? rt 'extension-registry))
-      (check-true (hash-has-key? rt 'system-instructions)))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (putenv "Q_TEST_INTEGRATION_BUILD_KEY" ""))))
+   (lambda () (void))
+   (lambda ()
+     (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir) "--model" "gpt-4o")))
+     (define rt (build-runtime-from-cli cfg))
+     (check-true (hash-has-key? rt 'provider))
+     (check-true (provider? (hash-ref rt 'provider)))
+     (check-equal? (provider-name (hash-ref rt 'provider)) "openai-compatible")
+     (check-equal? (hash-ref rt 'model-name) "gpt-4o")
+     (check-true (hash-has-key? rt 'session-dir))
+     (check-true (hash-has-key? rt 'tool-registry))
+     (check-true (hash-has-key? rt 'extension-registry))
+     (check-true (hash-has-key? rt 'system-instructions)))
+   (lambda ()
+     (cleanup-temp-dir tmp-dir)
+     (putenv "Q_TEST_INTEGRATION_BUILD_KEY" ""))))
 
 (test-case "build-runtime-from-cli: integration with --no-tools and real config"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o")
-                             'api-key-env "Q_TEST_NO_TOOLS_KEY")))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'openai
+                                                   (hasheq 'base-url
+                                                           "https://api.openai.com/v1"
+                                                           'models
+                                                           '("gpt-4o")
+                                                           'api-key-env
+                                                           "Q_TEST_NO_TOOLS_KEY")))))
   (putenv "Q_TEST_NO_TOOLS_KEY" "sk-test-no-tools")
   (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir)
-                                          "--model" "gpt-4o"
-                                          "--no-tools")))
-      (define rt (build-runtime-from-cli cfg))
-      (check-true (hash-ref rt 'no-tools?))
-      (define reg (hash-ref rt 'tool-registry))
-      (check-equal? (length (list-tools reg)) 0
-                    "no tools should be registered with --no-tools"))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (putenv "Q_TEST_NO_TOOLS_KEY" ""))))
+   (lambda () (void))
+   (lambda ()
+     (define cfg
+       (parse-cli-args
+        (vector "--project-dir" (path->string tmp-dir) "--model" "gpt-4o" "--no-tools")))
+     (define rt (build-runtime-from-cli cfg))
+     (check-true (hash-ref rt 'no-tools?))
+     (define reg (hash-ref rt 'tool-registry))
+     (check-equal? (length (list-tools reg)) 0 "no tools should be registered with --no-tools"))
+   (lambda ()
+     (cleanup-temp-dir tmp-dir)
+     (putenv "Q_TEST_NO_TOOLS_KEY" ""))))
 
 ;; ============================================================
 ;; build-runtime-from-cli: --tool filters registered tools
@@ -586,39 +577,30 @@
   (define in (open-input-string "hello\n/quit\n"))
   (define out (open-output-string))
   (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
-    #:in in
-    #:out out)
+                       #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
+                       #:in in
+                       #:out out)
   (check-equal? (reverse captured) '("hello")))
 
 (test-case "run-cli-interactive: handles /quit command"
   (define cfg (parse-cli-args #()))
   (define in (open-input-string "/quit\n"))
   (define out (open-output-string))
-  (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (void))
-    #:in in
-    #:out out)
+  (run-cli-interactive cfg #:session-fn (lambda (prompt) (void)) #:in in #:out out)
   (check-true (string-contains? (get-output-string out) "Goodbye.")))
 
 (test-case "run-cli-interactive: handles /exit command"
   (define cfg (parse-cli-args #()))
   (define in (open-input-string "/exit\n"))
   (define out (open-output-string))
-  (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (void))
-    #:in in
-    #:out out)
+  (run-cli-interactive cfg #:session-fn (lambda (prompt) (void)) #:in in #:out out)
   (check-true (string-contains? (get-output-string out) "Goodbye.")))
 
 (test-case "run-cli-interactive: handles /help command"
   (define cfg (parse-cli-args #()))
   (define in (open-input-string "/help\n/quit\n"))
   (define out (open-output-string))
-  (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (void))
-    #:in in
-    #:out out)
+  (run-cli-interactive cfg #:session-fn (lambda (prompt) (void)) #:in in #:out out)
   (check-true (string-contains? (get-output-string out) "Usage: q")))
 
 (test-case "run-cli-interactive: empty lines are ignored"
@@ -627,9 +609,9 @@
   (define in (open-input-string "\n\n\n/quit\n"))
   (define out (open-output-string))
   (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
-    #:in in
-    #:out out)
+                       #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
+                       #:in in
+                       #:out out)
   (check-equal? captured '()))
 
 (test-case "run-cli-interactive: multiple prompts in sequence"
@@ -638,9 +620,9 @@
   (define in (open-input-string "first\nsecond\nthird\n/quit\n"))
   (define out (open-output-string))
   (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
-    #:in in
-    #:out out)
+                       #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
+                       #:in in
+                       #:out out)
   (check-equal? (reverse captured) '("first" "second" "third")))
 
 (test-case "run-cli-interactive: handles session-fn errors gracefully"
@@ -649,19 +631,16 @@
   (define out (open-output-string))
   ;; session-fn raises an error — should be caught and printed, not crash
   (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (error 'test "intentional error"))
-    #:in in
-    #:out out)
+                       #:session-fn (lambda (prompt) (error 'test "intentional error"))
+                       #:in in
+                       #:out out)
   (check-true (string-contains? (get-output-string out) "Error:")))
 
 (test-case "run-cli-interactive: displays q> prompt"
   (define cfg (parse-cli-args #()))
   (define in (open-input-string "/quit\n"))
   (define out (open-output-string))
-  (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (void))
-    #:in in
-    #:out out)
+  (run-cli-interactive cfg #:session-fn (lambda (prompt) (void)) #:in in #:out out)
   (check-true (string-contains? (get-output-string out) "q> ")))
 
 (test-case "run-cli-interactive: handles EOF"
@@ -670,9 +649,9 @@
   (define in (open-input-string "hello"))
   (define out (open-output-string))
   (run-cli-interactive cfg
-    #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
-    #:in in
-    #:out out)
+                       #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
+                       #:in in
+                       #:out out)
   ;; "hello" without newline: read-line returns "hello", then next read returns eof
   (check-true (string-contains? (get-output-string out) "Goodbye.")))
 
@@ -684,18 +663,14 @@
   (define captured '())
   (define cfg (parse-cli-args #("hello world")))
   (define out (open-output-string))
-  (run-cli-single cfg
-    #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
-    #:out out)
+  (run-cli-single cfg #:session-fn (lambda (prompt) (set! captured (cons prompt captured))) #:out out)
   (check-equal? (reverse captured) '("hello world")))
 
 (test-case "run-cli-single: does nothing when no prompt"
   (define captured '())
   (define cfg (parse-cli-args #()))
   (define out (open-output-string))
-  (run-cli-single cfg
-    #:session-fn (lambda (prompt) (set! captured (cons prompt captured)))
-    #:out out)
+  (run-cli-single cfg #:session-fn (lambda (prompt) (set! captured (cons prompt captured))) #:out out)
   (check-equal? captured '()))
 
 (test-case "run-cli-single: handles session-fn errors gracefully"
@@ -703,8 +678,8 @@
   (define err (open-output-string))
   (parameterize ([current-error-port err])
     (run-cli-single cfg
-      #:session-fn (lambda (prompt) (error 'test "intentional error"))
-      #:out (open-output-string)))
+                    #:session-fn (lambda (prompt) (error 'test "intentional error"))
+                    #:out (open-output-string)))
   (check-true (string-contains? (get-output-string err) "Error:")))
 
 ;; ============================================================
@@ -713,14 +688,13 @@
 
 (test-case "build-runtime-from-cli: session-dir present with --project-dir"
   (define tmp-dir (make-temp-project-dir))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
-      (define rt (build-runtime-from-cli cfg))
-      (check-true (hash-has-key? rt 'session-dir))
-      (check-true (path-string? (hash-ref rt 'session-dir))))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
+                  (define rt (build-runtime-from-cli cfg))
+                  (check-true (hash-has-key? rt 'session-dir))
+                  (check-true (path-string? (hash-ref rt 'session-dir))))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 ;; ============================================================
 ;; register-default-tools!: #:only filter
@@ -729,8 +703,7 @@
 (test-case "register-default-tools!: #:only with unknown tool name registers nothing extra"
   (define reg (make-tool-registry))
   (register-default-tools! reg #:only '("nonexistent"))
-  (check-equal? (length (list-tools reg)) 0
-                "unknown tool name should not register anything"))
+  (check-equal? (length (list-tools reg)) 0 "unknown tool name should not register anything"))
 
 ;; ============================================================
 ;; build-runtime-from-cli: verbose? flag
@@ -756,7 +729,7 @@
 (test-case "register-default-tools! #:only #f registers all"
   (define reg (make-tool-registry))
   (register-default-tools! reg #:only #f)
-  (check-equal? (length (tool-names reg)) 9))
+  (check-equal? (length (tool-names reg)) 10))
 
 (test-case "register-default-tools! #:only empty list registers none"
   (define reg (make-tool-registry))
@@ -776,29 +749,34 @@
   (define tmp-dir (make-temp-project-dir))
   (define config-path (build-path tmp-dir "custom-config.json"))
   (call-with-output-file config-path
-    (lambda (out)
-      (write-json
-       (hasheq 'providers
-               (hasheq 'openai
-                       (hasheq 'base-url "https://api.openai.com/v1"
-                               'models '("gpt-4o")
-                               'api-key-env "Q_TEST_CONFIG_PATH_KEY")))
-       out)))
+                         (lambda (out)
+                           (write-json (hasheq 'providers
+                                               (hasheq 'openai
+                                                       (hasheq 'base-url
+                                                               "https://api.openai.com/v1"
+                                                               'models
+                                                               '("gpt-4o")
+                                                               'api-key-env
+                                                               "Q_TEST_CONFIG_PATH_KEY")))
+                                       out)))
   (putenv "Q_TEST_CONFIG_PATH_KEY" "sk-test-config-path")
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define cfg (parse-cli-args (vector "--config" (path->string config-path)
-                                           "--model" "gpt-4o"
-                                           "--project-dir" (path->string tmp-dir))))
-      (define rt-config (cli-config->runtime-config cfg))
-      (define settings (load-settings tmp-dir #:config-path config-path))
-      (define p (build-provider rt-config settings))
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (putenv "Q_TEST_CONFIG_PATH_KEY" ""))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define cfg
+                    (parse-cli-args (vector "--config"
+                                            (path->string config-path)
+                                            "--model"
+                                            "gpt-4o"
+                                            "--project-dir"
+                                            (path->string tmp-dir))))
+                  (define rt-config (cli-config->runtime-config cfg))
+                  (define settings (load-settings tmp-dir #:config-path config-path))
+                  (define p (build-provider rt-config settings))
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda ()
+                  (cleanup-temp-dir tmp-dir)
+                  (putenv "Q_TEST_CONFIG_PATH_KEY" ""))))
 
 ;; ============================================================
 ;; build-provider: local providers without API keys (BUG-02 fix)
@@ -809,89 +787,75 @@
     (make-temp-project-with-config
      (hasheq 'providers
              (hasheq 'local
-                     (hasheq 'base-url "http://127.0.0.1:8080/v1"
-                             'models '("gemma-4-e4b-it"))))))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "gemma-4-e4b-it"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      ;; Should NOT fall back to mock provider
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+                     (hasheq 'base-url "http://127.0.0.1:8080/v1" 'models '("gemma-4-e4b-it"))))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gemma-4-e4b-it"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  ;; Should NOT fall back to mock provider
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: local provider (localhost hostname) works without API key"
   (define tmp-dir
     (make-temp-project-with-config
      (hasheq 'providers
-             (hasheq 'local
-                     (hasheq 'base-url "http://localhost:8080/v1"
-                             'models '("llama-3-8b"))))))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "llama-3-8b"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      ;; Should NOT fall back to mock provider
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+             (hasheq 'local (hasheq 'base-url "http://localhost:8080/v1" 'models '("llama-3-8b"))))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "llama-3-8b"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  ;; Should NOT fall back to mock provider
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: local provider (192.168.x.x) works without API key"
   (define tmp-dir
     (make-temp-project-with-config
      (hasheq 'providers
              (hasheq 'local
-                     (hasheq 'base-url "http://192.168.1.100:8080/v1"
-                             'models '("mistral-7b"))))))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "mistral-7b"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      ;; Should NOT fall back to mock provider
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "openai-compatible"))
-    (lambda () (cleanup-temp-dir tmp-dir))))
+                     (hasheq 'base-url "http://192.168.1.100:8080/v1" 'models '("mistral-7b"))))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "mistral-7b"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  ;; Should NOT fall back to mock provider
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "openai-compatible"))
+                (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: cloud provider still requires API key"
   (define tmp-dir
-    (make-temp-project-with-config
-     (hasheq 'providers
-             (hasheq 'openai
-                     (hasheq 'base-url "https://api.openai.com/v1"
-                             'models '("gpt-4o")
-                             'api-key-env "Q_TEST_CLOUD_NO_KEY")))))
+    (make-temp-project-with-config (hasheq 'providers
+                                           (hasheq 'test-cloud-nokey
+                                                   (hasheq 'base-url
+                                                           "https://api.example.com/v1"
+                                                           'models
+                                                           '("gpt-4o")
+                                                           'api-key-env
+                                                           "Q_TEST_CLOUD_NO_KEY")))))
   ;; Ensure env var is NOT set
   (putenv "Q_TEST_CLOUD_NO_KEY" "")
   (define orig-val (getenv "Q_TEST_CLOUD_NO_KEY"))
-  (dynamic-wind
-    (lambda () (void))
-    (lambda ()
-      (define config
-        (make-hash
-         (list (cons 'project-dir tmp-dir)
-               (cons 'model "gpt-4o"))))
-      (define settings (load-settings tmp-dir))
-      (define p (build-provider config settings))
-      ;; Should fall back to mock provider for cloud without API key
-      (check-pred provider? p)
-      (check-equal? (provider-name p) "mock"))
-    (lambda ()
-      (cleanup-temp-dir tmp-dir)
-      (if orig-val
-          (putenv "Q_TEST_CLOUD_NO_KEY" orig-val)
-          (putenv "Q_TEST_CLOUD_NO_KEY" "")))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define config
+                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
+                  (define settings (load-settings tmp-dir))
+                  (define p (build-provider config settings))
+                  ;; Should fall back to mock provider for cloud without API key
+                  (check-pred provider? p)
+                  (check-equal? (provider-name p) "mock"))
+                (lambda ()
+                  (cleanup-temp-dir tmp-dir)
+                  (if orig-val
+                      (putenv "Q_TEST_CLOUD_NO_KEY" orig-val)
+                      (putenv "Q_TEST_CLOUD_NO_KEY" "")))))

@@ -8,11 +8,14 @@
 ;; register-default-tools! — registers all tools
 ;; ============================================================
 
-(test-case "register-default-tools! registers all 9 built-in tools"
+(test-case "register-default-tools! registers all 10 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (sort (tool-names reg) string<?))
-  (check equal? names (sort '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl") string<?)))
+  (check equal?
+         names
+         (sort '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl" "spawn-subagent")
+               string<?)))
 
 (test-case "each registered tool has correct name"
   (define reg (make-tool-registry))
@@ -35,9 +38,9 @@
   (register-default-tools! reg)
   (for ([name '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl")])
     (define t (lookup-tool reg name))
-    (check-pred hash? (tool-schema t)
-                (format "tool ~a schema should be a hash" name))
-    (check-equal? (hash-ref (tool-schema t) 'type #f) "object"
+    (check-pred hash? (tool-schema t) (format "tool ~a schema should be a hash" name))
+    (check-equal? (hash-ref (tool-schema t) 'type #f)
+                  "object"
                   (format "tool ~a schema should have type object" name))))
 
 (test-case "each registered tool has a procedure execute"
@@ -45,8 +48,7 @@
   (register-default-tools! reg)
   (for ([name '("read" "write" "edit" "bash" "grep" "find" "ls" "date" "firecrawl")])
     (define t (lookup-tool reg name))
-    (check-pred procedure? (tool-execute t)
-                (format "tool ~a execute should be a procedure" name))))
+    (check-pred procedure? (tool-execute t) (format "tool ~a execute should be a procedure" name))))
 
 ;; ============================================================
 ;; register-default-tools! with #:only filter
