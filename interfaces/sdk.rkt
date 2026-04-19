@@ -164,7 +164,9 @@
          model-name ; string or #f — default model
          max-iterations ; integer — max tool-call loops (default 10)
          system-instructions ; (listof string) — injected system prompts
-         token-budget-threshold) ; integer — token budget warning threshold
+         token-budget-threshold
+         resource-loader
+         session-manager) ; integer — token budget warning threshold
   #:transparent)
 
 ;; Runtime handle — wraps all configured components + active session
@@ -204,7 +206,9 @@
                       #:max-iterations [max-iterations 10]
                       #:system-instructions [system-instructions '()]
                       #:token-budget-threshold [token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD]
-                      #:cancellation-token [cancellation-token #f])
+                      #:cancellation-token [cancellation-token #f]
+                      #:resource-loader [resource-loader #f]
+                      #:session-manager [session-mgr #f])
   (make-runtime-internal (runtime-config provider
                                          tool-registry
                                          extension-registry
@@ -213,7 +217,9 @@
                                          model-name
                                          max-iterations
                                          system-instructions
-                                         token-budget-threshold)
+                                         token-budget-threshold
+                                         resource-loader
+                                         session-mgr)
                          #f
                          (or cancellation-token (make-cancellation-token))))
 
@@ -509,7 +515,9 @@
                               #:tool-registry [tool-registry (make-tool-registry)]
                               #:extension-registry [extension-registry #f]
                               #:event-bus [event-bus (make-event-bus)]
-                              #:thinking-level [thinking-level #f])
+                              #:thinking-level [thinking-level #f]
+                              #:resource-loader [resource-loader #f]
+                              #:session-manager [session-mgr #f])
   (define rt
     (make-runtime #:provider provider
                   #:session-dir session-dir
@@ -519,7 +527,9 @@
                   #:model-name model-name
                   #:max-iterations max-iterations
                   #:system-instructions system-instructions
-                  #:token-budget-threshold token-budget-threshold))
+                  #:token-budget-threshold token-budget-threshold
+                  #:resource-loader resource-loader
+                  #:session-manager session-mgr))
   (define opened (open-session rt session-id))
   (when (and thinking-level (runtime-rt-session opened))
     (session:set-thinking-level! (runtime-rt-session opened) thinking-level))
