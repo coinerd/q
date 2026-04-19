@@ -22,6 +22,8 @@
          racket/file
          racket/string
          racket/sequence
+         racket/port
+         file/sha1
          json
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt")
@@ -55,7 +57,11 @@
          in-memory-fork!
          ;; Custom entry helpers (#1147)
          append-custom-entry!
-         load-custom-entries)
+         load-custom-entries
+         ;; Hash chain (#1287)
+         verify-hash-chain
+         compute-event-hash
+         GENESIS-HASH)
 
 ;; ── Write-ahead marker ──
 
@@ -95,14 +101,54 @@
   (when (and dir (not (directory-exists? dir)))
     (make-directory* dir)))
 
+;; ── Hash chain (#1287) ──
+
+;; Sentinel value for the first entry in a hash chain.
+(define GENESIS-HASH "genesis")
+
+;; Compute the SHA-256 hash for a JSONL event entry.
+;; Hash input: canonical JSON of the entry with prev_hash field,
+;; but with 'hash' field removed (so we don't hash our own output).
+(define (compute-event-hash entry prev-hash)
+  (define with-prev (hash-set entry 'prev_hash prev-hash))
+  (define without-hash (hash-remove with-prev 'hash))
+  (define canonical (jsexpr->string without-hash))
+  (bytes->hex-string (sha256-bytes (open-input-string canonical))))
+
+;; Read the hash of the last entry in a JSONL file (or GENESIS-HASH if empty/missing).
+(define (read-last-hash path)
+  (define last-entries (jsonl-read-last path 1))
+  (cond
+    [(null? last-entries) GENESIS-HASH]
+    [else
+     (define last (car last-entries))
+     (if (hash? last)
+         (hash-ref last 'hash GENESIS-HASH)
+         GENESIS-HASH)]))
+
+;; Recompute hash chain for a list of jsexpr entries.
+;; Returns list of entries with valid prev_hash and hash fields.
+(define (recompute-hash-chain entries)
+  (define prev-box (box GENESIS-HASH))
+  (for/list ([e (in-list entries)])
+    (define prev (unbox prev-box))
+    (define h (compute-event-hash e prev))
+    (set-box! prev-box h)
+    (hash-set* e 'prev_hash prev 'hash h)))
+
 ;; ── Append operations ──
 
 ;; path-string? message? -> void?
 (define (append-entry! path msg)
   ;; Append a single message entry to the session JSONL log.
   ;; Uses write-ahead marker for crash safety.
+  ;; Includes hash chain for tamper detection (#1287).
   (write-pending-marker! path 1)
-  (jsonl-append! path (message->jsexpr msg))
+  (define prev-hash (read-last-hash path))
+  (define entry (message->jsexpr msg))
+  (define h (compute-event-hash entry prev-hash))
+  (define chained-entry (hash-set* entry 'prev_hash prev-hash 'hash h))
+  (jsonl-append! path chained-entry)
   (remove-pending-marker! path))
 
 ;; path-string? (listof message?) -> void?
@@ -110,11 +156,20 @@
   ;; Append multiple message entries atomically per commit boundary.
   ;; All entries are written in one filesystem operation.
   ;; If msgs is empty, does nothing (and does not create the file).
+  ;; Includes hash chain for tamper detection (#1287).
   (when (null? msgs)
     (void))
   (unless (null? msgs)
     (write-pending-marker! path (length msgs))
-    (define jsexprs (map message->jsexpr msgs))
+    (define prev-hash (read-last-hash path))
+    (define prev-box (box prev-hash))
+    (define jsexprs
+      (for/list ([msg (in-list msgs)])
+        (define entry (message->jsexpr msg))
+        (define prev (unbox prev-box))
+        (define h (compute-event-hash entry prev))
+        (set-box! prev-box h)
+        (hash-set* entry 'prev_hash prev 'hash h)))
     (jsonl-append-entries! path jsexprs)
     (remove-pending-marker! path)))
 
@@ -328,7 +383,74 @@
                 removed
                 (or bak-path "N/A")))
 
+     ;; Recompute hash chain on repaired entries
+     (when (> removed 0)
+       (when (file-exists? session-log-path)
+         (define repaired-entries (jsonl-read-all session-log-path))
+         (define chained (recompute-hash-chain repaired-entries))
+         (delete-file session-log-path)
+         (for ([e (in-list chained)])
+           (jsonl-append! session-log-path e))))
+
      (hasheq 'entries-kept (length valid-entries) 'entries-removed removed)]))
+
+;; ── Hash chain verification (#1287) ──
+
+(define (verify-hash-chain session-log-path)
+  ;; Verify the hash chain of a session log.
+  ;; Returns a hash with:
+  ;;   'valid?        — #t if chain is intact (or empty)
+  ;;   'has-hashes?   — #t if any entry has hash fields (false for legacy logs)
+  ;;   'chain-length  — number of entries with hash fields
+  ;;   'broken-links  — count of broken prev_hash → hash links
+  ;;   'broken-at     — list of line numbers where chain breaks
+  (cond
+    [(not (file-exists? session-log-path))
+     (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
+    [else
+     (define entries (jsonl-read-all session-log-path))
+     (cond
+       [(null? entries)
+        (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
+       [else
+        (define numbered
+          (for/list ([e (in-list entries)]
+                     [i (in-naturals 1)])
+            (cons i e)))
+        (define has-any-hashes?
+          (for/or ([ne (in-list numbered)])
+            (and (hash? (cdr ne)) (hash-has-key? (cdr ne) 'hash))))
+        (cond
+          [(not has-any-hashes?)
+           (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
+          [else
+           ;; Walk the chain
+           (define-values (broken-links broken-at prev-hash)
+             (for/fold ([broken 0]
+                        [at '()]
+                        [prev GENESIS-HASH])
+                       ([ne (in-list numbered)])
+               (define i (car ne))
+               (define e (cdr ne))
+               (define entry-prev (hash-ref e 'prev_hash #f))
+               (define entry-hash (hash-ref e 'hash #f))
+               (cond
+                 ;; Entry without hash — skip, chain continues from prev
+                 [(not entry-hash) (values broken at prev)]
+                 ;; Broken link!
+                 [(not (equal? entry-prev prev)) (values (add1 broken) (cons i at) entry-hash)]
+                 ;; Valid link
+                 [else (values broken at entry-hash)])))
+           (hasheq 'valid?
+                   (= broken-links 0)
+                   'has-hashes?
+                   #t
+                   'chain-length
+                   (length entries)
+                   'broken-links
+                   broken-links
+                   'broken-at
+                   (reverse broken-at))])])]))
 
 ;; ============================================================
 ;; Session versioning (#499)

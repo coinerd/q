@@ -42,7 +42,7 @@
          no-tools? ; boolean
          tools ; list of string (tool names to enable)
          session-dir ; path-string or #f
-         sessions-subcommand ; symbol: 'list | 'info | 'delete | #f
+         sessions-subcommand ; symbol: 'list | 'info | 'delete | 'verify | #f
          sessions-args ; list of string (subcommand args)
          keybindings-path ; path-string or #f — custom keybindings file (#1118)
          )
@@ -352,7 +352,7 @@
     [(equal? arg "doctor") (loop (add1 i) (acc-set acc 'command 'doctor))]
     ;; "init" subcommand
     [(equal? arg "init") (loop (add1 i) (acc-set acc 'command 'init))]
-    ;; "sessions" subcommand — q sessions <list|info|delete> [args...]
+    ;; "sessions" subcommand — q sessions <list|info|delete|verify> [args...]
     [(equal? arg "sessions")
      (if (< (add1 i) n)
          (let ([sub (vector-ref vec (add1 i))])
@@ -361,12 +361,35 @@
                [(equal? sub "list") 'list]
                [(equal? sub "info") 'info]
                [(equal? sub "delete") 'delete]
+               [(equal? sub "verify") 'verify]
                [else #f]))
            (if sub-sym
                (let ([rest (for/list ([j (in-range (+ i 2) n)])
                              (vector-ref vec j))])
                  (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f sub-sym rest #f))
                (make-help-config)))
+         (make-help-config))]
+    ;; "verify-session" top-level command — q verify-session <path> [--repair]
+    [(equal? arg "verify-session")
+     (if (< (add1 i) n)
+         (let* ([path-arg (vector-ref vec (add1 i))]
+                [rest-args (for/list ([j (in-range (+ i 2) n)])
+                             (vector-ref vec j))])
+           (cli-config 'sessions
+                       #f
+                       #f
+                       #f
+                       'interactive
+                       #f
+                       #f
+                       #f
+                       10
+                       #f
+                       '()
+                       #f
+                       'verify
+                       (cons path-arg rest-args)
+                       #f))
          (make-help-config))]
     ;; Default: treat as prompt
     ;; Second positional — ignore
