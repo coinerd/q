@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "q Package Index",
+  "description": "Schema for the q agent package index. The index is a static JSON file listing available packages.",
+  "type": "object",
+  "required": ["version", "updated", "packages"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Index format version (currently 1)",
+      "const": 1
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last index update"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "description", "author", "repo", "checksum"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "description": "Package name (lowercase, hyphens allowed)"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+",
+            "description": "SemVer version string"
+          },
+          "description": {
+            "type": "string",
+            "description": "One-line package description"
+          },
+          "author": {
+            "type": "string",
+            "description": "Author name or handle"
+          },
+          "repo": {
+            "type": "string",
+            "format": "uri",
+            "description": "Repository URL"
+          },
+          "tarball": {
+            "type": "string",
+            "format": "uri",
+            "description": "Download URL for the package tarball"
+          },
+          "checksum": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 checksum of the tarball"
+          },
+          "min-q-version": {
+            "type": "string",
+            "description": "Minimum q version required"
+          },
+          "max-q-version": {
+            "type": "string",
+            "description": "Maximum q version supported (exclusive)"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Searchable keywords"
+          },
+          "license": {
+            "type": "string",
+            "description": "SPDX license identifier"
+          },
+          "collection": {
+            "type": "string",
+            "description": "Racket collection name"
+          },
+          "deps": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Package dependencies"
+          }
+        }
+      }
+    }
+  }
+}
