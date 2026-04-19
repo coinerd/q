@@ -18,51 +18,51 @@
 ;; Provides
 ;; ============================================================
 
-(provide
- ;; Struct & predicate
- (struct-out qpm-manifest)
- qpm-type?
- ;; Constructor with keyword args
- (contract-out
-  [make-qpm-manifest
-   (->* [#:name string?
-         #:version string?
-         #:api-version string?
-         #:type (or/c 'extension 'skill 'bundle)
-         #:description string?
-         #:author string?]
-        [#:compat (or/c #f string?)
-         #:files (listof string?)
-         #:checksum (or/c #f string?)
-         #:entry (or/c #f string?)
-         #:homepage (or/c #f string?)
-         #:license (or/c #f string?)]
-        qpm-manifest?)]
-  [validate-manifest     (-> qpm-manifest? (values boolean? (listof string?)))]
-  [qpm-manifest->jsexpr  (-> qpm-manifest? hash?)]
-  [jsexpr->qpm-manifest  (-> any/c (or/c qpm-manifest? #f))]
-  [read-qpm-manifest     (-> (or/c path-string? path?) (or/c qpm-manifest? #f))]
-  [write-qpm-manifest    (-> qpm-manifest? (or/c path-string? path?) void?)]
-  [qpm-manifest=?        (-> qpm-manifest? qpm-manifest? boolean?)]
-  [compute-manifest-checksum (-> (or/c path-string? path?) string?)]))
+;; Struct & predicate
+(provide (struct-out qpm-manifest)
+         qpm-type?
+         ;; Constructor with keyword args
+         (contract-out [make-qpm-manifest
+                        (->* [#:name string?
+                              #:version string?
+                              #:api-version string?
+                              #:type (or/c 'extension 'skill 'bundle)
+                              #:description string?
+                              #:author string?]
+                             [#:compat (or/c #f string?)
+                              #:compatibility (or/c #f hash?)
+                              #:files (listof string?)
+                              #:checksum (or/c #f string?)
+                              #:entry (or/c #f string?)
+                              #:homepage (or/c #f string?)
+                              #:license (or/c #f string?)]
+                             qpm-manifest?)]
+                       [validate-manifest (-> qpm-manifest? (values boolean? (listof string?)))]
+                       [qpm-manifest->jsexpr (-> qpm-manifest? hash?)]
+                       [jsexpr->qpm-manifest (-> any/c (or/c qpm-manifest? #f))]
+                       [read-qpm-manifest (-> (or/c path-string? path?) (or/c qpm-manifest? #f))]
+                       [write-qpm-manifest (-> qpm-manifest? (or/c path-string? path?) void?)]
+                       [qpm-manifest=? (-> qpm-manifest? qpm-manifest? boolean?)]
+                       [compute-manifest-checksum (-> (or/c path-string? path?) string?)]))
 
 ;; ============================================================
 ;; Struct definition
 ;; ============================================================
 
 (struct qpm-manifest
-  (name         ; string?
-   version      ; string?
-   api-version  ; string?
-   type         ; (or/c 'extension 'skill 'bundle)
-   description  ; string?
-   author       ; string?
-   compat       ; (or/c #f string?)
-   files        ; (listof string?)
-   checksum     ; (or/c #f string?)
-   entry        ; (or/c #f string?)
-   homepage     ; (or/c #f string?)
-   license)     ; (or/c #f string?)
+        (name ; string?
+         version ; string?
+         api-version ; string?
+         type ; (or/c 'extension 'skill 'bundle)
+         description ; string?
+         author ; string?
+         compat ; (or/c #f string?)
+         compatibility ; (or/c #f hash?) -- structured compat: {min-q-version, max-q-version, tested-versions}
+         files ; (listof string?)
+         checksum ; (or/c #f string?)
+         entry ; (or/c #f string?)
+         homepage ; (or/c #f string?)
+         license) ; (or/c #f string?)
   #:transparent)
 
 ;; ============================================================
@@ -83,13 +83,25 @@
                            #:description description
                            #:author author
                            #:compat [compat #f]
+                           #:compatibility [compatibility #f]
                            #:files [files '()]
                            #:checksum [checksum #f]
                            #:entry [entry #f]
                            #:homepage [homepage #f]
                            #:license [license #f])
-  (qpm-manifest name version api-version type description author
-                compat files checksum entry homepage license))
+  (qpm-manifest name
+                version
+                api-version
+                type
+                description
+                author
+                compat
+                compatibility
+                files
+                checksum
+                entry
+                homepage
+                license))
 
 ;; ============================================================
 ;; Validation helpers
@@ -97,18 +109,15 @@
 
 ;; Loose semver check: digit(s).digit(s).digit(s)
 (define (looks-like-semver? s)
-  (and (string? s)
-       (regexp-match? #rx"^[0-9]+\\.[0-9]+\\.[0-9]+" s)))
+  (and (string? s) (regexp-match? #rx"^[0-9]+\\.[0-9]+\\.[0-9]+" s)))
 
 ;; Semver range: e.g. ">=0.4.2", "^1.0.0", "~2.3.0"
 (define (looks-like-semver-range? s)
-  (and (string? s)
-       (regexp-match? #rx"[<>=~^]" s)))
+  (and (string? s) (regexp-match? #rx"[<>=~^]" s)))
 
 ;; api-version: plain digit string like "1"
 (define (looks-like-api-version? s)
-  (and (string? s)
-       (regexp-match? #rx"^[0-9]+$" s)))
+  (and (string? s) (regexp-match? #rx"^[0-9]+$" s)))
 
 ;; ============================================================
 ;; Validation
@@ -121,34 +130,43 @@
   ;; name
   (let ([n (qpm-manifest-name m)])
     (cond
-      [(not (string? n))             (add-error! "name must be a string")]
+      [(not (string? n)) (add-error! "name must be a string")]
       [(string=? (string-trim n) "") (add-error! "name must not be empty")]))
   ;; version
   (unless (looks-like-semver? (qpm-manifest-version m))
-    (add-error! (format "version must look like semver (x.y.z), got: ~a"
-                        (qpm-manifest-version m))))
+    (add-error! (format "version must look like semver (x.y.z), got: ~a" (qpm-manifest-version m))))
   ;; api-version
   (unless (looks-like-api-version? (qpm-manifest-api-version m))
-    (add-error! (format "api-version must be a digit string, got: ~a"
-                        (qpm-manifest-api-version m))))
+    (add-error! (format "api-version must be a digit string, got: ~a" (qpm-manifest-api-version m))))
   ;; type
   (unless (qpm-type? (qpm-manifest-type m))
-    (add-error! (format "type must be extension, skill, or bundle, got: ~a"
-                        (qpm-manifest-type m))))
+    (add-error! (format "type must be extension, skill, or bundle, got: ~a" (qpm-manifest-type m))))
   ;; description
   (let ([d (qpm-manifest-description m)])
     (cond
-      [(not (string? d))             (add-error! "description must be a string")]
+      [(not (string? d)) (add-error! "description must be a string")]
       [(string=? (string-trim d) "") (add-error! "description must not be empty")]))
   ;; author
   (let ([a (qpm-manifest-author m)])
     (cond
-      [(not (string? a))             (add-error! "author must be a string")]
+      [(not (string? a)) (add-error! "author must be a string")]
       [(string=? (string-trim a) "") (add-error! "author must not be empty")]))
   ;; compat (optional)
   (let ([c (qpm-manifest-compat m)])
     (when (and c (not (looks-like-semver-range? c)))
       (add-error! (format "compat must look like a semver range, got: ~a" c))))
+  ;; compatibility (optional structured)
+  (let ([comp (qpm-manifest-compatibility m)])
+    (when comp
+      (unless (hash? comp)
+        (add-error! "compatibility must be a hash"))
+      (when (hash? comp)
+        (unless (hash-has-key? comp 'min-q-version)
+          (add-error! "compatibility hash must contain min-q-version"))
+        (when (hash-has-key? comp 'min-q-version)
+          (unless (and (string? (hash-ref comp 'min-q-version))
+                       (looks-like-semver? (hash-ref comp 'min-q-version)))
+            (add-error! "compatibility min-q-version must be a semver string"))))))
   ;; Return
   (values (null? errors) errors))
 
@@ -158,24 +176,32 @@
 
 (define (qpm-manifest->jsexpr m)
   (define h (make-hasheq))
-  (hash-set! h 'name        (qpm-manifest-name m))
-  (hash-set! h 'version     (qpm-manifest-version m))
+  (hash-set! h 'name (qpm-manifest-name m))
+  (hash-set! h 'version (qpm-manifest-version m))
   (hash-set! h 'api_version (qpm-manifest-api-version m))
-  (hash-set! h 'type        (symbol->string (qpm-manifest-type m)))
+  (hash-set! h 'type (symbol->string (qpm-manifest-type m)))
   (hash-set! h 'description (qpm-manifest-description m))
-  (hash-set! h 'author      (qpm-manifest-author m))
-  (hash-set! h 'files       (qpm-manifest-files m))
+  (hash-set! h 'author (qpm-manifest-author m))
+  (hash-set! h 'files (qpm-manifest-files m))
   ;; Optional fields: only include if non-#f
   (let ([c (qpm-manifest-compat m)])
-    (when c (hash-set! h 'compat c)))
+    (when c
+      (hash-set! h 'compat c)))
+  (let ([comp (qpm-manifest-compatibility m)])
+    (when comp
+      (hash-set! h 'compatibility comp)))
   (let ([c (qpm-manifest-checksum m)])
-    (when c (hash-set! h 'checksum c)))
+    (when c
+      (hash-set! h 'checksum c)))
   (let ([e (qpm-manifest-entry m)])
-    (when e (hash-set! h 'entry e)))
+    (when e
+      (hash-set! h 'entry e)))
   (let ([h2 (qpm-manifest-homepage m)])
-    (when h2 (hash-set! h 'homepage h2)))
+    (when h2
+      (hash-set! h 'homepage h2)))
   (let ([l (qpm-manifest-license m)])
-    (when l (hash-set! h 'license l)))
+    (when l
+      (hash-set! h 'license l)))
   ;; Convert to write-json-compatible: use string keys with underscores
   (for/hasheq ([(k v) (in-hash h)])
     (values (string->symbol (string-replace (symbol->string k) "-" "_")) v)))
@@ -189,39 +215,38 @@
 
 (define (json-get j key)
   ;; Try both underscore and hyphen versions
-  (hash-ref j key
-    (lambda ()
-      (define alt (string->symbol
-                    (string-replace (symbol->string key) "_" "-")))
-      (hash-ref j alt
-        (lambda () #f)))))
+  (hash-ref j
+            key
+            (lambda ()
+              (define alt (string->symbol (string-replace (symbol->string key) "_" "-")))
+              (hash-ref j alt (lambda () #f)))))
 
 (define (json-req j key)
-  (or (json-get j key)
-      (error (format "missing required key: ~a" key))))
+  (or (json-get j key) (error (format "missing required key: ~a" key))))
 
 (define (jsexpr->qpm-manifest j)
   (with-handlers ([exn:fail? (lambda (_) #f)])
-    (unless (hash? j) (error "not a hash"))
+    (unless (hash? j)
+      (error "not a hash"))
     (define type-val (json-get j 'type))
     (define type-sym
       (cond
         [(symbol? type-val) type-val]
         [(string? type-val) (string->symbol type-val)]
         [else (error "bad type value")]))
-    (make-qpm-manifest
-     #:name        (json-req j 'name)
-     #:version     (json-req j 'version)
-     #:api-version (or (json-get j 'api_version) (json-get j 'api-version) "")
-     #:type        type-sym
-     #:description (json-req j 'description)
-     #:author      (json-req j 'author)
-     #:compat      (json-get j 'compat)
-     #:files       (or (json-get j 'files) '())
-     #:checksum    (json-get j 'checksum)
-     #:entry       (json-get j 'entry)
-     #:homepage    (json-get j 'homepage)
-     #:license     (json-get j 'license))))
+    (make-qpm-manifest #:name (json-req j 'name)
+                       #:version (json-req j 'version)
+                       #:api-version (or (json-get j 'api_version) (json-get j 'api-version) "")
+                       #:type type-sym
+                       #:description (json-req j 'description)
+                       #:author (json-req j 'author)
+                       #:compat (json-get j 'compat)
+                       #:compatibility (json-get j 'compatibility)
+                       #:files (or (json-get j 'files) '())
+                       #:checksum (json-get j 'checksum)
+                       #:entry (json-get j 'entry)
+                       #:homepage (json-get j 'homepage)
+                       #:license (json-get j 'license))))
 
 ;; ============================================================
 ;; File I/O
@@ -230,37 +255,38 @@
 (define (read-qpm-manifest path)
   (with-handlers ([exn:fail? (lambda (_) #f)])
     (call-with-input-file path
-      (lambda (in)
-        (define j (read-json in))
-        (jsexpr->qpm-manifest j))
-      #:mode 'text)))
+                          (lambda (in)
+                            (define j (read-json in))
+                            (jsexpr->qpm-manifest j))
+                          #:mode 'text)))
 
 (define (write-qpm-manifest m path)
   (define h (qpm-manifest->jsexpr m))
   (call-with-output-file path
-    (lambda (out)
-      (write-json h out)
-      (newline out))
-    #:exists 'replace
-    #:mode 'text))
+                         (lambda (out)
+                           (write-json h out)
+                           (newline out))
+                         #:exists 'replace
+                         #:mode 'text))
 
 ;; ============================================================
 ;; Comparison
 ;; ============================================================
 
 (define (qpm-manifest=? a b)
-  (and (equal? (qpm-manifest-name a)        (qpm-manifest-name b))
-       (equal? (qpm-manifest-version a)     (qpm-manifest-version b))
+  (and (equal? (qpm-manifest-name a) (qpm-manifest-name b))
+       (equal? (qpm-manifest-version a) (qpm-manifest-version b))
        (equal? (qpm-manifest-api-version a) (qpm-manifest-api-version b))
-       (equal? (qpm-manifest-type a)        (qpm-manifest-type b))
+       (equal? (qpm-manifest-type a) (qpm-manifest-type b))
        (equal? (qpm-manifest-description a) (qpm-manifest-description b))
-       (equal? (qpm-manifest-author a)      (qpm-manifest-author b))
-       (equal? (qpm-manifest-compat a)      (qpm-manifest-compat b))
-       (equal? (qpm-manifest-files a)       (qpm-manifest-files b))
-       (equal? (qpm-manifest-checksum a)    (qpm-manifest-checksum b))
-       (equal? (qpm-manifest-entry a)       (qpm-manifest-entry b))
-       (equal? (qpm-manifest-homepage a)    (qpm-manifest-homepage b))
-       (equal? (qpm-manifest-license a)     (qpm-manifest-license b))))
+       (equal? (qpm-manifest-author a) (qpm-manifest-author b))
+       (equal? (qpm-manifest-compat a) (qpm-manifest-compat b))
+       (equal? (qpm-manifest-compatibility a) (qpm-manifest-compatibility b))
+       (equal? (qpm-manifest-files a) (qpm-manifest-files b))
+       (equal? (qpm-manifest-checksum a) (qpm-manifest-checksum b))
+       (equal? (qpm-manifest-entry a) (qpm-manifest-entry b))
+       (equal? (qpm-manifest-homepage a) (qpm-manifest-homepage b))
+       (equal? (qpm-manifest-license a) (qpm-manifest-license b))))
 
 ;; ============================================================
 ;; Checksum -- SHA-256 of all listed files, sorted and concatenated
@@ -277,6 +303,5 @@
      (lambda (out)
        (for ([f (in-list sorted-files)])
          (define full-path (build-path manifest-dir f))
-         (call-with-input-file full-path
-           (lambda (in) (display (port->string in) out)))))))
+         (call-with-input-file full-path (lambda (in) (display (port->string in) out)))))))
   (sha256-string digest-input))

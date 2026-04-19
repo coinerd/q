@@ -122,7 +122,7 @@
   ;; We can't pass a bad type through the constructor because the contract
   ;; enforces it. Instead we build a raw struct.
   (define bad-m (qpm-manifest "q-todo" "1.0.0" "1" 'invalid
-                              "desc" "author" #f '() #f #f #f #f))
+                              "desc" "author" #f #f '() #f #f #f #f))
   (define-values (ok? errors) (validate-manifest bad-m))
   (check-false ok?)
   (check-true (ormap (λ (e) (string-contains? e "type")) errors)))
