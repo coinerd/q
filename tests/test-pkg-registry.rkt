@@ -12,6 +12,7 @@
          json
          (only-in "../pkg/registry.rkt"
                   load-package-index
+                  fetch-remote-index
                   index-packages
                   search-packages
                   get-package-info
@@ -19,7 +20,8 @@
                   validate-index-entry
                   validate-index
                   install-package!
-                  verify-package))
+                  verify-package
+                  version<=?))
 
 ;; ---------------------------------------------------------------------------
 ;; Helpers
@@ -332,3 +334,65 @@
   (check-true (hash-has-key? result 'valid?))
   (check-true (hash-has-key? result 'checksum-match?))
   (check-true (hash-has-key? result 'details)))
+
+;; ---------------------------------------------------------------------------
+;; Tests: version<=? edge cases (FIX-02)
+;; ---------------------------------------------------------------------------
+
+(test-case "version<=?: standard 3-segment comparison"
+  (check-true (version<=? "0.10.0" "0.11.0"))
+  (check-true (version<=? "0.11.0" "0.11.0"))
+  (check-false (version<=? "0.12.0" "0.11.0")))
+
+(test-case "version<=?: 2-segment versions padded with 0"
+  (check-true (version<=? "0.10" "0.11.0"))
+  (check-true (version<=? "1.0" "1.0.0"))
+  (check-false (version<=? "0.12" "0.11.0")))
+
+(test-case "version<=?: 1-segment version"
+  (check-true (version<=? "1" "1.0.0"))
+  (check-true (version<=? "0" "0.11.3"))
+  (check-false (version<=? "2" "1.9.9")))
+
+(test-case "version<=?: 4-segment version truncated to 3"
+  (check-true (version<=? "1.0.0.1" "1.0.0"))
+  (check-true (version<=? "1.0.0.999" "1.0.1")))
+
+;; ---------------------------------------------------------------------------
+;; Tests: fetch-remote-index (FIX-07)
+;; ---------------------------------------------------------------------------
+
+(test-case "fetch-remote-index: returns #f for invalid URL"
+  ;; Network-dependent test: just verify it returns #f for a bad URL
+  (check-false (fetch-remote-index "https://invalid.example.test/nonexistent.json")))
+
+(test-case "fetch-remote-index: returns #f for malformed URL"
+  (check-false (fetch-remote-index "not-a-url")))
+
+;; ---------------------------------------------------------------------------
+;; Tests: install-package! download/checksum path (FIX-08)
+;; ---------------------------------------------------------------------------
+
+(test-case "install-package!: fails with invalid checksum format"
+  (define entry
+    (hasheq 'name
+            "q-test-checksum"
+            'version
+            "1.0.0"
+            'tarball
+            "file:///nonexistent/path.tar.gz"
+            'checksum
+            "invalid-checksum"))
+  (define result (install-package! entry))
+  (check-equal? (hash-ref result 'success?) #f))
+
+(test-case "install-package!: fails gracefully for missing tarball URL"
+  (define entry
+    (hasheq 'name
+            "q-test-no-tarball"
+            'version
+            "1.0.0"
+            'checksum
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"))
+  (define result (install-package! entry))
+  (check-equal? (hash-ref result 'success?) #f))

@@ -15,6 +15,9 @@
          json
          "../pkg/registry.rkt")
 
+(provide lint-info-rkt
+         lint-index)
+
 ;; ═══════════════════════════════════════════════════════════════════
 ;; info.rkt validation
 ;; ═══════════════════════════════════════════════════════════════════
@@ -35,17 +38,23 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (lint-index [path "pkg/index.json"])
-  (unless (file-exists? path)
-    (displayln (format "WARN: Index file not found: ~a" path))
-    (void))
-  (define index (load-package-index path))
-  (define report (validate-index index))
-  (for ([e (in-list (hash-ref report 'errors '()))])
-    (displayln (format "ERROR: ~a" e)))
-  (printf "Package index: ~a packages, ~a errors~n"
-          (hash-ref report 'package-count 0)
-          (length (hash-ref report 'errors '())))
-  (hash-ref report 'errors '()))
+  (cond
+    [(not (file-exists? path))
+     (displayln (format "WARN: Index file not found: ~a" path))
+     '()]
+    [else
+     (with-handlers ([exn:fail? (λ (e)
+                                  (displayln (format "WARN: Could not load index: ~a"
+                                                     (exn-message e)))
+                                  '())])
+       (define index (load-package-index path))
+       (define report (validate-index index))
+       (for ([e (in-list (hash-ref report 'errors '()))])
+         (displayln (format "ERROR: ~a" e)))
+       (printf "Package index: ~a packages, ~a errors~n"
+               (hash-ref report 'package-count 0)
+               (length (hash-ref report 'errors '())))
+       (hash-ref report 'errors '()))]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Main

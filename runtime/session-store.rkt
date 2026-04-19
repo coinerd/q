@@ -109,10 +109,28 @@
 ;; Compute the SHA-256 hash for a JSONL event entry.
 ;; Hash input: canonical JSON of the entry with prev_hash field,
 ;; but with 'hash' field removed (so we don't hash our own output).
+;; Canonical JSON serialization: sort keys alphabetically for deterministic hashing.
+;; Manually builds JSON string to guarantee key ordering independent of hash impl.
+(define (canonical-jsexpr->string v)
+  (cond
+    [(hash? v)
+     (define sorted-keys (sort (hash-keys v) symbol<?))
+     (define pairs
+       (for/list ([k (in-list sorted-keys)])
+         (format "\"~a\": ~a" k (canonical-jsexpr->string (hash-ref v k)))))
+     (format "{~a}" (string-join pairs ", "))]
+    [(list? v) (format "[~a]" (string-join (map canonical-jsexpr->string v) ", "))]
+    [(string? v) (jsexpr->string v)]
+    [(number? v) (number->string v)]
+    [(boolean? v) (if v "true" "false")]
+    [(eq? v 'null) "null"]
+    [(symbol? v) (format "\"~a\"" v)]
+    [else (format "~a" v)]))
+
 (define (compute-event-hash entry prev-hash)
   (define with-prev (hash-set entry 'prev_hash prev-hash))
   (define without-hash (hash-remove with-prev 'hash))
-  (define canonical (jsexpr->string without-hash))
+  (define canonical (canonical-jsexpr->string without-hash))
   (bytes->hex-string (sha256-bytes (open-input-string canonical))))
 
 ;; Read the hash of the last entry in a JSONL file (or GENESIS-HASH if empty/missing).

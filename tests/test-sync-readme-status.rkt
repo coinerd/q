@@ -7,7 +7,8 @@
 (require rackunit
          racket/file
          racket/port
-         racket/string)
+         racket/string
+         (only-in "../util/version.rkt" q-version))
 
 ;; ---------------------------------------------------------------------------
 ;; Resolve paths relative to q/ root (parent of tests/)
@@ -44,8 +45,8 @@
 
 (test-case "sync-readme-status: extracts current version"
   (define-values (out err) (run-script "--version"))
-  (check-true (string-contains? out "0.11.3")
-              (format "Expected version 0.11.3 in output, got: ~a~%err: ~a" out err)))
+  (check-true (string-contains? out q-version)
+              (format "Expected version ~a in output, got: ~a~%err: ~a" q-version out err)))
 
 (test-case "sync-readme-status: --check detects version mismatch"
   (define tmp-readme
@@ -66,18 +67,10 @@ EOF
               (format "Expected MISMATCH in output, got: ~a~%err: ~a" out err)))
 
 (test-case "sync-readme-status: --check passes for current version"
+  (define current-version-line (format "**v~a** — Current version. Some description." q-version))
   (define tmp-readme
-    (make-temp-readme #<<EOF
-# q
-
-## Status
-
-**v0.11.3** — Current version. Some description.
-
-## License
-MIT
-EOF
-                      ))
+    (make-temp-readme
+     (string-append "# q\n\n## Status\n\n" current-version-line "\n\n## License\nMIT")))
   (define-values (out err) (run-script "--check" (path->string tmp-readme)))
   (delete-file tmp-readme)
   (check-true (string-contains? out "OK") (format "Expected OK in output, got: ~a~%err: ~a" out err)))
@@ -98,8 +91,8 @@ EOF
   (define-values (out err) (run-script "--sync" (path->string tmp-readme)))
   (define updated (file->string tmp-readme))
   (delete-file tmp-readme)
-  (check-true (string-contains? updated "v0.11.3")
-              (format "Expected v0.11.3 in updated README, got: ~a" updated))
+  (check-true (string-contains? updated (format "v~a" q-version))
+              (format "Expected v~a in updated README, got: ~a" q-version updated))
   (check-false (string-contains? updated "v0.10.8") "Old version should be replaced"))
 
 (test-case "sync-readme-status: --sync preserves surrounding content"

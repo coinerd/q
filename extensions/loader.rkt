@@ -159,13 +159,20 @@
         (define stored-hash (hash-ref raw 'integrity #f))
         (cond
           [(not stored-hash)
-           ;; First load: store the integrity hash
+           ;; First load: store the integrity hash (skip on read-only dirs)
            (hash-set! raw 'integrity current-hash)
-           (call-with-output-file manifest-path
-                                  (lambda (out)
-                                    (write-json raw out)
-                                    (newline out))
-                                  #:exists 'replace)]
+           (with-handlers ([exn:fail:filesystem?
+                            (λ (e)
+                              (log-warning
+                               (format
+                                "extension '~a': could not write integrity hash (read-only dir): ~a"
+                                (hash-ref raw 'name "unknown")
+                                (exn-message e))))])
+             (call-with-output-file manifest-path
+                                    (lambda (out)
+                                      (write-json raw out)
+                                      (newline out))
+                                    #:exists 'replace))]
           [(not (equal? stored-hash current-hash))
            (raise (extension-load-error
                    (path->string path)
