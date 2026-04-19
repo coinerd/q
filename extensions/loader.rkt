@@ -21,6 +21,7 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../util/checksum.rkt"
+         "../util/version.rkt"
          "api.rkt"
          "manifest.rkt"
          "quarantine.rkt")
@@ -169,7 +170,26 @@
            (raise (extension-load-error
                    (path->string path)
                    (format "integrity hash mismatch: expected ~a, got ~a" stored-hash current-hash)
-                   'api-mismatch))])))
+                   'api-mismatch))])
+        ;; Compatibility check: warn if extension declares incompatible range
+        (when (hash-has-key? raw 'compatibility)
+          (define compat-hash (hash-ref raw 'compatibility))
+          (when (hash? compat-hash)
+            (define ext-name (hash-ref raw 'name "unknown"))
+            (define min-v (hash-ref compat-hash 'min-q-version #f))
+            (define max-v (hash-ref compat-hash 'max-q-version #f))
+            (when (and min-v (version<? q-version min-v))
+              (log-warning (format "extension '~a' requires q >= ~a, current version is ~a"
+                                   ext-name
+                                   min-v
+                                   q-version)))
+            (when (and max-v (string? max-v) (version<=? max-v q-version))
+              (log-warning
+               (format
+                "extension '~a' declares compatibility up to ~a (exclusive), current version is ~a"
+                ext-name
+                max-v
+                q-version)))))))
     ;; Dynamic require: the module must provide `the-extension`
     (dynamic-require mod-path 'the-extension)))
 
@@ -291,3 +311,20 @@
           (register-extension! registry ext)
           (set! loaded (cons name loaded))))))
   (reverse loaded))
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Version comparison helpers
+;; ═══════════════════════════════════════════════════════════════════
+
+(define (version-parts v)
+  (map (λ (s) (or (string->number s) 0)) (take (append (string-split v ".") '("0" "0" "0")) 3)))
+
+(define (version<=? a b)
+  (define pa (version-parts a))
+  (define pb (version-parts b))
+  (or (< (car pa) (car pb))
+      (and (= (car pa) (car pb))
+           (or (< (cadr pa) (cadr pb)) (and (= (cadr pa) (cadr pb)) (<= (caddr pa) (caddr pb)))))))
+
+(define (version<? a b)
+  (and (version<=? a b) (not (equal? a b))))
