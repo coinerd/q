@@ -46,3 +46,7 @@ doc/
 
 # Release tarballs
 dist/
+
+# Internal planning — never push
+.planning/
+../.planning/
