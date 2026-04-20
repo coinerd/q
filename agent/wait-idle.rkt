@@ -33,8 +33,10 @@
                 #:filter (lambda (evt)
                            (member (event-ev evt) '("iteration.completed" "iteration.ended")))))
   (define result
-    (if timeout-ms
-        (sync/timeout (/ timeout-ms 1000.0) done-channel)
-        (sync done-channel)))
-  (unsubscribe! bus sub-id)
+    (dynamic-wind void
+                  (lambda ()
+                    (if timeout-ms
+                        (sync/timeout (/ timeout-ms 1000.0) done-channel)
+                        (sync done-channel)))
+                  (lambda () (unsubscribe! bus sub-id))))
   (or result 'timeout))

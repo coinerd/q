@@ -5,7 +5,8 @@
 ;; Common helpers for parsing HTTP status lines and raising errors.
 ;; Used by anthropic.rkt, gemini.rkt, and openai-compatible.rkt.
 
-(require racket/contract)
+(require racket/contract
+         "provider-errors.rkt")
 
 (provide extract-status-code
          http-error?
@@ -39,6 +40,10 @@
 (define (http-error? status-code)
   (>= status-code 400))
 
-;; Raise exn:fail with a formatted HTTP error message.
-(define (raise-http-error! message)
-  (raise (exn:fail message (current-continuation-marks))))
+;; Raise provider-error with category inferred from HTTP status code.
+;; Falls back to exn:fail if no status code is provided.
+(define (raise-http-error! message [status-code #f])
+  (define category (classify-http-status status-code))
+  (if category
+      (raise (provider-error message (current-continuation-marks) status-code category))
+      (raise (exn:fail message (current-continuation-marks)))))

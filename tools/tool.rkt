@@ -5,6 +5,8 @@
          racket/set
          (only-in racket/string string-trim)
          json
+         ;; 3.2: Thread-safe registry access
+         (only-in racket/base make-semaphore call-with-semaphore)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          ;; ARCH-01: tool-call and tool-result structs from util/protocol-types.rkt
          (only-in "../util/protocol-types.rkt"
@@ -270,26 +272,29 @@
 ;; Tool registry
 ;; ============================================================
 
-(struct tool-registry (tools-box active-set-box) #:transparent)
+(struct tool-registry (tools-box active-set-box sem) #:transparent)
 
 (define (make-tool-registry)
-  (tool-registry (make-hash) (box #f)))
+  (tool-registry (make-hash) (box #f) (make-semaphore 1)))
 
 (define (register-tool! reg t)
   (unless (tool? t)
     (raise-argument-error 'register-tool! "tool?" t))
-  (define tbl (tool-registry-tools-box reg))
-  (define n (tool-name t))
-  (when (hash-has-key? tbl n)
-    (error 'register-tool! "tool already registered: ~a" n))
-  (hash-set! tbl n t))
+  (call-with-semaphore (tool-registry-sem reg)
+                       (lambda ()
+                         (define tbl (tool-registry-tools-box reg))
+                         (define n (tool-name t))
+                         (when (hash-has-key? tbl n)
+                           (error 'register-tool! "tool already registered: ~a" n))
+                         (hash-set! tbl n t))))
 
 (define (unregister-tool! reg name)
-  (define tbl (tool-registry-tools-box reg))
-  (hash-remove! tbl name))
+  (call-with-semaphore (tool-registry-sem reg)
+                       (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
 
 (define (lookup-tool reg name)
-  (hash-ref (tool-registry-tools-box reg) name #f))
+  (call-with-semaphore (tool-registry-sem reg)
+                       (lambda () (hash-ref (tool-registry-tools-box reg) name #f))))
 
 ;; tool->jsexpr : tool? -> hash?
 ;; Serialize a tool struct to the OpenAI normalized format.
@@ -314,7 +319,10 @@
 ;; Set which tools are active. #f means all tools are active.
 ;; active-names is (or/c #f (listof string?))
 (define (set-active-tools! reg active-names)
-  (set-box! (tool-registry-active-set-box reg) (and active-names (list->set active-names))))
+  (call-with-semaphore (tool-registry-sem reg)
+                       (lambda ()
+                         (set-box! (tool-registry-active-set-box reg)
+                                   (and active-names (list->set active-names))))))
 
 ;; Check if a tool is active.
 (define (tool-active? reg name)
@@ -323,7 +331,10 @@
 
 ;; List only active tools.
 (define (list-active-tools reg)
-  (filter (lambda (t) (tool-active? reg (tool-name t))) (hash-values (tool-registry-tools-box reg))))
+  (call-with-semaphore (tool-registry-sem reg)
+                       (lambda ()
+                         (filter (lambda (t) (tool-active? reg (tool-name t)))
+                                 (hash-values (tool-registry-tools-box reg))))))
 
 ;; List active tools in jsexpr format.
 (define (list-active-tools-jsexpr reg)
@@ -334,10 +345,11 @@
   (map tool->jsexpr (list-active-tools reg)))
 
 (define (list-tools reg)
-  (hash-values (tool-registry-tools-box reg)))
+  (call-with-semaphore (tool-registry-sem reg)
+                       (lambda () (hash-values (tool-registry-tools-box reg)))))
 
 (define (tool-names reg)
-  (hash-keys (tool-registry-tools-box reg)))
+  (call-with-semaphore (tool-registry-sem reg) (lambda () (hash-keys (tool-registry-tools-box reg)))))
 
 ;; ============================================================
 ;; Tool-call argument validation (for post-processing)
