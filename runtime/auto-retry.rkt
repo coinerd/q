@@ -14,14 +14,18 @@
          context-overflow-error?
          classify-error
          timeout-error?
+         rate-limit-error?
          ;; Retry execution
          with-auto-retry
          ;; Configuration
          default-max-retries
          default-base-delay-ms
+         default-rate-limit-base-delay-ms
          default-max-delay-ms
          ;; Struct for retry stats
-         (struct-out retry-stats))
+         (struct-out retry-stats)
+         ;; Struct for retry exhaustion (A3)
+         (struct-out retry-exhausted))
 
 ;; ============================================================
 ;; Configuration
@@ -29,13 +33,18 @@
 
 (define default-max-retries 2)
 (define default-base-delay-ms 1000)
-(define default-max-delay-ms 30000)
+(define default-rate-limit-base-delay-ms 10000)
+(define default-max-delay-ms 60000)
 
 ;; ============================================================
 ;; Structs
 ;; ============================================================
 
 (struct retry-stats (attempts final-delay-ms succeeded?) #:transparent)
+
+;; Raised when retries are exhausted. Wraps the original exception with metadata
+;; so callers (agent-session, TUI) can distinguish exhaustion from first failure.
+(struct retry-exhausted exn:fail (original-exn attempts last-error-type total-delay-ms) #:transparent)
 
 ;; ============================================================
 ;; Predicates
@@ -93,6 +102,13 @@
   (for/or ([pattern (in-list TIMEOUT_PATTERNS)])
     (string-contains? (string-downcase msg) pattern)))
 
+(define RATE_LIMIT_PATTERNS '("429" "rate" "overloaded" "quota" "too many"))
+
+(define (rate-limit-error? exn)
+  (define msg (exn-message exn))
+  (for/or ([pattern (in-list RATE_LIMIT_PATTERNS)])
+    (string-contains? (string-downcase msg) pattern)))
+
 ;; Classify an error into a symbolic type for recovery hint rendering.
 ;; Returns one of: 'timeout, 'rate-limit, 'auth, 'context-overflow,
 ;; 'max-iterations, 'provider-error
@@ -134,26 +150,43 @@
 (define (with-auto-retry thunk
                          #:max-retries [max-retries default-max-retries]
                          #:base-delay-ms [base-delay-ms default-base-delay-ms]
+                         #:rate-limit-base-delay-ms
+                         [rl-base-delay-ms default-rate-limit-base-delay-ms]
                          #:max-delay-ms [max-delay-ms default-max-delay-ms]
                          #:on-retry [on-retry #f]
                          #:context-reducer [context-reducer #f])
   (let loop ([attempt 0]
              [delay-ms 0]
+             [total-delay 0]
+             [last-error-type #f]
              [current-thunk thunk])
-    (with-handlers ([exn:fail?
-                     (lambda (exn)
-                       (cond
-                         [(and (retryable-error? exn) (< attempt max-retries))
-                          (define next-delay (min (* base-delay-ms (expt 2 attempt)) max-delay-ms))
-                          ;; For timeout errors, apply context reduction if available
-                          (define next-thunk
-                            (if (and context-reducer (timeout-error? exn))
-                                (context-reducer (add1 attempt))
-                                current-thunk))
-                          ;; Call retry callback if provided
-                          (when on-retry
-                            (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
-                          (sleep (/ next-delay 1000.0))
-                          (loop (add1 attempt) next-delay next-thunk)]
-                         [else (raise exn)]))])
+    (with-handlers
+        ([exn:fail?
+          (lambda (exn)
+            (define err-type (classify-error exn))
+            (cond
+              [(and (retryable-error? exn) (< attempt max-retries))
+               ;; A1: Use longer backoff for rate-limit errors
+               (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
+               (define next-delay (min (* rl-base (expt 2 attempt)) max-delay-ms))
+               ;; For timeout errors, apply context reduction if available
+               (define next-thunk
+                 (let ([reduced
+                        (and context-reducer (timeout-error? exn) (context-reducer (add1 attempt)))])
+                   (or reduced current-thunk)))
+               ;; Call retry callback if provided
+               (when on-retry
+                 (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
+               (sleep (/ next-delay 1000.0))
+               (loop (add1 attempt) next-delay (+ total-delay next-delay) err-type next-thunk)]
+              [else
+               ;; A3: Wrap in retry-exhausted if we attempted retries
+               (if (> attempt 0)
+                   (raise (retry-exhausted (format "~a (after ~a retries)" (exn-message exn) attempt)
+                                           (current-continuation-marks)
+                                           exn
+                                           attempt
+                                           last-error-type
+                                           total-delay))
+                   (raise exn))]))])
       (current-thunk))))

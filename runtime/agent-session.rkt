@@ -49,7 +49,11 @@
                   (build-session-context context-builder:build-session-context))
          "../util/ids.rkt"
          (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
-         (only-in "auto-retry.rkt" classify-error))
+         (only-in "auto-retry.rkt"
+                  classify-error
+                  retry-exhausted?
+                  retry-exhausted-attempts
+                  retry-exhausted-total-delay-ms))
 
 (provide agent-session?
          agent-session-session-dir
@@ -659,17 +663,22 @@
     (set-agent-session-model-name! sess override-model))
 
   ;; Run the core agent loop with tool-call iteration
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     ;; Emit runtime.error event with classified error-type
-                     (define error-type (classify-error e))
-                     (emit-session-event! bus
-                                          sid
-                                          "runtime.error"
-                                          (hasheq 'error (exn-message e) 'errorType error-type))
-                     (make-loop-result context-with-system
-                                       'error
-                                       (hasheq 'error (exn-message e) 'errorType error-type)))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               ;; Emit runtime.error event with classified error-type
+                               (define error-type (classify-error e))
+                               ;; A3: Include retry metadata if retries were attempted
+                               (define base-payload
+                                 (hasheq 'error (exn-message e) 'errorType error-type))
+                               (define payload
+                                 (if (retry-exhausted? e)
+                                     (hash-set* base-payload
+                                                'retries-attempted
+                                                (retry-exhausted-attempts e)
+                                                'total-retry-delay-ms
+                                                (retry-exhausted-total-delay-ms e))
+                                     base-payload))
+                               (emit-session-event! bus sid "runtime.error" payload)
+                               (make-loop-result context-with-system 'error payload))])
     (run-iteration-loop context-with-system
                         prov
                         bus
