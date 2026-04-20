@@ -361,14 +361,29 @@
             [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
             [else 'provider-error]))))
      ;; Recovery hint based on classified error type
+     ;; B1: Show different hint when retries were attempted
+     (define retries-attempted (hash-ref payload 'retries-attempted #f))
      (define hint
-       (case error-type
-         [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
-         [(rate-limit) "Rate limited. Will retry automatically."]
-         [(auth) "API key error. Check ~/.q/config.json"]
-         [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
-         [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
-         [else "Type /retry to resubmit your prompt."]))
+       (cond
+         [(and retries-attempted (> retries-attempted 0))
+          (case error-type
+            [(rate-limit)
+             (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
+                     retries-attempted)]
+            [(timeout)
+             (format "Provider timed out after ~a retries. Type /retry to resubmit."
+                     retries-attempted)]
+            [else
+             (format "Error persisted after ~a retries. Type /retry to resubmit."
+                     retries-attempted)])]
+         [else
+          (case error-type
+            [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
+            [(rate-limit) "Rate limited. Will retry automatically."]
+            [(auth) "API key error. Check ~/.q/config.json"]
+            [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
+            [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
+            [else "Type /retry to resubmit your prompt."])]))
      ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
      ;; Also clear streaming-thinking for complete state reset on error
      (define s1
