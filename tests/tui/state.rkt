@@ -109,12 +109,13 @@
              [evt (make-test-event "runtime.error" (hash 'error "something broke"))]
              [s2 (apply-event-to-state s evt)])
         ;; Now produces 2 entries: error + recovery hint
+        ;; v0.13.1: raw transcript is newest-first, so (first entries) = newest
         (define entries (ui-state-transcript s2))
         (check >= (length entries) 2 "runtime.error produces error + hint")
-        (check-equal? (transcript-entry-kind (first entries)) 'error)
-        (check-equal? (transcript-entry-text (first entries)) "Error: something broke")
-        (check-equal? (transcript-entry-kind (second entries)) 'system)
-        (check-not-false (string-contains? (transcript-entry-text (second entries)) "/retry"))
+        (check-equal? (transcript-entry-kind (first entries)) 'system)
+        (check-not-false (string-contains? (transcript-entry-text (first entries)) "/retry"))
+        (check-equal? (transcript-entry-kind (second entries)) 'error)
+        (check-equal? (transcript-entry-text (second entries)) "Error: something broke")
         (check-false (ui-state-busy? s2))))
 
     (test-case "apply-event: session.started"
@@ -824,15 +825,17 @@
       (max m (or (transcript-entry-id e) -1))))
   (check-equal? max-id 4 "max scrollback ID should be 4")
   (define base-state (initial-ui-state))
+  ;; v0.13.1: transcript stores newest-first, so reverse the loaded list
   (define fixed-state
-    (struct-copy ui-state base-state [transcript loaded] [next-entry-id (add1 max-id)]))
+    (struct-copy ui-state base-state [transcript (reverse loaded)] [next-entry-id (add1 max-id)]))
   (check-equal? (ui-state-next-entry-id fixed-state)
                 5
                 "next-entry-id should be 5 after loading 5 entries")
   ;; Add a new event and verify the new entry gets ID >= 5
   (define evt (make-test-event "assistant.message.completed" (hash 'content "New message")))
   (define s1 (apply-event-to-state fixed-state evt))
-  (define new-entry (last (ui-state-transcript s1)))
+  ;; v0.13.1: newest entry is at head (first), not tail (last)
+  (define new-entry (first (ui-state-transcript s1)))
   (check-equal? (transcript-entry-id new-entry)
                 5
                 "new entry should get ID 5 (not colliding with scrollback IDs 0-4)")
@@ -854,8 +857,9 @@
     (for/fold ([m -1]) ([e (in-list loaded)])
       (max m (or (transcript-entry-id e) -1))))
   (define base-state (initial-ui-state))
+  ;; v0.13.1: transcript stores newest-first, so reverse the loaded list
   (define fixed-state
-    (struct-copy ui-state base-state [transcript loaded] [next-entry-id (add1 max-id)]))
+    (struct-copy ui-state base-state [transcript (reverse loaded)] [next-entry-id (add1 max-id)]))
   ;; Apply 3 more events
   (define s1
     (apply-event-to-state fixed-state
@@ -863,14 +867,14 @@
                                            (hash 'content "New response"))))
   (define s2 (apply-event-to-state s1 (make-test-event "tool.call.started" (hash 'name "read"))))
   (define s3 (apply-event-to-state s2 (make-test-event "tool.call.completed" (hash 'name "read"))))
-  ;; Collect all IDs
+  ;; Collect all IDs — raw field is newest-first: [5,4,3,2,1,0]
   (define all-ids (map transcript-entry-id (ui-state-transcript s3)))
   ;; All IDs should be unique: 3 scrollback + 3 runtime = 6
   (check-equal? (length all-ids) 6 "should have 6 entries total")
   (check-equal? (length (remove-duplicates all-ids)) 6 "all IDs should be unique")
-  ;; Scrollback entries: 0, 1, 2; runtime entries: 3, 4, 5
-  (check-equal? (take all-ids 3) '(0 1 2) "scrollback IDs 0-2")
-  (check-equal? (drop all-ids 3) '(3 4 5) "runtime IDs 3-5")
+  ;; v0.13.1: newest-first: [5,4,3,2,1,0]
+  (check-equal? (take all-ids 3) '(5 4 3) "runtime IDs 5,4,3 at head")
+  (check-equal? (drop all-ids 3) '(2 1 0) "scrollback IDs 2,1,0 at tail")
   (delete-directory/files tmpdir))
 
 (test-case "W0.3: empty scrollback load — next-entry-id stays 0"

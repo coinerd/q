@@ -191,7 +191,8 @@
         (check-equal? (styled-segment-text (first segs)) "Title")
         ;; Header uses theme 'md-heading → 'cyan in default dark theme
         (check-not-false (member 'bold (styled-segment-style (first segs))) "header is bold")
-        (check-not-false (member 'cyan (styled-segment-style (first segs))) "header uses theme md-heading")))
+        (check-not-false (member 'cyan (styled-segment-style (first segs)))
+                         "header uses theme md-heading")))
 
     (test-case "format-entry assistant multi-line with newline"
       (let ([entry (make-entry 'assistant "line1\nline2" 1000 (hash))])
@@ -222,7 +223,8 @@
         (check-equal? (styled-segment-text link-seg) "here")
         ;; Link uses theme 'md-link → 'cyan in default dark theme
         (check-not-false (member 'underline (styled-segment-style link-seg)) "link has underline")
-        (check-not-false (member 'cyan (styled-segment-style link-seg)) "link uses theme md-link color")))
+        (check-not-false (member 'cyan (styled-segment-style link-seg))
+                         "link uses theme md-link color")))
 
     (test-case "format-entry tool-start shows [TOOL] text prefix and cyan color"
       (let ([entry (make-entry 'tool-start "[TOOL: read]" 1000 (hash))])
@@ -270,9 +272,9 @@
         (check-equal? (length lines) 2 "render-transcript: returns all when fits")))
 
     (test-case "render-transcript: more lines than height shows last N"
-      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
-                            (make-entry 'system "line2" 0 (hash))
-                            (make-entry 'system "line3" 0 (hash)))]
+      (let* ([entries (reverse (list (make-entry 'system "line1" 0 (hash))
+                                     (make-entry 'system "line2" 0 (hash))
+                                     (make-entry 'system "line3" 0 (hash))))] ; newest-first
              [state (struct-copy ui-state (initial-ui-state) [transcript entries])])
         (define-values (lines _st) (render-transcript state 2 200))
         (check-equal? (length lines) 2 "render-transcript: shows last 2 of 3 lines")
@@ -283,10 +285,10 @@
                       "[SYS] line3")))
 
     (test-case "render-transcript: scroll-offset=1 shows lines offset 1 from bottom"
-      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
-                            (make-entry 'system "line2" 0 (hash))
-                            (make-entry 'system "line3" 0 (hash))
-                            (make-entry 'system "line4" 0 (hash)))]
+      (let* ([entries (reverse (list (make-entry 'system "line1" 0 (hash))
+                                     (make-entry 'system "line2" 0 (hash))
+                                     (make-entry 'system "line3" 0 (hash))
+                                     (make-entry 'system "line4" 0 (hash))))] ; newest-first
              [state (struct-copy ui-state (initial-ui-state) [transcript entries] [scroll-offset 1])])
         (define-values (lines _st) (render-transcript state 2 200))
         (check-equal? (length lines) 2 "render-transcript: scroll=1 shows 2 lines")
@@ -297,11 +299,11 @@
                       "[SYS] line3")))
 
     (test-case "render-transcript: scroll-offset=2 shows older lines"
-      (let* ([entries (list (make-entry 'system "line1" 0 (hash))
-                            (make-entry 'system "line2" 0 (hash))
-                            (make-entry 'system "line3" 0 (hash))
-                            (make-entry 'system "line4" 0 (hash))
-                            (make-entry 'system "line5" 0 (hash)))]
+      (let* ([entries (reverse (list (make-entry 'system "line1" 0 (hash))
+                                     (make-entry 'system "line2" 0 (hash))
+                                     (make-entry 'system "line3" 0 (hash))
+                                     (make-entry 'system "line4" 0 (hash))
+                                     (make-entry 'system "line5" 0 (hash))))] ; newest-first
              [state (struct-copy ui-state (initial-ui-state) [transcript entries] [scroll-offset 2])])
         (define-values (lines _st) (render-transcript state 3 200))
         (check-equal? (length lines) 3 "render-transcript: scroll=2 shows 3 lines")
@@ -335,7 +337,9 @@
         (define last-seg (first (styled-line-segments (last lines))))
         (check-equal? (styled-segment-text last-seg) "streaming...")
         ;; Streaming text uses theme 'muted → 'bright-black in default dark theme
-        (check-equal? (styled-segment-style last-seg) '(bright-black) "streaming uses theme muted")))))
+        (check-equal? (styled-segment-style last-seg)
+                      '(bright-black)
+                      "streaming uses theme muted")))))
 
 (run-tests render-tests)
 
@@ -657,8 +661,8 @@
       (check-equal? (styled-line->ansi sl) "\x1b[1;31merror\x1b[0m"))
 
     (test-case "styled-line->ansi: multi-segment with different styles"
-      (define sl (styled-line (list (styled-segment "> " '(bold cyan))
-                                     (styled-segment "text" '(bold)))))
+      (define sl
+        (styled-line (list (styled-segment "> " '(bold cyan)) (styled-segment "text" '(bold)))))
       (define ansi (styled-line->ansi sl))
       (check-true (string-contains? ansi "\x1b[1;36m> "))
       (check-true (string-contains? ansi "\x1b[1mtext"))
@@ -686,8 +690,7 @@
 
     ;; SGR leak regression: styled→plain segment must not leak styles
     (test-case "styled-line->ansi: styled to plain segment resets SGR"
-      (define sl (styled-line (list (styled-segment "> " '(bold cyan))
-                                     (styled-segment "hello" '()))))
+      (define sl (styled-line (list (styled-segment "> " '(bold cyan)) (styled-segment "hello" '()))))
       (define ansi (styled-line->ansi sl))
       ;; First segment gets SGR codes (no leading reset since it's first)
       (check-true (string-contains? ansi "\x1b[1;36m> "))
@@ -699,9 +702,9 @@
                    "plain segment must not inherit previous style"))
 
     (test-case "styled-line->ansi: three segments with mixed styles"
-      (define sl (styled-line (list (styled-segment "[" '(bold))
-                                     (styled-segment "ok" '(green))
-                                     (styled-segment "]" '()))))
+      (define sl
+        (styled-line
+         (list (styled-segment "[" '(bold)) (styled-segment "ok" '(green)) (styled-segment "]" '()))))
       (define ansi (styled-line->ansi sl))
       ;; First segment: no leading reset
       (check-true (string-contains? ansi "\x1b[1m["))
@@ -764,9 +767,11 @@
       (define s0 (initial-ui-state))
       ;; Add 150 entries to the cache
       (define s1
-        (for/fold ([s s0])
-                  ([i (in-range 150)])
-          (rendered-cache-set s i (list (styled-line (list (styled-segment (format "entry ~a" i) (hash))))))))
+        (for/fold ([s s0]) ([i (in-range 150)])
+          (rendered-cache-set s
+                              i
+                              (list (styled-line (list (styled-segment (format "entry ~a" i)
+                                                                       (hash))))))))
       ;; Cache should be bounded (not 150 entries)
       (define cache-size (hash-count (ui-state-rendered-cache s1)))
       (check-true (< cache-size 150) "cache should be bounded")
@@ -777,9 +782,11 @@
     (test-case "cache preserves entries below limit"
       (define s0 (initial-ui-state))
       (define s1
-        (for/fold ([s s0])
-                  ([i (in-range 50)])
-          (rendered-cache-set s i (list (styled-line (list (styled-segment (format "entry ~a" i) (hash))))))))
+        (for/fold ([s s0]) ([i (in-range 50)])
+          (rendered-cache-set s
+                              i
+                              (list (styled-line (list (styled-segment (format "entry ~a" i)
+                                                                       (hash))))))))
       (define cache-size (hash-count (ui-state-rendered-cache s1)))
       (check-equal? cache-size 50 "cache keeps 50 entries under limit"))))
 
@@ -819,7 +826,9 @@
       ;; Second render should use cache and produce same output
       (define-values (lines2 s2r) (render-transcript s1r 200 80))
       (check-equal? (length lines1) (length lines2) "cached render same length")
-      (check-equal? (map styled-line->text lines1) (map styled-line->text lines2) "cached render same content"))))
+      (check-equal? (map styled-line->text lines1)
+                    (map styled-line->text lines2)
+                    "cached render same content"))))
 
 (run-tests bug36-tests)
 
@@ -846,7 +855,6 @@
 ;; BUG-57: Selection offset must account for transcript padding
 ;; ============================================================
 
-
 ;; ============================================================
 ;; BUG-57: Selection offset must account for transcript padding
 ;; ============================================================
@@ -865,10 +873,9 @@
       (define result (apply-selection-highlight lines anchor end 1 0))
       ;; Line at index 1 should be highlighted
       (define highlighted-line (list-ref result 1))
-      (check-not-false
-       (for/or ([seg (styled-line-segments highlighted-line)])
-         (member 'inverse (styled-segment-style seg)))
-       "line at index 1 should be highlighted when pad-count=0"))
+      (check-not-false (for/or ([seg (styled-line-segments highlighted-line)])
+                         (member 'inverse (styled-segment-style seg)))
+                       "line at index 1 should be highlighted when pad-count=0"))
 
     (test-case "apply-selection-highlight with pad-count=12 (user scenario)"
       ;; Simulate user's case: 25 content lines in 37-row transcript area
@@ -882,10 +889,9 @@
       ;; With pad-count=12, screen row 13 maps to line index 0
       (define result (apply-selection-highlight lines anchor end 1 12))
       (define highlighted-line (list-ref result 0))
-      (check-not-false
-       (for/or ([seg (styled-line-segments highlighted-line)])
-         (member 'inverse (styled-segment-style seg)))
-       "line at index 0 should be highlighted with pad-count=12"))
+      (check-not-false (for/or ([seg (styled-line-segments highlighted-line)])
+                         (member 'inverse (styled-segment-style seg)))
+                       "line at index 0 should be highlighted with pad-count=12"))
 
     (test-case "apply-selection-highlight with pad-count=5"
       ;; 3 lines in 8-row area -> pad-count=5
@@ -898,10 +904,9 @@
       (define end (cons 5 7))
       (define result (apply-selection-highlight lines anchor end 1 5))
       (define highlighted-line (list-ref result 1))
-      (check-not-false
-       (for/or ([seg (styled-line-segments highlighted-line)])
-         (member 'inverse (styled-segment-style seg)))
-       "line at index 1 should be highlighted with pad-count=5"))
+      (check-not-false (for/or ([seg (styled-line-segments highlighted-line)])
+                         (member 'inverse (styled-segment-style seg)))
+                       "line at index 1 should be highlighted with pad-count=5"))
 
     (test-case "click in padding area (above content) highlights nothing"
       (define lines
@@ -921,8 +926,7 @@
       (define result (apply-selection-highlight lines #f #f 1 5))
       (check-equal? (map styled-line->text result)
                     (map styled-line->text lines)
-                    "no selection passes through unchanged"))
-    ))
+                    "no selection passes through unchanged"))))
 
 (run-tests bug57-tests)
 
@@ -937,25 +941,20 @@
       (define s (initial-ui-state #:session-id "s1" #:model-name "gpt-4"))
       (define line (render-status-bar s 80))
       (define text (styled-line->text line))
-      (check-false (string-contains? text "No API key")
-                   "no warning when not mock provider"))
+      (check-false (string-contains? text "No API key") "no warning when not mock provider"))
 
     (test-case "status bar with mock provider shows No API key warning"
-      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1")
-                             [mock-provider? #t]))
+      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1") [mock-provider? #t]))
       (define line (render-status-bar s 80))
       (define text (styled-line->text line))
       (check-not-false (string-contains? text "No API key")
                        "warning shown when mock provider is active"))
 
     (test-case "status bar mock warning is visible in right section"
-      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1")
-                             [mock-provider? #t]))
+      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1") [mock-provider? #t]))
       (define line (render-status-bar s 80))
       (define text (styled-line->text line))
       ;; The warning should contain "[No API key]"
-      (check-not-false (string-contains? text "[No API key]")
-                       "formatted warning visible"))
-    ))
+      (check-not-false (string-contains? text "[No API key]") "formatted warning visible"))))
 
 (run-tests bug55-tests)

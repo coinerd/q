@@ -33,7 +33,7 @@
       (define cctx (make-test-cctx))
       (process-slash-command cctx 'help)
       (define state (unbox (cmd-ctx-state-box cctx)))
-      (define transcript (ui-state-transcript state))
+      (define transcript (transcript-entries state)) ; v0.13.1: oldest-first
       ;; Should have 16 entries: header + 15 commands (including /tree and /name)
       (check-equal? (length transcript) 16 "/help produces 16 entries (header + 15 commands)")
       ;; First entry is the header
@@ -74,7 +74,7 @@
       (define cctx (make-test-cctx))
       (process-slash-command cctx 'help)
       (define state (unbox (cmd-ctx-state-box cctx)))
-      (define transcript (ui-state-transcript state))
+      (define transcript (transcript-entries state)) ; v0.13.1: oldest-first
       ;; Skip header (first entry), check each command entry has format "  /cmd  Description"
       (for ([entry (in-list (cdr transcript))])
         (define text (transcript-entry-text entry))
