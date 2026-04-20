@@ -116,7 +116,11 @@
 ;; Returns (values messages catalog-entries).
 ;;   messages: (listof message?) — the context window for the LLM
 ;;   catalog-entries: (listof catalog-entry?) — summaries of excluded entries
-(define (assemble-context idx config)
+(define (assemble-context idx
+                          config
+                          #:cache [cache #f]
+                          #:provider [provider #f]
+                          #:model-name [model-name #f])
   (define raw-messages (build-session-context idx))
   (cond
     [(null? raw-messages) (values '() '())]
@@ -132,6 +136,23 @@
        (if (<= remaining-budget 0)
            (values '() removable)
            (fit-recent removable remaining-budget)))
+
+     ;; Phase 2: Generate summary for excluded entries (Wave 2B #1396)
+     (define summary-msg
+       (cond
+         [(null? excluded) #f]
+         [else
+          (define summary (generate-context-summary excluded provider model-name #:cache cache))
+          (and summary
+               (make-message (format "summary-~a-~a"
+                                     (context-summary-from-id summary)
+                                     (context-summary-to-id summary))
+                             #f
+                             'user
+                             'compaction-summary
+                             (list (make-text-part (context-summary-text summary)))
+                             (current-seconds)
+                             (hasheq)))]))
 
      ;; Phase 4: Generate catalog for excluded entries
      (define max-entries (context-manager-config-max-catalog-entries config))
@@ -150,8 +171,26 @@
                              (hash-has-key? recent-ids (message-id m))))
          m))
 
+     ;; Inject summary message after pinned, before recent
+     (define result-with-summary
+       (cond
+         [(not summary-msg) result-messages]
+         [else
+          (define pinned-last-pos
+            (for/last ([m (in-list result-messages)]
+                       [i (in-naturals)]
+                       #:when (hash-has-key? pinned-ids (message-id m)))
+              i))
+          (define insert-pos
+            (if pinned-last-pos
+                (add1 pinned-last-pos)
+                0))
+          (define-values (before after)
+            (split-at result-messages (min insert-pos (length result-messages))))
+          (append before (list summary-msg) after)]))
+
      ;; Ensure first user message is in result (pin guarantee)
-     (define result-with-pin (ensure-first-user-pinned result-messages raw-messages))
+     (define result-with-pin (ensure-first-user-pinned result-with-summary raw-messages))
 
      (values result-with-pin catalog)]))
 
