@@ -37,7 +37,21 @@
          catalog-entry-role
          catalog-entry-summary
          ;; Token estimation (re-exported for tests)
-         estimate-cm-message-tokens)
+         estimate-cm-message-tokens
+         ;; Summary (Wave 2A #1395)
+         context-summary
+         context-summary?
+         context-summary-from-id
+         context-summary-to-id
+         context-summary-text
+         context-summary-entry-count
+         context-summary-prompt
+         generate-context-summary
+         ;; Summary cache
+         summary-cache
+         make-summary-cache
+         summary-cache-lookup
+         summary-cache-store!)
 
 ;; ============================================================
 ;; Configuration
@@ -61,6 +75,27 @@
 ;; ============================================================
 
 (struct catalog-entry (id role summary) #:transparent)
+
+;; ============================================================
+;; Summary struct (Wave 2A #1395)
+;; ============================================================
+
+(struct context-summary (from-id to-id text entry-count) #:transparent)
+
+;; ============================================================
+;; Summary cache (Wave 2A #1395)
+;; ============================================================
+
+(struct summary-cache ([table #:mutable]) #:transparent)
+
+(define (make-summary-cache)
+  (summary-cache (hash)))
+
+(define (summary-cache-lookup cache from-id to-id)
+  (hash-ref (summary-cache-table cache) (cons from-id to-id) #f))
+
+(define (summary-cache-store! cache from-id to-id text)
+  (set-summary-cache-table! cache (hash-set (summary-cache-table cache) (cons from-id to-id) text)))
 
 ;; ============================================================
 ;; Token estimation
@@ -167,6 +202,103 @@
     (define summary (truncate-string text 80))
     (define role-str (symbol->string (message-role m)))
     (catalog-entry (message-id m) role-str summary)))
+
+;; ============================================================
+;; Summary prompt template (Wave 2A #1395)
+;; ============================================================
+
+(define SUMMARY-MAX-WORDS 500)
+
+(define (context-summary-prompt messages #:previous-summary [prev-summary #f])
+  (define formatted (format-messages-for-summary messages))
+  (cond
+    [prev-summary
+     (string-append "You are updating an existing session summary with new information. "
+                    "Merge the new messages into the existing summary.\n\n"
+                    "EXISTING SUMMARY:\n"
+                    prev-summary
+                    "\n\nNEW MESSAGES SINCE LAST SUMMARY:\n"
+                    formatted
+                    "\n\nProduce an UPDATED summary with these EXACT sections:\n"
+                    "## Goal\n"
+                    "## Progress\n### Done\n### In Progress\n### Blocked\n"
+                    "## Key Decisions\n"
+                    "## Next Steps\n"
+                    "## Critical Context\n\n"
+                    "RULES:\n"
+                    "- Maximum ~500 words\n"
+                    "- Preserve all information from existing summary that is still relevant\n"
+                    "- Add new information from new messages\n"
+                    "- Update Progress sections (move items between Done/In Progress/Blocked)\n"
+                    "- Keep the Goal to ONE line\n")]
+    [else
+     (string-append
+      "You are summarizing a coding assistant session. "
+      "Produce a structured summary with these EXACT sections:\n\n"
+      "## Goal\n<one-line description of what the user is trying to accomplish>\n\n"
+      "## Progress\n### Done\n- [x] <completed items>\n\n"
+      "### In Progress\n- <current work if any>\n\n"
+      "### Blocked\n- <blockers if any>\n\n"
+      "## Key Decisions\n- <important decisions made during the session>\n\n"
+      "## Next Steps\n1. <next actions>\n\n"
+      "## Critical Context\n- <must-preserve information: file paths, variable names, API details, error states>\n\n"
+      "RULES:\n"
+      "- Maximum ~500 words\n"
+      "- Preserve specific file paths, function names, variable names exactly\n"
+      "- Include any error messages or states being debugged\n"
+      "- Keep the Goal to ONE line\n\n"
+      "SESSION MESSAGES:\n"
+      formatted)]))
+
+(define (format-messages-for-summary messages)
+  (string-join (for/list ([m (in-list messages)])
+                 (define role (symbol->string (message-role m)))
+                 (define text (extract-message-text m))
+                 (format "[~a] (~a):\n  ~a" (message-id m) role (truncate-string text 500)))
+               "\n\n"))
+
+;; ============================================================
+;; Generate context summary (Wave 2A #1395)
+;; ============================================================
+
+;; Summarize excluded entries. When provider+model are given, uses LLM.
+;; Otherwise returns a simple concatenation summary.
+;; Checks cache first; only generates if cache miss.
+;; Returns context-summary? or #f.
+(define (generate-context-summary entries provider model-name #:cache [cache #f])
+  (cond
+    [(null? entries) #f]
+    [else
+     (define from-id (message-id (first entries)))
+     (define to-id (message-id (last entries)))
+     ;; Check cache
+     (define cached (and cache (summary-cache-lookup cache from-id to-id)))
+     (cond
+       [cached (context-summary from-id to-id cached (length entries))]
+       [else
+        ;; Generate summary
+        (define summary-text
+          (cond
+            ;; LLM summarization would go here — requires provider-send
+            ;; For now, use concatenation fallback
+            [(and provider model-name) (simple-summary-text entries)]
+            [else (simple-summary-text entries)]))
+        ;; Store in cache
+        (when cache
+          (summary-cache-store! cache from-id to-id summary-text))
+        (context-summary from-id to-id summary-text (length entries))])]))
+
+;; Simple fallback: concatenate first lines of each entry
+(define (simple-summary-text entries)
+  (string-append "## Progress\n### Done\n"
+                 (string-join (for/list ([m (in-list entries)]
+                                         [i (in-naturals)]
+                                         #:break (>= i 20))
+                                (format "- [~a] ~a: ~a"
+                                        (message-id m)
+                                        (symbol->string (message-role m))
+                                        (truncate-string (extract-message-text m) 100)))
+                              "\n")))
 
 ;; ============================================================
 ;; Helpers
