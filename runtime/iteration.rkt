@@ -326,7 +326,8 @@
                                    (make-minimal-settings #:provider (hash-ref config 'provider #f)
                                                           #:model (hash-ref config 'model-name #f)))
             #:call-id (generate-id)
-            #:session-metadata (hasheq 'session-id session-id))
+            #:session-metadata
+            (hasheq 'session-id session-id 'session-index (hash-ref config 'session-index #f)))
            #:parallel? (hash-ref config 'parallel-tools #t)))))
 
   ;; #1208: Dispatch 'tool.execution.end hook after tool batch

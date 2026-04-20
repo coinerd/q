@@ -713,7 +713,13 @@
                      (current-continuation-marks))))
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
-  (define cfg (agent-session-config sess))
+  (define base-cfg (agent-session-config sess))
+  ;; #1391: Inject session index into config for session_recall tool access
+  (define idx (agent-session-index sess))
+  (define cfg
+    (if idx
+        (hash-set base-cfg 'session-index idx)
+        base-cfg))
   (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 20)))
   (define token-budget-threshold
     (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
