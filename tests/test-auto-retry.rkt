@@ -227,3 +227,137 @@
                                                        (current-continuation-marks))))))))
   ;; Context reducer should NOT have been called for rate-limit errors
   (check-equal? (unbox reduction-log) '()))
+
+;; ============================================================
+;; A1: Rate-limit-specific backoff tests (v0.12.2)
+;; ============================================================
+
+(test-case "A1: rate-limit backoff uses 10s base delay"
+  (define delays (box '()))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry
+                (lambda () (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks))))
+                #:max-retries 2
+                #:base-delay-ms 10
+                #:rate-limit-base-delay-ms 50
+                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                             (set-box! delays (cons delay-ms (unbox delays)))))))
+  (define sorted-delays (reverse (unbox delays)))
+  ;; Should use rate-limit base (50ms): 50, 100
+  (check-equal? (length sorted-delays) 2)
+  (check-equal? (first sorted-delays) 50)
+  (check-equal? (second sorted-delays) 100))
+
+(test-case "A1: non-rate-limit backoff uses normal base delay"
+  (define delays (box '()))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (raise (exn:fail "HTTP 503 service unavailable"
+                                                   (current-continuation-marks))))
+                                #:max-retries 2
+                                #:base-delay-ms 10
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                             (set-box! delays (cons delay-ms (unbox delays)))))))
+  (define sorted-delays (reverse (unbox delays)))
+  ;; Should use normal base (10ms): 10, 20
+  (check-equal? (length sorted-delays) 2)
+  (check-equal? (first sorted-delays) 10)
+  (check-equal? (second sorted-delays) 20))
+
+(test-case "A1: rate-limit backoff capped at max-delay-ms"
+  (define delays (box '()))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (raise (exn:fail "HTTP 429 too many requests"
+                                                   (current-continuation-marks))))
+                                #:max-retries 4
+                                #:base-delay-ms 10
+                                #:rate-limit-base-delay-ms 50
+                                #:max-delay-ms 150
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                             (set-box! delays (cons delay-ms (unbox delays)))))))
+  ;; 50, 100, 150(cap), 150(cap)
+  (for ([d (in-list (reverse (unbox delays)))])
+    (check-true (<= d 150) (format "delay ~a should be <= 150" d))))
+
+;; ============================================================
+;; A3: Retry-exhausted struct tests (v0.12.2)
+;; ============================================================
+
+(test-case "A3: retry-exhausted raised after retries exhausted"
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))
+                     #:max-retries 2
+                     #:base-delay-ms 1))
+  (define e (unbox exn-result))
+  (check-true (retry-exhausted? e))
+  (check-equal? (retry-exhausted-attempts e) 2)
+  (check-equal? (retry-exhausted-last-error-type e) 'provider-error)
+  (check-true (> (retry-exhausted-total-delay-ms e) 0)))
+
+(test-case "A3: retry-exhausted has rate-limit type for 429"
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry (lambda () (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks))))
+                     #:max-retries 1
+                     #:base-delay-ms 1))
+  (define e (unbox exn-result))
+  (check-true (retry-exhausted? e))
+  (check-equal? (retry-exhausted-last-error-type e) 'rate-limit))
+
+(test-case "A3: non-retryable error is NOT wrapped in retry-exhausted"
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (raise (exn:fail "invalid API key" (current-continuation-marks))))
+                                #:max-retries 2
+                                #:base-delay-ms 1))
+             "non-retryable should be plain exn:fail"))
+
+(test-case "A3: retry-exhausted wraps original exception"
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry (lambda () (raise (exn:fail "timeout" (current-continuation-marks))))
+                     #:max-retries 1
+                     #:base-delay-ms 1))
+  (define e (unbox exn-result))
+  (check-true (retry-exhausted? e))
+  (check-true (string-contains? (exn-message e) "after 1 retries")))
+
+;; ============================================================
+;; rate-limit-error? predicate tests (v0.12.2)
+;; ============================================================
+
+(test-case "rate-limit-error?: positive cases"
+  (check-true (rate-limit-error? (exn:fail "HTTP 429" (current-continuation-marks))))
+  (check-true (rate-limit-error? (exn:fail "rate limit exceeded" (current-continuation-marks))))
+  (check-true (rate-limit-error? (exn:fail "Quota exceeded" (current-continuation-marks)))))
+
+(test-case "rate-limit-error?: negative cases"
+  (check-false (rate-limit-error? (exn:fail "timeout" (current-continuation-marks))))
+  (check-false (rate-limit-error? (exn:fail "internal error" (current-continuation-marks))))
+  (check-false (rate-limit-error? (exn:fail "invalid API key" (current-continuation-marks)))))
+
+;; ============================================================
+;; context-reducer #f return (no-op) tests (v0.12.2)
+;; ============================================================
+
+(test-case "context-reducer returning #f keeps original thunk"
+  (define call-count (box 0))
+  (define original-value 'original-result)
+  (define result
+    (with-auto-retry (lambda ()
+                       (set-box! call-count (add1 (unbox call-count)))
+                       (if (= (unbox call-count) 1)
+                           (raise (exn:fail "timeout" (current-continuation-marks)))
+                           'retry-result))
+                     #:max-retries 1
+                     #:base-delay-ms 1
+                     #:context-reducer (lambda (attempt) #f)))
+  ;; Should succeed — reducer returned #f so original thunk is used
+  (check-equal? result 'retry-result)
+  (check-equal? (unbox call-count) 2))

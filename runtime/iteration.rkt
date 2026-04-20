@@ -261,32 +261,41 @@
                      #:cancellation-token token))
    #:max-retries 2
    #:base-delay-ms 1000
-   #:context-reducer
-   (lambda (attempt)
-     ;; On timeout retry: pair-aware trim that keeps tool_call/result pairs atomic.
-     ;; Ensures first non-system message is always 'user (#1329).
-     (define ctx (unbox ctx-for-retry))
-     (define n (length ctx))
-     (define keep-count (max 4 (quotient n 2)))
-     (define reduced-ctx (trim-context-pair-aware ctx keep-count))
-     (set-box! ctx-for-retry reduced-ctx)
-     ;; Emit context-reduced event for TUI visibility
-     (publish!
-      bus
-      (make-event
-       "auto-retry.context-reduced"
-       (current-inexact-milliseconds)
-       session-id
-       turn-id
-       (hasheq 'original-messages n 'reduced-messages (length reduced-ctx) 'attempt attempt)))
-     (lambda ()
-       (run-agent-turn (unbox ctx-for-retry)
-                       prov
-                       bus
-                       #:session-id session-id
-                       #:turn-id turn-id
-                       #:tools tools
-                       #:cancellation-token token)))
+   #:context-reducer (lambda (attempt)
+                       ;; On timeout retry: pair-aware trim that keeps tool_call/result pairs atomic.
+                       ;; Ensures first non-system message is always 'user (#1329).
+                       (define ctx (unbox ctx-for-retry))
+                       (define n (length ctx))
+                       (define keep-count (max 4 (quotient n 2)))
+                       (define reduced-ctx (trim-context-pair-aware ctx keep-count))
+                       (define reduced-n (length reduced-ctx))
+                       ;; A2: No-op guard — if no meaningful reduction happened, don't waste a retry
+                       (define effective? (> (- n reduced-n) 1))
+                       (publish! bus
+                                 (make-event "auto-retry.context-reduced"
+                                             (current-inexact-milliseconds)
+                                             session-id
+                                             turn-id
+                                             (hasheq 'original-messages
+                                                     n
+                                                     'reduced-messages
+                                                     reduced-n
+                                                     'attempt
+                                                     attempt
+                                                     'effective?
+                                                     effective?)))
+                       (cond
+                         [effective?
+                          (set-box! ctx-for-retry reduced-ctx)
+                          (lambda ()
+                            (run-agent-turn (unbox ctx-for-retry)
+                                            prov
+                                            bus
+                                            #:session-id session-id
+                                            #:turn-id turn-id
+                                            #:tools tools
+                                            #:cancellation-token token))]
+                         [else #f]))
    #:on-retry
    (lambda (attempt max-retries delay-ms error-msg)
      (publish!
