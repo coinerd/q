@@ -165,13 +165,16 @@
   ;; Append a single message entry to the session JSONL log.
   ;; Uses write-ahead marker for crash safety.
   ;; Includes hash chain for tamper detection (#1287).
+  ;; 3.4: dynamic-wind guarantees marker removal on write failure.
   (write-pending-marker! path 1)
-  (define prev-hash (read-last-hash path))
-  (define entry (message->jsexpr msg))
-  (define h (compute-event-hash entry prev-hash))
-  (define chained-entry (hash-set* entry 'prev_hash prev-hash 'hash h))
-  (jsonl-append! path chained-entry)
-  (remove-pending-marker! path))
+  (dynamic-wind void
+                (lambda ()
+                  (define prev-hash (read-last-hash path))
+                  (define entry (message->jsexpr msg))
+                  (define h (compute-event-hash entry prev-hash))
+                  (define chained-entry (hash-set* entry 'prev_hash prev-hash 'hash h))
+                  (jsonl-append! path chained-entry))
+                (lambda () (remove-pending-marker! path))))
 
 ;; path-string? (listof message?) -> void?
 (define (append-entries! path msgs)
@@ -183,17 +186,19 @@
     (void))
   (unless (null? msgs)
     (write-pending-marker! path (length msgs))
-    (define prev-hash (read-last-hash path))
-    (define prev-box (box prev-hash))
-    (define jsexprs
-      (for/list ([msg (in-list msgs)])
-        (define entry (message->jsexpr msg))
-        (define prev (unbox prev-box))
-        (define h (compute-event-hash entry prev))
-        (set-box! prev-box h)
-        (hash-set* entry 'prev_hash prev 'hash h)))
-    (jsonl-append-entries! path jsexprs)
-    (remove-pending-marker! path)))
+    (dynamic-wind void
+                  (lambda ()
+                    (define prev-hash (read-last-hash path))
+                    (define prev-box (box prev-hash))
+                    (define jsexprs
+                      (for/list ([msg (in-list msgs)])
+                        (define entry (message->jsexpr msg))
+                        (define prev (unbox prev-box))
+                        (define h (compute-event-hash entry prev))
+                        (set-box! prev-box h)
+                        (hash-set* entry 'prev_hash prev 'hash h)))
+                    (jsonl-append-entries! path jsexprs))
+                  (lambda () (remove-pending-marker! path)))))
 
 ;; ── Load / replay ──
 

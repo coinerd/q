@@ -359,16 +359,22 @@
           (bytes->string/utf-8 response-body)
           response-body))
     (cond
-      [(= status-code 400) (raise-http-error! (format "Gemini API bad request (400): ~a" error-body))]
+      [(= status-code 400)
+       (raise-http-error! (format "Gemini API bad request (400): ~a" error-body) status-code)]
       [(= status-code 401)
-       (raise-http-error! (format "Gemini API authentication failed (401): ~a" error-body))]
-      [(= status-code 403) (raise-http-error! (format "Gemini API forbidden (403): ~a" error-body))]
+       (raise-http-error! (format "Gemini API authentication failed (401): ~a" error-body)
+                          status-code)]
+      [(= status-code 403)
+       (raise-http-error! (format "Gemini API forbidden (403): ~a" error-body) status-code)]
       [(= status-code 429)
        (raise-http-error! (format "Gemini API rate limited (429). Please wait and try again.\n~a"
-                                  error-body))]
+                                  error-body)
+                          status-code)]
       [(>= status-code 500)
-       (raise-http-error! (format "Gemini API server error (~a): ~a" status-code error-body))]
-      [else (raise-http-error! (format "Gemini API error (~a): ~a" status-code error-body))])))
+       (raise-http-error! (format "Gemini API server error (~a): ~a" status-code error-body)
+                          status-code)]
+      [else
+       (raise-http-error! (format "Gemini API error (~a): ~a" status-code error-body) status-code)])))
 
 ;; ============================================================
 ;; HTTP request execution (non-streaming)

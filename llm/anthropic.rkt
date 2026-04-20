@@ -294,9 +294,10 @@
           response-body))
     (cond
       [(= status-code 401)
-       (raise-http-error! (format "Anthropic API authentication failed (401): ~a" error-body))]
+       (raise-http-error! (format "Anthropic API authentication failed (401): ~a" error-body)
+                          status-code)]
       [(= status-code 403)
-       (raise-http-error! (format "Anthropic API forbidden (403): ~a" error-body))]
+       (raise-http-error! (format "Anthropic API forbidden (403): ~a" error-body) status-code)]
       [(= status-code 429)
        (define retry-hint
          (with-handlers ([exn:fail? (lambda (_) "")])
@@ -305,10 +306,14 @@
            (if retry-ms
                (format " Retry after ~a seconds." (quotient retry-ms 1000))
                " Please wait and try again.")))
-       (raise-http-error! (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body))]
+       (raise-http-error! (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body)
+                          status-code)]
       [(>= status-code 500)
-       (raise-http-error! (format "Anthropic API server error (~a): ~a" status-code error-body))]
-      [else (raise-http-error! (format "Anthropic API error (~a): ~a" status-code error-body))])))
+       (raise-http-error! (format "Anthropic API server error (~a): ~a" status-code error-body)
+                          status-code)]
+      [else
+       (raise-http-error! (format "Anthropic API error (~a): ~a" status-code error-body)
+                          status-code)])))
 
 ;; ============================================================
 ;; HTTP request execution (non-streaming)

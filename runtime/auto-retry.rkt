@@ -7,7 +7,8 @@
 
 (require racket/match
          racket/string
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         "../llm/provider-errors.rkt")
 
 ;; Predicates
 (provide retryable-error?
@@ -113,32 +114,43 @@
 ;; Returns one of: 'timeout, 'rate-limit, 'auth, 'context-overflow,
 ;; 'max-iterations, 'provider-error
 (define (classify-error exn)
-  (define msg
-    (if (exn:fail? exn)
-        (exn-message exn)
-        (format "~a" exn)))
-  (define msg-down (string-downcase msg))
+  ;; Fast path: structured provider-error carries its own category.
+  (when (provider-error? exn)
+    (define cat (provider-error-category exn))
+    (when cat
+      (set! cat cat))) ; already correct
   (cond
-    [(string-contains? msg-down "max.iterations") 'max-iterations]
-    [(string-contains? msg-down "429") 'rate-limit]
-    [(string-contains? msg-down "rate") 'rate-limit]
-    [(string-contains? msg-down "overloaded") 'rate-limit]
-    [(string-contains? msg-down "quota") 'rate-limit]
-    [(for/or ([p (in-list '("401" "403" "auth" "unauthorized" "permission"))])
-       (string-contains? msg-down p))
-     'auth]
-    [(for/or ([p (in-list '("context_length" "context length"
-                                             "too many tokens"
-                                             "token limit"
-                                             "max_tokens"
-                                             "input is too long"
-                                             "exceeds the maximum"))])
-       (string-contains? msg-down p))
-     'context-overflow]
-    [(for/or ([p (in-list TIMEOUT_PATTERNS)])
-       (string-contains? msg-down p))
-     'timeout]
-    [else 'provider-error]))
+    [(provider-error? exn)
+     (define cat (provider-error-category exn))
+     (if cat cat 'provider-error)]
+    [else
+     ;; Fallback: string-based classification for non-structured errors
+     (define msg
+       (if (exn:fail? exn)
+           (exn-message exn)
+           (format "~a" exn)))
+     (define msg-down (string-downcase msg))
+     (cond
+       [(string-contains? msg-down "max.iterations") 'max-iterations]
+       [(string-contains? msg-down "429") 'rate-limit]
+       [(string-contains? msg-down "rate") 'rate-limit]
+       [(string-contains? msg-down "overloaded") 'rate-limit]
+       [(string-contains? msg-down "quota") 'rate-limit]
+       [(for/or ([p (in-list '("401" "403" "auth" "unauthorized" "permission"))])
+          (string-contains? msg-down p))
+        'auth]
+       [(for/or ([p (in-list '("context_length" "context length"
+                                                "too many tokens"
+                                                "token limit"
+                                                "max_tokens"
+                                                "input is too long"
+                                                "exceeds the maximum"))])
+          (string-contains? msg-down p))
+        'context-overflow]
+       [(for/or ([p (in-list TIMEOUT_PATTERNS)])
+          (string-contains? msg-down p))
+        'timeout]
+       [else 'provider-error])]))
 
 ;; ============================================================
 ;; Retry logic
