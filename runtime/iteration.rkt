@@ -101,7 +101,9 @@
                   context-overflow-error?
                   timeout-error?)
          ;; FEAT-61: message injection support
-         (only-in "../extensions/message-inject.rkt" injection-event-topic))
+         (only-in "../extensions/message-inject.rkt" injection-event-topic)
+         ;; #1329: pair-aware context reduction for retry
+         (only-in "../runtime/context-reducer.rkt" trim-context-pair-aware))
 
 (provide run-iteration-loop
          emit-session-event!
@@ -261,20 +263,12 @@
    #:base-delay-ms 1000
    #:context-reducer
    (lambda (attempt)
-     ;; On timeout retry: trim oldest non-system messages.
-     ;; Keep system prompt + last N messages to reduce payload.
+     ;; On timeout retry: pair-aware trim that keeps tool_call/result pairs atomic.
+     ;; Ensures first non-system message is always 'user (#1329).
      (define ctx (unbox ctx-for-retry))
      (define n (length ctx))
      (define keep-count (max 4 (quotient n 2)))
-     (define system-msgs (filter (lambda (m) (eq? (message-role m) 'system)) ctx))
-     (define non-system-msgs (filter (lambda (m) (not (eq? (message-role m) 'system))) ctx))
-     (define trimmed-non-system (takef (reverse non-system-msgs) (lambda (_) #t)))
-     ;; Take last keep-count non-system messages
-     (define kept-non-system
-       (if (> (length trimmed-non-system) keep-count)
-           (take trimmed-non-system keep-count)
-           trimmed-non-system))
-     (define reduced-ctx (append system-msgs (reverse kept-non-system)))
+     (define reduced-ctx (trim-context-pair-aware ctx keep-count))
      (set-box! ctx-for-retry reduced-ctx)
      ;; Emit context-reduced event for TUI visibility
      (publish!

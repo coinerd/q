@@ -834,10 +834,9 @@
   ;; Get direct children of an entry.
   (hash-ref tree entry-id '()))
 
-(define (resolve-active-branch tree path)
+(define (resolve-active-branch tree)
   ;; Find the active branch (path from root to the last entry).
   ;; tree: the tree map from load-tree
-  ;; path: file path to the JSONL session log
   (define entries (hash-ref tree '%%entries%% '()))
   (cond
     [(null? entries) '()]
