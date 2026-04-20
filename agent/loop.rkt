@@ -35,6 +35,15 @@
          (only-in "../util/content-helpers.rkt" result-content->string)
          "streaming-message.rkt")
 
+;; ============================================================
+;; Configurable chunk limit (v0.12.3 Wave 0.1)
+;; ============================================================
+
+;; Maximum number of chunks to process from a provider stream.
+;; Prevents infinite loops from misbehaving providers.
+;; Parameterized for testing (set to small value in tests).
+(define MAX-STREAM-CHUNKS (make-parameter 10000))
+
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
                              (#:session-id [session-id string?]
@@ -66,7 +75,8 @@
                             (or/c (listof hash?) #f)
                             provider?
                             (or/c procedure? #f)
-                            loop-result?)]))
+                            loop-result?)])
+         MAX-STREAM-CHUNKS)
 
 ;; ============================================================
 ;; Helpers (shared utilities)
@@ -204,118 +214,163 @@
   (define message-id (streaming-message-message-id sm))
 
   (define stream-gen (provider-stream provider req))
+  (define chunk-count (box 0))
+  (define limit (MAX-STREAM-CHUNKS))
 
-  (let stream-loop ()
-    (define chunk (stream-gen))
-    (when (and chunk (not (eq? chunk #f)))
-      (streaming-message-append-chunk! sm chunk)
-      (when (stream-chunk-delta-text chunk)
-        ;; Emit message.start on first text delta
-        (unless (streaming-message-message-started? sm)
-          (streaming-message-set-message-started! sm)
+  ;; v0.12.3 Wave 0.1: Error boundary — emit cleanup events on provider crash.
+  ;; Without this, a mid-stream exception leaves TUI in busy?=#t forever.
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     ;; Emit cleanup events so subscribers (TUI) don't hang
+                     (when (streaming-message-message-started? sm)
+                       (emit! bus
+                              session-id
+                              turn-id
+                              "message.end"
+                              (hasheq 'message-id message-id 'usage (hasheq))
+                              #:state state))
+                     (emit!
+                      bus
+                      session-id
+                      turn-id
+                      "turn.completed"
+                      (hasheq 'termination 'error 'turnId turn-id 'reason "provider-stream-error")
+                      #:state state)
+                     (raise e))])
+    (let stream-loop ()
+      (define chunk (stream-gen))
+      (when (and chunk (not (eq? chunk #f)))
+        ;; v0.12.3 Wave 0.1: Chunk limit — prevent infinite streams
+        (set-box! chunk-count (+ 1 (unbox chunk-count)))
+        (when (> (unbox chunk-count) limit)
+          (log-warning
+           (format "stream-from-provider: exceeded ~a chunks, truncating session=~a turn=~a"
+                   limit
+                   session-id
+                   turn-id))
+          ;; Emit stream completion + message.end as if done
           (emit! bus
                  session-id
                  turn-id
-                 "message.start"
-                 (hasheq 'message-id message-id)
-                 #:state state))
-        ;; Text delta
-        (streaming-message-append-text! sm (stream-chunk-delta-text chunk))
-        (emit! bus
-               session-id
-               turn-id
-               "model.stream.delta"
-               (hasheq 'delta (stream-chunk-delta-text chunk))
-               #:state state)
-        ;; Emit message.delta with message-id for extension consumption
-        (emit! bus
-               session-id
-               turn-id
-               "message.delta"
-               (hasheq 'text (stream-chunk-delta-text chunk) 'message-id message-id)
-               #:state state)
-        ;; Dispatch message-update hook for text delta
-        (when hook-dispatcher
-          (define update-result
-            (hook-dispatcher 'message-update
-                             (hasheq 'session-id
-                                     session-id
-                                     'turn-id
-                                     turn-id
-                                     'delta-text
-                                     (stream-chunk-delta-text chunk)
-                                     'delta-tool-call
-                                     #f)))
-          (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
-            (streaming-message-set-blocked! sm))))
-      ;; FEAT-72: Thinking/reasoning delta
-      (when (stream-chunk-delta-thinking chunk)
-        (streaming-message-append-thinking! sm (stream-chunk-delta-thinking chunk))
-        (emit! bus
-               session-id
-               turn-id
-               "model.stream.thinking"
-               (hasheq 'delta (stream-chunk-delta-thinking chunk))
-               #:state state))
-      (when (stream-chunk-delta-tool-call chunk)
-        ;; Tool call delta
-        (define tc-delta (stream-chunk-delta-tool-call chunk))
-        (streaming-message-append-tool-call! sm tc-delta)
-        (emit! bus
-               session-id
-               turn-id
-               "model.stream.delta"
-               (hasheq 'delta-tool-call tc-delta)
-               #:state state)
-        ;; Dispatch message-update hook for tool-call delta
-        (when hook-dispatcher
-          (define update-result
-            (hook-dispatcher 'message-update
-                             (hasheq 'session-id
-                                     session-id
-                                     'turn-id
-                                     turn-id
-                                     'delta-text
-                                     #f
-                                     'delta-tool-call
-                                     tc-delta)))
-          (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
-            (streaming-message-set-blocked! sm))))
-      (when (stream-chunk-done? chunk)
-        ;; Stream completed
-        (emit! bus
-               session-id
-               turn-id
-               "model.stream.completed"
-               (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
-               #:state state)
-        ;; Emit message.end if we started a message
-        (when (streaming-message-message-started? sm)
-          (emit! bus
-                 session-id
-                 turn-id
-                 "message.end"
-                 (hasheq 'message-id message-id 'usage (or (stream-chunk-usage chunk) (hasheq)))
-                 #:state state)))
-      ;; Check cancellation after processing chunk
-      (cond
-        [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
-         (streaming-message-set-cancelled! sm)
-         (emit! bus
-                session-id
-                turn-id
-                "turn.cancelled"
-                (hasheq 'reason "cancellation-token")
-                #:state state)]
-        [(streaming-message-blocked? sm)
-         ;; message-update hook blocked -- emit model.stream.completed then stop streaming
-         (emit! bus
-                session-id
-                turn-id
-                "model.stream.completed"
-                (hasheq 'usage (hasheq))
-                #:state state)]
-        [else (stream-loop)])))
+                 "model.stream.completed"
+                 (hasheq 'usage (hasheq) 'truncated? #t)
+                 #:state state)
+          (when (streaming-message-message-started? sm)
+            (emit! bus
+                   session-id
+                   turn-id
+                   "message.end"
+                   (hasheq 'message-id message-id 'usage (hasheq))
+                   #:state state)))
+        (unless (> (unbox chunk-count) limit)
+          (streaming-message-append-chunk! sm chunk)
+          (when (stream-chunk-delta-text chunk)
+            ;; Emit message.start on first text delta
+            (unless (streaming-message-message-started? sm)
+              (streaming-message-set-message-started! sm)
+              (emit! bus
+                     session-id
+                     turn-id
+                     "message.start"
+                     (hasheq 'message-id message-id)
+                     #:state state))
+            ;; Text delta
+            (streaming-message-append-text! sm (stream-chunk-delta-text chunk))
+            (emit! bus
+                   session-id
+                   turn-id
+                   "model.stream.delta"
+                   (hasheq 'delta (stream-chunk-delta-text chunk))
+                   #:state state)
+            ;; Emit message.delta with message-id for extension consumption
+            (emit! bus
+                   session-id
+                   turn-id
+                   "message.delta"
+                   (hasheq 'text (stream-chunk-delta-text chunk) 'message-id message-id)
+                   #:state state)
+            ;; Dispatch message-update hook for text delta
+            (when hook-dispatcher
+              (define update-result
+                (hook-dispatcher 'message-update
+                                 (hasheq 'session-id
+                                         session-id
+                                         'turn-id
+                                         turn-id
+                                         'delta-text
+                                         (stream-chunk-delta-text chunk)
+                                         'delta-tool-call
+                                         #f)))
+              (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
+                (streaming-message-set-blocked! sm))))
+          ;; FEAT-72: Thinking/reasoning delta
+          (when (stream-chunk-delta-thinking chunk)
+            (streaming-message-append-thinking! sm (stream-chunk-delta-thinking chunk))
+            (emit! bus
+                   session-id
+                   turn-id
+                   "model.stream.thinking"
+                   (hasheq 'delta (stream-chunk-delta-thinking chunk))
+                   #:state state))
+          (when (stream-chunk-delta-tool-call chunk)
+            ;; Tool call delta
+            (define tc-delta (stream-chunk-delta-tool-call chunk))
+            (streaming-message-append-tool-call! sm tc-delta)
+            (emit! bus
+                   session-id
+                   turn-id
+                   "model.stream.delta"
+                   (hasheq 'delta-tool-call tc-delta)
+                   #:state state)
+            ;; Dispatch message-update hook for tool-call delta
+            (when hook-dispatcher
+              (define update-result
+                (hook-dispatcher 'message-update
+                                 (hasheq 'session-id
+                                         session-id
+                                         'turn-id
+                                         turn-id
+                                         'delta-text
+                                         #f
+                                         'delta-tool-call
+                                         tc-delta)))
+              (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
+                (streaming-message-set-blocked! sm))))
+          (when (stream-chunk-done? chunk)
+            ;; Stream completed
+            (emit! bus
+                   session-id
+                   turn-id
+                   "model.stream.completed"
+                   (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
+                   #:state state)
+            ;; Emit message.end if we started a message
+            (when (streaming-message-message-started? sm)
+              (emit! bus
+                     session-id
+                     turn-id
+                     "message.end"
+                     (hasheq 'message-id message-id 'usage (or (stream-chunk-usage chunk) (hasheq)))
+                     #:state state)))
+          ;; Check cancellation after processing chunk
+          (cond
+            [(and cancellation-token (cancellation-token-cancelled? cancellation-token))
+             (streaming-message-set-cancelled! sm)
+             (emit! bus
+                    session-id
+                    turn-id
+                    "turn.cancelled"
+                    (hasheq 'reason "cancellation-token")
+                    #:state state)]
+            [(streaming-message-blocked? sm)
+             ;; message-update hook blocked -- emit model.stream.completed then stop streaming
+             (emit! bus
+                    session-id
+                    turn-id
+                    "model.stream.completed"
+                    (hasheq 'usage (hasheq))
+                    #:state state)]
+            [else (stream-loop)])))))
 
   (streaming-message->hash sm))
 

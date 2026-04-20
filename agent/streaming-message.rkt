@@ -69,7 +69,10 @@
 
 (define (streaming-message-append-tool-call! sm tc)
   (define b (streaming-message-tool-calls-box sm))
-  (set-box! b (append (unbox b) (list tc))))
+  ;; v0.12.3 Wave 0.4: O(1) cons instead of O(n) append.
+  ;; Tool calls are reversed when accessed via streaming-message-finalize
+  ;; and streaming-message->hash.
+  (set-box! b (cons tc (unbox b))))
 
 (define (streaming-message-append-thinking! sm text)
   (define b (streaming-message-thinking-box sm))
@@ -96,7 +99,8 @@
   (unbox (streaming-message-text-box sm)))
 
 (define (streaming-message-tool-calls sm)
-  (unbox (streaming-message-tool-calls-box sm)))
+  ;; v0.12.3 Wave 0.4: reverse to restore insertion order
+  (reverse (unbox (streaming-message-tool-calls-box sm))))
 
 (define (streaming-message-thinking sm)
   (unbox (streaming-message-thinking-box sm)))

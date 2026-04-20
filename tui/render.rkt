@@ -80,9 +80,10 @@
   ;; BUG-NEWLINE-BLEED fix: sanitize newlines in tool results/errors
   ;; Newlines in styled-line text cause terminal row overflow.
   ;; Replace with ⏎ visual indicator.
-  (define text (if (memq kind '(tool-end tool-fail tool-start))
-                    (string-replace raw-text "\n" " \u23ce ")
-                    raw-text))
+  (define text
+    (if (memq kind '(tool-end tool-fail tool-start))
+        (string-replace raw-text "\n" " \u23ce ")
+        raw-text))
   ;; BUG-37 fix: skip whitespace-only assistant entries
   (case kind
     [(assistant)
