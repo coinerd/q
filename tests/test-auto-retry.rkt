@@ -188,45 +188,22 @@
   (check-false (timeout-error? (exn:fail "internal error" (current-continuation-marks)))))
 
 ;; ============================================================
-;; Context reduction on timeout retry tests (v0.11.2 Wave 4)
+;; No context reduction on retry (v0.13.2)
 ;; ============================================================
 
-(test-case "with-auto-retry: context-reducer called on timeout"
-  (define reduction-log (box '()))
+(test-case "with-auto-retry: retries use same thunk on timeout (no context reduction)"
+  ;; v0.13.2: #:context-reducer removed. Retries always use original thunk.
   (define call-count (box 0))
-  (check-exn exn:fail?
-             (lambda ()
-               (with-auto-retry
-                (lambda ()
-                  (set-box! call-count (add1 (unbox call-count)))
-                  (raise (exn:fail "HTTP read timeout" (current-continuation-marks))))
-                #:max-retries 2
-                #:base-delay-ms 1
-                #:context-reducer
-                (lambda (attempt)
-                  (set-box! reduction-log (cons attempt (unbox reduction-log)))
-                  ;; Return same thunk (context reduction is tested in iteration.rkt integration)
-                  (lambda ()
-                    (set-box! call-count (add1 (unbox call-count)))
-                    (raise (exn:fail "HTTP read timeout" (current-continuation-marks))))))))
-  ;; Context reducer should have been called for timeout errors
-  (check-equal? (reverse (unbox reduction-log)) '(1 2)))
-
-(test-case "with-auto-retry: context-reducer NOT called on non-timeout errors"
-  (define reduction-log (box '()))
-  (check-exn exn:fail?
-             (lambda ()
-               (with-auto-retry
-                (lambda () (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks))))
-                #:max-retries 1
-                #:base-delay-ms 1
-                #:context-reducer (lambda (attempt)
-                                    (set-box! reduction-log (cons attempt (unbox reduction-log)))
-                                    (lambda ()
-                                      (raise (exn:fail "HTTP 429 rate limit"
-                                                       (current-continuation-marks))))))))
-  ;; Context reducer should NOT have been called for rate-limit errors
-  (check-equal? (unbox reduction-log) '()))
+  (define result
+    (with-auto-retry (lambda ()
+                       (set-box! call-count (add1 (unbox call-count)))
+                       (if (= (unbox call-count) 1)
+                           (raise (exn:fail "timeout" (current-continuation-marks)))
+                           'success))
+                     #:max-retries 1
+                     #:base-delay-ms 1))
+  (check-equal? result 'success)
+  (check-equal? (unbox call-count) 2))
 
 ;; ============================================================
 ;; A1: Rate-limit-specific backoff tests (v0.12.2)
@@ -343,21 +320,8 @@
   (check-false (rate-limit-error? (exn:fail "invalid API key" (current-continuation-marks)))))
 
 ;; ============================================================
-;; context-reducer #f return (no-op) tests (v0.12.2)
+;; context-reducer tests removed (v0.13.2)
 ;; ============================================================
-
-(test-case "context-reducer returning #f keeps original thunk"
-  (define call-count (box 0))
-  (define original-value 'original-result)
-  (define result
-    (with-auto-retry (lambda ()
-                       (set-box! call-count (add1 (unbox call-count)))
-                       (if (= (unbox call-count) 1)
-                           (raise (exn:fail "timeout" (current-continuation-marks)))
-                           'retry-result))
-                     #:max-retries 1
-                     #:base-delay-ms 1
-                     #:context-reducer (lambda (attempt) #f)))
-  ;; Should succeed — reducer returned #f so original thunk is used
-  (check-equal? result 'retry-result)
-  (check-equal? (unbox call-count) 2))
+;; The #:context-reducer parameter was removed in v0.13.2.
+;; Retries now always use the same thunk without any context reduction.
+;; See "retries use same thunk on timeout" test above.

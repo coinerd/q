@@ -165,13 +165,11 @@
                          #:rate-limit-base-delay-ms
                          [rl-base-delay-ms default-rate-limit-base-delay-ms]
                          #:max-delay-ms [max-delay-ms default-max-delay-ms]
-                         #:on-retry [on-retry #f]
-                         #:context-reducer [context-reducer #f])
+                         #:on-retry [on-retry #f])
   (let loop ([attempt 0]
              [delay-ms 0]
              [total-delay 0]
-             [last-error-type #f]
-             [current-thunk thunk])
+             [last-error-type #f])
     (with-handlers
         ([exn:fail?
           (lambda (exn)
@@ -181,16 +179,13 @@
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
                (define next-delay (min (* rl-base (expt 2 attempt)) max-delay-ms))
-               ;; For timeout errors, apply context reduction if available
-               (define next-thunk
-                 (let ([reduced
-                        (and context-reducer (timeout-error? exn) (context-reducer (add1 attempt)))])
-                   (or reduced current-thunk)))
+               ;; v0.13.2: No context reduction on retry — retries use same thunk.
+               ;; Context management is a separate concern (v0.14.0 context manager).
                ;; Call retry callback if provided
                (when on-retry
                  (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
                (sleep (/ next-delay 1000.0))
-               (loop (add1 attempt) next-delay (+ total-delay next-delay) err-type next-thunk)]
+               (loop (add1 attempt) next-delay (+ total-delay next-delay) err-type)]
               [else
                ;; A3: Wrap in retry-exhausted if we attempted retries
                (if (> attempt 0)
@@ -201,4 +196,4 @@
                                            last-error-type
                                            total-delay))
                    (raise exn))]))])
-      (current-thunk))))
+      (thunk))))
