@@ -4,7 +4,7 @@ A walkthrough of a typical q CLI session from start to finish.
 
 ```bash
 $ raco q --model gpt-5.4
-q version 0.12.0
+q version 0.13.2
 Model:   gpt-5.4
 Session: a7f3c2e1
 
