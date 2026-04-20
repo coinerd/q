@@ -86,11 +86,12 @@
              (for/or ([entry (in-list path)]
                       [i (in-naturals)])
                (and (equal? (message-id entry) first-kept-id) i)))
-        => (lambda (kept-idx)
-             (define-values (pre post) (split-at path compaction-idx))
-             ;; post = [compaction-summary, ..., first-kept, ...]
-             ;; We want [compaction-summary] + messages from first-kept onward
-             (values pre post))]
+        =>
+        (lambda (kept-idx)
+          (define-values (pre post) (split-at path compaction-idx))
+          ;; post = [compaction-summary, ..., first-kept, ...]
+          ;; We want [compaction-summary] + messages from first-kept onward
+          (values pre post))]
        [else
         (define-values (pre post) (split-at path compaction-idx))
         (values pre post)])]))
@@ -159,32 +160,67 @@
 (define (truncate-messages-to-budget messages max-tokens)
   (cond
     [(null? messages) '()]
-    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens m))
-         max-tokens)
-     messages]
+    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens m)) max-tokens) messages]
     [else
      ;; Separate protected (system/compaction) from removable messages
      (define-values (protected removable)
-       (partition (lambda (m)
-                    (memq (message-kind m) '(system-instruction compaction-summary)))
+       (partition (lambda (m) (memq (message-kind m) '(system-instruction compaction-summary)))
                   messages))
+     ;; #1380: Find first user message to pin (never drop it)
+     (define first-user-msg
+       (for/first ([m (in-list messages)]
+                   #:when (eq? (message-role m) 'user))
+         m))
      ;; Protected messages always included; drop oldest removable until budget met
-     (define protected-tokens
-       (for/sum ([m (in-list protected)]) (estimate-message-tokens m)))
-     (define remaining-budget (- max-tokens protected-tokens))
+     (define protected-tokens (for/sum ([m (in-list protected)]) (estimate-message-tokens m)))
+     (define pinned-tokens
+       (if (and first-user-msg (not (member first-user-msg protected)))
+           (estimate-message-tokens first-user-msg)
+           0))
+     (define remaining-budget (- max-tokens protected-tokens pinned-tokens))
      (cond
-       [(<= remaining-budget 0) protected]
+       [(<= remaining-budget 0) (pin-first-user protected first-user-msg messages)]
        [else
         ;; Keep most recent removable messages that fit
-        (define kept-removable
-          (fit-messages-from-recent removable remaining-budget))
-        ;; Reassemble in original order: protected + kept-removable
-        ;; (preserving order from original messages list)
-        (define kept-ids (for/set ([m (in-list kept-removable)]) (message-id m)))
-        (for/list ([m (in-list messages)]
-                   #:when (or (memq (message-kind m) '(system-instruction compaction-summary))
-                              (set-member? kept-ids (message-id m))))
-          m)])]))
+        (define kept-removable (fit-messages-from-recent removable remaining-budget))
+        ;; Reassemble in original order: protected + kept-removable + pinned first-user
+        (define kept-ids
+          (for/set ([m (in-list kept-removable)])
+            (message-id m)))
+        (pin-first-user (for/list ([m (in-list messages)]
+                                   #:when (or (memq (message-kind m)
+                                                    '(system-instruction compaction-summary))
+                                              (set-member? kept-ids (message-id m))))
+                          m)
+                        first-user-msg
+                        messages)])]))
+
+;; #1380: Ensure first user message is in the result list, preserving original order.
+;; If it's already present, returns lst unchanged. Otherwise, inserts it at its original position.
+(define (pin-first-user lst first-user-msg original-messages)
+  (cond
+    [(not first-user-msg) lst]
+    [(member first-user-msg lst) lst]
+    [else
+     ;; Insert at correct position (where it was in original)
+     (define target-id (message-id first-user-msg))
+     ;; Find the message in original-messages that comes right after first-user-msg
+     (define after-id
+       (for/first ([m (in-list (dropf original-messages
+                                      (lambda (m) (not (equal? (message-id m) target-id)))))]
+                   #:when (member m lst))
+         (message-id m)))
+     (if after-id
+         ;; Insert before the message that followed first-user in original
+         (let loop ([result '()]
+                    [remaining lst])
+           (cond
+             [(null? remaining) (reverse (cons first-user-msg result))]
+             [(equal? (message-id (car remaining)) after-id)
+              (loop (cons (car remaining) (cons first-user-msg result)) (cdr remaining))]
+             [else (loop (cons (car remaining) result) (cdr remaining))]))
+         ;; Can't find position — prepend
+         (cons first-user-msg lst))]))
 
 ;; Fit as many messages as possible from the recent end within a token budget.
 ;; Returns messages in their original order.
