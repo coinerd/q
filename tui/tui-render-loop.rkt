@@ -307,6 +307,8 @@
              [(eq? result 'quit) (set-box! (tui-ctx-running-box ctx) #f)]
              [(and (list? result) (eq? (car result) 'submit))
               (define text (cadr result))
+              ;; Store prompt for /retry (#1378)
+              (set-box! (tui-ctx-last-prompt-box ctx) text)
               ;; Submit to runtime (non-blocking)
               (define runner (tui-ctx-session-runner ctx))
               (thread (lambda () (runner text)))]

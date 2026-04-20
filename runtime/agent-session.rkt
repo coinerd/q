@@ -174,7 +174,7 @@
 ;;   'tool-registry  → tool-registry? (required)
 ;;   'event-bus      → event-bus? (required)
 ;;   'session-dir    → path-string (base directory, required)
-;;   'max-iterations → integer (optional, default 10)
+;;   'max-iterations → integer (optional, default 20)
 ;;   'token-budget-threshold → integer (optional, default 100000)
 
 ;;; make-agent-session : (hash/c symbol? any/c) -> agent-session?
@@ -714,7 +714,7 @@
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
-  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 10)))
+  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 20)))
   (define token-budget-threshold
     (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
 
