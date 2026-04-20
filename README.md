@@ -331,7 +331,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.11.3** — Distribution Maturity. README metrics automation, prose reconciliation, sync-readme-status script, lint-prose mode, CI drift detection. 12 canonical extension examples, expanded hook catalog (streaming + lifecycle hooks), dynamic provider registration with RPC endpoints, SDK surface expansion (session state queries, telemetry), real provider wiring for subagents, 138+ new tests across 5 waves. 5100+ tests.
+**v0.12.0** — Extension Power · Session Tree · SDK. Session tree branching/navigation, typed per-tool events (bash/edit/write/read/grep/find/custom), unified session manager (persistent + in-memory), resource loader injection, extension context in hooks, pair-aware context reducer, SDK examples (8 progressive examples), event taxonomy & SDK documentation, 5260+ tests across 6 waves.
 
 **v0.10.8** — Timeout Render Fix + Extensibility + Test Runner. TUI streaming state cleanup on auto-retry/error, extension tool registration API, session tree UX, rich component model, built-in components + overlays, extension lifecycle, event coverage (37 events), custom editor + IME, SDK ergonomics, provider OAuth flow, image rendering, skills frontmatter, graceful shutdown, rewritten test runner with per-file result tracking. 4960+ tests.
 
