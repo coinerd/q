@@ -24,7 +24,7 @@
          "http-helpers.rkt")
 
 ;; Provider constructor
-(provide make-gemini-provider
+(provide (contract-out [make-gemini-provider (-> hash? provider?)])
          ;; Request/response helpers (exported for testing)
          gemini-build-request-body
          gemini-parse-response

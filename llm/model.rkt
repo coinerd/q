@@ -81,6 +81,12 @@
 
 (struct stream-chunk (delta-text delta-tool-call delta-thinking usage done?) #:transparent)
 
-;; Convenience constructor: 4-arg form (backward compat, delta-thinking defaults to #f)
-(define (make-stream-chunk delta-text delta-tool-call usage done?)
-  (stream-chunk delta-text delta-tool-call #f usage done?))
+;; Convenience constructor with optional #:delta-thinking keyword.
+;; v0.12.3 Wave 2.3: Added keyword arg so providers can pass thinking data
+;; without needing the raw 6-field stream-chunk constructor.
+(define (make-stream-chunk delta-text
+                           delta-tool-call
+                           usage
+                           done?
+                           #:delta-thinking [delta-thinking #f])
+  (stream-chunk delta-text delta-tool-call delta-thinking usage done?))
