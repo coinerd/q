@@ -29,8 +29,7 @@
 ;; simulate-events : ui-state? (listof event?) -> ui-state?
 ;; Applies events sequentially, returning the final state.
 (define (simulate-events state events)
-  (for/fold ([st state])
-            ([evt (in-list events)])
+  (for/fold ([st state]) ([evt (in-list events)])
     (apply-event-to-state st evt)))
 
 ;; simulate-and-record : ui-state? (listof event?) -> (listof ui-state?)
@@ -51,11 +50,11 @@
 
 ;; transcript-types : ui-state? -> (listof symbol?)
 (define (transcript-types state)
-  (map transcript-entry-kind (ui-state-transcript state)))
+  (map transcript-entry-kind (transcript-entries state)))
 
 ;; transcript-texts : ui-state? -> (listof string?)
 (define (transcript-texts state)
-  (map transcript-entry-text (ui-state-transcript state)))
+  (map transcript-entry-text (transcript-entries state)))
 
 ;; transcript-length : ui-state? -> nat
 (define (transcript-length state)

@@ -23,10 +23,11 @@
 ;; make-test-event
 ;; Wrap make-event with convenient keyword defaults for tests.
 ;; ------------------------------------------------------------
-(define (make-test-event ev payload
+(define (make-test-event ev
+                         payload
                          #:session-id [session-id "test-session"]
-                         #:turn-id    [turn-id "t1"]
-                         #:time       [time 1000.0])
+                         #:turn-id [turn-id "t1"]
+                         #:time [time 1000.0])
   (make-event ev time session-id turn-id payload))
 
 ;; ------------------------------------------------------------
@@ -35,9 +36,7 @@
 ;; Returns the final ui-state.
 ;; ------------------------------------------------------------
 (define (apply-events state events)
-  (foldl (lambda (evt st) (apply-event-to-state st evt))
-         state
-         events))
+  (foldl (lambda (evt st) (apply-event-to-state st evt)) state events))
 
 ;; ------------------------------------------------------------
 ;; render-state
@@ -64,7 +63,8 @@
 ;;                          "tool_start"     (hash "name" "read"))
 ;; ------------------------------------------------------------
 (define (event-sequence . ev-payload-pairs)
-  (let loop ([pairs ev-payload-pairs] [acc '()])
+  (let loop ([pairs ev-payload-pairs]
+             [acc '()])
     (cond
       [(null? pairs) (reverse acc)]
       [(null? (cdr pairs))
@@ -72,8 +72,7 @@
       [else
        (define ev (car pairs))
        (define payload (cadr pairs))
-       (loop (cddr pairs)
-             (cons (make-test-event ev payload) acc))])))
+       (loop (cddr pairs) (cons (make-test-event ev payload) acc))])))
 
 ;; ------------------------------------------------------------
 ;; find-entry-by-text
@@ -81,7 +80,7 @@
 ;; substring. Returns #f if not found.
 ;; ------------------------------------------------------------
 (define (find-entry-by-text state text)
-  (for/first ([e (in-list (ui-state-transcript state))]
+  (for/first ([e (in-list (transcript-entries state))]
               #:when (string-contains? (transcript-entry-text e) text))
     e))
 
@@ -97,4 +96,4 @@
 ;; Return a list of plain entry texts from the transcript.
 ;; ------------------------------------------------------------
 (define (state->texts state)
-  (map transcript-entry-text (ui-state-transcript state)))
+  (map transcript-entry-text (transcript-entries state)))

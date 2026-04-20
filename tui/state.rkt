@@ -59,6 +59,7 @@
          apply-event-to-state
 
          ;; Transcript helpers
+         transcript-entries
          add-transcript-entry
          visible-entries
          scroll-up
@@ -276,9 +277,10 @@
   (define payload (event-payload evt))
 
   ;; Helper: create entry, assign id, append to transcript, return new state
+  ;; v0.13.1: O(1) cons instead of O(n) append
   (define (append-entry st entry)
     (define-values (id-entry st1) (assign-entry-id entry st))
-    (struct-copy ui-state st1 [transcript (append (ui-state-transcript st1) (list id-entry))]))
+    (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
 
   (case ev
     [("assistant.message.completed")
@@ -534,15 +536,20 @@
         (assign-entry-id entry state)))
   (struct-copy ui-state
                state1
-               [transcript (append (ui-state-transcript state1) (list id-entry))]
+               [transcript (cons id-entry (ui-state-transcript state1))]
                [scroll-offset 0])) ;; Reset scroll to bottom
 
 ;; Get visible entries — returns all transcript entries.
 ;; Line-based slicing is done by the renderer (render.rkt)
 ;; which knows the width and can compute actual rendered line counts.
 ;; scroll-offset is now line-based (not entry-based).
+;; v0.13.1: Public accessor — always returns oldest-first
+;; Raw ui-state-transcript stores newest-first (cons); this reverses for consumers.
+(define (transcript-entries state)
+  (reverse (ui-state-transcript state)))
+
 (define (visible-entries state transcript-height)
-  (ui-state-transcript state))
+  (reverse (ui-state-transcript state)))
 
 ;; Scroll up (see older entries)
 ;; scroll-offset counts rendered LINES from the bottom.

@@ -148,7 +148,7 @@
   (when scrollback-path
     (with-handlers ([exn:fail? (lambda (e) (void))])
       (let* ([state (unbox (tui-ctx-ui-state-box ctx))]
-             [transcript (ui-state-transcript state)])
+             [transcript (transcript-entries state)])
         (when (not (null? transcript))
           (save-scrollback transcript scrollback-path)))))
   (displayln "Goodbye."))

@@ -462,7 +462,7 @@
 ;; scroll-offset is line-based: 0 = bottom, positive = scrolled up
 ;; Returns (listof styled-line)
 (define (render-transcript state transcript-height [width 200])
-  (define entries (ui-state-transcript state))
+  (define entries (transcript-entries state))
   (define scroll-offset (ui-state-scroll-offset state))
   ;; Check width validity — flush cache if terminal resized
   (define state0
