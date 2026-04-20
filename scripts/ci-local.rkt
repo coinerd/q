@@ -102,8 +102,7 @@
 
 (define fix-commands
   (list (list "sync-readme-status --sync" "racket scripts/sync-readme-status.rkt --sync")
-        ;; metrics --sync-all added in W1B; skip gracefully if not available
-        (list "metrics --sync-readme" "racket scripts/metrics.rkt --sync-readme")))
+        (list "metrics --sync-all" "racket scripts/metrics.rkt --sync-all")))
 
 ;; ---------------------------------------------------------------------------
 ;; Main

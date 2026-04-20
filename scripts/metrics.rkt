@@ -24,6 +24,7 @@
 (define lint? (member "--lint" args))
 (define lint-prose? (member "--lint-prose" args))
 (define sync-readme? (member "--sync-readme" args))
+(define sync-all? (member "--sync-all" args))
 
 ;; Resolve optional file argument (first non-flag arg)
 (define (file-arg)
@@ -208,11 +209,59 @@
   (printf "Synced METRICS markers in ~a~n" path)
   0)
 
+;; --- Sync table values: update metrics table in README ---
+
+(define (sync-table-values path)
+  (unless (file-exists? path)
+    (printf "ERROR: ~a not found~n" path)
+    1)
+  (define content (file->string path))
+  (define updated
+    (for/fold ([c content]) ([(name value) (in-dict computed-metrics)])
+      (regexp-replace* (regexp (format "\\| ~a \\| [0-9,]+ \\|" (regexp-quote name)))
+                       c
+                       (format "| ~a | ~a |" name value))))
+  (call-with-output-file path (λ (out) (display updated out)) #:exists 'replace)
+  (printf "Synced metrics table in ~a~n" path)
+  0)
+
+;; --- Sync prose counts: update prose NNN counts in README ---
+
+(define (sync-prose-counts path)
+  (unless (file-exists? path)
+    (printf "ERROR: ~a not found~n" path)
+    1)
+  (define content (file->string path))
+  ;; Fix "Full test suite (NNN files)"
+  (define test-file-count (number->string (length test-files)))
+  (define updated
+    (regexp-replace* #rx"Full test suite \\([0-9]+ files\\)"
+                     content
+                     (format "Full test suite (~a files)" test-file-count)))
+  ;; Fix "NNN source modules"
+  (define src-mod-count (number->string (length source-files)))
+  (define updated2
+    (regexp-replace* #rx"[0-9]+ source modules" updated (format "~a source modules" src-mod-count)))
+  (call-with-output-file path (λ (out) (display updated2 out)) #:exists 'replace)
+  (printf "Synced prose counts in ~a~n" path)
+  0)
+
+;; --- Sync all: table + prose + markers ---
+
+(define (sync-all path)
+  (define p (or path "README.md"))
+  (sync-readme-markers p)
+  (sync-table-values p)
+  (sync-prose-counts p)
+  (printf "--sync-all complete.~n")
+  0)
+
 ;; --- Output ---
 
 (cond
   [lint? (exit (lint-metrics))]
   [lint-prose? (exit (lint-prose-metrics (or (file-arg) "README.md")))]
+  [sync-all? (exit (sync-all (file-arg)))]
   [sync-readme? (exit (sync-readme-markers (or (file-arg) "README.md")))]
   [else
    (printf "| Metric | Value |~n")
