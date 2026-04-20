@@ -156,7 +156,10 @@
 
      ;; Phase 4: Generate catalog for excluded entries
      (define max-entries (context-manager-config-max-catalog-entries config))
-     (define catalog (generate-catalog excluded #:max-entries max-entries))
+     (define catalog
+       (generate-catalog excluded
+                         #:max-entries max-entries
+                         #:max-tokens (context-manager-config-max-catalog-tokens config)))
 
      ;; Phase 5: Reassemble in original order
      (define pinned-ids
@@ -233,14 +236,56 @@
 ;; Phase 4: Catalog generation
 ;; ============================================================
 
-(define (generate-catalog entries #:max-entries [max-entries 40])
-  (for/list ([m (in-list entries)]
-             [i (in-naturals)]
-             #:break (>= i max-entries))
-    (define text (extract-message-text m))
-    (define summary (truncate-string text 80))
-    (define role-str (symbol->string (message-role m)))
-    (catalog-entry (message-id m) role-str summary)))
+;; Generate one-line catalog entries for excluded messages.
+;; Consecutive tool-result messages are collapsed to a single entry.
+;; Both entry count and total token budget are enforced.
+(define (generate-catalog entries #:max-entries [max-entries 40] #:max-tokens [max-tokens 2000])
+  (define collapsed (collapse-consecutive-tools entries))
+  (let loop ([remaining collapsed]
+             [acc '()]
+             [used-tokens 0])
+    (cond
+      [(null? remaining) (reverse acc)]
+      [(>= (length acc) max-entries) (reverse acc)]
+      [else
+       (define entry (car remaining))
+       (define tokens (estimate-text-tokens (catalog-entry-summary entry)))
+       (if (> (+ used-tokens tokens) max-tokens)
+           (reverse acc)
+           (loop (cdr remaining) (cons entry acc) (+ used-tokens tokens)))])))
+
+;; Collapse consecutive tool-result messages into single catalog entries.
+;; Non-tool messages get individual entries. Returns (listof catalog-entry?).
+(define (collapse-consecutive-tools entries)
+  (define-values (result current-group)
+    (for/fold ([acc '()]
+               [group '()])
+              ([m (in-list entries)])
+      (cond
+        [(eq? (message-role m) 'tool) (values acc (cons m group))]
+        [(null? group) (values (cons (message->catalog-entry m) acc) '())]
+        [else
+         (values (cons (message->catalog-entry m)
+                       (cons (tool-group->catalog-entry (reverse group)) acc))
+                 '())])))
+  (reverse (if (null? current-group)
+               result
+               (cons (tool-group->catalog-entry (reverse current-group)) result))))
+
+;; Single message → catalog entry
+(define (message->catalog-entry m)
+  (catalog-entry (message-id m)
+                 (symbol->string (message-role m))
+                 (truncate-string (extract-message-text m) 80)))
+
+;; Group of consecutive tool results → single catalog entry
+(define (tool-group->catalog-entry tool-msgs)
+  (define ids (string-join (map message-id tool-msgs) ","))
+  (define texts (map extract-message-text tool-msgs))
+  (catalog-entry
+   ids
+   "tool"
+   (format "[~a tool calls: ~a]" (length tool-msgs) (truncate-string (string-join texts "; ") 50))))
 
 ;; ============================================================
 ;; Summary prompt template (Wave 2A #1395)
