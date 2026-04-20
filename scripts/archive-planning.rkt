@@ -20,10 +20,15 @@
 (define args (vector->list (current-command-line-arguments)))
 (define dry-run? (member "--dry-run" args))
 
+;; Allow overriding planning dir for testing
+(define planning-dir-arg
+  (for/or ([a (in-list args)])
+    (define m (regexp-match #rx"^--planning-dir=(.+)$" a))
+    (and m (cadr m))))
+
 ;; --- Protected files (never archive) ---
 
-(define protected-files
-  '("PLAN.md" "STATE.md" "HANDOFF.json" "VALIDATION.md" "SUMMARY.md"))
+(define protected-files '("PLAN.md" "STATE.md" "HANDOFF.json" "VALIDATION.md" "SUMMARY.md"))
 
 (define (protected? filename)
   (member filename protected-files))
@@ -35,26 +40,21 @@
   ;; "v0113_foo.md" -> "v0113"
   ;; "BUG_PLAN.md" -> #f (no version)
   ;; "ARCH_REVIEW.md" -> #f
-  (define prefix-rxs
-    (list #rx"^([Vv]0[0-9]+)_" #rx"^([Vv]0[0-9][0-9]+)"))
+  (define prefix-rxs (list #rx"^([Vv]0[0-9]+)_" #rx"^([Vv]0[0-9][0-9]+)"))
   (for/or ([rx (in-list prefix-rxs)])
     (define m (regexp-match rx filename))
     (and m (string-downcase (cadr m)))))
 
 ;; --- Get current milestone version from STATE.md ---
 
-(define (current-milestone)
+(define (current-milestone planning-dir)
   (with-handlers ([exn:fail? (λ (_) #f)])
-    (define content (file->string "../.planning/STATE.md"))
+    (define content (file->string (build-path planning-dir "STATE.md")))
     (define m (regexp-match #rx"#.*v[0-9]+\\.[0-9]+\\.[0-9]+" content))
     (and m
          (let* ([s (car m)]
                 [ver-m (regexp-match #rx"v([0-9]+)\\.([0-9]+)\\.([0-9]+)" s)])
-           (and ver-m
-                (format "v~a~a~a"
-                        (cadr ver-m)
-                        (caddr ver-m)
-                        (cadddr ver-m)))))))
+           (and ver-m (format "v~a~a~a" (cadr ver-m) (caddr ver-m) (cadddr ver-m)))))))
 
 ;; --- Collect archive candidates ---
 
@@ -77,14 +77,16 @@
          ;; Current milestone — keep
          [(and current-ms (string=? group current-ms)) (void)]
          ;; Old milestone — archive candidate
-         [else
-          (set! candidates (cons (cons name group) candidates))])]))
+         [else (set! candidates (cons (cons name group) candidates))])]))
   (reverse candidates))
 
 ;; --- Main ---
 
 (define (main)
-  (define planning-dir (simplify-path "../.planning"))
+  (define planning-dir
+    (simplify-path (if planning-dir-arg
+                       (string->path planning-dir-arg)
+                       "../.planning")))
 
   (unless (directory-exists? planning-dir)
     (printf "ERROR: ~a not found~n" planning-dir)
@@ -92,7 +94,7 @@
 
   (printf "=== .planning/ Archive ===~n~n")
 
-  (define current-ms (current-milestone))
+  (define current-ms (current-milestone planning-dir))
   (printf "Current milestone: ~a~n" (or current-ms "(unknown)"))
 
   (define candidates (collect-candidates planning-dir current-ms))
