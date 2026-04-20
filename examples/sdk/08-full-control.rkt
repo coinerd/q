@@ -1,10 +1,14 @@
 #lang racket/base
 
 ;; examples/sdk/08-full-control.rkt — Full dependency injection
+;;
+;; Demonstrates creating a runtime with explicit control over every
+;; component: event bus, tool registry, and session manager.
 
 (require "../../interfaces/sdk.rkt"
-         "../../tools/tool.rkt"
-         "../../runtime/session-manager.rkt")
+         (only-in "../../tools/tool.rkt" make-tool-registry)
+         (only-in "../../runtime/session-manager.rkt" make-in-memory-session-manager)
+         (only-in "../../agent/event-bus.rkt" make-event-bus))
 
 (define bus (make-event-bus))
 (define registry (make-tool-registry))
