@@ -5,7 +5,7 @@
 ;; Consolidates functions that were duplicated across:
 ;;   - runtime/compactor.rkt
 ;;   - runtime/cutpoint-rules.rkt
-;;   - runtime/context-reducer.rkt
+;;   - runtime/context-manager.rkt
 ;;   - runtime/session-store.rkt
 ;;   - runtime/session-index.rkt
 
@@ -24,7 +24,7 @@
 ;; ============================================================
 
 ;; Check if a message contains any tool-call parts.
-;; Used by compactor, cutpoint-rules, and context-reducer
+;; Used by compactor, cutpoint-rules, and context-manager
 ;; to preserve tool_call/result pair atomicity.
 (define (has-tool-calls? msg)
   (define content (message-content msg))
@@ -36,7 +36,7 @@
   (memq (message-kind msg) '(tool-result bash-execution)))
 
 ;; Extract all tool-call IDs from a message's content parts.
-;; Used by context-reducer for pair-aware trimming.
+;; Used by context-manager for pair-aware trimming.
 (define (get-tool-call-ids msg)
   (for/list ([cp (in-list (message-content msg))]
              #:when (tool-call-part? cp))
