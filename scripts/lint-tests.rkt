@@ -66,7 +66,7 @@
       ;; Single-char filenames like /a.rkt /b.rkt — clearly test fixtures
       (regexp-match? #rx"^/[a-z]\\.rkt$" str)
       ;; Multi-char fake test names /foo.rkt /bar.rkt
-      (regexp-match? #rx"^/(foo|bar)\\.rkt$" str)))
+      (regexp-match? #rx"^/(foo|bar|baz)\\.rkt$" str)))
 
 (define (absolute-path-pattern? str)
   ;; matches #rx"^/[a-z]" but NOT allowed prefixes, CLI commands, or test fixtures
