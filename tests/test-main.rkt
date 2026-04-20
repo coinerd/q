@@ -30,10 +30,10 @@
 ;; register-default-tools!
 ;; ============================================================
 
-(test-case "registers all 10 built-in tools"
+(test-case "registers all 11 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (check-equal? (length (list-tools reg)) 10))
+  (check-equal? (length (list-tools reg)) 11))
 
 (test-case "each tool is a valid tool struct with executable"
   (define reg (make-tool-registry))
@@ -46,7 +46,7 @@
 (test-case "registry has correct count"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (check-equal? (length (list-tools reg)) 10))
+  (check-equal? (length (list-tools reg)) 11))
 
 ;; ============================================================
 ;; build-runtime-from-cli
@@ -70,11 +70,11 @@
   (check-true (not (false? (member (provider-name (hash-ref rt 'provider))
                                    '("mock" "openai-compatible"))))))
 
-(test-case "tool-registry has all 10 built-in tools"
+(test-case "tool-registry has all 11 built-in tools"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (define reg (hash-ref rt 'tool-registry))
-  (check-equal? (length (list-tools reg)) 10))
+  (check-equal? (length (list-tools reg)) 11))
 
 (test-case "event-bus is valid"
   (define cfg (parse-cli-args #()))
@@ -729,7 +729,7 @@
 (test-case "register-default-tools! #:only #f registers all"
   (define reg (make-tool-registry))
   (register-default-tools! reg #:only #f)
-  (check-equal? (length (tool-names reg)) 10))
+  (check-equal? (length (tool-names reg)) 11))
 
 (test-case "register-default-tools! #:only empty list registers none"
   (define reg (make-tool-registry))

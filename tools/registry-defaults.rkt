@@ -3,8 +3,8 @@
 ;; tools/registry-defaults.rkt — Register built-in tools into a tool registry
 ;;
 ;; Extracted from main.rkt. Contains register-default-tools! which
-;; registers all 10 built-in tools (read, write, edit, bash, grep,
-;; find, ls, date, firecrawl, spawn-subagent) into the given registry.
+;; registers all 11 built-in tools (read, write, edit, bash, grep,
+;; find, ls, date, firecrawl, spawn-subagent, session_recall) into the given registry.
 
 (require "tool.rkt"
          "builtins/read.rkt"
@@ -16,7 +16,8 @@
          "builtins/ls.rkt"
          "builtins/date.rkt"
          "builtins/firecrawl.rkt"
-         "builtins/spawn-subagent.rkt")
+         "builtins/spawn-subagent.rkt"
+         "builtins/session-recall.rkt")
 
 (provide register-default-tools!)
 
@@ -237,4 +238,43 @@
                               'description
                               "Allowed tool names for child")))
       tool-spawn-subagent)))
+
+  ;; Session recall tool — retrieve earlier session entries by ID, query, or range (#1391)
+  (when (should-register? "session_recall")
+    (register-tool!
+     registry
+     (make-tool
+      "session_recall"
+      (string-append
+       "Retrieve earlier session entries that are not in your current context. "
+       "Use the Session History Catalog to find relevant entry IDs. "
+       "Provide one of: entry_ids (list of IDs), query (text search), or range (from/to IDs). "
+       "Returns up to 5 entries per call. Results are ephemeral — only in context for this turn.")
+      (hasheq
+       'type
+       "object"
+       'required
+       '()
+       'properties
+       (hasheq 'entry_ids
+               (hasheq 'type
+                       "array"
+                       'items
+                       (hasheq 'type "string")
+                       'description
+                       "Entry IDs to retrieve from session history")
+               'query
+               (hasheq 'type "string" 'description "Text search query to find relevant entries")
+               'range
+               (hasheq 'type
+                       "object"
+                       'properties
+                       (hasheq 'from
+                               (hasheq 'type "string" 'description "Start entry ID")
+                               'to
+                               (hasheq 'type "string" 'description "End entry ID"))
+                       'description
+                       "Retrieve a range of entries by ID (inclusive)")))
+      tool-session-recall)))
+
   (void))
