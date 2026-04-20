@@ -14,6 +14,7 @@
 ;;   5. Ensure first non-system message is always 'user (add synthetic if needed)
 
 (require "../util/protocol-types.rkt"
+         "../util/message-helpers.rkt"
          racket/list)
 
 (provide trim-context-pair-aware)
@@ -29,15 +30,7 @@
                 0
                 (hasheq)))
 
-(define (has-tool-calls? msg)
-  (and (eq? (message-role msg) 'assistant)
-       (for/or ([cp (in-list (message-content msg))])
-         (tool-call-part? cp))))
-
-(define (get-tool-call-ids msg)
-  (for/list ([cp (in-list (message-content msg))]
-             #:when (tool-call-part? cp))
-    (tool-call-part-id cp)))
+;; has-tool-calls? and get-tool-call-ids imported from util/message-helpers.rkt
 
 (define (tool-result-msg? msg)
   (eq? (message-role msg) 'tool))
@@ -56,8 +49,7 @@
      (define non-system (filter (lambda (m) (not (eq? (message-role m) 'system))) ctx))
      (cond
        [(null? non-system) system-msgs]
-       [(<= (length non-system) keep-count)
-        (append system-msgs (ensure-user-first non-system))]
+       [(<= (length non-system) keep-count) (append system-msgs (ensure-user-first non-system))]
        [else
         ;; Walk backwards to build atomic units
         (define units (build-atomic-units non-system))
@@ -76,7 +68,8 @@
 
 ;; Walk through messages in newest-first order, producing units.
 (define (build-units-from-newest rev-msgs)
-  (let loop ([msgs rev-msgs] [units '()])
+  (let loop ([msgs rev-msgs]
+             [units '()])
     (cond
       [(null? msgs) units]
       [else
@@ -85,11 +78,9 @@
          ;; Tool result: find all consecutive tool results, then find the
          ;; matching tool_call message. Group them together as one unit.
          [(tool-result-msg? msg)
-          (define-values (tool-results rest-after-results)
-            (splitf-at msgs tool-result-msg?))
+          (define-values (tool-results rest-after-results) (splitf-at msgs tool-result-msg?))
           (cond
-            [(and (pair? rest-after-results)
-                  (has-tool-calls? (car rest-after-results)))
+            [(and (pair? rest-after-results) (has-tool-calls? (car rest-after-results)))
              ;; The next msg is a tool_call. Check if it covers all results.
              (define call-msg (car rest-after-results))
              (define call-ids (get-tool-call-ids call-msg))
@@ -102,22 +93,21 @@
                 ;; In oldest-first order: tool_call first, then results
                 (define unit (cons call-msg tool-results))
                 (loop (cdr rest-after-results) (cons unit units))]
-               [else
-                ;; Mismatch — treat results as orphans, skip them
-                (loop rest-after-results units)])]
-            [else
-             ;; Orphan results — no matching tool_call — skip
-             (loop rest-after-results units)])]
+               ;; Mismatch — treat results as orphans, skip them
+               [else (loop rest-after-results units)])]
+            ;; Orphan results — no matching tool_call — skip
+            [else (loop rest-after-results units)])]
          ;; Regular message: one-message unit
-         [else
-          (loop (cdr msgs) (cons (list msg) units))])])))
+         [else (loop (cdr msgs) (cons (list msg) units))])])))
 
 ;; Take units from the newest end (last in list) until count >= target.
 ;; Returns messages in oldest-first order.
 (define (take-units units target)
   ;; units is oldest-first. Take from the end.
   (define rev-units (reverse units))
-  (let loop ([ru rev-units] [count 0] [acc '()])
+  (let loop ([ru rev-units]
+             [count 0]
+             [acc '()])
     (cond
       [(null? ru) (apply append (reverse acc))]
       [(>= count target) (apply append (reverse acc))]
