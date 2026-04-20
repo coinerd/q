@@ -14,6 +14,7 @@
 
 (require racket/contract
          racket/math
+         racket/list
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          "../agent/event-bus.rkt"
@@ -53,9 +54,7 @@
                   append-tree-entry!
                   load-tree
                   tree-info)
-         (prefix-in session: "../runtime/agent-session.rkt")
          (prefix-in store: "../runtime/session-store.rkt")
-         (prefix-in pt: "../util/protocol-types.rkt")
          "../util/cancellation.rkt")
 
 ;; Structs
@@ -577,7 +576,10 @@
     [(not sess) 'no-active-session]
     [else
      (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
-     (define target-id (or entry-id (session:session-id sess)))
+     ;; Use last entry ID as default target, not session-id
+     (define history (session:session-history sess))
+     (define target-id
+       (or entry-id (and (pair? history) (message-id (last history))) (session:session-id sess)))
      (define branch
        (make-branch-entry (format "branch-~a" (current-inexact-milliseconds)) target-id branch-name))
      (store:append-tree-entry! log-path branch)
@@ -591,15 +593,21 @@
     [(not sess) 'no-active-session]
     [else
      (define log-path (build-path (session:agent-session-session-dir sess) "session.jsonl"))
+     ;; Use last entry ID as from-entry, not session-id
+     (define history (session:session-history sess))
+     (define from-id
+       (if (pair? history)
+           (message-id (last history))
+           (session:session-id sess)))
      (define nav
        (make-tree-navigation-entry (format "nav-~a" (current-inexact-milliseconds))
-                                   (session:session-id sess)
+                                   from-id
                                    target-entry-id))
      (store:append-tree-entry! log-path nav)
      (hasheq 'navigation-id
              (message-id nav)
              'from-entry-id
-             (session:session-id sess)
+             from-id
              'target-entry-id
              target-entry-id)]))
 

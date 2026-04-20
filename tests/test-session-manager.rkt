@@ -80,7 +80,7 @@
       (sm-append! mgr "s1" (make-message "m2" "m1" 'assistant 'message '() 2 (hasheq)))
       (sm-fork! mgr "s1" "s2" "m1")
       (define forked (sm-load mgr "s2"))
-      (check >= (length forked) 1 "fork preserves at least 1 entry")
+      (check-equal? (length forked) 3 "fork preserves header + 2 entries")
       (cleanup-dir dir))
 
     (test-case "persistent: load non-existent returns empty"

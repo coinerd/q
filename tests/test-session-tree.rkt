@@ -138,7 +138,7 @@
       (append-entry! path (make-message "m1" "root" 'user 'message '() 1 (hasheq)))
       (append-entry! path (make-message "m2" "m1" 'assistant 'message '() 2 (hasheq)))
       (define tree (load-tree path))
-      (define active (resolve-active-branch tree path))
+      (define active (resolve-active-branch tree))
       (check-equal? (map message-id active) '("root" "m1" "m2"))
       (delete-directory/files dir))
 
@@ -151,7 +151,7 @@
       (append-entry! path (make-message "m2" "m1" 'assistant 'message '() 2 (hasheq)))
       ;; Last entry is m2 (on main path), so active branch is root->m1->m2
       (define tree (load-tree path))
-      (define active (resolve-active-branch tree path))
+      (define active (resolve-active-branch tree))
       (check-equal? (map message-id active) '("root" "m1" "m2"))
       (delete-directory/files dir))
 

@@ -293,6 +293,16 @@
   (check-true (tool-call-event? evt))
   (check-equal? (tool-call-event-tool-name evt) "edit"))
 
+(test-case "edit-tool-call-event: JSON roundtrip"
+  (define evt
+    (make-edit-tool-call-event #:session-id "s1"
+                               #:turn-id "t1"
+                               #:timestamp 1000
+                               #:path "test.rkt"
+                               #:edits '(((oldText . "foo") (newText . "bar")))
+                               #:tool-call-id "tc-edit"))
+  (check-roundtrip evt "edit-tool-call-event"))
+
 (test-case "write-tool-call-event: construction"
   (define evt
     (make-write-tool-call-event #:session-id "s1"
@@ -303,6 +313,16 @@
                                 #:tool-call-id "tc-write"))
   (check-equal? (typed-event-type evt) "write-tool-call")
   (check-equal? (write-tool-call-event-path evt) "out.rkt"))
+
+(test-case "write-tool-call-event: JSON roundtrip"
+  (define evt
+    (make-write-tool-call-event #:session-id "s1"
+                                #:turn-id "t1"
+                                #:timestamp 1000
+                                #:path "out.rkt"
+                                #:content "(#lang racket)"
+                                #:tool-call-id "tc-write"))
+  (check-roundtrip evt "write-tool-call-event"))
 
 (test-case "read-tool-call-event: construction"
   (define evt
@@ -318,6 +338,17 @@
   (check-equal? (read-tool-call-event-limit evt) 50)
   (check-true (tool-call-event? evt)))
 
+(test-case "read-tool-call-event: JSON roundtrip"
+  (define evt
+    (make-read-tool-call-event #:session-id "s1"
+                               #:turn-id "t1"
+                               #:timestamp 1000
+                               #:path "test.rkt"
+                               #:offset 1
+                               #:limit 50
+                               #:tool-call-id "tc-read"))
+  (check-roundtrip evt "read-tool-call-event"))
+
 (test-case "grep-tool-call-event: construction"
   (define evt
     (make-grep-tool-call-event #:session-id "s1"
@@ -330,6 +361,17 @@
   (check-equal? (typed-event-type evt) "grep-tool-call")
   (check-equal? (grep-tool-call-event-pattern evt) "TODO"))
 
+(test-case "grep-tool-call-event: JSON roundtrip"
+  (define evt
+    (make-grep-tool-call-event #:session-id "s1"
+                               #:turn-id "t1"
+                               #:timestamp 1000
+                               #:pattern "TODO"
+                               #:path "src/"
+                               #:glob "*.rkt"
+                               #:tool-call-id "tc-grep"))
+  (check-roundtrip evt "grep-tool-call-event"))
+
 (test-case "find-tool-call-event: construction"
   (define evt
     (make-find-tool-call-event #:session-id "s1"
@@ -339,6 +381,16 @@
                                #:path "src/"
                                #:tool-call-id "tc-find"))
   (check-equal? (typed-event-type evt) "find-tool-call"))
+
+(test-case "find-tool-call-event: JSON roundtrip"
+  (define evt
+    (make-find-tool-call-event #:session-id "s1"
+                               #:turn-id "t1"
+                               #:timestamp 1000
+                               #:pattern "test"
+                               #:path "src/"
+                               #:tool-call-id "tc-find"))
+  (check-roundtrip evt "find-tool-call-event"))
 
 (test-case "custom-tool-call-event: fallback for unknown tools"
   (define evt
@@ -351,6 +403,16 @@
   (check-equal? (typed-event-type evt) "custom-tool-call")
   (check-equal? (tool-call-event-tool-name evt) "my-custom-tool")
   (check-true (tool-call-event? evt)))
+
+(test-case "custom-tool-call-event: JSON roundtrip"
+  (define evt
+    (make-custom-tool-call-event #:session-id "s1"
+                                 #:turn-id "t1"
+                                 #:timestamp 1000
+                                 #:tool-name "my-custom-tool"
+                                 #:arguments '#hasheq((x . 1))
+                                 #:tool-call-id "tc-custom"))
+  (check-roundtrip evt "custom-tool-call-event"))
 
 ;; ============================================================
 ;; Provider events
