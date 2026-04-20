@@ -20,29 +20,29 @@
          racket/list
          racket/match
          "../util/protocol-types.rkt"
+         "../util/message-helpers.rkt"
          "compactor.rkt")
 
-(provide
- ;; #693: Cut-point rules
- adjust-cutpoint
- valid-cutpoint?
- find-nearest-valid-cutpoint
- cutpoint-rule-description
- ;; #694: Overflow recovery
- make-overflow-state
- overflow-state?
- overflow-state-attempted
- overflow-state-max-attempts
- overflow-state-will-retry
- mark-overflow-attempted!
- can-retry-overflow?
- ;; #695: Auto-retry
- make-retry-context
- retry-context?
- retry-context-original-prompt
- retry-context-compaction-result
- retry-context-retry-messages
- build-retry-messages)
+;; #693: Cut-point rules
+(provide adjust-cutpoint
+         valid-cutpoint?
+         find-nearest-valid-cutpoint
+         cutpoint-rule-description
+         ;; #694: Overflow recovery
+         make-overflow-state
+         overflow-state?
+         overflow-state-attempted
+         overflow-state-max-attempts
+         overflow-state-will-retry
+         mark-overflow-attempted!
+         can-retry-overflow?
+         ;; #695: Auto-retry
+         make-retry-context
+         retry-context?
+         retry-context-original-prompt
+         retry-context-compaction-result
+         retry-context-retry-messages
+         build-retry-messages)
 
 ;; ============================================================
 ;; #693: Cut-point rules
@@ -52,15 +52,7 @@
 ;; A message with role='tool and kind='tool-result is a tool result.
 ;; We must NEVER cut between them.
 
-;; Check if a message contains tool-call parts.
-(define (has-tool-calls? msg)
-  (define content (message-content msg))
-  (and (list? content)
-       (ormap tool-call-part? content)))
-
-;; Check if a message is a tool-result or bash-execution.
-(define (tool-result-message? msg)
-  (memq (message-kind msg) '(tool-result bash-execution)))
+;; has-tool-calls? and tool-result-message? imported from util/message-helpers.rkt
 
 ;; Check if a message is a user message (valid cut point).
 (define (user-message? msg)
@@ -70,9 +62,7 @@
 ;; An assistant message is valid IF it has no pending tool calls
 ;; (i.e., the next message is NOT a tool-result).
 (define (assistant-valid-cut? msg next-msg)
-  (and (eq? (message-role msg) 'assistant)
-       (or (not next-msg)
-           (not (tool-result-message? next-msg)))))
+  (and (eq? (message-role msg) 'assistant) (or (not next-msg) (not (tool-result-message? next-msg)))))
 
 ;; Check if placing a cut BEFORE index `idx` is valid.
 ;; A cut at index N means messages[0..N) are old, messages[N..] are recent.
@@ -84,8 +74,8 @@
 (define (valid-cutpoint? messages idx)
   (cond
     [(or (< idx 0) (> idx (length messages))) #f]
-    [(= idx 0) #t]  ;; Cutting at beginning is always valid
-    [(= idx (length messages)) #t]  ;; Cutting at end is always valid
+    [(= idx 0) #t] ;; Cutting at beginning is always valid
+    [(= idx (length messages)) #t] ;; Cutting at end is always valid
     [else
      (define msg-at (list-ref messages idx))
      (define role-at (message-role msg-at))
@@ -127,9 +117,8 @@
 (define (adjust-cutpoint messages proposed-idx)
   (cond
     [(valid-cutpoint? messages proposed-idx) proposed-idx]
-    [else
-     ;; Walk backward to find nearest user message boundary
-     (find-nearest-valid-cutpoint messages proposed-idx #t)]))
+    ;; Walk backward to find nearest user message boundary
+    [else (find-nearest-valid-cutpoint messages proposed-idx #t)]))
 
 ;; Human-readable description of why a cutpoint is valid or invalid.
 (define (cutpoint-rule-description messages idx)
@@ -138,28 +127,25 @@
     [(= idx (length messages)) "Cut at end: always valid"]
     [(valid-cutpoint? messages idx)
      (define msg-at (list-ref messages idx))
-     (format "Valid cut before ~a message at index ~a"
-             (message-role msg-at) idx)]
+     (format "Valid cut before ~a message at index ~a" (message-role msg-at) idx)]
     [else
      (define msg-at (list-ref messages idx))
      (format "Invalid cut at index ~a (before ~a message) — adjusted to nearest user boundary"
-             idx (message-role msg-at))]))
+             idx
+             (message-role msg-at))]))
 
 ;; ============================================================
 ;; #694: One-shot overflow recovery guard
 ;; ============================================================
 
 ;; State tracking for overflow recovery. Prevents infinite compaction loops.
-(struct overflow-state (attempted max-attempts)
-  #:mutable
-  #:transparent)
+(struct overflow-state (attempted max-attempts) #:mutable #:transparent)
 
 (define (make-overflow-state #:max-attempts [max 1])
   (overflow-state #f max))
 
 (define (overflow-state-will-retry? state)
-  (and (not (overflow-state-attempted state))
-       (< 0 (overflow-state-max-attempts state))))
+  (and (not (overflow-state-attempted state)) (< 0 (overflow-state-max-attempts state))))
 
 ;; Alias for external use
 (define (overflow-state-will-retry state)
@@ -176,8 +162,7 @@
 ;; ============================================================
 
 ;; Context for retrying after overflow compaction.
-(struct retry-context (original-prompt compaction-result retry-messages)
-  #:transparent)
+(struct retry-context (original-prompt compaction-result retry-messages) #:transparent)
 
 (define (make-retry-context prompt compaction-result messages)
   (retry-context prompt compaction-result messages))
@@ -189,11 +174,16 @@
   (define summary (compaction-result-summary-message compaction-result))
   (define kept (compaction-result-kept-messages compaction-result))
   ;; Build retry message list: summary + kept + re-injected prompt
-  (define base (if summary (cons summary kept) kept))
+  (define base
+    (if summary
+        (cons summary kept)
+        kept))
   ;; Create a fresh user message with the original prompt
   (define retry-msg
     (make-message (format "retry-~a" (current-inexact-milliseconds))
-                  #f 'user 'text
+                  #f
+                  'user
+                  'text
                   (list (make-text-part original-prompt))
                   (current-seconds)
                   (hasheq)))

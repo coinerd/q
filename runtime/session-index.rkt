@@ -25,6 +25,7 @@
          json
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
+         "../util/message-helpers.rkt"
          "../runtime/session-store.rkt")
 
 (provide session-index?
@@ -602,7 +603,4 @@
 ;; Internal helpers
 ;; ============================================================
 
-(define (ensure-parent-dirs! path)
-  (define dir (let ([p (path-only path)]) (if p p #f)))
-  (when (and dir (not (directory-exists? dir)))
-    (make-directory* dir)))
+;; ensure-parent-dirs! imported from util/message-helpers.rkt

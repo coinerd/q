@@ -23,6 +23,7 @@
          racket/list
          racket/set
          "../util/protocol-types.rkt"
+         "../util/message-helpers.rkt"
          "../runtime/session-store.rkt"
          "../runtime/compaction-prompts.rkt"
          (only-in "../llm/model.rkt" make-model-request model-response-content model-response?)
@@ -255,13 +256,7 @@
 ;; ============================================================
 
 ;; Check if a message contains tool-call parts.
-(define (has-tool-calls? msg)
-  (define content (message-content msg))
-  (and (list? content) (ormap tool-call-part? content)))
-
-;; Check if a message is a tool-result or bash-execution.
-(define (tool-result-message? msg)
-  (memq (message-kind msg) '(tool-result bash-execution)))
+;; has-tool-calls? and tool-result-message? now imported from util/message-helpers.rkt
 
 ;; Check if placing a cut BEFORE index `idx` is valid.
 ;; A cut at N means messages[0..N) are old, messages[N..] are recent.

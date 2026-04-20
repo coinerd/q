@@ -26,7 +26,8 @@
          file/sha1
          json
          "../util/protocol-types.rkt"
-         "../util/jsonl.rkt")
+         "../util/jsonl.rkt"
+         (only-in "../util/message-helpers.rkt" ensure-parent-dirs!))
 
 (provide (contract-out [append-entry! (path-string? message? . -> . void?)]
                        [append-entries! (path-string? (listof message?) . -> . void?)]
@@ -84,7 +85,7 @@
 (define (write-pending-marker! session-log-path entry-count)
   ;; Create the write-ahead marker file before appending.
   (define marker-path (pending-marker-path session-log-path))
-  (ensure-parent-dirs* marker-path)
+  (ensure-parent-dirs! marker-path)
   (call-with-output-file marker-path
                          (lambda (out) (write entry-count out))
                          #:mode 'text
@@ -102,11 +103,7 @@
   ;; This is an advisory check, not a hard gate.
   (file-exists? (pending-marker-path session-log-path)))
 
-(define (ensure-parent-dirs* path)
-  ;; Create parent directories of path if they don't exist.
-  (define-values (dir name must-be-dir?) (split-path path))
-  (when (and dir (not (directory-exists? dir)))
-    (make-directory* dir)))
+;; ensure-parent-dirs! imported from util/message-helpers.rkt
 
 ;; ── Hash chain (#1287) ──
 
@@ -523,7 +520,7 @@
      (define new-session-id (format "imported-~a" (current-inexact-milliseconds)))
      ;; Create destination directory
      (define dest-path (build-path dest-session-dir (format "~a.jsonl" new-session-id)))
-     (ensure-parent-dirs* dest-path)
+     (ensure-parent-dirs! dest-path)
      ;; Write version header + imported entries
      (define header-msg
        (make-message (format "session-version-header-~a" (current-inexact-milliseconds))
@@ -582,7 +579,7 @@
            new-acc)]))
   (define path-entries (walk-up source-entry-id '()))
   ;; Write version header + path entries to dest
-  (ensure-parent-dirs* dest-path)
+  (ensure-parent-dirs! dest-path)
   (define header-msg
     (make-message
      (format "session-version-header-~a" (current-inexact-milliseconds))
@@ -601,7 +598,7 @@
 (define (write-session-version-header! log-path)
   ;; Write a version header entry as the first line of a new session log.
   ;; Only writes if the file doesn't exist or is empty.
-  (ensure-parent-dirs* log-path)
+  (ensure-parent-dirs! log-path)
   (cond
     [(and (file-exists? log-path) (> (file-size log-path) 0))
      (void)] ;; Already has content — don't prepend
