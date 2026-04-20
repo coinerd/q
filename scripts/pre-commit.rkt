@@ -6,9 +6,13 @@
 ;; Checks staged .rkt files: runs format lint and associated tests.
 ;;
 ;; Flags:
-;;   --install   Create .git/hooks/pre-commit that invokes this script
-;;   --all       Run the full test suite instead of just affected tests
+;;   --install        Create .git/hooks/pre-commit (format + compile + tests)
+;;   --install-full   Create .git/hooks/pre-commit (format + compile + ci-local + tests)
+;;   --all            Run the full test suite instead of just affected tests
+;;   --ci             Also run ci-local.rkt (full CI lint suite)
+;;   --full           Format + compile + ci-local + affected tests
 ;;
+;; Default (no flags): format lint + compile check + affected tests only.
 ;; Exit 0 if all checks pass, 1 otherwise.
 
 (require racket/file
@@ -22,29 +26,40 @@
 ;; --- CLI flag parsing ---
 
 (define install-mode? #f)
+(define install-full-mode? #f)
 (define all-mode? #f)
+(define ci-mode? #f)
+(define full-mode? #f)
 
 (define (parse-flags!)
   (for ([arg (in-vector (current-command-line-arguments))])
     (cond
       [(string=? arg "--install") (set! install-mode? #t)]
+      [(string=? arg "--install-full") (set! install-full-mode? #t)]
       [(string=? arg "--all") (set! all-mode? #t)]
+      [(string=? arg "--ci") (set! ci-mode? #t)]
+      [(string=? arg "--full") (set! full-mode? #t)]
       [else (printf "Unknown flag: ~a~n" arg)])))
 
 ;; --- Install hook ---
 
-(define (install-hook!)
+(define (install-hook! #:full? [full? #f])
   (define script-path
     (simplify-path
      (build-path (path-only (resolved-module-path-name (variable-reference->resolved-module-path
                                                         (#%variable-reference))))
                  "pre-commit.rkt")))
   (define hook-path ".git/hooks/pre-commit")
-  (define hook-content (format "#!/bin/sh\nexec racket ~a\n" script-path))
+  (define hook-content
+    (if full?
+        (format "#!/bin/sh\nexec racket ~a --full\n" script-path)
+        (format "#!/bin/sh\nexec racket ~a\n" script-path)))
   (call-with-output-file hook-path (λ (out) (display hook-content out)) #:exists 'truncate)
   ;; Make executable
   (system (format "chmod +x ~a" hook-path))
-  (printf "Installed pre-commit hook: ~a~n" hook-path))
+  (printf "Installed pre-commit hook: ~a~n" hook-path)
+  (when full?
+    (printf "  Mode: --full (format + compile + ci-local + tests)~n")))
 
 ;; --- Get staged .rkt files ---
 
@@ -88,6 +103,24 @@
         (printf "WARNING: ~a not found, skipping format lint~n" lint-script)
         #t)))
 
+;; --- Run CI local lint suite ---
+
+(define (run-ci-local)
+  (printf "~n--- CI Local Lint Suite ---~n")
+  (define ci-script (build-path "scripts" "ci-local.rkt"))
+  (if (file-exists? ci-script)
+      (let ([exit-code (system/exit-code (format "racket ~a" ci-script))])
+        (if (= exit-code 0)
+            (begin
+              (printf "CI Local: PASS~n")
+              #t)
+            (begin
+              (printf "CI Local: FAIL~n")
+              #f)))
+      (begin
+        (printf "WARNING: ~a not found, skipping CI local~n" ci-script)
+        #t)))
+
 ;; --- Run test file ---
 
 (define (run-test test-path)
@@ -120,16 +153,26 @@
 (define (main)
   (parse-flags!)
 
-  (when install-mode?
-    (install-hook!)
-    (exit 0))
+  (cond
+    [install-mode?
+     (install-hook!)
+     (exit 0)]
+    [install-full-mode?
+     (install-hook! #:full? #t)
+     (exit 0)])
 
   ;; Ensure we're in the q/ directory
   (unless (file-exists? "main.rkt")
     (printf "ERROR: Run from the q/ directory (main.rkt not found).~n")
     (exit 1))
 
-  (printf "=== q Pre-commit Check ===~n")
+  (define mode-label
+    (cond
+      [full-mode? "--full (format + compile + ci-local + tests)"]
+      [ci-mode? "--ci (format + compile + ci-local)"]
+      [else "quick (format + compile + tests)"]))
+
+  (printf "=== q Pre-commit Check [~a] ===~n" mode-label)
 
   (define all-pass #t)
 
@@ -137,13 +180,18 @@
   (unless (run-format-lint)
     (set! all-pass #f))
 
+  ;; 2. CI local lint (if --ci or --full)
+  (when (or ci-mode? full-mode?)
+    (unless (run-ci-local)
+      (set! all-pass #f)))
+
   (cond
     [all-mode?
      ;; Run full suite
      (unless (run-full-suite)
        (set! all-pass #f))]
     [else
-     ;; 2. Get staged files and run affected tests
+     ;; 3. Get staged files and run affected tests
      (define staged (get-staged-rkt-files))
      (printf "~n--- Staged .rkt files: ~a ---~n"
              (if (null? staged)
@@ -160,7 +208,7 @@
              (unless (run-test tf)
                (set! all-pass #f)))))])
 
-  ;; 3. Summary
+  ;; 4. Summary
   (printf "~n=== Summary ===~n")
   (if all-pass
       (begin
