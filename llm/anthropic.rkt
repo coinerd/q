@@ -22,7 +22,7 @@
          "http-helpers.rkt")
 
 ;; Provider constructor
-(provide make-anthropic-provider
+(provide (contract-out [make-anthropic-provider (-> hash? provider?)])
          ;; Request/response helpers (exported for testing)
          anthropic-build-request-body
          anthropic-parse-response
