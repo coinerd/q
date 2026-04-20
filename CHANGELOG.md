@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.13.2 — 2026-04-20
+
+### Bug Fixes
+- **Removed context reduction from retry path**: `#:context-reducer` parameter removed from `with-auto-retry`. Retries now always use the same context — no trimming, no reduction. Eliminates P0 class of 400 errors from malformed reduced context after retry trimming. (#1388, PR #1389)
+
+---
+
 ## v0.13.1 — 2026-04-20
 
 ### Performance
