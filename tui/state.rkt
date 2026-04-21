@@ -405,9 +405,15 @@
             [else "Type /retry to resubmit your prompt."])]))
      ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
      ;; Also clear streaming-thinking for complete state reset on error
+     ;; v0.14.3: preserve partial streaming text before clearing (BUG-STREAMING-TEXT-LOST)
+     (define streamed (ui-state-streaming-text state))
+     (define s0
+       (if (and streamed (> (string-length (string-trim streamed)) 0))
+           (append-entry state (make-entry 'assistant streamed ts (hasheq 'partial #t)))
+           state))
      (define s1
        (struct-copy ui-state
-                    state
+                    s0
                     [busy? #f]
                     [pending-tool-name #f]
                     [streaming-text #f]
