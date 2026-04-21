@@ -723,7 +723,9 @@
   (define idx (agent-session-index sess))
   (define cfg
     (if idx
-        (hash-set base-cfg 'session-index idx)
+        (begin
+          (hash-set! base-cfg 'session-index idx)
+          base-cfg)
         base-cfg))
   (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 20)))
   (define token-budget-threshold
