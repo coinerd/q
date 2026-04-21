@@ -256,7 +256,7 @@
 
 ;; Run the provider turn: dispatch before-provider-request hook, then run agent turn.
 ;; Returns the loop-result from run-agent-turn.
-(define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token)
+(define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config)
   ;; Dispatch 'before-provider-request hook (informational)
   (define-values (_bpr-payload _bpr-res)
     (maybe-dispatch-hooks ext-reg
@@ -288,7 +288,8 @@
                                      #:session-id session-id
                                      #:turn-id turn-id
                                      #:tools tools
-                                     #:cancellation-token token))
+                                     #:cancellation-token token
+                                     #:provider-settings config))
                    #:max-retries 2
                    #:base-delay-ms 1000
                    #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
@@ -616,7 +617,7 @@
 
               ;; Run provider turn
               (define result
-                (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token))
+                (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config))
 
               (define termination (loop-result-termination-reason result))
               (define new-msgs (loop-result-messages result))
@@ -742,23 +743,21 @@
                  ;; without file writes — nudge agent toward execution
                  (define exec-context updated-ctx)
                  (when (>= consecutive-tool-count 8)
-                   (set!
-                    exec-context
-                    (append
-                     exec-context
-                     (list
-                      (make-message
-                       (generate-id)
-                       #f
-                       'system
-                       'message
-                       (list
-                        (make-text-part
-                         (format
-                          "[steering] You've made ~a consecutive tool calls without writing files. Focus on producing the actual output using the write or edit tool now."
-                          (add1 consecutive-tool-count))))
-                       (now-seconds)
-                       (hasheq))))))
+                   (set! exec-context
+                         (append
+                          exec-context
+                          (list (make-message
+                                 (generate-id)
+                                 #f
+                                 'system
+                                 'message
+                                 (list (make-text-part
+                                        (format "[steering] You've made ~a consecutive tool calls "
+                                                "without writing files. Focus on producing "
+                                                "the actual output using the write or edit tool now."
+                                                (add1 consecutive-tool-count))))
+                                 (now-seconds)
+                                 (hasheq))))))
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! exec-context bus session-id config)
                  (loop exec-context (add1 iteration) (add1 consecutive-tool-count))]
