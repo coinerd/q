@@ -7,7 +7,7 @@
 (require rackunit
          rackunit/text-ui
          "../interfaces/sdk.rkt"
-         "../runtime/resource-loader.rkt"
+         "../extensions/resource-discovery.rkt"
          (only-in "../runtime/session-store.rkt"
                   make-in-memory-session-manager
                   in-memory-session-manager?

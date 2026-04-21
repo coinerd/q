@@ -9,7 +9,7 @@
          "../extensions/loader.rkt"
          "../extensions/api.rkt"
          "../runtime/session-store.rkt"
-         "../runtime/resource-loader.rkt"
+         "../extensions/resource-discovery.rkt"
          "../util/hook-types.rkt"
          "../util/protocol-types.rkt")
 
