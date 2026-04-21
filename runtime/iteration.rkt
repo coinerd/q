@@ -497,7 +497,8 @@
   (if (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
       (make-loop-result '() 'completed (hasheq 'reason "extension-block"))
       (let loop ([ctx context]
-                 [iteration 0])
+                 [iteration 0]
+                 [consecutive-tool-count 0])
 
         ;; ── Cooperative cancellation check (between iterations) ──
         ;; R2-5 + FEAT-61: Check steering queue + drain injected messages.
@@ -626,7 +627,8 @@
                                                               (symbol->string follow-up-mode)))
                                  (append-entries! log-path followup-msgs)
                                  (loop (append ctx-with-injected new-msgs followup-msgs)
-                                       (add1 iteration)))))
+                                       (add1 iteration)
+                                       0))))
                          effective-result)))]
 
                 ;; ── Hard iteration limit reached: append and stop ──
@@ -671,7 +673,7 @@
                                               log-path
                                               token
                                               config))
-                 (loop updated-ctx (add1 iteration))]
+                 (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count))]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
@@ -686,7 +688,21 @@
                                               log-path
                                               token
                                               config))
-                 (loop updated-ctx (add1 iteration))]
+                 ;; v0.14.1: emit exploration progress after 4+ consecutive tool-only turns
+                 (when (>= consecutive-tool-count 4)
+                   (define tool-names
+                     (for/list ([tc (in-list (extract-tool-calls-from-messages new-msgs))])
+                       (tool-call-name tc)))
+                   (emit-session-event! bus
+                                        session-id
+                                        "exploration.progress"
+                                        (hasheq 'consecutive-tools
+                                                (add1 consecutive-tool-count)
+                                                'tool-names
+                                                tool-names
+                                                'iteration
+                                                (add1 iteration))))
+                 (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count))]
 
                 ;; ── Unknown termination: append and return ──
                 [else
