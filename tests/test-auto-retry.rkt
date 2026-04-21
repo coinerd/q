@@ -312,13 +312,15 @@
 (test-case "rate-limit-error?: positive cases"
   (check-true (rate-limit-error? (exn:fail "HTTP 429" (current-continuation-marks))))
   (check-true (rate-limit-error? (exn:fail "rate limit exceeded" (current-continuation-marks))))
-  (check-true (rate-limit-error? (exn:fail "Quota exceeded" (current-continuation-marks)))))
+  (check-true (rate-limit-error? (exn:fail "Quota exceeded" (current-continuation-marks))))
+  (check-true (rate-limit-error? (exn:fail "too many requests" (current-continuation-marks)))))
 
 (test-case "rate-limit-error?: negative cases"
   (check-false (rate-limit-error? (exn:fail "timeout" (current-continuation-marks))))
   (check-false (rate-limit-error? (exn:fail "internal error" (current-continuation-marks))))
-  (check-false (rate-limit-error? (exn:fail "invalid API key" (current-continuation-marks)))))
-
+  (check-false (rate-limit-error? (exn:fail "invalid API key" (current-continuation-marks))))
+  ;; v0.14.1 R2: "too many tokens" must NOT match rate-limit
+  (check-false (rate-limit-error? (exn:fail "too many tokens in request" (current-continuation-marks)))))
 ;; ============================================================
 ;; context-reducer tests removed (v0.13.2)
 ;; ============================================================

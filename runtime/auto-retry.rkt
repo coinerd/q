@@ -103,7 +103,7 @@
   (for/or ([pattern (in-list TIMEOUT_PATTERNS)])
     (string-contains? (string-downcase msg) pattern)))
 
-(define RATE_LIMIT_PATTERNS '("429" "rate" "overloaded" "quota" "too many"))
+(define RATE_LIMIT_PATTERNS '("429" "rate" "overloaded" "quota" "too many requests"))
 
 (define (rate-limit-error? exn)
   (define msg (exn-message exn))
@@ -115,10 +115,6 @@
 ;; 'max-iterations, 'provider-error
 (define (classify-error exn)
   ;; Fast path: structured provider-error carries its own category.
-  (when (provider-error? exn)
-    (define cat (provider-error-category exn))
-    (when cat
-      (set! cat cat))) ; already correct
   (cond
     [(provider-error? exn)
      (define cat (provider-error-category exn))
