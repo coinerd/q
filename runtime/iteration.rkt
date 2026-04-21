@@ -31,7 +31,7 @@
          racket/list
          racket/path
          json
-         (only-in racket/string string-trim)
+         (only-in racket/string string-trim string-join)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
@@ -520,6 +520,35 @@
   collected)
 
 ;; ============================================================
+;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): Intent-without-action detection
+;; ============================================================
+
+;; Regex matching intent-to-act phrases followed by action verbs.
+;; Case-insensitive via pregexp (?i:...) syntax.
+(define INTENT-ACTION-RX
+  #px"(?i:(?:I'll|I will|let me|now I'll|now let me) (?:write|create|rewrite|edit|update|modify|fix|refactor|implement|build|generate))")
+
+;; detect-intent-pattern : (or/c string? #f) -> boolean?
+;; Returns #t if the text matches intent-to-act patterns like
+;; "I'll rewrite the file" or "Let me create a new script".
+(define (detect-intent-pattern text)
+  (and (string? text) (> (string-length text) 0) (regexp-match? INTENT-ACTION-RX text)))
+
+;; extract-last-assistant-text : (listof message?) -> (or/c string? #f)
+;; Extracts the text content from the last assistant message in the context.
+(define (extract-last-assistant-text ctx)
+  (for/first ([msg (in-list (reverse ctx))]
+              #:when (eq? (message-role msg) 'assistant))
+    (define content (message-content msg))
+    (define texts
+      (for/list ([part (in-list content)]
+                 #:when (text-part? part))
+        (text-part-text part)))
+    (if (null? texts)
+        #f
+        (string-join texts " "))))
+
+;; ============================================================
 ;; Iteration loop
 ;; ============================================================
 
@@ -563,7 +592,8 @@
       (make-loop-result '() 'completed (hasheq 'reason "extension-block"))
       (let loop ([ctx context]
                  [iteration 0]
-                 [consecutive-tool-count 0])
+                 [consecutive-tool-count 0]
+                 [intent-retry-count 0])
 
         ;; ── Cooperative cancellation check (between iterations) ──
         ;; R2-5 + FEAT-61: Check steering queue + drain injected messages.
@@ -681,35 +711,67 @@
                      ;; #662: Drain follow-up queue — if follow-ups exist,
                      ;; inject as user messages and continue the loop.
                      ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
-                     (if steering-queue
-                         (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
-                                              (let ([one (dequeue-followup! steering-queue)])
-                                                (if one
-                                                    (list one)
-                                                    '()))
-                                              (dequeue-all-followups! steering-queue))])
-                           (if (null? followups)
-                               effective-result
-                               (let ([followup-msgs (for/list ([fu (in-list followups)])
-                                                      (make-message (generate-id)
-                                                                    #f
-                                                                    'user
-                                                                    'text
-                                                                    (list (make-text-part fu))
-                                                                    (now-seconds)
-                                                                    (hasheq 'source "followup")))])
-                                 (emit-session-event! bus
-                                                      session-id
-                                                      "followup.injected"
-                                                      (hasheq 'count
-                                                              (length followups)
-                                                              'mode
-                                                              (symbol->string follow-up-mode)))
-                                 (append-entries! log-path followup-msgs)
-                                 (loop (append ctx-with-injected new-msgs followup-msgs)
-                                       (add1 iteration)
-                                       0))))
-                         effective-result)))]
+                     (define base-result
+                       (if steering-queue
+                           (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
+                                                (let ([one (dequeue-followup! steering-queue)])
+                                                  (if one
+                                                      (list one)
+                                                      '()))
+                                                (dequeue-all-followups! steering-queue))])
+                             (if (null? followups)
+                                 effective-result
+                                 (let ([followup-msgs (for/list ([fu (in-list followups)])
+                                                        (make-message (generate-id)
+                                                                      #f
+                                                                      'user
+                                                                      'text
+                                                                      (list (make-text-part fu))
+                                                                      (now-seconds)
+                                                                      (hasheq 'source "followup")))])
+                                   (emit-session-event! bus
+                                                        session-id
+                                                        "followup.injected"
+                                                        (hasheq 'count
+                                                                (length followups)
+                                                                'mode
+                                                                (symbol->string follow-up-mode)))
+                                   (append-entries! log-path followup-msgs)
+                                   (loop (append ctx-with-injected new-msgs followup-msgs)
+                                         (add1 iteration)
+                                         0
+                                         intent-retry-count))))
+                           effective-result))
+                     ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
+                     ;; to write/edit but made no tool call, inject a steering nudge.
+                     (define assistant-text (extract-last-assistant-text ctx-with-injected))
+                     (define intent-detected? (detect-intent-pattern assistant-text))
+                     (define had-tool-calls?
+                       (not (null? (extract-tool-calls-from-messages new-msgs))))
+                     (if (and intent-detected? (not had-tool-calls?) (< intent-retry-count 1))
+                         (begin
+                           (emit-session-event!
+                            bus
+                            session-id
+                            "intent.nudge"
+                            (hasheq 'text assistant-text 'intent-retry-count intent-retry-count))
+                           (let ([nudge
+                                  (make-message
+                                   (generate-id)
+                                   #f
+                                   'user
+                                   'message
+                                   (list
+                                    (make-text-part
+                                     "[steering:intent] Your previous message said you would perform an action but no tool was used. Use the write or edit tool now. Do not explain — act."))
+                                   (now-seconds)
+                                   (hasheq 'source "intent-without-action"))])
+                             (append-entries! log-path (list nudge))
+                             (loop (append ctx-with-injected new-msgs (list nudge))
+                                   (add1 iteration)
+                                   0
+                                   (add1 intent-retry-count))))
+                         base-result)))]
 
                 ;; ── Hard iteration limit reached: append and stop ──
                 [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
@@ -755,7 +817,7 @@
                                               config))
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! updated-ctx bus session-id config)
-                 (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count))]
+                 (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count) intent-retry-count)]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
@@ -870,7 +932,7 @@
                         (hasheq)))))])
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! exec-context bus session-id config)
-                 (loop exec-context (add1 iteration) effective-tool-count)]
+                 (loop exec-context (add1 iteration) effective-tool-count intent-retry-count)]
 
                 ;; ── Unknown termination: append and return ──
                 [else
