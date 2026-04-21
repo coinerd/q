@@ -731,7 +731,8 @@
               base-cfg)
             (hash-set base-cfg 'session-index idx))
         base-cfg))
-  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 20)))
+  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 50)))
+  ;; v0.14.4 Wave 1: Increased default from 20→50 for slow exploration-heavy models
   (define token-budget-threshold
     (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
 
