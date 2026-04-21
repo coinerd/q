@@ -721,11 +721,15 @@
   (define base-cfg (agent-session-config sess))
   ;; #1391: Inject session index into config for session_recall tool access
   (define idx (agent-session-index sess))
+  ;; v0.14.3: Handle both mutable (make-hash) and immutable (hasheq) configs.
+  ;; Production uses make-hash (mutable), but some tests use hasheq (immutable).
   (define cfg
     (if idx
-        (begin
-          (hash-set! base-cfg 'session-index idx)
-          base-cfg)
+        (if (and (hash? base-cfg) (not (immutable? base-cfg)))
+            (begin
+              (hash-set! base-cfg 'session-index idx)
+              base-cfg)
+            (hash-set base-cfg 'session-index idx))
         base-cfg))
   (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 20)))
   (define token-budget-threshold
