@@ -19,7 +19,8 @@
 (provide build-provider
          build-mock-provider
          local-provider?
-         create-provider-for-name) ;; for testing
+         create-provider-for-name ;; for testing
+         provider-is-mock?) ;; v0.14.1: for tui-init without importing llm/
 
 ;; Build the appropriate provider based on provider name.
 (define (create-provider-for-name prov-name base-url api-key model-name)
@@ -39,6 +40,11 @@
     [(equal? prov-name "anthropic") (make-anthropic-provider config)]
     [(equal? prov-name "azure") (make-azure-openai-provider config)]
     [else (make-openai-compatible-provider config)]))
+
+;; Helper: Check if a provider is a mock provider (name = "mock").
+;; v0.14.1: Moves mock detection out of tui/tui-init.rkt to avoid tui→llm import.
+(define (provider-is-mock? prov)
+  (and (provider? prov) (equal? (provider-name prov) "mock")))
 
 ;; Helper: Check if a URL points to a local/self-hosted provider.
 ;; Local providers don't require API keys.
