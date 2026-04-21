@@ -510,8 +510,9 @@
                             #:shutdown-check [shutdown-check #f]
                             #:force-shutdown-check [force-shutdown-check #f])
   ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
-  ;; Default hard limit = max-iterations (backward compatible: no split unless explicitly configured)
-  (define max-iterations-hard (hash-ref config 'max-iterations-hard max-iterations))
+  ;; v0.14.4 Wave 1: Default hard limit = max(max-iterations * 1.6, 80) for slow models
+  (define max-iterations-hard
+    (hash-ref config 'max-iterations-hard (max (inexact->exact (floor (* max-iterations 1.6))) 80)))
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
   (define agent-start-payload
     (hasheq 'session-id
@@ -737,9 +738,30 @@
                                                 tool-names
                                                 'iteration
                                                 (add1 iteration))))
+                 ;; v0.14.4 Wave 1: Post-exploration steering hint after 8+ consecutive tools
+                 ;; without file writes — nudge agent toward execution
+                 (define exec-context updated-ctx)
+                 (when (>= consecutive-tool-count 8)
+                   (set!
+                    exec-context
+                    (append
+                     exec-context
+                     (list
+                      (make-message
+                       (generate-id)
+                       #f
+                       'system
+                       'message
+                       (list
+                        (make-text-part
+                         (format
+                          "[steering] You've made ~a consecutive tool calls without writing files. Focus on producing the actual output using the write or edit tool now."
+                          (add1 consecutive-tool-count))))
+                       (now-seconds)
+                       (hasheq))))))
                  ;; v0.14.1: mid-turn token budget check
-                 (check-mid-turn-budget! updated-ctx bus session-id config)
-                 (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count))]
+                 (check-mid-turn-budget! exec-context bus session-id config)
+                 (loop exec-context (add1 iteration) (add1 consecutive-tool-count))]
 
                 ;; ── Unknown termination: append and return ──
                 [else
