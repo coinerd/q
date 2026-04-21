@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.14.2 — 2026-04-20
+
+### Retry Robustness & TUI Crash Fix
+
+**Wave 0 (P0 TUI crash)**: Wrapped both TUI runner thread call sites with
+`with-handlers exn:fail?` that emit `runtime.error` + `turn.completed` events.
+Defense-in-depth `turn.completed` in `agent-session.rkt`. New test file:
+`test-tui-error-recovery.rkt` (6 tests).
+
+**Wave 1 (P1 retry budgets)**: Per-type retry budgets (`timeout=2`,
+`rate-limit=4`, `provider-error=2`) via `#:per-type-budgets` keyword argument.
+`retry-exhausted` struct gains `error-history` field tracking all error types
+across retries. Agent session includes `errorHistory` in `runtime.error` payload.
+State module renders recovery hints from full error history (mixed-type detection).
+4 new tests in `test-auto-retry.rkt`.
+
+**Wave 2 (P2 work preservation)**: `/retry` command enriched with previous
+attempt's tool summary. New `get-last-turn-tool-summary` in `tui/state.rkt`.
+Modified `/retry` handler to include `[Context from previous attempt: ...]`.
+8 new tests in `test-retry-enrichment.rkt`.
+
+**Wave 3 (P2 model timeouts)**: Per-model timeout profiles via
+`current-model-timeouts` parameter and `effective-request-timeout-for`.
+OpenAI-compatible provider extracts model name from request body and applies
+per-model timeout overrides. Config schema:
+`{ timeouts: { models: { "glm-5.1": { "request": 900 } } } }`.
+10 new tests in `test-model-timeouts.rkt`.
+
 ## v0.14.1 — 2026-04-20
 
 ### Exploration & Generation Robustness

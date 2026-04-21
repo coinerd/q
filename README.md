@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.14.1-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.14.2-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.14.1
+racket main.rkt --version  # q version 0.14.2
 raco test tests/           # run the full test suite
 ```
 
@@ -331,7 +331,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.14.1** — Exploration & Generation Robustness. Soft/hard iteration limits, context-aware retry messages, exploration progress hints, adaptive stream timeout, mid-turn token budget check. Architecture boundary fixes: TUI mock-provider lift, resource-discovery move, session-switch DI. Zero TUI layer violations. 5365 tests.
+**v0.14.2** — Exploration & Generation Robustness. Soft/hard iteration limits, context-aware retry messages, exploration progress hints, adaptive stream timeout, mid-turn token budget check. Architecture boundary fixes: TUI mock-provider lift, resource-discovery move, session-switch DI. Zero TUI layer violations. 5365 tests.
 
 **v0.10.8** — Timeout Render Fix + Extensibility + Test Runner. TUI streaming state cleanup on auto-retry/error, extension tool registration API, session tree UX, rich component model, built-in components + overlays, extension lifecycle, event coverage (37 events), custom editor + IME, SDK ergonomics, provider OAuth flow, image rendering, skills frontmatter, graceful shutdown, rewritten test runner with per-file result tracking. 4960+ tests.
 
