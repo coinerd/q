@@ -248,27 +248,32 @@
 
   (define ctx-for-retry (box ctx-final))
 
-  (with-auto-retry
-   (lambda ()
-     (run-agent-turn (unbox ctx-for-retry)
-                     prov
-                     bus
-                     #:session-id session-id
-                     #:turn-id turn-id
-                     #:tools tools
-                     #:cancellation-token token))
-   #:max-retries 2
-   #:base-delay-ms 1000
-   #:on-retry
-   (lambda (attempt max-retries delay-ms error-msg)
-     (publish!
-      bus
-      (make-event
-       "auto-retry.start"
-       (current-inexact-milliseconds)
-       session-id
-       turn-id
-       (hasheq 'attempt attempt 'max-retries max-retries 'delay-ms delay-ms 'error error-msg))))))
+  (with-auto-retry (lambda ()
+                     (run-agent-turn (unbox ctx-for-retry)
+                                     prov
+                                     bus
+                                     #:session-id session-id
+                                     #:turn-id turn-id
+                                     #:tools tools
+                                     #:cancellation-token token))
+                   #:max-retries 2
+                   #:base-delay-ms 1000
+                   #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
+                                (publish! bus
+                                          (make-event "auto-retry.start"
+                                                      (current-inexact-milliseconds)
+                                                      session-id
+                                                      turn-id
+                                                      (hasheq 'attempt
+                                                              attempt
+                                                              'max-retries
+                                                              max-retries
+                                                              'delay-ms
+                                                              delay-ms
+                                                              'error
+                                                              error-msg
+                                                              'errorType
+                                                              error-type))))))
 
 ;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
 ;; and return (values tool-result-messages updated-ctx) for the next loop iteration.
