@@ -38,6 +38,8 @@
          http-stream-timeout-default
          http-request-timeout-default
          current-http-request-timeout
+         current-model-timeouts
+         effective-request-timeout-for
          call-with-request-timeout)
 
 ;; ============================================================
@@ -55,6 +57,18 @@
 ;; Parameter: overall HTTP request timeout for the current session.
 ;; Set by the runtime from settings; read by LLM providers.
 (define current-http-request-timeout (make-parameter http-request-timeout-default))
+
+;; Parameter: per-model timeout overrides for the current session.
+;; Set by the runtime from settings; a hash of model-name → timeout-seconds.
+;; v0.14.2 Wave 3: allows model-specific request timeouts.
+(define current-model-timeouts (make-parameter (hash)))
+
+;; Get the effective request timeout for a specific model.
+;; Checks per-model overrides first, then falls back to current-http-request-timeout.
+(define (effective-request-timeout-for model-name)
+  (define overrides (current-model-timeouts))
+  (define model-timeout (and (hash? overrides) model-name (hash-ref overrides model-name #f)))
+  (or model-timeout (current-http-request-timeout)))
 
 ;; call-with-request-timeout : thunk [#:timeout seconds #:cleanup thunk] -> any
 ;; Runs thunk in a separate thread with a channel for results;

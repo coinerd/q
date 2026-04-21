@@ -126,6 +126,12 @@
     (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
   (define headers (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
+  ;; v0.14.2 Wave 3: per-model timeout via effective-request-timeout-for
+  (define model-name (and (hash? body) (hash-ref body 'model #f)))
+  (define timeout-secs
+    (if model-name
+        (effective-request-timeout-for model-name)
+        (current-http-request-timeout)))
   ;; Wrap entire request in overall timeout (SEC-11)
   (call-with-request-timeout (lambda ()
                                (define-values (status-line response-headers response-port)
@@ -145,7 +151,8 @@
                                                     #:data body-bytes)))
                                (define response-body (read-response-body/timeout response-port))
                                (check-http-status! status-line response-body)
-                               (bytes->jsexpr response-body))))
+                               (bytes->jsexpr response-body))
+                             #:timeout timeout-secs))
 
 ;; ============================================================
 ;; HTTP status check helper
@@ -248,6 +255,12 @@
     (define headers
       (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
+    ;; v0.14.2 Wave 3: per-model timeout for streaming requests
+    (define stream-model-name (and (hash? body) (hash-ref body 'model #f)))
+    (define stream-timeout
+      (if stream-model-name
+          (effective-request-timeout-for stream-model-name)
+          (current-http-request-timeout)))
     ;; Wrap initial HTTP request in overall timeout (SEC-11)
     ;; call-with-request-timeout returns a single value,
     ;; so we capture the 3 http-sendrecv values in a vector.
@@ -268,7 +281,8 @@
                                                         #:method "POST"
                                                         #:headers headers
                                                         #:data body-bytes)))
-                                   (vector sl rh rp))))
+                                   (vector sl rh rp))
+                                 #:timeout stream-timeout))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
