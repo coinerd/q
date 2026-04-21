@@ -809,7 +809,7 @@
                        (make-message
                         (generate-id)
                         #f
-                        'system
+                        'user
                         'message
                         (list (make-text-part
                                (format
@@ -836,7 +836,7 @@
                        (make-message
                         (generate-id)
                         #f
-                        'system
+                        'user
                         'message
                         (list (make-text-part
                                (format
@@ -858,7 +858,7 @@
                        (make-message
                         (generate-id)
                         #f
-                        'system
+                        'user
                         'message
                         (list
                          (make-text-part
