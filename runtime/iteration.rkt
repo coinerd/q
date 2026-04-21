@@ -860,13 +860,12 @@
                         #f
                         'user
                         'message
-                        (list
-                         (make-text-part
-                          (format
-                           (string-append
-                            "[steering] You've made ~a consecutive tool calls without writing files. "
-                            "Consider using the write or edit tool to produce output.")
-                           effective-tool-count)))
+                        (list (make-text-part
+                               (format (string-append
+                                        "[steering] You've made ~a consecutive read-only tool calls. "
+                                        "You MUST now use the write or edit tool to produce output. "
+                                        "Do not explain what you will do — just do it.")
+                                       effective-tool-count)))
                         (now-seconds)
                         (hasheq)))))])
                  ;; v0.14.1: mid-turn token budget check
