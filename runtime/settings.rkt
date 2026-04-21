@@ -66,7 +66,11 @@
          default-session-dir
          default-project-dir
          session-dir-from-settings
-         project-dir-from-settings)
+         project-dir-from-settings
+
+         ;; Trace logging config (v0.15.0)
+         trace-enabled?
+         trace-max-files)
 
 ;; ============================================================
 ;; Struct
@@ -327,3 +331,20 @@
 ;; Get effective request timeout: per-model override or global default.
 (define (effective-request-timeout settings model-name)
   (or (get-model-timeout settings model-name 'request) (http-request-timeout settings)))
+
+;; ============================================================
+;; Trace logging config (v0.15.0)
+;; ============================================================
+
+;; Is trace logging enabled? Reads logging.trace.enabled from config.
+;; Default: #f (disabled — zero overhead when off)
+(define (trace-enabled? settings)
+  (define trace-cfg (setting-ref* settings '(logging trace) #f))
+  (and (hash? trace-cfg) (hash-ref trace-cfg 'enabled #f)))
+
+;; Maximum trace files to keep (rotation). Default: 10.
+(define (trace-max-files settings)
+  (define trace-cfg (setting-ref* settings '(logging trace) #f))
+  (if (hash? trace-cfg)
+      (hash-ref trace-cfg 'max-files 10)
+      10))

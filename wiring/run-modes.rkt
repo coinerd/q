@@ -35,7 +35,8 @@
                   merge-extension-commands
                   make-command-registry)
          (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
-         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts))
+         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
+         (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -161,6 +162,13 @@
           acc)))
   (current-model-timeouts model-timeouts)
   (current-http-request-timeout (http-request-timeout settings))
+
+  ;; v0.15.0 Wave 2: Wire trace logger if enabled in config
+  (when (trace-enabled? settings)
+    (define trace-log (make-trace-logger bus session-dir #:enabled? #t))
+    (hash-set! base-config 'trace-logger trace-log)
+    (start-trace-logger! trace-log))
+
   base-config)
 
 ;; ============================================================
