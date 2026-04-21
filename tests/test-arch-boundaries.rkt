@@ -58,11 +58,9 @@
     (test-case "Only iteration.rkt in runtime/ imports from tools/ or extensions/"
       ;; Known exceptions:
       ;;   - runtime/package.rkt imports extensions/manifest.rkt for package audit
-      ;;   - runtime/session-switch.rkt imports extensions/context.rkt and hooks.rkt
-      ;;     for extension lifecycle during session switch (documented exception)
       (define runtime-files (rkt-files-in "runtime"))
       (define known-exceptions
-        '("iteration.rkt" "package.rkt" "session-switch.rkt"))
+        '("iteration.rkt" "package.rkt"))
       (define violations
         (for/list ([f (in-list runtime-files)]
                    #:when (not (member (path->string (file-name-from-path f)) known-exceptions)))
