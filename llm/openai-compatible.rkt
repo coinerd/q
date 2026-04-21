@@ -227,14 +227,20 @@
   (define api-key (hash-ref config 'api-key ""))
   (define default-model (hash-ref config 'model "gpt-4"))
 
+  (define default-max-tokens (hash-ref config 'max-tokens #f))
+
   (define (ensure-model-settings req)
-    ;; Merge default-model into request settings if not already set
+    ;; Merge default-model and default-max-tokens into request settings if not set
     (define settings (model-request-settings req))
-    (if (hash-has-key? settings 'model)
-        req
-        (make-model-request (model-request-messages req)
-                            (model-request-tools req)
-                            (hash-set settings 'model default-model))))
+    (define with-model
+      (if (hash-has-key? settings 'model)
+          settings
+          (hash-set settings 'model default-model)))
+    (define with-max-tokens
+      (if (and default-max-tokens (not (hash-has-key? with-model 'max-tokens)))
+          (hash-set with-model 'max-tokens default-max-tokens)
+          with-model))
+    (make-model-request (model-request-messages req) (model-request-tools req) with-max-tokens))
 
   (define (send req)
     (define req-with-model (ensure-model-settings req))

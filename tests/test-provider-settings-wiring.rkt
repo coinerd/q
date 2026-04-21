@@ -8,7 +8,8 @@
          "../llm/model.rkt"
          "../llm/openai-compatible.rkt"
          "../llm/provider.rkt"
-         "../agent/loop.rkt")
+         "../agent/loop.rkt"
+         "../runtime/provider-factory.rkt")
 
 ;; ============================================================
 ;; Test: max-tokens flows from config to request body
@@ -58,3 +59,39 @@
   (define req (make-model-request msgs #f mutable-cfg))
   ;; This should raise a contract violation
   (check-exn exn:fail:contract? (lambda () (ensure-model-setting req "glm-5.1"))))
+
+;; v0.14.5: Verify max-tokens flows through the full chain:
+;; config → provider-factory → make-openai-compatible-provider → ensure-model-settings → body
+;; Since ensure-model-settings is internal to the provider closure, we test the
+;; provider-factory wiring and the body construction separately.
+(test-case "provider-factory passes max-tokens to create-provider-for-name"
+  ;; Verify that create-provider-for-name with max-tokens creates a working provider
+  (define prov
+    (create-provider-for-name "openai-compatible"
+                              "https://api.example.com/v1"
+                              "test-key"
+                              "glm-5.1"
+                              32768))
+  ;; Provider should not be mock
+  (check-not-equal? (provider-name prov) "mock"))
+
+(test-case "max-tokens in model-request settings → max_tokens in body"
+  ;; This tests what ensure-model-settings produces: request with max-tokens in settings
+  (define req
+    (make-model-request (list (hasheq 'role "user" 'content "hello"))
+                        #f
+                        (hasheq 'model "glm-5.1" 'max-tokens 32768)))
+  (define body (openai-build-request-body req))
+  (check-equal? (hash-ref body 'max_tokens #f) 32768))
+
+(test-case "request-level max-tokens reaches body"
+  (define req
+    (make-model-request (list (hasheq 'role "user" 'content "hello")) #f (hasheq 'max-tokens 8192)))
+  (define body (openai-build-request-body req))
+  (check-equal? (hash-ref body 'max_tokens #f) 8192))
+
+(test-case "no max-tokens in settings → no max_tokens in body"
+  (define req
+    (make-model-request (list (hasheq 'role "user" 'content "hello")) #f (hasheq 'model "glm-5.1")))
+  (define body (openai-build-request-body req))
+  (check-false (hash-has-key? body 'max_tokens)))
