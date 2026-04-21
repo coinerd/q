@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.15.1 — 2026-04-21
+
+### Trace Logger Hardening
+- **[P0]** Fix malformed JSONL: added `sanitize-for-json` to recursively convert
+  non-jsexpr values (event structs, procedures) to safe string representations
+  before `write-json`, preventing partial writes that corrupt the trace file
+- **[P0]** Wrap `write-json` in error handler to skip non-serializable events
+  gracefully instead of crashing
+- **[P0]** Fix `model` field in `model.request.started` event: use string instead
+  of `(object-name provider)` symbol for safe JSON serialization
+- Raise circuit breaker threshold from 5 to 100 (sanitization now prevents the
+  most common failure mode; high threshold is safety net only)
+- 4 new tests: struct sanitization, 100 rapid events, procedure values,
+  circuit breaker resilience
+
+### max_tokens Event Timing Fix
+- **[P1]** Resolve max-tokens from multiple config paths: top-level,
+  `providers.<name>.max-tokens`, `models.default.max-tokens` — not just the
+  flat runtime config hash which never contains it
+- Import `setting-ref*` for nested config path resolution in iteration.rkt
+
+### Stream Timeout Tuning
+- **[P1]** SSE stream timeout formula: `max(120, timeout/4)` → `max(180, timeout/2)`
+- For glm-5.1 (request=900s): 225s → 450s, preventing premature SSE timeouts
+  during slow model generation
+
+### Exploration Steering Escalation
+- **[P2]** 3-level escalation: gentle nudge at 5, strong at 7, hard cap at 12
+  consecutive read-only tool calls
+- Tool-type-aware counting: counter resets when file writes detected
+  (write/edit/replace/create tools)
+- Hard cap emits `exploration.hard-cap` event for observability
+
 ## v0.15.0 — 2026-04-21
 
 ### Request-Cycle Trace Logger Module
