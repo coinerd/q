@@ -98,6 +98,9 @@
          set-editor-component
          clear-editor-component
 
+         ;; Retry enrichment (v0.14.2)
+         get-last-turn-tool-summary
+
          ;; Selection
          set-selection-anchor
          set-selection-end
@@ -903,3 +906,43 @@
            "(no args)"
            (truncate-string (format "~a" (car vals)) 60))]
       [else (truncate-string (format "~a" h) 60)])))
+
+;; ============================================================
+;; v0.14.2 Wave 2: Previous-turn tool summary for enriched /retry
+;; ============================================================
+
+;; Extract a summary of tool calls from the most recent turn.
+;; Scans transcript for tool-end entries after the last user message.
+;; Returns #f if no tool calls found, or a string summary.
+(define (get-last-turn-tool-summary state)
+  (define entries (transcript-entries state))
+  ;; Find the LAST user message (entries are oldest-first)
+  (define user-idx
+    (for/last ([e (in-list entries)]
+               [i (in-naturals)]
+               #:when (eq? (transcript-entry-kind e) 'user))
+      i))
+  (cond
+    [(not user-idx) #f]
+    [else
+     ;; Collect tool-end entries AFTER the last user message
+     (define after-user (drop entries (add1 user-idx)))
+     (define tool-entries
+       (for/list ([e (in-list after-user)]
+                  #:when (eq? (transcript-entry-kind e) 'tool-end))
+         e))
+     (cond
+       [(null? tool-entries) #f]
+       [else
+        (define parts
+          (for/list ([e (in-list tool-entries)])
+            (define meta (transcript-entry-meta e))
+            (define name (hash-ref meta 'name "unknown"))
+            (define result (hash-ref meta 'result ""))
+            (define result-str
+              (truncate-string (if (string? result)
+                                   result
+                                   (format "~a" result))
+                               100))
+            (format "~a: ~a" name result-str)))
+        (string-join parts "; ")])]))

@@ -496,7 +496,7 @@
        [(name) (handle-name-command cctx)]
        [(sessions) (handle-sessions-tui-command cctx #f)]
        [(retry)
-        ;; /retry: resubmit last prompt
+        ;; /retry: resubmit last prompt, enriched with previous turn context
         (define last-prompt (unbox (cmd-ctx-last-prompt-box cctx)))
         (cond
           [last-prompt
@@ -506,6 +506,12 @@
                          (current-inexact-milliseconds)
                          (hash)))
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           ;; v0.14.2 Wave 2: Enrich retry with tool summary from previous turn
+           (define tool-summary (get-last-turn-tool-summary (unbox (cmd-ctx-state-box cctx))))
+           (define enriched-prompt
+             (if tool-summary
+                 (format "~a\n\n[Context from previous attempt: ~a]" last-prompt tool-summary)
+                 last-prompt))
            (define runner (cmd-ctx-session-runner cctx))
            (when runner
              (thread
@@ -529,7 +535,7 @@
                                                            sid
                                                            #f
                                                            (hasheq 'reason "error")))))])
-                  (runner last-prompt)))))]
+                  (runner enriched-prompt)))))]
           [else
            (define entry
              (make-entry 'error "No previous prompt to retry." (current-inexact-milliseconds) (hash)))
