@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.15.0 — 2026-04-21
+
+### Request-Cycle Trace Logger Module
+
+Structured diagnostic trace of every LLM request cycle for post-mortem debugging.
+Disabled by default — zero overhead when off. Enable via `logging.trace.enabled` in
+config.json.
+
+**Core**: New `runtime/trace-logger.rkt` subscribes to event bus, writes `trace.jsonl`
+per session with sequence numbers, ISO 8601 timestamps, and full event data.
+Flush-on-write for crash safety.
+
+**Enriched events**:
+- `model.request.started` now includes `model`, `max_tokens`, `settings`
+- `model.stream.completed` now includes `finish_reason` (stop/length/tool_calls)
+- `stream-chunk` struct now has 6th field `finish-reason` for actual API value
+- New `iteration.decision` event at each loop iteration with termination, consecutive_tools
+
+**Config**: `logging.trace.enabled` (boolean), `logging.trace.max-files` (int, default 10)
+
+**CLI**: `q sessions trace <id>` — formatted, `--json` raw, `--summary` counts
+
+- `runtime/trace-logger.rkt`: New trace logger module (#1452)
+- `llm/model.rkt`: Added `finish-reason` field to `stream-chunk` (#1453)
+- `llm/stream.rkt`: Pass finish_reason through normalizers (#1453)
+- `agent/loop.rkt`: Enriched request/completed events (#1453)
+- `runtime/iteration.rkt`: New `iteration.decision` event (#1453)
+- `runtime/settings.rkt`: `trace-enabled?`, `trace-max-files` (#1454)
+- `wiring/run-modes.rkt`: Wire trace logger into startup (#1454)
+- `interfaces/sessions.rkt`: `q sessions trace` command (#1455)
+
 ## v0.14.4 — 2026-04-21
 
 ### Config Validation + Iteration Budget + Provider Settings Wiring

@@ -36,7 +36,10 @@
          run-sessions-command
          ;; Internal helpers (for testing)
          scan-session-dirs
-         read-session-metadata)
+         read-session-metadata
+         ;; Trace display (v0.15.0)
+         read-trace-entries
+         display-trace-summary)
 
 ;; ============================================================
 ;; Session scanning
@@ -297,6 +300,60 @@
     [else (format "~aMB" (quotient bytes (* 1024 1024)))]))
 
 ;; ============================================================
+;; ============================================================
+;; Trace display (v0.15.0)
+;; ============================================================
+
+(define (read-trace-entries path)
+  (filter-map (lambda (line)
+                (if (and (string? line) (> (string-length line) 0))
+                    (with-handlers ([exn:fail? (lambda (e) #f)])
+                      (string->jsexpr line))
+                    #f))
+              (file->lines path)))
+
+(define (display-trace-formatted path)
+  (define entries (read-trace-entries path))
+  (for ([e (in-list entries)])
+    (define phase (hash-ref e 'phase "?"))
+    (define seq (hash-ref e 'seq 0))
+    (define ts (hash-ref e 'ts ""))
+    (define sid (hash-ref e 'sessionId ""))
+    (printf "[~a] ~a ~a session=~a" seq ts phase sid)
+    (define data (hash-ref e 'data #f))
+    (when data
+      (define parts
+        (for/list ([(k v) (in-hash data)]
+                   #:when (and v (not (equal? v 'null))))
+          (format "~a=~a" k v)))
+      (when (pair? parts)
+        (printf " ~a" (string-join parts " "))))
+    (newline)))
+
+(define (display-trace-summary path)
+  (define entries (read-trace-entries path))
+  (define phases (map (lambda (e) (hash-ref e 'phase "?")) entries))
+  (define iteration-count (count (lambda (p) (equal? p "iteration.decision")) phases))
+  (define llm-requests (count (lambda (p) (equal? p "model.request.started")) phases))
+  (define tool-calls (count (lambda (p) (equal? p "tool.call.started")) phases))
+  (define errors (count (lambda (p) (equal? p "runtime.error")) phases))
+  ;; Extract finish reasons
+  (define finish-reasons
+    (filter-map (lambda (e)
+                  (if (equal? (hash-ref e 'phase #f) "model.stream.completed")
+                      (hash-ref (hash-ref e 'data (hasheq)) 'finish_reason "?")
+                      #f))
+                entries))
+  (printf "Session trace summary\n")
+  (printf "  Events: ~a\n" (length entries))
+  (printf "  Iterations: ~a\n" iteration-count)
+  (printf "  LLM requests: ~a\n" llm-requests)
+  (printf "  Tool calls: ~a\n" tool-calls)
+  (printf "  Errors: ~a\n" errors)
+  (when (pair? finish-reasons)
+    (printf "  Finish reasons: ~a\n"
+            (string-join (map (lambda (s) (format "~a" s)) finish-reasons) ", "))))
+
 ;; CLI dispatch — run-sessions-command
 ;; ============================================================
 
@@ -372,4 +429,21 @@
            (displayln "Usage: q verify-session <path> [--repair]")
            (displayln "       q sessions verify <path> [--repair]")
            (exit 1)))]
-    [else (displayln "Usage: q sessions <list|info|delete|verify> [args]")]))
+    [(trace)
+     ;; q sessions trace <session-id> [--json] [--summary]
+     (define sid
+       (if (>= (length args) 1)
+           (car args)
+           #f))
+     (define json? (member "--json" args))
+     (define summary? (member "--summary" args))
+     (if sid
+         (let ([trace-path (build-path session-dir sid "trace.jsonl")])
+           (cond
+             [(not (file-exists? trace-path))
+              (displayln (format "No trace file for session: ~a" sid))]
+             [summary? (display-trace-summary trace-path)]
+             [json? (displayln (file->string trace-path))]
+             [else (display-trace-formatted trace-path)]))
+         (displayln "Usage: q sessions trace <session-id> [--json] [--summary]"))]
+    [else (displayln "Usage: q sessions <list|info|delete|verify|trace> [args]")]))
