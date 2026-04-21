@@ -79,14 +79,16 @@
 ;; stream-chunk
 ;; ============================================================
 
-(struct stream-chunk (delta-text delta-tool-call delta-thinking usage done?) #:transparent)
+(struct stream-chunk (delta-text delta-tool-call delta-thinking usage done? finish-reason)
+  #:transparent)
 
-;; Convenience constructor with optional #:delta-thinking keyword.
-;; v0.12.3 Wave 2.3: Added keyword arg so providers can pass thinking data
-;; without needing the raw 6-field stream-chunk constructor.
+;; Convenience constructor with optional keywords.
+;; v0.12.3 Wave 2.3: Added #:delta-thinking keyword.
+;; v0.15.0 Wave 1: Added #:finish-reason keyword.
 (define (make-stream-chunk delta-text
                            delta-tool-call
                            usage
                            done?
-                           #:delta-thinking [delta-thinking #f])
-  (stream-chunk delta-text delta-tool-call delta-thinking usage done?))
+                           #:delta-thinking [delta-thinking #f]
+                           #:finish-reason [finish-reason #f])
+  (stream-chunk delta-text delta-tool-call delta-thinking usage done? finish-reason))

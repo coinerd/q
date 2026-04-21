@@ -631,6 +631,21 @@
               (define termination (loop-result-termination-reason result))
               (define new-msgs (loop-result-messages result))
 
+              ;; v0.15.0 Wave 1: emit iteration.decision for trace logging
+              (emit-session-event! bus
+                                   session-id
+                                   "iteration.decision"
+                                   (hasheq 'iteration
+                                           (add1 iteration)
+                                           'termination
+                                           termination
+                                           'consecutive_tools
+                                           consecutive-tool-count
+                                           'max_iterations
+                                           max-iterations
+                                           'max_iterations_hard
+                                           max-iterations-hard))
+
               (cond
                 ;; ── Completed: append and return ──
                 [(eq? termination 'completed)

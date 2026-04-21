@@ -228,7 +228,11 @@
                 #f))
           #f))
 
-    (make-stream-chunk delta-text delta-tool-call usage (and (string? finish-reason) #t))))
+    (make-stream-chunk delta-text
+                       delta-tool-call
+                       usage
+                       (and (string? finish-reason) #t)
+                       #:finish-reason finish-reason)))
 
 ;; ============================================================
 ;; accumulate-tool-call-deltas
@@ -344,7 +348,11 @@
               (car tcs)
               #f))
         #f))
-  (make-stream-chunk delta-text delta-tool-call usage (and (string? finish-reason) #t)))
+  (make-stream-chunk delta-text
+                     delta-tool-call
+                     usage
+                     (and (string? finish-reason) #t)
+                     #:finish-reason finish-reason))
 
 ;; ============================================================
 ;; read-sse-chunks (incremental generator)

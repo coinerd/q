@@ -339,11 +339,15 @@
                 (streaming-message-set-blocked! sm))))
           (when (stream-chunk-done? chunk)
             ;; Stream completed
+            ;; v0.15.0 Wave 1: include finish_reason in event
             (emit! bus
                    session-id
                    turn-id
                    "model.stream.completed"
-                   (hasheq 'usage (or (stream-chunk-usage chunk) (hasheq)))
+                   (hasheq 'usage
+                           (or (stream-chunk-usage chunk) (hasheq))
+                           'finish_reason
+                           (or (stream-chunk-finish-reason chunk) "unknown"))
                    #:state state)
             ;; Emit message.end if we started a message
             (when (streaming-message-message-started? sm)
@@ -690,6 +694,7 @@
             (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "model-request-pre-blocked"))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [else
+     ;; v0.15.0 Wave 1: enriched llm.request event for trace logging
      (emit! bus
             session-id
             turn-id
@@ -699,7 +704,13 @@
                     'toolCount
                     (if tools
                         (length tools)
-                        0))
+                        0)
+                    'model
+                    (object-name provider)
+                    'max_tokens
+                    (hash-ref (model-request-settings req) 'max-tokens #f)
+                    'settings
+                    (model-request-settings req))
             #:state st)
 
      ;; Dispatch 'message-start hook
