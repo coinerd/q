@@ -364,20 +364,33 @@
             [else 'provider-error]))))
      ;; Recovery hint based on classified error type
      ;; B1: Show different hint when retries were attempted
+     ;; v0.14.2: Use errorHistory for accurate multi-type retry hints
      (define retries-attempted (hash-ref payload 'retries-attempted #f))
+     (define error-history (hash-ref payload 'errorHistory '()))
+     (define history-types (remove-duplicates error-history))
      (define hint
        (cond
          [(and retries-attempted (> retries-attempted 0))
-          (case error-type
-            [(rate-limit)
-             (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
+          (cond
+            ;; Mixed error types
+            [(and (member 'timeout history-types) (member 'rate-limit history-types))
+             (format "Provider timed out, then rate limited (~a retries). Wait 30s, then type /retry."
                      retries-attempted)]
-            [(timeout)
-             (format "Provider timed out after ~a retries. Type /retry to resubmit."
+            [(> (length history-types) 1)
+             (format "Mixed errors after ~a retries. Wait a moment, then type /retry."
                      retries-attempted)]
+            ;; Single error type
             [else
-             (format "Error persisted after ~a retries. Type /retry to resubmit."
-                     retries-attempted)])]
+             (case error-type
+               [(rate-limit)
+                (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
+                        retries-attempted)]
+               [(timeout)
+                (format "Provider timed out after ~a retries. Type /retry to resubmit."
+                        retries-attempted)]
+               [else
+                (format "Error persisted after ~a retries. Type /retry to resubmit."
+                        retries-attempted)])])]
          [else
           (case error-type
             [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]

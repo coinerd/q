@@ -45,7 +45,8 @@
 
 ;; Raised when retries are exhausted. Wraps the original exception with metadata
 ;; so callers (agent-session, TUI) can distinguish exhaustion from first failure.
-(struct retry-exhausted exn:fail (original-exn attempts last-error-type total-delay-ms) #:transparent)
+(struct retry-exhausted exn:fail (original-exn attempts last-error-type total-delay-ms error-history)
+  #:transparent)
 
 ;; ============================================================
 ;; Predicates
@@ -155,23 +156,31 @@
 ;; Execute a thunk with automatic retry on retryable errors.
 ;; Returns the thunk result on success, or re-raises on non-retryable
 ;; error or after max-retries exhausted.
-(define (with-auto-retry thunk
-                         #:max-retries [max-retries default-max-retries]
-                         #:base-delay-ms [base-delay-ms default-base-delay-ms]
-                         #:rate-limit-base-delay-ms
-                         [rl-base-delay-ms default-rate-limit-base-delay-ms]
-                         #:max-delay-ms [max-delay-ms default-max-delay-ms]
-                         #:on-retry [on-retry #f])
+(define (with-auto-retry
+         thunk
+         #:max-retries [max-retries default-max-retries]
+         #:base-delay-ms [base-delay-ms default-base-delay-ms]
+         #:rate-limit-base-delay-ms [rl-base-delay-ms default-rate-limit-base-delay-ms]
+         #:max-delay-ms [max-delay-ms default-max-delay-ms]
+         #:on-retry [on-retry #f]
+         #:per-type-budgets [per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)])
+  ;; v0.14.2: Per-type retry budget. Each error type has its own budget.
+  ;; Rate-limit retries don't consume timeout budget, etc.
   (let loop ([attempt 0]
              [delay-ms 0]
              [total-delay 0]
-             [last-error-type #f])
+             [last-error-type #f]
+             [type-attempts (hash)] ; hash of error-type -> count
+             [error-history '()]) ; list of error types encountered
     (with-handlers
         ([exn:fail?
           (lambda (exn)
             (define err-type (classify-error exn))
+            (define current-type-count (hash-ref type-attempts err-type 0))
+            (define type-budget (hash-ref per-type-budgets err-type max-retries))
+            ;; Can retry if: globally under max-retries AND per-type under budget
             (cond
-              [(and (retryable-error? exn) (< attempt max-retries))
+              [(and (retryable-error? exn) (< attempt max-retries) (< current-type-count type-budget))
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
                (define next-delay (min (* rl-base (expt 2 attempt)) max-delay-ms))
@@ -181,15 +190,22 @@
                (when on-retry
                  (on-retry (add1 attempt) max-retries next-delay (exn-message exn) err-type))
                (sleep (/ next-delay 1000.0))
-               (loop (add1 attempt) next-delay (+ total-delay next-delay) err-type)]
+               (loop (add1 attempt)
+                     next-delay
+                     (+ total-delay next-delay)
+                     err-type
+                     (hash-set type-attempts err-type (add1 current-type-count))
+                     (append error-history (list err-type)))]
               [else
                ;; A3: Wrap in retry-exhausted if we attempted retries
+               (define final-history (append error-history (list err-type)))
                (if (> attempt 0)
                    (raise (retry-exhausted (format "~a (after ~a retries)" (exn-message exn) attempt)
                                            (current-continuation-marks)
                                            exn
                                            attempt
                                            last-error-type
-                                           total-delay))
+                                           total-delay
+                                           final-history))
                    (raise exn))]))])
       (thunk))))

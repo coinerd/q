@@ -53,7 +53,8 @@
                   classify-error
                   retry-exhausted?
                   retry-exhausted-attempts
-                  retry-exhausted-total-delay-ms))
+                  retry-exhausted-total-delay-ms
+                  retry-exhausted-error-history))
 
 (provide agent-session?
          agent-session-session-dir
@@ -675,7 +676,9 @@
                                                 'retries-attempted
                                                 (retry-exhausted-attempts e)
                                                 'total-retry-delay-ms
-                                                (retry-exhausted-total-delay-ms e))
+                                                (retry-exhausted-total-delay-ms e)
+                                                'errorHistory
+                                                (retry-exhausted-error-history e))
                                      base-payload))
                                (emit-session-event! bus sid "runtime.error" payload)
                                ;; Defense-in-depth: ensure turn.completed is emitted
