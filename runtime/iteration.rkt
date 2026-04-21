@@ -76,7 +76,7 @@
                   list-tools-jsexpr
                   merge-tool-lists)
          ;; Settings struct for exec-context runtime-settings (#1240)
-         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref)
+         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
          ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
@@ -283,10 +283,31 @@
   ;; The full config is a mutable hash with event-bus, extension-registry, etc.
   ;; Passing it to make-model-request causes hash-set contract violations
   ;; because provider.rkt's ensure-model-setting calls hash-set (immutable-only).
-  (define provider-settings
+  (define provider-settings-raw
     (for/hash ([(k v) (in-hash config)]
                #:when (memq k '(max-tokens temperature top_p frequency_penalty presence_penalty)))
       (values k v)))
+  ;; v0.15.1 Wave 1: Also resolve max-tokens from config if not in flat runtime hash.
+  ;; Config may have max-tokens in: top-level, providers.<name>.max-tokens, or models.default.max-tokens.
+  (define provider-settings
+    (let* ([settings (hash-ref config 'settings #f)]
+           [model-name (hash-ref config 'model-name #f)]
+           [resolve-max-tokens
+            (lambda ()
+              (or
+               (hash-has-key? provider-settings-raw 'max-tokens)
+               (and settings (setting-ref settings 'max-tokens #f))
+               (and settings
+                    model-name
+                    (setting-ref* settings `(providers ,(string->symbol model-name) max-tokens) #f))
+               (and settings (setting-ref* settings '(providers openai-compatible max-tokens) #f))
+               (and settings (setting-ref* settings '(models default max-tokens) #f))))])
+      (if (and settings (not (hash-has-key? provider-settings-raw 'max-tokens)))
+          (let ([mt (resolve-max-tokens)])
+            (if mt
+                (hash-set provider-settings-raw 'max-tokens mt)
+                provider-settings-raw))
+          provider-settings-raw)))
 
   (define ctx-for-retry (box ctx-final))
 
@@ -763,30 +784,94 @@
                                                 tool-names
                                                 'iteration
                                                 (add1 iteration))))
-                 ;; v0.14.4 Wave 1: Post-exploration steering hint after 8+ consecutive tools
-                 ;; without file writes — nudge agent toward execution
+                 ;; v0.15.1 Wave 3: Multi-level exploration steering escalation
+                 ;; with tool-type-aware counting.
+                 ;; - consecutive-tool-count resets when file writes are detected
+                 ;; - Level 1 (5+): gentle nudge to use write/edit tools
+                 ;; - Level 2 (7+): strong nudge with explicit instruction
+                 ;; - Level 3 (12+): hard cap — inject message and break the loop
+                 (define has-file-write?
+                   (for/or ([tc (in-list (extract-tool-calls-from-messages new-msgs))])
+                     (member (tool-call-name tc) '("write" "edit" "replace" "create"))))
+                 (define effective-tool-count
+                   (if has-file-write?
+                       0
+                       (add1 consecutive-tool-count)))
                  (define exec-context updated-ctx)
-                 (when (>= consecutive-tool-count 8)
-                   (set!
-                    exec-context
-                    (append
+                 (cond
+                   ;; Level 3: Hard cap at 12 — force-stop the exploration
+                   [(>= effective-tool-count 12)
+                    (set!
                      exec-context
-                     (list (make-message
-                            (generate-id)
-                            #f
-                            'system
-                            'message
-                            (list (make-text-part
-                                   (format (string-append
-                                            "[steering] You've made ~a consecutive tool calls "
-                                            "without writing files. Focus on producing "
-                                            "the actual output using the write or edit tool now.")
-                                           (add1 consecutive-tool-count))))
-                            (now-seconds)
-                            (hasheq))))))
+                     (append
+                      exec-context
+                      (list
+                       (make-message
+                        (generate-id)
+                        #f
+                        'system
+                        'message
+                        (list (make-text-part
+                               (format
+                                (string-append
+                                 "[steering:hard] You've made ~a consecutive read-only tool calls. "
+                                 "This is beyond the exploration budget. "
+                                 "You MUST now use the write or edit tool to produce output, "
+                                 "or explain what you cannot do.")
+                                effective-tool-count)))
+                        (now-seconds)
+                        (hasheq)))))
+                    (emit-session-event!
+                     bus
+                     session-id
+                     "exploration.hard-cap"
+                     (hasheq 'consecutive-tools effective-tool-count 'iteration (add1 iteration)))]
+                   ;; Level 2: Strong nudge at 7+
+                   [(>= effective-tool-count 7)
+                    (set!
+                     exec-context
+                     (append
+                      exec-context
+                      (list
+                       (make-message
+                        (generate-id)
+                        #f
+                        'system
+                        'message
+                        (list (make-text-part
+                               (format
+                                (string-append
+                                 "[steering:strong] ~a consecutive read-only tool calls detected. "
+                                 "Stop exploring. You MUST produce the actual output now "
+                                 "using the write or edit tool. "
+                                 "Do NOT run any more read-only commands.")
+                                effective-tool-count)))
+                        (now-seconds)
+                        (hasheq)))))]
+                   ;; Level 1: Gentle nudge at 5+
+                   [(>= effective-tool-count 5)
+                    (set!
+                     exec-context
+                     (append
+                      exec-context
+                      (list
+                       (make-message
+                        (generate-id)
+                        #f
+                        'system
+                        'message
+                        (list
+                         (make-text-part
+                          (format
+                           (string-append
+                            "[steering] You've made ~a consecutive tool calls without writing files. "
+                            "Consider using the write or edit tool to produce output.")
+                           effective-tool-count)))
+                        (now-seconds)
+                        (hasheq)))))])
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! exec-context bus session-id config)
-                 (loop exec-context (add1 iteration) (add1 consecutive-tool-count))]
+                 (loop exec-context (add1 iteration) effective-tool-count)]
 
                 ;; ── Unknown termination: append and return ──
                 [else

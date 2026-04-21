@@ -310,13 +310,14 @@
       (check-http-status! status-line err-body))
     ;; Status OK — return an incremental generator that reads SSE lines
     ;; from the response port, yielding stream-chunk values as they arrive.
-    ;; v0.14.3: Scale SSE stream timeouts with per-model request timeout.
-    ;; For slow models (e.g. glm-5.1 with request=900s), the default 60s
-    ;; stream-timeout causes premature SSE chunk timeouts during generation.
+    ;; v0.15.1 Wave 2: Increased stream timeout scaling from /4 to /2.
+    ;; Previous formula (max 120 timeout/4) gave 225s for glm-5.1 (request=900s)
+    ;; which caused premature SSE timeouts during slow generation.
+    ;; New formula gives 450s — enough for models that stall mid-generation.
     (define gen
       (read-sse-chunks response-port
                        #:initial-timeout stream-timeout
-                       #:stream-timeout (max 120 (quotient stream-timeout 4))))
+                       #:stream-timeout (max 180 (quotient stream-timeout 2))))
     ;; Simple wrapper: yield chunks until done, then close port.
     ;; No dynamic-wind — it fires before/after on every yield which
     ;; causes the port to be closed between yields.
