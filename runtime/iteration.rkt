@@ -471,6 +471,9 @@
                             ;; #1158: shutdown check thunks (avoid circular dep on agent-session)
                             #:shutdown-check [shutdown-check #f]
                             #:force-shutdown-check [force-shutdown-check #f])
+  ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
+  ;; Default hard limit = max-iterations (backward compatible: no split unless explicitly configured)
+  (define max-iterations-hard (hash-ref config 'max-iterations-hard max-iterations))
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
   (define agent-start-payload
     (hasheq 'session-id
@@ -621,8 +624,8 @@
                                        (add1 iteration)))))
                          effective-result)))]
 
-                ;; ── Max iterations reached: append and stop ──
-                [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations))
+                ;; ── Hard iteration limit reached: append and stop ──
+                [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
                  (append-entries! log-path new-msgs)
                  (emit-session-event! bus
                                       session-id
@@ -632,10 +635,38 @@
                                               'iteration
                                               iteration
                                               'maxIterations
-                                              max-iterations))
+                                              max-iterations-hard))
                  (make-loop-result new-msgs
                                    'max-iterations-exceeded
                                    (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
+
+                ;; ── Soft iteration limit: warn but continue ──
+                [(and (eq? termination 'tool-calls-pending)
+                      (>= (add1 iteration) max-iterations)
+                      (< (add1 iteration) max-iterations-hard))
+                 (append-entries! log-path new-msgs)
+                 (emit-session-event! bus
+                                      session-id
+                                      "iteration.soft-warning"
+                                      (hasheq 'iteration
+                                              (add1 iteration)
+                                              'soft-limit
+                                              max-iterations
+                                              'hard-limit
+                                              max-iterations-hard
+                                              'remaining
+                                              (- max-iterations-hard (add1 iteration))))
+                 (define updated-ctx
+                   (handle-tool-calls-pending new-msgs
+                                              ctx-with-injected
+                                              ext-reg
+                                              reg
+                                              bus
+                                              session-id
+                                              log-path
+                                              token
+                                              config))
+                 (loop updated-ctx (add1 iteration))]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
