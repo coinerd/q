@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.15.2 — 2026-04-21
+
+### Bug Fixes
+- **P1**: Detect silent stream EOF — emit synthetic `model.stream.completed` with
+  `finish_reason: "eof"` when API closes without finish chunk (BUG-SILENT-STREAM-EOF)
+- **P2**: Strengthen Level 1 exploration steering — "Consider" → "You MUST now"
+  (BUG-STEERING-LEVEL1-WEAK)
+- **P2**: Detect intent-without-action pattern — if model says "I'll rewrite" but
+  no tool call follows, inject steering nudge capped at 1 retry (BUG-INTENT-WITHOUT-ACTION)
+- **P0**: Steering messages use `'user` role instead of `'system` (fixes 400 errors)
+- **P0**: Context builder preserves tool_call/tool_result pairing during truncation
+- **P0**: Tiered context builder preserves system-instruction and first user message
+- **P1**: Index rebuild infers missing parentIds from log order (fixes context amnesia)
+
 ## v0.15.1 — 2026-04-21
 
 ### Trace Logger Hardening
