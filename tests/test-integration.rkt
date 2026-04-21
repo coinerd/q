@@ -57,7 +57,7 @@
          (prefix-in sdk: "../interfaces/sdk.rkt")
          (only-in "../runtime/compactor.rkt" compaction-result?))
 
-;; Import register-default-tools! from main.rkt (which wires all 10 tools)
+;; Import register-default-tools! from main.rkt (which wires all 11 tools)
 (require (only-in "../main.rkt" register-default-tools! make-event-bus))
 
 (require (only-in "helpers/mock-provider.rkt" make-simple-mock-provider make-tool-call-mock-provider))
@@ -411,18 +411,19 @@
 ;; 8. CLI / tool registration integration
 ;; ============================================================
 
-(test-case "integ: register-default-tools! registers 10 tools"
+(test-case "integ: register-default-tools! registers 11 tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (tool-names reg))
-  (check-equal? (length names) 10)
+  (check-equal? (length names) 11)
   (check-not-false (member "read" names))
   (check-not-false (member "write" names))
   (check-not-false (member "edit" names))
   (check-not-false (member "bash" names))
   (check-not-false (member "grep" names))
   (check-not-false (member "find" names))
-  (check-not-false (member "ls" names)))
+  (check-not-false (member "ls" names))
+  (check-not-false (member "session_recall" names)))
 
 (test-case "integ: register-default-tools! with #:only filter"
   (define reg (make-tool-registry))
