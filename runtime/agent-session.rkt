@@ -678,6 +678,8 @@
                                                 (retry-exhausted-total-delay-ms e))
                                      base-payload))
                                (emit-session-event! bus sid "runtime.error" payload)
+                               ;; Defense-in-depth: ensure turn.completed is emitted
+                               (emit-session-event! bus sid "turn.completed" (hasheq 'reason "error"))
                                (make-loop-result context-with-system 'error payload))])
     (run-iteration-loop context-with-system
                         prov

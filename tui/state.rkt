@@ -385,6 +385,7 @@
             [(auth) "API key error. Check ~/.q/config.json"]
             [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
             [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
+            [(internal-error) "Internal error occurred. Type /retry to resubmit your prompt."]
             [else "Type /retry to resubmit your prompt."])]))
      ;; BUG-29 fix: clear pending-tool-name and streaming-text on error
      ;; Also clear streaming-thinking for complete state reset on error
