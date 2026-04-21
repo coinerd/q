@@ -516,6 +516,16 @@
                                (event-time evt)
                                (hash)))]
 
+    ;; v0.14.1: mid-turn token budget warning
+    [("context.mid-turn-over-budget")
+     (define estimated (hash-ref payload 'estimated-tokens "?"))
+     (define budget (hash-ref payload 'budget "?"))
+     (append-entry state
+                   (make-entry 'system
+                               (format "[context growing: ~a/~a tokens used]" estimated budget)
+                               (event-time evt)
+                               (hash)))]
+
     ;; BUG-33 fix: auto-retry event from runtime/iteration.rkt
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))

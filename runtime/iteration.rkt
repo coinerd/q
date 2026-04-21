@@ -41,6 +41,8 @@
                   make-message
                   make-tool-result-part
                   make-text-part
+                  text-part?
+                  text-part-text
                   tool-call-part?
                   tool-call-part-id
                   tool-call-part-name
@@ -101,7 +103,9 @@
                   context-overflow-error?
                   timeout-error?)
          ;; FEAT-61: message injection support
-         (only-in "../extensions/message-inject.rkt" injection-event-topic))
+         (only-in "../extensions/message-inject.rkt" injection-event-topic)
+         ;; v0.14.1: mid-turn token budget check
+         (only-in "../llm/token-budget.rkt" estimate-context-tokens))
 
 (provide run-iteration-loop
          emit-session-event!
@@ -111,7 +115,9 @@
          make-injected-collector!
          drain-injected-messages!
          ;; FEAT-66: overflow recovery (for testing)
-         call-with-overflow-recovery)
+         call-with-overflow-recovery
+         ;; v0.14.1: mid-turn token budget check (for testing)
+         check-mid-turn-budget!)
 
 ;; ============================================================
 ;; Shared helpers
@@ -129,6 +135,33 @@
       (let ([result (dispatch-hooks hook-point payload ext-reg #:ctx ctx)])
         (values (hook-result-payload result) result))
       (values payload #f)))
+
+;; v0.14.1: Check if context exceeds mid-turn token budget.
+;; Returns estimated token count. Emits event if over budget.
+(define (check-mid-turn-budget! ctx bus session-id config)
+  (define max-tokens (hash-ref config 'max-context-tokens 128000))
+  (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
+  ;; Extract text from message? structs for token estimation
+  (define texts
+    (for/list ([msg (in-list ctx)])
+      (define content (message-content msg))
+      (cond
+        [(string? content) content]
+        [(list? content)
+         (apply string-append
+                (for/list ([part (in-list content)]
+                           #:when (text-part? part))
+                  (text-part-text part)))]
+        [else ""])))
+  (define estimated
+    (for/sum ([t (in-list texts)]) (estimate-context-tokens (list (hasheq 'content t)))))
+  (when (> estimated budget-threshold)
+    (emit-session-event!
+     bus
+     session-id
+     "context.mid-turn-over-budget"
+     (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
+  estimated)
 
 ;; ============================================================
 ;; Iteration-loop helpers (private)
@@ -673,6 +706,8 @@
                                               log-path
                                               token
                                               config))
+                 ;; v0.14.1: mid-turn token budget check
+                 (check-mid-turn-budget! updated-ctx bus session-id config)
                  (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count))]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
@@ -702,6 +737,8 @@
                                                 tool-names
                                                 'iteration
                                                 (add1 iteration))))
+                 ;; v0.14.1: mid-turn token budget check
+                 (check-mid-turn-budget! updated-ctx bus session-id config)
                  (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count))]
 
                 ;; ── Unknown termination: append and return ──
