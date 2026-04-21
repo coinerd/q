@@ -18,7 +18,7 @@
       (check-equal? (stream-chunk-delta-thinking c) "hmm"))
 
     (test-case "stream-chunk direct constructor works with 6 fields"
-      (define c (stream-chunk "hi" #f "thinking..." (hasheq 'total_tokens 10) #f))
+      (define c (stream-chunk "hi" #f "thinking..." (hasheq 'total_tokens 10) #f #f))
       (check-equal? (stream-chunk-delta-thinking c) "thinking..."))))
 
 (module+ main
