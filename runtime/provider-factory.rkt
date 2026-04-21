@@ -74,6 +74,21 @@
 ;;   6. Create make-openai-compatible-provider with config hash
 (define (build-provider config settings)
   (define project-dir (or (hash-ref config 'project-dir #f) (current-directory)))
+  ;; v0.14.4 Wave 0: Check for config parse errors before falling back to mock
+  (define global-cfg-path (build-path (find-system-path 'home-dir) ".q" "config.json"))
+  (define project-cfg-path (build-path project-dir ".q" "config.json"))
+  (define global-parse-err (config-parse-error global-cfg-path))
+  (define project-parse-err (config-parse-error project-cfg-path))
+  (when global-parse-err
+    (fprintf (current-error-port)
+             "ERROR: Config file ~a has invalid JSON: ~a\nFix the syntax error and restart q.\n"
+             global-cfg-path
+             global-parse-err))
+  (when project-parse-err
+    (fprintf (current-error-port)
+             "ERROR: Config file ~a has invalid JSON: ~a\nFix the syntax error and restart q.\n"
+             project-cfg-path
+             project-parse-err))
   (define merged (q-settings-merged settings))
   (cond
     [(hash-empty? merged)

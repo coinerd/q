@@ -40,6 +40,7 @@
          setting-ref*
          provider-config
          provider-names
+         config-parse-error
 
          ;; Parallel execution
          parallel-tools-enabled?
@@ -81,6 +82,17 @@
 ;; ============================================================
 ;; Internal helpers
 ;; ============================================================
+
+;; v0.14.4 Wave 0: Detect config file that exists but has invalid JSON.
+;; Returns #f if file is missing or valid, or an error message string if broken.
+(define (config-parse-error path)
+  (if (file-exists? path)
+      (with-handlers ([exn:fail? (λ (e) (exn-message e))])
+        (call-with-input-file path
+                              (λ (in)
+                                (define result (read-json in))
+                                (if (hash? result) #f "top-level value is not a JSON object"))))
+      #f))
 
 ;; Safely parse a JSON file, returning #f on any failure
 ;; or if the top-level value is not a JSON object (hash).
