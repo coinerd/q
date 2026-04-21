@@ -126,8 +126,9 @@
    (check-not-exn (lambda ()
                     (make-openai-compatible-provider
                      (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost"))))
-   (define prov (make-openai-compatible-provider
-                 (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost")))
+   (define prov
+     (make-openai-compatible-provider
+      (hash 'api-key "sk-valid-key-123" 'base-url "http://localhost")))
    (check-equal? (provider-name prov) "openai-compatible")))
 
 ;; ============================================================
@@ -194,6 +195,35 @@
                                  "429 error includes wait/retry guidance")))
 
 ;; ============================================================
+;; Tests for SSE stream timeout scaling (v0.14.3 Wave 1)
+;; ============================================================
+
+(define-test-suite sse-timeout-scaling-tests
+                   (test-case "default timeout produces expected stream-timeout"
+                     ;; Default request timeout = 600s
+                     ;; stream-timeout = max(120, quotient(600, 4)) = max(120, 150) = 150
+                     (define default-timeout (current-http-request-timeout))
+                     (define expected-stream (max 120 (quotient default-timeout 4)))
+                     (check-equal? expected-stream 150))
+                   (test-case "slow model timeout scales stream-timeout correctly"
+                     ;; For a model with request=900s: stream = max(120, 225) = 225
+                     (define slow-timeout 900)
+                     (define expected-stream (max 120 (quotient slow-timeout 4)))
+                     (check-equal? expected-stream 225))
+                   (test-case "very small timeout still gets minimum 120s stream timeout"
+                     ;; Even with request=60s: stream = max(120, 15) = 120
+                     (define tiny-timeout 60)
+                     (define expected-stream (max 120 (quotient tiny-timeout 4)))
+                     (check-equal? expected-stream 120)
+                     ;; And with request=480s: stream = max(120, 120) = 120
+                     (define four-eighty 480)
+                     (check-equal? (max 120 (quotient four-eighty 4)) 120))
+                   (test-case "effective-request-timeout-for falls back to default"
+                     ;; Unknown model name should return default timeout
+                     (define result (effective-request-timeout-for "nonexistent-model-xyz"))
+                     (check-equal? result (current-http-request-timeout))))
+
+;; ============================================================
 ;; Run all tests (updated to include new suites)
 ;; ============================================================
 
@@ -201,4 +231,5 @@
   (run-tests error-formatting-tests)
   (run-tests api-key-validation-tests)
   (run-tests response-size-limit-tests)
-  (run-tests rate-limit-guidance-tests))
+  (run-tests rate-limit-guidance-tests)
+  (run-tests sse-timeout-scaling-tests))
