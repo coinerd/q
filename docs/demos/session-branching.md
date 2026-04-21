@@ -4,7 +4,7 @@ Branching a session to explore an alternative approach without losing the origin
 
 ```bash
 $ raco q --model gpt-5.4
-q version 0.14.0
+q version 0.14.1
 Session: a7f3c2e1
 
 > Refactor the event bus to use channels instead of locks
