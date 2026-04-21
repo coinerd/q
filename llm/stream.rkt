@@ -351,8 +351,15 @@
                          #:initial-timeout [initial-secs http-read-timeout-default]
                          #:stream-timeout [stream-secs http-stream-timeout-default])
   (generator ()
+             (define stream-start (current-inexact-milliseconds))
              (let loop ([first-read? #t])
-               (define timeout-secs (if first-read? initial-secs stream-secs))
+               ;; v0.14.1: Adaptive per-chunk timeout for long generation
+               (define elapsed-ms (- (current-inexact-milliseconds) stream-start))
+               (define base-timeout (if first-read? initial-secs stream-secs))
+               (define timeout-secs
+                 (if (and (not first-read?) (> elapsed-ms (* stream-secs 1000.0)))
+                     (min (* stream-secs 2) (* base-timeout 2))
+                     base-timeout))
                (define line (read-line/timeout port #:timeout timeout-secs))
                (cond
                  [(eq? line #f)
