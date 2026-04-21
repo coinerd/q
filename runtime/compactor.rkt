@@ -515,27 +515,40 @@
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
 
-  ;; v0.15.2: Protect system-instruction messages.
-  ;; Without this, the tiered builder drops the system prompt,
-  ;; causing "messages parameter is illegal" errors.
-  (define-values (protected regular)
+  ;; v0.15.2: Protect system-instruction and first user message.
+  ;; Without this, the tiered builder drops the system prompt or user message,
+  ;; causing "messages parameter is illegal" errors from the API.
+  ;; API conversations must start with system (optional) + user (required).
+  (define-values (sys-protected regular)
     (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular-msgs))
 
+  ;; Find and extract first user message to pin it
+  (define first-user-idx
+    (for/first ([m (in-list regular)]
+                [i (in-naturals)]
+                #:when (eq? (message-role m) 'user))
+      i))
+  (define-values (pinned-user unpinned)
+    (if first-user-idx
+        (values (list (list-ref regular first-user-idx))
+                (append (take regular first-user-idx) (drop regular (add1 first-user-idx))))
+        (values '() regular)))
+
   ;; Calculate how many messages go to Tier C (most recent)
-  (define total (length regular))
+  (define total (length unpinned))
   (define tier-c-size (min tier-c-count total))
 
   ;; Tier C: most recent messages
   (define tier-c
     (if (> tier-c-size 0)
-        (take-right regular tier-c-size)
+        (take-right unpinned tier-c-size)
         '()))
 
   ;; Remaining messages after Tier C
   (define remaining-after-c
     (if (> tier-c-size 0)
-        (drop-right regular tier-c-size)
-        regular))
+        (drop-right unpinned tier-c-size)
+        unpinned))
 
   ;; Tier B: recent messages (up to tier-b-count)
   (define remaining-count (length remaining-after-c))
@@ -546,9 +559,9 @@
         (take-right remaining-after-c tier-b-size)
         '()))
 
-  ;; Tier A includes both system instructions AND compaction summaries
-  ;; System instructions must always be present for valid API calls.
-  (tiered-context (append protected compaction-summaries) tier-b tier-c))
+  ;; Tier A: system-instruction + first user + compaction summaries
+  ;; These must always be present for valid API calls.
+  (tiered-context (append sys-protected pinned-user compaction-summaries) tier-b tier-c))
 
 ;; R2-6: Build tiered context with hook support
 ;; Parameters:

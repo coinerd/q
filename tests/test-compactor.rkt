@@ -390,8 +390,8 @@
    (check-equal? (length (tiered-context-tier-c tc)) 3)
    ;; Tier B should have 5 messages
    (check-equal? (length (tiered-context-tier-b tc)) 5)
-   ;; Tier A should be empty (no compaction summaries)
-   (check-equal? (length (tiered-context-tier-a tc)) 0)
+   ;; Tier A should have first user message (pinned) but no compaction summaries
+   (check-equal? (length (tiered-context-tier-a tc)) 1)
    ;; No hook result when no dispatcher
    (check-false hook-result))
  (test-case "build-tiered-context-with-hooks: hook returns 'pass"
@@ -583,14 +583,16 @@
    ;; Convert to message list
    (define msg-list (tiered-context->message-list tc))
 
-   ;; Order should be: Tier A (empty) -> Tier B (was 3 msgs) -> Tier C (was 4 msgs)
-   (check-equal? (length msg-list) 7)
-   ;; First 3 should be what was originally tier-c
-   (check-equal? (message-id (first msg-list)) "msg7")
-   (check-equal? (message-id (third msg-list)) "msg9")
+   ;; Order should be: Tier A (pinned user) -> Tier B (was 3 msgs) -> Tier C (was 4 msgs)
+   (check-equal? (length msg-list) 8)
+   ;; First should be pinned user msg0
+   (check-equal? (message-id (first msg-list)) "msg0")
+   ;; Next 3 should be what was originally tier-c
+   (check-equal? (message-id (second msg-list)) "msg7")
+   (check-equal? (message-id (fourth msg-list)) "msg9")
    ;; Next 4 should be what was originally tier-b
-   (check-equal? (message-id (fourth msg-list)) "msg3")
-   (check-equal? (message-id (seventh msg-list)) "msg6"))
+   (check-equal? (message-id (fifth msg-list)) "msg3")
+   (check-equal? (message-id (eighth msg-list)) "msg6"))
  (test-case "build-tiered-context: system-instruction always included"
    ;; v0.15.2: System instruction must survive tiered context building
    ;; even when it's the oldest message and doesn't fit in tier-b/c.
@@ -603,6 +605,8 @@
    (define tc (build-tiered-context msgs #:tier-b-count 3 #:tier-c-count 2))
    ;; System instruction should be in tier-a
    (check-not-false (member sys-msg (tiered-context-tier-a tc)))
+   ;; First user message should also be in tier-a (pinned)
+   (check-not-false (member user-msg (tiered-context-tier-a tc)))
    ;; When flattened, system instruction should be first
    (define flat (tiered-context->message-list tc))
    (check-equal? (message-id (first flat)) "sys-0")
@@ -617,17 +621,18 @@
        (list (make-test-message (format "asst~a" i) 'assistant (format "Assistant ~a" i))
              (make-test-message (format "tool~a" i) 'tool (format "Result ~a" i)))))
    (define msgs (append (list sys-msg user-msg) (append* pairs)))
-   ;; tier-b=5, tier-c=3 → only 8 regular messages kept + system
+   ;; tier-b=5, tier-c=3 → only 8 unpinned messages kept + system + user in tier-a
    (define tc (build-tiered-context msgs #:tier-b-count 5 #:tier-c-count 3))
-   ;; System in tier-a
-   (check-equal? (length (filter (lambda (m) (eq? (message-kind m) 'system-instruction))
-                                 (tiered-context-tier-a tc)))
-                 1)
-   ;; Flattened list starts with system
+   ;; System instruction in tier-a
+   (check-not-false (member sys-msg (tiered-context-tier-a tc)))
+   ;; First user message also in tier-a (pinned)
+   (check-not-false (member user-msg (tiered-context-tier-a tc)))
+   ;; Flattened list starts with system, then user
    (define flat (tiered-context->message-list tc))
    (check-equal? (message-kind (first flat)) 'system-instruction)
-   ;; Flat list should include system + at least tier-b + tier-c
-   (check-true (>= (length flat) 7))))
+   (check-equal? (message-role (second flat)) 'user)
+   ;; Flat list should include system + user + at least tier-b + tier-c
+   (check-true (>= (length flat) 9))))
 
 ;; Run
 (run-tests test-compactor)
