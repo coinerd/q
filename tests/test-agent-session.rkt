@@ -392,7 +392,7 @@
 
    (define sess
      (make-agent-session
-      (hash 'provider prov 'tool-registry reg 'event-bus bus 'session-dir dir 'max-iterations 2)))
+      (hash 'provider prov 'tool-registry reg 'event-bus bus 'session-dir dir 'max-iterations 2 'max-iterations-hard 2)))
 
    (define-values (s result) (run-prompt! sess "keep looping"))
 

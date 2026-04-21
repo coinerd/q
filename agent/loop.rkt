@@ -51,7 +51,8 @@
                               #:state [state (or/c loop-state? #f)]
                               #:tools [tools (or/c (listof hash?) #f)]
                               #:cancellation-token [cancellation-token (or/c cancellation-token? #f)]
-                              #:hook-dispatcher [hook-dispatcher (or/c procedure? #f)])
+                              #:hook-dispatcher [hook-dispatcher (or/c procedure? #f)]
+                              #:provider-settings [provider-settings (or/c hash? #f)])
                              [result loop-result?])]
                        [build-raw-messages (-> (listof message?) (listof hash?))]
                        [stream-from-provider
@@ -631,7 +632,8 @@
                         #:state [state #f]
                         #:tools [tools #f]
                         #:cancellation-token [cancellation-token #f]
-                        #:hook-dispatcher [hook-dispatcher #f])
+                        #:hook-dispatcher [hook-dispatcher #f]
+                        #:provider-settings [provider-settings #f])
   ;; Ensure we have a state for accumulation
   (define st (or state (make-loop-state session-id turn-id)))
 
@@ -661,7 +663,8 @@
          #:state st)
 
   ;; 4. Build model-request
-  (define req (make-model-request raw-messages tools (hasheq)))
+  ;; v0.14.4 Wave 2: Pass provider settings (max-tokens etc.) from config
+  (define req (make-model-request raw-messages tools (or provider-settings (hasheq))))
 
   ;; R2-7: model-request-pre hook
   (define pre-hook-result
