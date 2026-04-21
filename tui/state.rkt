@@ -488,6 +488,17 @@
 
     [("queue.status-update") (struct-copy ui-state state [queue-counts payload])]
 
+    ;; v0.14.1: soft iteration limit warning
+    [("iteration.soft-warning")
+     (define iter (hash-ref payload 'iteration "?"))
+     (define remaining (hash-ref payload 'remaining "?"))
+     (append-entry
+      state
+      (make-entry 'system
+                  (format "[exploring... iteration ~a, ~a remaining before hard stop]" iter remaining)
+                  (event-time evt)
+                  (hash)))]
+
     ;; BUG-33 fix: auto-retry event from runtime/iteration.rkt
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
