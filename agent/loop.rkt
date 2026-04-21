@@ -252,6 +252,9 @@
   (define stream-gen (provider-stream provider req))
   (define chunk-count (box 0))
   (define limit (MAX-STREAM-CHUNKS))
+  ;; v0.15.2: Track whether a normal done chunk was received.
+  ;; Used to detect silent stream EOF (BUG-SILENT-STREAM-EOF).
+  (define received-done? (box #f))
 
   ;; v0.12.3 Wave 0.1: Error boundary — emit cleanup events on provider crash.
   ;; Without this, a mid-stream exception leaves TUI in busy?=#t forever.
@@ -373,6 +376,8 @@
               (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
                 (streaming-message-set-blocked! sm))))
           (when (stream-chunk-done? chunk)
+            ;; v0.15.2: Mark that we received a normal done chunk
+            (set-box! received-done? #t)
             ;; Stream completed
             ;; v0.15.0 Wave 1: include finish_reason in event
             (emit! bus
@@ -411,6 +416,25 @@
                     (hasheq 'usage (hasheq))
                     #:state state)]
             [else (stream-loop)])))))
+
+  ;; v0.15.2 (BUG-SILENT-STREAM-EOF): If the stream closed without sending
+  ;; a done chunk, emit a synthetic model.stream.completed with finish_reason
+  ;; "eof" and truncated? #t so downstream consumers are aware.
+  (unless (unbox received-done?)
+    ;; Only emit if we actually received some data (message was started)
+    (when (streaming-message-message-started? sm)
+      (emit! bus
+             session-id
+             turn-id
+             "model.stream.completed"
+             (hasheq 'usage (hasheq) 'finish_reason "eof" 'truncated? #t)
+             #:state state)
+      (emit! bus
+             session-id
+             turn-id
+             "message.end"
+             (hasheq 'message-id message-id 'usage (hasheq))
+             #:state state)))
 
   (streaming-message->hash sm))
 
