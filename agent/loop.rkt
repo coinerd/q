@@ -695,6 +695,8 @@
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [else
      ;; v0.15.0 Wave 1: enriched llm.request event for trace logging
+     ;; v0.15.1: Use model name from request settings instead of
+     ;; (object-name provider) to avoid non-jsexpr struct values.
      (emit! bus
             session-id
             turn-id
@@ -706,7 +708,9 @@
                         (length tools)
                         0)
                     'model
-                    (object-name provider)
+                    (hash-ref (model-request-settings req)
+                              'model
+                              (lambda () (format "~a" (object-name provider))))
                     'max_tokens
                     (hash-ref (model-request-settings req) 'max-tokens #f)
                     'settings

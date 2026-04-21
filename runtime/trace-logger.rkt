@@ -82,10 +82,17 @@
               'turnId
               (or (event-turn-id evt) 'null)
               'data
-              (event-payload evt)))
-    (write-json entry out)
-    (newline out)
-    (flush-output out)))
+              (sanitize-for-json (event-payload evt))))
+    ;; v0.15.1: Wrap write-json in error handler to prevent
+    ;; partial writes from corrupting the JSONL file.
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning
+                                  "trace-logger: skipping non-serializable event seq=~a: ~a"
+                                  seq
+                                  (exn-message e)))])
+      (write-json entry out)
+      (newline out)
+      (flush-output out))))
 
 ;; ============================================================
 ;; Helpers
@@ -105,3 +112,20 @@
   (if (< n 10)
       (format "0~a" n)
       (number->string n)))
+
+;; v0.15.1: Sanitize values for JSON serialization.
+;; Recursively converts non-jsexpr values (structs, etc.) to safe representations
+;; to prevent write-json partial writes that corrupt the JSONL file.
+(define (sanitize-for-json v)
+  (cond
+    [(jsexpr? v) v]
+    [(event? v)
+     (hasheq 'phase (event-ev v) 'seq "nested-event" 'data (sanitize-for-json (event-payload v)))]
+    [(struct? v) (format "<~a>" (object-name v))]
+    [(procedure? v) "<procedure>"]
+    [(hash? v)
+     (for/hasheq ([(k val) (in-hash v)])
+       (values k (sanitize-for-json val)))]
+    [(list? v) (map sanitize-for-json v)]
+    [(pair? v) (cons (sanitize-for-json (car v)) (sanitize-for-json (cdr v)))]
+    [else (format "<unsupported:~a>" v)]))
