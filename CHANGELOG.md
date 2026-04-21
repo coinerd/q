@@ -18,8 +18,15 @@
 - **Wave 8**: Session-switch dependency injection — replaced direct `extensions/` imports with DI via `dynamic-require` + keyword args
 - **Wave 9**: Removed `tui-init.rkt` from arch-boundaries test exceptions — TUI layer now has zero boundary violations
 
+### Post-Review Fixes (Waves 10–13)
+
+- **Wave 10**: Removed dead code in `classify-error` (R1) — no-op `when` block. Fixed `rate-limit-error?` pattern — replaced `"too many"` with `"too many requests"` to prevent context-overflow misclassification (R2)
+- **Wave 11**: Fixed README v0.14.1 status block — replaced v0.13.x description with accurate v0.14.1 features (D1). Synced metrics (D2)
+- **Wave 12**: Added 12 TUI event handler tests covering `iteration.soft-warning`, `exploration.progress`, `context.mid-turn-over-budget`, and `auto-retry.start` with `errorType` (TC1)
+- **Wave 13**: Added `session-rebind` to `hook-action-schemas` (H1). Wrapped `dynamic-require` with descriptive error messages in `session-switch.rkt` (SW1). Added argument validation in `resource-discovery.rkt` (RD1)
+
 ### Metrics
-- 314 test files, 5365 tests, 0 failures
+- 315 test files, 5365 tests, 0 failures
 - Remaining runtime exceptions: `iteration.rkt` (documented ARCH-01), `package.rkt` (manifest audit)
 
 ## v0.14.0 — 2026-04-20
