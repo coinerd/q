@@ -23,7 +23,7 @@
          provider-is-mock?) ;; v0.14.1: for tui-init without importing llm/
 
 ;; Build the appropriate provider based on provider name.
-(define (create-provider-for-name prov-name base-url api-key model-name)
+(define (create-provider-for-name prov-name base-url api-key model-name [max-tokens #f])
   ;; Local providers don't need real API keys — use a sentinel to
   ;; pass validation when no credential is available.
   (define effective-key
@@ -31,10 +31,15 @@
         "local-no-auth"
         api-key))
   (define config-base (hasheq 'api-key effective-key 'model model-name))
-  (define config
+  (define config-with-url
     (if (and base-url (not (string=? (string-trim base-url) "")))
         (hash-set config-base 'base-url base-url)
         config-base))
+  ;; v0.14.5: Pass max-tokens from provider config so it reaches the API
+  (define config
+    (if max-tokens
+        (hash-set config-with-url 'max-tokens max-tokens)
+        config-with-url))
   (cond
     [(equal? prov-name "gemini") (make-gemini-provider config)]
     [(equal? prov-name "anthropic") (make-anthropic-provider config)]
@@ -124,7 +129,8 @@
                  (create-provider-for-name prov-name
                                            base-url
                                            ""
-                                           (model-resolution-model-name resolution)))
+                                           (model-resolution-model-name resolution)
+                                           (hash-ref prov-cfg 'max-tokens #f)))
                (begin
                  ;; No credentials and not local -> mock
                  (fprintf (current-error-port)
@@ -135,7 +141,8 @@
            (create-provider-for-name prov-name
                                      base-url
                                      (credential-api-key cred)
-                                     (model-resolution-model-name resolution))])])]))
+                                     (model-resolution-model-name resolution)
+                                     (hash-ref prov-cfg 'max-tokens #f))])])]))
 
 ;; Helper: create a mock provider
 (define (build-mock-provider)
