@@ -108,13 +108,34 @@
   (for ([msg (in-list messages)])
     (hash-set! by-id (message-id msg) msg)
     (hash-set! children (message-id msg) '()))
+  ;; v0.15.2: Infer missing parentIds from log order.
+  ;; Assistant messages are persisted with parentId=#f, which breaks the tree
+  ;; structure on index rebuild. Infer the parent from the preceding message
+  ;; in log order, matching the behavior of append-to-leaf! in the live session.
+  (define fixed-messages
+    (for/list ([msg (in-list messages)]
+               [i (in-naturals)])
+      (cond
+        [(and (not (message-parent-id msg)) (> i 0) (not (eq? (message-kind msg) 'session-info)))
+         ;; Infer parent from preceding message
+         (define prev-msg (list-ref messages (sub1 i)))
+         (struct-copy message msg [parent-id (message-id prev-msg)])]
+        [else msg])))
+  ;; Update by-id with fixed messages
+  (for ([msg (in-list fixed-messages)])
+    (hash-set! by-id (message-id msg) msg))
   ;; Populate children: for each entry, add it to its parent's children list
-  (for ([msg (in-list messages)])
+  (for ([msg (in-list fixed-messages)])
     (define pid (message-parent-id msg))
     (when (and pid (hash-has-key? children pid))
       (hash-update! children pid (lambda (lst) (append lst (list msg))))))
   (define idx
-    (session-index by-id children (list->vector messages) (make-hash) (box #f) (make-semaphore 1)))
+    (session-index by-id
+                   children
+                   (list->vector fixed-messages)
+                   (make-hash)
+                   (box #f)
+                   (make-semaphore 1)))
   ;; Persist index to disk
   (save-index! index-path idx)
   idx)
