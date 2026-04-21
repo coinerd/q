@@ -499,6 +499,23 @@
                   (event-time evt)
                   (hash)))]
 
+    ;; v0.14.1: exploration progress hint
+    [("exploration.progress")
+     (define count (hash-ref payload 'consecutive-tools "?"))
+     (define tool-names (hash-ref payload 'tool-names '()))
+     (append-entry state
+                   (make-entry 'system
+                               (format "[exploring... ~a tool calls: ~a]"
+                                       count
+                                       (string-join (map (lambda (s)
+                                                           (if (string? s)
+                                                               s
+                                                               (format "~a" s)))
+                                                         tool-names)
+                                                    ", "))
+                               (event-time evt)
+                               (hash)))]
+
     ;; BUG-33 fix: auto-retry event from runtime/iteration.rkt
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
