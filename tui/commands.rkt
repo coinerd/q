@@ -508,7 +508,28 @@
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
            (define runner (cmd-ctx-session-runner cctx))
            (when runner
-             (thread (lambda () (runner last-prompt))))]
+             (thread
+              (lambda ()
+                (with-handlers ([exn:fail?
+                                 (lambda (e)
+                                   (define bus (cmd-ctx-event-bus cctx))
+                                   (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
+                                   (when (and bus sid)
+                                     (publish!
+                                      bus
+                                      (make-event
+                                       "runtime.error"
+                                       (current-inexact-milliseconds)
+                                       sid
+                                       #f
+                                       (hasheq 'error (exn-message e) 'errorType 'internal-error)))
+                                     (publish! bus
+                                               (make-event "turn.completed"
+                                                           (current-inexact-milliseconds)
+                                                           sid
+                                                           #f
+                                                           (hasheq 'reason "error")))))])
+                  (runner last-prompt)))))]
           [else
            (define entry
              (make-entry 'error "No previous prompt to retry." (current-inexact-milliseconds) (hash)))

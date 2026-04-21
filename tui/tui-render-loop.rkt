@@ -311,7 +311,29 @@
               (set-box! (tui-ctx-last-prompt-box ctx) text)
               ;; Submit to runtime (non-blocking)
               (define runner (tui-ctx-session-runner ctx))
-              (thread (lambda () (runner text)))]
+              ;; Wrap runner thread with exception handler to prevent TUI hang
+              (thread
+               (lambda ()
+                 (with-handlers
+                     ([exn:fail?
+                       (lambda (e)
+                         (define bus (tui-ctx-event-bus ctx))
+                         (define sid (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
+                         (when (and bus sid)
+                           (publish! bus
+                                     (make-event
+                                      "runtime.error"
+                                      (current-inexact-milliseconds)
+                                      sid
+                                      #f
+                                      (hasheq 'error (exn-message e) 'errorType 'internal-error)))
+                           (publish! bus
+                                     (make-event "turn.completed"
+                                                 (current-inexact-milliseconds)
+                                                 sid
+                                                 #f
+                                                 (hasheq 'reason "error")))))])
+                   (runner text))))]
              [(and (list? result) (eq? (car result) 'command))
               (define cmd (cadr result))
               (process-slash-command ctx cmd)]
