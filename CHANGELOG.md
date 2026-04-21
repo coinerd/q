@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.14.4 — 2026-04-21
+
+### Config Validation + Iteration Budget + Provider Settings Wiring
+
+**P1**: Invalid `config.json` silently fell back to mock provider with only a
+WARNING. Now `config-parse-error` in `settings.rkt` detects broken JSON and
+`provider-factory.rkt` prints a clear ERROR with file path and fix instructions
+before falling back to mock.
+
+**P1**: Slow models (glm-5.1) hit the default `max-iterations=20` from
+exploration overhead. Default soft limit raised 20→50. Hard limit now
+calculated as `max(soft*1.6, 80)` instead of matching soft limit. After 8+
+consecutive tool calls without file writes, a steering message is injected:
+"Focus on producing the actual output using the write or edit tool now."
+
+**P2**: Provider settings (e.g. `max-tokens`) from `config.json` never reached
+the API request body. Settings are now threaded through `run-provider-turn` →
+`run-agent-turn` → `make-model-request` → `openai-build-request-body`.
+
+- `settings.rkt`: `config-parse-error` function for JSON validation (#1444)
+- `provider-factory.rkt`: Clear error messages on broken config (#1444)
+- `agent-session.rkt`: Default `max-iterations` 20→50 (#1445)
+- `iteration.rkt`: Hard limit formula + exploration steering hint (#1445)
+- `loop.rkt`: `#:provider-settings` param in `run-agent-turn` (#1446)
+- `iteration.rkt`: Config threaded to `run-provider-turn` (#1446)
+
 ## v0.14.3 — 2026-04-21
 
 ### Second-Prompt Crash + SSE Timeout + Streaming Text Fix
