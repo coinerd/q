@@ -26,6 +26,8 @@
 ;; 'resources-discover hook. Returns a list of validated directory
 ;; paths that extensions want scanned for skills, prompts, etc.
 (define (discover-extension-resources registry)
+  (unless registry
+    (error 'discover-extension-resources "registry is required, got #f"))
   ;; Dispatch 'resources-discover hook on all extensions
   (define hook-result (dispatch-hooks 'resources-discover (hasheq) registry))
   ;; Extract paths from hook result payload
