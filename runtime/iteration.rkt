@@ -279,6 +279,15 @@
           (merge-tool-lists base-tools ext-tools)
           base-tools)))
 
+  ;; v0.14.4 Wave 2 FIX: Extract ONLY provider-specific settings from config.
+  ;; The full config is a mutable hash with event-bus, extension-registry, etc.
+  ;; Passing it to make-model-request causes hash-set contract violations
+  ;; because provider.rkt's ensure-model-setting calls hash-set (immutable-only).
+  (define provider-settings
+    (for/hash ([(k v) (in-hash config)]
+               #:when (memq k '(max-tokens temperature top_p frequency_penalty presence_penalty)))
+      (values k v)))
+
   (define ctx-for-retry (box ctx-final))
 
   (with-auto-retry (lambda ()
@@ -289,7 +298,7 @@
                                      #:turn-id turn-id
                                      #:tools tools
                                      #:cancellation-token token
-                                     #:provider-settings config))
+                                     #:provider-settings provider-settings))
                    #:max-retries 2
                    #:base-delay-ms 1000
                    #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
@@ -743,21 +752,23 @@
                  ;; without file writes — nudge agent toward execution
                  (define exec-context updated-ctx)
                  (when (>= consecutive-tool-count 8)
-                   (set! exec-context
-                         (append
-                          exec-context
-                          (list (make-message
-                                 (generate-id)
-                                 #f
-                                 'system
-                                 'message
-                                 (list (make-text-part
-                                        (format "[steering] You've made ~a consecutive tool calls "
-                                                "without writing files. Focus on producing "
-                                                "the actual output using the write or edit tool now."
-                                                (add1 consecutive-tool-count))))
-                                 (now-seconds)
-                                 (hasheq))))))
+                   (set!
+                    exec-context
+                    (append
+                     exec-context
+                     (list (make-message
+                            (generate-id)
+                            #f
+                            'system
+                            'message
+                            (list (make-text-part
+                                   (format (string-append
+                                            "[steering] You've made ~a consecutive tool calls "
+                                            "without writing files. Focus on producing "
+                                            "the actual output using the write or edit tool now.")
+                                           (add1 consecutive-tool-count))))
+                            (now-seconds)
+                            (hasheq))))))
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! exec-context bus session-id config)
                  (loop exec-context (add1 iteration) (add1 consecutive-tool-count))]

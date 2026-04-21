@@ -38,3 +38,23 @@
   (define req (make-model-request msgs #f (hasheq 'model "test-model")))
   (define body (openai-build-request-body req))
   (check-false (hash-has-key? body 'max_tokens)))
+
+;; Regression test for v0.14.4 P0: mutable config hash must not be passed as provider-settings.
+;; provider.rkt ensure-model-setting calls hash-set (immutable-only), which contracts on mutable.
+(test-case "ensure-model-setting works with immutable settings hash"
+  (define msgs (list (hasheq 'role "user" 'content "hello")))
+  ;; Simulate what iteration.rkt should produce: immutable hash with only provider keys
+  (define settings (hasheq 'max-tokens 32768))
+  (define req (make-model-request msgs #f settings))
+  ;; ensure-model-setting must not fail
+  (define req-with-model (ensure-model-setting req "glm-5.1"))
+  (check-equal? (hash-ref (model-request-settings req-with-model) 'model) "glm-5.1")
+  (check-equal? (hash-ref (model-request-settings req-with-model) 'max-tokens) 32768))
+
+(test-case "ensure-model-setting rejects mutable hash (regression guard)"
+  (define msgs (list (hasheq 'role "user" 'content "hello")))
+  ;; Mutable hash like the full runtime config — must NOT be passed as settings
+  (define mutable-cfg (make-hash '((event-bus . fake) (model-name . "glm-5.1"))))
+  (define req (make-model-request msgs #f mutable-cfg))
+  ;; This should raise a contract violation
+  (check-exn exn:fail:contract? (lambda () (ensure-model-setting req "glm-5.1"))))
