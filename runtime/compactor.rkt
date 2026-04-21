@@ -515,21 +515,27 @@
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
 
+  ;; v0.15.2: Protect system-instruction messages.
+  ;; Without this, the tiered builder drops the system prompt,
+  ;; causing "messages parameter is illegal" errors.
+  (define-values (protected regular)
+    (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular-msgs))
+
   ;; Calculate how many messages go to Tier C (most recent)
-  (define total (length regular-msgs))
+  (define total (length regular))
   (define tier-c-size (min tier-c-count total))
 
   ;; Tier C: most recent messages
   (define tier-c
     (if (> tier-c-size 0)
-        (take-right regular-msgs tier-c-size)
+        (take-right regular tier-c-size)
         '()))
 
   ;; Remaining messages after Tier C
   (define remaining-after-c
     (if (> tier-c-size 0)
-        (drop-right regular-msgs tier-c-size)
-        regular-msgs))
+        (drop-right regular tier-c-size)
+        regular))
 
   ;; Tier B: recent messages (up to tier-b-count)
   (define remaining-count (length remaining-after-c))
@@ -540,11 +546,9 @@
         (take-right remaining-after-c tier-b-size)
         '()))
 
-  ;; Any remaining regular messages would conceptually go to Tier A
-  ;; but we only include explicit compaction summaries in Tier A
-  ;; (those have already been processed into summaries)
-
-  (tiered-context compaction-summaries tier-b tier-c))
+  ;; Tier A includes both system instructions AND compaction summaries
+  ;; System instructions must always be present for valid API calls.
+  (tiered-context (append protected compaction-summaries) tier-b tier-c))
 
 ;; R2-6: Build tiered context with hook support
 ;; Parameters:

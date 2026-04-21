@@ -22,6 +22,7 @@
          racket/string
          racket/list
          racket/date
+         racket/set
          "../util/ids.rkt"
          "../util/protocol-types.rkt"
          "event-bus.rkt"
@@ -128,6 +129,40 @@
 ;;;   'assistant -> {role: "assistant", content: <text>, tool_calls: [...]}
 ;;;   'tool     -> {role: "tool", tool_call_id: ..., content: ...}
 ;;; Pure function — no side effects.
+(define (valid-api-message-sequence? msgs)
+  ;; Check that tool messages always follow assistant messages with tool_calls,
+  ;; and that every tool_call_id in tool messages has a matching assistant tool_call.
+  (define tool-call-ids (mutable-set))
+  (define prev-role #f)
+  (for/and ([m (in-list msgs)]
+            [i (in-naturals)])
+    (define role (hash-ref m 'role #f))
+    (cond
+      [(and (equal? role "tool") (not (or (equal? prev-role "assistant") (equal? prev-role "tool"))))
+       (log-warning "INVALID: msg[~a] role=tool follows role=~a (expected assistant or tool)"
+                    i
+                    prev-role)
+       #f]
+      [(equal? role "assistant")
+       (define tcs (hash-ref m 'tool_calls #f))
+       (when tcs
+         (for ([tc (in-list tcs)])
+           (set-add! tool-call-ids (hash-ref tc 'id #f))))
+       #t]
+      [(equal? role "tool")
+       (define tcid (hash-ref m 'tool_call_id #f))
+       (cond
+         [(not tcid)
+          (log-warning "INVALID: msg[~a] role=tool has no tool_call_id" i)
+          #f]
+         [(not (set-member? tool-call-ids tcid))
+          (log-warning "INVALID: msg[~a] role=tool tool_call_id=~a not found in preceding tool_calls"
+                       i
+                       tcid)
+          #f]
+         [else #t])]
+      [else #t])))
+
 (define (build-raw-messages context)
   (append*
    (for/list ([msg (in-list context)])
@@ -694,6 +729,14 @@
             (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "model-request-pre-blocked"))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [else
+     ;; DEBUG: validate raw-messages before sending
+     (unless (valid-api-message-sequence? raw-messages)
+       (log-warning "INVALID message sequence detected! Dumping raw messages:")
+       (for ([rm (in-list raw-messages)]
+             [i (in-naturals)])
+         (log-warning "  msg[~a]: role=~a keys=~a" i (hash-ref rm 'role #f) (hash-keys rm)))
+       (log-warning "End of invalid sequence dump"))
+
      ;; v0.15.0 Wave 1: enriched llm.request event for trace logging
      ;; v0.15.1: Use model name from request settings instead of
      ;; (object-name provider) to avoid non-jsexpr struct values.
