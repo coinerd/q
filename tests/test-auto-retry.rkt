@@ -58,7 +58,7 @@
            "success"))
      #:max-retries 2
      #:base-delay-ms 10
-     #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+     #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                   (set-box! retries (cons (list attempt delay-ms error-msg) (unbox retries))))))
   (check-equal? result "success")
   (check-equal? (unbox attempt) 2)
@@ -99,7 +99,7 @@
                (with-auto-retry (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))
                                 #:max-retries 3
                                 #:base-delay-ms 10
-                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   ;; Delays should be: 10, 20, 40 (exponential with base 10ms)
   (define sorted-delays (reverse (unbox delays)))
@@ -116,7 +116,7 @@
                                 #:max-retries 5
                                 #:base-delay-ms 100
                                 #:max-delay-ms 200
-                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
   ;; Delays should be capped at 200: 100, 200, 200, 200, 200
@@ -218,7 +218,7 @@
                 #:max-retries 2
                 #:base-delay-ms 10
                 #:rate-limit-base-delay-ms 50
-                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                              (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
   ;; Should use rate-limit base (50ms): 50, 100
@@ -235,7 +235,7 @@
                                                    (current-continuation-marks))))
                                 #:max-retries 2
                                 #:base-delay-ms 10
-                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
   ;; Should use normal base (10ms): 10, 20
@@ -254,7 +254,7 @@
                                 #:base-delay-ms 10
                                 #:rate-limit-base-delay-ms 50
                                 #:max-delay-ms 150
-                                #:on-retry (lambda (attempt max-retries delay-ms error-msg)
+                                #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   ;; 50, 100, 150(cap), 150(cap)
   (for ([d (in-list (reverse (unbox delays)))])

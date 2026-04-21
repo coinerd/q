@@ -181,9 +181,9 @@
                (define next-delay (min (* rl-base (expt 2 attempt)) max-delay-ms))
                ;; v0.13.2: No context reduction on retry — retries use same thunk.
                ;; Context management is a separate concern (v0.14.0 context manager).
-               ;; Call retry callback if provided
+               ;; Call retry callback if provided (include error-type)
                (when on-retry
-                 (on-retry (add1 attempt) max-retries next-delay (exn-message exn)))
+                 (on-retry (add1 attempt) max-retries next-delay (exn-message exn) err-type))
                (sleep (/ next-delay 1000.0))
                (loop (add1 attempt) next-delay (+ total-delay next-delay) err-type)]
               [else

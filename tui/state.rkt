@@ -503,12 +503,20 @@
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
      (define max-attempts (hash-ref payload 'max-retries "?"))
+     (define error-type (hash-ref payload 'errorType #f))
+     (define type-label
+       (case error-type
+         [(timeout) "LLM timeout"]
+         [(rate-limit) "rate limited"]
+         [(context-overflow) "context too large"]
+         [(provider-error) "server error"]
+         [else #f]))
+     (define msg
+       (if type-label
+           (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
+           (format "[retry: attempt ~a/~a]" attempt max-attempts)))
      (struct-copy ui-state
-                  (append-entry state
-                                (make-entry 'system
-                                            (format "[retry: attempt ~a/~a]" attempt max-attempts)
-                                            (event-time evt)
-                                            (hash)))
+                  (append-entry state (make-entry 'system msg (event-time evt) (hash)))
                   [streaming-text #f]
                   [streaming-thinking #f])]
 
