@@ -12,11 +12,11 @@
 ;; Resolve paths relative to the q/ project root.
 ;; raco test runs from the test file's directory; we need to go up one level.
 (define project-root
-  (simplify-path (build-path (or (path-only (resolved-module-path-name
-                                              (variable-reference->resolved-module-path
-                                               (#%variable-reference))))
-                                 ".")
-                             "..")))
+  (simplify-path
+   (build-path (or (path-only (resolved-module-path-name (variable-reference->resolved-module-path
+                                                          (#%variable-reference))))
+                   ".")
+               "..")))
 
 (define script-path (build-path project-root "scripts" "ci-local.rkt"))
 (define ver-path (build-path project-root "util" "version.rkt"))
@@ -38,8 +38,10 @@
 
 (test-case "ci-local.rkt exits 1 on version mismatch"
   (define backup (file->string ver-path))
-  ;; Corrupt version
-  (define corrupted (string-replace backup "\"0.12.0\"" "\"99.99.98\""))
+  ;; Extract current version and corrupt it
+  (define current-version
+    (let ([m (regexp-match #rx"\"([0-9]+[.][0-9]+[.][0-9]+)\"" backup)]) (and m (cadr m))))
+  (define corrupted (string-replace backup (format "\"~a\"" current-version) "\"99.99.98\""))
   (call-with-output-file ver-path (λ (out) (display corrupted out)) #:exists 'replace)
   (define exit-code (system/exit-code (format "cd ~a && racket ~a" project-root script-path)))
   ;; Restore

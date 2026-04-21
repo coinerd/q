@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.14.0 — 2026-04-20
+
+### Context Manager Architecture
+
+Replaces mechanical context truncation with a strategy-driven context assembly engine. The session log is now immutable — the context manager decides what goes into the LLM context window using pluggable strategies:
+
+1. **Pin**: System prompt + first user message (always present)
+2. **Summary**: LLM-generated or concatenation summary of excluded entries
+3. **Recent**: Last N tokens kept verbatim
+4. **Catalog**: One-line-per-entry summary of excluded entries
+5. **Budget enforcement**: Total context ≤ token budget
+
+#### New Modules
+- `runtime/context-manager.rkt` — Strategy-driven context assembly with configurable budgets, summary generation, catalog creation, and consecutive tool result collapsing
+- `tools/builtins/session-recall.rkt` — `session_recall` tool: lets the agent retrieve excluded session entries by ID or range
+
+#### Removed Modules
+- `runtime/context-reducer.rkt` — Old pair-aware mechanical trimming, fully replaced by context-manager
+
+#### Features
+- **Session Recall Tool** (#1391): Agent can now retrieve excluded context entries via `session_recall(id="...")` or `session_recall(range="from..to")`. Returns formatted message details.
+- **LLM Summary Generation** (#1395): Structured summary template with caching. Falls back to concatenation when no LLM provider is available.
+- **Summary Integration** (#1396): Excluded entries auto-summarized and injected as `compaction-summary` messages between pinned and recent context.
+- **Catalog Token Caps** (#1394): Catalog entries capped at 40 entries / 2K tokens. Consecutive tool results collapsed to single entry.
+- **Budget Enforcement**: Catalog dropped first, then summary truncated, recent window last. Pinned items never dropped.
+
+#### Bug Fixes
+- **Flaky CI tests fixed**: `test-bump-version.rkt` and `test-ci-local.rkt` now dynamically read current version instead of hardcoding. (#1393)
+- **Metrics lint drift**: Resolved stale prose counts causing intermittent CI failures.
+
+### Metrics
+- 312 test files, 5,358+ tests passing, 0 failures
+- 224+ source modules
+
+---
+
 ## v0.13.2 — 2026-04-20
 
 ### Bug Fixes
