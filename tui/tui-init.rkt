@@ -18,7 +18,7 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
-         "../llm/provider.rkt"
+         "../runtime/provider-factory.rkt"
          "../runtime/session-index.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
@@ -85,7 +85,7 @@
                       #:model-name (hash-ref rt-config 'model-name #f)))
   ;; BUG-55: Detect mock provider and set warning flag
   (define prov (hash-ref rt-config 'provider #f))
-  (define mock? (and prov (provider? prov) (equal? (provider-name prov) "mock")))
+  (define mock? (provider-is-mock? prov))
   (define base-state-with-mock
     (if mock?
         (struct-copy ui-state base-state [mock-provider? #t])
