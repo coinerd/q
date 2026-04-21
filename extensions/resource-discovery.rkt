@@ -1,16 +1,20 @@
 #lang racket/base
 
-;; runtime/resource-loader.rkt — extension resource discovery
+;; extensions/resource-discovery.rkt — extension resource discovery
 ;;
+;; Moved from runtime/resource-loader.rkt (v0.14.1 Wave 7).
 ;; Provides:
 ;;   discover-extension-resources — query extensions for additional resource paths
 ;;
 ;; Uses the 'resources-discover hook point to let extensions contribute
 ;; dynamic skill/prompt/config paths at runtime.
+;;
+;; Sits in extensions/ because it dispatches extension hooks — this is the
+;; natural layer for code that interacts with the extension API.
 
 (require racket/list
-         "../extensions/api.rkt"
-         "../extensions/hooks.rkt")
+         "api.rkt"
+         "hooks.rkt")
 
 (provide discover-extension-resources)
 
