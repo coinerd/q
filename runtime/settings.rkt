@@ -47,6 +47,10 @@
          ;; HTTP request timeout
          http-request-timeout
 
+         ;; Per-model timeout profiles (v0.14.2)
+         get-model-timeout
+         effective-request-timeout
+
          ;; Destructive command warning
          warn-on-destructive?
 
@@ -170,9 +174,17 @@
                                #:overrides [overrides (hash)])
   (define merged
     (for/fold ([acc (hash)]) ([(k v) (in-hash overrides)])
-      (if v (hash-set acc k v) acc)))
-  (define with-provider (if provider (hash-set merged 'default-provider provider) merged))
-  (define with-model (if model (hash-set with-provider 'default-model model) with-provider))
+      (if v
+          (hash-set acc k v)
+          acc)))
+  (define with-provider
+    (if provider
+        (hash-set merged 'default-provider provider)
+        merged))
+  (define with-model
+    (if model
+        (hash-set with-provider 'default-model model)
+        with-provider))
   (q-settings (hash) (hash) with-model))
 
 ;; ============================================================
@@ -288,3 +300,18 @@
 ;; Get project-dir from merged settings, falling back to default
 (define (project-dir-from-settings settings)
   (or (setting-ref settings 'project-dir #f) (default-project-dir)))
+
+;; ============================================================
+;; Per-model timeout profiles (v0.14.2 Wave 3)
+;; ============================================================
+
+;; Get per-model timeout override for a specific timeout kind.
+;; Config schema: { "timeouts": { "models": { "glm-5.1": { "request": 900 } } } }
+;; Returns #f if no per-model override configured.
+(define (get-model-timeout settings model-name timeout-key)
+  (define model-overrides (setting-ref* settings `(timeouts models ,(string->symbol model-name)) #f))
+  (and model-overrides (hash? model-overrides) (hash-ref model-overrides timeout-key #f)))
+
+;; Get effective request timeout: per-model override or global default.
+(define (effective-request-timeout settings model-name)
+  (or (get-model-timeout settings model-name 'request) (http-request-timeout settings)))

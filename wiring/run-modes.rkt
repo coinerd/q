@@ -30,8 +30,12 @@
          (only-in "../extensions/loader.rkt" load-extension!)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-amend hook-result-action hook-result-payload)
-         (only-in "../tui/palette.rkt" commands-from-hashes merge-extension-commands make-command-registry)
-         (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge))
+         (only-in "../tui/palette.rkt"
+                  commands-from-hashes
+                  merge-extension-commands
+                  make-command-registry)
+         (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
+         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -142,6 +146,21 @@
   ;; #1187: Wire templates into runtime config for /template command
   (hash-set! base-config 'templates (resource-set-templates all-resources))
   (hash-set! base-config 'verbose? (cli-config-verbose? cfg))
+  ;; v0.14.2 Wave 3: Set per-model timeouts from settings
+  ;; Config schema: { "timeouts": { "models": { "glm-5.1": { "request": 900 } } } }
+  (define models-config
+    (hash-ref (hash-ref (q-settings-merged settings) 'timeouts (hash)) 'models (hash)))
+  (define model-timeouts
+    (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
+      (if (and (hash? v) (hash-has-key? v 'request))
+          (hash-set acc
+                    (if (symbol? k)
+                        (symbol->string k)
+                        k)
+                    (hash-ref v 'request))
+          acc)))
+  (current-model-timeouts model-timeouts)
+  (current-http-request-timeout (http-request-timeout settings))
   base-config)
 
 ;; ============================================================
@@ -202,4 +221,18 @@
   ;; Swap into base-config
   (hash-set! base-config 'settings new-settings)
   (hash-set! base-config 'model-registry new-reg)
+  ;; v0.14.2 Wave 3: Refresh per-model timeouts
+  (define models-config
+    (hash-ref (hash-ref (q-settings-merged new-settings) 'timeouts (hash)) 'models (hash)))
+  (define model-timeouts
+    (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
+      (if (and (hash? v) (hash-has-key? v 'request))
+          (hash-set acc
+                    (if (symbol? k)
+                        (symbol->string k)
+                        k)
+                    (hash-ref v 'request))
+          acc)))
+  (current-model-timeouts model-timeouts)
+  (current-http-request-timeout (http-request-timeout new-settings))
   new-reg)
