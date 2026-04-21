@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.14.3 — 2026-04-21
+
+### Second-Prompt Crash + SSE Timeout + Streaming Text Fix
+
+**P0**: Fixed `hash-set` contract violation that crashed any second prompt. Production
+runtime uses mutable config hash (`make-hash`), but `hash-set` requires immutable.
+Now detects hash mutability and uses `hash-set!` or `hash-set` accordingly.
+
+**P1**: SSE stream timeout now scales with per-model request timeout. Previously
+hardcoded at 60s between chunks, causing timeouts on slow models (e.g. glm-5.1
+with `request: 900`). Stream timeout = `max(120, request/4)` seconds.
+
+**P2**: Partial streaming text preserved on error. When SSE timeout or other error
+fires during model streaming, accumulated grey text is now committed to the
+transcript as a partial assistant entry before clearing.
+
+- `agent-session.rkt`: Mutable/immutable config hash detection (#1438)
+- `openai-compatible.rkt`: Scaled SSE stream timeouts (#1439)
+- `tui/state.rkt`: Partial streaming text preservation (#1440)
+- 10 new/updated tests across 3 test files
+
 ## v0.14.2 — 2026-04-20
 
 ### Retry Robustness & TUI Crash Fix
