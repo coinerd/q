@@ -99,6 +99,7 @@
                (with-auto-retry (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))
                                 #:max-retries 3
                                 #:base-delay-ms 10
+                                #:per-type-budgets (hash 'timeout 3 'rate-limit 4 'provider-error 3)
                                 #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   ;; Delays should be: 10, 20, 40 (exponential with base 10ms)
@@ -116,6 +117,7 @@
                                 #:max-retries 5
                                 #:base-delay-ms 100
                                 #:max-delay-ms 200
+                                #:per-type-budgets (hash 'timeout 3 'rate-limit 4 'provider-error 5)
                                 #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
                                              (set-box! delays (cons delay-ms (unbox delays)))))))
   (define sorted-delays (reverse (unbox delays)))
@@ -320,10 +322,91 @@
   (check-false (rate-limit-error? (exn:fail "internal error" (current-continuation-marks))))
   (check-false (rate-limit-error? (exn:fail "invalid API key" (current-continuation-marks))))
   ;; v0.14.1 R2: "too many tokens" must NOT match rate-limit
-  (check-false (rate-limit-error? (exn:fail "too many tokens in request" (current-continuation-marks)))))
+  (check-false (rate-limit-error? (exn:fail "too many tokens in request"
+                                            (current-continuation-marks)))))
 ;; ============================================================
 ;; context-reducer tests removed (v0.13.2)
 ;; ============================================================
 ;; The #:context-reducer parameter was removed in v0.13.2.
 ;; Retries now always use the same thunk without any context reduction.
 ;; See "retries use same thunk on timeout" test above.
+
+;; ============================================================
+;; v0.14.2 Wave 1: Per-type retry budgets + error history
+;; ============================================================
+
+(test-case "v0.14.2: per-type budget — rate-limit doesn't consume timeout budget"
+  ;; With default budgets: timeout=2, rate-limit=4, provider-error=2
+  ;; If we get 1 rate-limit then 2 timeouts, the timeouts should use their own budget
+  (define errors-thrown (box '()))
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry (lambda ()
+                       ;; Always throw: rate-limit first, then timeouts
+                       (define n (length (unbox errors-thrown)))
+                       (cond
+                         [(= n 0)
+                          (set-box! errors-thrown (cons 'rate-limit (unbox errors-thrown)))
+                          (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks)))]
+                         [else
+                          (set-box! errors-thrown (cons 'timeout (unbox errors-thrown)))
+                          (raise (exn:fail "connection timed out" (current-continuation-marks)))]))
+                     #:max-retries 5
+                     #:base-delay-ms 1
+                     #:rate-limit-base-delay-ms 1
+                     #:per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)))
+  (check-true (retry-exhausted? (unbox exn-result)))
+  ;; 1 rate-limit + 2 timeouts = 3 retries (4th attempt hits per-type budget)
+  (check-equal? (length (unbox errors-thrown)) 4)
+  ;; Error history: rate-limit + 2 timeout retries + final timeout
+  (define hist (retry-exhausted-error-history (unbox exn-result)))
+  (check-equal? hist '(rate-limit timeout timeout timeout)))
+
+(test-case "v0.14.2: error-history tracks all error types"
+  (define exn-result (box #f))
+  (define call-n (box 0))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry
+     (lambda ()
+       ;; Deterministic sequence: provider-error, timeout, rate-limit, ...
+       (define n (modulo (unbox call-n) 3))
+       (set-box! call-n (add1 (unbox call-n)))
+       (cond
+         [(= n 0) (raise (exn:fail "HTTP 503 server error" (current-continuation-marks)))]
+         [(= n 1) (raise (exn:fail "connection timed out" (current-continuation-marks)))]
+         [else (raise (exn:fail "HTTP 429 rate limit" (current-continuation-marks)))]))
+     #:max-retries 10
+     #:base-delay-ms 1
+     #:rate-limit-base-delay-ms 1
+     #:per-type-budgets (hash 'timeout 2 'rate-limit 2 'provider-error 2)))
+  (check-true (retry-exhausted? (unbox exn-result)))
+  (define hist (retry-exhausted-error-history (unbox exn-result)))
+  ;; History should have entries from all types
+  (check-true (> (length hist) 0) (format "history should be non-empty: ~a" hist)))
+
+(test-case "v0.14.2: single error type fills its own budget"
+  (define attempt-count (box 0))
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry (lambda ()
+                       (set-box! attempt-count (add1 (unbox attempt-count)))
+                       (raise (exn:fail "connection timed out" (current-continuation-marks))))
+                     #:max-retries 5
+                     #:base-delay-ms 1
+                     #:rate-limit-base-delay-ms 1
+                     #:per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)))
+  (check-true (retry-exhausted? (unbox exn-result)))
+  ;; With timeout budget of 2, should try 3 times (1 initial + 2 retries)
+  (check-equal? (unbox attempt-count) 3)
+  (check-equal? (retry-exhausted-error-history (unbox exn-result)) '(timeout timeout timeout)))
+
+(test-case "v0.14.2: default per-type-budgets when not specified"
+  ;; Should use max-retries as fallback budget for all types
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-auto-retry (lambda ()
+                       (raise (exn:fail "connection timed out" (current-continuation-marks))))
+                     #:max-retries 2
+                     #:base-delay-ms 1))
+  (check-true (retry-exhausted? (unbox exn-result)))
+  (check-equal? (retry-exhausted-error-history (unbox exn-result)) '(timeout timeout timeout)))
