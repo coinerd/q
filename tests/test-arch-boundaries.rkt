@@ -83,10 +83,10 @@
       ;; exceptions — the TUI layer sits above runtime and consumes
       ;; events directly. The hard constraint is: TUI must not import
       ;; from llm/ or tools/ layers.
-      ;; Known exception: tui-init.rkt imports llm/provider.rkt for
-      ;; mock provider detection (documented exception — minimal coupling).
+      ;; v0.14.1: tui-init.rkt exception removed — now uses runtime/provider-factory.rkt
+      ;; instead of llm/provider.rkt for mock detection.
       (define tui-files (rkt-files-in "tui"))
-      (define known-tui-exceptions '("tui-init.rkt"))
+      (define known-tui-exceptions '())
       (define tui-files-checked
         (filter (lambda (f)
                   (not (member (path->string (file-name-from-path f)) known-tui-exceptions)))
