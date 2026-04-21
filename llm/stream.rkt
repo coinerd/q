@@ -50,7 +50,7 @@
 
 ;; Default overall HTTP request timeout in seconds.
 ;; Covers connection + full response reading.  Settable via settings.
-(define http-request-timeout-default 300)
+(define http-request-timeout-default 600)
 
 ;; Parameter: overall HTTP request timeout for the current session.
 ;; Set by the runtime from settings; read by LLM providers.
@@ -338,7 +338,7 @@
 
 ;; Default per-chunk timeout AFTER the first chunk has been received.
 ;; Once streaming has started, chunks should arrive quickly.
-(define http-stream-timeout-default 30)
+(define http-stream-timeout-default 60)
 
 ;; read-sse-chunks : input-port? [#:initial-timeout seconds] [#:stream-timeout seconds] -> generator?
 ;; Returns a generator that yields stream-chunk? values as they arrive from the port.
