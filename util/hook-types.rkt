@@ -160,6 +160,8 @@
           'session-before-tree
           '(pass block)
           'session-tree
+          '(pass)
+          'session-rebind
           '(pass)))
 
 ;; valid-hook-actions-for : symbol? -> (listof symbol?)
