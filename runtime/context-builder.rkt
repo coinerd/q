@@ -225,17 +225,110 @@
 ;; Fit as many messages as possible from the recent end within a token budget.
 ;; Returns messages in their original order.
 (define (fit-messages-from-recent messages budget)
+  ;; Walk backwards from newest, keeping messages that fit.
+  ;; v0.15.2: Preserve tool_call/tool_result pairing — if we include a tool
+  ;; result, also include its parent assistant (tool_call) message, and
+  ;; if we include an assistant with tool_calls, include the tool results.
+  ;; This prevents "messages parameter is illegal" 400 errors from the API.
+  (define msg-ids
+    (for/set ([m (in-list messages)])
+      (message-id m)))
+  ;; Build a map: tool-result-id → assistant-msg-id (via parentId)
+  ;; and assistant-msg-id → list of tool-result-msg-ids
+  (define tr->assistant (make-hash))
+  (define assistant->trs (make-hash))
+  (for ([m (in-list messages)])
+    (when (eq? (message-role m) 'tool)
+      (define pid (message-parent-id m))
+      (when (and pid (set-member? msg-ids pid))
+        (hash-set! tr->assistant (message-id m) pid)
+        (hash-update! assistant->trs pid (lambda (lst) (cons (message-id m) lst)) '()))))
+  ;; Also check assistant messages for tool_call parts
+  (for ([m (in-list messages)])
+    (when (eq? (message-role m) 'assistant)
+      (define parts (message-content m))
+      (when (and (pair? parts) (ormap tool-call-part? parts))
+        ;; This assistant has tool_calls; find its tool results (next messages)
+        (when (not (hash-has-key? assistant->trs (message-id m)))
+          (hash-set! assistant->trs (message-id m) '())))))
+  ;; Now walk backwards
   (let loop ([remaining (reverse messages)]
              [acc '()]
+             [acc-ids (set)]
              [used 0])
     (cond
       [(null? remaining) (reverse acc)]
       [else
        (define m (car remaining))
-       (define tokens (estimate-message-tokens m))
+       (define mid (message-id m))
        (cond
-         [(> (+ used tokens) budget) (reverse acc)]
-         [else (loop (cdr remaining) (cons m acc) (+ used tokens))])])))
+         ;; Already included (e.g., as a pair dependency)
+         [(set-member? acc-ids mid) (loop (cdr remaining) acc acc-ids used)]
+         [else
+          (define tokens (estimate-message-tokens m))
+          ;; Calculate pair tokens that must come with this message
+          (define pair-tokens 0)
+          ;; If this is a tool result, include its parent assistant
+          (define required-assistant (hash-ref tr->assistant mid #f))
+          (when required-assistant
+            (unless (set-member? acc-ids required-assistant)
+              (define ass-msg
+                (for/first ([mm (in-list messages)]
+                            #:when (equal? (message-id mm) required-assistant))
+                  mm))
+              (when ass-msg
+                (set! pair-tokens (+ pair-tokens (estimate-message-tokens ass-msg))))))
+          ;; If this is an assistant with tool_calls, include its tool results
+          (define child-trs (hash-ref assistant->trs mid #f))
+          (when child-trs
+            (for ([tr-id (in-list child-trs)])
+              (unless (set-member? acc-ids tr-id)
+                (define tr-msg
+                  (for/first ([mm (in-list messages)]
+                              #:when (equal? (message-id mm) tr-id))
+                    mm))
+                (when tr-msg
+                  (set! pair-tokens (+ pair-tokens (estimate-message-tokens tr-msg)))))))
+          (define total-needed (+ used tokens pair-tokens))
+          (cond
+            [(> total-needed budget) (reverse acc)]
+            [else
+             ;; Include this message and its required pairs
+             (define new-acc (cons m acc))
+             (define new-ids (set-add acc-ids mid))
+             (define new-used used)
+             (set! new-used (+ new-used tokens))
+             ;; Include parent assistant if needed
+             (define-values (final-acc final-ids final-used)
+               (if (and required-assistant (not (set-member? new-ids required-assistant)))
+                   (let ([ass-msg (for/first ([mm (in-list messages)]
+                                              #:when (equal? (message-id mm) required-assistant))
+                                    mm)])
+                     (if ass-msg
+                         (values (cons ass-msg new-acc)
+                                 (set-add new-ids required-assistant)
+                                 (+ new-used (estimate-message-tokens ass-msg)))
+                         (values new-acc new-ids new-used)))
+                   (values new-acc new-ids new-used)))
+             ;; Include child tool results if needed
+             (define-values (final-acc2 final-ids2 final-used2)
+               (if child-trs
+                   (for/fold ([fa final-acc]
+                              [fi final-ids]
+                              [fu final-used])
+                             ([tr-id (in-list child-trs)])
+                     (if (set-member? fi tr-id)
+                         (values fa fi fu)
+                         (let ([tr-msg (for/first ([mm (in-list messages)]
+                                                   #:when (equal? (message-id mm) tr-id))
+                                         mm)])
+                           (if tr-msg
+                               (values (cons tr-msg fa)
+                                       (set-add fi tr-id)
+                                       (+ fu (estimate-message-tokens tr-msg)))
+                               (values fa fi fu)))))
+                   (values final-acc final-ids final-used)))
+             (loop (cdr remaining) final-acc2 final-ids2 final-used2)])])])))
 
 ;; ============================================================
 ;; Utility
