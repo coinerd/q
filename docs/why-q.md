@@ -1,4 +1,4 @@
-<!-- verified-against: v0.10.2 -->
+<!-- verified-against: v0.15.2 -->
 # Why q?
 
 A candid look at who q is for, what it prioritizes, and where it's intentionally narrow.
@@ -34,15 +34,15 @@ q doesn't try to be everything. These are deliberate scope boundaries:
 - **Single-user, single-session focus** — No multi-user or concurrent-session architecture.
 - **Racket ecosystem** — Not Python, not Node.js. This is a deliberate choice for a small, coherent language with excellent macro and module systems, but it means fewer existing libraries and a smaller talent pool.
 
-## Current maturity (v0.8.0)
+## Current maturity (v0.15.x)
 
 Be realistic about where things stand:
 
-- **Core architecture** — Stable and tested (run `racket scripts/metrics.rkt --tests` for current count). The agent loop, session management, and provider abstraction are production-quality.
+- **Core architecture** — Stable and well-tested (~850+ tests). The agent loop, session management, and provider abstraction are production-quality. Iteration engine handles multi-turn tool calls with escalation.
 - **Interfaces** — Working CLI, TUI, JSON mode, RPC, and SDK interfaces. All functional, all terminal-based.
-- **Provider support** — OpenAI and Anthropic providers are solid. Local model support works via compatible endpoints (Ollama, llama.cpp, etc.).
-- **Extension system** — Functional and growing. The hooks and tool registry work; extension quarantine and safe-mode enforcement are now in place.
-- **Security hardening** — Safe-mode/quarantine enforcement, path validation, API key protection, env sanitization, and test isolation.
+- **Provider support** — OpenAI, Azure OpenAI, Anthropic, and Gemini providers with streaming. Local model support via compatible endpoints (Ollama, llama.cpp, etc.).
+- **Extension system** — Mature hook system with extension quarantine, safe-mode enforcement, and tool registration. Extension API v0.5 with context expansion.
+- **Security hardening** — Sandboxed subprocess execution, env sanitization, path validation, API key protection (non-transparent structs), credential redaction, process count limits, and security lint in CI.
 
 ### Packaging roadmap
 
@@ -76,4 +76,4 @@ Don't pick q if:
 
 ---
 
-*This document reflects q v0.8.0. Maturity and capabilities will evolve. Revisit this page as the project grows.*
+*This document reflects q v0.15.x. Maturity and capabilities will evolve. Revisit this page as the project grows.*

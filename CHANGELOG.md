@@ -225,6 +225,23 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 
 ---
 
+## v0.13.0 — 2026-04-20
+
+### Features
+- **Session tree navigation**: Navigate between parent/child sessions
+- **Context reducer**: Progressive context trimming for long conversations
+- **Extension power-user API**: Advanced extension hooks for tool/loop interception
+- **Provider improvements**: Better error handling, retry logic, timeout tuning
+
+### Bug Fixes
+- Settings contract fixes for `make-settings` field validation
+- Context reducer pair-awareness for tool-start/tool-end entries
+- `/retry` + iteration limit interaction
+- Newline bleed in assistant message rendering
+- First user message prompt pinning
+
+---
+
 ## v0.13.1 — 2026-04-20
 
 ### Performance
@@ -243,6 +260,22 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 - 325 test files, 68,903 test lines, 10,786 assertions
 - 224 source modules, 41,753 source lines
 - 5,330+ tests passing (full suite)
+
+---
+
+## v0.11.x — 2026-04-19
+
+### Features
+- **Tool scheduler**: Priority-based tool execution with concurrency limits
+- **Extension hooks v2**: Lifecycle hooks for tool dispatch, loop iteration, and session events
+- **Credential store**: Centralized API key management with environment variable support
+- **OAuth framework**: OAuth 2.0 authorization flow (stubs for token exchange/refresh)
+- **Safe-mode guard**: One-shot safe-mode lock for restricting dangerous operations
+
+### Infrastructure
+- CI local lint suite (8 checks)
+- Security lint for hardcoded secrets
+- Compatibility matrix documentation
 
 ---
 
