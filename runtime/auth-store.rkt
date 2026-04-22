@@ -12,35 +12,34 @@
          racket/generic
          racket/path)
 
-(provide
- ;; Structs
- (struct-out credential)
- (struct-out redacted-credential)
+;; Structs
+(provide (struct-out credential)
+         (struct-out redacted-credential)
 
- ;; Lookup
- lookup-credential
- credential-present?
+         ;; Lookup
+         lookup-credential
+         credential-present?
 
- ;; Storage (optional persistence)
- store-credential!
+         ;; Storage (optional persistence)
+         store-credential!
 
- ;; Batch resolution
- resolve-provider-credentials
+         ;; Batch resolution
+         resolve-provider-credentials
 
- ;; Redaction
- mask-api-key
- cred->redacted
+         ;; Redaction
+         mask-api-key
+         cred->redacted
 
- ;; Validation
- validate-credential-format
+         ;; Validation
+         validate-credential-format
 
- ;; Credential file
- load-credential-file
- save-credential-file!
- credential-file-path
+         ;; Credential file
+         load-credential-file
+         save-credential-file!
+         credential-file-path
 
- ;; Scoped access
- with-credential)
+         ;; Scoped access
+         with-credential)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; mask-api-key (defined before credential struct for custom-write)
@@ -64,14 +63,27 @@
 
 ;; A resolved credential
 (struct credential
-  (provider-name   ; string — e.g. "openai", "anthropic"
-   api-key         ; string — the resolved API key
-   source          ; symbol — 'environment | 'config | 'stored
-   )
-  #:transparent
+        (provider-name ; string — e.g. "openai", "anthropic"
+         api-key ; string — the resolved API key
+         source ; symbol — 'environment | 'config | 'stored
+         )
+  #:methods gen:equal+hash
+  [(define (equal-proc a b equal?-recur)
+     (and (equal?-recur (credential-provider-name a) (credential-provider-name b))
+          (equal?-recur (credential-api-key a) (credential-api-key b))
+          (equal?-recur (credential-source a) (credential-source b))))
+   (define (hash-proc a hash-recur)
+     (+ (hash-recur (credential-provider-name a))
+        (hash-recur (credential-api-key a))
+        (hash-recur (credential-source a))))
+   (define (hash2-proc a hash2-recur)
+     (+ (hash2-recur (credential-provider-name a))
+        (hash2-recur (credential-api-key a))
+        (hash2-recur (credential-source a))))]
   #:methods gen:custom-write
   [(define (write-proc cred port mode)
-     (fprintf port "#<credential ~a ~a ~a>"
+     (fprintf port
+              "#<credential ~a ~a ~a>"
               (credential-provider-name cred)
               (mask-api-key (credential-api-key cred))
               (credential-source cred)))])
@@ -82,14 +94,12 @@
 
 ;; Helper: non-empty string? — string that is not empty and not only whitespace
 (define (non-empty-string? v)
-  (and (string? v)
-       (> (string-length (string-trim v)) 0)))
+  (and (string? v) (> (string-length (string-trim v)) 0)))
 
 ;; Helper: get a value from a hash by either symbol or string key
 ;; Returns the first found value, or #f if neither key exists
 (define (config-ref cfg key-sym key-str [default #f])
-  (or (hash-ref cfg key-sym #f)
-      (hash-ref cfg key-str default)))
+  (or (hash-ref cfg key-sym #f) (hash-ref cfg key-str default)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; lookup-credential
@@ -103,25 +113,25 @@
 ;;   3. Return #f if not found
 (define (lookup-credential provider-name provider-config)
   ;; Normalize provider-name to string (JSON keys may be symbols)
-  (define norm-name (if (symbol? provider-name) (symbol->string provider-name) provider-name))
+  (define norm-name
+    (if (symbol? provider-name)
+        (symbol->string provider-name)
+        provider-name))
   ;; Guard: if provider-config is #f, try credential file only
   (cond
-    [(not provider-config)
-     (credential-from-file norm-name)]
+    [(not provider-config) (credential-from-file norm-name)]
     [else
      (let* ([env-var-name (config-ref provider-config 'api-key-env "api-key-env")]
             [env-val (and env-var-name (getenv env-var-name))])
        (cond
-         [(and env-val (non-empty-string? env-val))
-          (credential norm-name env-val 'environment)]
+         [(and env-val (non-empty-string? env-val)) (credential norm-name env-val 'environment)]
          [else
           (let ([config-key (config-ref provider-config 'api-key "api-key")])
             (cond
               [(and config-key (non-empty-string? config-key))
                (credential norm-name config-key 'config)]
-              [else
-               ;; Fall back to credential file (~/.q/credentials.json)
-               (credential-from-file norm-name)]))]))]))
+              ;; Fall back to credential file (~/.q/credentials.json)
+              [else (credential-from-file norm-name)]))]))]))
 
 ;; Lookup credential from the dedicated credential file.
 ;; Returns #<credential ...> or #f.
@@ -150,7 +160,8 @@
 
 ;; Store a credential (update config hash in memory, optionally persist to file).
 ;; Returns the updated provider-config hash.
-(define (store-credential! provider-name api-key
+(define (store-credential! provider-name
+                           api-key
                            #:provider-config provider-config
                            #:config-path [config-path #f])
   ;; Update the provider-config with the new api-key
@@ -175,10 +186,10 @@
 
 ;; A credential with the key masked — safe for logging/display
 (struct redacted-credential
-  (provider-name       ; string
-   masked-api-key      ; string — e.g. "sk-...7k3d"
-   source              ; symbol — 'environment | 'config | 'stored
-   )
+        (provider-name ; string
+         masked-api-key ; string — e.g. "sk-...7k3d"
+         source ; symbol — 'environment | 'config | 'stored
+         )
   #:transparent)
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -187,10 +198,9 @@
 
 ;; Create a redacted-credential from a credential.
 (define (cred->redacted cred)
-  (redacted-credential
-   (credential-provider-name cred)
-   (mask-api-key (credential-api-key cred))
-   (credential-source cred)))
+  (redacted-credential (credential-provider-name cred)
+                       (mask-api-key (credential-api-key cred))
+                       (credential-source cred)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; validate-credential-format
@@ -234,7 +244,10 @@
            (let ([providers (hash-ref content 'providers (hash))])
              ;; Convert symbol-keyed hash to string-keyed
              (for/hash ([(k v) (in-hash providers)])
-               (values (if (symbol? k) (symbol->string k) k) v)))))]))
+               (values (if (symbol? k)
+                           (symbol->string k)
+                           k)
+                       v)))))]))
 
 ;; Save a credential to the dedicated credential file.
 ;; SECURITY NOTE: API keys are stored as plaintext on disk.
@@ -242,18 +255,21 @@
 ;; are not encrypted at rest. On shared systems, consider using
 ;; environment variables or a dedicated secrets manager instead.
 (define (save-credential-file! provider-name api-key [path (credential-file-path)])
-  (with-handlers ([exn:fail? (λ (e) (log-warning (format "save-credential-file! failed: ~a" (exn-message e))))])
+  (with-handlers ([exn:fail?
+                   (λ (e) (log-warning (format "save-credential-file! failed: ~a" (exn-message e))))])
     (define dir (path-only path))
     (when (and dir (not (directory-exists? dir)))
       (make-directory* dir))
     (define existing (load-credential-file path))
-    (define updated
-      (hash-set existing provider-name (hasheq 'api-key api-key)))
+    (define updated (hash-set existing provider-name (hasheq 'api-key api-key)))
     ;; Write in the format: { "providers": { ... } }
     (define file-content
       (hasheq 'providers
               (for/hash ([(k v) (in-hash updated)])
-                (values (if (string? k) (string->symbol k) k) v))))
+                (values (if (string? k)
+                            (string->symbol k)
+                            k)
+                        v))))
     (atomic-write-json! path file-content)))
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -273,7 +289,6 @@
 ;; Internal: write credential to config file
 ;; ═══════════════════════════════════════════════════════════════════
 
-
 ;; Read existing JSON config, update the provider's api-key, write back.
 ;; If the file doesn't exist, create a new config structure.
 ;; Handles errors gracefully — does not propagate exceptions.
@@ -282,7 +297,8 @@
 ;; are not encrypted at rest. On shared systems, consider using
 ;; environment variables or a dedicated secrets manager instead.
 (define (write-credential-to-config! config-path provider-name api-key)
-  (with-handlers ([exn:fail? (lambda (e) (log-warning (format "credential save failed: ~a" (exn-message e))))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "credential save failed: ~a" (exn-message e))))])
     (internal-write-credential-to-config! config-path provider-name api-key)))
 
 ;; Actual implementation (separated for clarity)
@@ -295,12 +311,17 @@
   (define existing
     (if (file-exists? config-path)
         (let ([content (call-with-input-file config-path read-json)])
-          (if (eof-object? content) (hasheq) content))
+          (if (eof-object? content)
+              (hasheq)
+              content))
         (hasheq)))
   ;; Navigate to providers section, update the provider's api-key
   ;; read-json produces hasheq with symbol keys
   ;; provider-name is a string — convert to symbol for JSON key
-  (define provider-sym (if (symbol? provider-name) provider-name (string->symbol provider-name)))
+  (define provider-sym
+    (if (symbol? provider-name)
+        provider-name
+        (string->symbol provider-name)))
   (define providers (hash-ref existing 'providers (hasheq)))
   (define old-provider-cfg (hash-ref providers provider-sym (hasheq)))
   (define new-provider-cfg (hash-set old-provider-cfg 'api-key api-key))
@@ -319,15 +340,19 @@
   (define dir (path-only path))
   (when (and dir (not (directory-exists? dir)))
     (make-directory* dir))
-  (define tmp (make-temporary-file "credential-~a.tmp" #f (if dir dir (find-system-path 'temp-dir))))
-  (with-handlers ([exn:fail? (lambda (e)
-                                (with-handlers ([exn:fail? (lambda (e)
-                                                            (log-warning (format "credential load failed: ~a"
-                                                                               (exn-message e))))])
-                                  (delete-file tmp))
-                                (raise e))])
-    (call-with-output-file tmp
-      (lambda (out) (write-json data out))
-      #:exists 'truncate)
+  (define tmp
+    (make-temporary-file "credential-~a.tmp"
+                         #f
+                         (if dir
+                             dir
+                             (find-system-path 'temp-dir))))
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (with-handlers ([exn:fail? (lambda (e)
+                                                  (log-warning (format "credential load failed: ~a"
+                                                                       (exn-message e))))])
+                       (delete-file tmp))
+                     (raise e))])
+    (call-with-output-file tmp (lambda (out) (write-json data out)) #:exists 'truncate)
     (rename-file-or-directory tmp path #t)
     (file-or-directory-permissions path #o600)))

@@ -89,10 +89,10 @@
                   8089))
   (define url (oauth-authorize-url cfg "random-state"))
   (check-true (string-contains? url "client_id=my-client"))
-  (check-true (string-contains? url "redirect_uri=http://localhost:8089/callback"))
+  (check-true (string-contains? url "redirect_uri=http%3A%2F%2Flocalhost%3A8089%2Fcallback"))
   (check-true (string-contains? url "state=random-state"))
   (check-true (string-contains? url "response_type=code"))
-  (check-true (string-contains? url "openid+profile")))
+  (check-true (string-contains? url "openid%20profile")))
 
 (test-case "oauth-authorize-url starts with authorize-url"
   (define cfg
@@ -109,7 +109,7 @@
 ;; Token exchange/refresh stub tests
 ;; ═══════════════════════════════════════════════════════════════════
 
-(test-case "oauth-exchange-code returns #f (stub)"
+(test-case "oauth-exchange-code raises error (stub)"
   (define cfg
     (oauth-config "https://example.com/auth"
                   "https://example.com/token"
@@ -117,9 +117,9 @@
                   "secret"
                   '("scope")
                   8089))
-  (check-false (oauth-exchange-code cfg "some-auth-code")))
+  (check-exn exn:fail? (lambda () (oauth-exchange-code cfg "some-auth-code"))))
 
-(test-case "oauth-refresh-token returns #f (stub)"
+(test-case "oauth-refresh-token raises error (stub)"
   (define cfg
     (oauth-config "https://example.com/auth"
                   "https://example.com/token"
@@ -128,7 +128,7 @@
                   '("scope")
                   8089))
   (define tok (oauth-token "access" "refresh" 1000 "Bearer" "openid"))
-  (check-false (oauth-refresh-token cfg tok)))
+  (check-exn exn:fail? (lambda () (oauth-refresh-token cfg tok))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Serialization tests
@@ -200,7 +200,7 @@
   (check-equal? (oauth-token-access-token result) "valid-access")
   (delete-file tmp))
 
-(test-case "get-valid-oauth-token returns #f for expired token (stub refresh)"
+(test-case "get-valid-oauth-token raises for expired token (stub refresh)"
   (define tmp (make-temporary-file "oauth-test-~a.json"))
   (delete-file tmp)
   (define tok
@@ -213,8 +213,8 @@
                   "secret"
                   '("openid")
                   8089))
-  ;; oauth-refresh-token is a stub returning #f, so get-valid returns #f
-  (check-false (get-valid-oauth-token "expired-provider" cfg #:path tmp))
+  ;; oauth-refresh-token raises, so get-valid propagates the error
+  (check-exn exn:fail? (lambda () (get-valid-oauth-token "expired-provider" cfg #:path tmp)))
   (delete-file tmp))
 
 (test-case "get-valid-oauth-token returns #f for missing provider"
