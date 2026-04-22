@@ -41,7 +41,8 @@
 
 ;; Critical hooks default to 'block on error (safety-first).
 ;; Advisory hooks default to 'pass on error (liveness-first).
-(define critical-hooks '(tool-call session-before-switch session-before-fork session-before-compact input))
+(define critical-hooks
+  '(tool-call session-before-switch session-before-fork session-before-compact input))
 
 (define (critical-hook? hook-point)
   (and (member hook-point critical-hooks) #t))
@@ -94,15 +95,14 @@
     (if (critical-hook? hook-point)
         (hook-block (format "handler ~a failed for critical hook ~a" ext-name hook-point))
         (hook-pass payload)))
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning (format "Hook handler ~a for ~a threw: ~a [~a]"
-                                                    ext-name
-                                                    hook-point
-                                                    (exn-message e)
-                                                    (if (critical-hook? hook-point)
-                                                        "CRITICAL->block"
-                                                        "advisory->pass")))
-                               error-default)])
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (log-warning "Hook handler ~a for ~a threw: ~a [~a]"
+                                  ext-name
+                                  hook-point
+                                  (exn-message e)
+                                  (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass"))
+                     error-default)])
     (define raw-result
       (if timeout-ms
           ;; Run with timeout
@@ -143,9 +143,9 @@
               ;; M1: Invalid action — downgrade to 'pass instead of propagating
               (hook-pass payload)))
         (begin
-          (log-warning (format "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
-                               ext-name
-                               hook-point
-                               raw-result
-                               (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+          (log-warning "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
+                       ext-name
+                       hook-point
+                       raw-result
+                       (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass"))
           error-default))))

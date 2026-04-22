@@ -486,7 +486,7 @@
   ;; Error guard (#1121): catch any exception from mouse handling
   ;; to prevent crashes from corrupt or unexpected mouse data.
   (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning (format "TUI: mouse handler error: ~a" (exn-message e)))
+                               (log-warning "TUI: mouse handler error: ~a" (exn-message e))
                                'continue)])
     (define state (unbox (tui-ctx-ui-state-box ctx)))
     (define mouse-type (car msg-data))

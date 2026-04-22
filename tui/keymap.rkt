@@ -83,37 +83,59 @@
 
 ;; Check if an action symbol uses dot-namespace format (e.g. 'tui.editor.copy)
 (define (namespaced-action? action)
-  (and (symbol? action)
-       (regexp-match? #rx"^[a-z][a-z0-9-]*\\." (symbol->string action))))
+  (and (symbol? action) (regexp-match? #rx"^[a-z][a-z0-9-]*\\." (symbol->string action))))
 
 ;; Build a namespaced action from parts: (namespace 'editor 'copy) → 'app.editor.copy
 (define (namespace-action . parts)
   (string->symbol (string-join (map (lambda (p)
-                                      (if (symbol? p) (symbol->string p) p))
-                                    parts) ".")))
+                                      (if (symbol? p)
+                                          (symbol->string p)
+                                          p))
+                                    parts)
+                               ".")))
 
 ;; Migration table: flat action → namespaced equivalent
 (define flat->namespaced
-  (hasheq 'history-up 'tui.navigation.history-up
-          'history-down 'tui.navigation.history-down
-          'page-up 'tui.navigation.page-up
-          'page-down 'tui.navigation.page-down
-          'home 'tui.navigation.home
-          'end 'tui.navigation.end
-          'scroll-up 'tui.navigation.scroll-up
-          'scroll-down 'tui.navigation.scroll-down
-          'submit 'tui.input.submit
-          'backspace 'tui.input.backspace
-          'delete 'tui.input.delete
-          'cancel 'tui.input.cancel
-          'word-left 'tui.editor.word-left
-          'word-right 'tui.editor.word-right
-          'copy 'tui.editor.copy
-          'cut 'tui.editor.cut
-          'paste 'tui.editor.paste
-          'select-all 'tui.editor.select-all
-          'clear-input 'tui.editor.clear-input
-          'clear-screen 'tui.display.clear-screen))
+  (hasheq 'history-up
+          'tui.navigation.history-up
+          'history-down
+          'tui.navigation.history-down
+          'page-up
+          'tui.navigation.page-up
+          'page-down
+          'tui.navigation.page-down
+          'home
+          'tui.navigation.home
+          'end
+          'tui.navigation.end
+          'scroll-up
+          'tui.navigation.scroll-up
+          'scroll-down
+          'tui.navigation.scroll-down
+          'submit
+          'tui.input.submit
+          'backspace
+          'tui.input.backspace
+          'delete
+          'tui.input.delete
+          'cancel
+          'tui.input.cancel
+          'word-left
+          'tui.editor.word-left
+          'word-right
+          'tui.editor.word-right
+          'copy
+          'tui.editor.copy
+          'cut
+          'tui.editor.cut
+          'paste
+          'tui.editor.paste
+          'select-all
+          'tui.editor.select-all
+          'clear-input
+          'tui.editor.clear-input
+          'clear-screen
+          'tui.display.clear-screen))
 
 ;; Auto-migrate a flat action to its namespaced equivalent.
 ;; Returns the namespaced symbol if a mapping exists, otherwise the original.
@@ -282,10 +304,9 @@
 ;; is not significant.
 
 (define (load-keybindings-file path)
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (log-warning (format "keymap: failed to load ~a: ~a" path (exn-message e)))
-                     #f)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "keymap: failed to load ~a: ~a" path (exn-message e))
+                               #f)])
     (if (file-exists? path)
         (let ([content (file->string path)]) (parse-keybindings-content content path))
         #f)))
@@ -307,7 +328,7 @@
         (if (and (string? key-str) (string? action-str))
             (cons (parse-key-string key-str) (migrate-action (string->symbol action-str)))
             (begin
-              (log-warning (format "keymap: skipping invalid entry in ~a: ~v" source-path entry))
+              (log-warning "keymap: skipping invalid entry in ~a: ~v" source-path entry)
               #f))))
     (define valid-bindings (filter identity bindings))
     (if (null? valid-bindings) #f valid-bindings)))
@@ -331,10 +352,9 @@
   (define base (default-keymap))
   (define kb-path (or path (build-path (global-config-dir) "keybindings.json")))
   (define user-bindings
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       (log-warning (format "keymap: failed to load ~a: ~a" kb-path (exn-message e)))
-                       #f)])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning "keymap: failed to load ~a: ~a" kb-path (exn-message e))
+                                 #f)])
       (and (file-exists? kb-path) (load-keybindings-file kb-path))))
   (when user-bindings
     (define user-km (make-keymap))
