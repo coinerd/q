@@ -85,16 +85,21 @@
         ;; Group 2: Code quality
         (list "lint-tests" "racket scripts/lint-tests.rkt")
         (list "lint-format" "racket scripts/lint-format.rkt")
+        ;; Group 2b: Compilation (W6.1)
+        (list "compile-all" "raco make main.rkt")
         ;; Group 3: Metrics + protocol consistency
         (list "metrics --lint --lint-prose" "racket scripts/metrics.rkt --lint --lint-prose")
         (list "check-protocols" "racket scripts/check-protocols.rkt")
-        (list "check-imports" "racket scripts/check-imports.rkt")))
+        (list "check-imports" "racket scripts/check-imports.rkt")
+        ;; Group 4: Security (W6.3)
+        (list "lint-security" "racket scripts/lint-security.rkt")))
 
 (define quick-checks
   (list (list "sync-version (dry-run)" "racket scripts/sync-version.rkt")
         (list "lint-version" "racket scripts/lint-version.rkt")
         (list "sync-readme-status --check" "racket scripts/sync-readme-status.rkt --check")
-        (list "lint-format" "racket scripts/lint-format.rkt")))
+        (list "lint-format" "racket scripts/lint-format.rkt")
+        (list "compile-main" "raco make main.rkt 2>&1")))
 
 ;; ---------------------------------------------------------------------------
 ;; Fix definitions
