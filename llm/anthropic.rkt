@@ -11,6 +11,7 @@
 
 (require racket/contract
          racket/string
+         (only-in "../runtime/model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
          racket/port
          racket/generator
          json
@@ -37,10 +38,9 @@
 ;; Constants
 ;; ============================================================
 
-(define ANTHROPIC-DEFAULT-MODEL "claude-sonnet-4-20250514")
+;; model defaults now in runtime/model-defaults.rkt
 (define ANTHROPIC-DEFAULT-MAX-TOKENS 4096)
 (define ANTHROPIC-VERSION "2023-06-01")
-(define ANTHROPIC-DEFAULT-BASE-URL "https://api.anthropic.com")
 
 ;; ============================================================
 ;; Request body construction
