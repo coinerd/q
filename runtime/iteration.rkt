@@ -763,7 +763,8 @@
                                    'message
                                    (list
                                     (make-text-part
-                                     "[steering:intent] Your previous message said you would perform an action but no tool was used. Use the write or edit tool now. Do not explain — act."))
+                                     "[steering:intent] Your previous message said you would perform an action "
+                                     "but no tool was used. Use the write or edit tool now. Do not explain — act."))
                                    (now-seconds)
                                    (hasheq 'source "intent-without-action"))])
                              (append-entries! log-path (list nudge))
