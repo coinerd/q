@@ -1,4 +1,4 @@
-<!-- verified-against: v0.15.2 -->
+<!-- verified-against: v0.16.0 -->
 # Installation Guide
 
 <!-- This file is the canonical source. The docs/getting-started/installation.md copy is maintained for the doc site build. -->

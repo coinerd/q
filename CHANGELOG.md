@@ -1,5 +1,66 @@
 # Changelog
 
+## v0.16.0 — 2026-04-22
+
+### Architecture Hardening & Documentation Refresh
+
+Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
+`.planning/REVIEW-v0.15.2.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
+
+#### Wave 0 — Housekeeping (#1475, #1477, #1488)
+- Version drift sync, STATE.md + SUMMARY.md reconciliation
+
+#### Wave 1 — Shell Injection Fix (#1474)
+- FFI `getpid` via isolated submodule (avoids `ffi/unsafe` → `racket/contract` conflict)
+- `/proc/<pid>` filesystem check for `pid-alive?` (container-safe)
+- `truncated?` field on subprocess results
+
+#### Wave 2 — Azure Hardening (#1479)
+- `dynamic-wind` port cleanup for streaming generators
+- Shared response parser extracted from Azure-specific code
+- Configurable request timeout
+
+#### Wave 3 — Safe-Mode Enforcement (#1482)
+- Symlink resolution in path validation
+- One-shot lock via box parameter
+- `dangerous?` field on tool descriptors
+
+#### Wave 4 — Error Consolidation (#1478, #1489)
+- Eliminated duplicate `provider-error` struct definitions
+- Unified in `llm/provider-errors.rkt`
+
+#### Wave 5 — Sandbox, Credentials & OAuth (#1485, #1483, #1486)
+- SHA-256 HMAC for credential verification
+- Opaque credential structs with `gen:equal+hash` + `gen:custom-write`
+- OAuth scope separator: `+` → `%20` (spec-compliant)
+- OAuth stubs now raise errors instead of silently returning `#f`
+
+#### Wave 6 — CI Pipeline (#1480)
+- `scripts/ci-local.rkt`: 10 automated checks (format, compile, imports, security lint)
+- `scripts/lint-security.rkt`: hardcoded secret scanner with exemption patterns
+
+#### Wave 7 — Documentation Refresh (#1476, #1484)
+- 7 source files updated, 3 ADRs added (0008–0010)
+- CHANGELOG backfilled from git history
+
+#### Wave 8a — Iteration.rkt set! Fix (#1481)
+- Replaced 3x `set!` with `let-over-cond` binding in exploration escalation
+
+#### Wave 9 — Test Infrastructure (#1487)
+- Event bus concurrency test: mutex-protected counter via `call-with-semaphore`
+- Subprocess `truncated?` field tests (overflow vs. fits budget)
+
+#### Wave 10 — Port Cleanup & Quality (#1490)
+- `dynamic-wind` port cleanup in `anthropic.rkt` and `gemini.rkt` streaming
+- Fixed double warning in `load-session-log`
+- O(n²) → O(n) `jsonl-read-all-valid-with-count` via `cons`/`reverse`
+- Idempotent `cancel-token!` guard
+
+### Metrics
+- 332 test files, 5307 tests passing
+- 10/10 CI local checks
+- 3 new ADRs (0008-safe-mode, 0009-credential-redaction, 0010-streaming-port-lifecycle)
+
 ## v0.15.2 — 2026-04-21
 
 ### Bug Fixes
