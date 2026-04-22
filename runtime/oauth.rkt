@@ -10,7 +10,8 @@
          racket/format
          json
          racket/file
-         racket/path)
+         racket/path
+         net/uri-codec)
 
 ;; OAuth config struct
 (provide (struct-out oauth-config)
@@ -81,14 +82,14 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; Generate the authorization URL for browser redirect.
+;; W5.7 (S4-06): URI-encode all query parameters
 (define (oauth-authorize-url cfg state-param)
-  (format
-   "~a?client_id=~a&redirect_uri=http://localhost:~a/callback&response_type=code&scope=~a&state=~a"
-   (oauth-config-authorize-url cfg)
-   (oauth-config-client-id cfg)
-   (oauth-config-redirect-port cfg)
-   (string-join (oauth-config-scopes cfg) "+")
-   state-param))
+  (format "~a?client_id=~a&redirect_uri=~a&response_type=code&scope=~a&state=~a"
+          (oauth-config-authorize-url cfg)
+          (uri-encode (oauth-config-client-id cfg))
+          (uri-encode (format "http://localhost:~a/callback" (oauth-config-redirect-port cfg)))
+          (uri-encode (string-join (oauth-config-scopes cfg) " "))
+          (uri-encode state-param)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Token exchange & refresh (stubs)
@@ -98,34 +99,18 @@
 ;; Returns oauth-token on success, #f on failure.
 ;; STUB: Requires an HTTP client library (e.g. libcurl or net/http)
 ;; to perform the actual POST to the token endpoint.
+;; W5.6 (M-03): Explicit error — callers must handle, not silently get #f
 (define (oauth-exchange-code cfg code)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    ;; Build the POST body for reference / future implementation
-    (define _post-data
-      (format
-       "code=~a&client_id=~a&client_secret=~a&redirect_uri=http://localhost:~a/callback&grant_type=authorization_code"
-       code
-       (oauth-config-client-id cfg)
-       (oauth-config-client-secret cfg)
-       (oauth-config-redirect-port cfg)))
-    ;; TODO: HTTP POST to (oauth-config-token-url cfg) with _post-data
-    ;; Parse JSON response into oauth-token struct
-    #f))
+  (error 'oauth-exchange-code
+         "OAuth token exchange not yet implemented; requires HTTP client library"))
 
 ;; Refresh an expired token.
 ;; Returns oauth-token on success, #f on failure.
 ;; STUB: Same HTTP client dependency as oauth-exchange-code.
+;; W5.6 (M-03): Explicit error — callers must handle, not silently get #f
 (define (oauth-refresh-token cfg tok)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    ;; Build the POST body for reference / future implementation
-    (define _post-data
-      (format "refresh_token=~a&client_id=~a&client_secret=~a&grant_type=refresh_token"
-              (oauth-token-refresh-token tok)
-              (oauth-config-client-id cfg)
-              (oauth-config-client-secret cfg)))
-    ;; TODO: HTTP POST to (oauth-config-token-url cfg) with _post-data
-    ;; Parse JSON response into oauth-token struct
-    #f))
+  (error 'oauth-refresh-token
+         "OAuth token refresh not yet implemented; requires HTTP client library"))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Serialization helpers
