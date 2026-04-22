@@ -118,9 +118,8 @@
 (test-case "subscriber exception is logged, not swallowed silently"
   (define bus (make-event-bus))
   (define errors (box '()))
-  (parameterize ([current-event-bus-error-handler
-                   (λ (evt handler exn)
-                     (set-box! errors (cons exn (unbox errors))))])
+  (parameterize ([current-event-bus-error-handler (λ (evt handler exn)
+                                                    (set-box! errors (cons exn (unbox errors))))])
     (subscribe! bus (λ (evt) (error 'bad "boom")))
     (publish! bus (test-event))
     (check-equal? (length (unbox errors)) 1)
@@ -171,8 +170,7 @@
   (define bus (make-event-bus))
   (define received-event (box #f))
   (subscribe! bus (λ (evt) (set-box! received-event evt)))
-  (define evt (test-event #:name "model.stream.completed"
-                          #:payload '#hasheq((tokens . 42))))
+  (define evt (test-event #:name "model.stream.completed" #:payload '#hasheq((tokens . 42))))
   (publish! bus evt)
   (define out (unbox received-event))
   (check-not-false out)
@@ -196,26 +194,37 @@
 ;; 8. Thread safety (basic check)
 ;; ============================================================
 
+;; W9.3 (T3-09): Rewritten with proper barrier — subscribe before barrier
+;; so all subscribers are ready before any publishing starts.
 (test-case "concurrent publish and subscribe do not crash"
   (define bus (make-event-bus))
   (define count (box 0))
+  (define count-mutex (make-semaphore 1))
   (define barrier (make-semaphore 0))
-  ;; Start 10 threads that each subscribe and publish 100 events
+  (define ready (make-semaphore 0))
+  ;; Start 10 threads: subscribe FIRST, signal ready, then wait for barrier
   (define threads
     (for/list ([i (in-range 10)])
-      (thread
-       (λ ()
-         (semaphore-wait barrier)
-         (subscribe! bus (λ (evt) (set-box! count (add1 (unbox count)))))
-         (for ([j (in-range 100)])
-           (publish! bus (test-event #:name (format "thread-~a-~a" i j))))))))
-  ;; Release all threads at once
-  (for ([_ (in-range 10)]) (semaphore-post barrier))
+      (thread (λ ()
+                (subscribe! bus
+                            (λ (evt)
+                              (call-with-semaphore count-mutex
+                                                   (λ () (set-box! count (add1 (unbox count)))))))
+                (semaphore-post ready)
+                (semaphore-wait barrier)
+                (for ([j (in-range 100)])
+                  (publish! bus (test-event #:name (format "thread-~a-~a" i j))))))))
+  ;; Wait for all threads to subscribe
+  (for ([_ (in-range 10)])
+    (semaphore-wait ready))
+  ;; Release all threads to start publishing simultaneously
+  (for ([_ (in-range 10)])
+    (semaphore-post barrier))
   ;; Wait for all threads
   (for-each thread-wait threads)
-  ;; Should have received events — exact count is nondeterministic,
-  ;; but must be > 0 and no crash
-  (check-true (> (unbox count) 0)))
+  ;; All 10 subscribers should see events from all 10 threads × 100 = 1000
+  ;; Exact count depends on timing, but should be at least 1000
+  (check-true (>= (unbox count) 1000) (format "expected >= 1000 events, got ~a" (unbox count))))
 
 ;; ============================================================
 ;; 9. Property: publish always returns the input event
@@ -223,7 +232,7 @@
 
 (test-case "publish is identity on the event"
   (define bus (make-event-bus))
-  (subscribe! bus (λ (evt) (void)))  ; one subscriber
+  (subscribe! bus (λ (evt) (void))) ; one subscriber
   (for ([name '("session.started" "turn.started" "model.stream.delta")])
     (define evt (test-event #:name name))
     (check-eq? (publish! bus evt) evt)))
