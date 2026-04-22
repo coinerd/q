@@ -141,23 +141,29 @@
                               ap)))]
        [else
         ;; Default: check against project root
-        (let* ([resolved-root (with-handlers ([exn:fail? (λ (_) (simplify-path root-path))])
-                                (resolve-path root-path))]
-               [resolved-path (with-handlers ([exn:fail? (λ (_) (simplify-path path))])
-                                (resolve-path path))]
-               [root-str (path->string (if (complete-path? resolved-root)
-                                           resolved-root
-                                           (path->complete-path resolved-root)))]
-               [path-str (path->string (if (complete-path? resolved-path)
-                                           resolved-path
-                                           (path->complete-path resolved-path)))]
-               ;; Ensure root ends with separator for prefix matching
-               [root-prefix (if (string-suffix? root-str "/")
-                                root-str
-                                (string-append root-str "/"))])
-          (or (string=? path-str root-str) (string-prefix? path-str root-prefix)))])]))
+        ;; W3.1 (S4-11): resolve-path failure -> deny (#f), not fallback
+        (and (with-handlers ([exn:fail? (λ (_) #f)])
+               (resolve-path root-path))
+             (with-handlers ([exn:fail? (λ (_) #f)])
+               (resolve-path path))
+             (let* ([resolved-root (resolve-path root-path)]
+                    [resolved-path (resolve-path path)]
+                    [root-str (path->string (if (complete-path? resolved-root)
+                                                resolved-root
+                                                (path->complete-path resolved-root)))]
+                    [path-str (path->string (if (complete-path? resolved-path)
+                                                resolved-path
+                                                (path->complete-path resolved-path)))]
+                    [root-prefix (if (string-suffix? root-str "/")
+                                     root-str
+                                     (string-append root-str "/"))])
+               (or (string=? path-str root-str) (string-prefix? path-str root-prefix))))])]))
 
 ;; Whether safe-mode deactivation is locked (one-way switch)
+;; W3.2 (S4-16): One-shot parameter — once locked, cannot be unlocked.
+;; Kept as parameter for backward-compatible parameterize, but guarded.
+(define safe-mode-lock-one-shot (box #f))
+
 (define safe-mode-locked? (make-parameter #f))
 
 ;; Internal: check if locked via per-session config or parameter
@@ -165,7 +171,7 @@
   (define cfg (current-safe-mode-config))
   (cond
     [(safe-mode-config? cfg) (safe-mode-config-locked cfg)]
-    [else (safe-mode-locked?)]))
+    [else (or (unbox safe-mode-lock-one-shot) (safe-mode-locked?))]))
 
 ;; ============================================================
 ;; Actions
@@ -201,6 +207,7 @@
 ;; Lock safe-mode so it cannot be deactivated.
 ;; Once locked, only process restart can change the state.
 (define (lock-safe-mode!)
+  (set-box! safe-mode-lock-one-shot #t)
   (safe-mode-locked? #t))
 
 ;; ============================================================
@@ -243,20 +250,20 @@
          (safe-mode-config-project-root-path cfg)]
         [else (project-root)])))
   (hasheq 'active?
-        active
-        'trust-level
-        (trust-level)
-        'blocked-tools
-        (if active
-            blocked-tools
-            '())
-        'project-root
-        (path->string root)
-        'source
-        source
-        'reason
-        (if active
-            (format "Safe mode active (enabled by: ~a). File access restricted to: ~a"
-                    source
-                    (path->string root))
-            #f)))
+          active
+          'trust-level
+          (trust-level)
+          'blocked-tools
+          (if active
+              blocked-tools
+              '())
+          'project-root
+          (path->string root)
+          'source
+          source
+          'reason
+          (if active
+              (format "Safe mode active (enabled by: ~a). File access restricted to: ~a"
+                      source
+                      (path->string root))
+              #f)))
