@@ -167,8 +167,8 @@
                                 ""
                                 (format "Failed to execute: ~a" (exn-message e))
                                 #f
-                                (inexact->exact (round (- (current-inexact-milliseconds) start-ms))
-                                                #f)))])
+                                (inexact->exact (round (- (current-inexact-milliseconds) start-ms)))
+                                #f))])
 
     (define cmd-path (resolve-command command))
     (unless cmd-path

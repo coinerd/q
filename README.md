@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.16.0-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.16.1-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.16.0
+racket main.rkt --version  # q version 0.16.1
 raco test tests/           # run the full test suite
 ```
 
@@ -331,7 +331,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.16.0** — Config Validation + Iteration Budget + Provider Settings. Config.json validation with clear error messages before mock fallback. Increased iteration budgets (soft 20→50, hard=max(soft*1.6, 80)). Exploration steering hint after 8+ consecutive tool calls. Provider settings (max-tokens) wired through to API request body. 5370 tests.
+**v0.16.1** — Config Validation + Iteration Budget + Provider Settings. Config.json validation with clear error messages before mock fallback. Increased iteration budgets (soft 20→50, hard=max(soft*1.6, 80)). Exploration steering hint after 8+ consecutive tool calls. Provider settings (max-tokens) wired through to API request body. 5370 tests.
 
 **v0.14.3** — Exploration & Generation Robustness. Soft/hard iteration limits, context-aware retry messages, exploration progress hints, adaptive stream timeout, mid-turn token budget check. Architecture boundary fixes: TUI mock-provider lift, resource-discovery move, session-switch DI. Zero TUI layer violations. 5365 tests.
 

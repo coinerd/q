@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.16.1 — 2026-04-22
+
+### Critical Fixes (from PROJECT_REVIEW_v0.16.0)
+
+- **SEC-07**: Fix `subprocess-result` arity bug — error handler had `#f` nested inside
+  `inexact->exact` call instead of being the 6th field (`truncated?`). Any subprocess
+  execution failure (command not found, permission denied) would crash with arity error.
+  1-line fix: move `#f` to correct position.
+
+### Documentation Fixes
+
+- **D1-D3**: Rewrite wiki Architecture Overview — stale metrics (124→228 modules, 140→349
+  test files), removed reference to deleted `runtime/resource-loader.rkt`, corrected provider
+  API description from `complete`/`stream-complete` to `make-provider` dispatch protocol.
+- **D4**: Add missing ADR index entries for 0008 (safe-mode enforcement),
+  0009 (credential redaction), 0010 (streaming port lifecycle).
+
+### Housekeeping
+
+- Bump version references across all docs to 0.16.1
+
 ## v0.16.0 — 2026-04-22
 
 ### Architecture Hardening & Documentation Refresh

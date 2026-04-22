@@ -15,6 +15,9 @@ Each ADR describes a decision that was made, the context that led to it, and its
 | [0005](0005-interface-separation.md) | Interface separation | Accepted |
 | [0006](0006-extension-hook-model.md) | Extension hook model | Accepted |
 | [0007](0007-sandboxing-boundary.md) | Sandboxing boundary | Accepted |
+| [0008](0008-safe-mode-enforcement.md) | Safe-mode enforcement | Accepted |
+| [0009](0009-credential-redaction.md) | Credential redaction | Accepted |
+| [0010](0010-streaming-port-lifecycle.md) | Streaming port lifecycle | Accepted |
 
 ## Conventions
 
