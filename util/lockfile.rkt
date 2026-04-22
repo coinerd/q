@@ -34,13 +34,27 @@
 
 (module getpid-ffi racket/base
   (require ffi/unsafe)
-  (provide raw-getpid)
-  (define raw-getpid (get-ffi-obj "getpid" #f (_fun -> _int))))
+  (provide raw-getpid
+           raw-kill)
+  (define raw-getpid (get-ffi-obj "getpid" #f (_fun -> _int)))
+  (define raw-kill (get-ffi-obj "kill" #f (_fun _int _int -> _int))))
 
 (require (submod "." getpid-ffi))
 
 (define (getpid)
   (raw-getpid))
+
+;; Cross-platform pid-alive? check.
+;; Linux: /proc/<pid> exists (fast, no signal).
+;; macOS/other: kill(pid, 0) returns 0 if process exists, -1 otherwise.
+(define (pid-alive? pid)
+  (unless (and (exact-integer? pid) (positive? pid))
+    (error 'pid-alive? "expected positive integer, got: ~a" pid))
+  (cond
+    [(directory-exists? (format "/proc/~a" pid)) #t]
+    ;; Fallback: kill(pid, 0) — signal 0 checks existence without sending signal
+    ;; Returns 0 on success (process exists), -1 on error (no such process)
+    [else (zero? (raw-kill pid 0))]))
 
 ;; Lock directory — ~/.q/locks/
 (define (locks-dir)
@@ -62,12 +76,6 @@
         target))
   (define safe-name (regexp-replace* #rx"[^a-zA-Z0-9._-]" target-str "_"))
   (build-path (locks-dir) (string-append "lock-" safe-name)))
-
-;; Check if a PID is alive — via /proc filesystem (no shell, no kill)
-(define (pid-alive? pid)
-  (unless (and (exact-integer? pid) (positive? pid))
-    (error 'pid-alive? "expected positive integer, got: ~a" pid))
-  (directory-exists? (format "/proc/~a" pid)))
 
 ;; Read PID from lockfile
 (define (read-lock-pid lock-file)
