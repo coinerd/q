@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-<!-- verified-against: v0.10.2 -->
+<!-- verified-against: v0.15.2 -->
 
 This document tracks compatibility between q versions, Racket versions, and
 extension API versions.
@@ -9,6 +9,11 @@ extension API versions.
 
 | q Version | Min Racket | Tested Racket | Notes |
 |-----------|-----------|---------------|-------|
+| 0.15.x | 8.10 | 8.10 | Event-driven core, sandboxing, extensions, TUI |
+| 0.14.x | 8.10 | 8.10 | Trace logger, steering fixes, max_tokens resolution |
+| 0.13.x | 8.10 | 8.10 | Session tree, provider improvements |
+| 0.12.x | 8.10 | 8.10 | OAuth framework, credential store |
+| 0.11.x | 8.10 | 8.10 | Tool scheduler, extension hooks v2 |
 | 0.10.x | 8.10 | 8.10 | Requires `racket/base`, `rackunit` |
 | 0.9.x | 8.10 | 8.10 | Same as above |
 | 0.8.x | 8.9 | 8.9, 8.10 | Backward compatible with 8.9 |
@@ -17,6 +22,8 @@ extension API versions.
 
 | q Version | Extension API | Breaking? | Migration |
 |-----------|--------------|-----------|-----------|
+| 0.15.0+ | `0.5` | No | Additive — safe-mode hooks, quarantine |
+| 0.13.0+ | `0.4` | No | Additive — session-tree hooks |
 | 0.10.0+ | `0.3` | No | Additive — new hook types |
 | 0.9.0+ | `0.2` | No | Additive — extension context fields |
 | 0.8.0+ | `0.1` | Yes | Changed `extension` struct to 4-arg |
