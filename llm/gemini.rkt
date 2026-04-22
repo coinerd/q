@@ -414,6 +414,7 @@
       (define raw (gemini-do-http-request base-url api-key model-name body))
       (gemini-parse-response raw)))
 
+  ;; W10.1 (Q-19): dynamic-wind ensures response port cleanup on timeout/exception
   (define (stream req)
     (define merged-req (ensure-model-setting req default-model))
     (define body (gemini-build-request-body merged-req #:stream? #t))
@@ -427,53 +428,68 @@
     (define uri (string->url url-str))
     (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
     (define body-bytes (jsexpr->bytes body))
-    ;; Wrap initial HTTP request in overall timeout (SEC-11)
-    (define result-vec
-      (call-with-request-timeout (lambda ()
-                                   (define-values (sl rh rp)
-                                     (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-                                   (vector sl rh rp))))
-    (define status-line (vector-ref result-vec 0))
-    (define response-headers (vector-ref result-vec 1))
-    (define response-port (vector-ref result-vec 2))
-    ;; Check HTTP status first
-    (define status-str
-      (if (bytes? status-line)
-          (bytes->string/utf-8 status-line)
-          status-line))
-    (define status-code
-      (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
-        (if parts
-            (string->number (cadr parts))
-            0)))
-    (when (>= status-code 400)
-      (define resp-body (read-response-body/timeout response-port))
-      (gemini-check-http-status! status-line resp-body))
-    ;; Bind per-request counter (Issue #200)
-    (parameterize ([gemini-tool-id-counter-param 0])
-      ;; Incremental SSE parsing — generator yields chunks one at a time
-      (define raw-port response-port)
-      (generator ()
-                 (let loop ([first-read? #t])
-                   (define timeout-secs
-                     (if first-read? http-read-timeout-default http-stream-timeout-default))
-                   (define line (read-line/timeout raw-port #:timeout timeout-secs))
-                   (cond
-                     [(or (eq? line #f) (eof-object? line))
-                      (close-input-port raw-port)
-                      (yield #f)]
-                     [else
-                      (define parsed (parse-sse-line line))
+    (define response-port-box (box #f))
+    (dynamic-wind
+     (lambda () (void))
+     (lambda ()
+       ;; Wrap initial HTTP request in overall timeout (SEC-11)
+       (define result-vec
+         (call-with-request-timeout #:cleanup (lambda ()
+                                                (define rp (unbox response-port-box))
+                                                (when rp
+                                                  (with-handlers ([exn:fail? void])
+                                                    (close-input-port rp))))
+                                    (lambda ()
+                                      (define-values (sl rh rp)
+                                        (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
+                                      (set-box! response-port-box rp)
+                                      (vector sl rh rp))))
+       (define status-line (vector-ref result-vec 0))
+       (define response-headers (vector-ref result-vec 1))
+       (define response-port (vector-ref result-vec 2))
+       ;; Check HTTP status first
+       (define status-str
+         (if (bytes? status-line)
+             (bytes->string/utf-8 status-line)
+             status-line))
+       (define status-code
+         (let ([parts (regexp-match #rx"^HTTP/[^ ]+ ([0-9]+)" status-str)])
+           (if parts
+               (string->number (cadr parts))
+               0)))
+       (when (>= status-code 400)
+         (define resp-body (read-response-body/timeout response-port))
+         (gemini-check-http-status! status-line resp-body))
+       ;; Bind per-request counter (Issue #200)
+       (parameterize ([gemini-tool-id-counter-param 0])
+         ;; Incremental SSE parsing — generator yields chunks one at a time
+         (define raw-port response-port)
+         (generator ()
+                    (let loop ([first-read? #t])
+                      (define timeout-secs
+                        (if first-read? http-read-timeout-default http-stream-timeout-default))
+                      (define line (read-line/timeout raw-port #:timeout timeout-secs))
                       (cond
-                        [(eq? parsed 'done)
+                        [(or (eq? line #f) (eof-object? line))
                          (close-input-port raw-port)
                          (yield #f)]
-                        [(hash? parsed)
-                         (define chunks (gemini-parse-single-event parsed))
-                         (for ([ch (in-list chunks)])
-                           (yield ch))
-                         (loop #f)]
-                        [else (loop #f)])])))))
+                        [else
+                         (define parsed (parse-sse-line line))
+                         (cond
+                           [(eq? parsed 'done)
+                            (close-input-port raw-port)
+                            (yield #f)]
+                           [(hash? parsed)
+                            (define chunks (gemini-parse-single-event parsed))
+                            (for ([ch (in-list chunks)])
+                              (yield ch))
+                            (loop #f)]
+                           [else (loop #f)])])))))
+     (lambda ()
+       (define rp (unbox response-port-box))
+       (when rp
+         (with-handlers ([exn:fail? void])
+           (close-input-port rp))))))
 
   (make-provider (lambda () "gemini")
                  (lambda () (hasheq 'streaming #t 'token-counting #f))

@@ -104,21 +104,21 @@
   ;; corrupted-count is the number of non-empty lines that failed to parse.
   (if (not (file-exists? path))
       (values '() 0)
-      (call-with-input-file path
-                            (lambda (in)
-                              (define-values (valid corrupted)
-                                (for/fold ([acc '()]
-                                           [bad 0])
-                                          ([line (in-lines in)])
-                                  (define trimmed (string-trim line))
-                                  (cond
-                                    [(<= (string-length trimmed) 0) (values acc bad)]
-                                    [(jsonl-line-valid? line)
-                                     (values (append acc (list (read-json (open-input-string line))))
-                                             bad)]
-                                    [else (values acc (add1 bad))])))
-                              (values valid corrupted))
-                            #:mode 'text)))
+      (call-with-input-file
+       path
+       (lambda (in)
+         (define-values (valid corrupted)
+           (for/fold ([acc '()]
+                      [bad 0])
+                     ([line (in-lines in)])
+             (define trimmed (string-trim line))
+             (cond
+               [(<= (string-length trimmed) 0) (values acc bad)]
+               ;; W10.3 (Q-07): cons + reverse instead of append (O(n²) → O(n))
+               [(jsonl-line-valid? line) (values (cons (read-json (open-input-string line)) acc) bad)]
+               [else (values acc (add1 bad))])))
+         (values (reverse valid) corrupted))
+       #:mode 'text)))
 
 (define (jsonl-read-last path [max-lines 1000])
   ;; Read the last `max-lines` valid JSONL lines from file.
