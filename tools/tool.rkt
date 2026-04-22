@@ -54,6 +54,7 @@
          tool-execute
          tool-prompt-snippet
          tool-prompt-guidelines
+         tool-dangerous?
          tool->jsexpr
          merge-tool-lists
          validate-tool-schema
@@ -123,7 +124,14 @@
 ;; ============================================================
 
 (struct tool
-        (name description schema execute prompt-snippet prompt-guidelines render-call render-result)
+        (name description
+              schema
+              execute
+              prompt-snippet
+              prompt-guidelines
+              render-call
+              render-result
+              dangerous?)
   #:transparent)
 
 (define (make-tool name
@@ -133,7 +141,8 @@
                    #:prompt-snippet [prompt-snippet #f]
                    #:render-call [render-call #f]
                    #:render-result [render-result #f]
-                   #:prompt-guidelines [prompt-guidelines #f])
+                   #:prompt-guidelines [prompt-guidelines #f]
+                   #:dangerous? [dangerous? #f])
   (unless (string? name)
     (raise-argument-error 'make-tool "string?" name))
   (unless (string? description)
@@ -142,7 +151,15 @@
     (raise-argument-error 'make-tool "hash?" schema))
   (unless (procedure? execute)
     (raise-argument-error 'make-tool "procedure?" execute))
-  (tool name description schema execute prompt-snippet prompt-guidelines render-call render-result))
+  (tool name
+        description
+        schema
+        execute
+        prompt-snippet
+        prompt-guidelines
+        render-call
+        render-result
+        dangerous?))
 
 ;; ============================================================
 ;; Tool schema validation (#672)
