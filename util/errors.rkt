@@ -10,22 +10,19 @@
 
 (require racket/contract)
 
-(provide
- ;; Error structs and constructors
- (struct-out q-error)
- (struct-out provider-error)
- (struct-out tool-error)
- (struct-out session-error)
- raise-q-error
- raise-provider-error
- raise-tool-error
- raise-session-error)
+;; Error structs and constructors
+(provide (struct-out q-error)
+         (struct-out tool-error)
+         (struct-out session-error)
+         raise-q-error
+         raise-tool-error
+         raise-session-error)
 
 ;; Base error type for all q domain errors
 (struct q-error exn:fail (context) #:transparent)
 
-;; LLM provider errors
-(struct provider-error q-error (provider status-code) #:transparent)
+;; LLM provider errors — REMOVED (duplicate of llm/provider-errors.rkt canonical)
+;; Use (require "../llm/provider-errors.rkt") for provider-error
 
 ;; Tool execution errors
 (struct tool-error q-error (tool-name) #:transparent)
@@ -36,9 +33,6 @@
 ;; Convenience constructors
 (define (raise-q-error message [context (hash)])
   (raise (q-error message (current-continuation-marks) context)))
-
-(define (raise-provider-error message provider [status-code #f] [context (hash)])
-  (raise (provider-error message (current-continuation-marks) context provider status-code)))
 
 (define (raise-tool-error message tool-name [context (hash)])
   (raise (tool-error message (current-continuation-marks) context tool-name)))

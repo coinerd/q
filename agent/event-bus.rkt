@@ -11,7 +11,7 @@
 ;;   - publish! returns the event for chaining
 
 (require racket/contract
-         "types.rkt")
+         "../util/protocol-types.rkt")
 
 ;; Pub/sub event bus
 (provide (contract-out [make-event-bus (-> event-bus?)]
