@@ -29,7 +29,8 @@
          stdout ; string
          stderr ; string
          timed-out? ; boolean
-         elapsed-ms) ; number
+         elapsed-ms ; number
+         truncated?) ; boolean — output was cut at byte budget
   #:transparent)
 
 ;; --------------------------------------------------
@@ -166,8 +167,8 @@
                                 ""
                                 (format "Failed to execute: ~a" (exn-message e))
                                 #f
-                                (inexact->exact (round (- (current-inexact-milliseconds)
-                                                          start-ms)))))])
+                                (inexact->exact (round (- (current-inexact-milliseconds) start-ms))
+                                                #f)))])
 
     (define cmd-path (resolve-command command))
     (unless cmd-path
@@ -186,11 +187,9 @@
         (if (null? args)
             ;; No args: run command directly
             (subprocess #f #f #f cmd-path)
-            ;; With args: use /bin/sh -c to handle them
-            (let ([shell-cmd (format "exec ~a ~a"
-                                     (shell-quote cmd-string)
-                                     (string-join (map shell-quote args) " "))])
-              (subprocess #f #f #f "/bin/sh" "-c" shell-cmd)))))
+            ;; With args: pass as direct arg vector — avoids shell injection
+            ;; (previously used /bin/sh -c which was vulnerable to injection)
+            (apply subprocess #f #f #f cmd-path args))))
 
     ;; Close stdin immediately
     (close-output-port stdin-out)
@@ -229,13 +228,15 @@
          (format "\n[SYS] Command timed out after ~a seconds. Partial output shown above."
                  effective-timeout))
         #t
-        (inexact->exact (round (- end-ms start-ms))))]
+        (inexact->exact (round (- end-ms start-ms)))
+        #f)] ; truncated? — partial read, not byte-budget truncation
 
       ;; Completed
       [else
        (define out-str (read-port-bounded stdout-in max-output))
        (define err-str (read-port-bounded stderr-in max-output))
        (define exit-code (subprocess-status sp))
+       (define out-truncated? (string-contains? out-str "[output truncated at"))
 
        ;; Close ports; may already be closed by custodian shutdown.
        (with-handlers ([exn:fail? (lambda (e)
@@ -251,4 +252,5 @@
                           out-str
                           err-str
                           #f
-                          (inexact->exact (round (- end-ms start-ms))))])))
+                          (inexact->exact (round (- end-ms start-ms)))
+                          out-truncated?)])))
