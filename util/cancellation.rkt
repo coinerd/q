@@ -41,10 +41,11 @@
 
 ;; cancel-token! : cancellation-token? -> cancellation-token?
 ;; Sets the cancelled flag and fires the callback (if any).
-;; Note: calling cancel-token! multiple times fires the callback each time.
-;; This is documented behavior — callers should guard if idempotency is needed.
+;; W10.4 (Q-09): Idempotent — no-op if already cancelled.
 (define (cancel-token! tok)
-  (set-box! (cancellation-token-cancelled-box tok) #t)
-  (define cb (unbox (cancellation-token-callback-box tok)))
-  (when cb (cb tok))
+  (unless (unbox (cancellation-token-cancelled-box tok))
+    (set-box! (cancellation-token-cancelled-box tok) #t)
+    (define cb (unbox (cancellation-token-callback-box tok)))
+    (when cb
+      (cb tok)))
   tok)

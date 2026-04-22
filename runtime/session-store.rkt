@@ -209,18 +209,12 @@
   ;; Returns empty list if file does not exist.
   ;; Logs a warning to stderr if any corrupted lines were skipped.
   (define-values (raw corrupted-count) (jsonl-read-all-valid-with-count path))
-  (when (and (> corrupted-count 0) session-id)
-    (fprintf
-     (current-error-port)
-     "WARNING: Skipped ~a corrupted lines in session ~a. Run 'q sessions repair <id>' to fix.\n"
-     corrupted-count
-     session-id))
+  ;; W10.2 (Q-06): Fixed double warning - single message with session-id or path
   (when (> corrupted-count 0)
-    (fprintf
-     (current-error-port)
-     "WARNING: Skipped ~a corrupted lines in session log ~a. Run 'q sessions repair' to fix.\n"
-     corrupted-count
-     path))
+    (fprintf (current-error-port)
+             "WARNING: Skipped ~a corrupted lines in ~a. Run 'q sessions repair' to fix.\n"
+             corrupted-count
+             (or session-id path)))
   (map jsexpr->message raw))
 
 ;; path-string? -> (listof message?)
