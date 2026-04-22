@@ -853,6 +853,8 @@
                  ;; - Level 1 (5+): gentle nudge to use write/edit tools
                  ;; - Level 2 (7+): strong nudge with explicit instruction
                  ;; - Level 3 (12+): hard cap — inject message and break the loop
+                 ;; W8a.1 (Q-01): Replaced 3x set! with let-over-cond binding
+                 ;; Escalation levels: 5 (gentle) → 7 (strong) → 12 (hard cap)
                  (define has-file-write?
                    (for/or ([tc (in-list (extract-tool-calls-from-messages new-msgs))])
                      (member (tool-call-name tc) '("write" "edit" "replace" "create"))))
@@ -860,77 +862,73 @@
                    (if has-file-write?
                        0
                        (add1 consecutive-tool-count)))
-                 (define exec-context updated-ctx)
-                 (cond
-                   ;; Level 3: Hard cap at 12 — force-stop the exploration
-                   [(>= effective-tool-count 12)
-                    (set!
-                     exec-context
-                     (append
-                      exec-context
-                      (list
-                       (make-message
-                        (generate-id)
-                        #f
-                        'user
-                        'message
-                        (list (make-text-part
-                               (format
-                                (string-append
-                                 "[steering:hard] You've made ~a consecutive read-only tool calls. "
-                                 "This is beyond the exploration budget. "
-                                 "You MUST now use the write or edit tool to produce output, "
-                                 "or explain what you cannot do.")
-                                effective-tool-count)))
-                        (now-seconds)
-                        (hasheq)))))
-                    (emit-session-event!
-                     bus
-                     session-id
-                     "exploration.hard-cap"
-                     (hasheq 'consecutive-tools effective-tool-count 'iteration (add1 iteration)))]
-                   ;; Level 2: Strong nudge at 7+
-                   [(>= effective-tool-count 7)
-                    (set!
-                     exec-context
-                     (append
-                      exec-context
-                      (list
-                       (make-message
-                        (generate-id)
-                        #f
-                        'user
-                        'message
-                        (list (make-text-part
-                               (format
-                                (string-append
-                                 "[steering:strong] ~a consecutive read-only tool calls detected. "
-                                 "Stop exploring. You MUST produce the actual output now "
-                                 "using the write or edit tool. "
-                                 "Do NOT run any more read-only commands.")
-                                effective-tool-count)))
-                        (now-seconds)
-                        (hasheq)))))]
-                   ;; Level 1: Gentle nudge at 5+
-                   [(>= effective-tool-count 5)
-                    (set!
-                     exec-context
-                     (append
-                      exec-context
-                      (list
-                       (make-message
-                        (generate-id)
-                        #f
-                        'user
-                        'message
-                        (list (make-text-part
-                               (format (string-append
-                                        "[steering] You've made ~a consecutive read-only tool calls. "
-                                        "You MUST now use the write or edit tool to produce output. "
-                                        "Do not explain what you will do — just do it.")
-                                       effective-tool-count)))
-                        (now-seconds)
-                        (hasheq)))))])
+                 (define exec-context
+                   (let ([base-ctx updated-ctx]
+                         [steering-msg
+                          (cond
+                            ;; Level 3: Hard cap at 12 — force-stop the exploration
+                            [(>= effective-tool-count 12)
+                             (emit-session-event! bus
+                                                  session-id
+                                                  "exploration.hard-cap"
+                                                  (hasheq 'consecutive-tools
+                                                          effective-tool-count
+                                                          'iteration
+                                                          (add1 iteration)))
+                             (make-message
+                              (generate-id)
+                              #f
+                              'user
+                              'message
+                              (list
+                               (make-text-part
+                                (format
+                                 (string-append
+                                  "[steering:hard] You've made ~a consecutive read-only tool calls. "
+                                  "This is beyond the exploration budget. "
+                                  "You MUST now use the write or edit tool to produce output, "
+                                  "or explain what you cannot do.")
+                                 effective-tool-count)))
+                              (now-seconds)
+                              (hasheq))]
+                            ;; Level 2: Strong nudge at 7+
+                            [(>= effective-tool-count 7)
+                             (make-message
+                              (generate-id)
+                              #f
+                              'user
+                              'message
+                              (list
+                               (make-text-part
+                                (format
+                                 (string-append
+                                  "[steering:strong] ~a consecutive read-only tool calls detected. "
+                                  "Stop exploring. You MUST produce the actual output now "
+                                  "using the write or edit tool. "
+                                  "Do NOT run any more read-only commands.")
+                                 effective-tool-count)))
+                              (now-seconds)
+                              (hasheq))]
+                            ;; Level 1: Gentle nudge at 5+
+                            [(>= effective-tool-count 5)
+                             (make-message
+                              (generate-id)
+                              #f
+                              'user
+                              'message
+                              (list (make-text-part
+                                     (format
+                                      (string-append
+                                       "[steering] You've made ~a consecutive read-only tool calls. "
+                                       "You MUST now use the write or edit tool to produce output. "
+                                       "Do not explain what you will do — just do it.")
+                                      effective-tool-count)))
+                              (now-seconds)
+                              (hasheq))]
+                            [else #f])])
+                     (if steering-msg
+                         (append base-ctx (list steering-msg))
+                         base-ctx)))
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! exec-context bus session-id config)
                  (loop exec-context (add1 iteration) effective-tool-count intent-retry-count)]
