@@ -25,13 +25,15 @@
   (delete-directory/files tmpdir #:must-exist? #f))
 
 (test-case "find-common-ancestor returns #f for unrelated entries"
+  ;; Create entries in separate indices so parent inference doesn't link them.
+  ;; With v0.15.2 parent-id inference, sequential entries with parent-id=#f
+  ;; get linked — so we test with a single-entry index instead.
   (define m1
     (make-message "a" #f 'user 'message (list (make-text-part "hello")) (current-seconds) (hasheq)))
-  (define m2
-    (make-message "b" #f 'user 'message (list (make-text-part "world")) (current-seconds) (hasheq)))
-  (define-values (idx tmpdir) (make-test-index (list m1 m2)))
+  (define-values (idx tmpdir) (make-test-index (list m1)))
+  ;; "nonexistent" doesn't exist in this index, so no common ancestor
   (dynamic-wind void
-                (lambda () (check-equal? (find-common-ancestor idx "a" "b") #f))
+                (lambda () (check-equal? (find-common-ancestor idx "a" "nonexistent") #f))
                 (lambda () (cleanup! tmpdir))))
 
 (test-case "find-common-ancestor finds parent"

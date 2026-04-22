@@ -29,13 +29,17 @@
   (when (directory-exists? dir)
     (delete-directory/files dir #:must-exist? #f)))
 
-(define (session-path dir) (build-path dir "session.jsonl"))
-(define (index-path dir) (build-path dir "index.jsonl"))
+(define (session-path dir)
+  (build-path dir "session.jsonl"))
+(define (index-path dir)
+  (build-path dir "index.jsonl"))
 
 ;; Helper: make a simple message
 (define (make-test-msg role text [kind 'assistant])
   (make-message (format "msg-~a" (current-inexact-milliseconds))
-                #f role kind
+                #f
+                role
+                kind
                 (list (make-text-part text))
                 (current-seconds)
                 (hasheq)))
@@ -69,8 +73,7 @@
   (check-equal? (compaction-result->message-list result) '()))
 
 (test-case "edge-compact: build-summary-window with empty"
-  (define-values (old recent)
-    (build-summary-window '() (default-strategy)))
+  (define-values (old recent) (build-summary-window '() (default-strategy)))
   (check-equal? old '())
   (check-equal? recent '()))
 
@@ -89,7 +92,9 @@
   (define msgs (list (make-test-msg 'assistant "response")))
   (define result (compact-history msgs))
   (check-equal? (length (compaction-result-kept-messages result)) 1)
-  (check-equal? (text-part-text (car (message-content (car (compaction-result-kept-messages result))))) "response"))
+  (check-equal?
+   (text-part-text (car (message-content (car (compaction-result-kept-messages result)))))
+   "response"))
 
 (test-case "edge-compact: compact-and-persist! with single message"
   (define dir (make-temp-dir))
@@ -104,9 +109,9 @@
 (test-case "edge-compact: build-tiered-context with single message"
   (define msgs (list (make-test-msg 'user "hello")))
   (define tc (build-tiered-context msgs))
-  (check-equal? (tiered-context-tier-a tc) '())
-  ;; Single message goes to tier-c (most recent)
-  (check-equal? (length (tiered-context-tier-c tc)) 1))
+  ;; Single user message: pinned to Tier A (v0.15.2 API compliance)
+  (check-equal? (length (tiered-context-tier-a tc)) 1)
+  (check-equal? (length (tiered-context-tier-c tc)) 0))
 
 (test-case "edge-compact: build-tiered-context single message is in context list"
   (define msgs (list (make-test-msg 'user "hello")))
@@ -153,19 +158,21 @@
   ;; Settings entries (kind = 'settings) are not in the explicit filter
   ;; list (session-info, model-change, thinking-level-change), so they
   ;; pass through via the else clause. This is the documented behavior.
-  (define msg (make-message "s1" #f 'system 'settings
-                            (list (make-text-part "{}"))
-                            (current-seconds)
-                            (hasheq)))
+  (define msg
+    (make-message "s1" #f 'system 'settings (list (make-text-part "{}")) (current-seconds) (hasheq)))
   (define result (entry->context-message msg))
   (check-true (message? result) "settings entries pass through (not filtered)"))
 
 (test-case "edge-context: entry->context-message passes label entries"
   ;; Label entries pass through via the else clause
-  (define msg (make-message "l1" #f 'system 'label
-                            (list (make-text-part "my label"))
-                            (current-seconds)
-                            (hasheq)))
+  (define msg
+    (make-message "l1"
+                  #f
+                  'system
+                  'label
+                  (list (make-text-part "my label"))
+                  (current-seconds)
+                  (hasheq)))
   (define result (entry->context-message msg))
   (check-true (message? result) "label entries pass through (not filtered)"))
 
@@ -185,15 +192,17 @@
 
 (test-case "edge-compact: exactly keep-recent-count messages (no compaction)"
   ;; Default strategy keeps 20 recent. 20 messages should not compact.
-  (define msgs (for/list ([i (in-range 20)])
-                 (make-test-msg 'assistant (format "msg-~a" i))))
+  (define msgs
+    (for/list ([i (in-range 20)])
+      (make-test-msg 'assistant (format "msg-~a" i))))
   (define result (compact-history msgs))
   (check-equal? (compaction-result-removed-count result) 0)
   (check-equal? (length (compaction-result-kept-messages result)) 20))
 
 (test-case "edge-compact: keep-recent-count + 1 messages (one compacted)"
-  (define msgs (for/list ([i (in-range 21)])
-                 (make-test-msg 'assistant (format "msg-~a" i))))
+  (define msgs
+    (for/list ([i (in-range 21)])
+      (make-test-msg 'assistant (format "msg-~a" i))))
   ;; Use a tiny token config so 21 messages exceed the budget
   (define tiny-config (token-compaction-config 5 0 10))
   (define result (compact-history msgs #:token-config tiny-config))
@@ -204,10 +213,14 @@
 
 (test-case "edge-compact: tiered-context with only compaction summaries"
   ;; Only compaction summaries, no regular messages
-  (define summaries (list (make-message "cs1" #f 'system 'compaction-summary
-                                         (list (make-text-part "summary"))
-                                         (current-seconds)
-                                         (hasheq))))
+  (define summaries
+    (list (make-message "cs1"
+                        #f
+                        'system
+                        'compaction-summary
+                        (list (make-text-part "summary"))
+                        (current-seconds)
+                        (hasheq))))
   (define tc (build-tiered-context summaries))
   ;; Tier A should have the compaction summaries
   (check-equal? (length (tiered-context-tier-a tc)) 1)
@@ -216,10 +229,14 @@
   (check-equal? (tiered-context-tier-c tc) '()))
 
 (test-case "edge-compact: tiered-context->message-list includes all tiers"
-  (define summaries (list (make-message "cs1" #f 'system 'compaction-summary
-                                         (list (make-text-part "summary"))
-                                         (current-seconds)
-                                         (hasheq))))
+  (define summaries
+    (list (make-message "cs1"
+                        #f
+                        'system
+                        'compaction-summary
+                        (list (make-text-part "summary"))
+                        (current-seconds)
+                        (hasheq))))
   (define regular (list (make-test-msg 'assistant "response")))
   (define msgs (append summaries regular))
   (define tc (build-tiered-context msgs))
@@ -232,8 +249,7 @@
 ;; ============================================================
 
 (test-case "edge-compact: hook blocks compaction on empty"
-  (define blocker (lambda (hook payload)
-                    (hook-result 'block (hasheq))))
+  (define blocker (lambda (hook payload) (hook-result 'block (hasheq))))
   (define result (compact-history '() #:hook-dispatcher blocker))
   ;; Empty messages → identity result regardless of hook
   (check-equal? (compaction-result-removed-count result) 0))
@@ -242,10 +258,10 @@
   ;; FIX #636: The hook-dispatcher 'session-before-compact' now properly
   ;; blocks compaction. The `cond` form returns the identity result when
   ;; the hook returns 'block.
-  (define msgs (for/list ([i (in-range 30)])
-                 (make-test-msg 'assistant (format "msg-~a" i))))
-  (define blocker (lambda (hook payload)
-                    (hook-result 'block (hasheq))))
+  (define msgs
+    (for/list ([i (in-range 30)])
+      (make-test-msg 'assistant (format "msg-~a" i))))
+  (define blocker (lambda (hook payload) (hook-result 'block (hasheq))))
   (define result (compact-history msgs #:hook-dispatcher blocker))
   ;; Hook blocks — no messages compacted, identity result returned
   (check-equal? (compaction-result-removed-count result) 0)
@@ -253,29 +269,34 @@
   (check-false (compaction-result-summary-message result)))
 
 (test-case "edge-compact: hook allows compaction"
-  (define msgs (for/list ([i (in-range 30)])
-                 (make-test-msg 'assistant (format "msg-~a" i))))
+  (define msgs
+    (for/list ([i (in-range 30)])
+      (make-test-msg 'assistant (format "msg-~a" i))))
   (define tiny-config (token-compaction-config 5 0 10))
-  (define allow (lambda (hook payload)
-                  (hook-result 'pass (hasheq))))
+  (define allow (lambda (hook payload) (hook-result 'pass (hasheq))))
   (define result (compact-history msgs #:hook-dispatcher allow #:token-config tiny-config))
   ;; Hook passed — normal compaction
   (check > (compaction-result-removed-count result) 0))
 
 (test-case "compact-history sets firstKeptEntryId in summary metadata"
-  (define msgs (for/list ([i (in-range 20)])
-                 (make-message (format "id-~a" i) #f 'user 'message
-                               (list (make-text-part (format "msg ~a" i)))
-                               (current-seconds) (hash))))
+  (define msgs
+    (for/list ([i (in-range 20)])
+      (make-message (format "id-~a" i)
+                    #f
+                    'user
+                    'message
+                    (list (make-text-part (format "msg ~a" i)))
+                    (current-seconds)
+                    (hash))))
   (define tiny-config (token-compaction-config 5 0 10))
   (define result (compact-history msgs #:token-config tiny-config))
   (define summary (compaction-result-summary-message result))
   (when summary
     (define meta (message-meta summary))
-    (check-true (hash-has-key? meta 'firstKeptEntryId)
-                "summary should contain firstKeptEntryId")
+    (check-true (hash-has-key? meta 'firstKeptEntryId) "summary should contain firstKeptEntryId")
     (define first-kept (hash-ref meta 'firstKeptEntryId #f))
     (define kept (compaction-result-kept-messages result))
     (when (pair? kept)
-      (check-equal? first-kept (message-id (car kept))
+      (check-equal? first-kept
+                    (message-id (car kept))
                     "firstKeptEntryId should match first kept message id"))))
