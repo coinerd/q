@@ -199,8 +199,7 @@
   (define pre-hook-result
     (if hook-dispatcher
         (with-handlers ([exn:fail? (lambda (e)
-                                     (log-warning (format "tool-call-pre hook threw: ~a"
-                                                          (exn-message e)))
+                                     (log-warning "tool-call-pre hook threw: ~a" (exn-message e))
                                      #f)])
           (hook-dispatcher 'tool-call-pre pre-payload))
         #f))
@@ -240,8 +239,8 @@
      (define post-hook-result
        (if hook-dispatcher
            (with-handlers ([exn:fail? (lambda (e)
-                                        (log-warning (format "tool-result-post hook threw: ~a"
-                                                             (exn-message e)))
+                                        (log-warning "tool-result-post hook threw: ~a"
+                                                     (exn-message e))
                                         #f)])
              (hook-dispatcher 'tool-result-post post-payload))
            #f))

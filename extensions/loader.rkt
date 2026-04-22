@@ -101,10 +101,10 @@
           (try-load-extension path)))
     (cond
       [(extension-load-error? result)
-       (log-warning (format "extension load failed [~a]: ~a \u2014 ~a"
-                            (extension-load-error-category result)
-                            path
-                            (extension-load-error-message result)))
+       (log-warning "extension load failed [~a]: ~a \u2014 ~a"
+                    (extension-load-error-category result)
+                    path
+                    (extension-load-error-message result))
        (when event-bus
          (publish! event-bus
                    (make-event "extension.load.failed"
@@ -186,10 +186,10 @@
             (define min-v (hash-ref compat-hash 'min-q-version #f))
             (define max-v (hash-ref compat-hash 'max-q-version #f))
             (when (and min-v (version<? q-version min-v))
-              (log-warning (format "extension '~a' requires q >= ~a, current version is ~a"
-                                   ext-name
-                                   min-v
-                                   q-version)))
+              (log-warning "extension '~a' requires q >= ~a, current version is ~a"
+                           ext-name
+                           min-v
+                           q-version))
             (when (and max-v (string? max-v) (version<=? max-v q-version))
               (log-warning
                (format

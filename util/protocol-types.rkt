@@ -378,10 +378,10 @@
 (define (jsexpr->event h)
   (define ver (hash-ref h 'version 1))
   (when (> ver CURRENT-EVENT-VERSION)
-    (log-warning (format "jsexpr->event: event version ~a exceeds current ~a (event: ~a)"
-                         ver
-                         CURRENT-EVENT-VERSION
-                         (hash-ref h 'event "<unknown>"))))
+    (log-warning "jsexpr->event: event version ~a exceeds current ~a (event: ~a)"
+                 ver
+                 CURRENT-EVENT-VERSION
+                 (hash-ref h 'event "<unknown>")))
   (event ver
          (hash-ref h 'event)
          (hash-ref h 'time)

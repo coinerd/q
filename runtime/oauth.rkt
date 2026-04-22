@@ -166,8 +166,7 @@
 ;; Save all OAuth tokens to the token file.
 (define (save-oauth-token-file! tokens [path (oauth-token-file-path)])
   (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning (format "save-oauth-token-file! failed: ~a"
-                                                    (exn-message e))))])
+                               (log-warning "save-oauth-token-file! failed: ~a" (exn-message e)))])
     (define dir (path-only path))
     (when (and dir (not (directory-exists? dir)))
       (make-directory* dir))
