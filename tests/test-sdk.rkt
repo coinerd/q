@@ -758,8 +758,8 @@
   (cancel-token! tok)
   (check-pred cancellation-token-cancelled? tok)
   (check-equal? (unbox call-count)
-                2
-                "callback fires again on second cancel — not idempotent, documented behavior"))
+                1
+                "callback fires only once — cancel-token! is now idempotent (W10.4)"))
 
 (test-case "interrupt! on runtime with no active session cancels token, no crash"
   (define tmp (make-temp-session-dir))
