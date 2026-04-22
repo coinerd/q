@@ -10,6 +10,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
+         (only-in "../runtime/model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
          racket/generator
          racket/port
@@ -36,7 +37,7 @@
   (define settings (model-request-settings req))
   (define base
     (hasheq 'model
-            (hash-ref settings 'model "gpt-4")
+            (hash-ref settings 'model OPENAI-DEFAULT-MODEL)
             'messages
             (model-request-messages req)
             'stream
@@ -225,7 +226,7 @@
   (validate-api-key! "OpenAI" "OPENAI_API_KEY" config)
   (define base-url (hash-ref config 'base-url "https://api.openai.com/v1"))
   (define api-key (hash-ref config 'api-key ""))
-  (define default-model (hash-ref config 'model "gpt-4"))
+  (define default-model (hash-ref config 'model OPENAI-DEFAULT-MODEL))
 
   (define default-max-tokens (hash-ref config 'max-tokens #f))
 

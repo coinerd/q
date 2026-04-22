@@ -35,7 +35,7 @@
   ;; Store the table where the response handler can find it.
   ;; We attach it as a property on the thread for testability,
   ;; but the response handler receives the same table reference.
-  (hash-set! (get-global-bridge-table) ui-ch pending-requests)
+  (hash-set! (current-bridge-table) ui-ch pending-requests)
   (void (thread (lambda ()
                   (let loop ()
                     (define req (channel-get ui-ch))
@@ -67,10 +67,8 @@
 ;; table for a given UI channel.
 ;; ============================================================
 
-(define global-bridge-table (make-hash))
-
-(define (get-global-bridge-table)
-  global-bridge-table)
+;; Q-21: parameterised bridge table for testability and isolation
+(define current-bridge-table (make-parameter (make-hash)))
 
 ;; ============================================================
 ;; make-rpc-ui-response-handler : channel? -> (hash? -> hash?)
@@ -91,7 +89,7 @@
     (cond
       [(not request-id) (hasheq 'status "error" 'message "requestId required")]
       [else
-       (define pending-table (hash-ref global-bridge-table ui-ch #f))
+       (define pending-table (hash-ref (current-bridge-table) ui-ch #f))
        (define resp-ch (and pending-table (hash-ref pending-table request-id #f)))
        (cond
          [(not resp-ch) (hasheq 'status "error" 'message (format "unknown requestId: ~a" request-id))]

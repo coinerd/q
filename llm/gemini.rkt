@@ -12,6 +12,7 @@
 
 (require racket/contract
          racket/string
+         (only-in "../runtime/model-defaults.rkt" GEMINI-DEFAULT-MODEL GEMINI-DEFAULT-BASE-URL)
          racket/port
          racket/format
          racket/generator
@@ -41,7 +42,7 @@
 ;; Constants
 ;; ============================================================
 
-(define GEMINI-DEFAULT-MODEL "gemini-2.5-pro")
+;; model defaults now in runtime/model-defaults.rkt
 (define GEMINI-DEFAULT-MAX-TOKENS 4096)
 
 ;; Per-request tool call ID counter (Issue #200)
@@ -58,7 +59,6 @@
 ;; Reset the parameter for a fresh request.
 (define (gemini-reset-tool-id-counter!)
   (gemini-tool-id-counter-param 0))
-(define GEMINI-DEFAULT-BASE-URL "https://generativelanguage.googleapis.com")
 
 ;; ============================================================
 ;; Request body construction

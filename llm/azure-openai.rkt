@@ -13,6 +13,7 @@
 ;; #1195: Additional LLM Provider Adapters
 
 (require racket/contract
+         (only-in "../runtime/model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
          racket/generator
          racket/port
@@ -90,7 +91,7 @@
 
 (define (make-azure-openai-provider config)
   (define api-key (hash-ref config 'api-key ""))
-  (define model-name (hash-ref config 'model "gpt-4"))
+  (define model-name (hash-ref config 'model OPENAI-DEFAULT-MODEL))
   (define base-url (hash-ref config 'base-url ""))
   (define api-version (hash-ref config 'api-version "2024-02-15-preview"))
   (when (string=? api-key "")
