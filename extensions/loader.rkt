@@ -24,7 +24,8 @@
          "../util/version.rkt"
          "api.rkt"
          "manifest.rkt"
-         "quarantine.rkt")
+         "quarantine.rkt"
+         "tiers.rkt")
 
 ;; Extension loading errors
 (provide extension-load-error
@@ -136,7 +137,14 @@
                                        (extension-load-error-message result)
                                        'category
                                        (extension-load-error-category result)))))]
-      [(and result (extension? result)) (register-extension! registry result)]))
+      [(and result (extension? result))
+       ;; Tier validation: default to 'hooks (lowest) if no manifest tier declared
+       (define declared-tier 'hooks)
+       (define tier-result (extension-tier-valid? result declared-tier))
+       (when (list? tier-result)
+         (for ([msg (in-list tier-result)])
+           (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
+       (register-extension! registry result)]))
   (void))
 
 ;; Cache infrastructure removed (#448): was never called in production

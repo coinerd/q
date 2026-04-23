@@ -152,7 +152,7 @@
 ;; Query the registry for currently loaded extensions.
 (define (list-active-extensions registry)
   (for/list ([ext (in-list (list-extensions registry))])
-    (ext-info (extension-name ext) 'active (extension-version ext) "")))
+    (ext-info (extension-name ext) #f (extension-version ext) "")))
 
 ;; ============================================================
 ;; Activate / deactivate extensions
