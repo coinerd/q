@@ -220,6 +220,7 @@
 ;; Execute command handler: responds to /plan, /state, /handoff dispatch
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
+  (define input-text (hash-ref payload 'input ""))
   (define base-dir (current-directory))
   (with-output-to-file "/tmp/q-cmd-dispatch.log"
                        (lambda ()
@@ -237,20 +238,37 @@
   (cond
     [(not artifact) (hook-pass payload)]
     [else
-     (define content (read-planning-artifact base-dir artifact))
-     (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                          (lambda ()
-                            (printf "[~a] handle-execute-command: artifact=~a content=~a\n"
-                                    (current-inexact-milliseconds)
-                                    artifact
-                                    (and content #t)))
-                          #:exists 'append)
-     (define text
-       (cond
-         [(not content) (format "No ~a found in .planning/" artifact)]
-         [(hash? content) (jsexpr->string content)]
-         [else content]))
-     (hook-amend (hasheq 'text text))]))
+     ;; Extract arguments after the command
+     (define cmd-prefix
+       (let ([trimmed (string-trim input-text)])
+         (if (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
+             (let ([parts (string-split trimmed)])
+               (if (pair? parts)
+                   (car parts)
+                   cmd))
+             cmd)))
+     (define args
+       (let ([rest (string-trim (substring input-text (string-length cmd-prefix)))])
+         (if (string=? rest "") #f rest)))
+     (cond
+       ;; /plan <text> → submit as prompt to the agent
+       [args (hook-amend (hasheq 'submit args 'text (format "Planning: ~a" args)))]
+       [else
+        ;; /plan (no args) → display current plan
+        (define content (read-planning-artifact base-dir artifact))
+        (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                             (lambda ()
+                               (printf "[~a] handle-execute-command: artifact=~a content=~a\n"
+                                       (current-inexact-milliseconds)
+                                       artifact
+                                       (and content #t)))
+                             #:exists 'append)
+        (define text
+          (cond
+            [(not content) (format "No ~a found in .planning/" artifact)]
+            [(hash? content) (jsexpr->string content)]
+            [else content]))
+        (hook-amend (hasheq 'text text))])]))
 
 (define-q-extension gsd-planning-extension
                     #:version "1.0.0"

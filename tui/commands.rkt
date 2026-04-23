@@ -823,13 +823,25 @@
                              #:exists 'append)
         (cond
           [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
-           ;; Extension handled the command — display result text
+           ;; Extension handled the command
            (define payload (hook-result-payload ext-result))
-           (define text (hash-ref payload 'text #f))
-           (when text
-             (define entry (make-entry 'system text (current-inexact-milliseconds) (hash)))
-             (set-box! (cmd-ctx-state-box cctx)
-                       (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
+           (define submit-text (hash-ref payload 'submit #f))
+           (define display-text (hash-ref payload 'text #f))
+           (cond
+             [submit-text
+              ;; Extension wants to submit text as a prompt to the agent
+              (when display-text
+                (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+                (set-box! (cmd-ctx-state-box cctx)
+                          (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
+              (define runner (cmd-ctx-session-runner cctx))
+              (when runner
+                (thread (lambda () (runner submit-text))))]
+             [display-text
+              ;; Extension provided display text
+              (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+              (set-box! (cmd-ctx-state-box cctx)
+                        (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))])
            'continue]
           [else
            (with-output-to-file "/tmp/q-cmd-dispatch.log"
