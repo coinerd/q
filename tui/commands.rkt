@@ -423,15 +423,9 @@
 ;;   /activate --global <name> — activate in ~/.q/extensions/
 (define (handle-activate-command cctx)
   (define state (unbox (cmd-ctx-state-box cctx)))
-  (define session-dir (cmd-ctx-session-dir cctx))
-  (define project-dir (and session-dir (path-only session-dir)))
+  (define project-dir (current-directory))
   (define entries
     (cond
-      [(not project-dir)
-       (list (make-entry 'error
-                         "/activate: no project directory available (start a session first)"
-                         (current-inexact-milliseconds)
-                         (hash)))]
       [else
        ;; Parse args from raw input text (after /activate)
        (define input (unbox (cmd-ctx-input-text-box cctx)))
@@ -519,15 +513,9 @@
 
 (define (handle-deactivate-command cctx)
   (define state (unbox (cmd-ctx-state-box cctx)))
-  (define session-dir (cmd-ctx-session-dir cctx))
-  (define project-dir (and session-dir (path-only session-dir)))
+  (define project-dir (current-directory))
   (define entries
     (cond
-      [(not project-dir)
-       (list (make-entry 'error
-                         "/deactivate: no project directory available (start a session first)"
-                         (current-inexact-milliseconds)
-                         (hash)))]
       [else
        ;; Parse args from raw input text (after /deactivate)
        (define input (unbox (cmd-ctx-input-text-box cctx)))
