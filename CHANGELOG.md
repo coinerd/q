@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.17.8 — 2026-04-23
+
+### Extension Commands & Activation Fix
+
+Milestone #91 — Fix extension activation path, command dispatch plumbing,
+and gsd-planning execute-command handler for end-to-end `/activate` → command workflow.
+
+**Wave 1 — Fix project-dir in /activate and /deactivate (#1588)**
+- `handle-activate-command`: Changed project-dir source from `(path-only session-dir)`
+  to `(current-directory)` — q always starts with cwd set to project root.
+- `handle-deactivate-command`: Same fix.
+- Removed dead `session-dir` bindings and `not project-dir` branches.
+- Tests updated with `(parameterize ([current-directory tmp-dir]) ...)`."
+
+**Wave 2 — Extension command dispatch plumbing (#1589)**
+- Added `extension-registry-box` field to `cmd-ctx` (10th) and `tui-ctx` (14th).
+- Wired extension-registry from `run-modes.rkt` through `tui-init.rkt` to `tui-ctx`.
+- In `process-slash-command`, unknown commands dispatch via `'execute-command`
+  extension hook before falling back to "Unknown command" error.
+- Updated all test `cmd-ctx` constructors for new field arity.
+
+**Wave 3 — gsd-planning execute-command handler + hot-load (#1590)**
+- Added `'execute-command` hook point to `hook-action-schemas` in `util/hook-types.rkt`.
+- `gsd-planning.rkt`: Added `handle-execute-command` handler for `/plan`, `/state`,
+  `/handoff` — reads artifact content and returns via `hook-amend`.
+- `commands.rkt`: Added `try-hot-load-extension` — after `/activate`, loads the
+  newly activated extension into the running session registry.
+- 4 new tests for execute-command handler.
+
 ## v0.17.7 — 2026-04-23
 
 ### Review Remediation
