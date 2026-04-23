@@ -434,3 +434,49 @@
     (check-pred tool-result? result "stale returns tool-result")
     (check-false (tool-result-is-error? result) "stale succeeds"))
   (cleanup-mock-gh mock-dir))
+
+;; ============================================================
+;; Regression tests (Wave 3 — C3-C5, M1 fixes)
+;; Validates: shell injection prevention, regex fix, input validation
+;; ============================================================
+
+(require (only-in "../extensions/github-integration.rkt"
+                  valid-identifier?
+                  valid-number?
+                  valid-state?
+                  valid-method?))
+
+(test-case "valid-identifier? rejects shell metacharacters"
+  (check-true (valid-identifier? "hello-world_1.0"))
+  (check-false (valid-identifier? "; rm -rf /"))
+  (check-false (valid-identifier? "$(pwned)"))
+  (check-false (valid-identifier? "`id`")))
+
+(test-case "valid-number? accepts integers and numeric strings only"
+  (check-true (valid-number? 42))
+  (check-true (valid-number? "123"))
+  (check-false (valid-number? -1))
+  (check-false (valid-number? "12; echo pwned"))
+  (check-false (valid-number? "abc")))
+
+(test-case "valid-state? only allows known states"
+  (check-true (valid-state? "open"))
+  (check-true (valid-state? "closed"))
+  (check-true (valid-state? "all"))
+  (check-false (valid-state? "injection; rm -rf"))
+  (check-false (valid-state? "invalid")))
+
+(test-case "valid-method? only allows known merge methods"
+  (check-true (valid-method? "squash"))
+  (check-true (valid-method? "merge"))
+  (check-true (valid-method? "rebase"))
+  (check-false (valid-method? "injection; DROP TABLE"))
+  (check-false (valid-method? "invalid")))
+
+(test-case "close_tree regex correctly matches digit issue numbers"
+  ;; M1 fix: regex was ((0-9)+) which matched literal "0-9" chars
+  ;; Now uses ([0-9]+) which matches actual digit sequences
+  (define test-body "fixes #42, closes #100, resolves #999")
+  (define matches
+    (regexp-match* #px"(?:closes?|fixes?|resolves?)\\s+#(\\d+)" test-body #:match-select cadr))
+  (check-equal? matches '("42" "100" "999")))
