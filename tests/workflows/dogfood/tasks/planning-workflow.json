@@ -1,0 +1,10 @@
+{
+  "name": "planning-workflow",
+  "description": "Test GSD planning workflow through agent tools",
+  "prompt": "Create a plan for implementing a simple TODO application with PLAN.md and STATE.md artifacts.",
+  "expected_tools": ["planning-write"],
+  "expected_outcome": "PLAN.md and STATE.md created with valid content",
+  "max_iterations": 8,
+  "setup": {},
+  "teardown": []
+}

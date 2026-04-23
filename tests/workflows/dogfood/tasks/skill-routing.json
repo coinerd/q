@@ -1,0 +1,10 @@
+{
+  "name": "skill-routing",
+  "description": "Test skill discovery and routing through agent tools",
+  "prompt": "List all available skills and find the one most relevant to reviewing code.",
+  "expected_tools": ["skill-route"],
+  "expected_outcome": "Skills listed and reviewer skill identified",
+  "max_iterations": 5,
+  "setup": {},
+  "teardown": []
+}
