@@ -181,7 +181,6 @@
 ;; This avoids a circular dependency (commands.rkt cannot import
 ;; interfaces/tui.rkt where tui-ctx is defined).
 (define (tui-ctx->cmd-ctx ctx)
-  (define input-text (input-state-buffer (unbox (tui-ctx-input-state-box ctx))))
   (commands:cmd-ctx (tui-ctx-ui-state-box ctx)
                     (tui-ctx-running-box ctx)
                     (tui-ctx-event-bus ctx)
@@ -190,13 +189,15 @@
                     (tui-ctx-model-registry-box ctx)
                     (tui-ctx-last-prompt-box ctx)
                     (tui-ctx-session-runner ctx)
-                    (box input-text)))
+                    (box "")))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)
 ;; Public API — delegates to commands:process-slash-command.
-(define (process-slash-command ctx cmd)
-  (commands:process-slash-command (tui-ctx->cmd-ctx ctx) cmd))
+(define (process-slash-command ctx cmd [raw-text ""])
+  (define cctx (tui-ctx->cmd-ctx ctx))
+  (set-box! (commands:cmd-ctx-input-text-box cctx) raw-text)
+  (commands:process-slash-command cctx cmd))
 
 ;; ============================================================
 ;; Key handling
@@ -346,7 +347,7 @@
           [(not text) 'continue]
           [(input-slash-command text)
            (define cmd (parse-tui-slash-command text))
-           (list 'command (or cmd 'unknown))]
+           (list 'command (or cmd 'unknown) text)]
           [else
            ;; Add user message to transcript
            (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
@@ -377,7 +378,7 @@
           [(not text) 'continue]
           [(input-slash-command text)
            (define cmd (parse-tui-slash-command text))
-           (list 'command (or cmd 'unknown))]
+           (list 'command (or cmd 'unknown) text)]
           [else
            ;; Add user message to transcript
            (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))

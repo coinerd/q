@@ -336,7 +336,11 @@
                    (runner text))))]
              [(and (list? result) (eq? (car result) 'command))
               (define cmd (cadr result))
-              (process-slash-command ctx cmd)]
+              (define raw-text
+                (if (>= (length result) 3)
+                    (caddr result)
+                    ""))
+              (process-slash-command ctx cmd raw-text)]
              [else (void)])]
 
           ;; Resize event: resize ubuf and mark dirty
