@@ -70,7 +70,12 @@
         "/retry"
         (cons 'retry 'none)
         "/r"
-        (cons 'retry 'none)))
+        (cons 'retry 'none)
+        ;; Extensions (multi-arg: parsed manually in handler)
+        "/activate"
+        (cons 'activate 'none)
+        "/a"
+        (cons 'activate 'none)))
 
 ;; Parse a slash command string into a dispatch symbol + args list.
 ;; Returns: symbol | (list symbol args...) | #f

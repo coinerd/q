@@ -20,7 +20,8 @@
            (box #f) ;; needs-redraw
            #f ;; model-registry-box
            (box #f) ;; last-prompt-box
-           #f)) ;; session-runner
+           #f ;; session-runner
+           (box ""))) ;; input-text-box
 
 (define commands-tests
   (test-suite "TUI Commands"
