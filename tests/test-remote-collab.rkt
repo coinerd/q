@@ -1,0 +1,113 @@
+#lang racket/base
+
+;; tests/test-remote-collab.rkt — Tests for remote-collab extension
+
+(require rackunit
+         racket/string
+         "../extensions/remote-collab/remote-collab.rkt"
+         "../extensions/remote-collab/ssh-helpers.rkt"
+         "../tools/tool.rkt")
+
+;; ============================================================
+;; Error handling tests
+;; ============================================================
+
+(test-case "handle-remote-q requires host"
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (check-true
+                      (string-contains? (exn-message e) "host is required")))])
+    (handle-remote-q (hasheq 'action "status"))
+    (check-false "Should have raised error" #t)))
+
+(test-case "handle-remote-q unknown action raises error"
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (check-true
+                      (string-contains? (exn-message e) "unknown action")))])
+    (handle-remote-q (hasheq 'host "localhost" 'action "bogus"))
+    (check-false "Should have raised error" #t)))
+
+;; ============================================================
+;; Handler tests (SSH fails on unreachable host — tests error path)
+;; ============================================================
+
+(test-case "ssh-execute fails on unreachable host"
+  (define-values (ec out err)
+    (ssh-execute "nonexistent.test.invalid" "echo hello"
+                 #:options (cons "-o"
+                                 (cons "ConnectTimeout=1"
+                                       (default-ssh-options)))))
+  (check-not-equal? ec 0))
+
+(test-case "handle-remote-q send returns error for unreachable host"
+  (define result
+    (handle-remote-q
+     (hasheq 'host "nonexistent.test.invalid"
+             'action "send"
+             'session "test"
+             'prompt "hello world")))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+(test-case "handle-remote-q capture returns error for unreachable host"
+  (define result
+    (handle-remote-q
+     (hasheq 'host "nonexistent.test.invalid"
+             'action "capture"
+             'session "test"
+             'lines 50)))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+(test-case "handle-remote-q start returns error for unreachable host"
+  (define result
+    (handle-remote-q
+     (hasheq 'host "nonexistent.test.invalid"
+             'action "start"
+             'session "test"
+             'cwd "/tmp")))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+(test-case "handle-remote-q stop returns error for unreachable host"
+  (define result
+    (handle-remote-q
+     (hasheq 'host "nonexistent.test.invalid"
+             'action "stop"
+             'session "test")))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+(test-case "handle-remote-q interrupt returns error for unreachable host"
+  (define result
+    (handle-remote-q
+     (hasheq 'host "nonexistent.test.invalid"
+             'action "interrupt"
+             'session "test")))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+(test-case "handle-remote-q wait returns error for unreachable host"
+  (define result
+    (handle-remote-q
+     (hasheq 'host "nonexistent.test.invalid"
+             'action "wait"
+             'session "test"
+             'timeout 5)))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+;; ============================================================
+;; SSH options tests
+;; ============================================================
+
+(test-case "default-ssh-options includes StrictHostKeyChecking"
+  (define opts (default-ssh-options))
+  (define opts-str (string-join opts " "))
+  (check-true (string-contains? opts-str "StrictHostKeyChecking=no")))
+
+(test-case "default-ssh-options includes BatchMode"
+  (define opts (default-ssh-options))
+  (define opts-str (string-join opts " "))
+  (check-true (string-contains? opts-str "BatchMode=yes")))
