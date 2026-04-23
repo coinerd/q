@@ -59,15 +59,32 @@
 
 ;; Looks for .rkt files in <dir>/extensions/ and loads each one,
 ;; extracting the `the-extension` binding.
+;; Now also supports subdirectory extensions: extensions/<name>/<name>.rkt
+;; or extensions/<name>/main.rkt.
 (define (discover-extensions dir)
   (define ext-dir (build-path dir "extensions"))
   (cond
     [(not (directory-exists? ext-dir)) '()]
     [else
-     (define files
-       (filter (λ (f) (regexp-match? #rx"\\.rkt$" f)) (directory-list ext-dir #:build? #t)))
+     ;; Collect flat .rkt files
+     (define flat-files
+       (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f)))
+               (directory-list ext-dir #:build? #t)))
+     ;; Collect subdirectory extension entry points
+     (define subdir-files
+       (filter-map (λ (d)
+                     (and (directory-exists? d)
+                          (let* ([dir-name (path->string (file-name-from-path d))]
+                                 [name-rkt (build-path d (string-append dir-name ".rkt"))]
+                                 [main-rkt (build-path d "main.rkt")])
+                            (cond
+                              [(file-exists? name-rkt) name-rkt]
+                              [(file-exists? main-rkt) main-rkt]
+                              [else #f]))))
+                   (directory-list ext-dir #:build? #t)))
+     (define all-files (append flat-files subdir-files))
      (filter (λ (r) (and r (not (extension-load-error? r))))
-             (for/list ([f files])
+             (for/list ([f all-files])
                (try-load-extension f)))]))
 
 ;; ============================================================
