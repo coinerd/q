@@ -53,27 +53,31 @@
            (loop (cdr dirs)))])))
 
 ;; Run an arbitrary command, return (values exit-code stdout stderr)
+;; Uses subprocess instead of system/exit-code to avoid shell injection.
+;; Args are passed directly to exec, no /bin/sh interpretation.
 (define (run-command cmd args [cwd #f])
-  (define cmd-str
+  (define cmd-path
     (if (string? cmd)
         cmd
         (path->string cmd)))
-  (define arg-str
-    (string-join (map (lambda (a)
-                        (if (string? a)
-                            a
-                            (format "~a" a)))
-                      args)
-                 " "))
-  (define full-cmd (string-append cmd-str " " arg-str))
-  (define stdout (open-output-string))
-  (define stderr (open-output-string))
-  (define exit-code
-    (parameterize ([current-output-port stdout]
-                   [current-error-port stderr]
-                   [current-directory (or cwd (current-directory))])
-      (system/exit-code full-cmd)))
-  (values exit-code (get-output-string stdout) (get-output-string stderr)))
+  (define arg-strings
+    (map (lambda (a)
+           (if (string? a)
+               a
+               (format "~a" a)))
+         args))
+  (parameterize ([current-directory (or cwd (current-directory))])
+    (define-values (sp stdout-in stdin-out stderr-in)
+      (apply subprocess #f #f #f (find-executable-path cmd-path) arg-strings))
+    (define stdout-bytes (port->bytes stdout-in))
+    (define stderr-bytes (port->bytes stderr-in))
+    (close-input-port stdout-in)
+    (close-input-port stderr-in)
+    (when (output-port? stdin-out)
+      (close-output-port stdin-out))
+    (subprocess-wait sp)
+    (define exit-code (subprocess-status sp))
+    (values exit-code (bytes->string/utf-8 stdout-bytes) (bytes->string/utf-8 stderr-bytes))))
 
 ;; Specific raco commands
 (define (raco-fmt path)

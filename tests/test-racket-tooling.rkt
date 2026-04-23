@@ -249,3 +249,25 @@
   (define parsed (string->jsexpr text))
   (check-false (hash-ref parsed 'all-pass?))
   (cleanup-path path))
+
+;; ============================================================
+;; Shell injection regression tests (Wave 2 — C2 fix)
+;; run-command uses subprocess (no /bin/sh), so shell metacharacters
+;; in filenames/args are passed literally to the target process.
+;; ============================================================
+
+(test-case "racket-check handles filename with shell metacharacters safely"
+  ;; Create a temp file whose name contains shell metacharacters.
+  ;; With system/exit-code, ; would be interpreted as command separator.
+  ;; With subprocess, it's just part of the filename.
+  (define tmpdir (make-temporary-file "q-test-shell-~a" 'directory))
+  (define tricky-path (build-path tmpdir "foo; echo PWNED"))
+  (call-with-output-file tricky-path (λ (out) (displayln "#lang racket/base" out)) #:exists 'replace)
+  (define result (handle-racket-check (hasheq 'path (path->string tricky-path) 'mode "syntax")))
+  (check-pred tool-result? result)
+  (check-false (tool-result-is-error? result))
+  (define text (hash-ref (car (tool-result-content result)) 'text ""))
+  (define parsed (string->jsexpr text))
+  ;; The file should compile fine — no shell injection occurred
+  (check-true (hash-ref parsed 'all-pass?))
+  (delete-directory/files tmpdir))
