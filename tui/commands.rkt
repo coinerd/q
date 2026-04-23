@@ -513,6 +513,67 @@
                  0
                  (hash)))))
 
+;; ============================================================
+;; /deactivate command — extension removal
+;; ============================================================
+
+(define (handle-deactivate-command cctx)
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (define session-dir (cmd-ctx-session-dir cctx))
+  (define project-dir (and session-dir (path-only session-dir)))
+  (define entries
+    (cond
+      [(not project-dir)
+       (list (make-entry 'error
+                         "/deactivate: no project directory available (start a session first)"
+                         (current-inexact-milliseconds)
+                         (hash)))]
+      [else
+       ;; Parse args from raw input text (after /deactivate)
+       (define input (unbox (cmd-ctx-input-text-box cctx)))
+       (define args-str (string-trim (regexp-replace #rx"^/deactivate\\s*" input "")))
+       (define args (filter (λ (a) (not (string=? a ""))) (string-split args-str)))
+       (cond
+         [(null? args)
+          (list
+           (make-entry 'error "Usage: /deactivate <name> or /deactivate --global <name>" 0 (hash)))]
+         [(member "--global" args)
+          (define name
+            (for/or ([a (in-list args)]
+                     #:when (not (string-prefix? a "--")))
+              a))
+          (cond
+            [(not name) (list (make-entry 'error "Usage: /deactivate --global <name>" 0 (hash)))]
+            [(not (valid-extension-name? name))
+             (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
+            [else
+             (define q-home (build-path (find-system-path 'home-dir) ".q"))
+             (define target-dir (build-path q-home "extensions"))
+             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+               (deactivate-extension! name target-dir)
+               (list (make-entry 'system
+                                 (format "Extension '~a' deactivated globally (~a)" name target-dir)
+                                 (current-inexact-milliseconds)
+                                 (hash))))])]
+         [else
+          (define name (car args))
+          (cond
+            [(not (valid-extension-name? name))
+             (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
+            [else
+             (define target-dir (build-path project-dir ".q" "extensions"))
+             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+               (deactivate-extension! name target-dir)
+               (list (make-entry 'system
+                                 (format "Extension '~a' deactivated locally (~a)" name target-dir)
+                                 (current-inexact-milliseconds)
+                                 (hash))))])])]))
+  (define new-state
+    (for/fold ([s state]) ([e (in-list entries)])
+      (add-transcript-entry s e)))
+  (set-box! (cmd-ctx-state-box cctx) new-state)
+  'continue)
+
 ;; list-available-entries : -> (listof entry?)
 ;; List all known extensions from the source tree.
 (define (list-available-entries)
@@ -660,6 +721,7 @@
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
         'continue]
        [(activate) (handle-activate-command cctx)]
+       [(deactivate) (handle-deactivate-command cctx)]
        [(quit)
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]
