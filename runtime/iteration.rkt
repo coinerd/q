@@ -78,7 +78,14 @@
                   list-tools-jsexpr
                   merge-tool-lists)
          ;; Settings struct for exec-context runtime-settings (#1240)
-         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
+         (only-in "../runtime/settings.rkt"
+                  make-minimal-settings
+                  setting-ref
+                  setting-ref*
+                  steering-gentle-threshold
+                  steering-strong-threshold
+                  steering-hard-cap
+                  steering-same-file-dedup?)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
          ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
@@ -758,21 +765,41 @@
                                               config))
                  ;; v0.18.0: Context-aware exploration steering with same-file dedup.
                  ;; - Tracks seen file paths across consecutive read-only tool calls
-                 ;; - Same file reads don't increment the counter
+                 ;; - Same file reads don't increment the counter (configurable)
                  ;; - Counter resets on any write tool call
-                 ;; - Level 1 (8+): gentle nudge to use write/edit tools
-                 ;; - Level 2 (12+): strong nudge with explicit instruction
-                 ;; - Level 3 (20+): hard cap — inject message and break the loop
+                 ;; - Thresholds configurable via steering.gentle_threshold etc.
+                 (define current-settings (hash-ref config 'settings #f))
+                 (define gentle-at
+                   (if current-settings
+                       (steering-gentle-threshold current-settings)
+                       8))
+                 (define strong-at
+                   (if current-settings
+                       (steering-strong-threshold current-settings)
+                       12))
+                 (define hard-at
+                   (if current-settings
+                       (steering-hard-cap current-settings)
+                       20))
+                 (define same-file-dedup?
+                   (if current-settings
+                       (steering-same-file-dedup? current-settings)
+                       #t))
                  (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
+                 ;; Detect write tools (always relevant regardless of dedup setting)
+                 (define has-write-now?
+                   (for/or ([tc (in-list current-tool-calls)])
+                     (member (tool-call-name tc) '("write" "edit" "replace" "create"))))
                  (define-values (new-seen-paths should-increment?)
-                   (update-seen-paths current-tool-calls seen-paths))
+                   (cond
+                     [has-write-now? (values (set) #f)] ;; Reset: empty set, don't increment
+                     [(not same-file-dedup?)
+                      (values seen-paths #t)] ;; No dedup: keep set, always increment
+                     [else (update-seen-paths current-tool-calls seen-paths)]))
                  (define effective-tool-count
                    (cond
-                     ;; Write detected: reset counter and paths
-                     [(set-empty? new-seen-paths) 0]
-                     ;; Same file(s): don't increment
+                     [has-write-now? 0]
                      [(not should-increment?) consecutive-tool-count]
-                     ;; New file(s): increment
                      [else (add1 consecutive-tool-count)]))
                  ;; v0.14.1: emit exploration progress after 4+ consecutive tool-only turns
                  (when (>= effective-tool-count 4)
@@ -794,8 +821,8 @@
                    (let ([base-ctx updated-ctx]
                          [steering-msg
                           (cond
-                            ;; Level 3: Hard cap at 20 — force-stop the exploration
-                            [(>= effective-tool-count 20)
+                            ;; Level 3: Hard cap — force-stop the exploration
+                            [(>= effective-tool-count hard-at)
                              (emit-session-event! bus
                                                   session-id
                                                   "exploration.hard-cap"
@@ -819,8 +846,8 @@
                                  effective-tool-count)))
                               (now-seconds)
                               (hasheq))]
-                            ;; Level 2: Strong nudge at 12+
-                            [(>= effective-tool-count 12)
+                            ;; Level 2: Strong nudge
+                            [(>= effective-tool-count strong-at)
                              (make-message
                               (generate-id)
                               #f
@@ -837,8 +864,8 @@
                                  effective-tool-count)))
                               (now-seconds)
                               (hasheq))]
-                            ;; Level 1: Gentle nudge at 8+
-                            [(>= effective-tool-count 8)
+                            ;; Level 1: Gentle nudge
+                            [(>= effective-tool-count gentle-at)
                              (make-message
                               (generate-id)
                               #f
