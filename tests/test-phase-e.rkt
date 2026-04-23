@@ -5,9 +5,12 @@
 (require rackunit
          racket/file
          racket/string
-         "../extensions/ext-package-manager.rkt"
-         "../extensions/image-input.rkt"
-         "../extensions/session-export.rkt"
+         (only-in "../extensions/ext-package-manager.rkt" handle-ext-pkg)
+         (only-in "../extensions/image-input.rkt"
+                  handle-image-input
+                  image->base64
+                  extension->media-type)
+         (only-in "../extensions/session-export.rkt" handle-session-export)
          "../tools/tool.rkt")
 
 ;; ============================================================
@@ -34,16 +37,13 @@
 ;; ============================================================
 
 (test-case "image-input encode requires path"
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (check-true (string-contains? (exn-message e) "path")))])
+  (with-handlers ([exn:fail? (lambda (e) (check-true (string-contains? (exn-message e) "path")))])
     (handle-image-input (hasheq 'action "encode"))
     (check-false "Should have raised" #t)))
 
 (test-case "image-input file not found errors"
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (check-true (string-contains? (exn-message e) "not found")))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (check-true (string-contains? (exn-message e) "not found")))])
     (handle-image-input (hasheq 'action "encode" 'path "/nonexistent.png"))
     (check-false "Should have raised" #t)))
 
@@ -73,28 +73,25 @@
 ;; ============================================================
 
 (test-case "session-export requires session_path"
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (check-true (string-contains? (exn-message e) "session_path")))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (check-true (string-contains? (exn-message e) "session_path")))])
     (handle-session-export (hasheq 'format "markdown"))
     (check-false "Should have raised" #t)))
 
 (test-case "session-export file not found errors"
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (check-true (string-contains? (exn-message e) "not found")))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (check-true (string-contains? (exn-message e) "not found")))])
     (handle-session-export (hasheq 'session_path "/nonexistent.jsonl"))
     (check-false "Should have raised" #t)))
 
 (test-case "session-export markdown export works"
   (define tmp (make-temporary-file "session-~a.jsonl"))
   (call-with-output-file tmp
-    (lambda (out)
-      (displayln "{\"role\":\"user\",\"content\":\"hello\"}" out)
-      (displayln "{\"role\":\"assistant\",\"content\":\"world\"}" out))
-    #:exists 'replace)
-  (define result (handle-session-export
-                  (hasheq 'session_path (path->string tmp) 'format "markdown")))
+                         (lambda (out)
+                           (displayln "{\"role\":\"user\",\"content\":\"hello\"}" out)
+                           (displayln "{\"role\":\"assistant\",\"content\":\"world\"}" out))
+                         #:exists 'replace)
+  (define result (handle-session-export (hasheq 'session_path (path->string tmp) 'format "markdown")))
   (check-pred tool-result? result)
   (check-false (tool-result-is-error? result))
   (define text (hash-ref (car (tool-result-content result)) 'text ""))
@@ -105,11 +102,9 @@
 (test-case "session-export json export works"
   (define tmp (make-temporary-file "session-~a.jsonl"))
   (call-with-output-file tmp
-    (lambda (out)
-      (displayln "{\"role\":\"user\",\"content\":\"test\"}" out))
-    #:exists 'replace)
-  (define result (handle-session-export
-                  (hasheq 'session_path (path->string tmp) 'format "json")))
+                         (lambda (out) (displayln "{\"role\":\"user\",\"content\":\"test\"}" out))
+                         #:exists 'replace)
+  (define result (handle-session-export (hasheq 'session_path (path->string tmp) 'format "json")))
   (check-pred tool-result? result)
   (check-false (tool-result-is-error? result))
   (delete-file tmp))
@@ -117,11 +112,10 @@
 (test-case "session-export html export works"
   (define tmp (make-temporary-file "session-~a.jsonl"))
   (call-with-output-file tmp
-    (lambda (out)
-      (displayln "{\"role\":\"assistant\",\"content\":\"response\"}" out))
-    #:exists 'replace)
-  (define result (handle-session-export
-                  (hasheq 'session_path (path->string tmp) 'format "html")))
+                         (lambda (out)
+                           (displayln "{\"role\":\"assistant\",\"content\":\"response\"}" out))
+                         #:exists 'replace)
+  (define result (handle-session-export (hasheq 'session_path (path->string tmp) 'format "html")))
   (check-pred tool-result? result)
   (check-false (tool-result-is-error? result))
   (define text (hash-ref (car (tool-result-content result)) 'text ""))
@@ -133,15 +127,17 @@
   (define out-path (make-temporary-file "out-~a.md"))
   (delete-file out-path)
   (call-with-output-file tmp
-    (lambda (out) (displayln "{\"role\":\"user\",\"content\":\"hi\"}" out))
-    #:exists 'replace)
-  (define result (handle-session-export
-                  (hasheq 'session_path (path->string tmp)
-                          'format "markdown"
-                          'output_path (path->string out-path))))
+                         (lambda (out) (displayln "{\"role\":\"user\",\"content\":\"hi\"}" out))
+                         #:exists 'replace)
+  (define result
+    (handle-session-export (hasheq 'session_path
+                                   (path->string tmp)
+                                   'format
+                                   "markdown"
+                                   'output_path
+                                   (path->string out-path))))
   (check-pred tool-result? result)
-  (check-true (string-contains?
-               (hash-ref (car (tool-result-content result)) 'text "")
-               "Exported to"))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text "") "Exported to"))
   (delete-file tmp)
-  (when (file-exists? out-path) (delete-file out-path)))
+  (when (file-exists? out-path)
+    (delete-file out-path)))

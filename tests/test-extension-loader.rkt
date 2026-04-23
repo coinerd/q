@@ -132,12 +132,11 @@
   (call-with-output-file
    mod-file
    (λ (out)
-           (displayln "#lang racket/base" out)
-           (displayln "(provide the-extension)" out)
-           (displayln (format "(require (file \"~a\"))" api-abs-path) out)
-           (displayln (format "(define the-extension (extension \"~a\" \"1.0\" \"1\" (hasheq)))"
-                              ext-name)
-                      out))
+     (displayln "#lang racket/base" out)
+     (displayln "(provide the-extension)" out)
+     (displayln (format "(require (file \"~a\"))" api-abs-path) out)
+     (displayln (format "(define the-extension (extension \"~a\" \"1.0\" \"1\" (hasheq)))" ext-name)
+                out))
    #:exists 'replace)
   mod-file)
 
@@ -172,3 +171,48 @@
   (define exts (discover-extensions tmpdir))
   (check-equal? exts '())
   (delete-directory/files tmpdir))
+
+;; ============================================================
+;; Hook dispatch regression tests (Wave 1 — C1 fix)
+;; Verifies ext-register-tool! arity is correct (5 args, not 2).
+;; If extensions pass (make-tool ...) instead of (name desc schema handler),
+;; this test catches the arity mismatch.
+;; ============================================================
+
+(require "../extensions/dynamic-tools.rkt"
+         "../extensions/context.rkt"
+         "../extensions/api.rkt"
+         "../agent/event-bus.rkt"
+         "../tools/tool.rkt")
+
+(define (make-test-ctx)
+  (define reg (make-tool-registry))
+  (define ext-reg (make-extension-registry))
+  (define bus (make-event-bus))
+  (make-extension-ctx #:session-id "test-session"
+                      #:session-dir (find-system-path 'temp-dir)
+                      #:event-bus bus
+                      #:extension-registry ext-reg
+                      #:tool-registry reg))
+
+(test-case "ext-register-tool! accepts 5 positional args (ctx name desc schema handler)"
+  (define ctx (make-test-ctx))
+  (define reg (ctx-tool-registry ctx))
+  (ext-register-tool! ctx
+                      "test-tool"
+                      "A test tool for arity regression"
+                      (hasheq 'type "object" 'required '() 'properties (hasheq))
+                      (λ (args) (make-tool-result '() (hasheq) #f)))
+  (check-not-exn (λ () (lookup-tool reg "test-tool"))))
+
+(test-case "ext-register-tool! rejects make-tool wrapper (2-arg form)"
+  ;; This documents the bug pattern: passing (make-tool ...) as 2nd arg
+  ;; should fail because ext-register-tool! expects a string as 2nd arg.
+  (define ctx (make-test-ctx))
+  (check-exn exn:fail?
+             (λ ()
+               (ext-register-tool! ctx
+                                   (make-tool "bad"
+                                              "desc"
+                                              (hasheq 'type "object")
+                                              (λ (args) (make-tool-result '() (hasheq) #f)))))))

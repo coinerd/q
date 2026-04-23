@@ -15,7 +15,8 @@
          "hooks.rkt"
          "../tools/tool.rkt")
 
-(provide image-input-extension
+(provide the-extension
+         image-input-extension
          handle-image-input
          image->base64
          extension->media-type
@@ -37,14 +38,13 @@
 (define (make-image-message text image-path)
   (define b64 (image->base64 image-path))
   (define mt (extension->media-type image-path))
-  (hasheq 'type
-          "multi-modal"
-          'content
-          (list (hasheq 'type "text" 'text text)
-                (hasheq 'type
-                        "image_url"
-                        'image_url
-                        (hasheq 'url (string-append "data:" mt ";base64," b64))))))
+  (hasheq
+   'type
+   "multi-modal"
+   'content
+   (list
+    (hasheq 'type "text" 'text text)
+    (hasheq 'type "image_url" 'image_url (hasheq 'url (string-append "data:" mt ";base64," b64))))))
 
 (define (handle-image-input args [exec-ctx #f])
   (define action (hash-ref args 'action "encode"))
@@ -56,14 +56,13 @@
      (unless (file-exists? path)
        (error 'image-input (format "File not found: ~a" path)))
      (define b64 (image->base64 path))
-     (make-success-result
-      (list (hasheq 'type
-                    "text"
-                    'text
-                    (format "Encoded ~a (~a, ~a chars base64)"
-                            path
-                            (extension->media-type path)
-                            (string-length b64)))))]
+     (make-success-result (list (hasheq 'type
+                                        "text"
+                                        'text
+                                        (format "Encoded ~a (~a, ~a chars base64)"
+                                                path
+                                                (extension->media-type path)
+                                                (string-length b64)))))]
     [(string=? action "message")
      (define text (hash-ref args 'text ""))
      (define path (hash-ref args 'path ""))
@@ -71,39 +70,34 @@
        (error 'image-input "path is required for message"))
      (define msg (make-image-message text path))
      (make-success-result
-      (list (hasheq 'type
-                    "text"
-                    'text
-                    (format "Multi-modal message created with image ~a" path))
+      (list (hasheq 'type "text" 'text (format "Multi-modal message created with image ~a" path))
             msg))]
-    [else
-     (make-error-result (format "Unknown action: ~a" action))]))
+    [else (make-error-result (format "Unknown action: ~a" action))]))
 
 (define (register-image-tools ctx)
-  (ext-register-tool!
-   ctx
-   (make-tool
-    "image-input"
-    (string-append
-     "Multi-modal image input. "
-     "Actions: encode (base64), message (multi-modal). "
-     "PNG, JPEG, GIF, WebP.")
-    (hasheq 'type
-            "object"
-            'required
-            '("action" "path")
-            'properties
-            (hasheq 'action
-                    (hasheq 'type "string" 'description "encode|message")
-                    'path
-                    (hasheq 'type "string" 'description "Image file path")
-                    'text
-                    (hasheq 'type "string" 'description "Text for message")))
-    handle-image-input))
+  (ext-register-tool! ctx
+                      "image-input"
+                      (string-append "Multi-modal image input. "
+                                     "Actions: encode (base64), message (multi-modal). "
+                                     "PNG, JPEG, GIF, WebP.")
+                      (hasheq 'type
+                              "object"
+                              'required
+                              '("action" "path")
+                              'properties
+                              (hasheq 'action
+                                      (hasheq 'type "string" 'description "encode|message")
+                                      'path
+                                      (hasheq 'type "string" 'description "Image file path")
+                                      'text
+                                      (hasheq 'type "string" 'description "Text for message")))
+                      handle-image-input)
   (hook-pass ctx))
 
 (define-q-extension image-input-extension
-  #:version "1.0.0"
-  #:api-version "1"
-  #:on register-tools
-  register-image-tools)
+                    #:version "1.0.0"
+                    #:api-version "1"
+                    #:on register-tools
+                    register-image-tools)
+
+(define the-extension image-input-extension)
