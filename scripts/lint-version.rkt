@@ -50,6 +50,8 @@
   (define s (path->string p))
   (or (string-contains? s "/compiled/")
       (string-contains? s "/.git/")
+      (string-contains? s "/.planning/")
+      (string-contains? s "/.pi/")
       (and (filename-extension p) (equal? (bytes->string/utf-8 (filename-extension p)) "zo"))))
 
 (define (collect-md-files base-dir)
