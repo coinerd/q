@@ -29,6 +29,7 @@
 
 (require racket/contract
          racket/list
+         racket/set
          racket/path
          json
          (only-in racket/string string-trim string-join)
@@ -50,6 +51,7 @@
                   make-tool-call
                   tool-call-id
                   tool-call-name
+                  tool-call-arguments
                   make-loop-result
                   loop-result-termination-reason
                   loop-result-messages
@@ -118,6 +120,9 @@
          emit-session-event!
          maybe-dispatch-hooks
          ensure-hash-args ;; for testing
+         ;; v0.18.0: steering helpers for testing
+         extract-tool-target-path
+         update-seen-paths
          ;; FEAT-61: message injection support
          make-injected-collector!
          drain-injected-messages!
@@ -427,6 +432,41 @@
 ;; ============================================================
 ;; Iteration loop
 ;; ============================================================
+;; v0.18.0: Context-aware exploration steering helpers
+;; ============================================================
+
+;; Extract the target file path from a tool call's arguments.
+;; Returns #f if no path found. Only reliable for read/write/edit tools.
+(define (extract-tool-target-path tc)
+  (define args (tool-call-arguments tc))
+  (cond
+    [(hash? args) (or (hash-ref args 'path #f) (hash-ref args 'file #f))]
+    [else #f]))
+
+;; Compute the new seen-paths set and whether to increment the counter.
+;; Returns (values new-seen-paths should-increment?)
+(define (update-seen-paths tool-calls seen-paths)
+  (define read-tools '("read" "find"))
+  (define write-tools '("write" "edit" "replace" "create"))
+  (define has-write?
+    (for/or ([tc (in-list tool-calls)])
+      (member (tool-call-name tc) write-tools)))
+  (cond
+    [has-write? (values (set) #f)] ;; Reset on write
+    [else
+     ;; Collect paths from read tools
+     (define new-paths
+       (for/set ([tc (in-list tool-calls)]
+                 #:when (member (tool-call-name tc) read-tools))
+         (define p (extract-tool-target-path tc))
+         (or p 'no-path)))
+     ;; Any path we haven't seen before?
+     (define has-new-path?
+       (for/or ([p (in-set new-paths)])
+         (not (set-member? seen-paths p))))
+     (values (set-union seen-paths new-paths) has-new-path?)]))
+
+;; ============================================================
 
 (define (run-iteration-loop context
                             prov
@@ -469,6 +509,7 @@
       (let loop ([ctx context]
                  [iteration 0]
                  [consecutive-tool-count 0]
+                 [seen-paths (set)] ;; v0.18.0: same-file dedup tracking
                  [intent-retry-count 0])
 
         ;; ── Cooperative cancellation check (between iterations) ──
@@ -616,6 +657,7 @@
                                    (loop (append ctx-with-injected new-msgs followup-msgs)
                                          (add1 iteration)
                                          0
+                                         (set)
                                          intent-retry-count))))
                            effective-result))
                      ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
@@ -647,6 +689,7 @@
                              (loop (append ctx-with-injected new-msgs (list nudge))
                                    (add1 iteration)
                                    0
+                                   (set)
                                    (add1 intent-retry-count))))
                          base-result)))]
 
@@ -694,7 +737,11 @@
                                               config))
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! updated-ctx bus session-id config)
-                 (loop updated-ctx (add1 iteration) (add1 consecutive-tool-count) intent-retry-count)]
+                 (loop updated-ctx
+                       (add1 iteration)
+                       (add1 consecutive-tool-count)
+                       seen-paths
+                       intent-retry-count)]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
@@ -709,41 +756,46 @@
                                               log-path
                                               token
                                               config))
+                 ;; v0.18.0: Context-aware exploration steering with same-file dedup.
+                 ;; - Tracks seen file paths across consecutive read-only tool calls
+                 ;; - Same file reads don't increment the counter
+                 ;; - Counter resets on any write tool call
+                 ;; - Level 1 (8+): gentle nudge to use write/edit tools
+                 ;; - Level 2 (12+): strong nudge with explicit instruction
+                 ;; - Level 3 (20+): hard cap — inject message and break the loop
+                 (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
+                 (define-values (new-seen-paths should-increment?)
+                   (update-seen-paths current-tool-calls seen-paths))
+                 (define effective-tool-count
+                   (cond
+                     ;; Write detected: reset counter and paths
+                     [(set-empty? new-seen-paths) 0]
+                     ;; Same file(s): don't increment
+                     [(not should-increment?) consecutive-tool-count]
+                     ;; New file(s): increment
+                     [else (add1 consecutive-tool-count)]))
                  ;; v0.14.1: emit exploration progress after 4+ consecutive tool-only turns
-                 (when (>= consecutive-tool-count 4)
+                 (when (>= effective-tool-count 4)
                    (define tool-names
-                     (for/list ([tc (in-list (extract-tool-calls-from-messages new-msgs))])
+                     (for/list ([tc (in-list current-tool-calls)])
                        (tool-call-name tc)))
                    (emit-session-event! bus
                                         session-id
                                         "exploration.progress"
                                         (hasheq 'consecutive-tools
-                                                (add1 consecutive-tool-count)
+                                                effective-tool-count
                                                 'tool-names
                                                 tool-names
+                                                'seen-paths
+                                                (set-count new-seen-paths)
                                                 'iteration
                                                 (add1 iteration))))
-                 ;; v0.15.1 Wave 3: Multi-level exploration steering escalation
-                 ;; with tool-type-aware counting.
-                 ;; - consecutive-tool-count resets when file writes are detected
-                 ;; - Level 1 (5+): gentle nudge to use write/edit tools
-                 ;; - Level 2 (7+): strong nudge with explicit instruction
-                 ;; - Level 3 (12+): hard cap — inject message and break the loop
-                 ;; W8a.1 (Q-01): Replaced 3x set! with let-over-cond binding
-                 ;; Escalation levels: 5 (gentle) → 7 (strong) → 12 (hard cap)
-                 (define has-file-write?
-                   (for/or ([tc (in-list (extract-tool-calls-from-messages new-msgs))])
-                     (member (tool-call-name tc) '("write" "edit" "replace" "create"))))
-                 (define effective-tool-count
-                   (if has-file-write?
-                       0
-                       (add1 consecutive-tool-count)))
                  (define exec-context
                    (let ([base-ctx updated-ctx]
                          [steering-msg
                           (cond
-                            ;; Level 3: Hard cap at 12 — force-stop the exploration
-                            [(>= effective-tool-count 12)
+                            ;; Level 3: Hard cap at 20 — force-stop the exploration
+                            [(>= effective-tool-count 20)
                              (emit-session-event! bus
                                                   session-id
                                                   "exploration.hard-cap"
@@ -767,8 +819,8 @@
                                  effective-tool-count)))
                               (now-seconds)
                               (hasheq))]
-                            ;; Level 2: Strong nudge at 7+
-                            [(>= effective-tool-count 7)
+                            ;; Level 2: Strong nudge at 12+
+                            [(>= effective-tool-count 12)
                              (make-message
                               (generate-id)
                               #f
@@ -785,8 +837,8 @@
                                  effective-tool-count)))
                               (now-seconds)
                               (hasheq))]
-                            ;; Level 1: Gentle nudge at 5+
-                            [(>= effective-tool-count 5)
+                            ;; Level 1: Gentle nudge at 8+
+                            [(>= effective-tool-count 8)
                              (make-message
                               (generate-id)
                               #f
@@ -807,7 +859,11 @@
                          base-ctx)))
                  ;; v0.14.1: mid-turn token budget check
                  (check-mid-turn-budget! exec-context bus session-id config)
-                 (loop exec-context (add1 iteration) effective-tool-count intent-retry-count)]
+                 (loop exec-context
+                       (add1 iteration)
+                       effective-tool-count
+                       new-seen-paths
+                       intent-retry-count)]
 
                 ;; ── Unknown termination: append and return ──
                 [else
