@@ -19,6 +19,13 @@
 (define (read-session-lines path)
   (filter non-empty-string? (string-split (file->string path) "\n")))
 
+(define (html-escape s)
+  (let* ([s (string-replace s "&" "&amp;")]
+         [s (string-replace s "<" "&lt;")]
+         [s (string-replace s ">" "&gt;")]
+         [s (string-replace s "\"" "&quot;")])
+    s))
+
 (define (entry->markdown line idx)
   (with-handlers ([exn:fail? (lambda (e) (format "### Entry ~a\n~a\n" idx line))])
     (define obj (string->jsexpr line))
@@ -27,10 +34,13 @@
             (hash-ref obj 'content ""))))
 
 (define (entry->html line)
-  (with-handlers ([exn:fail? (lambda (e) (format "<pre>~a</pre>" line))])
+  (with-handlers ([exn:fail? (lambda (e) (format "<pre>~a</pre>" (html-escape line)))])
     (define obj (string->jsexpr line))
     (define role (hash-ref obj 'role "unknown"))
-    (format "<div class=\"~a\"><h4>~a</h4><pre>~a</pre></div>" role role (hash-ref obj 'content ""))))
+    (format "<div class=\"~a\"><h4>~a</h4><pre>~a</pre></div>"
+            (html-escape role)
+            (html-escape role)
+            (html-escape (hash-ref obj 'content "")))))
 
 (define (handle-session-export args [exec-ctx #f])
   (define path (hash-ref args 'session_path ""))
@@ -66,21 +76,22 @@
     [else (make-success-result (list (hasheq 'type "text" 'text result)))]))
 
 (define (register-export-tools ctx)
-  (ext-register-tool! ctx
-                      "session-export"
-                      "Export session logs to HTML, JSON, or Markdown."
-                      (hasheq 'type
-                              "object"
-                              'required
-                              '("session_path")
-                              'properties
-                              (hasheq 'session_path
-                                      (hasheq 'type "string" 'description "Session JSONL file path")
-                                      'format
-                                      (hasheq 'type "string" 'description "html|json|markdown")
-                                      'output_path
-                                      (hasheq 'type "string" 'description "Output file path")))
-                      handle-session-export)
+  (ext-register-tool!
+   ctx
+   (make-tool "session-export"
+              "Export session logs to HTML, JSON, or Markdown."
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("session_path")
+                      'properties
+                      (hasheq 'session_path
+                              (hasheq 'type "string" 'description "Session JSONL file path")
+                              'format
+                              (hasheq 'type "string" 'description "html|json|markdown")
+                              'output_path
+                              (hasheq 'type "string" 'description "Output file path")))
+              handle-session-export))
   (hook-pass ctx))
 
 (define-q-extension session-export-extension

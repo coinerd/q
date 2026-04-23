@@ -316,3 +316,29 @@
      (check-false (tool-result-is-error? result))
      ;; Verify content was written
      (check-equal? (read-planning-artifact dir "VALIDATION") "## Tests pass"))))
+
+;; ============================================================
+;; M2 regression: Path traversal in artifact names
+;; ============================================================
+
+(test-case "valid-artifact-name? rejects path traversal"
+  (check-true (valid-artifact-name? "PLAN"))
+  (check-true (valid-artifact-name? "custom.md"))
+  (check-true (valid-artifact-name? "data.json"))
+  (check-false (valid-artifact-name? "../../etc/crontab.md"))
+  (check-false (valid-artifact-name? "foo/bar.md"))
+  (check-false (valid-artifact-name? "..\x00PLAN")))
+
+(test-case "write-planning-artifact rejects path traversal"
+  (define dir (make-temporary-file "q-test-gsd-~a" 'directory))
+  (define reg (make-tool-registry))
+  (define ctx (make-test-ctx #:tool-registry reg))
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
+  (handler ctx)
+  (define pw (lookup-tool reg "planning-write"))
+  (define result
+    ((tool-execute pw) (hasheq 'artifact "../../etc/crontab.md" 'content "pwned" 'base_dir dir)))
+  ;; Should fail gracefully (artifact name rejected)
+  (check-true (or (tool-result-is-error? result)
+                  (not (file-exists? (build-path dir ".planning" "../../etc/crontab.md")))))
+  (delete-directory/files dir))
