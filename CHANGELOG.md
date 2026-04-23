@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.19.0 — 2026-04-23
+
+### Release & Polish
+
+**Wave 1 — Self-hosting validation suite** (PR #1661)
+- Valid GSD artifact name validation
+- Skill router tool-result contract
+- Extension registry loading and listing
+- Event bus pub/sub
+- Dogfood task format validation
+- 5 tests
+
+**Wave 2 — Documentation** (PR #1662)
+- `docs/self-hosting.md`: GSD planning, dogfood infrastructure, extension loading
+- `docs/workflow-testing.md`: test structure, mock provider patterns, conventions
+
+**Wave 3 — Version bump 0.18.4 → 0.19.0** (PR #1663)
+- Version bump and CHANGELOG update
+
 ## v0.18.4 — 2026-04-23
 
 ### Sandbox & Safety
