@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.18.0 — 2026-04-23
+
+### Context-Aware Exploration Steering
+
+**Wave 1 — Same-file dedup + raised thresholds** (PR #1611)
+- Raise exploration steering thresholds: gentle 5→8, strong 7→12, hard cap 12→20
+- Add same-file dedup: reading the same file multiple times counts as 1 exploration step
+- New `extract-tool-target-path` and `update-seen-paths` helpers exported for testing
+- 18 comprehensive steering tests in `tests/test-steering.rkt`
+
+**Wave 2 — Configurable thresholds** (PR #1612)
+- Steering thresholds now configurable via `config.json` under `steering` key
+  - `steering.gentle_threshold` (default: 8)
+  - `steering.strong_threshold` (default: 12)
+  - `steering.hard_cap` (default: 20)
+  - `steering.same_file_dedup` (default: true)
+- New accessors in `runtime/settings.rkt`: `steering-gentle-threshold`, `steering-strong-threshold`, `steering-hard-cap`, `steering-same-file-dedup?`
+- 10 config tests added to `tests/test-steering.rkt`
+
 ## v0.17.9 — 2026-04-23
 
 ### GSD Planning Workflow + Review Cleanup
