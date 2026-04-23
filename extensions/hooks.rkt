@@ -61,7 +61,12 @@
 (define (dispatch-hooks hook-point payload registry #:ctx [ctx #f])
   (define handlers (handlers-for-point registry hook-point))
   (when (eq? hook-point 'execute-command)
-    (log-info "dispatch-hooks execute-command: ~a handlers found" (length handlers)))
+    (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                         (lambda ()
+                           (printf "[~a] dispatch-hooks execute-command: ~a handlers found\n"
+                                   (current-inexact-milliseconds)
+                                   (length handlers)))
+                         #:exists 'append))
   (let loop ([remaining handlers]
              [current-payload payload]
              [amended? #f])
@@ -97,14 +102,15 @@
     (if (critical-hook? hook-point)
         (hook-block (format "handler ~a failed for critical hook ~a" ext-name hook-point))
         (hook-pass payload)))
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (log-warning "Hook handler ~a for ~a threw: ~a [~a]"
-                                  ext-name
-                                  hook-point
-                                  (exn-message e)
-                                  (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass"))
-                     error-default)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (when (eq? hook-point 'execute-command)
+                                 (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                                                      (lambda ()
+                                                        (printf "[~a] OUTER-HANDLER-CAUGHT: ~a\n"
+                                                                (current-inexact-milliseconds)
+                                                                (exn-message e)))
+                                                      #:exists 'append))
+                               error-default)])
     (define raw-result
       (if timeout-ms
           ;; Run with timeout
@@ -119,20 +125,21 @@
               (kill-thread thd)) ; #447: prevent thread leak
             (cond
               [(not maybe)
-               (log-warning
-                (format "Hook handler ~a for ~a timed out after ~ams [~a]"
-                        ext-name
-                        hook-point
-                        timeout-ms
-                        (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+               (when (eq? hook-point 'execute-command)
+                 (with-output-to-file
+                  "/tmp/q-cmd-dispatch.log"
+                  (lambda ()
+                    (printf "[~a] TIMEOUT after ~ams\n" (current-inexact-milliseconds) timeout-ms))
+                  #:exists 'append))
                error-default]
               [(eq? (car maybe) 'error)
-               (log-warning
-                (format "Hook handler ~a for ~a threw: ~a [~a]"
-                        ext-name
-                        hook-point
-                        (exn-message (cdr maybe))
-                        (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass")))
+               (when (eq? hook-point 'execute-command)
+                 (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                                      (lambda ()
+                                        (printf "[~a] INNER-ERROR: ~a\n"
+                                                (current-inexact-milliseconds)
+                                                (exn-message (cdr maybe))))
+                                      #:exists 'append))
                error-default]
               [else (cdr maybe)]))
           ;; No timeout — direct call
