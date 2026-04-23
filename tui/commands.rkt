@@ -449,11 +449,12 @@
                                                          (exn-message e))
                                                  (current-inexact-milliseconds)
                                                  (hash)))])
-          (load-extension! ext-reg ext-path #:event-bus bus)
+          (define loaded? (load-extension! ext-reg ext-path #:event-bus bus))
           (with-output-to-file "/tmp/q-cmd-dispatch.log"
                                (lambda ()
-                                 (printf "[~a] hot-load done, checking registry...\n"
-                                         (current-inexact-milliseconds))
+                                 (printf "[~a] hot-load done, loaded?=~a checking registry...\n"
+                                         (current-inexact-milliseconds)
+                                         loaded?)
                                  (define exts (list-extensions ext-reg))
                                  (printf "[~a] registry has ~a extensions: ~a\n"
                                          (current-inexact-milliseconds)
@@ -466,10 +467,18 @@
                                            (extension-name ext)
                                            (hash-keys hooks))))
                                #:exists 'append)
-          (make-entry 'system
-                      (format "  Extension '~a' loaded into running session." name)
-                      (current-inexact-milliseconds)
-                      (hash)))])]))
+          (if loaded?
+              (make-entry 'system
+                          (format "  Extension '~a' loaded into running session." name)
+                          (current-inexact-milliseconds)
+                          (hash))
+              (make-entry
+               'error
+               (format
+                "  Warning: extension '~a' could not be loaded. Check /tmp/q-cmd-dispatch.log for details."
+                name)
+               (current-inexact-milliseconds)
+               (hash))))])]))
 
 ;; handle-activate-command : cmd-ctx? -> 'continue
 ;; Supports:

@@ -95,6 +95,7 @@
 ;; Dynamically loads a module, extracts `the-extension`, and
 ;; registers it. Returns structured error info if loading fails.
 ;; When event-bus is provided, publishes extension.load.failed on error.
+;; Returns #t if extension was loaded and registered, #f otherwise.
 (define (load-extension! registry path #:event-bus [event-bus #f])
   (define ext-name (get-extension-name-from-path path))
   (with-output-to-file "/tmp/q-cmd-dispatch.log"
@@ -105,75 +106,79 @@
                                  ext-name))
                        #:exists 'append)
   (define state (extension-state ext-name))
-  (when (and (not (eq? state 'disabled)) (not (eq? state 'quarantined)))
-    (define timeout-secs (current-extension-startup-timeout))
-    (define result
-      (if timeout-secs
-          ;; Run with timeout to prevent hanging on slow extensions
-          (let ([chan (make-channel)])
-            (define thd (thread (lambda () (channel-put chan (try-load-extension path)))))
-            (define maybe-result (sync/timeout timeout-secs chan))
-            (unless maybe-result
-              (kill-thread thd)) ; #447: prevent thread leak
-            (if maybe-result
-                maybe-result
-                (extension-load-error (if (path? path)
-                                          (path->string path)
-                                          path)
-                                      (format "extension startup timed out after ~as" timeout-secs)
-                                      'timeout)))
-          ;; No timeout — direct call
-          (try-load-extension path)))
-    (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                         (lambda ()
-                           (printf "[~a] load-extension! result: ~a\n"
-                                   (current-inexact-milliseconds)
-                                   (cond
-                                     [(extension-load-error? result)
-                                      (format "load-error: ~a [~a]"
-                                              (extension-load-error-message result)
-                                              (extension-load-error-category result))]
-                                     [(extension? result)
-                                      (format "ext ~a hooks ~a"
-                                              (extension-name result)
-                                              (hash-keys (extension-hooks result)))]
-                                     [else result])))
-                         #:exists 'append)
-    (cond
-      [(extension-load-error? result)
-       (log-warning "extension load failed [~a]: ~a \u2014 ~a"
-                    (extension-load-error-category result)
-                    path
-                    (extension-load-error-message result))
-       (when event-bus
-         (publish! event-bus
-                   (make-event "extension.load.failed"
-                               (current-seconds)
-                               ""
-                               #f
-                               (hasheq 'path
-                                       (if (path? path)
+  (cond
+    [(or (eq? state 'disabled) (eq? state 'quarantined)) #f]
+    [else
+     (define timeout-secs (current-extension-startup-timeout))
+     (define result
+       (if timeout-secs
+           ;; Run with timeout to prevent hanging on slow extensions
+           (let ([chan (make-channel)])
+             (define thd (thread (lambda () (channel-put chan (try-load-extension path)))))
+             (define maybe-result (sync/timeout timeout-secs chan))
+             (unless maybe-result
+               (kill-thread thd)) ; #447: prevent thread leak
+             (if maybe-result
+                 maybe-result
+                 (extension-load-error (if (path? path)
                                            (path->string path)
                                            path)
-                                       'error
-                                       (extension-load-error-message result)
-                                       'category
-                                       (extension-load-error-category result)))))]
-      [(and result (extension? result))
-       ;; Tier validation: default to 'hooks (lowest) if no manifest tier declared
-       (define declared-tier 'hooks)
-       (define tier-result (extension-tier-valid? result declared-tier))
-       (when (list? tier-result)
-         (for ([msg (in-list tier-result)])
-           (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
-       (register-extension! registry result)
-       (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                            (lambda ()
-                              (printf "[~a] register-extension! called for ~a\n"
-                                      (current-inexact-milliseconds)
-                                      (extension-name result)))
-                            #:exists 'append)]))
-  (void))
+                                       (format "extension startup timed out after ~as" timeout-secs)
+                                       'timeout)))
+           ;; No timeout — direct call
+           (try-load-extension path)))
+     (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                          (lambda ()
+                            (printf "[~a] load-extension! result: ~a\n"
+                                    (current-inexact-milliseconds)
+                                    (cond
+                                      [(extension-load-error? result)
+                                       (format "load-error: ~a [~a]"
+                                               (extension-load-error-message result)
+                                               (extension-load-error-category result))]
+                                      [(extension? result)
+                                       (format "ext ~a hooks ~a"
+                                               (extension-name result)
+                                               (hash-keys (extension-hooks result)))]
+                                      [else result])))
+                          #:exists 'append)
+     (cond
+       [(extension-load-error? result)
+        (log-warning "extension load failed [~a]: ~a \u2014 ~a"
+                     (extension-load-error-category result)
+                     path
+                     (extension-load-error-message result))
+        (when event-bus
+          (publish! event-bus
+                    (make-event "extension.load.failed"
+                                (current-seconds)
+                                ""
+                                #f
+                                (hasheq 'path
+                                        (if (path? path)
+                                            (path->string path)
+                                            path)
+                                        'error
+                                        (extension-load-error-message result)
+                                        'category
+                                        (extension-load-error-category result)))))
+        #f]
+       [(and result (extension? result))
+        ;; Tier validation: default to 'hooks (lowest) if no manifest tier declared
+        (define declared-tier 'hooks)
+        (define tier-result (extension-tier-valid? result declared-tier))
+        (when (list? tier-result)
+          (for ([msg (in-list tier-result)])
+            (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
+        (register-extension! registry result)
+        (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                             (lambda ()
+                               (printf "[~a] register-extension! called for ~a\n"
+                                       (current-inexact-milliseconds)
+                                       (extension-name result)))
+                             #:exists 'append)
+        #t]
+       [else #f])]))
 
 ;; Cache infrastructure removed (#448): was never called in production
 ;; code paths (discover-extensions calls try-load-extension directly).
@@ -192,7 +197,11 @@
                                                          path)
                                                      (exn-message e)
                                                      (classify-exception e)))])
-    (define mod-path (path->complete-path path))
+    (define raw-path (path->complete-path path))
+    ;; Resolve symlinks so relative requires inside the extension module
+    ;; are resolved relative to the REAL file's directory, not the symlink's.
+    ;; E.g. .q/extensions/gsd-planning.rkt (symlink) → extensions/gsd-planning.rkt (real)
+    (define mod-path (simplify-path (resolve-path raw-path)))
     (unless (file-exists? mod-path)
       (raise (make-not-found-error path)))
     ;; Validate manifest if present (SEC-04)
@@ -366,7 +375,8 @@
       (with-handlers ([exn:fail? (lambda (e)
                                    (log-warning
                                     (format "Failed to load ~a: ~a" name (exn-message e))))])
-        (define ext (dynamic-require (path->complete-path path) 'the-extension))
+        (define ext
+          (dynamic-require (simplify-path (resolve-path (path->complete-path path))) 'the-extension))
         (when (extension? ext)
           (register-extension! registry ext)
           (set! loaded (cons name loaded))))))
