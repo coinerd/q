@@ -129,7 +129,10 @@
                            (printf "[~a] load-extension! result: ~a\n"
                                    (current-inexact-milliseconds)
                                    (cond
-                                     [(extension-load-error? result) 'load-error]
+                                     [(extension-load-error? result)
+                                      (format "load-error: ~a [~a]"
+                                              (extension-load-error-message result)
+                                              (extension-load-error-category result))]
                                      [(extension? result)
                                       (format "ext ~a hooks ~a"
                                               (extension-name result)
