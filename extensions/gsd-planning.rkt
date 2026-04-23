@@ -217,12 +217,35 @@
   (ext-register-command! ctx "/handoff" "Display handoff status" 'general '() '("ho"))
   (hook-pass #f))
 
+;; Execute command handler: responds to /plan, /state, /handoff dispatch
+(define (handle-execute-command payload)
+  (define cmd (hash-ref payload 'command #f))
+  (define base-dir (current-directory))
+  (define artifact
+    (cond
+      [(member cmd '("/plan" "/p")) "PLAN"]
+      [(member cmd '("/state" "/s")) "STATE"]
+      [(member cmd '("/handoff" "/ho")) "HANDOFF"]
+      [else #f]))
+  (cond
+    [(not artifact) (hook-pass payload)]
+    [else
+     (define content (read-planning-artifact base-dir artifact))
+     (define text
+       (cond
+         [(not content) (format "No ~a found in .planning/" artifact)]
+         [(hash? content) (jsexpr->string content)]
+         [else content]))
+     (hook-amend (hasheq 'text text))]))
+
 (define-q-extension gsd-planning-extension
                     #:version "1.0.0"
                     #:api-version "1"
                     #:on register-tools
                     register-gsd-tools
                     #:on register-shortcuts
-                    register-gsd-commands)
+                    register-gsd-commands
+                    #:on execute-command
+                    handle-execute-command)
 
 (define the-extension gsd-planning-extension)
