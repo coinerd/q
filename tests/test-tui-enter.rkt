@@ -54,7 +54,7 @@
       (define ctx (make-test-ctx))
       (type-text ctx "/quit")
       (define result (handle-key ctx 'return))
-      (check-equal? result '(command quit)))
+      (check-equal? result '(command quit "/quit")))
 
     ;; --------------------------------------------------
     ;; Test 4: 'return with /help returns command
@@ -63,7 +63,7 @@
       (define ctx (make-test-ctx))
       (type-text ctx "/help")
       (define result (handle-key ctx 'return))
-      (check-equal? result '(command help)))
+      (check-equal? result '(command help "/help")))
 
     ;; --------------------------------------------------
     ;; Test 5: 'return with /clear returns command
@@ -72,7 +72,7 @@
       (define ctx (make-test-ctx))
       (type-text ctx "/clear")
       (define result (handle-key ctx 'return))
-      (check-equal? result '(command clear)))
+      (check-equal? result '(command clear "/clear")))
 
     ;; --------------------------------------------------
     ;; Test 6: 'kp-return (numpad enter) also submits
