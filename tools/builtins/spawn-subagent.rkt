@@ -18,19 +18,35 @@
          "../../llm/model.rkt"
          "../../util/ids.rkt"
          (only-in "../../util/protocol-types.rkt" make-message message-role message-content)
-         (only-in "../../runtime/settings.rkt" q-settings? setting-ref))
+         (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
+         (only-in "../builtins/skill-router.rkt" tool-skill-route))
 
 (provide tool-spawn-subagent
-         tool-spawn-subagents)
+         tool-spawn-subagents
+         resolve-role-prompt)
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
   "You are a focused assistant executing a specific delegated task. Complete the task efficiently and return the result.")
 
+;; Resolve a role value: if it matches a skill name, load that skill as the prompt.
+;; Otherwise use it as a literal prompt string.
+(define (resolve-role-prompt role-value)
+  (if (string? role-value)
+      (let* ([result (tool-skill-route (hasheq 'action "context" 'name role-value))])
+        (if (and (tool-result? result) (not (tool-result-is-error? result)))
+            ;; Skill found — use its content as the role prompt
+            (let ([content (hash-ref (car (tool-result-content result)) 'text "")])
+              (if (non-empty-string? content) content default-role-prompt))
+            ;; Not a skill name — use as literal prompt
+            (if (non-empty-string? role-value) role-value default-role-prompt)))
+      default-role-prompt))
+
 ;; The spawn-subagent tool implementation
 (define (tool-spawn-subagent args [exec-ctx #f])
   (define task (hash-ref args 'task #f))
-  (define role-prompt (hash-ref args 'role default-role-prompt))
+  (define role-arg (hash-ref args 'role default-role-prompt))
+  (define role-prompt (resolve-role-prompt role-arg))
   (define max-turns (hash-ref args 'max-turns 5))
   (define allowed-tools (hash-ref args 'tools #f)) ;; optional list of tool names
 
