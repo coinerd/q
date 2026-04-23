@@ -90,6 +90,31 @@
   (check-true (string-contains? opts-str "BatchMode=yes")))
 
 ;; ============================================================
+;; Tool registration test
+;; ============================================================
+
+(require "../extensions/context.rkt"
+         "../extensions/dynamic-tools.rkt"
+         "../extensions/api.rkt"
+         "../extensions/hooks.rkt"
+         "../agent/event-bus.rkt")
+
+(test-case "remote-collab extension registers remote-q tool"
+  (define reg (make-tool-registry))
+  (define ctx
+    (make-extension-ctx #:session-id "test"
+                        #:session-dir "/tmp"
+                        #:event-bus (make-event-bus)
+                        #:extension-registry (make-extension-registry)
+                        #:tool-registry reg
+                        #:command-registry (box (hash))))
+  (define hook (hash-ref (extension-hooks the-extension) 'register-tools #f))
+  (check-not-false hook "register-tools hook exists")
+  (when hook
+    (hook ctx))
+  (check-not-false (lookup-tool reg "remote-q") "remote-q tool registered"))
+
+;; ============================================================
 ;; M7 regression: Session name validation
 ;; ============================================================
 
