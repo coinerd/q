@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.17.4 — 2026-04-23
+
+### Phase E: Polish
+
+- **ext-package-manager**: Wraps `runtime/package.rkt` as a tool. Actions: list,
+  install, remove, info for extension packages.
+- **image-input**: Multi-modal image support. Base64 encodes images (PNG, JPEG,
+  GIF, WebP) and constructs multi-modal messages for vision-capable LLMs.
+- **session-export**: Export session JSONL logs to HTML, JSON, or Markdown.
+  Supports output to file or inline text result.
+
+### Testing
+
+- 16 tests across 3 Phase E extensions
+- All existing tests continue to pass
+
+---
+
 ## v0.17.3 — 2026-04-23
 
 ### Phase D: GSD Skills
