@@ -27,7 +27,8 @@
          "../interfaces/sessions.rkt"
          "../runtime/model-registry.rkt"
          "../runtime/extension-catalog.rkt"
-         "../extensions/hooks.rkt")
+         "../extensions/hooks.rkt"
+         "../extensions/loader.rkt")
 
 ;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
 (provide cmd-ctx
@@ -418,6 +419,35 @@
 ;; /activate command — extension management
 ;; ============================================================
 
+;; Try to hot-load a newly activated extension into the running registry.
+;; Returns a status entry (success or warning) or #f if no registry available.
+(define (try-hot-load-extension cctx name target-dir)
+  (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
+  (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
+  (define bus (cmd-ctx-event-bus cctx))
+  (cond
+    [(not ext-reg) #f]
+    [else
+     (define ext-path (build-path target-dir (string-append name ".rkt")))
+     (cond
+       [(not (file-exists? ext-path))
+        (make-entry 'system
+                    (format "  Warning: extension file not found for hot-load: ~a" ext-path)
+                    (current-inexact-milliseconds)
+                    (hash))]
+       [else
+        (with-handlers ([exn:fail? (λ (e)
+                                     (make-entry 'system
+                                                 (format "  Warning: hot-load failed: ~a"
+                                                         (exn-message e))
+                                                 (current-inexact-milliseconds)
+                                                 (hash)))])
+          (load-extension! ext-reg ext-path #:event-bus bus)
+          (make-entry 'system
+                      (format "  Extension '~a' loaded into running session." name)
+                      (current-inexact-milliseconds)
+                      (hash)))])]))
+
 ;; handle-activate-command : cmd-ctx? -> 'continue
 ;; Supports:
 ;;   /activate              — show status (active + available)
@@ -452,10 +482,17 @@
              (define target-dir (build-path q-home "extensions"))
              (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
                (activate-extension! name target-dir)
-               (list (make-entry 'system
-                                 (format "Extension '~a' activated globally (~a)" name target-dir)
-                                 (current-inexact-milliseconds)
-                                 (hash))))])]
+               (define hot-load-entry (try-hot-load-extension cctx name target-dir))
+               (if hot-load-entry
+                   (list (make-entry 'system
+                                     (format "Extension '~a' activated globally (~a)" name target-dir)
+                                     (current-inexact-milliseconds)
+                                     (hash))
+                         hot-load-entry)
+                   (list (make-entry 'system
+                                     (format "Extension '~a' activated globally (~a)" name target-dir)
+                                     (current-inexact-milliseconds)
+                                     (hash)))))])]
          ;; /activate <name> — activate in project-local dir
          [(and (pair? args) (not (string-prefix? (car args) "--")))
           (define name (car args))
@@ -466,10 +503,17 @@
              (define target-dir (build-path project-dir ".q" "extensions"))
              (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
                (activate-extension! name target-dir)
-               (list (make-entry 'system
-                                 (format "Extension '~a' activated locally (~a)" name target-dir)
-                                 (current-inexact-milliseconds)
-                                 (hash))))])]
+               (define hot-load-entry (try-hot-load-extension cctx name target-dir))
+               (if hot-load-entry
+                   (list (make-entry 'system
+                                     (format "Extension '~a' activated locally (~a)" name target-dir)
+                                     (current-inexact-milliseconds)
+                                     (hash))
+                         hot-load-entry)
+                   (list (make-entry 'system
+                                     (format "Extension '~a' activated locally (~a)" name target-dir)
+                                     (current-inexact-milliseconds)
+                                     (hash)))))])]
          ;; /activate with no args — show status
          [else (list-status-entries project-dir)])]))
   (define new-state

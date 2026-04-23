@@ -143,6 +143,9 @@
           ;; Shortcut registration
           'register-shortcuts
           '(pass amend)
+          ;; Command dispatch
+          'execute-command
+          '(pass amend)
           ;; Agent lifecycle
           'agent.started
           '(pass)

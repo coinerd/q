@@ -342,3 +342,50 @@
   (check-true (or (tool-result-is-error? result)
                   (not (file-exists? (build-path dir ".planning" "../../etc/crontab.md")))))
   (delete-directory/files dir))
+
+;; ============================================================
+;; execute-command handler tests
+;; ============================================================
+
+(test-case "execute-command handler returns plan content"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       ;; Write a plan
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "PLAN.md")
+         (lambda (out) (display "# Plan\nWave 1: test" out))
+         #:exists 'truncate)
+       ;; Get the handler from the extension hooks
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/plan" 'input "/plan")))
+       (check-equal? (hook-result-action result) 'amend)
+       (check-equal? (hash-ref (hook-result-payload result) 'text) "# Plan\nWave 1: test")))))
+
+(test-case "execute-command handler returns state content"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "STATE.md")
+         (lambda (out) (display "Status: in progress" out))
+         #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/state" 'input "/state")))
+       (check-equal? (hook-result-action result) 'amend)
+       (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "in progress"))))))
+
+(test-case "execute-command handler passes unknown commands"
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/unknown" 'input "/unknown")))
+  (check-equal? (hook-result-action result) 'pass))
+
+(test-case "execute-command handler reports missing artifact"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       ;; No .planning/ dir
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/plan" 'input "/plan")))
+       (check-equal? (hook-result-action result) 'amend)
+       (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "No PLAN found"))))))
