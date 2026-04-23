@@ -9,7 +9,8 @@
 ;; #1193: Subagent Spawning — Isolated Child Agent Processes
 ;; #1203/#1204: Real provider injection — uses parent's provider
 
-(require racket/port
+(require racket/list
+         racket/port
          racket/string
          "../../tools/tool.rkt"
          "../../agent/event-bus.rkt"
@@ -19,7 +20,8 @@
          (only-in "../../util/protocol-types.rkt" make-message message-role message-content)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref))
 
-(provide tool-spawn-subagent)
+(provide tool-spawn-subagent
+         tool-spawn-subagents)
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
@@ -138,6 +140,145 @@
          ;; Would need tool execution — simplified: return results
          [(eq? (model-response-stop-reason resp) 'tool_calls) (values new-all 'stopped)]
          [else (values new-all 'complete)])])))
+
+;; ============================================================
+;; spawn-subagents: Batch parallel execution
+;; ============================================================
+
+;; Run a single job and return (cons job-id result) or (cons job-id error)
+(define (run-single-job job provider parent-ctx)
+  (define job-id (hash-ref job 'jobId #f))
+  (define task (hash-ref job 'task #f))
+  (define role-prompt (hash-ref job 'role (hash-ref job 'rolePrompt #f)))
+  (define model-name (or (hash-ref job 'model #f) (resolve-model-name parent-ctx job)))
+  (define max-turns (hash-ref job 'max-turns 5))
+  (define result
+    (if (not task)
+        (make-error-result "task is required for each job")
+        (run-subagent (hasheq 'task
+                              task
+                              'role
+                              (or role-prompt default-role-prompt)
+                              'model
+                              model-name
+                              'max-turns
+                              max-turns)
+                      (or role-prompt default-role-prompt)
+                      max-turns
+                      #f ;; allowed-tools
+                      parent-ctx)))
+  (cons job-id result))
+
+;; Batch subagent execution with concurrency control
+(define (tool-spawn-subagents args [exec-ctx #f])
+  (define jobs (hash-ref args 'jobs #f))
+  (define max-parallel (hash-ref args 'maxParallel 3))
+  (define aggregate? (hash-ref args 'aggregate #t))
+
+  (cond
+    [(not jobs) (make-error-result "jobs array is required")]
+    [(not (list? jobs)) (make-error-result "jobs must be an array")]
+    [(= (length jobs) 0) (make-error-result "jobs array must not be empty")]
+    [(> (length jobs) 12) (make-error-result "jobs array must not exceed 12 items")]
+    [(< max-parallel 1) (make-error-result "maxParallel must be at least 1")]
+    [(> max-parallel 3) (make-error-result "maxParallel must not exceed 3")]
+    [else
+     (define effective-parallel (min max-parallel (length jobs) 3))
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (make-error-result (format "spawn-subagents failed: ~a"
+                                                             (exn-message e))))])
+       ;; Resolve provider once for all jobs
+       (define provider (resolve-provider exec-ctx))
+
+       ;; Execute jobs with bounded parallelism using futures/threads
+       (define results (run-jobs-parallel jobs provider exec-ctx effective-parallel))
+
+       ;; Aggregate results
+       (define job-results
+         (for/list ([r (in-list results)])
+           (define job-id (car r))
+           (define result (cdr r))
+           (hasheq 'jobId
+                   job-id
+                   'success
+                   (not (tool-result-is-error? result))
+                   'content
+                   (tool-result-content result)
+                   'details
+                   (tool-result-details result))))
+
+       (define success-count (count (lambda (r) (hash-ref r 'success #f)) job-results))
+       (define fail-count (- (length job-results) success-count))
+
+       (define summary-text
+         (if aggregate?
+             (format "Batch complete: ~a/~a succeeded, ~a failed.\n\n~a"
+                     success-count
+                     (length job-results)
+                     fail-count
+                     (string-join (for/list ([jr (in-list job-results)])
+                                    (format "[~a] ~a"
+                                            (or (hash-ref jr 'jobId #f) "unnamed")
+                                            (if (hash-ref jr 'success #f)
+                                                (extract-text-summary (hash-ref jr 'content '()))
+                                                "FAILED")))
+                                  "\n---\n"))
+             (format "Batch complete: ~a/~a succeeded, ~a failed."
+                     success-count
+                     (length job-results)
+                     fail-count)))
+
+       (make-success-result (list (hasheq 'type "text" 'text summary-text))
+                            (hasheq 'total-jobs
+                                    (length job-results)
+                                    'succeeded
+                                    success-count
+                                    'failed
+                                    fail-count
+                                    'jobs
+                                    job-results)))]))
+
+;; Extract a short text summary from tool result content
+(define (extract-text-summary content)
+  (define full-text
+    (string-join (for/list ([c (in-list (if (list? content)
+                                            content
+                                            '()))]
+                            #:when (and (hash? c) (hash-ref c 'text #f)))
+                   (hash-ref c 'text ""))
+                 "\n"))
+  ;; Truncate to 200 chars for summary
+  (if (> (string-length full-text) 200)
+      (string-append (substring full-text 0 200) "...")
+      full-text))
+
+;; Run jobs in parallel with bounded concurrency using threads + channel
+(define (run-jobs-parallel jobs provider exec-ctx max-parallel)
+  (define n (length jobs))
+  (cond
+    ;; Single job: run directly (no thread overhead)
+    [(= n 1) (list (run-single-job (car jobs) provider exec-ctx))]
+    ;; Multiple jobs: use threads with bounded concurrency
+    [else
+     (define results-box (box '()))
+     (define concurrency-sem (make-semaphore max-parallel))
+     (define mutex-sem (make-semaphore 1))
+     (define threads
+       (for/list ([job (in-list jobs)])
+         (thread (lambda ()
+                   ;; Acquire concurrency slot
+                   (call-with-semaphore
+                    concurrency-sem
+                    (lambda ()
+                      (define r (run-single-job job provider exec-ctx))
+                      ;; Thread-safe append to results (shared mutex)
+                      (call-with-semaphore
+                       mutex-sem
+                       (lambda () (set-box! results-box (cons r (unbox results-box)))))))))))
+     ;; Wait for all threads to complete
+     (for-each thread-wait threads)
+     ;; Results are in reverse order (last completed first), restore job order
+     (reverse (unbox results-box))]))
 
 ;; Helper: create a mock provider for subagent testing (fallback when no real provider)
 (define (build-mock-provider-for-subagent)

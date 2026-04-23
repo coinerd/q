@@ -8,7 +8,7 @@
 ;; register-default-tools! — registers all tools
 ;; ============================================================
 
-(test-case "register-default-tools! registers all 11 built-in tools"
+(test-case "register-default-tools! registers all 13 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (sort (tool-names reg) string<?))
@@ -23,7 +23,9 @@
                         "date"
                         "firecrawl"
                         "spawn-subagent"
-                        "session_recall")
+                        "spawn-subagents"
+                        "session_recall"
+                        "skill-route")
                string<?)))
 
 (test-case "each registered tool has correct name"

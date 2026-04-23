@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.17.0 — 2026-04-23
+
+### Phase A: Foundation Extensions
+
+- **A1**: `spawn-subagents` tool — parallel batch execution with output aggregation
+  (up to 3 concurrent subagent processes, structured results, partial failure handling)
+- **A2**: `gsd-planning` extension — registers `planning-read` and `planning-write` tools
+  plus `/plan`, `/state`, `/handoff` slash commands
+- **A3**: `github-integration` extension — registers 6 GitHub tools:
+  `gh-issue`, `gh-pr`, `gh-milestone`, `gh-board`, `gh-wave-start`, `gh-wave-finish`
+  Uses `gh` CLI via subprocess with `gh-binary-path` parameter for test injection
+- **A4**: `skill-route` tool — skill discovery by description match, full content loading
+  Actions: `list`, `match`, `load`. Registered in `registry-defaults.rkt`
+
+### Testing
+
+- 60 tests for github-integration extension (mock `gh` CLI)
+- 11 tests for skill-route tool
+- All existing tests continue to pass
+
+---
+
 ## v0.16.1 — 2026-04-22
 
 ### Critical Fixes (from PROJECT_REVIEW_v0.16.0)

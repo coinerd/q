@@ -17,7 +17,8 @@
          "builtins/date.rkt"
          "builtins/firecrawl.rkt"
          "builtins/spawn-subagent.rkt"
-         "builtins/session-recall.rkt")
+         "builtins/session-recall.rkt"
+         "builtins/skill-router.rkt")
 
 (provide register-default-tools!)
 
@@ -239,6 +240,36 @@
                               "Allowed tool names for child")))
       tool-spawn-subagent)))
 
+  ;; spawn-subagents: batch parallel subagent execution
+  (when (should-register? "spawn-subagents")
+    (register-tool!
+     registry
+     (make-tool
+      "spawn-subagents"
+      "Run multiple subagent tasks in parallel with bounded concurrency."
+      (hasheq
+       'type
+       "object"
+       'required
+       '("jobs")
+       'properties
+       (hasheq
+        'jobs
+        (hasheq 'type
+                "array"
+                'description
+                "Array of job objects, each with task (required), role, model, max-turns, jobId"
+                'items
+                (hasheq 'type "object"))
+        'maxParallel
+        (hasheq 'type "integer" 'description "Max concurrent subagents (1-3, default 3)")
+        'aggregate
+        (hasheq 'type
+                "boolean"
+                'description
+                "Include aggregated summary in response (default true)")))
+      tool-spawn-subagents)))
+
   ;; Session recall tool — retrieve earlier session entries by ID, query, or range (#1391)
   (when (should-register? "session_recall")
     (register-tool!
@@ -276,5 +307,30 @@
                        'description
                        "Retrieve a range of entries by ID (inclusive)")))
       tool-session-recall)))
+
+  ;; skill-route: discover and search skills by description match
+  (when (should-register? "skill-route")
+    (register-tool!
+     registry
+     (make-tool
+      "skill-route"
+      "Discover, search, and load skill instructions by name or description."
+      (hasheq
+       'type
+       "object"
+       'required
+       '()
+       'properties
+       (hasheq
+        'action
+        (hasheq 'type
+                "string"
+                'description
+                "Action: list (all skills), match (search by query), load (full content by name)")
+        'query
+        (hasheq 'type "string" 'description "Search query for match action")
+        'name
+        (hasheq 'type "string" 'description "Skill name for load action")))
+      tool-skill-route)))
 
   (void))
