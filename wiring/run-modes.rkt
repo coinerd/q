@@ -106,10 +106,13 @@
               sd))))
   (make-directory* session-dir)
 
-  ;; Extension registry — discover from project dir
+  ;; Extension registry — discover from global + project dirs
+  ;; Load order: global (~/.q/extensions/) first, then project-local.
+  ;; Project-local extensions override global ones (same name wins from later registration).
   (define ext-reg (make-extension-registry))
+  (define q-home (build-path (find-system-path 'home-dir) ".q"))
+  (load-extensions-from-dir! ext-reg (build-path q-home "extensions") #:event-bus bus)
   (load-extensions-from-dir! ext-reg (build-path project-dir ".q" "extensions") #:event-bus bus)
-  (load-extensions-from-dir! ext-reg (build-path project-dir ".pi" "extensions") #:event-bus bus)
 
   ;; #677/#678: Query extensions for commands and shortcuts
   (define ext-cmds
