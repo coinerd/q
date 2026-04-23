@@ -6,6 +6,7 @@
 ;; Returns structured results for assertion.
 
 (require racket/file
+         racket/port
          (prefix-in sdk: "../../../interfaces/sdk.rkt")
          "../../../agent/event-bus.rkt"
          (only-in "../../../util/protocol-types.rkt"
@@ -23,6 +24,7 @@
          (only-in "../../../extensions/api.rkt" make-extension-registry extension-registry?)
          (only-in "../../../extensions/loader.rkt" load-extension!)
          (only-in "../../../wiring/run-modes.rkt" load-extensions-from-dir!)
+         (only-in "../../../skills/resource-loader.rkt" try-read-file)
          "../../../util/jsonl.rkt"
          "../fixtures/temp-project.rkt"
          "../fixtures/event-recorder.rkt"
@@ -60,6 +62,7 @@
 ;;               #:system-instructions (listof string?)
 ;;               #:extensions (listof path-string?)
 ;;               #:extension-registry (or/c extension-registry? #f)
+;;               #:skills-dir (or/c path-string? #f)
 ;;            -> workflow-result?
 ;;
 ;; Creates a full SDK runtime with the given provider, runs a single prompt,
@@ -71,7 +74,8 @@
                       #:max-iterations [max-iter 10]
                       #:system-instructions [system-instrs '()]
                       #:extensions [ext-paths '()]
-                      #:extension-registry [ext-reg #f])
+                      #:extension-registry [ext-reg #f]
+                      #:skills-dir [skills-dir #f])
   (define-values (project-dir session-dir)
     (if (null? files)
         (values #f (make-temp-session-dir))
@@ -91,13 +95,26 @@
          (load-extension! er p #:event-bus bus))
        er]))
 
+  ;; Load skills from directory and append to system instructions
+  (define skill-instrs
+    (if (and skills-dir (directory-exists? skills-dir))
+        (let* ([skills-sub (build-path skills-dir "skills")]
+               [dir (if (directory-exists? skills-sub) skills-sub skills-dir)])
+          (filter values
+                  (for/list ([entry (in-list (directory-list dir))]
+                             #:when (directory-exists? (build-path dir entry)))
+                    (define skill-file (build-path dir entry "SKILL.md"))
+                    (try-read-file skill-file))))
+        '()))
+  (define effective-system-instrs (append system-instrs skill-instrs))
+
   (define rt
     (sdk:make-runtime #:provider provider
                       #:session-dir session-dir
                       #:tool-registry reg
                       #:event-bus bus
                       #:max-iterations max-iter
-                      #:system-instructions system-instrs
+                      #:system-instructions effective-system-instrs
                       #:extension-registry effective-ext-reg))
   (define rt2 (sdk:open-session rt))
   (define sid (hash-ref (sdk:session-info rt2) 'session-id))
@@ -126,7 +143,8 @@
                                  #:files [files '()]
                                  #:max-iterations [max-iter 10]
                                  #:extensions [ext-paths '()]
-                                 #:extension-registry [ext-reg #f])
+                                 #:extension-registry [ext-reg #f]
+                                 #:skills-dir [skills-dir #f])
   (define-values (project-dir session-dir)
     (if (null? files)
         (values #f (make-temp-session-dir))
@@ -146,12 +164,25 @@
          (load-extension! er p #:event-bus bus))
        er]))
 
+  ;; Load skills from directory
+  (define skill-instrs
+    (if (and skills-dir (directory-exists? skills-dir))
+        (let* ([skills-sub (build-path skills-dir "skills")]
+               [dir (if (directory-exists? skills-sub) skills-sub skills-dir)])
+          (filter values
+                  (for/list ([entry (in-list (directory-list dir))]
+                             #:when (directory-exists? (build-path dir entry)))
+                    (define skill-file (build-path dir entry "SKILL.md"))
+                    (try-read-file skill-file))))
+        '()))
+
   (define rt
     (sdk:make-runtime #:provider provider
                       #:session-dir session-dir
                       #:tool-registry reg
                       #:event-bus bus
                       #:max-iterations max-iter
+                      #:system-instructions skill-instrs
                       #:extension-registry effective-ext-reg))
   (define rt2 (sdk:open-session rt))
   (define sid (hash-ref (sdk:session-info rt2) 'session-id))
