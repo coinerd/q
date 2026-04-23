@@ -30,10 +30,10 @@
     (define skill-dir (build-path skills-dir skill-name))
     (make-directory* skill-dir)
     (call-with-output-file (build-path skill-dir "SKILL.md")
-      (lambda (out)
-        (displayln (format "# ~a" skill-name) out)
-        (displayln "" out)
-        (displayln content out))))
+                           (lambda (out)
+                             (displayln (format "# ~a" skill-name) out)
+                             (displayln "" out)
+                             (displayln content out))))
   dir)
 
 (define (cleanup-dir dir)
@@ -45,9 +45,9 @@
 ;; ============================================================
 
 (test-case "skill-route list returns all skills"
-  (define dir (make-temp-skill-dir
-               '(("test-skill" . "A test skill for routing.\n\nFull content here.")
-                 ("another-skill" . "Another skill.\n\nMore content."))))
+  (define dir
+    (make-temp-skill-dir '(("test-skill" . "A test skill for routing.\n\nFull content here.")
+                           ("another-skill" . "Another skill.\n\nMore content."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq 'action "list")))
     (check-pred tool-result? result)
@@ -64,10 +64,10 @@
 ;; ============================================================
 
 (test-case "skill-route match finds by description"
-  (define dir (make-temp-skill-dir
-               '(("bug-fixer" . "Fix bugs in the codebase.\n\nInstructions.")
-                 ("docs-writer" . "Write documentation for the project.\n\nInstructions.")
-                 ("code-reviewer" . "Review code changes.\n\nInstructions."))))
+  (define dir
+    (make-temp-skill-dir '(("bug-fixer" . "Fix bugs in the codebase.\n\nInstructions.")
+                           ("docs-writer" . "Write documentation for the project.\n\nInstructions.")
+                           ("code-reviewer" . "Review code changes.\n\nInstructions."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq 'action "match" 'query "bug")))
     (check-pred tool-result? result)
@@ -82,9 +82,9 @@
 ;; ============================================================
 
 (test-case "skill-route match finds by name"
-  (define dir (make-temp-skill-dir
-               '(("q-gsd-orchestrator" . "Top level router.\n\nContent.")
-                 ("q-gsd-reviewer" . "Review code.\n\nContent."))))
+  (define dir
+    (make-temp-skill-dir '(("q-gsd-orchestrator" . "Top level router.\n\nContent.")
+                           ("q-gsd-reviewer" . "Review code.\n\nContent."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq 'action "match" 'query "reviewer")))
     (check-pred tool-result? result)
@@ -107,8 +107,9 @@
 ;; ============================================================
 
 (test-case "skill-route load returns full content"
-  (define dir (make-temp-skill-dir
-               '(("my-skill" . "Short description.\n\nDetailed skill content here.\nMultiple lines."))))
+  (define dir
+    (make-temp-skill-dir
+     '(("my-skill" . "Short description.\n\nDetailed skill content here.\nMultiple lines."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq 'action "load" 'name "my-skill")))
     (check-pred tool-result? result)
@@ -122,8 +123,7 @@
 ;; ============================================================
 
 (test-case "skill-route load non-existent skill returns error"
-  (define dir (make-temp-skill-dir
-               '(("exists" . "A skill.\n\nContent."))))
+  (define dir (make-temp-skill-dir '(("exists" . "A skill.\n\nContent."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq 'action "load" 'name "nonexistent")))
     (check-pred tool-result? result)
@@ -167,8 +167,7 @@
 ;; ============================================================
 
 (test-case "skill-route match is case-insensitive"
-  (define dir (make-temp-skill-dir
-               '(("Bug-Fixer" . "Fix bugs.\n\nContent."))))
+  (define dir (make-temp-skill-dir '(("Bug-Fixer" . "Fix bugs.\n\nContent."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq 'action "match" 'query "BUG")))
     (check-pred tool-result? result)
@@ -182,12 +181,88 @@
 ;; ============================================================
 
 (test-case "skill-route defaults to list"
-  (define dir (make-temp-skill-dir
-               '(("default-test" . "A skill.\n\nContent."))))
+  (define dir (make-temp-skill-dir '(("default-test" . "A skill.\n\nContent."))))
   (parameterize ([current-directory dir])
     (define result (tool-skill-route (hasheq)))
     (check-pred tool-result? result)
     (check-false (tool-result-is-error? result))
     (define text (hash-ref (car (tool-result-content result)) 'text ""))
     (check-true (string-contains? text "default-test")))
+  (cleanup-dir dir))
+
+;; ============================================================
+;; Test: recommend returns top-3 with confidence
+;; ============================================================
+
+(test-case "skill-route recommend returns top skills with confidence"
+  (define dir
+    (make-temp-skill-dir '(("bug-fixer" . "Fix bugs in the codebase.")
+                           ("bug-analyzer" . "Analyze bugs and find root causes.")
+                           ("docs-writer" . "Write documentation.")
+                           ("code-reviewer" . "Review code changes."))))
+  (parameterize ([current-directory dir])
+    (define result (tool-skill-route (hasheq 'action "recommend" 'query "bug fix")))
+    (check-pred tool-result? result)
+    (check-false (tool-result-is-error? result))
+    (define text (hash-ref (car (tool-result-content result)) 'text ""))
+    (check-true (string-contains? text "bug-fixer"))
+    (check-true (string-contains? text "bug-analyzer"))
+    (check-true (string-contains? text "confidence")))
+  (cleanup-dir dir))
+
+(test-case "skill-route recommend without query returns error"
+  (define result (tool-skill-route (hasheq 'action "recommend")))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+;; ============================================================
+;; Test: context returns skill content with shared deps
+;; ============================================================
+
+(test-case "skill-route context returns skill content"
+  (define dir (make-temp-skill-dir '(("my-skill" . "Skill description.\n\nDetailed instructions."))))
+  (parameterize ([current-directory dir])
+    (define result (tool-skill-route (hasheq 'action "context" 'name "my-skill")))
+    (check-pred tool-result? result)
+    (check-false (tool-result-is-error? result))
+    (define text (hash-ref (car (tool-result-content result)) 'text ""))
+    (check-true (string-contains? text "Detailed instructions")))
+  (cleanup-dir dir))
+
+(test-case "skill-route context with _shared dependencies"
+  (define dir (make-temporary-file "skill-test-~a" 'directory))
+  (define skills-dir (build-path dir ".q" "skills"))
+  (define skill-dir (build-path skills-dir "shared-skill"))
+  (define shared-dir (build-path skill-dir "_shared"))
+  (make-directory* shared-dir)
+  (call-with-output-file (build-path skill-dir "SKILL.md")
+                         (lambda (out)
+                           (displayln "# shared-skill" out)
+                           (displayln "" out)
+                           (displayln "A skill with shared deps." out)))
+  (call-with-output-file (build-path shared-dir "PLAYBOOK.md")
+                         (lambda (out)
+                           (displayln "# Playbook" out)
+                           (displayln "Common debugging steps." out)))
+  (parameterize ([current-directory dir])
+    (define result (tool-skill-route (hasheq 'action "context" 'name "shared-skill")))
+    (check-pred tool-result? result)
+    (check-false (tool-result-is-error? result))
+    (define text (hash-ref (car (tool-result-content result)) 'text ""))
+    (check-true (string-contains? text "A skill with shared deps"))
+    (check-true (string-contains? text "Playbook"))
+    (check-true (string-contains? text "Common debugging steps")))
+  (cleanup-dir dir))
+
+(test-case "skill-route context without name returns error"
+  (define result (tool-skill-route (hasheq 'action "context")))
+  (check-pred tool-result? result)
+  (check-true (tool-result-is-error? result)))
+
+(test-case "skill-route context non-existent skill returns error"
+  (define dir (make-temp-skill-dir '(("exists" . "A skill."))))
+  (parameterize ([current-directory dir])
+    (define result (tool-skill-route (hasheq 'action "context" 'name "nonexistent")))
+    (check-pred tool-result? result)
+    (check-true (tool-result-is-error? result)))
   (cleanup-dir dir))
