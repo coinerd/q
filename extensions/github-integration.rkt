@@ -23,6 +23,10 @@
          gh-binary-path
          run-command
          shell-quote
+         valid-identifier?
+         valid-number?
+         valid-state?
+         valid-method?
          handle-gh-issue
          handle-gh-pr
          handle-gh-milestone
@@ -38,7 +42,7 @@
 (define gh-binary-path (make-parameter #f))
 
 ;; ============================================================
-;; Shell helpers
+;; Shell helpers + input validation
 ;; ============================================================
 
 (define (shell-quote s)
@@ -47,6 +51,26 @@
         s
         (~a s)))
   (string-append "'" (string-replace str "'" "'\\''") "'"))
+
+;; Validate that a string contains only safe identifier characters
+(define (valid-identifier? s)
+  (and (string? s) (regexp-match? #rx"^[a-zA-Z0-9_.-]+$" s)))
+
+;; Validate issue/PR number is a positive integer or numeric string
+(define (valid-number? n)
+  (or (and (integer? n) (positive? n)) (and (string? n) (regexp-match? #rx"^[0-9]+$" n))))
+
+;; Validate state arg is one of known values
+(define valid-states '("open" "closed" "all"))
+
+(define (valid-state? s)
+  (and (string? s) (member s valid-states) #t))
+
+;; Validate merge method is one of known values
+(define valid-methods '("squash" "merge" "rebase"))
+
+(define (valid-method? s)
+  (and (string? s) (member s valid-methods) #t))
 
 (define (run-command cmd-str)
   (define-values (sp stdout-in stdin-out stderr-in) (subprocess #f #f #f "/bin/sh" "-c" cmd-str))
@@ -347,7 +371,10 @@
                                       num))])]
          ;; list
          [(string=? action "list")
-          (define state-arg (format "--state ~a" (hash-ref args 'state "open")))
+          (define raw-state (hash-ref args 'state "open"))
+          (unless (valid-state? raw-state)
+            (raise-user-error 'github-issues "invalid state: ~a" raw-state))
+          (define state-arg (format "--state ~a" raw-state))
           (define ms-arg
             (let ([mn (hash-ref args 'milestone_number #f)])
               (if mn
@@ -372,7 +399,7 @@
                 (define sub-nums
                   (if (= ec-view 0)
                       (map string->number
-                           (regexp-match* #rx"(?:closes?|fixes?|resolves?)\\s+#((0-9)+)"
+                           (regexp-match* #px"(?:closes?|fixes?|resolves?)\\s+#(\\d+)"
                                           (string-trim out-view)
                                           #:match-select cadr))
                       '()))
@@ -428,6 +455,8 @@
             [(not num) (make-error-result "merge requires 'number'")]
             [else
              (define method (hash-ref args 'method "squash"))
+             (unless (valid-method? method)
+               (raise-user-error 'github-pr "invalid merge method: ~a" method))
              (define commit-title (hash-ref args 'commit_title #f))
              (define ct-arg
                (if commit-title
@@ -436,7 +465,10 @@
              (gh-success-json (format "pr merge ~a --~a~a --json url" num method ct-arg))])]
          ;; list
          [(string=? action "list")
-          (define state-arg (format "--state ~a" (hash-ref args 'state "open")))
+          (define raw-state (hash-ref args 'state "open"))
+          (unless (valid-state? raw-state)
+            (raise-user-error 'github-pr "invalid state: ~a" raw-state))
+          (define state-arg (format "--state ~a" raw-state))
           (gh-success-json (format "pr list ~a --limit 100 --json number,title,state,headRefName"
                                    state-arg))]
          ;; get
