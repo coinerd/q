@@ -1,0 +1,10 @@
+{
+  "name": "basic-file-ops",
+  "description": "Test basic file creation and reading via agent tools",
+  "prompt": "Create a file called hello.txt with the content 'Hello, world!' and then read it back to verify.",
+  "expected_tools": ["write", "read"],
+  "expected_outcome": "File hello.txt created and read successfully",
+  "max_iterations": 5,
+  "setup": {},
+  "teardown": ["hello.txt"]
+}
