@@ -141,3 +141,22 @@
   (delete-file tmp)
   (when (file-exists? out-path)
     (delete-file out-path)))
+
+;; ============================================================
+;; M3 regression: XSS in session-export HTML output
+;; ============================================================
+
+(test-case "session-export html escapes script tags"
+  (define tmp (make-temporary-file "session-~a.jsonl"))
+  (call-with-output-file
+   tmp
+   (lambda (out) (displayln "{\"role\":\"user\",\"content\":\"<script>alert(1)</script>\"}" out))
+   #:exists 'replace)
+  (define result (handle-session-export (hasheq 'session_path (path->string tmp) 'format "html")))
+  (check-pred tool-result? result)
+  (define text (hash-ref (car (tool-result-content result)) 'text ""))
+  ;; Raw <script> must NOT appear in output
+  (check-false (string-contains? text "<script>"))
+  ;; Escaped version must appear
+  (check-true (string-contains? text "&lt;script&gt;"))
+  (delete-file tmp))

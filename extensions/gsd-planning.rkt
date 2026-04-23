@@ -17,7 +17,8 @@
          "hooks.rkt"
          "../tools/tool.rkt")
 
-(provide gsd-planning-extension
+(provide the-extension
+         gsd-planning-extension
          planning-artifact-path
          valid-artifact-name?
          read-planning-artifact
@@ -54,7 +55,12 @@
     [else #f]))
 
 (define (valid-artifact-name? name)
-  (or (assoc name artifact-extensions) (string-suffix? name ".md") (string-suffix? name ".json")))
+  (and (string? name)
+       (not (string-contains? name "/"))
+       (not (string-contains? name ".."))
+       (not (string-contains? name "\x00"))
+       (or (assoc name artifact-extensions) (string-suffix? name ".md") (string-suffix? name ".json"))
+       #t))
 
 (define (json-artifact? name)
   (or (string-suffix? name ".json")
@@ -218,3 +224,5 @@
                     register-gsd-tools
                     #:on register-shortcuts
                     register-gsd-commands)
+
+(define the-extension gsd-planning-extension)
