@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.17.1 — 2026-04-23
+
+### Phase B: Self-Editing & Extension Infrastructure
+
+- **B1**: `racket-tooling` extension — 3 tools for structural Racket editing:
+  `racket-check` (format, syntax, test, expand, all), `racket-edit` (9 modes:
+  replace, form, skeleton, struct-add-field, provide-append, cond-insert-clause,
+  match-insert-clause, rewrite-form, constructor-add-arg), `racket-codemod`
+  (pattern/template with @@PLACEHOLDER matching). All modes validate with
+  `raco fmt` + `raco make`, revert on failure.
+- **B2**: `compact-context` extension — agent-invocable context compaction tool
+  that reads `.planning/` state and injects it into the compaction context.
+- **B3**: Extension subdirectory support — `discover-extensions` now scans
+  `extensions/<name>/<name>.rkt` and `extensions/<name>/main.rkt` for
+  multi-file extensions, alongside existing flat `.rkt` files.
+
+### Testing
+
+- 16 tests for racket-tooling extension
+- 10 tests for compact-context extension
+- 3 new tests for extension subdirectory discovery
+- All existing tests continue to pass
+
+---
+
 ## v0.17.0 — 2026-04-23
 
 ### Phase A: Foundation Extensions
