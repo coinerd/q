@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.17.3 — 2026-04-23
+
+### Phase D: GSD Skills
+
+All 15 GSD skills verified present in `.pi/skills/`:
+
+- **Core skills**: q-gsd-orchestrator, q-gsd-milestone-builder, q-gsd-reviewer,
+  q-gsd-project-reviewer, q-gsd-bug-orchestrator, q-gsd-bugfix-builder
+- **Builder skills**: q-gsd-foundation-builder, q-gsd-core-builder, q-gsd-tools-builder,
+  q-gsd-runtime-builder, q-gsd-interfaces-builder, q-gsd-hardening-builder
+- **Support skills**: q-gsd-docs-orchestrator, q-gsd-skillsmith, q-gsd-testing-improver
+- **GitHub skills**: q-gsd-github-init, q-gsd-github-issues, q-gsd-github-branches, q-gsd-github-projects
+
+No new Racket code — skills are pure markdown discovered by existing skill system.
+
+---
+
 ## v0.17.2 — 2026-04-23
 
 ### Phase C: Remote Collaboration Extension
