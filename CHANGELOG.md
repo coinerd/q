@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.17.6 — 2026-04-23
+
+### Extension Discovery & Activation
+
+- **Removed `.pi/extensions/` loading**: TypeScript pi extensions are incompatible
+  with q's Racket `dynamic-require` loader. The loader no longer scans
+  `<project>/.pi/extensions/`.
+- **Added `~/.q/extensions/` global directory**: Extensions placed in
+  `~/.q/extensions/` are loaded for all projects. Global extensions load
+  first; project-local `<project>/.q/extensions/` overrides global.
+- **Extension catalog module** (`runtime/extension-catalog.rkt`): New module
+  providing `known-extensions-dir`, `list-known-extensions`,
+  `list-active-extensions`, `activate-extension!`, `deactivate-extension!`.
+  Supports flat files and subdirectory extensions (e.g., `remote-collab`).
+- **`/activate` TUI command**: New slash command for in-session extension
+  management:
+  - `/activate` — show active + available extensions
+  - `/activate <name>` — activate extension in project-local dir
+  - `/activate --global <name>` — activate in `~/.q/extensions/`
+  - `/activate --available` — list all known extensions from source tree
+
+**Tests**: +18 new tests (4 run-modes, 13 extension-catalog, 5 activate-command,
+3 cmd-ctx arity fixes). 347 files, 5609 tests, 0 failures.
+
+---
+
 ## v0.17.5 — 2026-04-23
 
 ### Audit Remediation
