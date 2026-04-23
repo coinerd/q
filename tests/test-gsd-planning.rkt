@@ -391,24 +391,32 @@
                      (check-true (string-contains? (hash-ref (hook-result-payload result) 'text)
                                                    "No PLAN found"))))))
 
-;; ============================================================
-;; execute-command /plan <text> submit tests (Wave 1 v0.17.9)
-;; ============================================================
+(test-case "planning-system-prompt has GSD planning instructions"
+  (check-true (string-contains? planning-system-prompt "[gsd-planning]"))
+  (check-true (string-contains? planning-system-prompt "planning-write"))
+  (check-true (string-contains? planning-system-prompt "PLAN.md"))
+  (check-true (string-contains? planning-system-prompt "Do NOT implement")))
 
-(test-case "/plan <text> returns submit payload"
+(test-case "/plan <text> returns augmented submit payload"
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
   (define result (handler (hasheq 'command "/plan" 'input "/plan refactor the module")))
   (check-equal? (hook-result-action result) 'amend)
   (define payload (hook-result-payload result))
-  (check-equal? (hash-ref payload 'submit) "refactor the module")
+  ;; Submit text is augmented with planning preamble
+  (define submit-text (hash-ref payload 'submit))
+  (check-true (string-contains? submit-text "[gsd-planning]"))
+  (check-true (string-contains? submit-text "planning-write"))
+  (check-true (string-contains? submit-text "refactor the module"))
   (check-true (string-contains? (hash-ref payload 'text) "refactor the module")))
 
-(test-case "/p <text> returns submit payload (shortcut)"
+(test-case "/p <text> returns augmented submit payload (shortcut)"
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
   (define result (handler (hasheq 'command "/p" 'input "/p quick fix")))
   (check-equal? (hook-result-action result) 'amend)
   (define payload (hook-result-payload result))
-  (check-equal? (hash-ref payload 'submit) "quick fix"))
+  (define submit-text (hash-ref payload 'submit))
+  (check-true (string-contains? submit-text "[gsd-planning]"))
+  (check-true (string-contains? submit-text "quick fix")))
 
 (test-case "/plan (no args) returns display text"
   (with-temp-dir (lambda (dir)
