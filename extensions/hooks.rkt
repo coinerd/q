@@ -60,6 +60,8 @@
 ;; it is skipped and a warning is logged.
 (define (dispatch-hooks hook-point payload registry #:ctx [ctx #f])
   (define handlers (handlers-for-point registry hook-point))
+  (when (eq? hook-point 'execute-command)
+    (log-info "dispatch-hooks execute-command: ~a handlers found" (length handlers)))
   (let loop ([remaining handlers]
              [current-payload payload]
              [amended? #f])
@@ -77,7 +79,7 @@
 
 ;; Per-hook timeout in milliseconds (default: 100ms for streaming hooks).
 ;; Set to #f to disable timeout.
-(define current-hook-timeout-ms (make-parameter 100))
+(define current-hook-timeout-ms (make-parameter 500))
 
 ;; Internal: call handler with or without ctx based on arity.
 ;; If ctx is provided and handler accepts 2 args, call (handler ctx payload).

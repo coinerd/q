@@ -221,6 +221,7 @@
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
   (define base-dir (current-directory))
+  (log-info "handle-execute-command: cmd=~a base-dir=~a" cmd base-dir)
   (define artifact
     (cond
       [(member cmd '("/plan" "/p")) "PLAN"]
@@ -231,6 +232,7 @@
     [(not artifact) (hook-pass payload)]
     [else
      (define content (read-planning-artifact base-dir artifact))
+     (log-info "handle-execute-command: artifact=~a content=~a" artifact (and content #t))
      (define text
        (cond
          [(not content) (format "No ~a found in .planning/" artifact)]

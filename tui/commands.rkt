@@ -770,11 +770,13 @@
             (and (> (string-length trimmed) 0)
                  (char=? (string-ref trimmed 0) #\/)
                  (let ([parts (string-split trimmed)]) (and (pair? parts) (car parts))))))
+        (log-info "execute-command dispatch: cmd-name=~a has-ext-reg=~a" cmd-name (and ext-reg #t))
         (define ext-result
           (and
            ext-reg
            cmd-name
            (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
+        (log-info "execute-command result: ~a" (and ext-result (hook-result-action ext-result)))
         (cond
           [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
            ;; Extension handled the command — display result text
@@ -786,6 +788,11 @@
                        (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
            'continue]
           [else
+           (log-warning "execute-command fell through: ext-result=~a cmd-name=~a"
+                        (if ext-result
+                            (hook-result-action ext-result)
+                            #f)
+                        cmd-name)
            (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
            'continue])]
