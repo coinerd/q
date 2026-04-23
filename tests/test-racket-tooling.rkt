@@ -271,3 +271,27 @@
   ;; The file should compile fine — no shell injection occurred
   (check-true (hash-ref parsed 'all-pass?))
   (delete-directory/files tmpdir))
+
+;; ============================================================
+;; m1 regression: find-form-end handles strings, comments, brackets
+;; ============================================================
+
+(require (only-in "../extensions/racket-tooling.rkt" find-form-end))
+
+(test-case "find-form-end handles escaped quotes in strings"
+  (define lines '("(define s \"hello \\\"world\\\" foo\")"))
+  (define-values (end-idx depth) (find-form-end lines 0))
+  (check-equal? end-idx 1)
+  (check-equal? depth 0))
+
+(test-case "find-form-end skips comment lines"
+  (define lines '("(define (foo)" "  ;; this is a comment with (parens)" "  42)"))
+  (define-values (end-idx depth) (find-form-end lines 0))
+  (check-equal? end-idx 3)
+  (check-equal? depth 0))
+
+(test-case "find-form-end tracks square brackets"
+  (define lines '("(define (foo)" "  (let ([x 1]" "        [y 2])" "    (+ x y)))"))
+  (define-values (end-idx depth) (find-form-end lines 0))
+  (check-equal? end-idx 4)
+  (check-equal? depth 0))

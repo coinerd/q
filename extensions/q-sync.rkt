@@ -40,22 +40,37 @@
   (close-input-port err-in)
   (values (subprocess-status sp) stdout-str stderr-str))
 
-;; Get remote host from args or default
+;; Get remote host from args — no default, must be provided
 (define (get-remote-host args)
-  (hash-ref args 'remote_host "user@vps2402959.fastwebserver.de"))
+  (define host (hash-ref args 'remote_host #f))
+  (unless host
+    (error 'q-sync "remote_host is required. No default provided."))
+  host)
 
 ;; Get project dir
 (define (get-project-dir args)
   (hash-ref args 'project_dir (path->string (current-directory))))
 
-;; Sync planning state via rsync
+;; Sync planning state via rsync (with --backup-dir for safety)
 (define (sync-planning remote-host local-dir direction)
   (define planning-dir (build-path local-dir ".planning"))
   (define remote-path (string-append remote-host ":~/src/q-agent/.planning/"))
   (define-values (ec out err)
     (case (string->symbol direction)
-      [(push) (run-cmd "rsync" (list "-avz" "--delete" (path->string planning-dir) "/" remote-path))]
-      [(pull) (run-cmd "rsync" (list "-avz" "--delete" remote-path (path->string planning-dir) "/"))]
+      [(push)
+       (run-cmd "rsync"
+                (list "-avz"
+                      "--backup"
+                      "--backup-dir=.rsync-backup"
+                      (string-append (path->string planning-dir) "/")
+                      remote-path))]
+      [(pull)
+       (run-cmd "rsync"
+                (list "-avz"
+                      "--backup"
+                      "--backup-dir=.rsync-backup"
+                      remote-path
+                      (string-append (path->string planning-dir) "/")))]
       [else (values 1 "" (format "Unknown direction: ~a" direction))]))
   (values ec (string-trim out) (string-trim err)))
 
