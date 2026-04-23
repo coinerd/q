@@ -70,7 +70,13 @@
 
          ;; Trace logging config (v0.15.0)
          trace-enabled?
-         trace-max-files)
+         trace-max-files
+
+         ;; Steering config (v0.18.0)
+         steering-gentle-threshold
+         steering-strong-threshold
+         steering-hard-cap
+         steering-same-file-dedup?)
 
 ;; ============================================================
 ;; Struct
@@ -348,3 +354,23 @@
   (if (hash? trace-cfg)
       (hash-ref trace-cfg 'max-files 10)
       10))
+
+;; ============================================================
+;; Steering config (v0.18.0)
+;; ============================================================
+
+;; Gentle steering threshold. Default: 8 (raised from 5 in v0.18.0).
+(define (steering-gentle-threshold settings)
+  (setting-ref* settings '(steering gentle_threshold) 8))
+
+;; Strong steering threshold. Default: 12 (raised from 7 in v0.18.0).
+(define (steering-strong-threshold settings)
+  (setting-ref* settings '(steering strong_threshold) 12))
+
+;; Hard cap for steering. Default: 20 (raised from 12 in v0.18.0).
+(define (steering-hard-cap settings)
+  (setting-ref* settings '(steering hard_cap) 20))
+
+;; Whether same-file dedup is enabled. Default: #t.
+(define (steering-same-file-dedup? settings)
+  (setting-ref* settings '(steering same_file_dedup) #t))

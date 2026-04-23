@@ -227,4 +227,59 @@
       (check-false inc? "Already-seen file should not increment")
       (check-equal? (set-count sp) 1))))
 
+;; ══════════════════════════════════════════════════════════
+;; Configurable thresholds (Wave 2)
+;; ══════════════════════════════════════════════════════════
+
 (run-tests test-steering)
+
+(require "../runtime/settings.rkt")
+
+(define test-steering-config
+  (test-suite "Steering Config (v0.18.0 Wave 2)"
+
+    (test-case "default gentle threshold is 8"
+      (define s (make-minimal-settings))
+      (check-equal? (steering-gentle-threshold s) 8))
+
+    (test-case "default strong threshold is 12"
+      (define s (make-minimal-settings))
+      (check-equal? (steering-strong-threshold s) 12))
+
+    (test-case "default hard cap is 20"
+      (define s (make-minimal-settings))
+      (check-equal? (steering-hard-cap s) 20))
+
+    (test-case "default same-file dedup is #t"
+      (define s (make-minimal-settings))
+      (check-true (steering-same-file-dedup? s)))
+
+    (test-case "custom gentle threshold via steering config"
+      (define s (make-minimal-settings #:overrides (hash 'steering (hash 'gentle_threshold 15))))
+      (check-equal? (steering-gentle-threshold s) 15))
+
+    (test-case "custom strong threshold via steering config"
+      (define s (make-minimal-settings #:overrides (hash 'steering (hash 'strong_threshold 25))))
+      (check-equal? (steering-strong-threshold s) 25))
+
+    (test-case "custom hard cap via steering config"
+      (define s (make-minimal-settings #:overrides (hash 'steering (hash 'hard_cap 50))))
+      (check-equal? (steering-hard-cap s) 50))
+
+    (test-case "disable same-file dedup via steering config"
+      (define s (make-minimal-settings #:overrides (hash 'steering (hash 'same_file_dedup #f))))
+      (check-false (steering-same-file-dedup? s)))
+
+    (test-case "partial config: only override gentle, others default"
+      (define s (make-minimal-settings #:overrides (hash 'steering (hash 'gentle_threshold 3))))
+      (check-equal? (steering-gentle-threshold s) 3)
+      (check-equal? (steering-strong-threshold s) 12)
+      (check-equal? (steering-hard-cap s) 20))
+
+    (test-case "empty settings: defaults apply"
+      (check-equal? (steering-gentle-threshold (make-minimal-settings)) 8)
+      (check-equal? (steering-strong-threshold (make-minimal-settings)) 12)
+      (check-equal? (steering-hard-cap (make-minimal-settings)) 20)
+      (check-true (steering-same-file-dedup? (make-minimal-settings))))))
+
+(run-tests test-steering-config)
