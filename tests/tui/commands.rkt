@@ -21,7 +21,8 @@
            #f ;; model-registry-box
            (box #f) ;; last-prompt-box
            #f ;; session-runner
-           (box ""))) ;; input-text-box
+           (box "") ;; input-text-box
+           (box #f))) ;; extension-registry-box
 
 (define commands-tests
   (test-suite "TUI Commands"

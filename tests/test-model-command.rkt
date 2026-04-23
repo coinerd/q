@@ -51,7 +51,8 @@
            (and reg (box reg)) ; model-registry-box
            (box #f) ; last-prompt-box
            #f ; session-runner
-           (box ""))) ; input-text-box
+           (box "") ; input-text-box
+           (box #f))) ; extension-registry-box
 
 ;; Extract transcript text from a cmd-ctx
 (define (cctx-transcript-text cctx)

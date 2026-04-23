@@ -25,7 +25,8 @@
            #f ;; model-registry-box
            (box #f) ;; last-prompt-box
            #f ;; session-runner
-           (box ""))) ;; input-text-box
+           (box "") ;; input-text-box
+           (box #f))) ;; extension-registry-box
 
 ;; Helper: get transcript text entries from cctx state
 (define (get-transcript-texts cctx)
