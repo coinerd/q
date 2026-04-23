@@ -222,13 +222,6 @@
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
   (define base-dir (current-directory))
-  (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                       (lambda ()
-                         (printf "[~a] handle-execute-command: cmd=~a base-dir=~a\n"
-                                 (current-inexact-milliseconds)
-                                 cmd
-                                 base-dir))
-                       #:exists 'append)
   (define artifact
     (cond
       [(member cmd '("/plan" "/p")) "PLAN"]
@@ -238,31 +231,21 @@
   (cond
     [(not artifact) (hook-pass payload)]
     [else
-     ;; Extract arguments after the command
-     (define cmd-prefix
-       (let ([trimmed (string-trim input-text)])
-         (if (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
-             (let ([parts (string-split trimmed)])
-               (if (pair? parts)
-                   (car parts)
-                   cmd))
-             cmd)))
-     (define args
-       (let ([rest (string-trim (substring input-text (string-length cmd-prefix)))])
-         (if (string=? rest "") #f rest)))
      (cond
-       ;; /plan <text> → submit as prompt to the agent
-       [args (hook-amend (hasheq 'submit args 'text (format "Planning: ~a" args)))]
+       ;; /plan <text> and /p <text> → submit as prompt to the agent
+       [(and (member cmd '("/plan" "/p"))
+             (let* ([trimmed (string-trim input-text)]
+                    [parts (and (> (string-length trimmed) 0)
+                                (char=? (string-ref trimmed 0) #\/)
+                                (string-split trimmed))])
+               (and (pair? parts)
+                    (let ([rest (string-trim (substring input-text (string-length (car parts))))])
+                      (and (> (string-length rest) 0) rest)))))
+        =>
+        (lambda (args) (hook-amend (hasheq 'submit args 'text (format "Planning: ~a" args))))]
        [else
-        ;; /plan (no args) → display current plan
+        ;; Display artifact content (always for /state, /handoff; no-args /plan)
         (define content (read-planning-artifact base-dir artifact))
-        (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                             (lambda ()
-                               (printf "[~a] handle-execute-command: artifact=~a content=~a\n"
-                                       (current-inexact-milliseconds)
-                                       artifact
-                                       (and content #t)))
-                             #:exists 'append)
         (define text
           (cond
             [(not content) (format "No ~a found in .planning/" artifact)]
