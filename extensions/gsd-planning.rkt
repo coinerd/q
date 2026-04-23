@@ -19,6 +19,7 @@
 
 (provide the-extension
          gsd-planning-extension
+         planning-system-prompt
          planning-artifact-path
          valid-artifact-name?
          read-planning-artifact
@@ -31,6 +32,21 @@
 ;; ============================================================
 
 (define planning-dir-name ".planning")
+
+;; Planning preamble prepended to user text when /plan <text> submits.
+;; Gives the agent explicit GSD planning instructions.
+(define planning-system-prompt
+  (string-append "[gsd-planning] Create a structured implementation plan for the following request.\n"
+                 "Write your plan to .planning/PLAN.md using the planning-write tool.\n"
+                 "Plan format:\n"
+                 "  - Goal: what this accomplishes\n"
+                 "  - Scope: files/modules affected\n"
+                 "  - Waves: 1-3 atomic task groups, each with verify commands\n"
+                 "  - Dependencies: what must be done first\n"
+                 "  - Risks: what could go wrong\n"
+                 "First explore the codebase to understand the current state, then write the plan.\n"
+                 "Do NOT implement — only plan.\n\n"
+                 "User request: "))
 
 (define artifact-extensions
   '(("PLAN" . ".md") ("STATE" . ".md")
@@ -242,7 +258,9 @@
                     (let ([rest (string-trim (substring input-text (string-length (car parts))))])
                       (and (> (string-length rest) 0) rest)))))
         =>
-        (lambda (args) (hook-amend (hasheq 'submit args 'text (format "Planning: ~a" args))))]
+        (lambda (args)
+          (define augmented-text (string-append planning-system-prompt args))
+          (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" args))))]
        [else
         ;; Display artifact content (always for /state, /handoff; no-args /plan)
         (define content (read-planning-artifact base-dir artifact))
