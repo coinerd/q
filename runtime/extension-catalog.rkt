@@ -61,13 +61,28 @@
               (let ([p (string->path source-dir)]) (and (directory-exists? p) p))))))
 
 ;; binary-relative-extensions-dir : -> (or/c path? #f)
-;; Find extensions/ relative to this module's load directory.
+;; Find extensions/ relative to this module's source directory.
 ;; In dev: q/runtime/extension-catalog.rkt -> parent -> q/extensions/
+;; Uses variable-reference to reliably find the module's own path
+;; even when current-load-relative-directory is #f (e.g., racket main.rkt).
 (define (binary-relative-extensions-dir)
-  (define this-dir (or (current-load-relative-directory) (current-directory)))
+  (define this-dir (or (current-load-relative-directory) (module-source-dir) (current-directory)))
   (define ext-dir (build-path this-dir ".." "extensions"))
   (define cleaned (simple-form-path ext-dir))
   (and (directory-exists? cleaned) cleaned))
+
+;; module-source-dir : -> (or/c path? #f)
+;; Resolve the directory containing this module's source file.
+;; Works even when current-load-relative-directory is #f.
+(define (module-source-dir)
+  (define raw (#%variable-reference))
+  (define rmp (variable-reference->resolved-module-path raw))
+  (and rmp
+       (resolved-module-path? rmp)
+       (let ([vr (resolved-module-path-name rmp)])
+         (and (path? vr)
+              (let-values ([(base name must-be-dir) (split-path vr)])
+                (and (path? base) base))))))
 
 ;; ============================================================
 ;; List known extensions
