@@ -35,7 +35,7 @@ User input → Interface (CLI/TUI/RPC)
     → Events emitted to bus
 ```
 
-## Metrics (v0.17.9)
+## Metrics (v0.18.0)
 
 > _See `racket scripts/metrics.rkt` for current numbers._
 
