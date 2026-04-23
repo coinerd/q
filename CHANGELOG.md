@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.17.5 — 2026-04-23
+
+### Audit Remediation
+
+Security and robustness fixes from comprehensive audit of v0.17.0–v0.17.4
+(remote pi implementation). 25 findings addressed: 5 CRITICAL, 7 MAJOR, 13 MINOR.
+
+**CRITICAL fixes:**
+- **C1**: Fixed `ext-register-tool!` arity — all 7 extensions now use 5-positional-arg
+  form instead of wrapping `make-tool` inside a 2-arg call
+- **C2**: Replaced `system/exit-code` with `subprocess` in `racket-tooling.rkt`,
+  eliminating shell injection via filenames with metacharacters
+- **C3–C5**: Added input validation to `github-integration.rkt` — whitelist `state`,
+  `method` params; validate `issue_number`, `pr_number`; fixed regex from `#rx` to
+  `#px` for `(?:...)` non-capturing groups
+
+**MAJOR fixes:**
+- **M2**: `gsd-planning.rkt` rejects path traversal in artifact names (`/`, `..`, null bytes)
+- **M3**: `session-export.rkt` HTML-escapes all user content (`&`, `<`, `>`, `"`)
+- **M4**: `gh-wave-finish` checks exit codes at every step (PR merge, checkout, pull, close)
+- **M5**: Removed hardcoded default host from `q-sync.rkt` — `remote_host` now required
+- **M6**: Replaced rsync `--delete` with `--backup --backup-dir=.rsync-backup`
+- **M7**: `remote-collab.rkt` validates session names (alphanumeric + hyphens only)
+
+**MINOR fixes:**
+- **m1**: Rewrote `find-form-end` with proper depth tracking, string escape handling,
+  semicolon comment skipping, and square bracket support
+
+**Regression tests:** 30+ new tests across 6 test files. 168 tests pass.
+
+---
+
 ## v0.17.4 — 2026-04-23
 
 ### Phase E: Polish

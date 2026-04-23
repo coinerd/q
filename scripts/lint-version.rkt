@@ -90,7 +90,8 @@
         (string-contains? (if (path? filename)
                               (path->string filename)
                               filename)
-                          "docs/demos/")))
+                          "docs/demos/")
+        (equal? fname "EXTENSIONS_INVENTORY.md")))
   ;; Skip historical release lines like "**v0.6.3** — ..."
   (define historical-line? (lambda (line) (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line))))
   ;; Skip lines inside fenced code blocks (``` ... ```)
