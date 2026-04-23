@@ -15,7 +15,8 @@
          "hooks.rkt"
          "../tools/tool.rkt")
 
-(provide q-sync-extension
+(provide the-extension
+         q-sync-extension
          handle-q-sync
          sync-planning
          sync-pi-config
@@ -53,14 +54,8 @@
   (define remote-path (string-append remote-host ":~/src/q-agent/.planning/"))
   (define-values (ec out err)
     (case (string->symbol direction)
-      [(push) (run-cmd "rsync"
-                       (list "-avz" "--delete"
-                             (path->string planning-dir) "/"
-                             remote-path))]
-      [(pull) (run-cmd "rsync"
-                       (list "-avz" "--delete"
-                             remote-path
-                             (path->string planning-dir) "/"))]
+      [(push) (run-cmd "rsync" (list "-avz" "--delete" (path->string planning-dir) "/" remote-path))]
+      [(pull) (run-cmd "rsync" (list "-avz" "--delete" remote-path (path->string planning-dir) "/"))]
       [else (values 1 "" (format "Unknown direction: ~a" direction))]))
   (values ec (string-trim out) (string-trim err)))
 
@@ -70,11 +65,8 @@
   (define remote-path (string-append remote-host ":~/src/q-agent/.pi/"))
   (define-values (ec out err)
     (case (string->symbol direction)
-      [(push) (run-cmd "rsync"
-                       (list "-avz" (path->string pi-dir) "/" remote-path))]
-      [(pull) (run-cmd "rsync"
-                       (list "-avz" remote-path
-                             (path->string pi-dir) "/"))]
+      [(push) (run-cmd "rsync" (list "-avz" (path->string pi-dir) "/" remote-path))]
+      [(pull) (run-cmd "rsync" (list "-avz" remote-path (path->string pi-dir) "/"))]
       [else (values 1 "" (format "Unknown direction: ~a" direction))]))
   (values ec (string-trim out) (string-trim err)))
 
@@ -84,11 +76,8 @@
   (define remote-path (string-append remote-host ":~/src/q-agent/scripts/"))
   (define-values (ec out err)
     (case (string->symbol direction)
-      [(push) (run-cmd "rsync"
-                       (list "-avz" (path->string scripts-dir) "/" remote-path))]
-      [(pull) (run-cmd "rsync"
-                       (list "-avz" remote-path
-                             (path->string scripts-dir) "/"))]
+      [(push) (run-cmd "rsync" (list "-avz" (path->string scripts-dir) "/" remote-path))]
+      [(pull) (run-cmd "rsync" (list "-avz" remote-path (path->string scripts-dir) "/"))]
       [else (values 1 "" (format "Unknown direction: ~a" direction))]))
   (values ec (string-trim out) (string-trim err)))
 
@@ -117,12 +106,10 @@
                   "✗ .pi/ missing locally")
               parts))
   ;; Check git status
-  (define-values (git-ec git-out _)
-    (run-cmd "git" '("status" "--short")))
+  (define-values (git-ec git-out _) (run-cmd "git" '("status" "--short")))
   (set! parts
         (cons (if (non-empty-string? (string-trim git-out))
-                  (format "⚠ git: uncommitted changes\n~a"
-                          (string-trim git-out))
+                  (format "⚠ git: uncommitted changes\n~a" (string-trim git-out))
                   "✓ git: clean")
               parts))
   (string-join (reverse parts) "\n"))
@@ -142,38 +129,27 @@
   (case (string->symbol direction)
     [(status)
      (define status-text (sync-status remote-host local-dir))
-     (make-success-result
-      (list (hasheq 'type "text"
-                    'text (format "Sync Status:\n~a" status-text))))]
+     (make-success-result (list (hasheq 'type "text" 'text (format "Sync Status:\n~a" status-text))))]
     [(push pull)
      ;; Sync requested domains
      (when (member domain '("planning" "all"))
-       (define-values (ec out err)
-         (sync-planning remote-host local-dir direction))
-       (set! results
-             (cons (format "planning: ~a" (if (zero? ec) "OK" err)) results)))
+       (define-values (ec out err) (sync-planning remote-host local-dir direction))
+       (set! results (cons (format "planning: ~a" (if (zero? ec) "OK" err)) results)))
      (when (member domain '("pi" "config" "all"))
-       (define-values (ec out err)
-         (sync-pi-config remote-host local-dir direction))
-       (set! results
-             (cons (format "pi-config: ~a" (if (zero? ec) "OK" err)) results)))
+       (define-values (ec out err) (sync-pi-config remote-host local-dir direction))
+       (set! results (cons (format "pi-config: ~a" (if (zero? ec) "OK" err)) results)))
      (when (member domain '("scripts" "all"))
-       (define-values (ec out err)
-         (sync-scripts remote-host local-dir direction))
-       (set! results
-             (cons (format "scripts: ~a" (if (zero? ec) "OK" err)) results)))
+       (define-values (ec out err) (sync-scripts remote-host local-dir direction))
+       (set! results (cons (format "scripts: ~a" (if (zero? ec) "OK" err)) results)))
      (when (member domain '("git" "all"))
        (define-values (ec out err) (sync-git local-dir direction))
-       (set! results
-             (cons (format "git: ~a" (if (zero? ec) "OK" err)) results)))
+       (set! results (cons (format "git: ~a" (if (zero? ec) "OK" err)) results)))
      (make-success-result
-      (list (hasheq 'type
-                     "text"
-                     'text
-                     (format "Sync ~a (~a):\n~a"
-                             direction
-                             domain
-                             (string-join (reverse results) "\n")))))]
+      (list (hasheq
+             'type
+             "text"
+             'text
+             (format "Sync ~a (~a):\n~a" direction domain (string-join (reverse results) "\n")))))]
     [(handoff)
      ;; Push everything then update HANDOFF.json
      (for ([d '("planning" "pi" "scripts" "git")])
@@ -183,16 +159,13 @@
            [(pi) (sync-pi-config remote-host local-dir "push")]
            [(scripts) (sync-scripts remote-host local-dir "push")]
            [(git) (sync-git local-dir "push")]))
-       (set! results
-             (cons (format "~a: ~a" d (if (zero? ec) "OK" err)) results)))
-     (make-success-result
-      (list (hasheq 'type
-                     "text"
-                     'text
-                     (format "Handoff complete:\n~a"
-                             (string-join (reverse results) "\n")))))]
-    [else
-     (make-error-result (format "Unknown direction: ~a" direction))]))
+       (set! results (cons (format "~a: ~a" d (if (zero? ec) "OK" err)) results)))
+     (make-success-result (list (hasheq 'type
+                                        "text"
+                                        'text
+                                        (format "Handoff complete:\n~a"
+                                                (string-join (reverse results) "\n")))))]
+    [else (make-error-result (format "Unknown direction: ~a" direction))]))
 
 ;; ============================================================
 ;; Extension definition
@@ -201,35 +174,31 @@
 (define (register-sync-tools ctx)
   (ext-register-tool!
    ctx
-   (make-tool
-    "q-sync"
-    (string-append
-     "Sync project state between local and remote machines. "
-     "Domains: planning, pi, scripts, git, all. "
-     "Directions: push, pull, status, handoff. "
-     "Uses rsync for file sync, git for version control.")
-    (hasheq 'type
-            "object"
-            'required
-            '()
-            'properties
-            (hasheq 'direction
-                    (hasheq 'type "string"
-                            'description "push|pull|status|handoff (default: status)")
-                    'domain
-                    (hasheq 'type "string"
-                            'description "planning|pi|scripts|git|all (default: all)")
-                    'remote_host
-                    (hasheq 'type "string"
-                            'description "SSH remote host (default: from config)")
-                    'project_dir
-                    (hasheq 'type "string"
-                            'description "Project root directory (default: cwd)")))
-    handle-q-sync))
+   "q-sync"
+   (string-append "Sync project state between local and remote machines. "
+                  "Domains: planning, pi, scripts, git, all. "
+                  "Directions: push, pull, status, handoff. "
+                  "Uses rsync for file sync, git for version control.")
+   (hasheq 'type
+           "object"
+           'required
+           '()
+           'properties
+           (hasheq 'direction
+                   (hasheq 'type "string" 'description "push|pull|status|handoff (default: status)")
+                   'domain
+                   (hasheq 'type "string" 'description "planning|pi|scripts|git|all (default: all)")
+                   'remote_host
+                   (hasheq 'type "string" 'description "SSH remote host (default: from config)")
+                   'project_dir
+                   (hasheq 'type "string" 'description "Project root directory (default: cwd)")))
+   handle-q-sync)
   (hook-pass ctx))
 
 (define-q-extension q-sync-extension
-  #:version "1.0.0"
-  #:api-version "1"
-  #:on register-tools
-  register-sync-tools)
+                    #:version "1.0.0"
+                    #:api-version "1"
+                    #:on register-tools
+                    register-sync-tools)
+
+(define the-extension q-sync-extension)
