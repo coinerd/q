@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.17.9 — 2026-04-23
+
+### GSD Planning Workflow + Review Cleanup
+
+Milestone #92 — Post-v0.17.8 review follow-ups and planning prompt augmentation.
+
+**Wave 1 — Review cleanup + test coverage (#1596)**
+- Removed all `/tmp/q-cmd-dispatch.log` diagnostic tracing from 4 files.
+- Replaced with `log-debug` where useful, removed entirely where not.
+- Fixed stale `-> void?` contract comment in `loader.rkt` (now returns `boolean?`).
+- Restricted `/plan <text>` submit to `/plan` and `/p` only —
+  `/state` and `/handoff` always display artifact regardless of trailing text.
+- Added 5 tests for execute-command with/without args.
+
+**Wave 2 — Planning prompt augmentation (#1599)**
+- Defined `planning-system-prompt` constant with GSD planning instructions.
+- When `/plan <text>` submits, agent prompt is augmented with planning preamble
+  instructing it to write a structured plan to `.planning/PLAN.md`.
+- Display text shows "Planning: <original>" without full preamble.
+- Added test verifying augmented submit text contains `[gsd-planning]` preamble.
+
 ## v0.17.8 — 2026-04-23
 
 ### Extension Commands & Activation Fix
