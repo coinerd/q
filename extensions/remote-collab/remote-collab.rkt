@@ -102,41 +102,40 @@
 (define (register-remote-tools ctx)
   (ext-register-tool!
    ctx
-   (make-tool
-    "remote-q"
-    (string-append "Control a remote q agent instance via SSH + tmux. "
-                   "Actions: status (check session), start (new session), "
-                   "send (send prompt), capture (read output), "
-                   "wait (wait for idle), interrupt (stop task), stop (kill session).")
-    (hasheq
-     'type
-     "object"
-     'required
-     '("host" "action")
-     'properties
-     (hasheq 'host
-             (hasheq 'type "string" 'description "SSH host (user@host)")
-             'action
-             (hasheq 'type "string" 'description "status|start|send|capture|wait|interrupt|stop")
-             'session
-             (hasheq 'type "string" 'description "Tmux session name (default: q-agent)")
-             'prompt
-             (hasheq 'type "string" 'description "Prompt text (for send)")
-             'lines
-             (hasheq 'type "integer" 'description "Lines to capture (default: 80)")
-             'cwd
-             (hasheq 'type "string" 'description "Working directory (for start)")
-             'provider
-             (hasheq 'type "string" 'description "Pi provider")
-             'model
-             (hasheq 'type "string" 'description "Pi model")
-             'thinking
-             (hasheq 'type "string" 'description "Thinking level")
-             'timeout
-             (hasheq 'type "integer" 'description "Wait timeout seconds (default: 60)")
-             'ssh_options
-             (hasheq 'type "array" 'description "Extra SSH options")))
-    handle-remote-q))
+   "remote-q"
+   (string-append "Control a remote q agent instance via SSH + tmux. "
+                  "Actions: status (check session), start (new session), "
+                  "send (send prompt), capture (read output), "
+                  "wait (wait for idle), interrupt (stop task), stop (kill session).")
+   (hasheq
+    'type
+    "object"
+    'required
+    '("host" "action")
+    'properties
+    (hasheq 'host
+            (hasheq 'type "string" 'description "SSH host (user@host)")
+            'action
+            (hasheq 'type "string" 'description "status|start|send|capture|wait|interrupt|stop")
+            'session
+            (hasheq 'type "string" 'description "Tmux session name (default: q-agent)")
+            'prompt
+            (hasheq 'type "string" 'description "Prompt text (for send)")
+            'lines
+            (hasheq 'type "integer" 'description "Lines to capture (default: 80)")
+            'cwd
+            (hasheq 'type "string" 'description "Working directory (for start)")
+            'provider
+            (hasheq 'type "string" 'description "Pi provider")
+            'model
+            (hasheq 'type "string" 'description "Pi model")
+            'thinking
+            (hasheq 'type "string" 'description "Thinking level")
+            'timeout
+            (hasheq 'type "integer" 'description "Wait timeout seconds (default: 60)")
+            'ssh_options
+            (hasheq 'type "array" 'description "Extra SSH options")))
+   handle-remote-q)
   (hook-pass ctx))
 
 (define-q-extension the-extension

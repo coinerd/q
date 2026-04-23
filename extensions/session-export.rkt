@@ -76,22 +76,21 @@
     [else (make-success-result (list (hasheq 'type "text" 'text result)))]))
 
 (define (register-export-tools ctx)
-  (ext-register-tool!
-   ctx
-   (make-tool "session-export"
-              "Export session logs to HTML, JSON, or Markdown."
-              (hasheq 'type
-                      "object"
-                      'required
-                      '("session_path")
-                      'properties
-                      (hasheq 'session_path
-                              (hasheq 'type "string" 'description "Session JSONL file path")
-                              'format
-                              (hasheq 'type "string" 'description "html|json|markdown")
-                              'output_path
-                              (hasheq 'type "string" 'description "Output file path")))
-              handle-session-export))
+  (ext-register-tool! ctx
+                      "session-export"
+                      "Export session logs to HTML, JSON, or Markdown."
+                      (hasheq 'type
+                              "object"
+                              'required
+                              '("session_path")
+                              'properties
+                              (hasheq 'session_path
+                                      (hasheq 'type "string" 'description "Session JSONL file path")
+                                      'format
+                                      (hasheq 'type "string" 'description "html|json|markdown")
+                                      'output_path
+                                      (hasheq 'type "string" 'description "Output file path")))
+                      handle-session-export)
   (hook-pass ctx))
 
 (define-q-extension session-export-extension
