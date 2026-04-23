@@ -13,6 +13,8 @@
 (require racket/base
          racket/string
          racket/list
+         racket/file
+         racket/path
          "state.rkt"
          "render.rkt"
          "terminal.rkt"
@@ -23,7 +25,8 @@
          "../runtime/session-index.rkt"
          "../runtime/settings.rkt"
          "../interfaces/sessions.rkt"
-         "../runtime/model-registry.rkt")
+         "../runtime/model-registry.rkt"
+         "../runtime/extension-catalog.rkt")
 
 ;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
 (provide cmd-ctx
@@ -36,6 +39,7 @@
          cmd-ctx-model-registry-box
          cmd-ctx-last-prompt-box
          cmd-ctx-session-runner
+         cmd-ctx-input-text-box
 
          ;; Main command dispatcher
          process-slash-command)
@@ -54,7 +58,8 @@
          needs-redraw-box ; (boxof boolean)
          model-registry-box ; (or/c (boxof (or/c model-registry? #f)) #f)
          last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
-         session-runner) ; (string -> void) or #f — for /retry resubmission
+         session-runner ; (string -> void) or #f — for /retry resubmission
+         input-text-box) ; (boxof string?) — raw input text for commands like /activate
   #:transparent)
 
 ;; ============================================================
@@ -407,6 +412,113 @@
   'continue)
 
 ;; ============================================================
+;; /activate command — extension management
+;; ============================================================
+
+;; handle-activate-command : cmd-ctx? -> 'continue
+;; Supports:
+;;   /activate              — show status (active + available)
+;;   /activate --available  — list all known extensions
+;;   /activate <name>       — activate extension in project dir
+;;   /activate --global <name> — activate in ~/.q/extensions/
+(define (handle-activate-command cctx)
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (define session-dir (cmd-ctx-session-dir cctx))
+  (define project-dir (and session-dir (path-only session-dir)))
+  (define entries
+    (cond
+      [(not project-dir)
+       (list (make-entry 'error
+                         "/activate: no project directory available (start a session first)"
+                         (current-inexact-milliseconds)
+                         (hash)))]
+      [else
+       ;; Parse args from raw input text (after /activate)
+       (define input (unbox (cmd-ctx-input-text-box cctx)))
+       (define args-str (string-trim (regexp-replace #rx"^/activate\\s*" input "")))
+       (define args (filter (λ (a) (not (string=? a ""))) (string-split args-str)))
+       (cond
+         ;; /activate --available
+         [(member "--available" args) (list-available-entries)]
+         ;; /activate --global <name>
+         [(and (member "--global" args)
+               (for/or ([a (in-list args)]
+                        #:when (not (string-prefix? a "--")))
+                 a))
+          (define name
+            (for/or ([a (in-list args)]
+                     #:when (not (string-prefix? a "--")))
+              a))
+          (define q-home (build-path (find-system-path 'home-dir) ".q"))
+          (define target-dir (build-path q-home "extensions"))
+          (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+            (activate-extension! name target-dir)
+            (list (make-entry 'system
+                              (format "Extension '~a' activated globally (~a)" name target-dir)
+                              (current-inexact-milliseconds)
+                              (hash))))]
+         ;; /activate <name> — activate in project-local dir
+         [(and (pair? args) (not (string-prefix? (car args) "--")))
+          (define name (car args))
+          (define target-dir (build-path project-dir ".q" "extensions"))
+          (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+            (activate-extension! name target-dir)
+            (list (make-entry 'system
+                              (format "Extension '~a' activated locally (~a)" name target-dir)
+                              (current-inexact-milliseconds)
+                              (hash))))]
+         ;; /activate with no args — show status
+         [else (list-status-entries project-dir)])]))
+  (define new-state
+    (for/fold ([s state]) ([e (in-list entries)])
+      (add-transcript-entry s e)))
+  (set-box! (cmd-ctx-state-box cctx) new-state)
+  'continue)
+
+;; list-status-entries : path? -> (listof entry?)
+;; Show active and available extensions.
+(define (list-status-entries project-dir)
+  (define local-dir (build-path project-dir ".q" "extensions"))
+  (define global-dir (build-path (find-system-path 'home-dir) ".q" "extensions"))
+  (define active-local
+    (if (directory-exists? local-dir)
+        (map path->string (directory-list local-dir))
+        '()))
+  (define active-global
+    (if (directory-exists? global-dir)
+        (map path->string (directory-list global-dir))
+        '()))
+  (define known (list-known-extensions))
+  (define known-names (map ext-info-name known))
+  (define active-names (append active-global active-local))
+  (append (list (make-entry 'system "Extension Status:" 0 (hash)))
+          (if (null? active-names)
+              (list (make-entry 'system "  No extensions activated." 0 (hash)))
+              (for/list ([n (in-list (remove-duplicates active-names))])
+                (make-entry 'system (format "  ● ~a" n) 0 (hash))))
+          (list (make-entry 'system "" 0 (hash))
+                (make-entry 'system "Available extensions (use /activate <name>):" 0 (hash)))
+          (for/list ([n (in-list known-names)])
+            (make-entry 'system (format "  ○ ~a" n) 0 (hash)))
+          (list (make-entry 'system "" 0 (hash))
+                (make-entry
+                 'system
+                 "Use /activate <name> for project-local, /activate --global <name> for global."
+                 0
+                 (hash)))))
+
+;; list-available-entries : -> (listof entry?)
+;; List all known extensions from the source tree.
+(define (list-available-entries)
+  (define known (list-known-extensions))
+  (append
+   (list (make-entry 'system "Available extensions:" 0 (hash)))
+   (for/list ([e (in-list known)])
+     (make-entry 'system (format "  ~a (~a)" (ext-info-name e) (ext-info-source-path e)) 0 (hash)))
+   (list (make-entry 'system "" 0 (hash))
+         (make-entry 'system "Use /activate <name> or /activate --global <name>" 0 (hash)))))
+
+;; ============================================================
 ;; Main command dispatcher
 ;; ============================================================
 
@@ -541,6 +653,7 @@
              (make-entry 'error "No previous prompt to retry." (current-inexact-milliseconds) (hash)))
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
         'continue]
+       [(activate) (handle-activate-command cctx)]
        [(quit)
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]

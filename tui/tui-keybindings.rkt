@@ -181,6 +181,7 @@
 ;; This avoids a circular dependency (commands.rkt cannot import
 ;; interfaces/tui.rkt where tui-ctx is defined).
 (define (tui-ctx->cmd-ctx ctx)
+  (define input-text (input-state-buffer (unbox (tui-ctx-input-state-box ctx))))
   (commands:cmd-ctx (tui-ctx-ui-state-box ctx)
                     (tui-ctx-running-box ctx)
                     (tui-ctx-event-bus ctx)
@@ -188,7 +189,8 @@
                     (tui-ctx-needs-redraw-box ctx)
                     (tui-ctx-model-registry-box ctx)
                     (tui-ctx-last-prompt-box ctx)
-                    (tui-ctx-session-runner ctx)))
+                    (tui-ctx-session-runner ctx)
+                    (box input-text)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)

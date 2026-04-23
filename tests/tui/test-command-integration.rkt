@@ -24,7 +24,8 @@
            (box #f) ;; needs-redraw
            #f ;; model-registry-box
            (box #f) ;; last-prompt-box
-           #f)) ;; session-runner
+           #f ;; session-runner
+           (box ""))) ;; input-text-box
 
 ;; Helper: get transcript text entries from cctx state
 (define (get-transcript-texts cctx)
