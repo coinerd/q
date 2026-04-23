@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.17.2 — 2026-04-23
+
+### Phase C: Remote Collaboration Extension
+
+- **C1**: `remote-collab` extension — multi-file extension using subdirectory
+  support (B3). `remote-q` tool controls remote q instances via SSH + tmux.
+  Actions: status, start, send, capture, wait, interrupt, stop.
+  `ssh-helpers.rkt` and `tmux-helpers.rkt` as separate modules.
+- **C2**: `q-sync` extension — multi-domain sync tool. Directions: push, pull,
+  status, handoff. Domains: planning, pi-config, scripts, git, all.
+  Uses `rsync` for file sync, `git` for version control.
+
+### Testing
+
+- 11 tests for remote-collab extension
+- 8 tests for q-sync extension
+- All existing tests continue to pass
+
+---
+
 ## v0.17.1 — 2026-04-23
 
 ### Phase B: Self-Editing & Extension Infrastructure
