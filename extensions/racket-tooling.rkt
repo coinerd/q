@@ -30,7 +30,8 @@
          raco-fmt
          raco-make
          raco-test
-         run-raco)
+         run-raco
+         find-form-end)
 
 ;; ============================================================
 ;; Raco command helpers
@@ -715,41 +716,62 @@
 ;; ============================================================
 
 (define (find-form-end lines start-idx)
-  (define depth 0)
   (let loop ([i start-idx]
              [col 0]
-             [in-string #f])
+             [in-string #f]
+             [escape-next #f]
+             [cur-depth 0])
     (cond
-      [(>= i (length lines)) (values i depth)]
+      [(>= i (length lines)) (values i cur-depth)]
       [else
        (define line (list-ref lines i))
        (define chars (string->list line))
        (let char-loop ([cs (if (= i start-idx)
                                (drop chars col)
                                chars)]
-                       [d depth]
-                       [in-str in-string])
+                       [d cur-depth]
+                       [in-str in-string]
+                       [esc escape-next])
          (cond
            [(null? cs)
             (if (zero? d)
                 (values (+ i 1) d)
-                (loop (+ i 1) 0 in-str))]
+                (loop (+ i 1) 0 in-str esc d))]
            [else
             (define c (car cs))
-            (define new-d
-              (cond
-                [in-str d]
-                [(char=? c #\() (+ d 1)]
-                [(char=? c #\)) (- d 1)]
-                [else d]))
-            (if (and (= i start-idx) (= new-d 0) (char=? c #\)))
-                (values (+ i 1) 0)
-                (char-loop (cdr cs)
-                           new-d
-                           (if (and (not in-str) (char=? c #\"))
-                               #t
-                               (if (and in-str (char=? c #\")) #f in-str))))]))])))
-
+            (cond
+              ;; Inside a string
+              [in-str
+               (cond
+                 [esc (char-loop (cdr cs) d in-str #f)]
+                 [(char=? c #\\) (char-loop (cdr cs) d in-str #t)]
+                 [(char=? c #\") (char-loop (cdr cs) d #f #f)]
+                 [else (char-loop (cdr cs) d in-str #f)])]
+              ;; Not in a string
+              [else
+               (cond
+                 ;; Comment — skip rest of line
+                 [(char=? c #\;)
+                  (if (zero? d)
+                      (values (+ i 1) 0)
+                      (loop (+ i 1) 0 #f #f d))]
+                 ;; String start
+                 [(char=? c #\") (char-loop (cdr cs) d #t #f)]
+                 ;; Parens
+                 [(char=? c #\() (char-loop (cdr cs) (+ d 1) #f #f)]
+                 [(char=? c #\))
+                  (define new-d (- d 1))
+                  (if (and (= i start-idx) (= new-d 0))
+                      (values (+ i 1) 0)
+                      (char-loop (cdr cs) new-d #f #f))]
+                 ;; Brackets — same as parens for depth tracking
+                 [(char=? c #\[) (char-loop (cdr cs) (+ d 1) #f #f)]
+                 [(char=? c #\])
+                  (define new-d (- d 1))
+                  (if (and (= i start-idx) (= new-d 0))
+                      (values (+ i 1) 0)
+                      (char-loop (cdr cs) new-d #f #f))]
+                 [else (char-loop (cdr cs) d #f #f)])])]))])))
 ;; ============================================================
 ;; Extension definition
 ;; ============================================================

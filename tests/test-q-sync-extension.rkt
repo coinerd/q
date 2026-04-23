@@ -13,55 +13,56 @@
 ;; ============================================================
 
 (test-case "handle-q-sync status returns success"
-  (define result (handle-q-sync (hasheq 'direction "status")))
+  (define result (handle-q-sync (hasheq 'direction "status" 'remote_host "user@localhost")))
   (check-pred tool-result? result)
   (check-false (tool-result-is-error? result)))
 
 (test-case "handle-q-sync status includes sync status text"
-  (define result (handle-q-sync (hasheq 'direction "status")))
+  (define result (handle-q-sync (hasheq 'direction "status" 'remote_host "user@localhost")))
   (define text (hash-ref (car (tool-result-content result)) 'text ""))
   (check-true (string-contains? text "Sync Status")))
 
 (test-case "handle-q-sync unknown direction returns error"
-  (define result
-    (handle-q-sync (hasheq 'direction "sideways")))
+  (define result (handle-q-sync (hasheq 'direction "sideways" 'remote_host "user@localhost")))
   (check-pred tool-result? result)
   (check-true (tool-result-is-error? result)))
 
 (test-case "handle-q-sync push returns tool result"
   ;; Push will fail without remote, but should return a result
   (define result
-    (handle-q-sync (hasheq 'direction "push"
-                           'domain "planning"
-                           'remote_host "nonexistent.test.invalid")))
+    (handle-q-sync
+     (hasheq 'direction "push" 'domain "planning" 'remote_host "nonexistent.test.invalid")))
   (check-pred tool-result? result))
 
 (test-case "handle-q-sync pull returns tool result"
   (define result
-    (handle-q-sync (hasheq 'direction "pull"
-                           'domain "planning"
-                           'remote_host "nonexistent.test.invalid")))
+    (handle-q-sync
+     (hasheq 'direction "pull" 'domain "planning" 'remote_host "nonexistent.test.invalid")))
   (check-pred tool-result? result))
 
 (test-case "handle-q-sync handoff returns tool result"
   (define result
-    (handle-q-sync (hasheq 'direction "handoff"
-                           'remote_host "nonexistent.test.invalid")))
+    (handle-q-sync (hasheq 'direction "handoff" 'remote_host "nonexistent.test.invalid")))
   (check-pred tool-result? result))
 
 (test-case "handle-q-sync domain planning only"
   (define result
-    (handle-q-sync (hasheq 'direction "push"
-                           'domain "planning"
-                           'remote_host "nonexistent.test.invalid")))
+    (handle-q-sync
+     (hasheq 'direction "push" 'domain "planning" 'remote_host "nonexistent.test.invalid")))
   (check-pred tool-result? result)
   (define text (hash-ref (car (tool-result-content result)) 'text ""))
   (check-true (string-contains? text "planning")))
 
 (test-case "handle-q-sync domain git only"
   (define result
-    (handle-q-sync (hasheq 'direction "push"
-                           'domain "git")))
+    (handle-q-sync (hasheq 'direction "push" 'domain "git" 'remote_host "user@localhost")))
   (check-pred tool-result? result)
   (define text (hash-ref (car (tool-result-content result)) 'text ""))
   (check-true (string-contains? text "git")))
+
+;; M5 regression: no default host -- must provide remote_host
+(test-case "handle-q-sync requires remote_host for push"
+  (check-exn exn:fail? (lambda () (handle-q-sync (hasheq 'direction "push" 'domain "git")))))
+
+(test-case "handle-q-sync requires remote_host for pull"
+  (check-exn exn:fail? (lambda () (handle-q-sync (hasheq 'direction "pull" 'domain "git")))))

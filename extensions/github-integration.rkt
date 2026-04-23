@@ -753,12 +753,29 @@
                       #f))
                 ;; Step 4: merge PR
                 (when pr-num
-                  (gh-exec-result (format "pr merge ~a --squash" pr-num)))
+                  (define-values (ec-merge _out-merge err-merge)
+                    (gh-exec-result (format "pr merge ~a --squash" pr-num)))
+                  (unless (= ec-merge 0)
+                    (make-error-result
+                     (format
+                      "PR merge failed (exit ~a): ~a. Files committed and pushed but PR not merged."
+                      ec-merge
+                      (string-trim err-merge)))))
                 ;; Step 5: sync main
-                (git-exec-result "checkout main")
-                (git-exec-result "pull origin main")
+                (define-values (ec-co _out-co err-co) (git-exec-result "checkout main"))
+                (define-values (ec-pull _out-pull err-pull) (git-exec-result "pull origin main"))
+                (unless (= ec-co 0)
+                  (make-error-result (format "git checkout main failed: ~a" (string-trim err-co))))
+                (unless (= ec-pull 0)
+                  (make-error-result (format "git pull failed: ~a" (string-trim err-pull))))
                 ;; Step 6: close issue
-                (gh-exec-result (format "issue close ~a" issue-num))
+                (define-values (ec-close _out-close err-close)
+                  (gh-exec-result (format "issue close ~a" issue-num)))
+                (unless (= ec-close 0)
+                  (make-error-result
+                   (format "Issue close failed (exit ~a): ~a. PR merged but issue not closed."
+                           ec-close
+                           (string-trim err-close))))
                 (make-success-result
                  (list (hasheq
                         'type
