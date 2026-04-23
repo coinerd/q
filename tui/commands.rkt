@@ -28,7 +28,8 @@
          "../runtime/model-registry.rkt"
          "../runtime/extension-catalog.rkt"
          "../extensions/hooks.rkt"
-         "../extensions/loader.rkt")
+         "../extensions/loader.rkt"
+         "../extensions/api.rkt")
 
 ;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
 (provide cmd-ctx
@@ -437,12 +438,34 @@
                     (hash))]
        [else
         (with-handlers ([exn:fail? (λ (e)
+                                     (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                                                          (lambda ()
+                                                            (printf "[~a] hot-load FAILED: ~a\n"
+                                                                    (current-inexact-milliseconds)
+                                                                    (exn-message e)))
+                                                          #:exists 'append)
                                      (make-entry 'system
                                                  (format "  Warning: hot-load failed: ~a"
                                                          (exn-message e))
                                                  (current-inexact-milliseconds)
                                                  (hash)))])
           (load-extension! ext-reg ext-path #:event-bus bus)
+          (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                               (lambda ()
+                                 (printf "[~a] hot-load done, checking registry...\n"
+                                         (current-inexact-milliseconds))
+                                 (define exts (list-extensions ext-reg))
+                                 (printf "[~a] registry has ~a extensions: ~a\n"
+                                         (current-inexact-milliseconds)
+                                         (length exts)
+                                         (map extension-name exts))
+                                 (for ([ext exts])
+                                   (define hooks (extension-hooks ext))
+                                   (printf "[~a] ext '~a' hooks: ~a\n"
+                                           (current-inexact-milliseconds)
+                                           (extension-name ext)
+                                           (hash-keys hooks))))
+                               #:exists 'append)
           (make-entry 'system
                       (format "  Extension '~a' loaded into running session." name)
                       (current-inexact-milliseconds)

@@ -97,6 +97,13 @@
 ;; When event-bus is provided, publishes extension.load.failed on error.
 (define (load-extension! registry path #:event-bus [event-bus #f])
   (define ext-name (get-extension-name-from-path path))
+  (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                       (lambda ()
+                         (printf "[~a] load-extension! called: path=~a ext-name=~a\n"
+                                 (current-inexact-milliseconds)
+                                 path
+                                 ext-name))
+                       #:exists 'append)
   (define state (extension-state ext-name))
   (when (and (not (eq? state 'disabled)) (not (eq? state 'quarantined)))
     (define timeout-secs (current-extension-startup-timeout))
@@ -117,6 +124,18 @@
                                       'timeout)))
           ;; No timeout — direct call
           (try-load-extension path)))
+    (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                         (lambda ()
+                           (printf "[~a] load-extension! result: ~a\n"
+                                   (current-inexact-milliseconds)
+                                   (cond
+                                     [(extension-load-error? result) 'load-error]
+                                     [(extension? result)
+                                      (format "ext ~a hooks ~a"
+                                              (extension-name result)
+                                              (hash-keys (extension-hooks result)))]
+                                     [else result])))
+                         #:exists 'append)
     (cond
       [(extension-load-error? result)
        (log-warning "extension load failed [~a]: ~a \u2014 ~a"
@@ -144,7 +163,13 @@
        (when (list? tier-result)
          (for ([msg (in-list tier-result)])
            (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
-       (register-extension! registry result)]))
+       (register-extension! registry result)
+       (with-output-to-file "/tmp/q-cmd-dispatch.log"
+                            (lambda ()
+                              (printf "[~a] register-extension! called for ~a\n"
+                                      (current-inexact-milliseconds)
+                                      (extension-name result)))
+                            #:exists 'append)]))
   (void))
 
 ;; Cache infrastructure removed (#448): was never called in production
