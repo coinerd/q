@@ -26,7 +26,8 @@
          "../runtime/settings.rkt"
          "../interfaces/sessions.rkt"
          "../runtime/model-registry.rkt"
-         "../runtime/extension-catalog.rkt")
+         "../runtime/extension-catalog.rkt"
+         "../extensions/hooks.rkt")
 
 ;; Command context struct (lightweight, avoids circular dep with interfaces/tui)
 (provide cmd-ctx
@@ -40,6 +41,7 @@
          cmd-ctx-last-prompt-box
          cmd-ctx-session-runner
          cmd-ctx-input-text-box
+         cmd-ctx-extension-registry-box
 
          ;; Main command dispatcher
          process-slash-command)
@@ -59,7 +61,8 @@
          model-registry-box ; (or/c (boxof (or/c model-registry? #f)) #f)
          last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
          session-runner ; (string -> void) or #f — for /retry resubmission
-         input-text-box) ; (boxof string?) — raw input text for commands like /activate
+         input-text-box ; (boxof string?) — raw input text for commands like /activate
+         extension-registry-box) ; (or/c (boxof (or/c extension-registry? #f)) #f) — for ext command dispatch
   #:transparent)
 
 ;; ============================================================
@@ -714,7 +717,32 @@
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]
        [(unknown)
-        (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-        'continue]
+        ;; Try extension command dispatch before showing error
+        (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
+        (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
+        (define input-text (unbox (cmd-ctx-input-text-box cctx)))
+        (define cmd-name
+          (let ([trimmed (string-trim input-text)])
+            (and (> (string-length trimmed) 0)
+                 (char=? (string-ref trimmed 0) #\/)
+                 (let ([parts (string-split trimmed)]) (and (pair? parts) (car parts))))))
+        (define ext-result
+          (and
+           ext-reg
+           cmd-name
+           (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
+        (cond
+          [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
+           ;; Extension handled the command — display result text
+           (define payload (hook-result-payload ext-result))
+           (define text (hash-ref payload 'text #f))
+           (when text
+             (define entry (make-entry 'system text (current-inexact-milliseconds) (hash)))
+             (set-box! (cmd-ctx-state-box cctx)
+                       (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
+           'continue]
+          [else
+           (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
+           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+           'continue])]
        [else 'continue])]))

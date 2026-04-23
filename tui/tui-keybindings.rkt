@@ -83,13 +83,15 @@
          ubuf-box ; (boxof any) — ubuf buffer for output
          model-registry-box ; (boxof (or/c model-registry? #f)) — model registry for /model
          previous-frame-box ; (boxof (or/c (listof string) #f)) — last rendered frame for diffing
-         last-prompt-box) ; (boxof (or/c string? #f)) — last user prompt for /retry
+         last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
+         extension-registry-box) ; (or/c (boxof (or/c extension-registry? #f)) #f)
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
                       #:session-runner [runner (lambda (prompt) (void))]
                       #:session-dir [sess-dir #f]
-                      #:model-registry [reg #f])
+                      #:model-registry [reg #f]
+                      #:extension-registry [ext-reg #f])
   (tui-ctx (box (initial-ui-state))
            (box (initial-input-state))
            bus
@@ -102,7 +104,8 @@
            (box #f) ; ubuf-box - set when buffer created
            (box reg) ; model-registry-box
            (box #f) ; previous-frame-box - #f means no previous frame
-           (box #f))) ; last-prompt-box - #f until first submit
+           (box #f) ; last-prompt-box - #f until first submit
+           (box ext-reg))) ; extension-registry-box
 
 ;; ============================================================
 ;; mark-dirty!
@@ -189,7 +192,8 @@
                     (tui-ctx-model-registry-box ctx)
                     (tui-ctx-last-prompt-box ctx)
                     (tui-ctx-session-runner ctx)
-                    (box "")))
+                    (box "")
+                    (tui-ctx-extension-registry-box ctx)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)

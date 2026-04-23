@@ -27,7 +27,8 @@
            (box #f) ; model-registry
            (box #f) ; last-prompt
            (lambda (prompt) (void))
-           (box input-text)))
+           (box input-text)
+           (box #f))) ; extension-registry-box
 
 ;; ============================================================
 ;; Tests
