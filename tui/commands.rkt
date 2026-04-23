@@ -438,47 +438,22 @@
                     (hash))]
        [else
         (with-handlers ([exn:fail? (λ (e)
-                                     (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                                                          (lambda ()
-                                                            (printf "[~a] hot-load FAILED: ~a\n"
-                                                                    (current-inexact-milliseconds)
-                                                                    (exn-message e)))
-                                                          #:exists 'append)
+                                     (log-debug "hot-load failed for ~a: ~a" name (exn-message e))
                                      (make-entry 'system
                                                  (format "  Warning: hot-load failed: ~a"
                                                          (exn-message e))
                                                  (current-inexact-milliseconds)
                                                  (hash)))])
           (define loaded? (load-extension! ext-reg ext-path #:event-bus bus))
-          (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                               (lambda ()
-                                 (printf "[~a] hot-load done, loaded?=~a checking registry...\n"
-                                         (current-inexact-milliseconds)
-                                         loaded?)
-                                 (define exts (list-extensions ext-reg))
-                                 (printf "[~a] registry has ~a extensions: ~a\n"
-                                         (current-inexact-milliseconds)
-                                         (length exts)
-                                         (map extension-name exts))
-                                 (for ([ext exts])
-                                   (define hooks (extension-hooks ext))
-                                   (printf "[~a] ext '~a' hooks: ~a\n"
-                                           (current-inexact-milliseconds)
-                                           (extension-name ext)
-                                           (hash-keys hooks))))
-                               #:exists 'append)
           (if loaded?
               (make-entry 'system
                           (format "  Extension '~a' loaded into running session." name)
                           (current-inexact-milliseconds)
                           (hash))
-              (make-entry
-               'error
-               (format
-                "  Warning: extension '~a' could not be loaded. Check /tmp/q-cmd-dispatch.log for details."
-                name)
-               (current-inexact-milliseconds)
-               (hash))))])]))
+              (make-entry 'error
+                          (format "  Warning: extension '~a' could not be loaded." name)
+                          (current-inexact-milliseconds)
+                          (hash))))])]))
 
 ;; handle-activate-command : cmd-ctx? -> 'continue
 ;; Supports:
@@ -802,25 +777,14 @@
             (and (> (string-length trimmed) 0)
                  (char=? (string-ref trimmed 0) #\/)
                  (let ([parts (string-split trimmed)]) (and (pair? parts) (car parts))))))
-        (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                             (lambda ()
-                               (printf "[~a] cmd-name=~a has-ext-reg=~a input='~a'\n"
-                                       (current-inexact-milliseconds)
-                                       cmd-name
-                                       (and ext-reg #t)
-                                       input-text))
-                             #:exists 'append)
+        (log-debug "command dispatch: cmd=~a has-ext-reg=~a" cmd-name (and ext-reg #t))
         (define ext-result
           (and
            ext-reg
            cmd-name
            (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
-        (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                             (lambda ()
-                               (printf "[~a] result-action=~a\n"
-                                       (current-inexact-milliseconds)
-                                       (and ext-result (hook-result-action ext-result))))
-                             #:exists 'append)
+        (log-debug "command dispatch result: action=~a"
+                   (and ext-result (hook-result-action ext-result)))
         (cond
           [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
            ;; Extension handled the command
@@ -844,15 +808,7 @@
                         (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))])
            'continue]
           [else
-           (with-output-to-file "/tmp/q-cmd-dispatch.log"
-                                (lambda ()
-                                  (printf "[~a] FELL-THROUGH: result=~a cmd-name=~a\n"
-                                          (current-inexact-milliseconds)
-                                          (if ext-result
-                                              (hook-result-action ext-result)
-                                              #f)
-                                          cmd-name))
-                                #:exists 'append)
+           (log-debug "command fell through: cmd=~a" cmd-name)
            (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
            'continue])]

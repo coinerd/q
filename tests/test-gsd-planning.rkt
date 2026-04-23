@@ -354,8 +354,8 @@
        ;; Write a plan
        (make-directory* (build-path dir ".planning"))
        (call-with-output-file (build-path dir ".planning" "PLAN.md")
-         (lambda (out) (display "# Plan\nWave 1: test" out))
-         #:exists 'truncate)
+                              (lambda (out) (display "# Plan\nWave 1: test" out))
+                              #:exists 'truncate)
        ;; Get the handler from the extension hooks
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/plan" 'input "/plan")))
@@ -368,8 +368,8 @@
      (parameterize ([current-directory dir])
        (make-directory* (build-path dir ".planning"))
        (call-with-output-file (build-path dir ".planning" "STATE.md")
-         (lambda (out) (display "Status: in progress" out))
-         #:exists 'truncate)
+                              (lambda (out) (display "Status: in progress" out))
+                              #:exists 'truncate)
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/state" 'input "/state")))
        (check-equal? (hook-result-action result) 'amend)
@@ -381,11 +381,79 @@
   (check-equal? (hook-result-action result) 'pass))
 
 (test-case "execute-command handler reports missing artifact"
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     ;; No .planning/ dir
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/plan" 'input "/plan")))
+                     (check-equal? (hook-result-action result) 'amend)
+                     (check-true (string-contains? (hash-ref (hook-result-payload result) 'text)
+                                                   "No PLAN found"))))))
+
+;; ============================================================
+;; execute-command /plan <text> submit tests (Wave 1 v0.17.9)
+;; ============================================================
+
+(test-case "/plan <text> returns submit payload"
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/plan" 'input "/plan refactor the module")))
+  (check-equal? (hook-result-action result) 'amend)
+  (define payload (hook-result-payload result))
+  (check-equal? (hash-ref payload 'submit) "refactor the module")
+  (check-true (string-contains? (hash-ref payload 'text) "refactor the module")))
+
+(test-case "/p <text> returns submit payload (shortcut)"
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/p" 'input "/p quick fix")))
+  (check-equal? (hook-result-action result) 'amend)
+  (define payload (hook-result-payload result))
+  (check-equal? (hash-ref payload 'submit) "quick fix"))
+
+(test-case "/plan (no args) returns display text"
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     (make-directory* (build-path dir ".planning"))
+                     (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                                            (lambda (out) (display "# Test Plan" out))
+                                            #:exists 'truncate)
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/plan" 'input "/plan")))
+                     (check-equal? (hook-result-action result) 'amend)
+                     (define payload (hook-result-payload result))
+                     ;; No submit key — display mode
+                     (check-false (hash-ref payload 'submit #f))
+                     (check-equal? (hash-ref payload 'text) "# Test Plan")))))
+
+(test-case "/state <text> ignores args and displays artifact"
   (with-temp-dir
    (lambda (dir)
      (parameterize ([current-directory dir])
-       ;; No .planning/ dir
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "STATE.md")
+                              (lambda (out) (display "Status: active" out))
+                              #:exists 'truncate)
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
-       (define result (handler (hasheq 'command "/plan" 'input "/plan")))
+       (define result (handler (hasheq 'command "/state" 'input "/state some extra text")))
        (check-equal? (hook-result-action result) 'amend)
-       (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "No PLAN found"))))))
+       (define payload (hook-result-payload result))
+       ;; No submit key — /state always displays
+       (check-false (hash-ref payload 'submit #f))
+       (check-equal? (hash-ref payload 'text) "Status: active")))))
+
+(test-case "/handoff <text> ignores args and displays artifact"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "HANDOFF.json")
+                              (lambda (out) (write-json (hasheq 'machine "local") out))
+                              #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/handoff" 'input "/handoff do something")))
+       (check-equal? (hook-result-action result) 'amend)
+       (define payload (hook-result-payload result))
+       ;; No submit key — /handoff always displays
+       (check-false (hash-ref payload 'submit #f))
+       (check-true (string-contains? (hash-ref payload 'text) "local"))))))
