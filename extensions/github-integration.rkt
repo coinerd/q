@@ -72,12 +72,16 @@
 (define (valid-method? s)
   (and (string? s) (member s valid-methods) #t))
 
-(define (run-command cmd-str)
-  (define-values (sp stdout-in stdin-out stderr-in) (subprocess #f #f #f "/bin/sh" "-c" cmd-str))
+;; Run a command with explicit arg list — no /bin/sh interpolation.
+;; Returns (values exit-code stdout stderr)
+(define (run-command cmd . args)
+  (define-values (sp stdout-in stdin-out stderr-in) (apply subprocess #f #f #f cmd args))
   (define out-str (port->string stdout-in))
   (define err-str (port->string stderr-in))
   (close-input-port stdout-in)
   (close-input-port stderr-in)
+  (when (output-port? stdin-out)
+    (close-output-port stdin-out))
   (subprocess-wait sp)
   (values (subprocess-status sp) out-str err-str))
 
@@ -98,20 +102,20 @@
 (define (gh-unavailable-error)
   (make-error-result "GitHub CLI (gh) not found. Install from https://cli.github.com"))
 
-(define (gh-exec-result args-str)
+(define (gh-exec-result . args)
   (define bin (gh-binary))
   (unless bin
     (error 'gh "GitHub CLI not found"))
-  (run-command (format "~a ~a" (path->string bin) args-str)))
+  (apply run-command bin args))
 
-(define (git-exec-result args-str)
+(define (git-exec-result . args)
   (define bin (git-binary))
   (unless bin
     (error 'git "git not found"))
-  (run-command (format "~a ~a" (path->string bin) args-str)))
+  (apply run-command bin args))
 
-(define (gh-success cmd)
-  (define-values (ec out err) (gh-exec-result cmd))
+(define (gh-success . args)
+  (define-values (ec out err) (apply gh-exec-result args))
   (if (= ec 0)
       (let ([text (string-trim out)])
         (make-success-result (list (hasheq 'type
@@ -122,8 +126,8 @@
                                                text)))))
       (make-error-result (format "gh failed (exit ~a): ~a" ec (string-trim err)))))
 
-(define (gh-success-json cmd)
-  (define-values (ec out err) (gh-exec-result cmd))
+(define (gh-success-json . args)
+  (define-values (ec out err) (apply gh-exec-result args))
   (if (= ec 0)
       (let* ([raw (string-trim out)]
              [parsed (with-handlers ([exn:fail? (lambda (_) #f)])
@@ -136,8 +140,8 @@
                                                raw)))))
       (make-error-result (format "gh failed (exit ~a): ~a" ec (string-trim err)))))
 
-(define (git-success cmd)
-  (define-values (ec out err) (git-exec-result cmd))
+(define (git-success . args)
+  (define-values (ec out err) (apply git-exec-result args))
   (if (= ec 0)
       (make-success-result (list (hasheq 'type
                                          "text"
@@ -149,7 +153,8 @@
       (make-error-result (format "git failed (exit ~a): ~a" ec (string-trim err)))))
 
 (define (get-repo-info)
-  (define-values (ec out _) (run-command "gh repo view --json nameWithOwner -q .nameWithOwner"))
+  (define-values (ec out _)
+    (run-command (gh-binary) "repo" "view" "--json" "nameWithOwner" "-q" ".nameWithOwner"))
   (cond
     [(not (= ec 0)) (values #f #f)]
     [else
@@ -323,79 +328,88 @@
             [else
              (define body (hash-ref args 'body ""))
              (define labels (hash-ref args 'labels '()))
-             (define label-arg
+             (define label-val
                (if (null? labels)
-                   ""
-                   (format " --label ~a" (string-join (map shell-quote labels) ","))))
+                   #f
+                   (string-join labels ",")))
              (define ms-id (hash-ref args 'milestone_id #f))
-             (define ms-arg
-               (if ms-id
-                   (format " --milestone ~a" (shell-quote ms-id))
-                   ""))
-             (gh-success-json (format "issue create --title ~a --body ~a~a~a --json number,title,url"
-                                      (shell-quote title)
-                                      (shell-quote body)
-                                      label-arg
-                                      ms-arg))])]
+             (apply gh-success-json
+                    (append
+                     (list "issue" "create" "--title" title "--body" body "--json" "number,title,url")
+                     (if label-val
+                         (list "--label" label-val)
+                         '())
+                     (if ms-id
+                         (list "--milestone" ms-id)
+                         '())))])]
          ;; close
          [(string=? action "close")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "close requires 'number'")]
-            [else (gh-success (format "issue close ~a" num))])]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
+            [else (gh-success "issue" "close" (~a num))])]
          ;; update
          [(string=? action "update")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "update requires 'number'")]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
             [else
-             (define title-arg
-               (let ([t (hash-ref args 'title #f)])
-                 (if t
-                     (format " --title ~a" (shell-quote t))
-                     "")))
-             (define body-arg
-               (let ([b (hash-ref args 'body #f)])
-                 (if b
-                     (format " --body ~a" (shell-quote b))
-                     "")))
-             (gh-success-json
-              (format "issue edit ~a~a~a --json number,title,state" num title-arg body-arg))])]
+             (define t (hash-ref args 'title #f))
+             (define b (hash-ref args 'body #f))
+             (apply gh-success-json
+                    (append (list "issue" "edit" (~a num) "--json" "number,title,state")
+                            (if t
+                                (list "--title" t)
+                                '())
+                            (if b
+                                (list "--body" b)
+                                '())))])]
          ;; get
          [(string=? action "get")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "get requires 'number'")]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
             [else
-             (gh-success-json (format "issue view ~a --json number,title,state,body,labels,milestone"
-                                      num))])]
+             (gh-success-json "issue"
+                              "view"
+                              (~a num)
+                              "--json"
+                              "number,title,state,body,labels,milestone")])]
          ;; list
          [(string=? action "list")
           (define raw-state (hash-ref args 'state "open"))
           (unless (valid-state? raw-state)
             (raise-user-error 'github-issues "invalid state: ~a" raw-state))
-          (define state-arg (format "--state ~a" raw-state))
-          (define ms-arg
-            (let ([mn (hash-ref args 'milestone_number #f)])
-              (if mn
-                  (format " --milestone ~a" mn)
-                  "")))
-          (gh-success-json
-           (format "issue list ~a --limit 100~a --json number,title,state,labels" state-arg ms-arg))]
+          (define mn (hash-ref args 'milestone_number #f))
+          (apply gh-success-json
+                 (append (list "issue"
+                               "list"
+                               "--state"
+                               raw-state
+                               "--limit"
+                               "100"
+                               "--json"
+                               "number,title,state,labels")
+                         (if mn
+                             (list "--milestone" (~a mn))
+                             '())))]
          ;; close_tree
          [(string=? action "close_tree")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "close_tree requires 'number'")]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
             [else
-             (define-values (ec-main _out-main err-main)
-               (gh-exec-result (format "issue close ~a" num)))
+             (define-values (ec-main _out-main err-main) (gh-exec-result "issue" "close" (~a num)))
              (cond
                [(not (= ec-main 0))
                 (make-error-result (format "Failed to close #~a: ~a" num (string-trim err-main)))]
                [else
                 (define-values (ec-view out-view _)
-                  (gh-exec-result (format "issue view ~a --json body -q .body" num)))
+                  (gh-exec-result "issue" "view" (~a num) "--json" "body" "-q" ".body"))
                 (define sub-nums
                   (if (= ec-view 0)
                       (map string->number
@@ -405,7 +419,7 @@
                       '()))
                 (define closed-subs
                   (for/list ([sn sub-nums])
-                    (define-values (ec-s _out-s _err-s) (gh-exec-result (format "issue close ~a" sn)))
+                    (define-values (ec-s _out-s _err-s) (gh-exec-result "issue" "close" (~a sn)))
                     (hasheq 'number sn 'closed (= ec-s 0))))
                 (make-success-result (list (hasheq 'type
                                                    "text"
@@ -438,47 +452,61 @@
              (define body (hash-ref args 'body ""))
              (define head (hash-ref args 'head #f))
              (define base (hash-ref args 'base "main"))
-             (define head-arg
-               (if head
-                   (format " --head ~a" (shell-quote head))
-                   ""))
-             (gh-success-json
-              (format "pr create --title ~a --body ~a~a --base ~a --json number,title,url"
-                      (shell-quote title)
-                      (shell-quote body)
-                      head-arg
-                      (shell-quote base)))])]
+             (apply gh-success-json
+                    (append (list "pr"
+                                  "create"
+                                  "--title"
+                                  title
+                                  "--body"
+                                  body
+                                  "--base"
+                                  base
+                                  "--json"
+                                  "number,title,url")
+                            (if head
+                                (list "--head" head)
+                                '())))])]
          ;; merge
          [(string=? action "merge")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "merge requires 'number'")]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
             [else
              (define method (hash-ref args 'method "squash"))
              (unless (valid-method? method)
                (raise-user-error 'github-pr "invalid merge method: ~a" method))
              (define commit-title (hash-ref args 'commit_title #f))
-             (define ct-arg
-               (if commit-title
-                   (format " --subject ~a" (shell-quote commit-title))
-                   ""))
-             (gh-success-json (format "pr merge ~a --~a~a --json url" num method ct-arg))])]
+             (apply gh-success-json
+                    (append (list "pr" "merge" (~a num) (string-append "--" method) "--json" "url")
+                            (if commit-title
+                                (list "--subject" commit-title)
+                                '())))])]
          ;; list
          [(string=? action "list")
           (define raw-state (hash-ref args 'state "open"))
           (unless (valid-state? raw-state)
             (raise-user-error 'github-pr "invalid state: ~a" raw-state))
-          (define state-arg (format "--state ~a" raw-state))
-          (gh-success-json (format "pr list ~a --limit 100 --json number,title,state,headRefName"
-                                   state-arg))]
+          (gh-success-json "pr"
+                           "list"
+                           "--state"
+                           raw-state
+                           "--limit"
+                           "100"
+                           "--json"
+                           "number,title,state,headRefName")]
          ;; get
          [(string=? action "get")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "get requires 'number'")]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
             [else
-             (gh-success-json
-              (format "pr view ~a --json number,title,state,headRefName,baseRefName,url" num))])]
+             (gh-success-json "pr"
+                              "view"
+                              (~a num)
+                              "--json"
+                              "number,title,state,headRefName,baseRefName,url")])]
          ;; unknown
          [else
           (make-error-result (format "Unknown action: ~a. Valid: create, merge, list, get"
@@ -514,13 +542,18 @@
             (define d (hash-ref m 'description ""))
             (define due (hash-ref m 'due_on ""))
             (define-values (ec _out err)
-              (gh-exec-result
-               (format "api repos/{owner}/{repo}/milestones -X POST -f title=~a -f description=~a~a"
-                       (shell-quote t)
-                       (shell-quote d)
-                       (if (string=? due "")
-                           ""
-                           (format " -f due_on=~a" (shell-quote due))))))
+              (apply gh-exec-result
+                     (append (list "api"
+                                   "repos/{owner}/{repo}/milestones"
+                                   "-X"
+                                   "POST"
+                                   "-f"
+                                   (format "title=~a" t)
+                                   "-f"
+                                   (format "description=~a" d))
+                             (if (string=? due "")
+                                 '()
+                                 (list "-f" (format "due_on=~a" due))))))
             (hasheq 'title
                     t
                     'success
@@ -549,28 +582,41 @@
             [else
              (define desc (hash-ref args 'description ""))
              (define due (hash-ref args 'due_on ""))
-             (define desc-arg (format " -f description=~a" (shell-quote desc)))
-             (define due-arg
-               (if (string=? due "")
-                   ""
-                   (format " -f due_on=~a" (shell-quote due))))
-             (gh-success-json (format "api repos/{owner}/{repo}/milestones -X POST -f title=~a~a~a"
-                                      (shell-quote title)
-                                      desc-arg
-                                      due-arg))])]
+             (apply gh-success-json
+                    (append (list "api"
+                                  "repos/{owner}/{repo}/milestones"
+                                  "-X"
+                                  "POST"
+                                  "-f"
+                                  (format "title=~a" title))
+                            (if (string=? desc "")
+                                '()
+                                (list "-f" (format "description=~a" desc)))
+                            (if (string=? due "")
+                                '()
+                                (list "-f" (format "due_on=~a" due)))))])]
          ;; close
          [(string=? action "close")
           (define num (hash-ref args 'number #f))
           (cond
             [(not num) (make-error-result "close requires 'number'")]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
             [else
-             (gh-success-json
-              (format "api repos/{owner}/{repo}/milestones/~a -X PATCH -f state=closed" num))])]
+             (gh-success-json "api"
+                              "repos/{owner}/{repo}/milestones"
+                              (~a num)
+                              "-X"
+                              "PATCH"
+                              "-f"
+                              "state=closed")])]
          ;; list
          [(string=? action "list")
           (define state-arg (hash-ref args 'state "open"))
-          (gh-success-json (format "api 'repos/{owner}/{repo}/milestones?state=~a' --paginate"
-                                   state-arg))]
+          (unless (valid-state? state-arg)
+            (raise-user-error 'github-milestone "invalid state: ~a" state-arg))
+          (gh-success-json "api"
+                           (format "repos/{owner}/{repo}/milestones?state=~a" state-arg)
+                           "--paginate")]
          ;; create_from_spec
          [(string=? action "create_from_spec")
           (define spec-file (hash-ref args 'spec_file #f))
@@ -598,10 +644,16 @@
           (cond
             [(not mn) (make-error-result "status requires 'milestone_number'")]
             [else
-             (gh-success-json
-              (format
-               "issue list --milestone ~a --state all --limit 100 --json number,title,state,labels"
-               mn))])]
+             (gh-success-json "issue"
+                              "list"
+                              "--milestone"
+                              (~a mn)
+                              "--state"
+                              "all"
+                              "--limit"
+                              "100"
+                              "--json"
+                              "number,title,state,labels")])]
          ;; verify
          [(string=? action "verify")
           (define mn (hash-ref args 'milestone_number #f))
@@ -609,8 +661,16 @@
             [(not mn) (make-error-result "verify requires 'milestone_number'")]
             [else
              (define-values (ec out err)
-               (gh-exec-result
-                (format "issue list --milestone ~a --state open --limit 100 --json number,title" mn)))
+               (gh-exec-result "issue"
+                               "list"
+                               "--milestone"
+                               (~a mn)
+                               "--state"
+                               "open"
+                               "--limit"
+                               "100"
+                               "--json"
+                               "number,title"))
              (cond
                [(not (= ec 0))
                 (make-error-result (format "Failed to check milestone: ~a" (string-trim err)))]
@@ -635,10 +695,16 @@
           (cond
             [(not mn) (make-error-result (format "~a requires 'milestone_number'" action))]
             [else
-             (gh-success-json
-              (format
-               "issue list --milestone ~a --state all --limit 100 --json number,title,state,updatedAt"
-               mn))])]
+             (gh-success-json "issue"
+                              "list"
+                              "--milestone"
+                              (~a mn)
+                              "--state"
+                              "all"
+                              "--limit"
+                              "100"
+                              "--json"
+                              "number,title,state,updatedAt")])]
          ;; batch_set
          [(string=? action "batch_set")
           (define nums (hash-ref args 'issue_numbers '()))
@@ -659,7 +725,8 @@
           (define num (hash-ref args 'issue_number #f))
           (cond
             [(not num) (make-error-result "reconfigure requires 'issue_number'")]
-            [else (gh-success-json (format "issue view ~a --json number,title,state,labels" num))])]
+            [(not (valid-number? num)) (make-error-result (format "invalid number: ~a" num))]
+            [else (gh-success-json "issue" "view" (~a num) "--json" "number,title,state,labels")])]
          ;; unknown
          [else
           (make-error-result
@@ -678,15 +745,14 @@
        (define branch-name
          (or (hash-ref args 'branch_name #f) (format "feature/issue-~a-wave" issue-num)))
        ;; Sync main
-       (define-values (ec-co _out-co err-co) (git-exec-result "checkout main"))
+       (define-values (ec-co _out-co err-co) (git-exec-result "checkout" "main"))
        (cond
          [(not (= ec-co 0))
           (make-error-result (format "Cannot checkout main: ~a" (string-trim err-co)))]
          [else
-          (git-exec-result "pull origin main")
+          (git-exec-result "pull" "origin" "main")
           ;; Create feature branch
-          (define-values (ec-branch _out-br err-br)
-            (git-exec-result (format "checkout -b ~a" (shell-quote branch-name))))
+          (define-values (ec-branch _out-br err-br) (git-exec-result "checkout" "-b" branch-name))
           (cond
             [(not (= ec-branch 0))
              (make-error-result
@@ -714,23 +780,22 @@
       [(not (gh-binary)) (gh-unavailable-error)]
       [else
        ;; Step 1: git add + commit
-       (define add-cmd (format "add ~a" (string-join (map shell-quote files) " ")))
-       (define-values (ec-add _out-add err-add) (git-exec-result add-cmd))
+       (define-values (ec-add _out-add err-add) (apply git-exec-result "add" files))
        (cond
          [(not (= ec-add 0)) (make-error-result (format "git add failed: ~a" (string-trim err-add)))]
          [else
           (define-values (ec-commit _out-commit err-commit)
-            (git-exec-result (format "commit -m ~a" (shell-quote commit-msg))))
+            (git-exec-result "commit" "-m" commit-msg))
           (cond
             [(not (= ec-commit 0))
              (make-error-result (format "git commit failed: ~a" (string-trim err-commit)))]
             [else
              ;; Step 2: detect branch, push
-             (define-values (ec-br out-br _) (git-exec-result "branch --show-current"))
+             (define-values (ec-br out-br _) (git-exec-result "branch" "--show-current"))
              (define branch
                (or (hash-ref args 'branch #f) (and (= ec-br 0) (string-trim out-br)) "main"))
              (define-values (ec-push _out-push err-push)
-               (git-exec-result (format "push -u origin ~a" (shell-quote branch))))
+               (git-exec-result "push" "-u" "origin" branch))
              (cond
                [(not (= ec-push 0))
                 (make-error-result (format "git push failed: ~a" (string-trim err-push)))]
@@ -739,11 +804,18 @@
                 (define pr-title (hash-ref args 'pr_title commit-msg))
                 (define pr-body (hash-ref args 'pr_body (format "(#~a)" issue-num)))
                 (define-values (ec-pr out-pr err-pr)
-                  (gh-exec-result
-                   (format "pr create --title ~a --body ~a --head ~a --base main --json number,url"
-                           (shell-quote pr-title)
-                           (shell-quote pr-body)
-                           (shell-quote branch))))
+                  (gh-exec-result "pr"
+                                  "create"
+                                  "--title"
+                                  pr-title
+                                  "--body"
+                                  pr-body
+                                  "--head"
+                                  branch
+                                  "--base"
+                                  "main"
+                                  "--json"
+                                  "number,url"))
                 (define pr-num
                   (if (= ec-pr 0)
                       (hash-ref (with-handlers ([exn:fail? (lambda (_) (hasheq))])
@@ -754,7 +826,7 @@
                 ;; Step 4: merge PR
                 (when pr-num
                   (define-values (ec-merge _out-merge err-merge)
-                    (gh-exec-result (format "pr merge ~a --squash" pr-num)))
+                    (gh-exec-result "pr" "merge" (~a pr-num) "--squash"))
                   (unless (= ec-merge 0)
                     (make-error-result
                      (format
@@ -762,15 +834,15 @@
                       ec-merge
                       (string-trim err-merge)))))
                 ;; Step 5: sync main
-                (define-values (ec-co _out-co err-co) (git-exec-result "checkout main"))
-                (define-values (ec-pull _out-pull err-pull) (git-exec-result "pull origin main"))
+                (define-values (ec-co _out-co err-co) (git-exec-result "checkout" "main"))
+                (define-values (ec-pull _out-pull err-pull) (git-exec-result "pull" "origin" "main"))
                 (unless (= ec-co 0)
                   (make-error-result (format "git checkout main failed: ~a" (string-trim err-co))))
                 (unless (= ec-pull 0)
                   (make-error-result (format "git pull failed: ~a" (string-trim err-pull))))
                 ;; Step 6: close issue
                 (define-values (ec-close _out-close err-close)
-                  (gh-exec-result (format "issue close ~a" issue-num)))
+                  (gh-exec-result "issue" "close" (~a issue-num)))
                 (unless (= ec-close 0)
                   (make-error-result
                    (format "Issue close failed (exit ~a): ~a. PR merged but issue not closed."
@@ -835,7 +907,7 @@
 (define (register-github-commands ctx)
   (ext-register-command! ctx "/milestone" "Quick milestone status" 'general '() '("ms"))
   (ext-register-command! ctx "/issue" "Quick issue info" 'general '() '("i"))
-  (ext-register-command! ctx "/pr" "Quick PR status" 'general '() '())
+  (ext-register-command! ctx "/pr" "Quick PR status" 'general '())
   (hook-pass #f))
 
 ;; ============================================================

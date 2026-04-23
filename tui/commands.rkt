@@ -441,32 +441,38 @@
          ;; /activate --available
          [(member "--available" args) (list-available-entries)]
          ;; /activate --global <name>
-         [(and (member "--global" args)
-               (for/or ([a (in-list args)]
-                        #:when (not (string-prefix? a "--")))
-                 a))
+         [(member "--global" args)
           (define name
             (for/or ([a (in-list args)]
                      #:when (not (string-prefix? a "--")))
               a))
-          (define q-home (build-path (find-system-path 'home-dir) ".q"))
-          (define target-dir (build-path q-home "extensions"))
-          (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
-            (activate-extension! name target-dir)
-            (list (make-entry 'system
-                              (format "Extension '~a' activated globally (~a)" name target-dir)
-                              (current-inexact-milliseconds)
-                              (hash))))]
+          (cond
+            [(not name) (list (make-entry 'error "Usage: /activate --global <name>" 0 (hash)))]
+            [(not (valid-extension-name? name))
+             (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
+            [else
+             (define q-home (build-path (find-system-path 'home-dir) ".q"))
+             (define target-dir (build-path q-home "extensions"))
+             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+               (activate-extension! name target-dir)
+               (list (make-entry 'system
+                                 (format "Extension '~a' activated globally (~a)" name target-dir)
+                                 (current-inexact-milliseconds)
+                                 (hash))))])]
          ;; /activate <name> — activate in project-local dir
          [(and (pair? args) (not (string-prefix? (car args) "--")))
           (define name (car args))
-          (define target-dir (build-path project-dir ".q" "extensions"))
-          (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
-            (activate-extension! name target-dir)
-            (list (make-entry 'system
-                              (format "Extension '~a' activated locally (~a)" name target-dir)
-                              (current-inexact-milliseconds)
-                              (hash))))]
+          (cond
+            [(not (valid-extension-name? name))
+             (list (make-entry 'error (format "Invalid extension name: ~a" name) 0 (hash)))]
+            [else
+             (define target-dir (build-path project-dir ".q" "extensions"))
+             (with-handlers ([exn:fail? (λ (e) (list (make-entry 'error (exn-message e) 0 (hash))))])
+               (activate-extension! name target-dir)
+               (list (make-entry 'system
+                                 (format "Extension '~a' activated locally (~a)" name target-dir)
+                                 (current-inexact-milliseconds)
+                                 (hash))))])]
          ;; /activate with no args — show status
          [else (list-status-entries project-dir)])]))
   (define new-state
