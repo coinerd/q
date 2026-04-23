@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.18.4 — 2026-04-23
+
+### Sandbox & Safety
+
+**Wave 1 — Dogfooding infrastructure** (PR #1658)
+- New `scripts/run-dogfood-session.rkt`: task loader, validator, mock runner
+- New `scripts/capture-regression.rkt`: baseline capture and regression comparison
+- Dogfood task format spec (JSON) with setup/teardown
+- 3 sample tasks: basic-file-ops, planning-workflow, skill-routing
+- 11 tests
+
+**Wave 2 — Dogfood execution + analysis** (PR #1659)
+- Mock execution trace validation
+- Baseline capture and comparison workflow tests
+- Regression detection (pass/fail cases)
+- Multi-task comparison
+- 6 tests
+
+**Wave 3 — Version bump 0.18.0 → 0.18.4** (PR #1660)
+- Version bump and CHANGELOG update
+
 ## v0.18.0 — 2026-04-23
 
 ### Context-Aware Exploration Steering

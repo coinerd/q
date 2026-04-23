@@ -1,4 +1,4 @@
-<!-- verified-against: v0.18.0 -->
+<!-- verified-against: v0.18.4 -->
 # q Source Style Guide
 
 This document defines formatting and naming conventions for the q Racket codebase.
