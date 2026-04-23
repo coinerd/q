@@ -21,6 +21,14 @@ Milestone #92 — Post-v0.17.8 review follow-ups and planning prompt augmentatio
 - Display text shows "Planning: <original>" without full preamble.
 - Added test verifying augmented submit text contains `[gsd-planning]` preamble.
 
+**Wave 4 — Fix pre-existing test failures (#1605)**
+- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.17.9.
+- Added `.planning/` and `.pi/` to `lint-version.rkt` skip list (historical version refs).
+- Synced README metrics (source line counts).
+- Fixed `test-tui-enter.rkt`: updated expected command return format
+  from `(command quit)` to `(command quit "/quit")`.
+- All 3 previously-failing tests now pass: 348/348 files, 5629/5629 tests.
+
 ## v0.17.8 — 2026-04-23
 
 ### Extension Commands & Activation Fix
