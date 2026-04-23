@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.17.7 — 2026-04-23
+
+### Review Remediation
+
+Milestone #90 — Security hardening, extension system integrity, and broken
+registration fixes from v0.17.6 review.
+
+**Wave 1 — Fix broken extension registrations (#1573)**
+- `remote-collab/remote-collab.rkt`: Fixed `ext-register-tool!` from 2-arg
+  `(ctx (make-tool ...))` to 5-arg `(ctx name desc schema handler)` form
+- `session-export.rkt`: Same arity fix — unwrapped `make-tool` into direct args
+- Added tool-registration tests for both extensions
+
+**Wave 2 — Security hardening (#1576)**
+- **Shell injection eliminated** in `github-integration.rkt`: Replaced `/bin/sh -c`
+  with arg-list `subprocess` pattern (same as `racket-tooling.rkt`). All command
+  construction now passes args directly — no shell interpolation.
+- **Input validation consistency**: `valid-number?` applied to all issue/PR/milestone
+  number params. `valid-state?`/`valid-method?` applied to all state/method branches.
+- **Rsync args fixed** in `q-sync.rkt`: `sync-pi-config` and `sync-scripts` now
+  concatenate trailing `/` into the path string instead of passing `/` as a separate
+  rsync argument (which rsync interprets as "sync root directory").
+- **Backup safety** added to `q-sync.rkt`: `--backup --backup-dir=.rsync-backup`
+  on all rsync calls.
+- **Path traversal fix** in `extension-catalog.rkt`: Added `valid-extension-name?`
+  whitelist (`[a-zA-Z0-9_-]+`) before all `build-path` calls in `activate-extension!`
+  and `deactivate-extension!`. Same validation wired into TUI `/activate` handler.
+- Regression tests for `../../foo`, `foo/bar`, `..`, `.hidden` traversal attempts.
+
+**Wave 3 — Extension system integrity (#1580)**
+- **EXTENSIONS_INVENTORY.md**: Rewritten to list all 8 extensions (was 4).
+  Corrected tool counts (16), command counts (6), versions, and API versions.
+  Removed loadable extensions from "supporting infrastructure" table.
+- **Tier validation wired**: `extension-tier-valid?` called during `load-extension!`
+  in `loader.rkt`. Default tier is `hooks`; violations are logged as warnings.
+- **Catalog type fix**: `list-active-extensions` now uses `#f` for `source-path`
+  instead of symbol `'active` (violates struct contract).
+- **`/activate --global` UX**: Returns usage error when no name provided after `--global`.
+- **`/deactivate` TUI command**: New slash command for symmetry with `/activate`.
+  Supports `/deactivate <name>` (project-local) and `/deactivate --global <name>`.
+
+**Tests**: +22 new tests across 4 test files. 347 files, 5631 tests, 0 failures.
+
+---
+
 ## v0.17.6 — 2026-04-23
 
 ### Extension Discovery & Activation
