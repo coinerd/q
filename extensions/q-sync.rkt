@@ -80,8 +80,20 @@
   (define remote-path (string-append remote-host ":~/src/q-agent/.pi/"))
   (define-values (ec out err)
     (case (string->symbol direction)
-      [(push) (run-cmd "rsync" (list "-avz" (path->string pi-dir) "/" remote-path))]
-      [(pull) (run-cmd "rsync" (list "-avz" remote-path (path->string pi-dir) "/"))]
+      [(push)
+       (run-cmd "rsync"
+                (list "-avz"
+                      "--backup"
+                      "--backup-dir=.rsync-backup"
+                      (string-append (path->string pi-dir) "/")
+                      remote-path))]
+      [(pull)
+       (run-cmd "rsync"
+                (list "-avz"
+                      "--backup"
+                      "--backup-dir=.rsync-backup"
+                      remote-path
+                      (string-append (path->string pi-dir) "/")))]
       [else (values 1 "" (format "Unknown direction: ~a" direction))]))
   (values ec (string-trim out) (string-trim err)))
 
@@ -91,8 +103,20 @@
   (define remote-path (string-append remote-host ":~/src/q-agent/scripts/"))
   (define-values (ec out err)
     (case (string->symbol direction)
-      [(push) (run-cmd "rsync" (list "-avz" (path->string scripts-dir) "/" remote-path))]
-      [(pull) (run-cmd "rsync" (list "-avz" remote-path (path->string scripts-dir) "/"))]
+      [(push)
+       (run-cmd "rsync"
+                (list "-avz"
+                      "--backup"
+                      "--backup-dir=.rsync-backup"
+                      (string-append (path->string scripts-dir) "/")
+                      remote-path))]
+      [(pull)
+       (run-cmd "rsync"
+                (list "-avz"
+                      "--backup"
+                      "--backup-dir=.rsync-backup"
+                      remote-path
+                      (string-append (path->string scripts-dir) "/")))]
       [else (values 1 "" (format "Unknown direction: ~a" direction))]))
   (values ec (string-trim out) (string-trim err)))
 

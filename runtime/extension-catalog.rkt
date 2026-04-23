@@ -22,6 +22,7 @@
          list-active-extensions
          activate-extension!
          deactivate-extension!
+         valid-extension-name?
          ext-info
          ext-info?
          ext-info-name
@@ -157,11 +158,18 @@
 ;; Activate / deactivate extensions
 ;; ============================================================
 
+;; valid-extension-name? : string? -> boolean?
+;; Whitelist check: only alphanumeric, hyphens, and underscores.
+(define (valid-extension-name? name)
+  (and (string? name) (regexp-match? #rx"^[a-zA-Z0-9_-]+$" name)))
+
 ;; activate-extension! : string? path? -> void?
 ;; Create a symlink in target-dir pointing to the extension's source file.
 ;; Handles both flat files (name.rkt) and subdirectory extensions (name/name.rkt).
 ;; Idempotent: no error if already activated.
 (define (activate-extension! name target-dir)
+  (unless (valid-extension-name? name)
+    (error 'activate-extension! "invalid extension name: ~a" name))
   (define source-dir (known-extensions-dir))
   (define flat-source (build-path source-dir (format "~a.rkt" name)))
   (define subdir-source (build-path source-dir name (format "~a.rkt" name)))
@@ -182,6 +190,8 @@
 ;; Remove the symlink for the named extension from target-dir.
 ;; No error if not present.
 (define (deactivate-extension! name target-dir)
+  (unless (valid-extension-name? name)
+    (error 'deactivate-extension! "invalid extension name: ~a" name))
   (define link-path (build-path target-dir (format "~a.rkt" name)))
   (when (or (link-exists? link-path) (file-exists? link-path))
     (delete-file link-path)))

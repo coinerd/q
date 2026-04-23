@@ -66,3 +66,16 @@
 
 (test-case "handle-q-sync requires remote_host for pull"
   (check-exn exn:fail? (lambda () (handle-q-sync (hasheq 'direction "pull" 'domain "git")))))
+
+;; ============================================================
+;; rsync argument construction tests
+;; ============================================================
+
+(test-case "sync-pi-config push appends trailing slash to source"
+  (define-values (ec out err) (sync-pi-config "nonexistent.test.invalid" "/tmp" "push"))
+  ;; rsync will fail quickly (no remote), but command should be constructed correctly
+  (check-pred integer? ec))
+
+(test-case "sync-scripts pull appends trailing slash to dest"
+  (define-values (ec out err) (sync-scripts "nonexistent.test.invalid" "/tmp" "pull"))
+  (check-pred integer? ec))

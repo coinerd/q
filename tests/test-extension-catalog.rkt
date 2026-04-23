@@ -139,3 +139,35 @@
   (deactivate-extension! "gsd-planning" target-dir)
   ;; Cleanup
   (delete-directory/files tmp-dir))
+
+;; ============================================================
+;; Path traversal regression tests
+;; ============================================================
+
+(test-case "valid-extension-name? accepts valid names"
+  (check-true (valid-extension-name? "gsd-planning"))
+  (check-true (valid-extension-name? "remote_collab_2"))
+  (check-false (valid-extension-name? "../../foo"))
+  (check-false (valid-extension-name? "foo/bar"))
+  (check-false (valid-extension-name? ".."))
+  (check-false (valid-extension-name? ".hidden"))
+  (check-false (valid-extension-name? "foo;rm -rf /")))
+
+(test-case "activate-extension! rejects path traversal"
+  (define tmp-dir (make-temporary-file "q-activate-trav-~a" 'directory))
+  (define target-dir (build-path tmp-dir "extensions"))
+  (make-directory* target-dir)
+  (check-exn exn:fail? (lambda () (activate-extension! "../../foo" target-dir)))
+  (check-exn exn:fail? (lambda () (activate-extension! "foo/bar" target-dir)))
+  (check-exn exn:fail? (lambda () (activate-extension! ".hidden" target-dir)))
+  ;; Cleanup
+  (delete-directory/files tmp-dir))
+
+(test-case "deactivate-extension! rejects path traversal"
+  (define tmp-dir (make-temporary-file "q-deact-trav-~a" 'directory))
+  (define target-dir (build-path tmp-dir "extensions"))
+  (make-directory* target-dir)
+  (check-exn exn:fail? (lambda () (deactivate-extension! "../../foo" target-dir)))
+  (check-exn exn:fail? (lambda () (deactivate-extension! "foo/bar" target-dir)))
+  ;; Cleanup
+  (delete-directory/files tmp-dir))
