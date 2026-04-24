@@ -78,6 +78,9 @@ jobs:
       - name: Import conflicts
         run: racket scripts/check-imports.rkt
 
+      - name: Dependency completeness
+        run: racket scripts/check-deps.rkt
+
       - name: Verify project structure
         run: |
           pwd
