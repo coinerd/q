@@ -17,8 +17,32 @@
          "../../llm/provider.rkt"
          "../../llm/model.rkt"
          "../../util/ids.rkt"
-         (only-in "../../util/protocol-types.rkt" make-message message-role message-content)
+         (only-in "../../util/protocol-types.rkt"
+                  make-message
+                  message-role
+                  message-content
+                  message-id
+                  tool-call-part?
+                  tool-call-part-id
+                  tool-call-part-name
+                  tool-call-part-arguments
+                  make-tool-call
+                  make-tool-call-part
+                  make-tool-result-part
+                  tool-call-id
+                  tool-result-content
+                  tool-result-is-error?)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
+         (only-in "../../util/json-helpers.rkt" ensure-hash-args)
+         "../../tools/scheduler.rkt"
+         ;; Individual builtins for child-safe tool registration (no circular dep)
+         (only-in "../builtins/read.rkt" tool-read)
+         (only-in "../builtins/write.rkt" tool-write)
+         (only-in "../builtins/edit.rkt" tool-edit)
+         (only-in "../builtins/bash.rkt" tool-bash)
+         (only-in "../builtins/grep.rkt" tool-grep)
+         (only-in "../builtins/find.rkt" tool-find)
+         (only-in "../builtins/ls.rkt" tool-ls)
          (only-in "../builtins/skill-router.rkt" tool-skill-route))
 
 (provide tool-spawn-subagent
@@ -80,6 +104,93 @@
         (and rt (rt-settings-ref rt 'model #f)))
       "mock-model"))
 
+;; Child-safe tools: read-only + safe write/edit/bash for subagent children.
+;; Schemas match those in registry-defaults.rkt.
+(define (child-safe-tools)
+  (list (make-tool "read"
+                   "Read file contents"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("path")
+                           'properties
+                           (hasheq 'path
+                                   (hasheq 'type "string" 'description "Path to file")
+                                   'offset
+                                   (hasheq 'type "integer" 'description "Line offset")
+                                   'limit
+                                   (hasheq 'type "integer" 'description "Max lines")))
+                   tool-read)
+        (make-tool "write"
+                   "Write content to a file"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("path" "content")
+                           'properties
+                           (hasheq 'path
+                                   (hasheq 'type "string" 'description "Path to file")
+                                   'content
+                                   (hasheq 'type "string" 'description "Content to write")))
+                   tool-write)
+        (make-tool "edit"
+                   "Edit a file with exact text replacement"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("path" "edits")
+                           'properties
+                           (hasheq 'path
+                                   (hasheq 'type "string" 'description "Path to file")
+                                   'edits
+                                   (hasheq 'type "array" 'description "Edit operations")))
+                   tool-edit)
+        (make-tool "bash"
+                   "Execute a bash command"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("command")
+                           'properties
+                           (hasheq 'command
+                                   (hasheq 'type "string" 'description "Bash command")
+                                   'timeout
+                                   (hasheq 'type "integer" 'description "Timeout in seconds")))
+                   tool-bash)
+        (make-tool "grep"
+                   "Search file contents with regex"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("pattern")
+                           'properties
+                           (hasheq 'pattern
+                                   (hasheq 'type "string" 'description "Regex pattern")
+                                   'path
+                                   (hasheq 'type "string" 'description "File or directory path")))
+                   tool-grep)
+        (make-tool "find"
+                   "Find files by name pattern"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("pattern")
+                           'properties
+                           (hasheq 'pattern
+                                   (hasheq 'type "string" 'description "Name pattern")
+                                   'path
+                                   (hasheq 'type "string" 'description "Search directory")))
+                   tool-find)
+        (make-tool "ls"
+                   "List directory contents"
+                   (hasheq 'type
+                           "object"
+                           'required
+                           '("path")
+                           'properties
+                           (hasheq 'path (hasheq 'type "string" 'description "Directory path")))
+                   tool-ls)))
+
 ;; Internal: run the subagent
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
@@ -89,8 +200,11 @@
     (define provider (resolve-provider exec-ctx))
     (define model-name (resolve-model-name exec-ctx args))
 
-    ;; Create scoped tool registry (empty for now — child agents are limited)
+    ;; Create scoped tool registry with child-safe tools
     (define registry (make-tool-registry))
+    ;; Register tools directly to avoid circular dependency with registry-defaults
+    (for ([t (child-safe-tools)])
+      (register-tool! registry t))
 
     ;; Build child session
     (define session-id (generate-id))
@@ -132,6 +246,7 @@
      (hasheq 'turns-used max-turns 'status (symbol->string final-status) 'session-id session-id))))
 
 ;; Run a simple agent loop for the subagent
+;; v0.19.4 GAP-1 fix: actually dispatch tool_calls instead of returning 'stopped
 (define (run-subagent-loop provider registry messages ctx max-turns)
   (let loop ([msgs messages]
              [turns-remaining max-turns]
@@ -142,19 +257,56 @@
        (define req (make-model-request msgs (list-active-tools-jsexpr registry) (hasheq)))
        (define resp (provider-send provider req))
        (define content (model-response-content resp))
+       ;; Build assistant message from response content parts
+       (define content-parts
+         (for/list ([c (in-list content)])
+           (cond
+             [(hash-ref c 'type #f)
+              =>
+              (lambda (t)
+                (cond
+                  [(equal? t "text") (hash-ref c 'text (format "~a" c))]
+                  [(equal? t "tool_call")
+                   (make-tool-call-part (hash-ref c 'id (generate-id))
+                                        (hash-ref c 'name "")
+                                        (ensure-hash-args (hash-ref c 'arguments "{}")))]
+                  [else (format "~a" c)]))]
+             [else (hash-ref c 'text (format "~a" c))])))
        (define assistant-msg
-         (make-message (generate-id)
-                       #f
-                       'assistant
-                       'message
-                       (for/list ([c (in-list content)])
-                         (hash-ref c 'text (format "~a" c)))
-                       (current-seconds)
-                       (hasheq)))
+         (make-message (generate-id) #f 'assistant 'message content-parts (current-seconds) (hasheq)))
        (define new-all (append all-results (list assistant-msg)))
        (cond
-         ;; Would need tool execution — simplified: return results
-         [(eq? (model-response-stop-reason resp) 'tool_calls) (values new-all 'stopped)]
+         ;; Dispatch tool calls and continue the loop
+         [(eq? (model-response-stop-reason resp) 'tool_calls)
+          (define tool-calls
+            (for/list ([part (in-list content-parts)]
+                       #:when (tool-call-part? part))
+              (make-tool-call (tool-call-part-id part)
+                              (tool-call-part-name part)
+                              (tool-call-part-arguments part))))
+          (if (null? tool-calls)
+              (values new-all 'complete)
+              (let ()
+                ;; Run tool batch
+                (define sched-result (run-tool-batch tool-calls registry #:exec-context ctx))
+                (define results (scheduler-result-results sched-result))
+                ;; Build tool-result messages
+                (define tool-result-msgs
+                  (for/list ([tc (in-list tool-calls)]
+                             [tr (in-list results)])
+                    (make-message
+                     (generate-id)
+                     (message-id assistant-msg)
+                     'tool
+                     'tool-result
+                     (list (make-tool-result-part (tool-call-id tc)
+                                                  (tool-result-content tr)
+                                                  (tool-result-is-error? tr)))
+                     (current-seconds)
+                     (hasheq 'toolCallId (tool-call-id tc) 'isError (tool-result-is-error? tr)))))
+                (loop (append msgs (list assistant-msg) tool-result-msgs)
+                      (sub1 turns-remaining)
+                      (append new-all tool-result-msgs))))]
          [else (values new-all 'complete)])])))
 
 ;; ============================================================
