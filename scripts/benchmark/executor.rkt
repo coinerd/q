@@ -1,0 +1,195 @@
+#lang racket/base
+
+;; scripts/benchmark/executor.rkt — Live and mock benchmark execution engine
+;;
+;; Runs a benchmark task through the SDK runtime with either a real LLM
+;; provider (from config) or a mock provider. Captures trace and returns
+;; structured execution results.
+
+(require racket/file
+         racket/format
+         racket/list
+         racket/match
+         racket/port
+         racket/string
+         json
+         (prefix-in sdk: "../../interfaces/sdk.rkt")
+         (only-in "../../agent/event-bus.rkt" make-event-bus)
+         (only-in "../../tools/tool.rkt" make-tool-registry)
+         (only-in "../../extensions/api.rkt" make-extension-registry)
+         (only-in "../../extensions/loader.rkt" load-extension!)
+         (only-in "../../wiring/run-modes.rkt" load-extensions-from-dir!)
+         (only-in "../../runtime/trace-logger.rkt"
+                  make-trace-logger
+                  start-trace-logger!
+                  stop-trace-logger!)
+         (only-in "../../runtime/provider-factory.rkt" build-provider)
+         (only-in "../../runtime/settings.rkt" load-settings q-settings-merged)
+         (only-in "../../llm/provider.rkt" make-mock-provider)
+         (only-in "../../llm/model.rkt" make-model-response)
+         (only-in "../../util/protocol-types.rkt" message-role message-content text-part-text)
+         (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
+         "task.rkt")
+
+(provide (struct-out execution-result)
+         execute-task/mock
+         execute-task/live
+         build-live-provider
+         trace-tool-calls)
+
+;; ============================================================
+;; Result struct
+;; ============================================================
+
+(struct execution-result
+        (task-name ; string?
+         trace-path ; (or/c path? #f)
+         session-dir ; path?
+         duration-ms ; exact-nonnegative-integer?
+         iterations-used ; exact-nonnegative-integer?
+         outcome ; symbol: 'completed | 'timeout | 'error
+         error-msg ; (or/c string? #f)
+         project-dir ; (or/c path? #f)
+         raw-result) ; any — SDK run-prompt! result
+  #:transparent)
+
+;; ============================================================
+;; Provider construction
+;; ============================================================
+
+;; build-live-provider : (or/c string? #f) -> provider?
+;; Builds a real LLM provider from ~/.q/config.json or env vars.
+;; If provider-override is given (format "provider/model"), uses that.
+(define (build-live-provider [provider-override #f])
+  (define config
+    (if provider-override
+        (hasheq 'model provider-override 'project-dir (current-directory))
+        (hasheq 'project-dir (current-directory))))
+  (define settings (load-settings (current-directory)))
+  (build-provider config settings))
+
+;; build-mock-provider-for-task : benchmark-task? -> provider?
+(define (build-mock-provider-for-task task)
+  (define mock-response
+    (make-model-response (list (hasheq 'type
+                                       "text"
+                                       'text
+                                       (format "Mock response for benchmark task: ~a"
+                                               (benchmark-task-name task))))
+                         (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                         "mock-benchmark"
+                         'stop))
+  (make-mock-provider mock-response #:name "benchmark-mock"))
+
+;; ============================================================
+;; Trace analysis helpers
+;; ============================================================
+
+;; trace-tool-calls : path? -> (listof string?)
+;; Extracts tool call names from a trace JSONL file.
+(define (trace-tool-calls trace-path)
+  (if (not (and trace-path (file-exists? trace-path)))
+      '()
+      (for*/list ([entry (in-list (jsonl-read-all-valid trace-path))]
+                  #:when (hash? entry)
+                  #:when (equal? (hash-ref entry 'role #f) "assistant")
+                  [tc (in-list (hash-ref entry 'tool_calls '()))])
+        (hash-ref (hash-ref tc 'function (hasheq)) 'name "unknown"))))
+
+;; ============================================================
+;; Core execution
+;; ============================================================
+
+;; execute-task/mock : benchmark-task? [path?] -> execution-result?
+;; Execute with mock provider. For testing the benchmark infrastructure.
+(define (execute-task/mock task [output-dir #f])
+  (define provider (build-mock-provider-for-task task))
+  (execute-task-internal task provider #f output-dir))
+
+;; execute-task/live : benchmark-task? [string?] [path?] -> execution-result?
+;; Execute with real LLM provider from config.
+(define (execute-task/live task [provider-override #f] [output-dir #f])
+  (define provider (build-live-provider provider-override))
+  (execute-task-internal task provider provider-override output-dir))
+
+;; execute-task-internal : benchmark-task? provider? (or/c string? #f) (or/c path? #f)
+;;                       -> execution-result?
+(define (execute-task-internal task provider provider-label output-dir)
+  (define tmp-dir (task-setup task))
+  (define trace-dir (or output-dir (build-path tmp-dir "traces")))
+  (make-directory* trace-dir)
+
+  (define start-ms (current-inexact-milliseconds))
+  (define bus (make-event-bus))
+
+  ;; Setup trace logger
+  (define tlogger (make-trace-logger bus trace-dir #:enabled? #t))
+  (start-trace-logger! tlogger)
+
+  ;; Build extension registry
+  (define ext-reg (make-extension-registry))
+
+  ;; Try loading project extensions
+  (define project-ext-dir (build-path tmp-dir ".q" "extensions"))
+  (when (directory-exists? project-ext-dir)
+    (load-extensions-from-dir! ext-reg project-ext-dir #:event-bus bus))
+
+  ;; Build runtime
+  (define reg (make-tool-registry))
+  (define rt
+    (sdk:make-runtime #:provider provider
+                      #:session-dir (build-path tmp-dir "sessions")
+                      #:tool-registry reg
+                      #:event-bus bus
+                      #:max-iterations (benchmark-task-max-iterations task)
+                      #:extension-registry ext-reg))
+
+  ;; Run the task
+  (define-values (outcome iterations error-msg raw-result)
+    (with-handlers ([exn:fail? (lambda (e) (values 'error 0 (exn-message e) #f))])
+      (define rt2 (sdk:open-session rt))
+
+      ;; Execute with timeout if specified
+      (define time-limit (benchmark-task-time-limit-seconds task))
+      (define-values (rt3 result)
+        (if time-limit
+            (sync/timeout (/ time-limit 1000.0)
+                          (thread (lambda ()
+                                    (parameterize ([current-directory tmp-dir])
+                                      (sdk:run-prompt! rt2 (benchmark-task-prompt task))))))
+            (parameterize ([current-directory tmp-dir])
+              (sdk:run-prompt! rt2 (benchmark-task-prompt task)))))
+
+      (cond
+        ;; Timeout — the sync/timeout returned #f
+        [(not rt3) (values 'timeout 0 "Time limit exceeded" #f)]
+        [else
+         ;; Count iterations from session log
+         (define sess-info (sdk:session-info rt3))
+         (define iter-count (hash-ref sess-info 'iterations 1))
+         (values 'completed iter-count #f result)])))
+
+  ;; Stop trace logger
+  (stop-trace-logger! tlogger)
+
+  (define end-ms (current-inexact-milliseconds))
+  (define duration-ms (inexact->exact (round (- end-ms start-ms))))
+
+  ;; Find trace file
+  (define trace-path
+    (let ([trace-files (for/list ([f (in-directory trace-dir)]
+                                  #:when (regexp-match? #rx"\\.jsonl$" (path->string f)))
+                         f)])
+      (if (null? trace-files)
+          #f
+          (car trace-files))))
+
+  (execution-result (benchmark-task-name task)
+                    trace-path
+                    (build-path tmp-dir "sessions")
+                    duration-ms
+                    iterations
+                    outcome
+                    error-msg
+                    tmp-dir
+                    raw-result))
