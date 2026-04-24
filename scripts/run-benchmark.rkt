@@ -21,7 +21,9 @@
          racket/string
          json
          "benchmark/task.rkt"
-         "benchmark/executor.rkt")
+         "benchmark/executor.rkt"
+         "benchmark/scorer.rkt"
+         "benchmark/report.rkt")
 
 ;; ============================================================
 ;; CLI parameters
@@ -93,11 +95,14 @@
     (printf "Running task: ~a (~a) ... " (benchmark-task-name task) (benchmark-task-category task))
     (flush-output)
     (define result (run-single-task task))
-    (printf "~a (~a ms, ~a iterations)~n"
+    ;; Score the execution
+    (define scores (score-execution result task))
+    (printf "~a | ~a (~a ms, ~a iter)~n"
             (execution-result-outcome result)
+            (score-result-verdict scores)
             (execution-result-duration-ms result)
             (execution-result-iterations-used result))
-    (cons task result)))
+    (list task result scores)))
 
 ;; ============================================================
 ;; Output formatting
@@ -112,32 +117,44 @@
 (define (format-results-human results-list)
   (define lines
     (for/list ([r (in-list results-list)])
-      (match-define (cons task result) r)
-      (format "  ~a ~a | ~a | ~a ms | ~a iter | ~a"
+      (match-define (list task result scores) r)
+      (format "  ~a ~a | ~a | ~a | ~a ms | ~a iter | ~a"
               (benchmark-task-name task)
               (difficulty-str (benchmark-task-difficulty task))
+              (score-result-verdict scores)
               (execution-result-outcome result)
               (execution-result-duration-ms result)
               (execution-result-iterations-used result)
               (or (execution-result-error-msg result) ""))))
+  ;; Summary stats
+  (define verdicts (map (lambda (r) (score-result-verdict (third r))) results-list))
+  (define n-pass (count (lambda (v) (eq? v 'PASS)) verdicts))
+  (define n-partial (count (lambda (v) (eq? v 'PARTIAL)) verdicts))
+  (define n-fail (count (lambda (v) (eq? v 'FAIL)) verdicts))
+  (define avg-score
+    (if (null? results-list)
+        0
+        (exact->inexact (/ (for/sum ([r (in-list results-list)]) (score-result-total-score (third r)))
+                           (length results-list)))))
   (string-join (append (list "══════════════════════════════════════════════════════════════"
                              "  BENCHMARK RESULTS"
                              "══════════════════════════════════════════════════════════════"
                              "")
                        lines
                        (list ""
-                             (format "  Total tasks: ~a" (length results-list))
-                             (format "  Completed: ~a"
-                                     (count (lambda (r)
-                                              (eq? (execution-result-outcome (cdr r)) 'completed))
-                                            results-list))
+                             (format "  Total: ~a | PASS: ~a | PARTIAL: ~a | FAIL: ~a"
+                                     (length results-list)
+                                     n-pass
+                                     n-partial
+                                     n-fail)
+                             (format "  Average score: ~a/100" (real->decimal-string avg-score 1))
                              "══════════════════════════════════════════════════════════════"))
                "\n"))
 
 (define (results->json results-list)
   (define results-data
     (for/list ([r (in-list results-list)])
-      (match-define (cons task result) r)
+      (match-define (list task result scores) r)
       (hasheq 'task
               (benchmark-task-name task)
               'category
@@ -146,6 +163,20 @@
               (benchmark-task-difficulty task)
               'outcome
               (symbol->string (execution-result-outcome result))
+              'verdict
+              (symbol->string (score-result-verdict scores))
+              'total_score
+              (score-result-total-score scores)
+              'correctness
+              (score-result-correctness scores)
+              'tool_discipline
+              (score-result-tool-discipline scores)
+              'efficiency
+              (score-result-efficiency scores)
+              'skill_compliance
+              (score-result-skill-compliance scores)
+              'no_regressions
+              (score-result-no-regressions scores)
               'duration_ms
               (execution-result-duration-ms result)
               'iterations
