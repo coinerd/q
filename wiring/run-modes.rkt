@@ -36,7 +36,8 @@
                   make-command-registry)
          (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
          (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
-         (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!))
+         (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
+         (only-in "../runtime/project-tree.rkt" project-tree->string))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -89,10 +90,20 @@
   ;; Progressive skill disclosure: inject skill summaries into system prompt
   ;; Full SKILL.md content is available on-demand via the `read` tool
   (define skill-section (skills-summary-section (resource-set-skills all-resources)))
+
+  ;; v0.19.3 Wave 3: Inject project file tree into system prompt
+  ;; This saves 1-2 exploration iterations per session.
+  (define project-tree-section
+    (let ([tree-str (project-tree->string project-dir)]) (if (string=? tree-str "") #f tree-str)))
+
   (define final-system-instrs
-    (if skill-section
-        (append system-instrs (list skill-section))
-        system-instrs))
+    (append system-instrs
+            (if skill-section
+                (list skill-section)
+                '())
+            (if project-tree-section
+                (list project-tree-section)
+                '())))
 
   ;; Provider uses the shared settings
   (define prov (build-provider base-config settings))
