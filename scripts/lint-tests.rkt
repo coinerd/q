@@ -159,6 +159,48 @@
                              lineno
                              which)))))))
 
+;;; --- out-of-repo path guard check ---
+
+;; Paths that are outside the q/ git repo and don't exist on CI.
+;; Tests referencing these must guard with skip-on-ci, on-ci?, or with-handlers.
+(define out-of-repo-patterns '(".pi/skills" ".pi\\skills" ".planning/" "gh_helpers.py"))
+
+;; Guard patterns that indicate a test is properly protected.
+(define guard-patterns '("skip-on-ci" "on-ci?" "with-handlers"))
+
+(define (check-out-of-repo-guards filepath lines)
+  ;; For each test file, find lines referencing out-of-repo paths.
+  ;; Check that the enclosing test-case or skip-on-ci block has a guard.
+  (define in-guarded-block? #f)
+  (define in-test-case? #f)
+  (define current-test-has-guard? #f)
+  (for ([line (in-list lines)]
+        [lineno (in-naturals 1)])
+    (unless (comment-line? line)
+      ;; Track guard patterns on any line
+      (when (for/or ([gp (in-list guard-patterns)])
+              (string-contains? line gp))
+        (set! current-test-has-guard? #t))
+      ;; Track test-case/skip-on-ci boundaries
+      (when (or (string-contains? line "(test-case") (string-contains? line "(skip-on-ci"))
+        (set! in-test-case? #t)
+        (when (string-contains? line "skip-on-ci")
+          (set! current-test-has-guard? #t)))
+      ;; Check for out-of-repo references
+      (when (and (or in-test-case? (not in-test-case?))
+                 (for/or ([op (in-list out-of-repo-patterns)])
+                   (string-contains? line op)))
+        (unless current-test-has-guard?
+          (add-warning!
+           (format
+            "WARNING: ~a:~a: out-of-repo path reference not guarded by skip-on-ci/on-ci?/with-handlers"
+            filepath
+            lineno))))
+      ;; Reset per-test guard tracking at close paren (rough heuristic)
+      (when (and in-test-case? (string-prefix? (string-trim line) ")"))
+        (set! in-test-case? #f)
+        (set! current-test-has-guard? #f)))))
+
 ;;; --- main ---
 
 (define tests-dir (build-path (current-directory) "tests"))
@@ -168,7 +210,8 @@
   (define rel (path->string (find-relative-path (current-directory) filepath)))
   (check-hardcoded-paths rel lines)
   (check-cwd-assumptions rel lines)
-  (check-hash-ordering rel lines))
+  (check-hash-ordering rel lines)
+  (check-out-of-repo-guards rel lines))
 
 (define (main)
   (unless (directory-exists? tests-dir)

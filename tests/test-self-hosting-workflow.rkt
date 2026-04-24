@@ -9,6 +9,7 @@
          racket/file
          racket/path
          racket/string
+         "helpers/ci-detection.rkt"
          "../interfaces/sdk.rkt"
          (only-in "../llm/model.rkt" model-response)
          "../llm/provider.rkt"
@@ -19,19 +20,6 @@
          "../agent/event-bus.rkt"
          "../skills/resource-loader.rkt"
          "../runtime/settings.rkt")
-
-(define project-root (build-path (current-directory) ".." ".."))
-
-;; CI detection: .pi/skills/ and .planning/ are outside q/ git repo
-;; so they don't exist on CI. Skip tests that depend on them.
-(define on-ci? (not (directory-exists? (build-path project-root ".pi" "skills"))))
-
-(define-syntax-rule (skip-on-ci test-name body ...)
-  (if on-ci?
-      (test-case test-name
-        (check-true #t "skipped: CI environment"))
-      (test-case test-name
-        body ...)))
 
 ;; ============================================================
 ;; Pattern 1: Skill Discovery & Loading
