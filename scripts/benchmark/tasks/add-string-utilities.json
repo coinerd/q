@@ -1,0 +1,17 @@
+{
+  "name": "add-string-utilities",
+  "prompt": "Create q/tests/fixtures/string-utils.rkt with functions: trim-whitespace, slugify, camel->kebab. Export all via provide. Note: the file already exists with buggy implementations — fix or rewrite them.",
+  "category": "implementation",
+  "difficulty": 2,
+  "description": "Create or fix a string utilities module with three functions",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "q/tests/fixtures/string-utils.rkt",
+        "must_contain": ["trim-whitespace", "slugify", "camel->kebab", "(provide"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "write_file"],
+  "tools_not_used": ["run_shell"]
+}

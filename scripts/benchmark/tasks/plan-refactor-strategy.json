@@ -1,0 +1,17 @@
+{
+  "name": "plan-refactor-strategy",
+  "prompt": "Read q/tests/fixtures/legacy.rkt and create a refactor plan in .planning/PLAN-REFACTOR.md breaking it into 3 smaller modules: one for parsing, one for formatting, and one for validation.",
+  "category": "planning",
+  "difficulty": 2,
+  "description": "Read a monolithic module and create a decomposition plan",
+  "scoring": {
+    "files_created": [
+      {
+        "path": ".planning/PLAN-REFACTOR.md",
+        "must_contain": ["parsing", "formatting", "validation"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "write_file"],
+  "tools_not_used": ["run_shell"]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "analyze-module-structure",
+  "prompt": "Analyze the module structure of q/tests/fixtures/ and write a brief report to .planning/ANALYSIS.md listing all modules and their exports.",
+  "category": "planning",
+  "difficulty": 1,
+  "description": "Analyze fixture modules and write a report",
+  "scoring": {
+    "files_created": [
+      {
+        "path": ".planning/ANALYSIS.md",
+        "must_contain": ["math", "counter", "provide"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "write_file", "list_directory"],
+  "tools_not_used": ["run_shell"]
+}

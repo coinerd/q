@@ -1,0 +1,17 @@
+{
+  "name": "fix-off-by-one",
+  "prompt": "Fix the off-by-one error in q/tests/fixtures/counter.rkt where range should be (in-range 1 (add1 n)) not (in-range 1 n).",
+  "category": "bug-fix",
+  "difficulty": 1,
+  "description": "Fix an off-by-one error in a counter function",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "q/tests/fixtures/counter.rkt",
+        "must_contain": ["(in-range 1 (add1 n))"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "edit_file"],
+  "tools_not_used": ["run_shell"]
+}
