@@ -13,6 +13,7 @@
 ;; Predicates
 (provide retryable-error?
          context-overflow-error?
+         permanent-tool-error?
          classify-error
          timeout-error?
          rate-limit-error?
@@ -53,26 +54,34 @@
 ;; ============================================================
 
 ;; Check if an error is retryable (transient / rate-limit / server error).
+;; Permanent tool errors (validation failures) are NEVER retryable.
 (define (retryable-error? exn)
-  (define msg (exn-message exn))
-  (define retryable-patterns
-    '("429" "rate"
-            "overloaded"
-            "quota"
-            "too many"
-            "500"
-            "502"
-            "503"
-            "504"
-            "server error"
-            "timeout"
-            "timed out"
-            "connection"
-            "network"
-            "retry"
-            "backoff"))
-  (for/or ([pattern (in-list retryable-patterns)])
-    (string-contains? (string-downcase msg) pattern)))
+  (when (permanent-tool-error? exn)
+    (for/or ([pattern (in-list PERMANENT_TOOL_PATTERNS)])
+      (string-contains? (string-downcase (exn-message exn)) (string-downcase pattern))
+      #f)) ; matched but return #f via cond below
+  (cond
+    [(permanent-tool-error? exn) #f]
+    [else
+     (define msg (exn-message exn))
+     (define retryable-patterns
+       '("429" "rate"
+               "overloaded"
+               "quota"
+               "too many"
+               "500"
+               "502"
+               "503"
+               "504"
+               "server error"
+               "timeout"
+               "timed out"
+               "connection"
+               "network"
+               "retry"
+               "backoff"))
+     (for/or ([pattern (in-list retryable-patterns)])
+       (string-contains? (string-downcase msg) pattern))]))
 
 ;; FEAT-66: Check if an error is a context overflow / token limit error.
 ;; These errors indicate the context was too long for the model.
@@ -91,6 +100,25 @@
   (define msg (exn-message exn))
   (for/or ([pattern (in-list CONTEXT_OVERFLOW_PATTERNS)])
     (string-contains? (string-downcase msg) pattern)))
+
+;; ============================================================
+;; Permanent tool error predicate (v0.19.3 Wave 2)
+;; ============================================================
+
+;; A permanent tool error is one where retrying will never succeed.
+;; Tool-call validation failures (missing/wrong-type args) are permanent:
+;; the LLM must be given the error feedback immediately to correct its call.
+(define PERMANENT_TOOL_PATTERNS
+  '("validate-tool-args" "missing required argument"
+                         "expected type"
+                         "args must be a hash"
+                         "post-hook validation failed"
+                         "unknown tool:"))
+
+(define (permanent-tool-error? exn)
+  (define msg (exn-message exn))
+  (for/or ([pattern (in-list PERMANENT_TOOL_PATTERNS)])
+    (string-contains? (string-downcase msg) (string-downcase pattern))))
 
 ;; ============================================================
 ;; Error classification (v0.11.2 Wave 3)

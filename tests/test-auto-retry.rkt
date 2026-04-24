@@ -410,3 +410,50 @@
                      #:base-delay-ms 1))
   (check-true (retry-exhausted? (unbox exn-result)))
   (check-equal? (retry-exhausted-error-history (unbox exn-result)) '(timeout timeout timeout)))
+
+;; ============================================================
+;; v0.19.3 Wave 2: permanent-tool-error? tests
+;; ============================================================
+
+(test-case "permanent-tool-error?: validation failure is permanent"
+  (check-true (permanent-tool-error?
+               (exn:fail "validate-tool-args: missing required argument 'path' for tool 'read'"
+                         (current-continuation-marks)))))
+
+(test-case "permanent-tool-error?: wrong type is permanent"
+  (check-true
+   (permanent-tool-error?
+    (exn:fail
+     "validate-tool-args: argument 'count' expected type 'integer', got \"hello\" for tool 'add'"
+     (current-continuation-marks)))))
+
+(test-case "permanent-tool-error?: unknown tool is permanent"
+  (check-true (permanent-tool-error? (exn:fail "unknown tool: 'nonexistent'"
+                                               (current-continuation-marks)))))
+
+(test-case "permanent-tool-error?: rate limit is NOT permanent"
+  (check-false (permanent-tool-error? (exn:fail "HTTP 429 rate limit exceeded"
+                                                (current-continuation-marks)))))
+
+(test-case "permanent-tool-error?: timeout is NOT permanent"
+  (check-false (permanent-tool-error? (exn:fail "connection timed out after 30s"
+                                                (current-continuation-marks)))))
+
+(test-case "retryable-error?: permanent tool errors are never retried"
+  (check-false (retryable-error?
+                (exn:fail "validate-tool-args: missing required argument 'path' for tool 'read'"
+                          (current-continuation-marks)))))
+
+(test-case "with-auto-retry: permanent tool error raises immediately without retries"
+  (define attempt-count (box 0))
+  (define raised-exn (box #f))
+  (with-handlers ([exn:fail? (lambda (e) (set-box! raised-exn e))])
+    (with-auto-retry (lambda ()
+                       (set-box! attempt-count (add1 (unbox attempt-count)))
+                       (raise (exn:fail "validate-tool-args: missing required argument 'path'"
+                                        (current-continuation-marks))))
+                     #:max-retries 3
+                     #:base-delay-ms 1))
+  (check-equal? (unbox attempt-count) 1 "should not retry permanent tool error")
+  (check-true (exn:fail? (unbox raised-exn)) "should raise the original error")
+  (check-false (retry-exhausted? (unbox raised-exn)) "should NOT be retry-exhausted"))
