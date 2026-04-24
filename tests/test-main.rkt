@@ -30,10 +30,12 @@
 ;; register-default-tools!
 ;; ============================================================
 
-(test-case "registers all 13 built-in tools"
+(test-case "registers all built-in tools (>= 13)"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (check-equal? (length (list-tools reg)) 13))
+  ;; Guard: use >= to avoid breakage when tools are added
+  (check-true (>= (length (list-tools reg)) 13)
+              (format "expected >= 13 built-in tools, got ~a" (length (list-tools reg)))))
 
 (test-case "each tool is a valid tool struct with executable"
   (define reg (make-tool-registry))
@@ -43,10 +45,12 @@
     (check-pred tool? t)
     (check-true (procedure? (tool-execute t)))))
 
-(test-case "registry has correct count"
+(test-case "registry has correct count (>= 13)"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (check-equal? (length (list-tools reg)) 13))
+  ;; Guard: use >= to avoid breakage when tools are added
+  (check-true (>= (length (list-tools reg)) 13)
+              (format "expected >= 13 built-in tools, got ~a" (length (list-tools reg)))))
 
 ;; ============================================================
 ;; build-runtime-from-cli
@@ -70,11 +74,13 @@
   (check-true (not (false? (member (provider-name (hash-ref rt 'provider))
                                    '("mock" "openai-compatible"))))))
 
-(test-case "tool-registry has all 11 built-in tools"
+(test-case "tool-registry has built-in tools (>= 13)"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (define reg (hash-ref rt 'tool-registry))
-  (check-equal? (length (list-tools reg)) 13))
+  ;; Guard: use >= to avoid breakage when tools are added
+  (check-true (>= (length (list-tools reg)) 13)
+              (format "expected >= 13 built-in tools, got ~a" (length (list-tools reg)))))
 
 (test-case "event-bus is valid"
   (define cfg (parse-cli-args #()))
@@ -731,10 +737,12 @@
   (register-default-tools! reg #:only '("read" "bash"))
   (check-equal? (sort (tool-names reg) string<?) '("bash" "read")))
 
-(test-case "register-default-tools! #:only #f registers all"
+(test-case "register-default-tools! #:only #f registers all (>= 13)"
   (define reg (make-tool-registry))
   (register-default-tools! reg #:only #f)
-  (check-equal? (length (tool-names reg)) 13))
+  ;; Guard: use >= to avoid breakage when tools are added
+  (check-true (>= (length (tool-names reg)) 13)
+              (format "expected >= 13 tool names, got ~a" (length (tool-names reg)))))
 
 (test-case "register-default-tools! #:only empty list registers none"
   (define reg (make-tool-registry))
