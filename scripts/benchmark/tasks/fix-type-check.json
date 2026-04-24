@@ -1,17 +1,25 @@
 {
   "name": "fix-type-check",
-  "prompt": "The function safe-divide in q/tests/fixtures/math.rkt crashes on non-number input. Add a guard that raises an informative error when either argument is not a number.",
+  "prompt": "The function safe-divide in math.rkt crashes on non-number input. Add a guard that raises an informative error when either argument is not a number.",
   "category": "bug-fix",
   "difficulty": 2,
   "description": "Add type guard to safe-divide to handle non-number inputs",
   "scoring": {
     "files_created": [
       {
-        "path": "q/tests/fixtures/math.rkt",
-        "must_contain": ["number?", "error"]
+        "path": "math.rkt",
+        "must_contain": [
+          "number?",
+          "error"
+        ]
       }
-    ]
+    ],
+    "tools_used": [
+      "read",
+      "edit"
+    ],
+    "tools_not_used": []
   },
-  "tools_used": ["read_file", "edit_file"],
-  "tools_not_used": []
+  "fixtures_dir": "calculator.rkt",
+  "setup": {}
 }

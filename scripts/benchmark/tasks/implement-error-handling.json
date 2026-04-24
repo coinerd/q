@@ -1,17 +1,27 @@
 {
   "name": "implement-error-handling",
-  "prompt": "Add comprehensive error handling to q/tests/fixtures/calculator.rkt. Each function (add, subtract, multiply, divide, modulo, power) should validate that both arguments are numbers and raise informative errors for invalid input. For divide, also prevent division by zero.",
+  "prompt": "Add comprehensive error handling to calculator.rkt. Each function (add, subtract, multiply, divide, modulo, power) should validate that both arguments are numbers and raise informative errors for invalid input. For divide, also prevent division by zero.",
   "category": "implementation",
   "difficulty": 3,
   "description": "Add input validation and error handling to all calculator functions",
   "scoring": {
     "files_created": [
       {
-        "path": "q/tests/fixtures/calculator.rkt",
-        "must_contain": ["number?", "error", "zero?"]
+        "path": "calculator.rkt",
+        "must_contain": [
+          "number?",
+          "error",
+          "zero?"
+        ]
       }
-    ]
+    ],
+    "tools_used": [
+      "read",
+      "edit",
+      "bash"
+    ],
+    "tools_not_used": []
   },
-  "tools_used": ["read_file", "edit_file", "run_shell"],
-  "tools_not_used": []
+  "fixtures_dir": "legacy.rkt",
+  "setup": {}
 }

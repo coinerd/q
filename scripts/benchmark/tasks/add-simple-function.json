@@ -1,17 +1,27 @@
 {
   "name": "add-simple-function",
-  "prompt": "Add a function (double n) that returns n*2 to q/tests/fixtures/math.rkt. Export it via provide. Note: there is an existing buggy `double` function that returns n+2 instead of n*2 — fix it.",
+  "prompt": "Add a function (double n) that returns n*2 to math.rkt. Export it via provide. Note: there is an existing buggy `double` function that returns n+2 instead of n*2 \u2014 fix it.",
   "category": "implementation",
   "difficulty": 1,
   "description": "Add or fix a simple function with provide export",
   "scoring": {
     "files_created": [
       {
-        "path": "q/tests/fixtures/math.rkt",
-        "must_contain": ["(define (double n)", "(* n 2)"]
+        "path": "math.rkt",
+        "must_contain": [
+          "(define (double n)",
+          "(* n 2)"
+        ]
       }
+    ],
+    "tools_used": [
+      "read",
+      "edit"
+    ],
+    "tools_not_used": [
+      "bash"
     ]
   },
-  "tools_used": ["read_file", "edit_file"],
-  "tools_not_used": ["run_shell"]
+  "fixtures_dir": "math.rkt",
+  "setup": {}
 }
