@@ -8,35 +8,27 @@
 ;; ============================================================
 
 (test-case "make-tool creates a valid tool"
-  (define t (make-tool "test"
-                       "A test tool"
-                       (hasheq 'type "object")
-                       (λ (args) 'ok)))
+  (define t (make-tool "test" "A test tool" (hasheq 'type "object") (λ (args) 'ok)))
   (check-pred tool? t)
   (check-equal? (tool-name t) "test")
   (check-equal? (tool-description t) "A test tool")
   (check-equal? (tool-schema t) (hasheq 'type "object")))
 
 (test-case "make-tool rejects bad name"
-  (check-exn exn:fail?
-    (λ () (make-tool 123 "desc" (hasheq) (λ (_) 'ok)))))
+  (check-exn exn:fail? (λ () (make-tool 123 "desc" (hasheq) (λ (_) 'ok)))))
 
 (test-case "make-tool rejects bad description"
-  (check-exn exn:fail?
-    (λ () (make-tool "name" 42 (hasheq) (λ (_) 'ok)))))
+  (check-exn exn:fail? (λ () (make-tool "name" 42 (hasheq) (λ (_) 'ok)))))
 
 (test-case "make-tool rejects bad schema"
-  (check-exn exn:fail?
-    (λ () (make-tool "name" "desc" "not-a-hash" (λ (_) 'ok)))))
+  (check-exn exn:fail? (λ () (make-tool "name" "desc" "not-a-hash" (λ (_) 'ok)))))
 
 (test-case "make-tool rejects bad execute"
-  (check-exn exn:fail?
-    (λ () (make-tool "name" "desc" (hasheq) "not-a-proc"))))
+  (check-exn exn:fail? (λ () (make-tool "name" "desc" (hasheq) "not-a-proc"))))
 
 (test-case "tool execute can be called"
-  (define t (make-tool "add" "addition"
-                       (hasheq)
-                       (λ (args) (+ (hash-ref args 'a) (hash-ref args 'b)))))
+  (define t
+    (make-tool "add" "addition" (hasheq) (λ (args) (+ (hash-ref args 'a) (hash-ref args 'b)))))
   (check-equal? ((tool-execute t) (hasheq 'a 3 'b 4)) 7))
 
 ;; ============================================================
@@ -52,8 +44,7 @@
 (test-case "make-error-result has is-error #t"
   (define tr (make-error-result "something broke"))
   (check-pred tool-result-is-error? tr)
-  (check-equal? (tool-result-content tr)
-                (list (hasheq 'type "text" 'text "something broke"))))
+  (check-equal? (tool-result-content tr) (list (hasheq 'type "text" 'text "something broke"))))
 
 (test-case "make-success-result defaults details to empty hash"
   (define tr (make-success-result "ok"))
@@ -85,9 +76,10 @@
   (check-equal? (exec-context-call-id ctx) ""))
 
 (test-case "make-exec-context with all keywords"
-  (define ctx (make-exec-context #:working-directory "/tmp"
-                                 #:call-id "call-123"
-                                 #:session-metadata (hasheq 'key "val")))
+  (define ctx
+    (make-exec-context #:working-directory "/tmp"
+                       #:call-id "call-123"
+                       #:session-metadata (hasheq 'key "val")))
   (check-equal? (exec-context-call-id ctx) "call-123"))
 
 ;; ============================================================
@@ -110,13 +102,11 @@
 (test-case "register-tool! rejects duplicates"
   (define reg (make-tool-registry))
   (register-tool! reg (make-tool "x" "first" (hasheq) (λ (_) 'ok)))
-  (check-exn exn:fail?
-    (λ () (register-tool! reg (make-tool "x" "second" (hasheq) (λ (_) 'ok))))))
+  (check-exn exn:fail? (λ () (register-tool! reg (make-tool "x" "second" (hasheq) (λ (_) 'ok))))))
 
 (test-case "register-tool! rejects non-tool"
   (define reg (make-tool-registry))
-  (check-exn exn:fail?
-    (λ () (register-tool! reg "not-a-tool"))))
+  (check-exn exn:fail? (λ () (register-tool! reg "not-a-tool"))))
 
 (test-case "unregister-tool! removes a tool"
   (define reg (make-tool-registry))
@@ -146,31 +136,64 @@
 ;; ============================================================
 
 (test-case "validate-tool-args passes for valid args"
-  (define t (make-tool "echo" "echo"
-                       (hasheq 'type "object"
-                               'required '(name)
-                               'properties (hasheq 'name (hasheq 'type "string")))
-                       (λ (_) 'ok)))
+  (define t
+    (make-tool
+     "echo"
+     "echo"
+     (hasheq 'type "object" 'required '(name) 'properties (hasheq 'name (hasheq 'type "string")))
+     (λ (_) 'ok)))
   (check-true (validate-tool-args t (hasheq 'name "hello"))))
 
 (test-case "validate-tool-args rejects missing required"
-  (define t (make-tool "echo" "echo"
-                       (hasheq 'type "object"
-                               'required '(name)
-                               'properties (hasheq 'name (hasheq 'type "string")))
-                       (λ (_) 'ok)))
-  (check-exn exn:fail?
-    (λ () (validate-tool-args t (hasheq)))))
+  (define t
+    (make-tool
+     "echo"
+     "echo"
+     (hasheq 'type "object" 'required '(name) 'properties (hasheq 'name (hasheq 'type "string")))
+     (λ (_) 'ok)))
+  (check-exn exn:fail? (λ () (validate-tool-args t (hasheq)))))
 
 (test-case "validate-tool-args rejects wrong type"
-  (define t (make-tool "echo" "echo"
-                       (hasheq 'type "object"
-                               'properties (hasheq 'count (hasheq 'type "integer")))
-                       (λ (_) 'ok)))
-  (check-exn exn:fail?
-    (λ () (validate-tool-args t (hasheq 'count "not-int")))))
+  (define t
+    (make-tool "echo"
+               "echo"
+               (hasheq 'type "object" 'properties (hasheq 'count (hasheq 'type "integer")))
+               (λ (_) 'ok)))
+  (check-exn exn:fail? (λ () (validate-tool-args t (hasheq 'count "not-int")))))
 
 (test-case "validate-tool-args rejects non-hash args"
   (define t (make-tool "echo" "echo" (hasheq) (λ (_) 'ok)))
-  (check-exn exn:fail?
-    (λ () (validate-tool-args t "not-a-hash"))))
+  (check-exn exn:fail? (λ () (validate-tool-args t "not-a-hash"))))
+
+;; ============================================================
+;; v0.19.3 Wave 1: format-tool-schema-hint tests
+;; ============================================================
+
+(test-case "format-tool-schema-hint: required and optional params"
+  (define t
+    (make-tool "read"
+               "Read"
+               (hasheq 'type
+                       "object"
+                       'properties
+                       (hasheq 'path
+                               (hasheq 'type "string")
+                               'offset
+                               (hasheq 'type "integer")
+                               'limit
+                               (hasheq 'type "integer"))
+                       'required
+                       '("path"))
+               (λ (_) 'ok)))
+  (define hint (format-tool-schema-hint t))
+  ;; Required param should NOT have ?
+  (check-true (string-contains? hint "path: string") (format "required param without ?: ~a" hint))
+  ;; Optional params should have ?
+  (check-true (string-contains? hint "offset?: integer") (format "optional param with ?: ~a" hint))
+  ;; Should start with tool name
+  (check-true (string-contains? hint "read(") (format "should start with tool name: ~a" hint)))
+
+(test-case "format-tool-schema-hint: no params"
+  (define t (make-tool "noop" "Noop" (hasheq 'type "object" 'properties (hasheq)) (λ (_) 'ok)))
+  (define hint (format-tool-schema-hint t))
+  (check-equal? hint "noop()"))

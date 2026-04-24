@@ -24,6 +24,7 @@
                   register-tool!
                   lookup-tool
                   validate-tool-args
+                  format-tool-schema-hint
                   tool-result?
                   tool-result-content
                   tool-result-details
@@ -154,20 +155,22 @@
                path-arg
                (safe-mode-project-root)))]
             [else
-             ;; Revalidate arguments after potential hook mutation
-             (define validated?
-               (with-handlers ([exn:fail? (lambda (e) #f)])
+             ;; Revalidate arguments after potential hook mutation (v0.19.3 W1)
+             ;; Capture exception detail to produce actionable error feedback
+             (define validation-result
+               (with-handlers ([exn:fail? (lambda (e) e)])
                  (validate-tool-args t (tool-call-arguments tc-after-hook))
-                 #t))
-             (if validated?
+                 #f))
+             (if (not validation-result)
                  (hasheq 'status 'ready 'tool-call tc-after-hook 'tool t)
                  (hasheq 'status
                          'error
                          'tool-call
                          tc-after-hook
                          'error-message
-                         (format "post-hook validation failed for tool '~a'"
-                                 (tool-call-name tc-after-hook))))])])]
+                         (format "~a. Usage: ~a"
+                                 (exn-message validation-result)
+                                 (format-tool-schema-hint t))))])])]
       [else
        ;; Unexpected hook return value — treat as error
        (hasheq 'status
