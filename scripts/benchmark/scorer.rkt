@@ -108,35 +108,52 @@
        (for/list ([fc (in-list checks)])
          (define rel-path (file-check-path fc))
          (define must-contain (file-check-must-contain fc))
+         (define must-not-contain (file-check-must-not-contain fc))
          (define full-path
            (if project-dir
                (build-path project-dir rel-path)
                rel-path))
          (define exists? (file-exists? full-path))
          (cond
-           [(not exists?) (hash 'path rel-path 'exists? #f 'content-ok? #f 'reason "file missing")]
-           [(null? must-contain)
-            (hash 'path rel-path 'exists? #t 'content-ok? #t 'reason "no content requirements")]
+           [(not exists?) (hash 'path rel-path 'exists? #f 'score 0.0 'reason "file missing")]
            [else
             (define content (file->string full-path))
-            (define content-ok?
-              (for/and ([needle (in-list must-contain)])
-                (string-contains? content needle)))
+            ;; Positive checks (must-contain)
+            (define n-positive (length must-contain))
+            (define positive-pass
+              (for/sum ([needle (in-list must-contain)]) (if (string-contains? content needle) 1 0)))
+            ;; Negative checks (must-not-contain)
+            (define n-negative (length must-not-contain))
+            (define negative-pass
+              (for/sum ([forbidden (in-list must-not-contain)])
+                       (if (string-contains? content forbidden) 0 1)))
+            ;; Combined score: average of positive and negative ratios
+            (define n-total-checks (+ n-positive n-negative))
+            (define raw-score
+              (cond
+                [(zero? n-total-checks) 1.0]
+                [else (/ (+ positive-pass negative-pass) n-total-checks)]))
             (hash 'path
                   rel-path
                   'exists?
                   #t
-                  'content-ok?
-                  content-ok?
+                  'score
+                  raw-score
+                  'positive-pass
+                  positive-pass
+                  'n-positive
+                  n-positive
+                  'negative-pass
+                  negative-pass
+                  'n-negative
+                  n-negative
                   'reason
-                  (if content-ok? "ok" "missing required content"))])))
+                  (if (= raw-score 1.0) "ok" "partial match"))])))
 
      (define file-score
        (if (zero? n-file-checks)
            1.0
-           (/ (for/sum ([r (in-list file-results)])
-                       (if (and (hash-ref r 'exists? #f) (hash-ref r 'content-ok? #f)) 1 0))
-              n-file-checks)))
+           (/ (for/sum ([r (in-list file-results)]) (hash-ref r 'score 0.0)) n-file-checks)))
 
      ;; --- Test checks ---
      (define test-results
