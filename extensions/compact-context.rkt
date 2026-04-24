@@ -104,7 +104,7 @@
 ;; Extension definition
 ;; ============================================================
 
-(define (register-compact-tools ctx)
+(define (register-compact-tools ctx _payload)
   (ext-register-tool!
    ctx
    "compact-context"

@@ -145,7 +145,7 @@
   (define reg (make-tool-registry))
   (define ctx (make-test-ctx #:tool-registry reg))
   ;; Register extension tools
-  (register-github-tools ctx)
+  (register-github-tools ctx (hasheq))
   ;; Check all 6 tools are registered
   (for ([name '("gh-issue" "gh-pr" "gh-milestone" "gh-board" "gh-wave-start" "gh-wave-finish")])
     (check-not-false (lookup-tool reg name) (format "Tool ~a should be registered" name))))

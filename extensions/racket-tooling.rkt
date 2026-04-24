@@ -776,7 +776,7 @@
 ;; Extension definition
 ;; ============================================================
 
-(define (register-racket-tools ctx)
+(define (register-racket-tools ctx _payload)
   (ext-register-tool!
    ctx
    "racket-check"

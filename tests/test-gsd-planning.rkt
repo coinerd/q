@@ -270,7 +270,7 @@
   (define reg (make-tool-registry))
   (define ctx (make-test-ctx #:tool-registry reg))
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
-  (handler ctx)
+  (handler ctx (hasheq))
   (check-not-false (lookup-tool reg "planning-read"))
   (check-not-false (lookup-tool reg "planning-write"))
   ;; Check tools have proper schemas
@@ -297,7 +297,7 @@
                    (define ctx (make-test-ctx #:tool-registry reg))
                    (define handler
                      (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
-                   (handler ctx)
+                   (handler ctx (hasheq))
                    (define pr (lookup-tool reg "planning-read"))
                    (define result ((tool-execute pr) (hasheq 'artifact "STATE" 'base_dir dir)))
                    (check-false (tool-result-is-error? result))
@@ -309,7 +309,7 @@
      (define reg (make-tool-registry))
      (define ctx (make-test-ctx #:tool-registry reg))
      (define handler (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
-     (handler ctx)
+     (handler ctx (hasheq))
      (define pw (lookup-tool reg "planning-write"))
      (define result
        ((tool-execute pw) (hasheq 'artifact "VALIDATION" 'content "## Tests pass" 'base_dir dir)))
@@ -334,7 +334,7 @@
   (define reg (make-tool-registry))
   (define ctx (make-test-ctx #:tool-registry reg))
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
-  (handler ctx)
+  (handler ctx (hasheq))
   (define pw (lookup-tool reg "planning-write"))
   (define result
     ((tool-execute pw) (hasheq 'artifact "../../etc/crontab.md" 'content "pwned" 'base_dir dir)))

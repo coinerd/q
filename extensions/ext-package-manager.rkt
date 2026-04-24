@@ -60,7 +60,7 @@
          (make-error-result (format "Failed to remove ~a." name)))]
     [else (make-error-result (format "Unknown action: ~a" action))]))
 
-(define (register-ext-pkg-tools ctx)
+(define (register-ext-pkg-tools ctx _payload)
   (ext-register-tool!
    ctx
    "ext-package"

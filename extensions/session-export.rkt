@@ -75,7 +75,7 @@
      (make-success-result (list (hasheq 'type "text" 'text (format "Exported to ~a" output))))]
     [else (make-success-result (list (hasheq 'type "text" 'text result)))]))
 
-(define (register-export-tools ctx)
+(define (register-export-tools ctx _payload)
   (ext-register-tool! ctx
                       "session-export"
                       "Export session logs to HTML, JSON, or Markdown."

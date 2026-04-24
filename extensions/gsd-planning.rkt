@@ -202,7 +202,7 @@
 ;; Extension definition
 ;; ============================================================
 
-(define (register-gsd-tools ctx)
+(define (register-gsd-tools ctx _payload)
   (ext-register-tool!
    ctx
    "planning-read"
