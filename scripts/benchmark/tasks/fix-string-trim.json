@@ -1,0 +1,17 @@
+{
+  "name": "fix-string-trim",
+  "prompt": "The trim-whitespace function in q/tests/fixtures/string-utils.rkt doesn't handle tabs. Fix it so it trims all whitespace characters including \\t.",
+  "category": "bug-fix",
+  "difficulty": 2,
+  "description": "Fix trim-whitespace to handle tab characters",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "q/tests/fixtures/string-utils.rkt",
+        "must_contain": ["trim-whitespace", "char-whitespace?"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "edit_file"],
+  "tools_not_used": []
+}

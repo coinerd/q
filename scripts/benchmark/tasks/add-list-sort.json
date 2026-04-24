@@ -1,0 +1,17 @@
+{
+  "name": "add-list-sort",
+  "prompt": "Implement a stable-sort function in q/tests/fixtures/sort.rkt that sorts a list using a comparison function. Include a (provide stable-sort) and basic test submodules.",
+  "category": "implementation",
+  "difficulty": 2,
+  "description": "Implement a stable sorting function from scratch",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "q/tests/fixtures/sort.rkt",
+        "must_contain": ["(define (stable-sort", "(provide stable-sort)", "module+ test"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "write_file", "run_shell"],
+  "tools_not_used": []
+}

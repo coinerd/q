@@ -1,0 +1,17 @@
+{
+  "name": "full-feature-branch",
+  "prompt": "Create a new module q/tests/fixtures/queue.rkt implementing a FIFO queue with enqueue, dequeue, peek, empty?, and size functions. Write tests in a module+ test block, run them with raco test, and ensure they all pass.",
+  "category": "full-workflow",
+  "difficulty": 3,
+  "description": "Full workflow: implement a queue module from scratch with tests",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "q/tests/fixtures/queue.rkt",
+        "must_contain": ["enqueue", "dequeue", "peek", "empty?", "size", "module+ test"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "write_file", "run_shell"],
+  "tools_not_used": []
+}

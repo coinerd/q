@@ -1,0 +1,17 @@
+{
+  "name": "full-pipeline-test",
+  "prompt": "Implement a test suite for q/tests/fixtures/math.rkt. Write tests in a module+ test block within the file, run them with raco test, and fix any issues found in the math functions themselves.",
+  "category": "full-workflow",
+  "difficulty": 3,
+  "description": "Write tests, run them, and fix issues — full pipeline",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "q/tests/fixtures/math.rkt",
+        "must_contain": ["module+ test", "check-equal?"]
+      }
+    ]
+  },
+  "tools_used": ["read_file", "edit_file", "run_shell", "write_file"],
+  "tools_not_used": []
+}
