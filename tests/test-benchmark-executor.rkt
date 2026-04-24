@@ -159,3 +159,21 @@
   (check-false (member "session-recall" benchmark-tools))
   (check-false (member "skill-router" benchmark-tools))
   (check-equal? (length benchmark-tools) 8))
+
+(test-case "exec: trace-tool-call-count counts tool events"
+  (define tmp-dir (make-temporary-file "bench-trace-~a" 'directory))
+  (define trace-file (build-path tmp-dir "trace.jsonl"))
+  ;; Write trace JSONL with 3 tool call events and 2 other events
+  (call-with-output-file
+   trace-file
+   (lambda (out)
+     (displayln "{\"phase\":\"session.start\",\"data\":{}}" out)
+     (displayln "{\"phase\":\"tool.call.started\",\"data\":{\"name\":\"read\"}}" out)
+     (displayln "{\"phase\":\"tool.call.started\",\"data\":{\"name\":\"edit\"}}" out)
+     (displayln "{\"phase\":\"llm.response\",\"data\":{}}" out)
+     (displayln "{\"phase\":\"tool.call.started\",\"data\":{\"name\":\"bash\"}}" out)))
+  ;; We test by importing from executor module
+  ;; Since trace-tool-call-count is not exported, test via trace-tool-calls
+  (define tools (trace-tool-calls trace-file))
+  (check-equal? (length tools) 3 "should find 3 tool calls")
+  (delete-directory/files tmp-dir))

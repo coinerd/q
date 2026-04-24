@@ -203,8 +203,20 @@
                     trace-path
                     (build-path tmp-dir "sessions")
                     duration-ms
-                    iterations
+                    (if (and (eq? outcome 'timeout) trace-path (file-exists? trace-path))
+                        (max iterations (trace-tool-call-count trace-path))
+                        iterations)
                     outcome
                     error-msg
                     tmp-dir
                     raw-result))
+
+;; trace-tool-call-count : path? -> exact-nonnegative-integer?
+;; Count tool.call.started events in trace JSONL as iteration proxy.
+(define (trace-tool-call-count trace-path)
+  (define entries
+    (with-handlers ([exn:fail? (lambda (e) '())])
+      (jsonl-read-all-valid trace-path)))
+  (for/sum ([e (in-list entries)] #:when (and (hash? e)
+                                              (equal? (hash-ref e 'phase #f) "tool.call.started")))
+           1))

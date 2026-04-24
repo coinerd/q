@@ -30,7 +30,7 @@
 ;; Structs
 ;; ============================================================
 
-(struct file-check (path must-contain) #:transparent)
+(struct file-check (path must-contain must-not-contain) #:transparent)
 
 (struct scoring-spec
         (files-created ; (listof file-check?)
@@ -136,7 +136,9 @@
   (define raw-scoring (hash-ref j 'scoring (hasheq)))
   (define scoring-spec-val
     (scoring-spec (for/list ([fc (in-list (hash-ref raw-scoring 'files_created '()))])
-                    (file-check (hash-ref fc 'path "") (hash-ref fc 'must_contain '())))
+                    (file-check (hash-ref fc 'path "")
+                                (hash-ref fc 'must_contain '())
+                                (hash-ref fc 'must_not_contain '())))
                   (hash-ref raw-scoring 'files_not_modified '())
                   (hash-ref raw-scoring 'tests_pass '())
                   (hash-ref raw-scoring 'tools_used '())
@@ -185,7 +187,13 @@
           (build-path (task-fixture-paths) fixtures-dir)))
     (cond
       [(directory-exists? fixtures-path)
-       (copy-directory/files fixtures-path tmp-dir #:keep-modification-seconds? #t)]
+       ;; Copy contents of fixtures dir into tmp-dir (which already exists)
+       (for ([child (in-list (directory-list fixtures-path))])
+         (define src (build-path fixtures-path child))
+         (define dst (build-path tmp-dir child))
+         (cond
+           [(directory-exists? src) (copy-directory/files src dst)]
+           [(file-exists? src) (copy-file src dst)]))]
       [(file-exists? fixtures-path)
        ;; Single fixture file — copy into tmp-dir preserving name
        (copy-file fixtures-path (build-path tmp-dir (file-name-from-path fixtures-path)))]))
