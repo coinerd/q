@@ -22,24 +22,34 @@
 
 (define project-root (build-path (current-directory) ".." ".."))
 
+;; CI detection: .pi/skills/ and .planning/ are outside q/ git repo
+;; so they don't exist on CI. Skip tests that depend on them.
+(define on-ci? (not (directory-exists? (build-path project-root ".pi" "skills"))))
+
+(define-syntax-rule (skip-on-ci test-name body ...)
+  (if on-ci?
+      (test-case test-name
+        (check-true #t "skipped: CI environment"))
+      (test-case test-name
+        body ...)))
+
 ;; ============================================================
 ;; Pattern 1: Skill Discovery & Loading
 ;; ============================================================
-(test-case "P1: skills discoverable from .pi/skills/"
-  (define skills-dir (build-path project-root ".pi" "skills"))
-  (check-true (directory-exists? skills-dir) ".pi/skills/ must exist")
-  (define skill-dirs
-    (filter (lambda (d)
-              (and (directory-exists? (build-path skills-dir d))
-                   (file-exists? (build-path skills-dir d "SKILL.md"))))
-            (directory-list skills-dir)))
-  ;; Exclude _package (archived)
-  (define active (filter (lambda (d) (not (string-prefix? (path->string d) "_")))
-                         skill-dirs))
-  (check-true (>= (length active) 15)
-              (format "Expected >= 15 active skills, found ~a: ~a"
-                      (length active)
-                      (map path->string active))))
+(skip-on-ci
+ "P1: skills discoverable from .pi/skills/"
+ (define skills-dir (build-path project-root ".pi" "skills"))
+ (check-true (directory-exists? skills-dir) ".pi/skills/ must exist")
+ (define skill-dirs
+   (filter (lambda (d)
+             (and (directory-exists? (build-path skills-dir d))
+                  (file-exists? (build-path skills-dir d "SKILL.md"))))
+           (directory-list skills-dir)))
+ ;; Exclude _package (archived)
+ (define active (filter (lambda (d) (not (string-prefix? (path->string d) "_"))) skill-dirs))
+ (check-true
+  (>= (length active) 15)
+  (format "Expected >= 15 active skills, found ~a: ~a" (length active) (map path->string active))))
 
 (test-case "P1: skill-router tool exists in registry"
   (define reg (make-tool-registry))
@@ -69,27 +79,25 @@
   (for ([f (in-directory ext-dir)]
         #:when (and (regexp-match? #rx"\\.rkt$" (path->string f))
                     (not (string-contains? (path->string f) "_"))))
-    (with-handlers ([exn:fail?
-                     (lambda (e)
-                       ;; Some extensions need gh/external tools — just note the failure
-                       (printf "  Note: could not load ~a: ~a~n"
-                               (file-name-from-path f)
-                               (exn-message e)))])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 ;; Some extensions need gh/external tools — just note the failure
+                                 (printf "  Note: could not load ~a: ~a~n"
+                                         (file-name-from-path f)
+                                         (exn-message e)))])
       (load-extension! ext-reg f #:event-bus bus)
       (set! loaded-count (add1 loaded-count))))
   (printf "  Loaded ~a extensions~n" loaded-count)
-  (check-true (>= loaded-count 1)
-              "At least 1 extension must load successfully"))
+  (check-true (>= loaded-count 1) "At least 1 extension must load successfully"))
 
 ;; ============================================================
 ;; Pattern 3: Planning Artifact System
 ;; ============================================================
-(test-case "P3: .planning/ directory is readable"
-  (define planning-dir (build-path project-root ".planning"))
-  (check-true (directory-exists? planning-dir) ".planning/ must exist")
-  (define artifacts (directory-list planning-dir))
-  (check-true (>= (length artifacts) 5)
-              (format "Expected >= 5 planning artifacts, found ~a" (length artifacts))))
+(skip-on-ci "P3: .planning/ directory is readable"
+            (define planning-dir (build-path project-root ".planning"))
+            (check-true (directory-exists? planning-dir) ".planning/ must exist")
+            (define artifacts (directory-list planning-dir))
+            (check-true (>= (length artifacts) 5)
+                        (format "Expected >= 5 planning artifacts, found ~a" (length artifacts))))
 
 (test-case "P3: planning-read/write extension tools load"
   (define bus (make-event-bus))
@@ -114,8 +122,7 @@
 (test-case "P4: spawn-subagent has required schema fields"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (define sa-tool (findf (lambda (t) (equal? (tool-name t) "spawn-subagent"))
-                         (list-tools reg)))
+  (define sa-tool (findf (lambda (t) (equal? (tool-name t) "spawn-subagent")) (list-tools reg)))
   (check-not-false sa-tool "spawn-subagent must exist")
   (define schema (tool-schema sa-tool))
   (check-true (hash? schema) "tool must have schema")
@@ -162,9 +169,9 @@
   (define gi-path (build-path project-root "q" "extensions" "github-integration.rkt"))
   (check-true (file-exists? gi-path)))
 
-(test-case "P8: gh_helpers.py script exists"
-  (define hh-path (build-path project-root "scripts" "gh_helpers.py"))
-  (check-true (file-exists? hh-path)))
+(skip-on-ci "P8: gh_helpers.py script exists"
+            (define hh-path (build-path project-root "scripts" "gh_helpers.py"))
+            (check-true (file-exists? hh-path)))
 
 ;; ============================================================
 ;; Pattern 9: Racket Tooling Extension
@@ -179,33 +186,30 @@
 (test-case "P10: SDK can create runtime with all components"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (define prov (make-mock-provider
-                (model-response
-                 (list (hasheq 'type "text" 'text "OK"))
-                 #f "mock" #f)
-                #:name "mock"))
+  (define prov
+    (make-mock-provider (model-response (list (hasheq 'type "text" 'text "OK")) #f "mock" #f)
+                        #:name "mock"))
   (define rt (make-runtime #:provider prov #:tool-registry reg))
   (check-true (runtime? rt)))
 
 ;; ============================================================
 ;; Pattern 11: Wave Execution Pipeline
 ;; ============================================================
-(test-case "P11: wave start/finish scripts exist"
-  ;; These are in gh_helpers.py
-  (define hh-path (build-path project-root "scripts" "gh_helpers.py"))
-  (check-true (file-exists? hh-path))
-  ;; Verify the key functions exist
-  (define content (file->string hh-path))
-  (check-true (string-contains? content "def wave_start("))
-  (check-true (string-contains? content "def wave_finish("))
-  (check-true (string-contains? content "def create_milestone(")))
+(skip-on-ci "P11: wave start/finish scripts exist"
+            ;; These are in gh_helpers.py
+            (define hh-path (build-path project-root "scripts" "gh_helpers.py"))
+            (check-true (file-exists? hh-path))
+            ;; Verify the key functions exist
+            (define content (file->string hh-path))
+            (check-true (string-contains? content "def wave_start("))
+            (check-true (string-contains? content "def wave_finish("))
+            (check-true (string-contains? content "def create_milestone(")))
 
 ;; ============================================================
 ;; Pattern 12: Remote Collaboration
 ;; ============================================================
 (test-case "P12: remote-collab extension exists"
-  (define rc-path (build-path project-root "q" "extensions" "remote-collab"
-                              "remote-collab.rkt"))
+  (define rc-path (build-path project-root "q" "extensions" "remote-collab" "remote-collab.rkt"))
   (check-true (file-exists? rc-path)))
 
 (test-case "P12: q-sync extension exists"
