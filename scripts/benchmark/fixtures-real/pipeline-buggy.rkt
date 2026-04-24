@@ -32,13 +32,13 @@
            (map fn items))))
 
 ;; BUG: sorts in wrong direction (uses > instead of < for ascending)
-(define (stage-sort [key-fn identity])
+(define (stage-sort [key-fn (lambda (x) x)])
   (stage 'sort
          (lambda (items)
            (sort items (lambda (a b) (> (key-fn a) (key-fn b)))))))  ;; BUG: wrong comparison
 
 ;; Works correctly
-(define (stage-deduplicate [key-fn identity])
+(define (stage-deduplicate [key-fn (lambda (x) x)])
   (stage 'dedup
          (lambda (items)
            (define seen (make-hash))
