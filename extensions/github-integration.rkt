@@ -914,10 +914,45 @@
 ;; Extension definition
 ;; ============================================================
 
+(define (handle-github-command payload)
+  (define cmd (hash-ref payload 'command #f))
+  (define input-text (hash-ref payload 'input ""))
+  (cond
+    [(member cmd '("/milestone" "/ms"))
+     (hook-amend
+      (hasheq
+       'text
+       (format
+        "GitHub milestone command.~a\nUsage: /milestone [list|status|create] [args]\n\nUse gh-milestone-list, gh-milestone-status, or gh-milestone-create tools for full functionality."
+        (if (string=? input-text "")
+            ""
+            (format " Input: ~a" input-text)))))]
+    [(member cmd '("/issue" "/i"))
+     (hook-amend
+      (hasheq
+       'text
+       (format
+        "GitHub issue command.~a\nUsage: /issue [get|list|create|close] [number|args]\n\nUse gh-issue-get, gh-issue-list, gh-issue-create, or gh-issue-close tools for full functionality."
+        (if (string=? input-text "")
+            ""
+            (format " Input: ~a" input-text)))))]
+    [(member cmd '("/pr"))
+     (hook-amend
+      (hasheq
+       'text
+       (format
+        "GitHub PR command.~a\nUsage: /pr [list|get|create|merge] [number|args]\n\nUse gh-pr-list, gh-pr-get, gh-pr-create, or gh-pr-merge tools for full functionality."
+        (if (string=? input-text "")
+            ""
+            (format " Input: ~a" input-text)))))]
+    [else (hook-pass payload)]))
+
 (define-q-extension github-integration-extension
                     #:version "1.0.0"
                     #:api-version "1"
                     #:on register-tools
                     register-github-tools
                     #:on register-shortcuts
-                    register-github-commands)
+                    register-github-commands
+                    #:on execute-command
+                    handle-github-command)
