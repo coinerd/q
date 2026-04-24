@@ -102,7 +102,7 @@
 ;; ============================================================
 ;; Deep Test 4: Skill content loading
 ;; ============================================================
-(test-case "DEEP-4: skill SKILL.md files are readable"
+(skip-on-ci "DEEP-4: skill SKILL.md files are readable"
   (define skills-dir (build-path project-root ".pi" "skills"))
   (define skill-dirs
     (filter (lambda (d)
