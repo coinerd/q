@@ -1,0 +1,20 @@
+{
+  "name": "wf-bugfix-multi",
+  "prompt": "Read pipeline-buggy.rkt carefully. It has THREE bugs:\n1. stage-filter drops the last element of the filtered list\n2. stage-sort uses > instead of < (sorts descending instead of ascending)\n3. make-pipeline reverses stages, applying them in wrong order\n\nFix all three bugs. Do not change stage-map, stage-deduplicate, or pipeline-process.",
+  "category": "bug-fix",
+  "difficulty": 2,
+  "description": "Pattern 1+5: Fix multiple related bugs in one module — common in audit remediation",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "pipeline-buggy.rkt",
+        "must_contain": ["(take filtered (length filtered))", "(lambda (a b) (< (key-fn a) (key-fn b)))"]
+      }
+    ],
+    "tools_used": ["read", "edit"],
+    "tools_not_used": ["write"]
+  },
+  "fixtures_dir": "pipeline-buggy.rkt",
+  "time_limit_seconds": 300,
+  "setup": {}
+}

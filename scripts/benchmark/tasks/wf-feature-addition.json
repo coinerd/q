@@ -1,0 +1,20 @@
+{
+  "name": "wf-feature-addition",
+  "prompt": "Read string-helpers-buggy.rkt. Add two new exported functions:\n\n1. `(camel->kebab s)` — converts camelCase to kebab-case. Example: \"myFunctionName\" → \"my-function-name\". Use regexp-replace* with #rx\"([A-Z])\" and string-downcase.\n\n2. `(pad-center s width [char #\\space])` — centers string s in a field of given width, padding with char. If s is longer than width, return s unchanged. Example: (pad-center \"hi\" 6) → \"  hi  \"\n\nAdd both functions after the existing ones, and add them to the provide form.",
+  "category": "implementation",
+  "difficulty": 2,
+  "description": "Pattern 7: Add new functionality to an existing module with provide export",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "string-helpers-buggy.rkt",
+        "must_contain": ["camel->kebab", "pad-center", "regexp-replace*", "provide"]
+      }
+    ],
+    "tools_used": ["read", "edit"],
+    "tools_not_used": ["bash"]
+  },
+  "fixtures_dir": "string-helpers-buggy.rkt",
+  "time_limit_seconds": 300,
+  "setup": {}
+}

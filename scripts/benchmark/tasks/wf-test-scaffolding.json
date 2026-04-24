@@ -1,0 +1,20 @@
+{
+  "name": "wf-test-scaffolding",
+  "prompt": "Read string-helpers-buggy.rkt. Write a test file called test-string-helpers.rkt that tests all 5 exported functions. Use #lang racket with require rackunit and test-case. Include tests for:\n- slugify: basic, multiple separators, leading/trailing\n- truncate-with-ellipsis: short string (no truncation), exact length, long string\n- count-words: empty string, single word, multiple words\n- indent-lines: single line, multiple lines\n- strip-ansi-codes: string with \\033 codes, string with \\x1b codes, clean string\n\nEach function should have at least 3 test cases.",
+  "category": "implementation",
+  "difficulty": 2,
+  "description": "Pattern 8: Write test scaffolding for an existing module — our most frequent task",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "test-string-helpers.rkt",
+        "must_contain": ["#lang racket", "rackunit", "test-case", "slugify", "truncate-with-ellipsis", "count-words"]
+      }
+    ],
+    "tools_used": ["read", "write"],
+    "tools_not_used": ["bash"]
+  },
+  "fixtures_dir": "string-helpers-buggy.rkt",
+  "time_limit_seconds": 300,
+  "setup": {}
+}

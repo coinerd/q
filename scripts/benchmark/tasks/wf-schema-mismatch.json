@@ -1,0 +1,20 @@
+{
+  "name": "wf-schema-mismatch",
+  "prompt": "Read config-reader-buggy.rkt. The function `resolve-model` is supposed to handle model names in \"provider/model\" format (e.g. \"openai/gpt-4o\") but always returns #f for compound names. Fix it so it correctly splits the name, looks up the provider, and returns the provider config. Also fix `merge-configs` which currently lets global override project (it should be the opposite — project overrides global).",
+  "category": "bug-fix",
+  "difficulty": 2,
+  "description": "Pattern 4: Fix schema/format mismatch between producer and consumer",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "config-reader-buggy.rkt",
+        "must_contain": ["string-split", "hash-ref providers"]
+      }
+    ],
+    "tools_used": ["read", "edit"],
+    "tools_not_used": ["write", "bash"]
+  },
+  "fixtures_dir": "config-reader-buggy.rkt",
+  "time_limit_seconds": 300,
+  "setup": {}
+}

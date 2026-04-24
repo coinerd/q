@@ -59,9 +59,20 @@
   (call-with-output-file
    tmp
    (lambda (out)
-     (display
-      "{\"name\":\"full-task\",\"prompt\":\"Implement X\",\"category\":\"bug-fix\",\"difficulty\":3,\"description\":\"A complex bug fix\",\"max_iterations\":20,\"max_tokens\":50000,\"time_limit_seconds\":300,\"setup\":{\"files\":{\"foo.rkt\":\"#lang racket\"},\"extensions\":[\"racket-tooling\"],\"skills\":[\"q-racket-guardrails\"]},\"scoring\":{\"files_created\":[{\"path\":\"q/foo.rkt\",\"must_contain\":[\"define\",\"provide\"]}],\"tools_used\":[\"write\",\"racket-check\"],\"max_iterations\":15},\"teardown\":[\"q/foo.rkt\"]}"
-      out))
+     (display (string-append "{\"name\":\"full-task\",\"prompt\":\"Implement X\","
+                             "\"category\":\"bug-fix\",\"difficulty\":3,"
+                             "\"description\":\"A complex bug fix\","
+                             "\"max_iterations\":20,\"max_tokens\":50000,"
+                             "\"time_limit_seconds\":300,"
+                             "\"setup\":{\"files\":{\"foo.rkt\":\"#lang racket\"},"
+                             "\"extensions\":[\"racket-tooling\"],"
+                             "\"skills\":[\"q-racket-guardrails\"]},"
+                             "\"scoring\":{\"files_created\":[{\"path\":\"q/foo.rkt\","
+                             "\"must_contain\":[\"define\",\"provide\"]}],"
+                             "\"tools_used\":[\"write\",\"racket-check\"],"
+                             "\"max_iterations\":15},"
+                             "\"teardown\":[\"q/foo.rkt\"]}")
+              out))
    #:exists 'replace)
   (define task (load-benchmark-task tmp))
   (check-equal? (benchmark-task-name task) "full-task")

@@ -919,32 +919,33 @@
   (define input-text (hash-ref payload 'input ""))
   (cond
     [(member cmd '("/milestone" "/ms"))
-     (hook-amend
-      (hasheq
-       'text
-       (format
-        "GitHub milestone command.~a\nUsage: /milestone [list|status|create] [args]\n\nUse gh-milestone-list, gh-milestone-status, or gh-milestone-create tools for full functionality."
-        (if (string=? input-text "")
-            ""
-            (format " Input: ~a" input-text)))))]
+     (hook-amend (hasheq 'text
+                         (string-append "GitHub milestone command."
+                                        (if (string=? input-text "")
+                                            ""
+                                            (format " Input: ~a" input-text))
+                                        "\nUsage: /milestone [list|status|create] [args]"
+                                        "\n\nUse gh-milestone-list, gh-milestone-status,"
+                                        " or gh-milestone-create tools for full functionality.")))]
     [(member cmd '("/issue" "/i"))
-     (hook-amend
-      (hasheq
-       'text
-       (format
-        "GitHub issue command.~a\nUsage: /issue [get|list|create|close] [number|args]\n\nUse gh-issue-get, gh-issue-list, gh-issue-create, or gh-issue-close tools for full functionality."
-        (if (string=? input-text "")
-            ""
-            (format " Input: ~a" input-text)))))]
+     (hook-amend (hasheq 'text
+                         (string-append
+                          "GitHub issue command."
+                          (if (string=? input-text "")
+                              ""
+                              (format " Input: ~a" input-text))
+                          "\nUsage: /issue [get|list|create|close] [number|args]"
+                          "\n\nUse gh-issue-get, gh-issue-list,"
+                          " gh-issue-create, or gh-issue-close for full functionality.")))]
     [(member cmd '("/pr"))
-     (hook-amend
-      (hasheq
-       'text
-       (format
-        "GitHub PR command.~a\nUsage: /pr [list|get|create|merge] [number|args]\n\nUse gh-pr-list, gh-pr-get, gh-pr-create, or gh-pr-merge tools for full functionality."
-        (if (string=? input-text "")
-            ""
-            (format " Input: ~a" input-text)))))]
+     (hook-amend (hasheq 'text
+                         (string-append "GitHub PR command."
+                                        (if (string=? input-text "")
+                                            ""
+                                            (format " Input: ~a" input-text))
+                                        "\nUsage: /pr [list|get|create|merge] [number|args]"
+                                        "\n\nUse gh-pr-list, gh-pr-get,"
+                                        " gh-pr-create, or gh-pr-merge for full functionality.")))]
     [else (hook-pass payload)]))
 
 (define-q-extension github-integration-extension

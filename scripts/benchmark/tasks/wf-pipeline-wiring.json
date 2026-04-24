@@ -1,0 +1,20 @@
+{
+  "name": "wf-pipeline-wiring",
+  "prompt": "Read pipeline-buggy.rkt and config-reader-buggy.rkt.\n\nCreate a new file called pipeline-runner.rkt that combines the two:\n- Load config from a given path using load-config from config-reader-buggy\n- Use get-provider-config to get a provider's config\n- Use that config to determine which pipeline stages to build\n- If provider config has a 'filters key (list of predicates), create stage-filter for each\n- If it has a 'sort_key, create a stage-sort using that key\n- Always add stage-deduplicate at the end\n- Export a function (run-pipeline config-path provider-name input-data) that runs the built pipeline\n\nThe module should use #lang racket/base and require both modules.",
+  "category": "implementation",
+  "difficulty": 3,
+  "description": "Pattern 3: Pipeline wiring — read multiple modules, integrate them into a new component",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "pipeline-runner.rkt",
+        "must_contain": ["#lang racket/base", "load-config", "get-provider-config", "run-pipeline", "stage-filter", "stage-sort", "stage-deduplicate"]
+      }
+    ],
+    "tools_used": ["read", "write"],
+    "tools_not_used": ["bash"]
+  },
+  "fixtures_dir": "pipeline-buggy.rkt",
+  "time_limit_seconds": 360,
+  "setup": {}
+}

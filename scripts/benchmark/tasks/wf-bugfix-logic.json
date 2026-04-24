@@ -1,0 +1,20 @@
+{
+  "name": "wf-bugfix-logic",
+  "prompt": "Read string-helpers-buggy.rkt. It has a bug in `count-words`: empty string returns 1 instead of 0. Fix it so (count-words \"\") returns 0. Only change the count-words function. Do not modify any other function.",
+  "category": "bug-fix",
+  "difficulty": 1,
+  "description": "Pattern 5: Fix a simple logic bug (off-by-one / wrong condition) — our most common task",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "string-helpers-buggy.rkt",
+        "must_contain": ["(count-words s)", "(string=? trimmed \"\")", "0"]
+      }
+    ],
+    "tools_used": ["read", "edit"],
+    "tools_not_used": ["bash"]
+  },
+  "fixtures_dir": "string-helpers-buggy.rkt",
+  "time_limit_seconds": 180,
+  "setup": {}
+}

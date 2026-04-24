@@ -1,0 +1,20 @@
+{
+  "name": "wf-security-hardening",
+  "prompt": "Read validator-buggy.rkt. It has security issues:\n1. `valid-module-name?` allows names starting with numbers (Racket identifiers can't start with digits)\n2. `sanitize-path` allows path traversal via \"..\" — this is a security vulnerability\n3. `validate-config` accepts any hash, even empty — it should require at least 'providers key\n\nFix all three issues. For sanitize-path, reject any path component that is \"..\".",
+  "category": "bug-fix",
+  "difficulty": 2,
+  "description": "Pattern 2: Security hardening — fix validation gaps in boundary code",
+  "scoring": {
+    "files_created": [
+      {
+        "path": "validator-buggy.rkt",
+        "must_contain": ["^[a-zA-Z_]", "string-split", "providers"]
+      }
+    ],
+    "tools_used": ["read", "edit"],
+    "tools_not_used": ["bash"]
+  },
+  "fixtures_dir": "validator-buggy.rkt",
+  "time_limit_seconds": 300,
+  "setup": {}
+}
