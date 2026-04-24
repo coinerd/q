@@ -1,17 +1,27 @@
 {
   "name": "fix-nested-map",
-  "prompt": "The nested-map function in q/tests/fixtures/list-utils.rkt fails on empty sublists. Fix it and add edge case tests in a module+ test block covering empty sublists, deeply nested structures, and mixed empty/non-empty patterns.",
+  "prompt": "The nested-map function in list-utils.rkt fails on empty sublists. Fix it and add edge case tests in a module+ test block covering empty sublists, deeply nested structures, and mixed empty/non-empty patterns.",
   "category": "bug-fix",
   "difficulty": 3,
   "description": "Fix nested-map to handle empty sublists and add comprehensive edge case tests",
   "scoring": {
     "files_created": [
       {
-        "path": "q/tests/fixtures/list-utils.rkt",
-        "must_contain": ["nested-map", "module+ test", "null?"]
+        "path": "list-utils.rkt",
+        "must_contain": [
+          "nested-map",
+          "module+ test",
+          "null?"
+        ]
       }
-    ]
+    ],
+    "tools_used": [
+      "read",
+      "edit",
+      "bash"
+    ],
+    "tools_not_used": []
   },
-  "tools_used": ["read_file", "edit_file", "run_shell"],
-  "tools_not_used": []
+  "fixtures_dir": "list-utils.rkt",
+  "setup": {}
 }

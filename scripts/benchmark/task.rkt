@@ -58,7 +58,8 @@
               time-limit-seconds
               setup ; task-setup-spec?
               scoring ; scoring-spec?
-              teardown) ; (listof string?) — paths to clean up
+              teardown ; (listof string?) — paths to clean up
+              fixtures-dir) ; (or/c string? #f) — relative path to fixture dir
   #:transparent)
 
 ;; ============================================================
@@ -84,7 +85,9 @@
         [(and (eq? sk 'files) (hash? v)) v]
         [(and (eq? sk 'files_created) (list? v))
          (for/list ([item (in-list v)])
-           (if (hash? item) (normalize-keys item) item))]
+           (if (hash? item)
+               (normalize-keys item)
+               item))]
         [(hash? v) (normalize-keys v)]
         [(and (list? v) (andmap hash? v)) (map normalize-keys v)]
         [else v]))
@@ -156,7 +159,8 @@
                   (hash-ref j 'time_limit_seconds 120)
                   setup-spec
                   scoring-spec-val
-                  teardown))
+                  teardown
+                  (hash-ref j 'fixtures_dir #f)))
 
 ;; ============================================================
 ;; Task setup / teardown
@@ -172,7 +176,21 @@
         (make-temporary-file "benchmark-~a" 'directory)))
   (make-directory* tmp-dir)
 
-  ;; Create setup files
+  ;; Copy fixtures if fixtures-dir is specified
+  (define fixtures-dir (benchmark-task-fixtures-dir task))
+  (when fixtures-dir
+    (define fixtures-path
+      (if (absolute-path? fixtures-dir)
+          (string->path fixtures-dir)
+          (build-path (task-fixture-paths) fixtures-dir)))
+    (cond
+      [(directory-exists? fixtures-path)
+       (copy-directory/files fixtures-path tmp-dir #:keep-modification-seconds? #t)]
+      [(file-exists? fixtures-path)
+       ;; Single fixture file — copy into tmp-dir preserving name
+       (copy-file fixtures-path (build-path tmp-dir (file-name-from-path fixtures-path)))]))
+
+  ;; Create setup files (overrides fixtures if overlapping)
   (define files (task-setup-spec-files (benchmark-task-setup task)))
   (for ([(rel-path content) (in-hash files)])
     (define rel-str
@@ -186,7 +204,8 @@
                              (display (if (string? content)
                                           content
                                           (~a content))
-                                      out))))
+                                      out))
+                           #:exists 'truncate))
 
   ;; Create .q directory for project config
   (make-directory* (build-path tmp-dir ".q"))
