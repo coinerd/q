@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.19.3 — 2026-04-24
+
+### Tool Error Feedback & Agent Loop Improvements
+
+- **Tool error feedback with schema hints** (`tools/tool.rkt`, `tools/scheduler.rkt`):
+  New `format-tool-schema-hint` function generates one-line parameter hints.
+  Scheduler preflight captures exception detail and appends usage hint to error messages.
+- **Auto-retry skips permanent tool errors** (`runtime/auto-retry.rkt`):
+  New `permanent-tool-error?` predicate. Validation failures are never retried,
+  saving iteration budget for actual transient errors.
+- **Context seeding with project file tree** (`runtime/project-tree.rkt`):
+  New module generates shallow directory tree injected into system prompt.
+  LLM can skip initial `find`/`ls` exploration, saving 1-2 iterations per task.
+- **Benchmark scoring improvements** (`scripts/benchmark/scorer.rkt`):
+  Partial credit scoring: N/M checks pass → N/M × max score.
+  New `must_not_contain` negative content checks reduce score on violation.
+  Trace-based iteration counting on timeout via `tool.call.started` events.
+- **Benchmark selective tool registration** (`scripts/benchmark/executor.rkt`):
+  Excludes `session-recall` and `skill-router` from benchmark tool set.
+  Directory fixture copy fixed to copy contents into existing tmp-dir.
+
 ## v0.19.2 — 2026-04-24
 
 ### Benchmark Suite Hardening
