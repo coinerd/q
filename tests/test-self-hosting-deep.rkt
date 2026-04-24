@@ -9,6 +9,7 @@
          racket/path
          racket/string
          racket/match
+         "helpers/ci-detection.rkt"
          "../interfaces/sdk.rkt"
          (only-in "../llm/model.rkt" model-response)
          "../llm/provider.rkt"
@@ -18,13 +19,6 @@
          "../extensions/loader.rkt"
          "../agent/event-bus.rkt"
          "../runtime/settings.rkt")
-
-(define project-root (build-path (current-directory) ".." ".."))
-(define on-ci? (not (directory-exists? (build-path project-root ".pi" "skills"))))
-(define-syntax-rule (skip-on-ci test-name body ...)
-  (if on-ci?
-      (test-case test-name (check-true #t "skipped: CI environment"))
-      (test-case test-name body ...)))
 (define tmp-base (make-temporary-file "q-self-host-~a" 'directory))
 
 ;; Helper: create extension registry with all extensions loaded
@@ -64,8 +58,7 @@
   (define ext-reg (make-loaded-extension-registry #:bus bus))
   (define exts (list-extensions ext-reg))
   (define ext-names (map extension-name exts))
-  (check-not-false (member "gsd-planning-extension" ext-names)
-                   "gsd-planning must load"))
+  (check-not-false (member "gsd-planning-extension" ext-names) "gsd-planning must load"))
 
 ;; ============================================================
 ;; Deep Test 2: Extension count + tool registration GAP
@@ -93,75 +86,74 @@
   (define tools (list-tools reg))
   (define schema-errors
     (for/list ([t tools]
-               #:when (not (and (hash? (tool-schema t))
-                                (hash-has-key? (tool-schema t) 'type))))
+               #:when (not (and (hash? (tool-schema t)) (hash-has-key? (tool-schema t) 'type))))
       (tool-name t)))
-  (check-equal? schema-errors '()
-                (format "Tools with missing schemas: ~a" schema-errors)))
+  (check-equal? schema-errors '() (format "Tools with missing schemas: ~a" schema-errors)))
 
 ;; ============================================================
 ;; Deep Test 4: Skill content loading
 ;; ============================================================
 (skip-on-ci "DEEP-4: skill SKILL.md files are readable"
-  (define skills-dir (build-path project-root ".pi" "skills"))
-  (define skill-dirs
-    (filter (lambda (d)
-              (and (directory-exists? (build-path skills-dir d))
-                   (not (string-prefix? (path->string d) "_"))))
-            (directory-list skills-dir)))
-  (define results
-    (for/list ([d skill-dirs])
-      (define skill-file (build-path skills-dir d "SKILL.md"))
-      (define exists? (file-exists? skill-file))
-      (define size (if exists? (file-size skill-file) 0))
-      (cons (path->string d) (list exists? size))))
-  ;; All must exist and be > 100 bytes
-  (for ([r results])
-    (match-define (cons name (list exists? size)) r)
-    (check-true exists? (format "SKILL.md missing for ~a" name))
-    (check-true (> size 100) (format "SKILL.md too small for ~a (~a bytes)" name size))))
+            (define skills-dir (build-path project-root ".pi" "skills"))
+            (define skill-dirs
+              (filter (lambda (d)
+                        (and (directory-exists? (build-path skills-dir d))
+                             (not (string-prefix? (path->string d) "_"))))
+                      (directory-list skills-dir)))
+            (define results
+              (for/list ([d skill-dirs])
+                (define skill-file (build-path skills-dir d "SKILL.md"))
+                (define exists? (file-exists? skill-file))
+                (define size
+                  (if exists?
+                      (file-size skill-file)
+                      0))
+                (cons (path->string d) (list exists? size))))
+            ;; All must exist and be > 100 bytes
+            (for ([r results])
+              (match-define (cons name (list exists? size)) r)
+              (check-true exists? (format "SKILL.md missing for ~a" name))
+              (check-true (> size 100) (format "SKILL.md too small for ~a (~a bytes)" name size))))
 
 ;; ============================================================
 ;; Deep Test 5: _shared/ skill resources exist
 ;; ============================================================
 (skip-on-ci "DEEP-5: _shared/ skill dependencies exist"
-  (define shared-dir (build-path project-root ".pi" "skills" "_shared"))
-  (check-true (directory-exists? shared-dir))
-  (define shared-files (directory-list shared-dir))
-  (check-true (>= (length shared-files) 3)
-              (format "Expected >= 3 shared resources, found ~a" (length shared-files)))
-  ;; Key shared files
-  (for ([f '("GSD_TDD_WORKFLOW.md" "RACKET_EDIT_POLICY.md")])
-    (check-true (file-exists? (build-path shared-dir f))
-                (format "~a must exist in _shared/" f))))
+            (define shared-dir (build-path project-root ".pi" "skills" "_shared"))
+            (check-true (directory-exists? shared-dir))
+            (define shared-files (directory-list shared-dir))
+            (check-true (>= (length shared-files) 3)
+                        (format "Expected >= 3 shared resources, found ~a" (length shared-files)))
+            ;; Key shared files
+            (for ([f '("GSD_TDD_WORKFLOW.md" "RACKET_EDIT_POLICY.md")])
+              (check-true (file-exists? (build-path shared-dir f))
+                          (format "~a must exist in _shared/" f))))
 
 ;; ============================================================
 ;; Deep Test 6: Agent loop module completeness
 ;; ============================================================
 (test-case "DEEP-6: core agent modules exist"
   (define core-modules
-    '("agent/loop.rkt"
-      "agent/event-bus.rkt"
-      "agent/state.rkt"
-      "runtime/iteration.rkt"
-      "runtime/auto-retry.rkt"
-      "runtime/context-manager.rkt"
-      "runtime/trace-logger.rkt"
-      "runtime/project-tree.rkt"
-      "runtime/agent-session.rkt"
-      "runtime/settings.rkt"
-      "runtime/session-store.rkt"
-      "llm/provider.rkt"
-      "llm/openai-compatible.rkt"
-      "tools/tool.rkt"
-      "tools/scheduler.rkt"
-      "tools/registry-defaults.rkt"
-      "interfaces/sdk.rkt"
-      "wiring/run-modes.rkt"))
+    '("agent/loop.rkt" "agent/event-bus.rkt"
+                       "agent/state.rkt"
+                       "runtime/iteration.rkt"
+                       "runtime/auto-retry.rkt"
+                       "runtime/context-manager.rkt"
+                       "runtime/trace-logger.rkt"
+                       "runtime/project-tree.rkt"
+                       "runtime/agent-session.rkt"
+                       "runtime/settings.rkt"
+                       "runtime/session-store.rkt"
+                       "llm/provider.rkt"
+                       "llm/openai-compatible.rkt"
+                       "tools/tool.rkt"
+                       "tools/scheduler.rkt"
+                       "tools/registry-defaults.rkt"
+                       "interfaces/sdk.rkt"
+                       "wiring/run-modes.rkt"))
   (for ([rel-path core-modules])
     (define full-path (build-path project-root "q" rel-path))
-    (check-true (file-exists? full-path)
-                (format "~a must exist" rel-path))))
+    (check-true (file-exists? full-path) (format "~a must exist" rel-path))))
 
 ;; ============================================================
 ;; Deep Test 7: spawn-subagent tool schema quality
@@ -169,8 +161,7 @@
 (test-case "DEEP-7: spawn-subagent tool has proper schema"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
-  (define sa (findf (lambda (t) (equal? (tool-name t) "spawn-subagent"))
-                    (list-tools reg)))
+  (define sa (findf (lambda (t) (equal? (tool-name t) "spawn-subagent")) (list-tools reg)))
   (check-not-false sa)
   (define schema (tool-schema sa))
   (define props (hash-ref schema 'properties (hasheq)))
@@ -200,8 +191,7 @@
   (define ver-path (build-path project-root "q" "util" "version.rkt"))
   (check-true (file-exists? ver-path))
   (define content (file->string ver-path))
-  (check-true (string-contains? content "0.19")
-              "version must be in 0.19.x series"))
+  (check-true (string-contains? content "0.19") "version must be in 0.19.x series"))
 
 ;; ============================================================
 ;; Deep Test 10: Benchmark suite infrastructure
@@ -210,13 +200,11 @@
   (define bench-dir (build-path project-root "q" "scripts" "benchmark"))
   (check-true (directory-exists? bench-dir))
   (for ([f '("scorer.rkt" "executor.rkt" "task.rkt" "report.rkt")])
-    (check-true (file-exists? (build-path bench-dir f))
-                (format "benchmark/~a must exist" f)))
+    (check-true (file-exists? (build-path bench-dir f)) (format "benchmark/~a must exist" f)))
   ;; Task files
   (define tasks-dir (build-path bench-dir "tasks"))
   (check-true (directory-exists? tasks-dir))
-  (check-true (>= (length (directory-list tasks-dir)) 7)
-              "must have >= 7 benchmark task files"))
+  (check-true (>= (length (directory-list tasks-dir)) 7) "must have >= 7 benchmark task files"))
 
 ;; ============================================================
 ;; Cleanup
