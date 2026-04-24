@@ -12,7 +12,7 @@
 ;;   --ci             Also run ci-local.rkt (full CI lint suite)
 ;;   --full           Format + compile + ci-local + affected tests
 ;;
-;; Default (no flags): format lint + compile check + affected tests only.
+;; Default (no flags): format lint + version sync + metrics lint + affected tests.
 ;; Exit 0 if all checks pass, 1 otherwise.
 
 (require racket/file
@@ -103,6 +103,42 @@
         (printf "WARNING: ~a not found, skipping format lint~n" lint-script)
         #t)))
 
+;; --- Run version sync lint (dry-run) ---
+
+(define (run-version-lint)
+  (printf "~n--- Version Sync Lint (dry-run) ---~n")
+  (define script (build-path "scripts" "sync-version.rkt"))
+  (if (file-exists? script)
+      (let ([exit-code (system/exit-code (format "racket ~a" script))])
+        (if (= exit-code 0)
+            (begin
+              (printf "Version sync: PASS~n")
+              #t)
+            (begin
+              (printf "Version sync: FAIL (drift detected)~n")
+              #f)))
+      (begin
+        (printf "WARNING: ~a not found, skipping version lint~n" script)
+        #t)))
+
+;; --- Run metrics lint (static) ---
+
+(define (run-metrics-lint)
+  (printf "~n--- Metrics Lint (static) ---~n")
+  (define script (build-path "scripts" "metrics.rkt"))
+  (if (file-exists? script)
+      (let ([exit-code (system/exit-code (format "racket ~a --lint" script))])
+        (if (= exit-code 0)
+            (begin
+              (printf "Metrics lint: PASS~n")
+              #t)
+            (begin
+              (printf "Metrics lint: FAIL (README metrics diverged)~n")
+              #f)))
+      (begin
+        (printf "WARNING: ~a not found, skipping metrics lint~n" script)
+        #t)))
+
 ;; --- Run CI local lint suite ---
 
 (define (run-ci-local)
@@ -170,7 +206,7 @@
     (cond
       [full-mode? "--full (format + compile + ci-local + tests)"]
       [ci-mode? "--ci (format + compile + ci-local)"]
-      [else "quick (format + compile + tests)"]))
+      [else "quick (format + version + metrics + tests)"]))
 
   (printf "=== q Pre-commit Check [~a] ===~n" mode-label)
 
@@ -180,7 +216,15 @@
   (unless (run-format-lint)
     (set! all-pass #f))
 
-  ;; 2. CI local lint (if --ci or --full)
+  ;; 2. Version sync lint (default mode)
+  (unless (run-version-lint)
+    (set! all-pass #f))
+
+  ;; 3. Metrics lint (default mode)
+  (unless (run-metrics-lint)
+    (set! all-pass #f))
+
+  ;; 4. CI local lint (if --ci or --full)
   (when (or ci-mode? full-mode?)
     (unless (run-ci-local)
       (set! all-pass #f)))
@@ -191,7 +235,7 @@
      (unless (run-full-suite)
        (set! all-pass #f))]
     [else
-     ;; 3. Get staged files and run affected tests
+     ;; 5. Get staged files and run affected tests
      (define staged (get-staged-rkt-files))
      (printf "~n--- Staged .rkt files: ~a ---~n"
              (if (null? staged)
@@ -208,7 +252,7 @@
              (unless (run-test tf)
                (set! all-pass #f)))))])
 
-  ;; 4. Summary
+  ;; 6. Summary
   (printf "~n=== Summary ===~n")
   (if all-pass
       (begin
