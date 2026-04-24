@@ -16,15 +16,15 @@
          (prefix-in sdk: "../../interfaces/sdk.rkt")
          (only-in "../../agent/event-bus.rkt" make-event-bus)
          (only-in "../../tools/tool.rkt" make-tool-registry)
+         (only-in "../../tools/registry-defaults.rkt" register-default-tools!)
          (only-in "../../extensions/api.rkt" make-extension-registry)
-         (only-in "../../extensions/loader.rkt" load-extension!)
          (only-in "../../wiring/run-modes.rkt" load-extensions-from-dir!)
          (only-in "../../runtime/trace-logger.rkt"
                   make-trace-logger
                   start-trace-logger!
                   stop-trace-logger!)
          (only-in "../../runtime/provider-factory.rkt" build-provider)
-         (only-in "../../runtime/settings.rkt" load-settings q-settings-merged)
+         (only-in "../../runtime/settings.rkt" load-settings)
          (only-in "../../llm/provider.rkt" make-mock-provider)
          (only-in "../../llm/model.rkt" make-model-response)
          (only-in "../../util/protocol-types.rkt" message-role message-content text-part-text)
@@ -87,14 +87,15 @@
 
 ;; trace-tool-calls : path? -> (listof string?)
 ;; Extracts tool call names from a trace JSONL file.
+;; q's trace format: {"phase": "tool.call.started", "data": {"name": "read", ...}}
 (define (trace-tool-calls trace-path)
   (if (not (and trace-path (file-exists? trace-path)))
       '()
       (for*/list ([entry (in-list (jsonl-read-all-valid trace-path))]
                   #:when (hash? entry)
-                  #:when (equal? (hash-ref entry 'role #f) "assistant")
-                  [tc (in-list (hash-ref entry 'tool_calls '()))])
-        (hash-ref (hash-ref tc 'function (hasheq)) 'name "unknown"))))
+                  #:when (equal? (hash-ref entry 'phase #f) "tool.call.started"))
+        (define data (hash-ref entry 'data (hasheq)))
+        (hash-ref data 'name "unknown"))))
 
 ;; ============================================================
 ;; Core execution
@@ -134,8 +135,9 @@
   (when (directory-exists? project-ext-dir)
     (load-extensions-from-dir! ext-reg project-ext-dir #:event-bus bus))
 
-  ;; Build runtime
+  ;; Build runtime with default tools
   (define reg (make-tool-registry))
+  (register-default-tools! reg)
   (define rt
     (sdk:make-runtime #:provider provider
                       #:session-dir (build-path tmp-dir "sessions")
@@ -149,25 +151,37 @@
     (with-handlers ([exn:fail? (lambda (e) (values 'error 0 (exn-message e) #f))])
       (define rt2 (sdk:open-session rt))
 
-      ;; Execute with timeout if specified
+      ;; Execute with timeout via channel
       (define time-limit (benchmark-task-time-limit-seconds task))
-      (define-values (rt3 result)
-        (if time-limit
-            (sync/timeout (/ time-limit 1000.0)
-                          (thread (lambda ()
-                                    (parameterize ([current-directory tmp-dir])
-                                      (sdk:run-prompt! rt2 (benchmark-task-prompt task))))))
-            (parameterize ([current-directory tmp-dir])
-              (sdk:run-prompt! rt2 (benchmark-task-prompt task)))))
+      (define ch (make-channel))
+      (define exec-thread
+        (thread (lambda ()
+                  (channel-put ch
+                               (with-handlers ([exn:fail? (lambda (e) (list 'error e))])
+                                 (define-values (rt3 result)
+                                   (parameterize ([current-directory tmp-dir])
+                                     (sdk:run-prompt! rt2 (benchmark-task-prompt task))))
+                                 (list 'ok rt3 result))))))
+      (define exec-result (sync/timeout time-limit ch))
 
       (cond
-        ;; Timeout — the sync/timeout returned #f
-        [(not rt3) (values 'timeout 0 "Time limit exceeded" #f)]
+        ;; Timeout — sync/timeout returned #f
+        [(not exec-result)
+         (kill-thread exec-thread)
+         (values 'timeout 0 "Time limit exceeded" #f)]
+        ;; Error from inside the thread
+        [(and (list? exec-result) (eq? (car exec-result) 'error))
+         (values 'error 0 (exn-message (cadr exec-result)) #f)]
         [else
-         ;; Count iterations from session log
-         (define sess-info (sdk:session-info rt3))
-         (define iter-count (hash-ref sess-info 'iterations 1))
-         (values 'completed iter-count #f result)])))
+         (match exec-result
+           [(list 'ok rt3 result)
+            (define sess-info (sdk:session-info rt3))
+            (define iter-count
+              (if sess-info
+                  (hash-ref sess-info 'history-length 1)
+                  1))
+            (values 'completed iter-count #f result)]
+           [_ (values 'error 0 "Unexpected channel result" #f)])])))
 
   ;; Stop trace logger
   (stop-trace-logger! tlogger)
