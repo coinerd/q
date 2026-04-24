@@ -92,16 +92,16 @@
 
 (define results
   (for/list ([task (in-list tasks)])
-    (printf "Running task: ~a (~a) ... " (benchmark-task-name task) (benchmark-task-category task))
-    (flush-output)
+    (eprintf "Running task: ~a (~a) ... " (benchmark-task-name task) (benchmark-task-category task))
+    (flush-output (current-error-port))
     (define result (run-single-task task))
     ;; Score the execution
     (define scores (score-execution result task))
-    (printf "~a | ~a (~a ms, ~a iter)~n"
-            (execution-result-outcome result)
-            (score-result-verdict scores)
-            (execution-result-duration-ms result)
-            (execution-result-iterations-used result))
+    (eprintf "~a | ~a (~a ms, ~a iter)~n"
+             (execution-result-outcome result)
+             (score-result-verdict scores)
+             (execution-result-duration-ms result)
+             (execution-result-iterations-used result))
     (list task result scores)))
 
 ;; ============================================================

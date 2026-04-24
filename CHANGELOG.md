@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.19.2 — 2026-04-24
+
+### Benchmark Suite Hardening
+
+- **Executor pipeline fixes** (`scripts/benchmark/executor.rkt`): Register default tools
+  after making tool registry, fix timeout arithmetic (seconds not ms), channel-based
+  concurrency for thread-safe result passing, use correct `history-length` field
+- **Task fixture wiring** (`scripts/benchmark/task.rkt`): New `fixtures_dir` field on
+  `benchmark-task` struct, auto-copies fixture files (single file or directory) into temp
+  project dir before execution
+- **Tool name migration**: All 12 task JSONs updated from pi tool names
+  (`read_file`, `edit_file`, `run_shell`) to q tool names (`read`, `edit`, `bash`)
+- **CLI scoring pipeline** (`scripts/run-benchmark.rkt`): Scoring wired into CLI runner —
+  each task scored across 5 dimensions, verdicts shown in human and JSON output,
+  progress messages on stderr for clean JSON piping
+- **Trace schema fix** (`scripts/benchmark/scorer.rkt`): Tool name extraction updated
+  from OpenAI format (`type: "tool_use"`) to q format (`phase: "tool.call.started"`)
+- **65 benchmark tests passing** across 6 test files
+
 ## v0.19.1 — 2026-04-24
 
 ### Systematic Live Benchmark Suite
