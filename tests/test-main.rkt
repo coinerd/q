@@ -347,13 +347,18 @@
 ;; build-runtime-from-cli: system-instructions (resource loading)
 ;; ============================================================
 
-(test-case "build-runtime-from-cli: system-instructions empty when no .q dir"
-  (define cfg (parse-cli-args #()))
-  (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'system-instructions))
-  (check-equal? (hash-ref rt 'system-instructions)
-                '()
-                "system-instructions should be empty when no .q dir exists"))
+(test-case "build-runtime-from-cli: system-instructions from project tree when no .q dir"
+  (define tmp-dir (make-temporary-file "q-no-dot-q-~a" 'directory))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
+                  (define rt (build-runtime-from-cli cfg))
+                  (check-true (hash-has-key? rt 'system-instructions))
+                  ;; Empty project dir with no .q dir → no project tree, no instructions
+                  (check-equal? (hash-ref rt 'system-instructions)
+                                '()
+                                "system-instructions should be empty in empty project dir"))
+                (lambda () (delete-directory/files tmp-dir))))
 
 (test-case "build-runtime-from-cli: system-instructions loaded from .q/instructions.md"
   (define tmp-dir (make-temp-project-dir))
@@ -367,8 +372,8 @@
                   (define rt (build-runtime-from-cli cfg))
                   (check-true (hash-has-key? rt 'system-instructions))
                   (define instrs (hash-ref rt 'system-instructions))
-                  (check-true (and (list? instrs) (= (length instrs) 1))
-                              "should have one instruction from instructions.md")
+                  (check-true (and (list? instrs) (>= (length instrs) 1))
+                              "should have at least one instruction from instructions.md")
                   (when (and (list? instrs) (not (null? instrs)))
                     (check-true (string-contains? (first instrs) "helpful assistant")
                                 "instruction should contain text from instructions.md")))

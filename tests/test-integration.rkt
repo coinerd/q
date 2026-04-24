@@ -411,11 +411,11 @@
 ;; 8. CLI / tool registration integration
 ;; ============================================================
 
-(test-case "integ: register-default-tools! registers 11 tools"
+(test-case "integ: register-default-tools! registers 13 tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (tool-names reg))
-  (check-equal? (length names) 11)
+  (check-equal? (length names) 13)
   (check-not-false (member "read" names))
   (check-not-false (member "write" names))
   (check-not-false (member "edit" names))
