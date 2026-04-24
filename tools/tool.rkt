@@ -3,7 +3,7 @@
 (require racket/contract
          racket/hash
          racket/set
-         (only-in racket/string string-trim)
+         (only-in racket/string string-trim string-contains? string-join)
          json
          ;; 3.2: Thread-safe registry access
          (only-in racket/base make-semaphore call-with-semaphore)
@@ -58,6 +58,7 @@
          tool->jsexpr
          merge-tool-lists
          validate-tool-schema
+         format-tool-schema-hint
 
          ;; ── Tool result (re-exported from agent/types.rkt) ──
          tool-result?
@@ -428,6 +429,43 @@
     [("object") (hash? v)]
     [("array") (list? v)]
     [else #t])) ; unknown type spec -> pass
+
+;; ============================================================
+;; Tool schema hint formatting (v0.19.3 Wave 1)
+;; ============================================================
+
+;; format-tool-schema-hint : tool? -> string?
+;; Format a one-line parameter hint from a tool's JSON schema.
+;; Example: "read(path: string, offset?: integer, limit?: integer)"
+(define (format-tool-schema-hint t)
+  (define schema (tool-schema t))
+  (define props (hash-ref schema 'properties (hasheq)))
+  (define required
+    (for/set ([r (in-list (hash-ref schema 'required '()))])
+      (if (string? r)
+          (string->symbol r)
+          r)))
+  (define param-strs
+    (for/list ([(k v) (in-hash props)])
+      (define key-sym
+        (if (string? k)
+            (string->symbol k)
+            k))
+      (define type-str (hash-ref v 'type "any"))
+      (if (set-member? required key-sym)
+          (format "~a: ~a" key-sym type-str)
+          (format "~a?: ~a" key-sym type-str))))
+  ;; Sort: required first, then optional, alphabetically within each group
+  (define sorted
+    (sort param-strs
+          (lambda (a b)
+            (define a-req? (not (string-contains? a "?")))
+            (define b-req? (not (string-contains? b "?")))
+            (cond
+              [(and a-req? (not b-req?)) #t]
+              [(and (not a-req?) b-req?) #f]
+              [else (string<? a b)]))))
+  (format "~a(~a)" (tool-name t) (string-join sorted ", ")))
 
 ;; ============================================================
 ;; Tool result validation

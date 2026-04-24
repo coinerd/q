@@ -26,6 +26,7 @@
                   register-tool!
                   lookup-tool
                   validate-tool-args
+                  format-tool-schema-hint
                   tool-result?
                   tool-result-content
                   tool-result-details
@@ -209,7 +210,8 @@
   (define tcs (list (tool-call "tc-1" "add" (hasheq 'a 1 'b 2))))
   (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
   (check-true (tool-result-is-error? (car (scheduler-result-results sr))))
-  (check-true (string-contains? (result-text (car (scheduler-result-results sr))) "validation")))
+  (check-true (string-contains? (result-text (car (scheduler-result-results sr)))
+                                "validate-tool-args")))
 
 ;; ============================================================
 ;; 7. Tool exception caught → error result (not crash)
@@ -376,3 +378,96 @@
   (check-equal? (result-text (car results))
                 "post-resilient"
                 "result content should be from tool execution"))
+
+;; ============================================================
+;; v0.19.3 Wave 1: Tool error feedback tests
+;; ============================================================
+
+(test-case "format-tool-schema-hint formats read tool"
+  (define t
+    (make-tool "read"
+               "Read file"
+               (hasheq 'type
+                       "object"
+                       'properties
+                       (hasheq 'path
+                               (hasheq 'type "string")
+                               'offset
+                               (hasheq 'type "integer")
+                               'limit
+                               (hasheq 'type "integer"))
+                       'required
+                       '("path"))
+               (lambda (args ctx) (make-success-result 'ok))))
+  (define hint (format-tool-schema-hint t))
+  (check-true (string-contains? hint "read("))
+  (check-true (string-contains? hint "path: string"))
+  (check-true (string-contains? hint "offset?: integer")))
+
+(test-case "format-tool-schema-hint formats tool with no optional params"
+  (define t
+    (make-tool "add"
+               "Add"
+               (hasheq 'type
+                       "object"
+                       'properties
+                       (hasheq 'a (hasheq 'type "integer") 'b (hasheq 'type "integer"))
+                       'required
+                       '("a" "b"))
+               (lambda (args ctx) (make-success-result 'ok))))
+  (define hint (format-tool-schema-hint t))
+  (check-true (string-contains? hint "a: integer"))
+  (check-true (string-contains? hint "b: integer")))
+
+(test-case "Missing required arg produces actionable error with schema hint"
+  (define reg (make-tool-registry))
+  ;; Register a tool with required param
+  (register-tool!
+   reg
+   (make-tool "read"
+              "Read file"
+              (hasheq 'type
+                      "object"
+                      'properties
+                      (hasheq 'path (hasheq 'type "string") 'offset (hasheq 'type "integer"))
+                      'required
+                      '("path"))
+              (lambda (args ctx) (make-success-result 'ok))))
+  ;; Call with empty args — should get error with 'path' and schema hint
+  (define tc (tool-call "tc-missing" "read" (hasheq)))
+  (define sr (run-tool-batch (list tc) reg))
+  (define results (scheduler-result-results sr))
+  (check-equal? (length results) 1)
+  (define tr (car results))
+  (check-true (tool-result-is-error? tr) "should be error result")
+  (define err-text (result-text tr))
+  (check-true (string-contains? err-text "path")
+              (format "error should mention 'path', got: ~a" err-text))
+  (check-true (string-contains? err-text "required")
+              (format "error should mention 'required', got: ~a" err-text))
+  (check-true (string-contains? err-text "read(")
+              (format "error should include schema hint, got: ~a" err-text)))
+
+(test-case "Wrong type arg produces actionable error with schema hint"
+  (define reg (make-tool-registry))
+  (register-tool! reg
+                  (make-tool "add"
+                             "Add"
+                             (hasheq 'type
+                                     "object"
+                                     'properties
+                                     (hasheq 'a (hasheq 'type "integer") 'b (hasheq 'type "integer"))
+                                     'required
+                                     '("a" "b"))
+                             (lambda (args ctx) (make-success-result 'ok))))
+  ;; Call with wrong type — should get error with type info and schema hint
+  (define tc (tool-call "tc-wrong-type" "add" (hasheq 'a "not-int" 'b 1)))
+  (define sr (run-tool-batch (list tc) reg))
+  (define results (scheduler-result-results sr))
+  (define tr (car results))
+  (check-true (tool-result-is-error? tr))
+  (define err-text (result-text tr))
+  (check-true (string-contains? err-text "expected type")
+              (format "error should mention type mismatch, got: ~a" err-text))
+  (check-true (string-contains? err-text "add(")
+              (format "error should include schema hint, got: ~a" err-text)))
