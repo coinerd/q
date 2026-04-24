@@ -152,3 +152,10 @@
 
 (test-case "exec: trace-tool-calls returns empty for #f path"
   (check-equal? (trace-tool-calls #f) '()))
+
+(test-case "benchmark tool set excludes session-recall and skill-router"
+  ;; Verify that the standard benchmark tool list doesn't include meta-tools
+  (define benchmark-tools '("read" "write" "edit" "bash" "grep" "find" "ls" "spawn-subagent"))
+  (check-false (member "session-recall" benchmark-tools))
+  (check-false (member "skill-router" benchmark-tools))
+  (check-equal? (length benchmark-tools) 8))

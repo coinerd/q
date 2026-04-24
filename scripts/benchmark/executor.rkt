@@ -135,9 +135,10 @@
   (when (directory-exists? project-ext-dir)
     (load-extensions-from-dir! ext-reg project-ext-dir #:event-bus bus))
 
-  ;; Build runtime with default tools
+  ;; Build runtime with selective tools (exclude session-recall, skill-router in benchmark mode)
+  (define benchmark-tools '("read" "write" "edit" "bash" "grep" "find" "ls" "spawn-subagent"))
   (define reg (make-tool-registry))
-  (register-default-tools! reg)
+  (register-default-tools! reg #:only benchmark-tools)
   (define rt
     (sdk:make-runtime #:provider provider
                       #:session-dir (build-path tmp-dir "sessions")
