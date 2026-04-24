@@ -91,7 +91,23 @@ jobs:
           test -f main.rkt && echo "main.rkt found at repo root"
 
       - name: Run tests
-        run: racket scripts/run-tests.rkt
+        run: racket scripts/run-tests.rkt 2>&1 | tee test-output.log
+
+      - name: Test failure summary
+        if: failure()
+        run: |
+          echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-log
+          path: test-output.log
+          retention-days: 7
 
       - name: Coverage report
         if: runner.os == 'Linux'
