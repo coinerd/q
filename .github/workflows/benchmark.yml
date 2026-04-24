@@ -1,0 +1,58 @@
+name: Benchmark Suite
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'LLM Provider to use'
+        required: false
+        default: 'openai'
+        type: choice
+        options:
+          - openai
+          - anthropic
+      task_dir:
+        description: 'Task directory'
+        required: false
+        default: 'scripts/benchmark/tasks'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Bogdanp/setup-racket@v1.11
+        with:
+          version: 8.10
+          distribution: full
+
+      - name: Install dependencies
+        run: |
+          raco pkg install --auto --skip-installed
+
+      - name: Run benchmark suite
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          Q_BENCHMARK_PROVIDER: ${{ github.event.inputs.provider || 'openai' }}
+        run: |
+          racket scripts/run-benchmark.rkt --live --task-dir scripts/benchmark/tasks/ --output-dir traces/ --json --provider $Q_BENCHMARK_PROVIDER
+
+      - name: Upload traces
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-traces-${{ github.ref_name }}
+          path: traces/
+          retention-days: 30
+
+      - name: Benchmark summary
+        if: always()
+        run: |
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          cat traces/latest-summary.md >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No summary available" >> $GITHUB_STEP_SUMMARY
