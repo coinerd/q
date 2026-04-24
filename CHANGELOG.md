@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.19.4 — 2026-04-24
+
+### Self-Hosting Workflow Gaps
+
+- **Fixed**: Extension tools now register correctly (GAP-2) — `register-tools` hook
+  dispatch passes proper `extension-ctx?` to handlers instead of raw `(hasheq)`.
+  All 9 extension register-tools handlers updated to 2-arg signature `(ctx payload)`.
+- **Added**: Subagent children can execute tools (GAP-1) — 7 child-safe tools
+  (read, write, edit, bash, grep, find, ls) registered with recursive tool dispatch
+  loop in `run-subagent-loop`. Tool calls are dispatched via `run-tool-batch`
+  instead of returning `'stopped`.
+- **Added**: Slash command handlers for github-integration (`/milestone`, `/issue`, `/pr`)
+  and racket-tooling (`/fmt`, `/check`, `/expand`) extensions (GAP-3).
+- **Fixed**: Removed phantom `racket-find-files` reference from guardrails skill (M1).
+- **Improved**: GitHub projects skill now prefers extension tools over bash+curl (M2).
+- **Added**: SDK extension wiring integration tests (`test-sdk-extensions.rkt`).
+- **Added**: Spawn-subagent tool dispatch tests (`test-spawn-subagent-tool-dispatch.rkt`).
+- **Added**: Extension tool registration tests (`test-extension-tool-registration.rkt`).
+
 ## v0.19.3 — 2026-04-24
 
 ### Tool Error Feedback & Agent Loop Improvements
