@@ -99,7 +99,7 @@
 ;; Extension definition
 ;; ============================================================
 
-(define (register-remote-tools ctx)
+(define (register-remote-tools ctx _payload)
   (ext-register-tool!
    ctx
    "remote-q"

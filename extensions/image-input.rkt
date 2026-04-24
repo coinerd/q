@@ -74,7 +74,7 @@
             msg))]
     [else (make-error-result (format "Unknown action: ~a" action))]))
 
-(define (register-image-tools ctx)
+(define (register-image-tools ctx _payload)
   (ext-register-tool! ctx
                       "image-input"
                       (string-append "Multi-modal image input. "

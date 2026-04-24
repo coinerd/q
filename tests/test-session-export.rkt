@@ -30,7 +30,7 @@
   (define hook (hash-ref (extension-hooks the-extension) 'register-tools #f))
   (check-not-false hook "register-tools hook exists")
   (when hook
-    (hook ctx))
+    (hook ctx (hasheq)))
   (check-not-false (lookup-tool reg "session-export") "session-export tool registered"))
 
 ;; ============================================================

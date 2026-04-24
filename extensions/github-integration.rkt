@@ -862,7 +862,7 @@
 ;; Registration
 ;; ============================================================
 
-(define (register-github-tools ctx)
+(define (register-github-tools ctx _payload)
   (ext-register-tool!
    ctx
    "gh-issue"

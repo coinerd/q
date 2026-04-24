@@ -210,7 +210,7 @@
 ;; Extension definition
 ;; ============================================================
 
-(define (register-sync-tools ctx)
+(define (register-sync-tools ctx _payload)
   (ext-register-tool!
    ctx
    "q-sync"

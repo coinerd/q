@@ -94,6 +94,7 @@
          ;; dispatches lifecycle hooks (turn-start, tool-call, tool-result,
          ;; turn-end, etc.) so extensions can observe/amend/block each step.
          "../extensions/hooks.rkt"
+         (only-in "../extensions/context.rkt" make-extension-ctx)
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/compactor.rkt"
@@ -265,14 +266,24 @@
   (define base-tools (and reg (list-tools-jsexpr reg)))
 
   ;; #673: Merge extension-provided tools into the tool list
+  ;; v0.19.4 GAP-2 fix: create proper extension-ctx so register-tools handlers
+  ;; can call ext-register-tool! without contract violations.
   (define tools
-    (let ([ext-tools (and ext-reg
-                          (let ()
-                            (define-values (amended hook-res)
-                              (maybe-dispatch-hooks ext-reg 'register-tools (hasheq)))
-                            (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
-                                (hash-ref (hook-result-payload hook-res) 'tools '())
-                                '())))])
+    (let ([ext-tools
+           (and ext-reg
+                (let ()
+                  ;; Build extension-ctx with available session components
+                  (define the-ext-ctx
+                    (make-extension-ctx #:session-id session-id
+                                        #:session-dir #f
+                                        #:event-bus bus
+                                        #:extension-registry ext-reg
+                                        #:tool-registry reg))
+                  (define-values (amended hook-res)
+                    (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))
+                  (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
+                      (hash-ref (hook-result-payload hook-res) 'tools '())
+                      '())))])
       (if (and base-tools (pair? ext-tools))
           (merge-tool-lists base-tools ext-tools)
           base-tools)))
