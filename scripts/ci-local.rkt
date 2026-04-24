@@ -94,7 +94,9 @@
         ;; Group 4: Dependency completeness
         (list "check-deps" "racket scripts/check-deps.rkt")
         ;; Group 5: Security (W6.3)
-        (list "lint-security" "racket scripts/lint-security.rkt")))
+        (list "lint-security" "racket scripts/lint-security.rkt")
+        ;; Group 6: CI readiness — stray files, symlinks, gitignore hygiene
+        (list "lint-ci-readiness" "racket scripts/lint-ci-readiness.rkt")))
 
 (define quick-checks
   (list (list "sync-version (dry-run)" "racket scripts/sync-version.rkt")
