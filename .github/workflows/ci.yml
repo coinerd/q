@@ -81,6 +81,9 @@ jobs:
       - name: Dependency completeness
         run: racket scripts/check-deps.rkt
 
+      - name: CI readiness
+        run: racket scripts/lint-ci-readiness.rkt
+
       - name: Verify project structure
         run: |
           pwd
