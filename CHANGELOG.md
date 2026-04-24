@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.19.1 — 2026-04-24
+
+### Systematic Live Benchmark Suite
+
+- **Live benchmark executor** (`scripts/benchmark/executor.rkt`): Mock and live execution
+  modes using SDK runtime with configurable provider and model
+- **Enhanced task format** (`scripts/benchmark/task.rkt`): JSON task definitions with
+  category, difficulty (1-3★), scoring spec, setup/teardown, and file fixtures
+- **Five-dimension scoring engine** (`scripts/benchmark/scorer.rkt`): Correctness (40%),
+  Tool Discipline (20%), Efficiency (15%), Skill Compliance (15%), No Regressions (10%)
+  with PASS/PARTIAL/FAIL verdicts
+- **Report generator** (`scripts/benchmark/report.rkt`): Human-readable and Markdown
+  output, per-dimension breakdown, comparison between reports
+- **12 benchmark tasks**: 4 implementation, 3 bug-fix, 3 planning/analysis, 2 full-workflow
+  with 7 fixture files containing deliberate bugs
+- **Baseline management** (`scripts/benchmark/baseline.rkt`): Version-pinned baseline
+  capture and loading for regression tracking
+- **Comparison engine** (`scripts/benchmark/compare.rkt`): Regression detection (>10 point
+  drop) and improvement detection (>10 point gain) with human-readable output
+- **CLI runner** (`scripts/run-benchmark.rkt`): `--live`, `--mock`, `--task-dir`, `--output-dir`,
+  `--keep-on-failure`, `--provider`, `--json`, `--summary` flags
+- **CI workflow** (`.github/workflows/benchmark.yml`): Runs on release tags with trace
+  artifact upload and GitHub step summary
+- **Benchmark README** (`scripts/benchmark/README.md`): Usage guide and scoring docs
+- **32 new tests**: 14 task, 21 scorer, 11 report, 5 baseline, 8 comparison
+
 ## v0.19.0 — 2026-04-23
 
 ### Release & Polish
