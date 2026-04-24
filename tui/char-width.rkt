@@ -148,15 +148,65 @@
 ;; ============================================================
 ;; Grapheme cluster utilities (UAX #29)
 ;; ============================================================
-;; Uses Racket's built-in string-grapheme-span for segmentation.
+
+;; Fallback grapheme span for Racket < 8.12 (no string-grapheme-span).
+;; Covers the common cases: base char + combining marks, base + VS16,
+;; flag pairs (regional indicators), and ZWJ sequences.
+;; Returns the codepoint span of the grapheme starting at position i.
+(define (fallback-grapheme-span s i)
+  (define len (string-length s))
+  (cond
+    [(>= i len) 0]
+    [else
+     (define c0 (char->integer (string-ref s i)))
+     (define (combining? j)
+       (and (< j len)
+            (let ([cp (char->integer (string-ref s j))])
+              (or (and (>= cp #x0300) (<= cp #x036F))
+                  (and (>= cp #x1AB0) (<= cp #x1AFF))
+                  (and (>= cp #x1DC0) (<= cp #x1DFF))
+                  (and (>= cp #x20D0) (<= cp #x20FF))
+                  (and (>= cp #xFE20) (<= cp #xFE2F))
+                  (and (>= cp #xFE00) (<= cp #xFE0F))
+                  (and (>= cp #xE0100) (<= cp #xE01EF))
+                  (= cp #x200B)
+                  (= cp #x200C)
+                  (= cp #x200D)
+                  (= cp #x2060)
+                  (= cp #x200E)
+                  (= cp #x200F)))))
+     ;; Regional indicator pair (flag emoji)
+     (define (regional-indicator? cp)
+       (and (>= cp #x1F1E6) (<= cp #x1F1FF)))
+     (let loop ([j (add1 i)])
+       (cond
+         [(>= j len) (- j i)]
+         [(combining? j) (loop (add1 j))]
+         ;; ZWJ followed by another char (emoji ZWJ sequence)
+         [(and (= (char->integer (string-ref s (sub1 j))) #x200D) (< j len)) (loop (add1 j))]
+         ;; Second regional indicator
+         [(and (= (- j i) 1)
+               (regional-indicator? c0)
+               (regional-indicator? (char->integer (string-ref s j))))
+          (loop (add1 j))]
+         [else (- j i)]))]))
+
+;; Use Racket's string-grapheme-span if available (8.12+), else fallback.
+(define grapheme-span-impl
+  (with-handlers ([exn:fail:contract? (lambda (_) #f)])
+    (procedure? string-grapheme-span)))
+
+(define (grapheme-span-at-impl s i)
+  (if (>= i (string-length s))
+      0
+      (if grapheme-span-impl
+          (string-grapheme-span s i)
+          (fallback-grapheme-span s i))))
 
 ;; grapheme-span-at : String Natural → Natural
 ;; Returns the codepoint span of the grapheme cluster starting at position i.
 ;; If i is past the end, returns 0.
-(define (grapheme-span-at s i)
-  (if (>= i (string-length s))
-      0
-      (string-grapheme-span s i)))
+(define grapheme-span-at grapheme-span-at-impl)
 
 ;; grapheme-count : String → Natural
 ;; Returns the number of grapheme clusters in the string.
@@ -166,7 +216,7 @@
     (cond
       [(>= i (string-length s)) count]
       [else
-       (define span (string-grapheme-span s i))
+       (define span (grapheme-span-at-impl s i))
        (loop (+ i span) (+ count 1))])))
 
 ;; Alias
@@ -193,7 +243,7 @@
       [(>= n gc) i]
       [(>= i (string-length s)) (string-length s)]
       [else
-       (define span (string-grapheme-span s i))
+       (define span (grapheme-span-at-impl s i))
        (loop (+ i span) (+ n 1))])))
 
 ;; prev-grapheme-start : String Natural → Natural
@@ -204,7 +254,7 @@
       0
       ;; Walk from beginning to find the grapheme boundary before pos
       (let loop ([i 0])
-        (define span (string-grapheme-span s i))
+        (define span (grapheme-span-at-impl s i))
         (define next (+ i span))
         (cond
           [(>= next pos) i]
@@ -217,7 +267,7 @@
 (define (next-grapheme-start s pos)
   (if (>= pos (string-length s))
       (string-length s)
-      (+ pos (string-grapheme-span s pos))))
+      (+ pos (grapheme-span-at-impl s pos))))
 
 (provide prev-grapheme-start
          next-grapheme-start)

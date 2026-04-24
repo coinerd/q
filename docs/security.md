@@ -1,4 +1,4 @@
-<!-- verified-against: v0.19.4 -->
+<!-- verified-against: v0.19.5 -->
 # Security Considerations
 
 ## API Key Storage
