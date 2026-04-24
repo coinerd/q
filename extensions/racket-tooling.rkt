@@ -876,12 +876,47 @@
   (ext-register-command! ctx "/expand" "Expand a Racket file" 'general '() '("e"))
   (hook-pass ctx))
 
+(define (handle-racket-command payload)
+  (define cmd (hash-ref payload 'command #f))
+  (define input-text (hash-ref payload 'input ""))
+  (cond
+    [(member cmd '("/fmt" "/f"))
+     (hook-amend
+      (hasheq
+       'text
+       (format
+        "Format a Racket file with raco fmt.~a\nUsage: /fmt <path>\n\nUse the racket-check tool with mode='format' for programmatic access."
+        (if (string=? input-text "")
+            ""
+            (format " File: ~a" input-text)))))]
+    [(member cmd '("/check" "/c"))
+     (hook-amend
+      (hasheq
+       'text
+       (format
+        "Compile-check a Racket file.~a\nUsage: /check <path>\n\nUse the racket-check tool with mode='syntax' for programmatic access."
+        (if (string=? input-text "")
+            ""
+            (format " File: ~a" input-text)))))]
+    [(member cmd '("/expand" "/e"))
+     (hook-amend
+      (hasheq
+       'text
+       (format
+        "Expand macros in a Racket file.~a\nUsage: /expand <path>\n\nUse the racket-check tool with mode='expand' for programmatic access."
+        (if (string=? input-text "")
+            ""
+            (format " File: ~a" input-text)))))]
+    [else (hook-pass payload)]))
+
 (define-q-extension racket-tooling-extension
                     #:version "1.0.0"
                     #:api-version "1"
                     #:on register-tools
                     register-racket-tools
                     #:on register-shortcuts
-                    register-racket-commands)
+                    register-racket-commands
+                    #:on execute-command
+                    handle-racket-command)
 
 (define the-extension racket-tooling-extension)
