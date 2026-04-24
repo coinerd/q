@@ -91,7 +91,9 @@
         (list "metrics --lint --lint-prose" "racket scripts/metrics.rkt --lint --lint-prose")
         (list "check-protocols" "racket scripts/check-protocols.rkt")
         (list "check-imports" "racket scripts/check-imports.rkt")
-        ;; Group 4: Security (W6.3)
+        ;; Group 4: Dependency completeness
+        (list "check-deps" "racket scripts/check-deps.rkt")
+        ;; Group 5: Security (W6.3)
         (list "lint-security" "racket scripts/lint-security.rkt")))
 
 (define quick-checks
