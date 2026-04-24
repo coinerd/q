@@ -262,23 +262,18 @@
                    trace-tools))]))
 
 ;; extract-tool-names-from-trace : path? -> (listof string?)
-;; Reads trace JSONL and extracts tool_use event names.
+;; Reads trace JSONL and extracts tool names from q's trace format.
+;; q trace entries have 'phase "tool.call.started" and 'data with 'name field.
 (define (extract-tool-names-from-trace trace-path)
   (define entries
     (with-handlers ([exn:fail? (lambda (e) '())])
       (jsonl-read-all-valid trace-path)))
-  (append*
-   (for/list ([entry (in-list entries)]
-              #:when (hash? entry))
-     (cond
-       ;; Direct tool_use event with 'name' field
-       [(equal? (hash-ref entry 'type #f) "tool_use")
-        (list (hash-ref entry 'name "unknown"))]
-       ;; Assistant message with tool_calls array
-       [(equal? (hash-ref entry 'role #f) "assistant")
-        (for/list ([tc (in-list (hash-ref entry 'tool_calls '()))])
-          (hash-ref (hash-ref tc 'function (hasheq)) 'name "unknown"))]
-       [else '()]))))
+  (filter string?
+          (for/list ([entry (in-list entries)]
+                     #:when (hash? entry)
+                     #:when (equal? (hash-ref entry 'phase #f) "tool.call.started"))
+            (define data (hash-ref entry 'data (hasheq)))
+            (hash-ref data 'name #f))))
 
 ;; ============================================================
 ;; Dimension 3: Efficiency (15%)

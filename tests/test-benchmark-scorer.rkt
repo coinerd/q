@@ -151,9 +151,9 @@
   (define tmp-file (make-temporary-file "bench-trace-~a.jsonl"))
   (call-with-output-file tmp-file
     (lambda (out)
-      (write-json (hasheq 'type "tool_use" 'name "write") out)
+      (write-json (hasheq 'phase "tool.call.started" 'data (hasheq 'name "write")) out)
       (newline out)
-      (write-json (hasheq 'type "tool_use" 'name "read") out)
+      (write-json (hasheq 'phase "tool.call.started" 'data (hasheq 'name "read")) out)
       (newline out))
     #:exists 'replace)
   (define exec (make-test-exec-result #:trace-path tmp-file))
@@ -166,7 +166,7 @@
   (define tmp-file (make-temporary-file "bench-trace-~a.jsonl"))
   (call-with-output-file tmp-file
     (lambda (out)
-      (write-json (hasheq 'type "tool_use" 'name "read") out)
+      (write-json (hasheq 'phase "tool.call.started" 'data (hasheq 'name "read")) out)
       (newline out))
     #:exists 'replace)
   (define exec (make-test-exec-result #:trace-path tmp-file))
@@ -179,9 +179,9 @@
   (define tmp-file (make-temporary-file "bench-trace-~a.jsonl"))
   (call-with-output-file tmp-file
     (lambda (out)
-      (write-json (hasheq 'type "tool_use" 'name "bash") out)
+      (write-json (hasheq 'phase "tool.call.started" 'data (hasheq 'name "bash")) out)
       (newline out)
-      (write-json (hasheq 'type "tool_use" 'name "write") out)
+      (write-json (hasheq 'phase "tool.call.started" 'data (hasheq 'name "write")) out)
       (newline out))
     #:exists 'replace)
   (define exec (make-test-exec-result #:trace-path tmp-file))
