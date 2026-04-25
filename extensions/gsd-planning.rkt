@@ -36,17 +36,18 @@
 ;; Planning preamble prepended to user text when /plan <text> submits.
 ;; Gives the agent explicit GSD planning instructions.
 (define planning-system-prompt
-  (string-append "[gsd-planning] Create a structured implementation plan for the following request.\n"
-                 "Write your plan to .planning/PLAN.md using the planning-write or write tool.\n"
-                 "Plan format:\n"
-                 "  - Goal: what this accomplishes\n"
-                 "  - Scope: files/modules affected\n"
-                 "  - Waves: 1-3 atomic task groups, each with verify commands\n"
-                 "  - Dependencies: what must be done first\n"
-                 "  - Risks: what could go wrong\n"
-                 "Read PLAN.md and STATE.md first if they exist. Limit exploration to 5 tool calls.\n"
-                 "Do NOT implement — only plan.\n\n"
-                 "User request: "))
+  (string-append
+   "[gsd-planning] Create a structured implementation plan for the following request.\n"
+   "Write your plan to .planning/PLAN.md using the planning-write tool.\n"
+   "Plan format:\n"
+   "  - Goal: what this accomplishes\n"
+   "  - Scope: files/modules affected\n"
+   "  - Waves: 1-3 atomic task groups, each with verify commands\n"
+   "  - Dependencies: what must be done first\n"
+   "  - Risks: what could go wrong\n"
+   "Use planning-read to check PLAN and STATE first. Limit exploration to 5 tool calls.\n"
+   "Do NOT implement — only plan.\n\n"
+   "User request: "))
 
 (define artifact-extensions
   '(("PLAN" . ".md") ("STATE" . ".md")
@@ -213,7 +214,7 @@
    planning-read-schema
    handle-planning-read
    #:prompt-guidelines
-   "Use planning-read to check current plan/state before taking action. Always read PLAN.md and STATE.md before implementing waves.")
+   "Use planning-read with artifact='PLAN' or artifact='STATE' to check current plan/state before taking action.")
   (ext-register-tool!
    ctx
    "planning-write"
@@ -222,9 +223,11 @@
                   "For .json artifacts, pass content as JSON string.")
    planning-write-schema
    handle-planning-write
-   #:prompt-guidelines (string-append "Use planning-write to update PLAN.md after completing a wave. "
-                                      "Always update STATE.md with current status. "
-                                      "Write HANDOFF.json before machine switches."))
+   #:prompt-guidelines
+   (string-append
+    "Use planning-write with artifact='PLAN' to update PLAN.md after completing a wave. "
+    "Use artifact='STATE' to update STATE.md with current status. "
+    "Use artifact='HANDOFF' to write HANDOFF.json before machine switches."))
   (hook-pass #f))
 
 (define (register-gsd-commands ctx)
