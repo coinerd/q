@@ -15,7 +15,8 @@
 (provide make-trace-logger
          trace-logger?
          start-trace-logger!
-         stop-trace-logger!)
+         stop-trace-logger!
+         flush-trace-logger!)
 
 ;; ============================================================
 ;; Trace logger struct
@@ -60,6 +61,13 @@
     (when out
       (close-output-port out)
       (set-trace-logger-out-port! logger #f))))
+
+;; T02: Synchronous flush for deterministic testing.
+;; Ensures all buffered trace writes are written to disk.
+(define (flush-trace-logger! logger)
+  (define out (trace-logger-out-port logger))
+  (when out
+    (flush-output out)))
 
 ;; ============================================================
 ;; Event handler

@@ -50,7 +50,7 @@
     ;; Use a non-critical hook point so timeout defaults to 'pass
     (parameterize ([current-hook-timeout-ms 10])
       (define (slow-handler payload)
-        (sleep 1) ; way longer than 10ms
+        (sleep 0.1) ; way longer than 10ms
         (hook-amend "should not reach"))
       (define reg (make-ext-reg-with 'message-end slow-handler))
       (define result (dispatch-hooks 'message-end "original" reg))
@@ -67,7 +67,7 @@
     "E2: critical hook timeout returns block default"
     (parameterize ([current-hook-timeout-ms 10])
       (define (slow-handler payload)
-        (sleep 1)
+        (sleep 0.1)
         (hook-amend "should not reach"))
       ;; 'tool-call is a critical hook
       (define reg (make-ext-reg-with 'tool-call slow-handler))
@@ -82,7 +82,7 @@
     "E3: advisory hook timeout returns pass default"
     (parameterize ([current-hook-timeout-ms 10])
       (define (slow-handler payload)
-        (sleep 1)
+        (sleep 0.1)
         (hook-block "should not reach"))
       ;; 'message-end is advisory
       (define reg (make-ext-reg-with 'message-end slow-handler))

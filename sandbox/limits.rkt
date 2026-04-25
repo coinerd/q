@@ -17,6 +17,7 @@
          current-process-count
          get-process-count
          process-count-box
+         reset-process-count!
          track-process!
          untrack-process!
          current-max-processes)
@@ -67,6 +68,13 @@
                          (define n (max 0 (sub1 (unbox process-count-box))))
                          (set-box! process-count-box n)
                          n)))
+
+;; T09: Reset process count for test isolation.
+;; Only use in test teardown.
+(define (reset-process-count!)
+  (call-with-semaphore process-count-sem
+                       (lambda ()
+                         (set-box! process-count-box 0))))
 
 ;; --------------------------------------------------
 ;; exec-limits struct
