@@ -85,28 +85,34 @@
   (check-false (within-limits? lim #:processes 6)))
 
 (test-case "track-process! increments counter (#452)"
-  ;; Save/restore box state instead of parameterize
+  ;; dynamic-wind for guaranteed restore (TEST-01)
   (define saved (unbox process-count-box))
-  (set-box! process-count-box 0)
-  (track-process!)
-  (check-equal? (get-process-count) 1)
-  (track-process!)
-  (check-equal? (get-process-count) 2)
-  (set-box! process-count-box saved))
+  (dynamic-wind
+    (lambda () (set-box! process-count-box 0))
+    (lambda ()
+      (track-process!)
+      (check-equal? (get-process-count) 1)
+      (track-process!)
+      (check-equal? (get-process-count) 2))
+    (lambda () (set-box! process-count-box saved))))
 
 (test-case "untrack-process! decrements counter (#452)"
   (define saved (unbox process-count-box))
-  (set-box! process-count-box 2)
-  (untrack-process!)
-  (check-equal? (get-process-count) 1)
-  (set-box! process-count-box saved))
+  (dynamic-wind
+    (lambda () (set-box! process-count-box 2))
+    (lambda ()
+      (untrack-process!)
+      (check-equal? (get-process-count) 1))
+    (lambda () (set-box! process-count-box saved))))
 
 (test-case "untrack-process! never goes below zero (#452)"
   (define saved (unbox process-count-box))
-  (set-box! process-count-box 0)
-  (untrack-process!)
-  (check-equal? (get-process-count) 0)
-  (set-box! process-count-box saved))
+  (dynamic-wind
+    (lambda () (set-box! process-count-box 0))
+    (lambda ()
+      (untrack-process!)
+      (check-equal? (get-process-count) 0))
+    (lambda () (set-box! process-count-box saved))))
 
 (test-case "process count over limit fails within-limits?"
   (define lim (exec-limits 10 1000 10000 3))

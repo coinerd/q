@@ -285,7 +285,9 @@
                     seen)]
            [else
             (define parsed
-              (with-handlers ([exn:fail? (lambda (e) #f)])
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (log-warning (format "session-store: ~a" (exn-message e)))
+                                           #f)])
                 (read-json (open-input-string line-text))))
             (define required-fields '(id role kind content timestamp))
             (define missing
@@ -368,7 +370,9 @@
            [(not (jsonl-line-valid? line)) (values valid (+ rmvd 1) seen)]
            [else
             (define parsed
-              (with-handlers ([exn:fail? (lambda (e) #f)])
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (log-warning (format "session-store: ~a" (exn-message e)))
+                                           #f)])
                 (read-json (open-input-string line))))
             (define required-fields '(id role kind content timestamp))
             (define missing
@@ -621,7 +625,9 @@
 (define (read-first-log-entry log-path)
   ;; Read only the first line of a JSONL log file.
   ;; Returns the first message or #f if file is empty/missing.
-  (with-handlers ([exn:fail? (lambda (e) #f)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "session-store: ~a" (exn-message e)))
+                               #f)])
     (call-with-input-file log-path
                           (lambda (in)
                             (define line (read-line in))

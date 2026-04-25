@@ -24,7 +24,6 @@
                        [provider-send (-> provider? model-request? any/c)]
                        [provider-stream (-> provider? model-request? any/c)]
                        [provider-capabilities (-> provider? hash?)]
-                       [provider-count-tokens (-> provider? any/c (or/c #f integer?))]
                        [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
                        [make-mock-provider
                         (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
@@ -144,19 +143,6 @@
                 [(stream) (lambda (req) (stream-result->generator (stream-proc req)))]
                 [(count-tokens) (lambda (req) #f)] ; not supported by default
                 [else (error 'provider "unknown operation: ~a" op)]))))
-
-;; ============================================================
-;; count-tokens protocol method
-;; ============================================================
-
-;; Returns #f for providers that don't support token counting,
-;; or an integer count for providers that do.
-;; provider-count-tokens : provider? any/c -> (or/c #f integer?)
-;; Returns token count for the given request, or #f if the provider
-;; doesn't support counting. Default implementation returns #f.
-(define (provider-count-tokens p req)
-  (define count-proc ((provider-dispatch p) 'count-tokens))
-  (count-proc req))
 
 ;; ============================================================
 ;; Mock provider (for testing)

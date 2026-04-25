@@ -66,3 +66,36 @@
   (check-false (tool-result-is-error? result))
   (check-equal? (hash-ref (tool-result-details result) 'total-lines) 3)
   (delete-file tmp))
+
+;; ============================================================
+;; TEST-02: Additional coverage — path traversal, symlink, large file
+;; ============================================================
+
+(test-case "tool-read: path traversal returns error"
+  (define result (tool-read (hasheq 'path "../../etc/passwd")))
+  (check-pred tool-result-is-error? result))
+
+(test-case "tool-read: symlink resolves correctly"
+  (define tmp (make-temporary-file "q-test-symlink-~a.txt"))
+  (display-to-file "symlink-target-content" tmp #:exists 'replace)
+  (define link-path (make-temporary-file "q-test-link-~a.txt"))
+  (delete-file link-path)
+  (make-file-or-directory-link tmp link-path)
+  (define result (tool-read (hasheq 'path link-path)))
+  (check-false (tool-result-is-error? result))
+  (check-true (string-contains? (car (tool-result-content result)) "symlink-target-content"))
+  (delete-file link-path)
+  (delete-file tmp))
+
+(test-case "tool-read: large file (1000+ lines) works"
+  (define tmp (make-temporary-file "q-test-large-~a.txt"))
+  (define lines (for/list ([i (in-range 1200)]) (format "line ~a" i)))
+  (display-to-file (string-join lines "\n") tmp #:exists 'replace)
+  (define result (tool-read (hasheq 'path tmp)))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (hash-ref (tool-result-details result) 'total-lines) 1200)
+  (delete-file tmp))
+
+(test-case "tool-read: missing path arg returns error"
+  (define result (tool-read (hasheq)))
+  (check-pred tool-result-is-error? result))
