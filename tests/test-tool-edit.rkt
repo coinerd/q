@@ -128,3 +128,72 @@
   (define t (lookup-tool reg "edit"))
   (check-not-false t)
   (check-true (string-contains? (tool-description t) "verbatim")))
+
+;; ============================================================
+;; tool-edit — v0.19.10 safeguards
+;; ============================================================
+
+(test-case "tool-edit: rejects old-text longer than 500 chars"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file (make-string 600 #\x) tmp #:exists 'replace)
+  (define long-old-text (make-string 501 #\x))
+  (define result (tool-edit (hasheq 'path tmp 'old-text long-old-text 'new-text "y")))
+  (check-pred tool-result-is-error? result)
+  (define msg (hash-ref (car (tool-result-content result)) 'text))
+  (check-true (string-contains? msg "too long"))
+  (check-true (string-contains? msg "500"))
+  (check-true (string-contains? msg "Break your edit"))
+  ;; File must not be modified
+  (check-equal? (file->string tmp) (make-string 600 #\x))
+  (delete-file tmp))
+
+(test-case "tool-edit: accepts old-text at exactly 500 chars"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (define content (string-append (make-string 500 #\a) "suffix"))
+  (display-to-file content tmp #:exists 'replace)
+  (define result (tool-edit (hasheq 'path tmp 'old-text (make-string 500 #\a) 'new-text "REPLACED")))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (file->string tmp) "REPLACEDsuffix")
+  (delete-file tmp))
+
+(test-case "tool-edit: creates backup before successful edit"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "original content here" tmp #:exists 'replace)
+  (define result (tool-edit (hasheq 'path tmp 'old-text "original" 'new-text "modified")))
+  (check-false (tool-result-is-error? result))
+  ;; Check backup was saved and details include backup path
+  (define details (tool-result-details result))
+  (check-true (hash-has-key? details 'backup))
+  (define backup-path (hash-ref details 'backup))
+  (when (and (string? backup-path) (non-empty-string? backup-path))
+    (check-true (file-exists? backup-path) "backup file should exist")
+    (check-equal? (file->string backup-path) "original content here")
+    (delete-file backup-path))
+  (delete-file tmp))
+
+(test-case "tool-edit: line-count integrity passes for normal edit"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "line1\nline2\nline3" tmp #:exists 'replace)
+  ;; Replace one line — delta should be 0 (same number of lines)
+  (define result (tool-edit (hasheq 'path tmp 'old-text "line2" 'new-text "LINE2")))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (file->string tmp) "line1\nLINE2\nline3")
+  (delete-file tmp))
+
+(test-case "tool-edit: line-count integrity passes when adding lines"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "line1\nline2" tmp #:exists 'replace)
+  ;; Replace single line with two lines — expected delta = +1
+  (define result (tool-edit (hasheq 'path tmp 'old-text "line1" 'new-text "line1a\nline1b")))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (file->string tmp) "line1a\nline1b\nline2")
+  (delete-file tmp))
+
+(test-case "tool-edit: prompt-guidelines mention safeguards"
+  (define reg (make-tool-registry))
+  (register-default-tools! reg)
+  (define t (lookup-tool reg "edit"))
+  (check-not-false t)
+  (define guidelines (tool-prompt-guidelines t))
+  ;; v0.19.10: guidelines should mention the 500-char limit
+  (check-true (string-contains? guidelines "500") "should mention 500-char limit"))
