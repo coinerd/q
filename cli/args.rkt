@@ -34,7 +34,7 @@
          session-id ; string or #f
          prompt ; string or #f
          model ; string or #f
-         mode ; symbol: 'interactive | 'single | 'json | 'rpc | 'tui
+         mode ; symbol: 'interactive | 'single | 'json | 'rpc | 'tui | 'print
          project-dir ; path-string or #f
          config-path ; path-string or #f
          verbose? ; boolean
@@ -45,12 +45,13 @@
          sessions-subcommand ; symbol: 'list | 'info | 'delete | 'verify | #f
          sessions-args ; list of string (subcommand args)
          keybindings-path ; path-string or #f — custom keybindings file (#1118)
+         print-mode? ; boolean — -p/--print flag (G9.3)
          )
   #:transparent)
 
 ;; Helper: construct a "help" config (used for parse errors and --help)
 (define (make-help-config)
-  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f))
+  (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
 
 ;; ============================================================
 ;; Flag definition table (QUAL-12)
@@ -104,7 +105,8 @@
                      (no-tools? . #f)
                      (tools . ())
                      (session-dir . #f)
-                     (keybindings-path . #f)))
+                     (keybindings-path . #f)
+                     (print-mode? . #f)))
 
 ;; Construct a cli-config from an accumulator alist.
 (define (acc->cli-config acc)
@@ -126,6 +128,7 @@
         [(eq? m 'json) 'json]
         [(eq? m 'rpc) 'rpc]
         [(eq? m 'tui) 'tui]
+        [(eq? m 'print) 'print]
         [(eq? final-command 'prompt) 'single]
         [else 'interactive])))
   (cli-config final-command
@@ -142,7 +145,8 @@
               (acc-ref acc 'session-dir)
               #f ; sessions-subcommand
               '() ; sessions-args
-              (acc-ref acc 'keybindings-path)))
+              (acc-ref acc 'keybindings-path)
+              (acc-ref acc 'print-mode?)))
 
 ;; ============================================================
 ;; Flag table — all option definitions
@@ -264,7 +268,15 @@
                   'string
                   "Path to custom keybindings JSON file"
                   #f
-                  (lambda (val acc) (acc-set acc 'keybindings-path val)))))
+                  (lambda (val acc) (acc-set acc 'keybindings-path val)))
+        ;; -p / --print — plain-text stdout output (G9.3)
+        (flag-def "print"
+                  #\p
+                  "print"
+                  'boolean
+                  "Print mode: run once, output plain text to stdout"
+                  #f
+                  (lambda (val acc) (acc-set (acc-set acc 'print-mode? #t) 'mode 'print)))))
 
 ;; Build lookup tables for fast matching
 (define long-flag-table
@@ -327,7 +339,7 @@
        (cond
          [(eq? result 'help) (make-help-config)]
          [(eq? result 'version)
-          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f)]
+          (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f)]
          [else (loop (add1 i) result)]))]
     [(or (eq? t 'string) (eq? t 'integer) (eq? t 'accumulate))
      (if (< (add1 i) n)
@@ -366,7 +378,22 @@
            (if sub-sym
                (let ([rest (for/list ([j (in-range (+ i 2) n)])
                              (vector-ref vec j))])
-                 (cli-config 'sessions #f #f #f 'interactive #f #f #f 10 #f '() #f sub-sym rest #f))
+                 (cli-config 'sessions
+                             #f
+                             #f
+                             #f
+                             'interactive
+                             #f
+                             #f
+                             #f
+                             10
+                             #f
+                             '()
+                             #f
+                             sub-sym
+                             rest
+                             #f
+                             #f))
                (make-help-config)))
          (make-help-config))]
     ;; "verify-session" top-level command — q verify-session <path> [--repair]
@@ -389,6 +416,7 @@
                        #f
                        'verify
                        (cons path-arg rest-args)
+                       #f
                        #f))
          (make-help-config))]
     ;; Default: treat as prompt
@@ -420,6 +448,8 @@
     (hash-set! base 'session-id (cli-config-session-id cfg)))
   (when (cli-config-session-dir cfg)
     (hash-set! base 'session-dir (cli-config-session-dir cfg)))
+  (when (cli-config-print-mode? cfg)
+    (hash-set! base 'print-mode #t))
   base)
 
 ;; ============================================================

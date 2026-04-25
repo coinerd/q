@@ -36,7 +36,8 @@
                   run-single-shot
                   run-resume
                   run-json
-                  run-rpc))
+                  run-rpc
+                  run-print-mode))
 
 ;; Main entry
 (provide main
@@ -94,7 +95,8 @@
          run-single-shot
          run-resume
          run-json
-         run-rpc)
+         run-rpc
+         run-print-mode)
 
 ;; ============================================================
 ;; main — entry point
@@ -129,6 +131,9 @@
     [(single)
      (define rt-config (build-runtime-from-cli cfg))
      (run-single-shot cfg rt-config)]
+    [(print)
+     (define rt-config (build-runtime-from-cli cfg))
+     (run-print-mode cfg rt-config)]
     [(json)
      (define rt-config (build-runtime-from-cli cfg))
      (run-json cfg rt-config)]

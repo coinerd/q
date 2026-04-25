@@ -9,6 +9,7 @@
 ;;   - Re-exports all mode runners from run-interactive.rkt and run-json-rpc.rkt
 
 (require racket/file
+         racket/string
          "../interfaces/cli.rkt"
          (only-in "../runtime/agent-session.rkt"
                   make-agent-session
@@ -37,7 +38,14 @@
          (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
          (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
-         (only-in "../runtime/project-tree.rkt" project-tree->string))
+         (only-in "../runtime/project-tree.rkt" project-tree->string)
+         (only-in "../util/protocol-types.rkt"
+                  event-ev
+                  event-payload
+                  message-role
+                  message-content
+                  text-part?
+                  text-part-text))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -54,7 +62,9 @@
          run-resume
          ;; Re-exported from run-json-rpc.rkt
          run-json
-         run-rpc)
+         run-rpc
+         ;; G9.3: print mode
+         run-print-mode)
 
 ;; ============================================================
 ;; build-runtime-from-cli
@@ -258,3 +268,35 @@
   (current-model-timeouts model-timeouts)
   (current-http-request-timeout (http-request-timeout new-settings))
   new-reg)
+
+;; ============================================================
+;; run-print-mode (G9.3)
+;; ============================================================
+
+;; Run a single-shot prompt and print plain-text assistant response to stdout.
+;; No streaming, no TUI, no interactivity. Designed for piping/automation.
+(define (run-print-mode cfg rt-config)
+  (define prompt (cli-config-prompt cfg))
+  (unless prompt
+    (displayln "Error: -p/--print requires a prompt argument." (current-error-port))
+    (exit 1))
+  (define sess (make-agent-session rt-config))
+  ;; Subscribe a collector that accumulates assistant text deltas
+  (define accumulated-text (box ""))
+  (define (print-subscriber evt)
+    (define ev (event-ev evt))
+    (cond
+      [(equal? ev "model.stream.delta")
+       (define delta (hash-ref (event-payload evt) 'delta ""))
+       (when (> (string-length delta) 0)
+         (set-box! accumulated-text (string-append (unbox accumulated-text) delta)))]
+      [else (void)]))
+  (define bus (hash-ref rt-config 'event-bus))
+  (subscribe! bus print-subscriber)
+  ;; Run the prompt
+  (with-handlers ([exn:fail? (lambda (e)
+                               (displayln (exn-message e) (current-error-port))
+                               (exit 1))])
+    (run-prompt! sess prompt))
+  ;; Output plain text
+  (displayln (unbox accumulated-text)))

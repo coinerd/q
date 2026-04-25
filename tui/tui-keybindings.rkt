@@ -63,7 +63,9 @@
          input-insert-string
          ;; ── Keybindings config (#1117) ──
          reload-keymap!
-         current-keybindings-path)
+         current-keybindings-path
+         ;; ── Inline bash expansion (G3.3) ──
+         input-expand-last-prompt)
 
 ;; ============================================================
 ;; TUI context
@@ -299,6 +301,9 @@
      (when text
        (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text)))
      'handled]
+    [(tui.editor.expand-file-ref expand-file-ref)
+     (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
+     'handled]
     [(tui.editor.select-all select-all) #f] ;; Complex — let hardcoded handle
     [(tui.navigation.scroll-up scroll-up)
      (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 1))
@@ -367,6 +372,10 @@
        [(#\backspace #\rubout)
         (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
         'continue]
+       [(#\tab)
+        ;; Tab — expand @ file reference at cursor (G3.2)
+        (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
+        'continue]
        [(#\u001b) 'continue]
        [else
         ;; Regular printable character
@@ -414,6 +423,10 @@
         'continue]
        [(end kp-end)
         (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
+        'continue]
+       [(tab)
+        ;; Tab — expand @ file reference at cursor (G3.2)
+        (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
         'continue]
        [(escape) 'continue]
        ;; Undo/Redo
@@ -618,3 +631,11 @@
 
 (provide handle-tree-overlay-key
          update-tree-overlay!)
+
+;; ============================================================
+;; Inline bash expansion helper (G3.3)
+;; ============================================================
+
+;; Convenience wrapper: expand !! in text using the last prompt from ctx.
+(define (input-expand-last-prompt text ctx)
+  (expand-inline-bash text (unbox (tui-ctx-last-prompt-box ctx))))

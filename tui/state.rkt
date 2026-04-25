@@ -8,7 +8,8 @@
 (require racket/string
          racket/list
          json
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         "../util/cost-tracker.rkt")
 
 ;; Structs
 (provide (struct-out transcript-entry)
@@ -146,6 +147,7 @@
          focused-component ; (or/c #f symbol?) — id of component with focus
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
+         cost-tracker ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
          )
   #:transparent)
 
@@ -276,6 +278,7 @@
             #f ; focused-component
             #f ; editor-component
             #f ; context-tokens
+            (make-cost-tracker) ; cost-tracker
             ))
 
 ;; ============================================================
@@ -603,7 +606,14 @@
      (struct-copy ui-state state [streaming-thinking new-thinking] [busy? #t])]
 
     ;; BUG-34 fix: model.stream.completed clears streaming text
+    ;; G8.4: also update cost tracker with usage data
     [("model.stream.completed")
+     (define usage (hash-ref payload 'usage (hasheq)))
+     (define in-tok (hash-ref usage 'prompt_tokens (hash-ref usage 'input_tokens 0)))
+     (define out-tok (hash-ref usage 'completion_tokens (hash-ref usage 'output_tokens 0)))
+     (define ct (ui-state-cost-tracker state))
+     (when ct
+       (cost-tracker-update! ct in-tok out-tok (ui-model-label state)))
      (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])]
 
     [else state])) ;; Ignore unknown events
