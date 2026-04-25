@@ -5,7 +5,8 @@
          (only-in "../../util/path-helpers.rkt" path-only expand-home-path)
          (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
          (only-in "../../util/safe-mode-predicates.rkt"
-                  safe-mode? allowed-path? safe-mode-project-root))
+                  safe-mode? allowed-path? safe-mode-project-root)
+         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
 
 (provide tool-write
          current-max-write-bytes
@@ -38,7 +39,8 @@
     [else
      (define content-str (hash-ref args 'content ""))
      (with-handlers ([exn:fail:filesystem?
-                      (lambda (e) (make-error-result (format "Write error: ~a" (exn-message e))))]
+                      (lambda (e) (make-error-result (sanitize-error-message
+                                                         (format "Write error: ~a" (exn-message e)))))]
                      [tool-error?
                       (lambda (e) (make-error-result (exn-message e)))])
        ;; SEC-03: Enforce per-write max-write-bytes limit

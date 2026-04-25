@@ -20,7 +20,8 @@
                   safe-mode?
                   allowed-path?
                   safe-mode-project-root)
-         (only-in "../../util/path-helpers.rkt" expand-home-path))
+         (only-in "../../util/path-helpers.rkt" expand-home-path)
+         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
 
 (provide tool-edit)
 
@@ -38,7 +39,9 @@
 (define (ensure-backup-dir)
   (define dir (build-path (find-system-path 'home-dir) ".q" "edit-backups"))
   (unless (directory-exists? dir)
-    (make-directory* dir))
+    (make-directory* dir)
+    ;; SEC-D: Restrict backup dir to owner only (0700)
+    (file-or-directory-permissions dir #o700))
   dir)
 
 (define (save-backup path-str content)
@@ -252,8 +255,9 @@
                        ;; Write new content
                        (with-handlers ([exn:fail:filesystem?
                                         (lambda (e)
-                                          (make-error-result (format "Write error: ~a"
-                                                                     (exn-message e))))])
+                                          (make-error-result (sanitize-error-message
+                                                               (format "Write error: ~a"
+                                                                       (exn-message e)))))])
                          (call-with-output-file path-str
                                                 (lambda (out) (display new-content out))
                                                 #:exists 'replace)

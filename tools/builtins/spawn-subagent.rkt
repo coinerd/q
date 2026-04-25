@@ -34,6 +34,7 @@
                   tool-result-is-error?)
          (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          (only-in "../../util/json-helpers.rkt" ensure-hash-args)
+         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/scheduler.rkt"
          ;; Individual builtins for child-safe tool registration (no circular dep)
          (only-in "../builtins/read.rkt" tool-read)
@@ -195,7 +196,8 @@
 (define (run-subagent args role-prompt max-turns allowed-tools exec-ctx)
   (define task (hash-ref args 'task))
   (with-handlers ([exn:fail? (lambda (e)
-                               (make-error-result (format "subagent failed: ~a" (exn-message e))))])
+                               (make-error-result (sanitize-error-message
+                                                   (format "subagent failed: ~a" (exn-message e)))))])
     ;; #1204: Resolve real provider from parent's runtime-settings
     (define provider (resolve-provider exec-ctx))
     (define model-name (resolve-model-name exec-ctx args))
