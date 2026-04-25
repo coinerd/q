@@ -63,8 +63,8 @@ jobs:
       - name: Format lint
         run: racket scripts/lint-format.rkt
 
-      - name: Lint metrics consistency
-        run: racket scripts/metrics.rkt --lint
+      - name: Sync and lint metrics
+        run: racket scripts/metrics.rkt --sync-all && racket scripts/metrics.rkt --lint
 
       - name: Lint prose metrics consistency
         run: racket scripts/metrics.rkt --lint-prose
