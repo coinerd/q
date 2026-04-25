@@ -15,6 +15,7 @@
          racket/list
          racket/file
          racket/path
+         racket/set
          "state.rkt"
          "render.rkt"
          "terminal.rkt"
@@ -255,34 +256,61 @@
 
 (define (handle-tree-command cctx)
   (define state (unbox (cmd-ctx-state-box cctx)))
-  (define idx (get-session-index cctx))
+  ;; If tree overlay already active, dismiss it (toggle)
+  (define ov (ui-state-active-overlay state))
   (cond
-    [(not idx)
-     (define entry (make-entry 'error "No session index available" 0 (hash)))
-     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+    [(and ov (eq? (overlay-state-type ov) 'tree-browser))
+     (set-box! (cmd-ctx-state-box cctx) (dismiss-overlay state))
+     (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
      'continue]
     [else
-     (define entries (session-index-entry-order idx))
-     (if (zero? (vector-length entries))
-         (let ([entry (make-entry 'system "Session is empty." 0 (hash))])
-           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-           'continue)
-         (let ()
-           (define msgs (vector->list entries))
-           (define nodes (build-tree-nodes msgs))
-           (define active-leaf-id (let ([leaf (active-leaf idx)]) (and leaf (message-id leaf))))
-           (define-values (cols rows) (tui-screen-size))
-           (define lines (render-session-tree nodes active-leaf-id cols))
-           (define header (make-entry 'system "Session tree:" 0 (hash)))
-           (define tree-entries
-             (for/list ([line (in-list lines)])
-               (make-entry 'system line 0 (hash))))
-           (define all-entries (cons header tree-entries))
-           (define new-state
-             (for/fold ([s state]) ([e (in-list all-entries)])
-               (add-transcript-entry s e)))
-           (set-box! (cmd-ctx-state-box cctx) new-state)
-           'continue))]))
+     (define idx (get-session-index cctx))
+     (cond
+       [(not idx)
+        (define entry (make-entry 'error "No session index available" 0 (hash)))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        'continue]
+       [else
+        (define entries (session-index-entry-order idx))
+        (if (zero? (vector-length entries))
+            (let ([entry (make-entry 'system "Session is empty." 0 (hash))])
+              (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+              'continue)
+            (let ()
+              (define msgs (vector->list entries))
+              (define nodes (build-tree-nodes msgs))
+              (define active-leaf-id (let ([leaf (active-leaf idx)]) (and leaf (message-id leaf))))
+              (define-values (cols rows) (tui-screen-size))
+              ;; Build interactive tree overlay
+              (define rendered (render-session-tree nodes active-leaf-id cols))
+              (define styled-lines
+                (for/list ([line (in-list rendered)]
+                           [i (in-naturals)])
+                  (if (= i 0)
+                      (list (cons (format "► ~a" line) '()))
+                      (list (cons (format "  ~a" line) '())))))
+              (define tbs (tree-browser-state nodes 0 (set) rendered))
+              (define header-line
+                (list (cons "Session Tree (↑↓ navigate, Enter/f fold, q/Esc close)" '((bold)))))
+              (define all-styled (append (list header-line) styled-lines))
+              (define new-state
+                (show-overlay state
+                              'tree-browser
+                              all-styled
+                              ""
+                              #:anchor 'top-left
+                              #:width cols
+                              #:height (min (add1 (length rendered)) (- rows 4))
+                              #:margin 1))
+              ;; Store tree-browser-state in overlay extra
+              (define new-ov (ui-state-active-overlay new-state))
+              (define final-state
+                (struct-copy ui-state
+                             new-state
+                             [active-overlay (struct-copy overlay-state new-ov [extra tbs])]))
+              (set-box! (cmd-ctx-state-box cctx) final-state)
+              (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
+              'continue))])]))
 
 ;; ============================================================
 ;; /name command handler

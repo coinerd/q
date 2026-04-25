@@ -15,6 +15,7 @@
          (struct-out ui-state)
          (struct-out branch-info)
          (struct-out overlay-state)
+         (struct-out tree-browser-state)
 
          ;; Constructors
          initial-ui-state
@@ -157,6 +158,15 @@
          width ; (or/c integer? #f) — explicit width override
          height ; (or/c integer? #f) — explicit height override
          margin ; integer — margin around overlay (default 0)
+         extra)
+  #:transparent)
+
+;; Tree browser state for interactive tree navigation
+(struct tree-browser-state
+        (nodes ; (listof (list id parent-id role text timestamp)) — flat entry list
+         selected-idx ; integer — currently selected node index in rendered lines
+         folded-set ; set? — set of node IDs that are collapsed
+         rendered-lines ; (listof string) — cached rendered lines
          )
   #:transparent)
 
@@ -759,7 +769,8 @@
                                (overlay-config-anchor config)
                                (overlay-config-width-spec config)
                                (overlay-config-height-spec config)
-                               (overlay-config-margin config))]))
+                               (overlay-config-margin config)
+                               #f)]))
 
 ;; Compute overlay bounds from overlay-state and terminal dimensions.
 ;; Returns (values x y w h) — position and size of overlay.
@@ -805,7 +816,7 @@
   ;; Show an overlay with the given type, content lines, input, and positioning
   (struct-copy ui-state
                state
-               [active-overlay (overlay-state type content input anchor width height margin)]))
+               [active-overlay (overlay-state type content input anchor width height margin #f)]))
 
 (define (update-overlay-input state input)
   ;; Update the overlay input text (e.g., as user types in palette)
