@@ -6,14 +6,15 @@
 ;; to eliminate duplication (QUAL-02).
 
 (require racket/list
+         racket/path
          racket/string)
 
-(provide ;; Path utility
- path-only
- expand-home-path
- ;; Byte helpers
- contains-null-bytes?
- bytes->display-lines)
+;; Path utility
+(provide path-only
+         expand-home-path
+         ;; Byte helpers
+         contains-null-bytes?
+         bytes->display-lines)
 
 ;; Extract directory portion of a path string.
 ;; Returns #f when the path has no directory component (i.e. is relative/simple).
@@ -29,8 +30,7 @@
   (define text (bytes->string/utf-8 raw-bytes #\?))
   (define all-lines (string-split text "\n" #:trim? #f))
   (define has-trailing-newline
-    (and (> (string-length text) 0)
-         (char=? (string-ref text (sub1 (string-length text))) #\newline)))
+    (and (> (string-length text) 0) (char=? (string-ref text (sub1 (string-length text))) #\newline)))
   (define display-lines
     (if has-trailing-newline
         (drop-right all-lines 1)
@@ -46,12 +46,10 @@
 ;; This is needed because Racket's file-exists?, directory-exists?, etc.
 ;; do NOT expand ~ — they treat it as a literal directory name.
 (define (expand-home-path path-str)
-  (if (and (string? path-str)
-           (> (string-length path-str) 0)
-           (char=? (string-ref path-str 0) #\~))
+  (if (and (string? path-str) (> (string-length path-str) 0) (char=? (string-ref path-str 0) #\~))
       (let ([home (find-system-path 'home-dir)])
-        (if (and (> (string-length path-str) 1)
-                 (char=? (string-ref path-str 1) #\/))
-            (string-append (path->string home) (substring path-str 1))
+        (if (and (> (string-length path-str) 1) (char=? (string-ref path-str 1) #\/))
+            (path->string (simplify-path (string->path (string-append (path->string home)
+                                                                      (substring path-str 1)))))
             (path->string home)))
       path-str))
