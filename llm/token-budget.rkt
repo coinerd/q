@@ -7,7 +7,8 @@
 ;; English text with modern tokenizers.
 
 (require racket/contract
-         racket/string)
+         racket/string
+         (only-in "../util/protocol-types.rkt" message? message-content text-part? text-part-text))
 
 (provide estimate-context-tokens
          estimate-turn-tokens
@@ -82,16 +83,24 @@
                           [else CHARS-PER-TOKEN])])
              (quotient (string-length text) ratio)))))
 
-;; Extract text from a single message hash
+;; Extract text from a single message (hash or message struct)
 (define (extract-message-text msg)
-  (define content (hash-ref msg 'content ""))
   (cond
-    [(string? content) content]
-    [(list? content)
-     ;; Content parts: extract text from parts with 'text key
-     (string-append* (for/list ([part (in-list content)]
-                                #:when (hash? part))
-                       (hash-ref part 'text "")))]
+    [(message? msg)
+     ;; message struct: content is (listof content-part)
+     (define parts (message-content msg))
+     (string-append* (for/list ([part (in-list parts)]
+                                #:when (text-part? part))
+                       (text-part-text part)))]
+    [(hash? msg)
+     (define content (hash-ref msg 'content ""))
+     (cond
+       [(string? content) content]
+       [(list? content)
+        (string-append* (for/list ([part (in-list content)]
+                                   #:when (hash? part))
+                          (hash-ref part 'text "")))]
+       [else ""])]
     [else ""]))
 
 (define (estimate-context-tokens messages)
