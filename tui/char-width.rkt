@@ -192,15 +192,16 @@
          [else (- j i)]))]))
 
 ;; Use Racket's string-grapheme-span if available (8.12+), else fallback.
+;; dynamic-require avoids compile-time unbound identifier on Racket < 8.12
 (define grapheme-span-impl
-  (with-handlers ([exn:fail:contract? (lambda (_) #f)])
-    (procedure? string-grapheme-span)))
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (dynamic-require 'racket/string 'string-grapheme-span)))
 
 (define (grapheme-span-at-impl s i)
   (if (>= i (string-length s))
       0
       (if grapheme-span-impl
-          (string-grapheme-span s i)
+          (grapheme-span-impl s i)
           (fallback-grapheme-span s i))))
 
 ;; grapheme-span-at : String Natural → Natural
