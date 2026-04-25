@@ -125,7 +125,9 @@
         #rx"(?i:TOKEN)"
         #rx"(?i:PASSWORD)"
         #rx"(?i:CREDENTIAL)"
-        #rx"(?i:AUTH)"))
+        #rx"(?i:AUTH)"
+        #rx"(?i:GH_PAT)"
+        #rx"(?i:_PAT$)"))
 
 (define (secret-env-var? name)
   (define name-str

@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; runtime/model-defaults.rkt — centralised model name / base URL constants
+;; llm/model-defaults.rkt — centralised model name / base URL constants
 ;;
 ;; Q-12: Extracted from individual LLM provider modules so that
 ;;       version bumps and model name changes are made in one place.

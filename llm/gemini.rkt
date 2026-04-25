@@ -12,7 +12,7 @@
 
 (require racket/contract
          racket/string
-         (only-in "../runtime/model-defaults.rkt" GEMINI-DEFAULT-MODEL GEMINI-DEFAULT-BASE-URL)
+         (only-in "model-defaults.rkt" GEMINI-DEFAULT-MODEL GEMINI-DEFAULT-BASE-URL)
          racket/port
          racket/format
          racket/generator
@@ -42,7 +42,7 @@
 ;; Constants
 ;; ============================================================
 
-;; model defaults now in runtime/model-defaults.rkt
+;; model defaults in llm/model-defaults.rkt
 (define GEMINI-DEFAULT-MAX-TOKENS 4096)
 
 ;; Per-request tool call ID counter (Issue #200)

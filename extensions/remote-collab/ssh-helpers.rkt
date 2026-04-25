@@ -10,11 +10,22 @@
 
 (provide ssh-execute
          ssh-execute-with-output
-         default-ssh-options)
+         default-ssh-options
+         ssh-strict-mode)
+
+(define ssh-strict-mode (make-parameter 'accept-new))
 
 ;; Default SSH options for non-interactive execution
+;; Uses 'accept-new' by default (first connection auto-accepts, verifies on subsequent).
+;; Override with (ssh-strict-mode 'no) only if you understand the MITM risk.
 (define (default-ssh-options)
-  '("-o" "StrictHostKeyChecking=no" "-o" "ConnectTimeout=10" "-o" "BatchMode=yes"))
+  (list*
+   "-o"
+   (case (ssh-strict-mode)
+     [(no) "StrictHostKeyChecking=no"]
+     [(accept-new) "StrictHostKeyChecking=accept-new"]
+     [(yes) "StrictHostKeyChecking=yes"])
+   '("-o" "UserKnownHostsFile ~/.ssh/known_hosts" "-o" "ConnectTimeout=10" "-o" "BatchMode=yes")))
 
 ;; Execute a command on a remote host via SSH.
 ;; Returns (values exit-code stdout-string stderr-string)

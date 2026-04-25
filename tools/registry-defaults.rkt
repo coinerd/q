@@ -3,8 +3,9 @@
 ;; tools/registry-defaults.rkt — Register built-in tools into a tool registry
 ;;
 ;; Extracted from main.rkt. Contains register-default-tools! which
-;; registers all 11 built-in tools (read, write, edit, bash, grep,
-;; find, ls, date, firecrawl, spawn-subagent, session_recall) into the given registry.
+;; registers all 13 built-in tools (read, write, edit, bash, grep,
+;; find, ls, date, firecrawl, spawn-subagent, spawn-subagents,
+;; session_recall, skill-route) into the given registry.
 
 (require "tool.rkt"
          "builtins/read.rkt"

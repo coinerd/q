@@ -13,7 +13,7 @@
 ;; #1195: Additional LLM Provider Adapters
 
 (require racket/contract
-         (only-in "../runtime/model-defaults.rkt" OPENAI-DEFAULT-MODEL)
+         (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
          racket/generator
          racket/port

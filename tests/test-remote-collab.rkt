@@ -82,7 +82,9 @@
 (test-case "default-ssh-options includes StrictHostKeyChecking"
   (define opts (default-ssh-options))
   (define opts-str (string-join opts " "))
-  (check-true (string-contains? opts-str "StrictHostKeyChecking=no")))
+  (check-true (string-contains? opts-str "StrictHostKeyChecking=accept-new"))
+  ;; Verify not using insecure 'no' by default
+  (check-false (string-contains? opts-str "StrictHostKeyChecking=no")))
 
 (test-case "default-ssh-options includes BatchMode"
   (define opts (default-ssh-options))
