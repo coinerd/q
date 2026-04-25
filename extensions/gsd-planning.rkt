@@ -25,7 +25,8 @@
          read-planning-artifact
          write-planning-artifact!
          handle-planning-read
-         handle-planning-write)
+         handle-planning-write
+         planning-implement-prompt)
 
 ;; ============================================================
 ;; Constants
@@ -245,14 +246,20 @@
   (hook-pass #f))
 
 (define planning-implement-prompt
-  (string-append
-   "[gsd-planning] Execute the implementation plan in .planning/PLAN.md.\n"
-   "1. Use planning-read with artifact='PLAN' to read the full plan.\n"
-   "2. Use planning-read with artifact='STATE' to check current progress.\n"
-   "3. Start with the first uncompleted wave. Implement each task.\n"
-   "4. After completing a wave, use planning-write with artifact='STATE' to update progress.\n"
-   "5. Run verify commands listed in the plan after each wave.\n"
-   "Work through all waves. Update STATE.md after each wave completes.\n\n"))
+  (string-append "[gsd-planning] EXECUTE the plan below. IMPLEMENT NOW — do NOT explore.\n"
+                 "\n"
+                 "CRITICAL RULES:\n"
+                 "1. Do NOT re-read the plan. It is provided below in full.\n"
+                 "2. Do NOT write a new plan. Execute the existing one.\n"
+                 "3. Do NOT use planning-read or planning-write during implementation.\n"
+                 "4. Do NOT run read-only tools (read, find, grep, ls) unless a wave's\n"
+                 "   old-text match fails and you need to re-read the target file ONCE.\n"
+                 "5. Use the edit or write tool for EVERY wave. Your budget is:\n"
+                 "   - Max 2 read-only tool calls per wave before you MUST write/edit.\n"
+                 "   - After 5 total read-only calls across all waves, STOP and summarize.\n"
+                 "6. After completing each wave, run its verify command.\n"
+                 "\n"
+                 "The plan follows. Start implementing immediately.\n\n"))
 
 (define (register-gsd-commands ctx)
   (ext-register-command! ctx "/plan" "Display current GSD plan" 'general '() '("p"))
