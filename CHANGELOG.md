@@ -1,6 +1,41 @@
 # Changelog
 
-## v0.19.4 — 2026-04-24
+## v0.19.6 — 2026-04-25
+
+### Project Review Remediation (55 findings across 6 axes)
+
+**W0 — Critical Quick Fixes**
+- **Fixed**: Moved `runtime/model-defaults.rkt` → `llm/model-defaults.rkt` (upward import fix)
+- **Fixed**: README tool count corrected 10→13, status block updated
+- **Fixed**: SSH `StrictHostKeyChecking=no` replaced with `accept-new` + configurable `ssh-strict-mode`
+- **Fixed**: `GH_PAT` and `_PAT$` patterns added to secret sanitization
+
+**W1 — Architecture Remediation**
+- **Added**: `extensions/ui-surface.rkt` — parameter-based callback layer for UI decoupling
+- **Removed**: `util/package-audit.rkt` re-export shell (ARCH-03)
+- **Removed**: `agent/types.rkt` deprecated facade — all importers migrated to `util/protocol-types.rkt`
+
+**W2 — Security Hardening**
+- **Added**: `validate-base-url` and `safe-base-url` in model-registry (SSRF prevention)
+- **Added**: `valid-ssh-host?` in ssh-helpers (shell injection prevention)
+- **Added**: Cumulative write budget (50MB default) in write tool
+
+**W3 — Code Quality**
+- **Added**: `with-logged-catch` and `with-cleanup` macros in `util/errors.rkt`
+- **Extracted**: `extensions/github/helpers.rkt` from monolithic `github-integration.rkt`
+
+**W4 — Test Health**
+- **Added**: `flush-trace-logger!` — eliminates timing-dependent trace tests
+- **Added**: `tests/test-frontmatter.rkt` — 8 skill frontmatter tests
+- **Added**: `tests/test-iteration-edge-cases.rkt` — 9 edge-case tests
+- **Added**: `tests/helpers/temp-fs.rkt` — temp file/directory test macros
+- **Added**: `reset-process-count!` for test isolation in sandbox/limits
+
+**W5 — Documentation Refresh**
+- **Fixed**: README metrics updated to current values
+- **Updated**: All verified-against markers to v0.19.6
+
+## v0.19.5 — 2026-04-25
 
 ### Self-Hosting Workflow Gaps
 
