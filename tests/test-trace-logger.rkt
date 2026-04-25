@@ -39,7 +39,7 @@
   (start-trace-logger! logger)
   ;; Publish a test event
   (publish! bus (make-event "test.event" (current-seconds) "sess-1" #f (hasheq 'key "value")))
-  (sleep 0.1) ; allow async write
+  (flush-trace-logger! logger) ; allow async write
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check >= (length entries) 1 "should have at least one trace entry")
@@ -56,7 +56,7 @@
   (publish! bus (make-event "evt.1" (current-seconds) "s1" #f (hasheq)))
   (publish! bus (make-event "evt.2" (current-seconds) "s1" #f (hasheq)))
   (publish! bus (make-event "evt.3" (current-seconds) "s1" #f (hasheq)))
-  (sleep 0.1)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check >= (length entries) 3)
@@ -72,7 +72,7 @@
   (define logger (make-trace-logger bus dir #:enabled? #t))
   (start-trace-logger! logger)
   (publish! bus (make-event "test.ts" (current-seconds) "s1" #f (hasheq)))
-  (sleep 0.1)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check >= (length entries) 1)
@@ -88,7 +88,7 @@
   (define logger (make-trace-logger bus dir #:enabled? #f))
   (start-trace-logger! logger)
   (publish! bus (make-event "test.disabled" (current-seconds) "s1" #f (hasheq)))
-  (sleep 0.1)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define trace-path (build-path dir "trace.jsonl"))
   (check-false (file-exists? trace-path) "disabled logger should not create file")
@@ -102,7 +102,7 @@
   (publish!
    bus
    (make-event "tool.call.started" (current-seconds) "s1" #f (hasheq 'tool "write" 'arguments '())))
-  (sleep 0.1)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check >= (length entries) 1)
@@ -126,7 +126,7 @@
   (publish!
    bus
    (make-event "outer.event" (current-seconds) "s1" #f (hasheq 'nested inner-evt 'plain "text")))
-  (sleep 0.1)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check >= (length entries) 1)
@@ -146,7 +146,7 @@
   (start-trace-logger! logger)
   (for ([i (in-range 100)])
     (publish! bus (make-event (format "rapid.~a" i) (current-seconds) "s1" #f (hasheq 'i i))))
-  (sleep 0.5) ; allow all writes to flush
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check-equal? (length entries) 100 "all 100 events should produce valid JSON")
@@ -161,7 +161,7 @@
   (publish!
    bus
    (make-event "test.procedure" (current-seconds) "s1" #f (hasheq 'fn (lambda (x) x) 'valid "yes")))
-  (sleep 0.1)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check >= (length entries) 1)
@@ -184,7 +184,7 @@
     (publish!
      bus
      (make-event (format "stress.~a" i) (current-seconds) "s1" #f (hasheq 'nested inner-evt 'idx i))))
-  (sleep 0.5)
+  (flush-trace-logger! logger)
   (stop-trace-logger! logger)
   (define entries (read-trace-jsonl dir))
   (check-equal? (length entries) 20 "all 20 events with nested structs should be logged")
