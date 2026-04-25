@@ -46,7 +46,8 @@
    "  - Dependencies: what must be done first\n"
    "  - Risks: what could go wrong\n"
    "Use planning-read to check PLAN and STATE first. Limit exploration to 5 tool calls.\n"
-   "Do NOT implement — only plan.\n\n"
+   "Do NOT implement — only plan.\n"
+   "End by telling the user: 'Use /go to start implementing.'\n\n"
    "User request: "))
 
 (define artifact-extensions
@@ -230,49 +231,94 @@
     "Use artifact='HANDOFF' to write HANDOFF.json before machine switches."))
   (hook-pass #f))
 
+(define planning-implement-prompt
+  (string-append
+   "[gsd-planning] Execute the implementation plan in .planning/PLAN.md.\n"
+   "1. Use planning-read with artifact='PLAN' to read the full plan.\n"
+   "2. Use planning-read with artifact='STATE' to check current progress.\n"
+   "3. Start with the first uncompleted wave. Implement each task.\n"
+   "4. After completing a wave, use planning-write with artifact='STATE' to update progress.\n"
+   "5. Run verify commands listed in the plan after each wave.\n"
+   "Work through all waves. Update STATE.md after each wave completes.\n\n"))
+
 (define (register-gsd-commands ctx)
   (ext-register-command! ctx "/plan" "Display current GSD plan" 'general '() '("p"))
   (ext-register-command! ctx "/state" "Display current project state" 'general '() '("s"))
   (ext-register-command! ctx "/handoff" "Display handoff status" 'general '() '("ho"))
+  (ext-register-command! ctx
+                         "/go"
+                         "Start implementing the current plan"
+                         'general
+                         '()
+                         '("implement" "i"))
   (hook-pass #f))
 
-;; Execute command handler: responds to /plan, /state, /handoff dispatch
+;; Execute command handler: responds to /plan, /state, /handoff, /go dispatch
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
   (define base-dir (current-directory))
-  (define artifact
-    (cond
-      [(member cmd '("/plan" "/p")) "PLAN"]
-      [(member cmd '("/state" "/s")) "STATE"]
-      [(member cmd '("/handoff" "/ho")) "HANDOFF"]
-      [else #f]))
   (cond
-    [(not artifact) (hook-pass payload)]
-    [else
+    ;; /go, /implement, /i → start implementing the plan
+    [(member cmd '("/go" "/implement" "/i"))
+     (define plan-content (read-planning-artifact base-dir "PLAN"))
      (cond
-       ;; /plan <text> and /p <text> → submit as prompt to the agent
-       [(and (member cmd '("/plan" "/p"))
-             (let* ([trimmed (string-trim input-text)]
-                    [parts (and (> (string-length trimmed) 0)
-                                (char=? (string-ref trimmed 0) #\/)
-                                (string-split trimmed))])
-               (and (pair? parts)
-                    (let ([rest (string-trim (substring input-text (string-length (car parts))))])
-                      (and (> (string-length rest) 0) rest)))))
-        =>
-        (lambda (args)
-          (define augmented-text (string-append planning-system-prompt args))
-          (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" args))))]
+       [(not plan-content)
+        (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
        [else
-        ;; Display artifact content (always for /state, /handoff; no-args /plan)
-        (define content (read-planning-artifact base-dir artifact))
-        (define text
-          (cond
-            [(not content) (format "No ~a found in .planning/" artifact)]
-            [(hash? content) (jsexpr->string content)]
-            [else content]))
-        (hook-amend (hasheq 'text text))])]))
+        (define state-content (read-planning-artifact base-dir "STATE"))
+        (define state-note
+          (if state-content
+              (format "\nCurrent state:\n~a\n" state-content)
+              ""))
+        (define wave-arg
+          (let* ([trimmed (string-trim input-text)]
+                 ;; Input might be "/go wave 2" or "/go 2"
+                 [parts (string-split trimmed)])
+            (if (>= (length parts) 2)
+                (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
+                  (if (and (> (string-length maybe-num) 0) (regexp-match? #rx"^[0-9]+$" maybe-num))
+                      (format "\nStart with wave ~a." maybe-num)
+                      ""))
+                "")))
+        (define augmented-text
+          (string-append planning-implement-prompt "Plan:\n" plan-content "\n" state-note wave-arg))
+        (hook-amend
+         (hasheq 'submit augmented-text 'text (format "Implementing plan~a..." wave-arg)))])]
+    ;; Artifact display commands
+    [else
+     (define artifact
+       (cond
+         [(member cmd '("/plan" "/p")) "PLAN"]
+         [(member cmd '("/state" "/s")) "STATE"]
+         [(member cmd '("/handoff" "/ho")) "HANDOFF"]
+         [else #f]))
+     (cond
+       [(not artifact) (hook-pass payload)]
+       [else
+        (cond
+          ;; /plan <text> and /p <text> → submit as prompt to the agent
+          [(and (member cmd '("/plan" "/p"))
+                (let* ([trimmed (string-trim input-text)]
+                       [parts (and (> (string-length trimmed) 0)
+                                   (char=? (string-ref trimmed 0) #\/)
+                                   (string-split trimmed))])
+                  (and (pair? parts)
+                       (let ([rest (string-trim (substring input-text (string-length (car parts))))])
+                         (and (> (string-length rest) 0) rest)))))
+           =>
+           (lambda (args)
+             (define augmented-text (string-append planning-system-prompt args))
+             (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" args))))]
+          [else
+           ;; Display artifact content (always for /state, /handoff; no-args /plan)
+           (define content (read-planning-artifact base-dir artifact))
+           (define text
+             (cond
+               [(not content) (format "No ~a found in .planning/" artifact)]
+               [(hash? content) (jsexpr->string content)]
+               [else content]))
+           (hook-amend (hasheq 'text text))])])]))
 
 (define-q-extension gsd-planning-extension
                     #:version "1.0.0"

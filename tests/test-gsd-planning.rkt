@@ -465,3 +465,79 @@
        ;; No submit key — /handoff always displays
        (check-false (hash-ref payload 'submit #f))
        (check-true (string-contains? (hash-ref payload 'text) "local"))))))
+
+;; ============================================================
+;; /go command tests
+;; ============================================================
+
+(test-case "/go reports error when no plan exists"
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/go" 'input "/go")))
+                     (check-equal? (hook-result-action result) 'amend)
+                     (define payload (hook-result-payload result))
+                     (check-false (hash-ref payload 'submit #f) "no submit without plan")
+                     (check-true (string-contains? (hash-ref payload 'text) "No PLAN found"))))))
+
+(test-case "/go submits implementation prompt with plan content"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                              (lambda (out) (display "# Plan\n## Wave 0\n- Fix bug" out))
+                              #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/go" 'input "/go")))
+       (check-equal? (hook-result-action result) 'amend)
+       (define payload (hook-result-payload result))
+       (define submit-text (hash-ref payload 'submit))
+       (check-true (string-contains? submit-text "[gsd-planning]"))
+       (check-true (string-contains? submit-text "planning-read"))
+       (check-true (string-contains? submit-text "Wave 0"))
+       (check-true (string-contains? (hash-ref payload 'text) "Implementing"))))))
+
+(test-case "/go includes state when available"
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     (make-directory* (build-path dir ".planning"))
+                     (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                                            (lambda (out) (display "# Plan\nWave 0" out))
+                                            #:exists 'truncate)
+                     (call-with-output-file (build-path dir ".planning" "STATE.md")
+                                            (lambda (out) (display "W0: done" out))
+                                            #:exists 'truncate)
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/go" 'input "/go")))
+                     (define submit-text (hash-ref (hook-result-payload result) 'submit))
+                     (check-true (string-contains? submit-text "W0: done"))))))
+
+(test-case "/go N starts at specified wave"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                              (lambda (out) (display "# Plan\nWave 0\nWave 1\nWave 2" out))
+                              #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/go" 'input "/go 2")))
+       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (check-true (string-contains? submit-text "wave 2"))))))
+
+(test-case "/implement alias works"
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     (make-directory* (build-path dir ".planning"))
+                     (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                                            (lambda (out) (display "# Plan\nWave 0" out))
+                                            #:exists 'truncate)
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/implement" 'input "/implement")))
+                     (check-equal? (hook-result-action result) 'amend)
+                     (define submit-text (hash-ref (hook-result-payload result) 'submit))
+                     (check-true (string-contains? submit-text "[gsd-planning]"))))))
