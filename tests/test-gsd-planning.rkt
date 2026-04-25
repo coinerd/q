@@ -514,9 +514,28 @@
        (define payload (hook-result-payload result))
        (define submit-text (hash-ref payload 'submit))
        (check-true (string-contains? submit-text "[gsd-planning]"))
-       (check-true (string-contains? submit-text "planning-read"))
+       (check-true (string-contains? submit-text "IMPLEMENT NOW"))
        (check-true (string-contains? submit-text "Wave 0"))
        (check-true (string-contains? (hash-ref payload 'text) "Implementing"))))))
+
+;; ============================================================
+;; W1 (#1867): /go anti-exploration tests
+;; ============================================================
+
+(test-case "planning-implement-prompt forbids re-reading the plan"
+  (check-true (string-contains? planning-implement-prompt "Do NOT re-read the plan")))
+
+(test-case "planning-implement-prompt forbids writing a new plan"
+  (check-true (string-contains? planning-implement-prompt "Do NOT write a new plan")))
+
+(test-case "planning-implement-prompt forbids planning-read during implementation"
+  (check-true (string-contains? planning-implement-prompt "Do NOT use planning-read")))
+
+(test-case "planning-implement-prompt sets read-only budget per wave"
+  (check-true (string-contains? planning-implement-prompt "Max 2 read-only tool calls per wave")))
+
+(test-case "planning-implement-prompt does NOT tell agent to use planning-read"
+  (check-false (string-contains? planning-implement-prompt "Use planning-read")))
 
 (test-case "/go includes state when available"
   (with-temp-dir (lambda (dir)
