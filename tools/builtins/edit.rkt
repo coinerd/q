@@ -6,9 +6,15 @@
 ;;   tool-edit : (hash [exec-ctx]) -> tool-result?
 ;;   Arguments: path (string), old-text (string), new-text (string)
 ;;   Returns:  tool-result with success or error details
+;;
+;; Safeguards (v0.19.10):
+;;   - old-text length limit (500 chars) to reduce blast radius
+;;   - post-edit line-count delta check with auto-revert on corruption
+;;   - pre-edit backup save to ~/.q/edit-backups/
 
 (require racket/file
          racket/string
+         (only-in racket/list last drop)
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/safe-mode-predicates.rkt"
                   safe-mode?
@@ -17,6 +23,62 @@
          (only-in "../../util/path-helpers.rkt" expand-home-path))
 
 (provide tool-edit)
+
+;; --------------------------------------------------
+;; Constants
+;; --------------------------------------------------
+
+(define MAX-OLD-TEXT-LEN 500)
+(define MAX-BACKUPS-PER-FILE 10)
+
+;; --------------------------------------------------
+;; Backup helpers
+;; --------------------------------------------------
+
+(define (ensure-backup-dir)
+  (define dir (build-path (find-system-path 'home-dir) ".q" "edit-backups"))
+  (unless (directory-exists? dir)
+    (make-directory* dir))
+  dir)
+
+(define (save-backup path-str content)
+  (with-handlers ([exn:fail? (lambda (e) #f)])
+    (define dir (ensure-backup-dir))
+    (define basename (file-name-from-path path-str))
+    (define timestamp (format "~a" (inexact->exact (current-inexact-milliseconds))))
+    (define backup-name (format "~a_~a" timestamp basename))
+    (define backup-path (build-path dir backup-name))
+    (display-to-file content backup-path #:exists 'replace)
+    ;; Prune old backups for this basename
+    (prune-old-backups dir basename)
+    (path->string backup-path)))
+
+(define (file-name-from-path p)
+  (define fname
+    (if (string? p)
+        p
+        (path->string p)))
+  (define parts (regexp-split #rx"/" fname))
+  (if (null? parts)
+      "unknown"
+      (last parts)))
+
+(define (prune-old-backups dir basename)
+  (with-handlers ([exn:fail? (lambda (e) (void))])
+    (define all (directory-list dir))
+    (define matching
+      (filter (lambda (f) (string-contains? (path->string f) basename))
+              (sort (map path->string all) string>?)))
+    (when (> (length matching) MAX-BACKUPS-PER-FILE)
+      (for ([f (in-list (drop matching MAX-BACKUPS-PER-FILE))])
+        (delete-file (build-path dir f))))))
+
+;; --------------------------------------------------
+;; Line-count helper
+;; --------------------------------------------------
+
+(define (line-count s)
+  (length (string-split s "\n" #:trim? #f)))
 
 ;; --------------------------------------------------
 ;; String helpers
@@ -137,36 +199,73 @@
               ;; Read file content
               (define content (file->string path-str))
 
-              ;; Check for ambiguity (multiple matches)
-              (define occurrences (count-occurrences content old-text))
-
+              ;; W0.1: Old-text length limit
               (cond
-                [(zero? occurrences)
-                 (make-error-result (make-not-found-error path-str old-text content))]
-
-                [(> occurrences 1)
+                [(> (string-length old-text) MAX-OLD-TEXT-LEN)
                  (make-error-result
-                  (format "old-text appears ~a times in ~a; be more specific" occurrences path-str))]
+                  (format
+                   "old-text is too long (~a chars, max ~a). Break your edit into smaller pieces — each edit should change ≤20 lines."
+                   (string-length old-text)
+                   MAX-OLD-TEXT-LEN))]
 
                 [else
-                 ;; Perform replacement
-                 (define new-content (regexp-replace (regexp-quote old-text) content new-text))
+                 ;; Check for ambiguity (multiple matches)
+                 (define occurrences (count-occurrences content old-text))
 
-                 ;; Write back
-                 (with-handlers ([exn:fail:filesystem?
-                                  (lambda (e)
-                                    (make-error-result (format "Write error: ~a" (exn-message e))))])
-                   (call-with-output-file path-str
-                                          (lambda (out) (display new-content out))
-                                          #:exists 'replace)
+                 (cond
+                   [(zero? occurrences)
+                    (make-error-result (make-not-found-error path-str old-text content))]
 
-                   (make-success-result
-                    (list (format "Edited ~a (replaced ~a occurrence)" path-str occurrences))
-                    (hasheq 'path
-                            path-str
-                            'replacements
-                            1
-                            'old-length
-                            (string-length old-text)
-                            'new-length
-                            (string-length new-text))))])])])])]))
+                   [(> occurrences 1)
+                    (make-error-result (format "old-text appears ~a times in ~a; be more specific"
+                                               occurrences
+                                               path-str))]
+
+                   [else
+                    ;; W0.3: Save backup before edit
+                    (define backup-path (save-backup path-str content))
+
+                    ;; Perform replacement
+                    (define new-content (regexp-replace (regexp-quote old-text) content new-text))
+
+                    ;; W0.2: Post-edit line-count integrity check
+                    (define expected-delta (- (line-count new-text) (line-count old-text)))
+                    (define actual-delta (- (line-count new-content) (line-count content)))
+                    (define delta-diff (abs (- actual-delta expected-delta)))
+
+                    (cond
+                      [(> delta-diff 2)
+                       ;; Auto-revert: write back original content
+                       (with-handlers ([exn:fail? (lambda (e) (void))])
+                         (display-to-file content path-str #:exists 'replace))
+                       (make-error-result
+                        (format
+                         (string-append "Edit reverted: line count changed unexpectedly "
+                                        "(expected ~a lines delta, got ~a). "
+                                        "The file may have been modified since your last read. "
+                                        "Re-read the file and try a smaller edit.")
+                         expected-delta
+                         actual-delta))]
+
+                      [else
+                       ;; Write new content
+                       (with-handlers ([exn:fail:filesystem?
+                                        (lambda (e)
+                                          (make-error-result (format "Write error: ~a"
+                                                                     (exn-message e))))])
+                         (call-with-output-file path-str
+                                                (lambda (out) (display new-content out))
+                                                #:exists 'replace)
+
+                         (make-success-result
+                          (list (format "Edited ~a (replaced ~a occurrence)" path-str occurrences))
+                          (hasheq 'path
+                                  path-str
+                                  'replacements
+                                  1
+                                  'old-length
+                                  (string-length old-text)
+                                  'new-length
+                                  (string-length new-text)
+                                  'backup
+                                  (or backup-path ""))))])])])])])])]))

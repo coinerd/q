@@ -87,8 +87,11 @@
         (hasheq 'type "string" 'description "Replacement text")))
       tool-edit
       #:prompt-guidelines
-      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior
-read tool result. If edit fails, re-read the file first.")))
+      (string-append
+       "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior "
+       "read tool result. If edit fails, re-read the file first. "
+       "Keep old-text short — ideally under 500 chars (~20 lines). "
+       "If you need to change a large block, split into multiple smaller edits."))))
   (when (should-register? "bash")
     (register-tool!
      registry
