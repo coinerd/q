@@ -37,14 +37,14 @@
 ;; Gives the agent explicit GSD planning instructions.
 (define planning-system-prompt
   (string-append "[gsd-planning] Create a structured implementation plan for the following request.\n"
-                 "Write your plan to .planning/PLAN.md using the planning-write tool.\n"
+                 "Write your plan to .planning/PLAN.md using the planning-write or write tool.\n"
                  "Plan format:\n"
                  "  - Goal: what this accomplishes\n"
                  "  - Scope: files/modules affected\n"
                  "  - Waves: 1-3 atomic task groups, each with verify commands\n"
                  "  - Dependencies: what must be done first\n"
                  "  - Risks: what could go wrong\n"
-                 "First explore the codebase to understand the current state, then write the plan.\n"
+                 "Read PLAN.md and STATE.md first if they exist. Limit exploration to 5 tool calls.\n"
                  "Do NOT implement — only plan.\n\n"
                  "User request: "))
 
