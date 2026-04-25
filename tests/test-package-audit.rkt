@@ -14,8 +14,11 @@
 ;; Helpers: create temporary package directories
 ;; ============================================================
 
-(define (make-tmp-dir)
-  (make-temporary-directory "q-audit-test-~a"))
+(define make-tmp-dir
+  (with-handlers ([exn:fail? (lambda (_)
+                                 (lambda (fmt)
+                                   (make-temporary-file fmt 'directory)))])
+    (dynamic-require 'racket/file 'make-temporary-directory)))
 
 (define (write-qpm-json! dir
                           #:name [name "test-pkg"]
