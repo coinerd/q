@@ -175,6 +175,18 @@
 
 ## v0.19.5 — 2026-04-25
 
+### CI Tooling & Test Guard Improvements
+
+- **Added**: CI log preservation — failure summary + test log artifact on CI failure (#1767)
+- **Added**: CI readiness lint — stray file, symlink, and gitignore hygiene checks (#1764)
+- **Fixed**: Replaced hardcoded tool counts with range checks in tests (#1761)
+- **Added**: CI-aware test guards — shared `ci-detection` helper, out-of-repo lint (#1758)
+- **Added**: `check-deps.rkt` for dependency completeness verification (#1755)
+- **Added**: Version + metrics lint in pre-commit hook (#1752)
+- **Fixed**: Pipeline test fixture fixes, metrics sync, CI lint failures
+
+## v0.19.4 — 2026-04-25
+
 ### Self-Hosting Workflow Gaps
 
 - **Fixed**: Extension tools now register correctly (GAP-2) — `register-tools` hook
@@ -191,6 +203,20 @@
 - **Added**: SDK extension wiring integration tests (`test-sdk-extensions.rkt`).
 - **Added**: Spawn-subagent tool dispatch tests (`test-spawn-subagent-tool-dispatch.rkt`).
 - **Added**: Extension tool registration tests (`test-extension-tool-registration.rkt`).
+
+## v0.19.11 — 2026-04-25
+
+### Budget Counter & Steering Resilience (4 commits)
+
+- **Added**: Budget counter — explore-vs-implement tracking in iteration loop
+  (`steering.budget`, `steering.budget-soft`, `steering.budget-hard` events)
+- **Added**: Error-wrapped steering injection — steering messages wrapped in
+  structured error context for robust delivery
+- **Added**: `/go` prompt hardening — implement-only directives, anti-exploration
+  budget, no re-reading plan during execution
+- **Added**: `/plan` prompt hardening — actionable plans with root causes,
+  `old-text` snippets, line numbers for precise implementation
+- **Fixed**: `make-text-part` arity mismatch in intent-without-action steering
 
 ## v0.19.3 — 2026-04-24
 

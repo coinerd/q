@@ -1,4 +1,4 @@
-<!-- verified-against: 0.19.11 -->
+<!-- verified-against: 0.20.0 -->
 # Security & Trust Model
 
 This document provides an honest, per-area assessment of what q enforces
@@ -24,7 +24,6 @@ Safe mode activates when **any** of the following is true:
 
 | Method | Example |
 |--------|---------|
-| CLI flag | `q --safe` |
 | Environment variable | `Q_SAFE_MODE=1` |
 | Config file | `"safe-mode": true` in `~/.q/config.json` |
 
@@ -68,8 +67,8 @@ API keys for LLM providers are resolved through a **pluggable backend
 system** (`q/runtime/credential-backend.rkt`) with the following
 priority chain:
 
-1. **Environment variables** — e.g. `Q_OPENAI_API_KEY`,
-   `Q_ANTHROPIC_API_KEY`, `Q_GEMINI_API_KEY` (read-only)
+1. **Environment variables** — e.g. `OPENAI_API_KEY`,
+   `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (read-only)
 2. **OS keychain** — `secret-tool` (Linux/libsecret) or `security`
    (macOS Keychain) — encrypted at rest
 3. **Credential file** — `~/.q/credentials.json` (dedicated storage)
