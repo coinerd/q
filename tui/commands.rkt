@@ -590,6 +590,45 @@
                  (hash)))))
 
 ;; ============================================================
+;; /reload command — hot-reload extensions
+;; ============================================================
+
+(define (handle-reload-command cctx)
+  (define state (unbox (cmd-ctx-state-box cctx)))
+  (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
+  (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
+  (cond
+    [(not ext-reg)
+     (define entry (make-entry 'error "[no extension registry available]" 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
+    [else
+     ;; Discover extension directories: global + project-local
+     (define q-home (build-path (find-system-path 'home-dir) ".q"))
+     (define project-dir (current-directory))
+     (define global-ext-dir (build-path q-home "extensions"))
+     (define local-ext-dir (build-path project-dir ".q" "extensions"))
+     (define ext-paths (filter directory-exists? (list global-ext-dir local-ext-dir)))
+     (cond
+       [(null? ext-paths)
+        (define entry (make-entry 'system "[no extension directories found]" 0 (hash)))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        'continue]
+       [else
+        (define loaded-names (reload-extensions! ext-reg ext-paths))
+        (define n (length loaded-names))
+        (define msg
+          (if (zero? n)
+              "[reload complete: no extensions loaded]"
+              (format "[reload complete: ~a extension~a reloaded (~a)]"
+                      n
+                      (if (= n 1) "" "s")
+                      (string-join loaded-names ", "))))
+        (define entry (make-entry 'system msg 0 (hash)))
+        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+        'continue])]))
+
+;; ============================================================
 ;; /deactivate command — extension removal
 ;; ============================================================
 
@@ -792,6 +831,7 @@
         'continue]
        [(activate) (handle-activate-command cctx)]
        [(deactivate) (handle-deactivate-command cctx)]
+       [(reload) (handle-reload-command cctx)]
        [(quit)
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]

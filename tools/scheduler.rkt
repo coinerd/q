@@ -34,6 +34,7 @@
                   validate-tool-result
                   exec-context?
                   exec-context-event-publisher
+                  exec-context-permission-config
                   tool-call
                   tool-call?
                   make-tool-call
@@ -46,7 +47,8 @@
                   allowed-tool?
                   allowed-path?
                   safe-mode-project-root)
-         (only-in "file-mutation-queue.rkt" with-file-mutation-queue))
+         (only-in "file-mutation-queue.rkt" with-file-mutation-queue)
+         (only-in "permission-gate.rkt" permission-config? tool-needs-approval? request-approval))
 
 ;; ── Result struct ──
 (provide (struct-out scheduler-result)
@@ -225,42 +227,50 @@
                  tc))
            tc))
 
-     ;; Execute the tool (with file mutation queue for write tools)
-     (define file-mutating-tools '("write" "edit"))
-     (define exec-result
-       (with-handlers ([exn:fail? (lambda (e)
-                                    (make-error-result
-                                     (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
-         (define args (tool-call-arguments tc-to-execute))
-         (define path-arg
-           (and (member tc-name file-mutating-tools) (hash? args) (hash-ref args 'path #f)))
-         (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx)))))
-
-     ;; Dispatch 'tool-result-post hook
-     (define post-payload (hasheq 'tool-name tc-name 'result exec-result 'entry-id tc-id))
-
-     (define post-hook-result
-       (if hook-dispatcher
-           (with-handlers ([exn:fail? (lambda (e)
-                                        (log-warning "tool-result-post hook threw: ~a"
-                                                     (exn-message e))
-                                        #f)])
-             (hook-dispatcher 'tool-result-post post-payload))
-           #f))
-
+     ;; G3.4: Permission gate — check if tool needs approval
+     (define perm-cfg (exec-context-permission-config exec-ctx))
      (cond
-       [(and (hook-result? post-hook-result) (eq? (hook-result-action post-hook-result) 'block))
-        ;; Treat block as error
-        (make-error-result (format "tool '~a' result blocked by tool-result-post hook" tc-name))]
-       [(and (hook-result? post-hook-result)
-             (eq? (hook-result-action post-hook-result) 'amend)
-             (hash? (hook-result-payload post-hook-result))
-             (hash-has-key? (hook-result-payload post-hook-result) 'result))
-        ;; Validate post-hook amended result is a valid tool-result
-        (let ([amended-result (hash-ref (hook-result-payload post-hook-result) 'result)])
-          (if (validate-tool-result amended-result) amended-result exec-result))]
-       ;; Return original result
-       [else exec-result])]))
+       [(and (permission-config? perm-cfg)
+             (tool-needs-approval? perm-cfg tc-name)
+             (not (request-approval perm-cfg tc-name (tool-call-arguments tc-to-execute))))
+        (make-error-result (format "tool '~a' blocked — approval denied" tc-name))]
+       [else
+        ;; Execute the tool (with file mutation queue for write tools)
+        (define file-mutating-tools '("write" "edit"))
+        (define exec-result
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (make-error-result
+                                        (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
+            (define args (tool-call-arguments tc-to-execute))
+            (define path-arg
+              (and (member tc-name file-mutating-tools) (hash? args) (hash-ref args 'path #f)))
+            (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx)))))
+
+        ;; Dispatch 'tool-result-post hook
+        (define post-payload (hasheq 'tool-name tc-name 'result exec-result 'entry-id tc-id))
+
+        (define post-hook-result
+          (if hook-dispatcher
+              (with-handlers ([exn:fail? (lambda (e)
+                                           (log-warning "tool-result-post hook threw: ~a"
+                                                        (exn-message e))
+                                           #f)])
+                (hook-dispatcher 'tool-result-post post-payload))
+              #f))
+
+        (cond
+          [(and (hook-result? post-hook-result) (eq? (hook-result-action post-hook-result) 'block))
+           ;; Treat block as error
+           (make-error-result (format "tool '~a' result blocked by tool-result-post hook" tc-name))]
+          [(and (hook-result? post-hook-result)
+                (eq? (hook-result-action post-hook-result) 'amend)
+                (hash? (hook-result-payload post-hook-result))
+                (hash-has-key? (hook-result-payload post-hook-result) 'result))
+           ;; Validate post-hook amended result is a valid tool-result
+           (let ([amended-result (hash-ref (hook-result-payload post-hook-result) 'result)])
+             (if (validate-tool-result amended-result) amended-result exec-result))]
+          ;; Return original result
+          [else exec-result])])]))
 
 ;; ============================================================
 ;; Execution stage

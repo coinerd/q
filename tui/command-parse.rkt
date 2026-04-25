@@ -75,7 +75,10 @@
         "/activate"
         (cons 'activate 'none)
         "/a"
-        (cons 'activate 'none)))
+        (cons 'activate 'none)
+        ;; Reload
+        "/reload"
+        (cons 'reload 'none)))
 
 ;; Parse a slash command string into a dispatch symbol + args list.
 ;; Returns: symbol | (list symbol args...) | #f

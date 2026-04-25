@@ -82,6 +82,7 @@
          exec-context-call-id
          exec-context-session-metadata
          exec-context-progress-callback
+         exec-context-permission-config
          emit-progress!
          ;; ── Tool-call struct (re-exported from agent/types.rkt) ──
          tool-call
@@ -118,6 +119,7 @@
 ;; Tools should call this to report incremental progress.
 (define (emit-progress! ctx percentage message)
   (define cb (exec-context-progress-callback ctx))
+         exec-context-permission-config
   (when cb
     (cb percentage message)))
 
@@ -270,7 +272,8 @@
                            runtime-settings
                            call-id
                            session-metadata
-                           progress-callback)
+                           progress-callback
+                           permission-config) ; G3.4: permission gate config or #f
   #:transparent)
 
 (define (make-exec-context #:working-directory [working-directory (current-directory)]
@@ -279,14 +282,16 @@
                            #:runtime-settings [runtime-settings #f]
                            #:call-id [call-id ""]
                            #:session-metadata [session-metadata #f]
-                           #:progress-callback [progress-callback #f])
+                           #:progress-callback [progress-callback #f]
+                           #:permission-config [permission-config #f])
   (exec-context working-directory
                 cancellation-token
                 event-publisher
                 runtime-settings
                 call-id
                 session-metadata
-                progress-callback))
+                progress-callback
+                permission-config))
 
 ;; ============================================================
 ;; Tool registry
