@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.20.0 — 2026-04-25
+
+### Feature Gap Closure — pi→q Parity (4 waves, 16 features)
+
+**W0 — Context Safety**
+- G5.2: Tool output truncation with temp-file overflow (`~/.q/output-overflow/`)
+- G2.3: Context file discovery (AGENTS.md) wired into context-builder
+- G3.1: TUI message queue during streaming (enqueue-followup when busy)
+- G2.1: Proactive auto-compaction (verified — already complete)
+
+**W1 — Session Mastery**
+- G1.1: Interactive tree browser overlay (↑↓ navigate, Enter/f fold, q/Esc close)
+- G1.2: Session resume (verified — already complete)
+- G1.3: Fork/clone subscriber (verified — already complete)
+- G8.1: Session info display (verified — already complete)
+
+**W2 — UX Enhancements**
+- G3.2: `@` file reference expansion with Tab key
+- G3.3: `!!` inline bash expansion (repeats last prompt)
+- G8.4: Cost tracking ($ per model) displayed in TUI status bar
+- G9.3: Print mode (`-p`/`--print`) for non-interactive plain-text output
+
+**W3 — Extension System**
+- G6.2: Hot-reload `/reload` command for extensions
+- G3.4: Permission gates for tool execution (auto-approved vs needs-approval)
+- G6.3: State persistence (verified — already complete)
+- G2.4: Custom compaction (verified — already complete)
+
+**Test baseline**: 382 files, 5966 tests all pass.
+
 ## v0.19.12 — 2026-04-25
 
 ### /plan Exploration Cap + Context Usage Visibility (4 waves)
