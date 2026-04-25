@@ -464,13 +464,16 @@
 ;; Compute the new seen-paths set and whether to increment the counter.
 ;; Returns (values new-seen-paths should-increment?)
 (define (update-seen-paths tool-calls seen-paths)
-  (define read-tools '("read" "find"))
-  (define write-tools '("write" "edit" "replace" "create"))
-  (define has-write?
+  ;; FIX: Use read-tools blacklist instead of write-tools whitelist.
+  ;; Extension tools (planning-write, bash, gh-*) are not in the old whitelist,
+  ;; so the counter never resets when the agent uses them. With a blacklist,
+  ;; any tool that isn't a read/explore tool resets the counter.
+  (define read-tools '("read" "find" "grep" "ls" "planning-read"))
+  (define has-non-read?
     (for/or ([tc (in-list tool-calls)])
-      (member (tool-call-name tc) write-tools)))
+      (not (member (tool-call-name tc) read-tools))))
   (cond
-    [has-write? (values (set) #f)] ;; Reset on write
+    [has-non-read? (values (set) #f)] ;; Reset on any non-read tool
     [else
      ;; Collect paths from read tools
      (define new-paths
@@ -797,10 +800,12 @@
                        (steering-same-file-dedup? current-settings)
                        #t))
                  (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
-                 ;; Detect write tools (always relevant regardless of dedup setting)
+                 ;; Detect non-read tools — any tool not in read-tools resets counter
+                 ;; FIX: Was write-tools whitelist that missed extension tools.
+                 (define read-tools '("read" "find" "grep" "ls" "planning-read"))
                  (define has-write-now?
                    (for/or ([tc (in-list current-tool-calls)])
-                     (member (tool-call-name tc) '("write" "edit" "replace" "create"))))
+                     (not (member (tool-call-name tc) read-tools))))
                  (define-values (new-seen-paths should-increment?)
                    (cond
                      [has-write-now? (values (set) #f)] ;; Reset: empty set, don't increment

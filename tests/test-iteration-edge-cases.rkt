@@ -7,9 +7,10 @@
 ;; - check-mid-turn-budget! boundary behavior
 
 (require rackunit
-         racket/hash
+         racket/set
          "../runtime/iteration.rkt"
-         "../agent/event-bus.rkt")
+         "../agent/event-bus.rkt"
+         "../util/protocol-types.rkt")
 
 ;; ============================================================
 ;; ensure-hash-args edge cases
@@ -46,14 +47,49 @@
   ;; ctx = message list, bus = event bus, config with max-context-tokens
   (define bus (make-event-bus))
   (define config (hasheq 'max-context-tokens 1000))
-  (check-not-exn
-   (lambda ()
-     (check-mid-turn-budget! '() bus "test-session" config))))
+  (check-not-exn (lambda () (check-mid-turn-budget! '() bus "test-session" config))))
 
 (test-case "check-mid-turn-budget! uses default when no config key"
   (define bus (make-event-bus))
   (define config (hasheq))
   ;; Empty context, default 128K tokens — should pass easily
-  (check-not-exn
-   (lambda ()
-     (check-mid-turn-budget! '() bus "test-session" config))))
+  (check-not-exn (lambda () (check-mid-turn-budget! '() bus "test-session" config))))
+
+;; ============================================================
+;; update-seen-paths / steering counter reset tests
+;; ============================================================
+
+(test-case "update-seen-paths resets counter on write tool"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc1" "write" (hasheq 'path "/tmp/x"))) (set)))
+  (check-equal? (set-count seen) 0 "seen-paths reset on write")
+  (check-false inc? "should not increment on write"))
+
+(test-case "update-seen-paths resets counter on planning-write (extension tool)"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc2" "planning-write" (hasheq))) (set)))
+  (check-equal? (set-count seen) 0 "seen-paths reset on planning-write")
+  (check-false inc? "should not increment on planning-write"))
+
+(test-case "update-seen-paths resets counter on bash tool"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc3" "bash" (hasheq 'command "mkdir"))) (set)))
+  (check-equal? (set-count seen) 0 "seen-paths reset on bash")
+  (check-false inc? "should not increment on bash"))
+
+(test-case "update-seen-paths increments on read tool with new path"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc4" "read" (hasheq 'path "/tmp/new.rkt"))) (set)))
+  (check-true (set-member? seen "/tmp/new.rkt") "path added to seen set")
+  (check-true inc? "should increment on new read path"))
+
+(test-case "update-seen-paths resets counter on edit tool"
+  (define-values (seen inc?) (update-seen-paths (list (make-tool-call "tc5" "edit" (hasheq))) (set)))
+  (check-equal? (set-count seen) 0 "seen-paths reset on edit")
+  (check-false inc? "should not increment on edit"))
+
+(test-case "update-seen-paths resets counter on gh-issue (extension tool)"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc6" "gh-issue" (hasheq))) (set)))
+  (check-equal? (set-count seen) 0 "seen-paths reset on gh-issue")
+  (check-false inc? "should not increment on gh-issue"))
