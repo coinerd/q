@@ -1,6 +1,6 @@
 # q SDK & RPC Catalog
 
-<!-- verified-against: v0.19.6 -->
+<!-- verified-against: 0.19.7 -->
 
 This document catalogs all public SDK and RPC interfaces provided by q.
 

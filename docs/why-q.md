@@ -1,4 +1,4 @@
-<!-- verified-against: v0.19.6 -->
+<!-- verified-against: 0.19.7 -->
 # Why q?
 
 A candid look at who q is for, what it prioritizes, and where it's intentionally narrow.

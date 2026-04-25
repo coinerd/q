@@ -1,4 +1,4 @@
-<!-- verified-against: 0.19.6 -->
+<!-- verified-against: 0.19.7 -->
 # Security & Trust Model
 
 This document provides an honest, per-area assessment of what q enforces
