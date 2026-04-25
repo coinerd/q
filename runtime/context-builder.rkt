@@ -8,18 +8,22 @@
 ;;
 ;; Issue #498: Context assembly pipeline (tree walk).
 
-(require racket/list
+(require racket/file
+         racket/list
          racket/string
          racket/set
          "../util/protocol-types.rkt"
          "../runtime/session-index.rkt"
-         "../llm/token-budget.rkt")
+         "../llm/token-budget.rkt"
+         "../skills/context-files.rkt")
 
 (provide build-session-context
          build-session-context/tokens
          truncate-messages-to-budget
          estimate-message-tokens
-         entry->context-message)
+         entry->context-message
+         load-agents-context
+         build-system-preamble)
 
 ;; ============================================================
 ;; Context assembly pipeline (#498)
@@ -329,6 +333,55 @@
                                (values fa fi fu)))))
                    (values final-acc final-ids final-used)))
              (loop (cdr remaining) final-acc2 final-ids2 final-used2)])])])))
+
+;; ============================================================
+;; AGENTS.md context discovery (G2.3)
+;; ============================================================
+
+;; Discover and load AGENTS.md files from working-directory up to git root.
+;; Returns the merged instructions string, or "" if none found.
+(define (load-agents-context working-directory)
+  (define paths (discover-agents-files working-directory))
+  (cond
+    [(null? paths) ""]
+    [else
+     (define contexts
+       (for/list ([p (in-list paths)]
+                  #:when (file-exists? p))
+         (define content (file->string p))
+         (parse-agent-file content)))
+     (cond
+       [(null? contexts) ""]
+       [else (agent-context-instructions (merge-agent-contexts contexts))])]))
+
+;; Build a system preamble string from AGENTS.md discovery.
+;; Returns a formatted string suitable for prepending to system messages,
+;; or "" if no AGENTS.md files were found.
+(define (build-system-preamble working-directory)
+  (define paths (discover-agents-files working-directory))
+  (cond
+    [(null? paths) ""]
+    [else
+     (define contexts
+       (for/list ([p (in-list paths)]
+                  #:when (file-exists? p))
+         (define content (file->string p))
+         (parse-agent-file content)))
+     (cond
+       [(null? contexts) ""]
+       [else
+        (define merged (merge-agent-contexts contexts))
+        (define name (agent-context-name merged))
+        (define desc (agent-context-description merged))
+        (define inst (agent-context-instructions merged))
+        (define parts
+          (filter (λ (s) (not (string=? s "")))
+                  (list (if (string=? name "Unnamed Agent")
+                            ""
+                            (format "# ~a" name))
+                        desc
+                        inst)))
+        (string-join parts "\n\n")])]))
 
 ;; ============================================================
 ;; Utility
