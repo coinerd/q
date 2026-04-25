@@ -127,13 +127,13 @@
   (printf "~n--- Metrics Lint (static) ---~n")
   (define script (build-path "scripts" "metrics.rkt"))
   (if (file-exists? script)
-      (let ([exit-code (system/exit-code (format "racket ~a --lint" script))])
+      (let ([exit-code (system/exit-code (format "racket ~a --lint --lint-prose" script))])
         (if (= exit-code 0)
             (begin
               (printf "Metrics lint: PASS~n")
               #t)
             (begin
-              (printf "Metrics lint: FAIL (README metrics diverged)~n")
+              (printf "Metrics lint: FAIL (README metrics/prose diverged)~n")
               #f)))
       (begin
         (printf "WARNING: ~a not found, skipping metrics lint~n" script)

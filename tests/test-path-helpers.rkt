@@ -24,10 +24,11 @@
 ;; Test suite: expand-home-path
 ;; ============================================================
 
-(test-case "expand-home-path: expands ~/ to home directory"
-  (define home (path->string (find-system-path 'home-dir)))
-  (check-equal? (expand-home-path "~/foo/bar.txt")
-                (string-append home "/foo/bar.txt")))
+(test-case "expand-home-path: expands ~/ to home directory (no double-slash)"
+  (define result (expand-home-path "~/foo/bar.txt"))
+  (check-false (regexp-match? #rx"//" result) (format "expected no // but got: ~a" result))
+  (check-true (string-prefix? result (path->string (find-system-path 'home-dir)))
+              (format "expected to start with home dir but got: ~a" result)))
 
 (test-case "expand-home-path: expands bare ~ to home directory"
   (define home (path->string (find-system-path 'home-dir)))
@@ -42,9 +43,9 @@
 (test-case "expand-home-path: leaves empty string unchanged"
   (check-equal? (expand-home-path "") ""))
 
-(test-case "expand-home-path: handles ~/ alone"
+(test-case "expand-home-path: handles ~/ alone (normalized, no double-slash)"
   (define home (path->string (find-system-path 'home-dir)))
-  (check-equal? (expand-home-path "~/") (string-append home "/")))
+  (check-equal? (expand-home-path "~/") home))
 
 ;; Integration test: verify tilde-expanded paths resolve correctly
 (test-case "expand-home-path: expanded home actually exists"
@@ -59,6 +60,13 @@
   (check-true (file-exists? expanded))
   (check-equal? (file->string expanded) "hello")
   (delete-file tmp-file))
+
+(test-case "expand-home-path: no double-slash from ~/ expansion"
+  (define expanded (expand-home-path "~/foo.rkt"))
+  (check-false (regexp-match? #rx"//" expanded) (format "expected no // but got: ~a" expanded)))
+
+(test-case "expand-home-path: relative path unchanged"
+  (check-equal? (expand-home-path "foo.rkt") "foo.rkt"))
 
 ;; Integration: tool-read with tilde path
 (test-case "tool-read: reads file via tilde path"
