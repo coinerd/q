@@ -5,6 +5,8 @@
 ;; Tests boundary conditions:
 ;; - ensure-hash-args edge cases
 ;; - check-mid-turn-budget! boundary behavior
+;; - update-seen-paths steering counter reset
+;; - v0.19.10: spiral breaker event structure
 
 (require rackunit
          racket/set
@@ -43,8 +45,6 @@
 ;; ============================================================
 
 (test-case "check-mid-turn-budget! passes when well under limit"
-  ;; check-mid-turn-budget! takes (ctx bus session-id config)
-  ;; ctx = message list, bus = event bus, config with max-context-tokens
   (define bus (make-event-bus))
   (define config (hasheq 'max-context-tokens 1000))
   (check-not-exn (lambda () (check-mid-turn-budget! '() bus "test-session" config))))
@@ -52,7 +52,6 @@
 (test-case "check-mid-turn-budget! uses default when no config key"
   (define bus (make-event-bus))
   (define config (hasheq))
-  ;; Empty context, default 128K tokens — should pass easily
   (check-not-exn (lambda () (check-mid-turn-budget! '() bus "test-session" config))))
 
 ;; ============================================================
@@ -93,3 +92,44 @@
     (update-seen-paths (list (make-tool-call "tc6" "gh-issue" (hasheq))) (set)))
   (check-equal? (set-count seen) 0 "seen-paths reset on gh-issue")
   (check-false inc? "should not increment on gh-issue"))
+
+;; ============================================================
+;; v0.19.10: Spiral breaker event structure tests
+;; ============================================================
+
+(test-case "event-bus: spiral events have correct structure"
+  (define bus (make-event-bus))
+  (define captured '())
+  (subscribe! bus
+              (lambda (evt) (set! captured (cons evt captured)))
+              #:filter (lambda (e)
+                         (and (event? e)
+                              (member (event-ev e)
+                                      '("spiral.error-warning" "spiral.bash-only-warning"
+                                                               "spiral.bash-breaker")))))
+  (emit-session-event! bus "s1" "spiral.error-warning" (hasheq 'consecutive-errors 7 'iteration 5))
+  (emit-session-event! bus "s1" "spiral.bash-only-warning" (hasheq 'bash-count 12 'iteration 8))
+  (emit-session-event! bus
+                       "s1"
+                       "spiral.bash-breaker"
+                       (hasheq 'action "steering-injected" 'iteration 10))
+  (check-equal? (length captured) 3 "should capture all 3 spiral events")
+  (check-equal? (event-ev (car captured)) "spiral.bash-breaker")
+  (check-equal? (event-ev (cadr captured)) "spiral.bash-only-warning")
+  (check-equal? (event-ev (caddr captured)) "spiral.error-warning"))
+
+(test-case "update-seen-paths: multiple tools in one call"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc1" "read" (hasheq 'path "/tmp/a.rkt"))
+                             (make-tool-call "tc2" "read" (hasheq 'path "/tmp/b.rkt")))
+                       (set)))
+  (check-true (set-member? seen "/tmp/a.rkt"))
+  (check-true (set-member? seen "/tmp/b.rkt"))
+  (check-true inc? "should increment when any new read path"))
+
+(test-case "update-seen-paths: read of already-seen path does not increment"
+  (define-values (seen inc?)
+    (update-seen-paths (list (make-tool-call "tc1" "read" (hasheq 'path "/tmp/old.rkt")))
+                       (set "/tmp/old.rkt")))
+  (check-true (set-member? seen "/tmp/old.rkt"))
+  (check-false inc? "should not increment for already-seen path"))
