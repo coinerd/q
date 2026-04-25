@@ -14,7 +14,7 @@
          "../runtime/iteration.rkt"
          "../runtime/compactor.rkt"
          "../agent/event-bus.rkt"
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 ;; Helper: create a simple message for testing
 (define (make-test-msg [role 'user] [content "test"])

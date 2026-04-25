@@ -12,7 +12,7 @@
 
 (require rackunit
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/protocol-types.rkt"
          "../extensions/message-inject.rkt")
 

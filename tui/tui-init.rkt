@@ -15,6 +15,7 @@
          "../tui/terminal.rkt"
          "../tui/state.rkt"
          "../tui/scrollback.rkt"
+         "../tui/render.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
@@ -22,7 +23,8 @@
          "../runtime/session-index.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
-         "../cli/args.rkt")
+         "../cli/args.rkt"
+         "../extensions/ui-surface.rkt")
 
 (provide run-tui
          run-tui-with-runtime
@@ -67,6 +69,21 @@
                   #:session-dir sess-dir
                   #:model-registry (hash-ref rt-config 'model-registry #f)
                   #:extension-registry (hash-ref rt-config 'extension-registry #f)))
+
+  ;; Install UI callbacks for extensions (breaks extensions→TUI upward import)
+  (install-ui-callbacks!
+   (hasheq 'set-footer
+           (lambda (box lines) (set-box! box (set-custom-footer (unbox box) lines)))
+           'set-header
+           (lambda (box lines) (set-box! box (set-custom-header (unbox box) lines)))
+           'clear-footer
+           (lambda (box) (set-box! box (clear-custom-footer (unbox box))))
+           'clear-header
+           (lambda (box) (set-box! box (clear-custom-header (unbox box))))
+           'make-styled-line
+           styled-line
+           'make-styled-segment
+           styled-segment))
 
   ;; Subscribe to events
   (subscribe-runtime-events! ctx)

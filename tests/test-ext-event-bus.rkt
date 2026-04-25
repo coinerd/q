@@ -11,7 +11,7 @@
 
 (require rackunit
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../extensions/api.rkt"
          "../extensions/events.rkt"
          "../extensions/context.rkt")
