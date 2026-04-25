@@ -74,6 +74,8 @@
          set-agent-session-persisted?!
          agent-session-pending-entries
          set-agent-session-pending-entries!
+         agent-session-prompt-running?
+         set-agent-session-prompt-running?!
          ensure-persisted!
          buffer-or-append!
          make-agent-session
@@ -124,7 +126,8 @@
          [pending-entries #:mutable] ; (listof message?) — buffered before persistence
          [thinking-level #:mutable] ; symbol — one of thinking-levels (#1153)
          [shutdown-requested? #:mutable] ; boolean — graceful shutdown flag (#1158)
-         [force-shutdown? #:mutable]) ; boolean — immediate shutdown flag (#1158)
+         [force-shutdown? #:mutable]
+         [prompt-running? #:mutable]) ; boolean — concurrent prompt execution guard
   #:transparent)
 
 ;; ============================================================
@@ -216,7 +219,8 @@
                    '() ; pending-entries
                    (hash-ref config 'thinking-level 'medium) ; thinking-level (#1153)
                    #f ; shutdown-requested? (#1158)
-                   #f)) ; force-shutdown? (#1158)
+                   #f ; force-shutdown?
+                   #f)) ; prompt-running?
 
   ;; Emit session.started
   (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
@@ -309,7 +313,8 @@
                    '() ; pending-entries
                    (hash-ref config 'thinking-level 'medium) ; thinking-level (#1153)
                    #f ; shutdown-requested? (#1158)
-                   #f)) ; force-shutdown? (#1158)
+                   #f ; force-shutdown?
+                   #f)) ; prompt-running?
 
   ;; Emit session.resumed
   (emit-session-event! (agent-session-event-bus sess)
@@ -420,7 +425,8 @@
                    '() ; pending-entries
                    (agent-session-thinking-level sess) ; inherit thinking-level (#1153)
                    #f ; shutdown-requested? (#1158)
-                   #f)) ; force-shutdown? (#1158)
+                   #f ; force-shutdown?
+                   #f)) ; prompt-running?
 
   ;; Emit session.forked on original session's bus
   (emit-session-event! (agent-session-event-bus sess)
@@ -716,41 +722,60 @@
   (unless (session-active? sess)
     (raise (exn:fail (format "run-prompt!: session ~a is closed" (agent-session-session-id sess))
                      (current-continuation-marks))))
+  ;; Guard against concurrent prompt execution
+  ;; If a prompt is already running, reject this call to prevent consecutive
+  ;; user messages in the API (which causes 400 errors on GLM/OpenAI).
+  (when (agent-session-prompt-running? sess)
+    (emit-session-event! (agent-session-event-bus sess)
+                         (agent-session-session-id sess)
+                         "runtime.error"
+                         (hasheq 'error "Prompt already running — ignoring concurrent submission"))
+    (raise (exn:fail (format "run-prompt!: session ~a already has a prompt running"
+                             (agent-session-session-id sess))
+                     (current-continuation-marks))))
+  (set-agent-session-prompt-running?! sess #t)
+  (define cleanup-thunk (lambda () (set-agent-session-prompt-running?! sess #f)))
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
   (define base-cfg (agent-session-config sess))
   ;; #1391: Inject session index into config for session_recall tool access
-  (define idx (agent-session-index sess))
-  ;; v0.14.3: Handle both mutable (make-hash) and immutable (hasheq) configs.
-  ;; Production uses make-hash (mutable), but some tests use hasheq (immutable).
-  (define cfg
-    (if idx
-        (if (and (hash? base-cfg) (not (immutable? base-cfg)))
-            (begin
-              (hash-set! base-cfg 'session-index idx)
-              base-cfg)
-            (hash-set base-cfg 'session-index idx))
-        base-cfg))
-  (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 50)))
-  ;; v0.14.4 Wave 1: Increased default from 20→50 for slow exploration-heavy models
-  (define token-budget-threshold
-    (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; #1391: Inject session index into config for session_recall tool access
+     (define idx (agent-session-index sess))
+     ;; v0.14.3: Handle both mutable (make-hash) and immutable (hasheq) configs.
+     ;; Production uses make-hash (mutable), but some tests use hasheq (immutable).
+     (define cfg
+       (if idx
+           (if (and (hash? base-cfg) (not (immutable? base-cfg)))
+               (begin
+                 (hash-set! base-cfg 'session-index idx)
+                 base-cfg)
+               (hash-set base-cfg 'session-index idx))
+           base-cfg))
+     (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 50)))
+     ;; v0.14.4 Wave 1: Increased default from 20→50 for slow exploration-heavy models
+     (define token-budget-threshold
+       (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
 
-  ;; #666: Dispatch 'input hook — intercept/transform user input before processing
-  (define ext-reg (agent-session-extension-registry sess))
-  (define-values (_processed-input input-hook-res)
-    (maybe-dispatch-hooks ext-reg 'input (hasheq 'session-id sid 'message user-message)))
-  (cond
-    [(and input-hook-res (eq? (hook-result-action input-hook-res) 'block))
-     ;; Input blocked by extension
-     (emit-session-event! bus sid "input.blocked" (hasheq 'reason "extension-block"))
-     (values sess (make-loop-result '() 'completed (hasheq 'reason "input-blocked")))]
-    [else
-     (define effective-input
-       (if (and input-hook-res (eq? (hook-result-action input-hook-res) 'amend))
-           (hash-ref (hook-result-payload input-hook-res) 'message user-message)
-           user-message))
-     (run-prompt-internal sess effective-input max-iterations token-budget-threshold)]))
+     ;; #666: Dispatch 'input hook — intercept/transform user input before processing
+     (define ext-reg (agent-session-extension-registry sess))
+     (define-values (_processed-input input-hook-res)
+       (maybe-dispatch-hooks ext-reg 'input (hasheq 'session-id sid 'message user-message)))
+     (cond
+       [(and input-hook-res (eq? (hook-result-action input-hook-res) 'block))
+        ;; Input blocked by extension
+        (emit-session-event! bus sid "input.blocked" (hasheq 'reason "extension-block"))
+        (values sess (make-loop-result '() 'completed (hasheq 'reason "input-blocked")))]
+       [else
+        (define effective-input
+          (if (and input-hook-res (eq? (hook-result-action input-hook-res) 'amend))
+              (hash-ref (hook-result-payload input-hook-res) 'message user-message)
+              user-message))
+        (run-prompt-internal sess effective-input max-iterations token-budget-threshold)]))
+   ;; Cleanup: always reset prompt-running? even on error
+   (lambda () (set-agent-session-prompt-running?! sess #f))))
 
 ;; ============================================================
 ;; Iteration loop lives in iteration.rkt

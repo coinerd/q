@@ -163,60 +163,77 @@
          [else #t])]
       [else #t])))
 
+;; Merge consecutive messages with the same role.
+;; Some providers (GLM, some OpenAI-compatible) reject consecutive same-role messages.
+(define (merge-consecutive-roles msgs)
+  (reverse (for/fold ([acc '()]) ([msg (in-list msgs)])
+             (cond
+               [(null? acc) (list msg)]
+               [(equal? (hash-ref msg 'role #f) (hash-ref (car acc) 'role #f))
+                ;; Same role: merge content
+                (define new-content
+                  (string-append (hash-ref (car acc) 'content "") "\n\n" (hash-ref msg 'content "")))
+                (cons (hash-set (car acc) 'content new-content) (cdr acc))]
+               [else (cons msg acc)]))))
+
 (define (build-raw-messages context)
-  (append*
-   (for/list ([msg (in-list context)])
-     (define role (message-role msg))
-     (define parts (message-content msg))
-     (cond
-       ;; user -> simple text message
-       [(eq? role 'user) (list (hasheq 'role "user" 'content (parts->text-string parts)))]
+  (define raw-msgs
+    (append*
+     (for/list ([msg (in-list context)])
+       (define role (message-role msg))
+       (define parts (message-content msg))
+       (cond
+         ;; user -> simple text message
+         [(eq? role 'user) (list (hasheq 'role "user" 'content (parts->text-string parts)))]
 
-       ;; assistant -> text + optional tool_calls
-       [(eq? role 'assistant)
-        (define text-parts (filter text-part? parts))
-        (define tc-parts (filter tool-call-part? parts))
-        (define text-content (parts->text-string text-parts))
-        (if (null? tc-parts)
-            ;; text-only assistant message
-            (list (hasheq 'role "assistant" 'content text-content))
-            ;; assistant with tool calls -- OpenAI format
-            ;; Note: GLM rejects 'null for content, so we omit the field when empty
-            (let* ([tool-calls-list (for/list ([tc (in-list tc-parts)])
-                                      (hasheq 'id
-                                              (tool-call-part-id tc)
-                                              'type
-                                              "function"
-                                              'function
-                                              (hasheq 'name
-                                                      (tool-call-part-name tc)
-                                                      'arguments
-                                                      (tool-call-part-arguments tc))))]
-                   [assistant-msg (if (string=? text-content "")
-                                      ;; No text content: omit content field (GLM compatible)
-                                      (hasheq 'role "assistant" 'tool_calls tool-calls-list)
-                                      ;; Has text content: include content field
-                                      (hasheq 'role
-                                              "assistant"
-                                              'content
-                                              text-content
-                                              'tool_calls
-                                              tool-calls-list))])
-              (list assistant-msg)))]
+         ;; assistant -> text + optional tool_calls
+         [(eq? role 'assistant)
+          (define text-parts (filter text-part? parts))
+          (define tc-parts (filter tool-call-part? parts))
+          (define text-content (parts->text-string text-parts))
+          (if (null? tc-parts)
+              ;; text-only assistant message
+              (list (hasheq 'role "assistant" 'content text-content))
+              ;; assistant with tool calls -- OpenAI format
+              ;; Note: GLM rejects 'null for content, so we omit the field when empty
+              (let* ([tool-calls-list (for/list ([tc (in-list tc-parts)])
+                                        (hasheq 'id
+                                                (tool-call-part-id tc)
+                                                'type
+                                                "function"
+                                                'function
+                                                (hasheq 'name
+                                                        (tool-call-part-name tc)
+                                                        'arguments
+                                                        (tool-call-part-arguments tc))))]
+                     [assistant-msg (if (string=? text-content "")
+                                        ;; No text content: omit content field (GLM compatible)
+                                        (hasheq 'role "assistant" 'tool_calls tool-calls-list)
+                                        ;; Has text content: include content field
+                                        (hasheq 'role
+                                                "assistant"
+                                                'content
+                                                text-content
+                                                'tool_calls
+                                                tool-calls-list))])
+                (list assistant-msg)))]
 
-       ;; tool -> one OpenAI message per tool-result-part
-       [(eq? role 'tool)
-        (for/list ([p (in-list parts)]
-                   #:when (tool-result-part? p))
-          (hasheq 'role
-                  "tool"
-                  'tool_call_id
-                  (tool-result-part-tool-call-id p)
-                  'content
-                  (result-content->string (tool-result-part-content p))))]
+         ;; tool -> one OpenAI message per tool-result-part
+         [(eq? role 'tool)
+          (for/list ([p (in-list parts)]
+                     #:when (tool-result-part? p))
+            (hasheq 'role
+                    "tool"
+                    'tool_call_id
+                    (tool-result-part-tool-call-id p)
+                    'content
+                    (result-content->string (tool-result-part-content p))))]
 
-       ;; fallback -- unknown role
-       [else (list (hasheq 'role (symbol->string role) 'content (parts->text-string parts)))]))))
+         ;; fallback -- unknown role
+         [else (list (hasheq 'role (symbol->string role) 'content (parts->text-string parts)))]))))
+  ;; Safety net: merge consecutive user messages.
+  ;; Some providers (GLM) reject consecutive same-role messages.
+  (merge-consecutive-roles raw-msgs))
 
 ;; ============================================================
 ;; Extracted helper: stream-from-provider

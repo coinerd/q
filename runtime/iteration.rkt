@@ -32,7 +32,7 @@
          racket/set
          racket/path
          json
-         (only-in racket/string string-trim string-join)
+         (only-in racket/string string-trim string-join string-contains?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
@@ -43,6 +43,7 @@
                   make-tool-result-part
                   tool-result-part?
                   tool-result-part-is-error?
+                  tool-result-part-content
                   make-text-part
                   text-part?
                   text-part-text
@@ -702,11 +703,35 @@
                      (define base-result (if followup-continued? effective-result effective-result))
                      ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
                      ;; to write/edit but made no tool call, inject a steering nudge.
+                     ;; Exception: don't nudge after planning-write PLAN succeeds
+                     ;; (the plan is complete — assistant should stop, not implement).
                      (define assistant-text (extract-last-assistant-text ctx-with-injected))
                      (define intent-detected? (detect-intent-pattern assistant-text))
                      (define had-tool-calls?
                        (not (null? (extract-tool-calls-from-messages new-msgs))))
-                     (if (and intent-detected? (not had-tool-calls?) (< intent-retry-count 1))
+                     ;; Check if the last tool-result in context is a successful planning-write PLAN
+                     (define recent-plan-write?
+                       (let ([tool-results (for/list ([msg (in-list (reverse ctx-with-injected))]
+                                                      #:when (eq? (message-role msg) 'tool-result)
+                                                      #:when (message-content msg))
+                                             (for/list ([p (in-list (if (list? (message-content msg))
+                                                                        (message-content msg)
+                                                                        '()))]
+                                                        #:when (tool-result-part? p))
+                                               p))])
+                         (for/or ([tr (in-list (apply append tool-results))]
+                                  #:break #f)
+                           (define content (tool-result-part-content tr))
+                           (and (not (tool-result-part-is-error? tr))
+                                (pair? content)
+                                (for/or ([c (in-list content)])
+                                  (and (hash? c)
+                                       (equal? (hash-ref c 'type #f) "text")
+                                       (string-contains? (hash-ref c 'text "") "PLAN")))))))
+                     (if (and intent-detected?
+                              (not had-tool-calls?)
+                              (< intent-retry-count 1)
+                              (not recent-plan-write?))
                          (begin
                            (emit-session-event!
                             bus
