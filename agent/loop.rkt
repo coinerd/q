@@ -30,7 +30,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../llm/stream.rkt" accumulate-tool-call-deltas)
-         (only-in "../llm/token-budget.rkt" estimate-turn-tokens)
+         (only-in "../llm/token-budget.rkt" estimate-turn-tokens estimate-context-tokens)
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/content-helpers.rkt" result-content->string)
@@ -717,12 +717,13 @@
   ;; 2. Build normalized model context (pure function)
   (define raw-messages (build-raw-messages context))
 
-  ;; 3. Emit context.built
+  ;; 3. Emit context.built (v0.19.12 W1: added tokenCount)
+  (define ctx-built-token-count (estimate-context-tokens raw-messages))
   (emit! bus
          session-id
          turn-id
          "context.built"
-         (hasheq 'messageCount (length raw-messages))
+         (hasheq 'messageCount (length raw-messages) 'tokenCount ctx-built-token-count)
          #:state st)
 
   ;; 4. Build model-request
