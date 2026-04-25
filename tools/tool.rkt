@@ -223,9 +223,9 @@
 ;; Returns #t if jsexpr->string would succeed, #f otherwise.
 (define (json-serializable? v)
   (with-logged-catch #f
-    (lambda ()
-      (jsexpr->string v)
-      #t)))
+                     (lambda ()
+                       (jsexpr->string v)
+                       #t)))
 
 ;; ============================================================
 ;; Tool result helpers (struct imported from agent/types.rkt)
@@ -398,10 +398,16 @@
                              (if (string? key)
                                  (string->symbol key)
                                  key))
-        (raise (exn:fail (format "validate-tool-args: missing required argument '~a' for tool '~a'"
-                                 key
-                                 (tool-name t))
-                         (current-continuation-marks))))))
+        (raise
+         (exn:fail
+          (format
+           "validate-tool-args: missing required argument '~a' for tool '~a'.~a"
+           key
+           (tool-name t)
+           (if (and (eq? key 'path) (eq? (tool-name t) "read"))
+               " You must include 'path' in every read call, even when making parallel calls with different offsets."
+               ""))
+          (current-continuation-marks))))))
   ;; Check types for present keys
   (when (and properties (hash? properties))
     (for ([(arg-key arg-val) (in-hash args)])

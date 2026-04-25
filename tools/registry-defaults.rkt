@@ -31,20 +31,23 @@
   (when (should-register? "read")
     (register-tool!
      registry
-     (make-tool "read"
-                "Read file contents"
-                (hasheq 'type
-                        "object"
-                        'required
-                        '("path")
-                        'properties
-                        (hasheq 'path
-                                (hasheq 'type "string" 'description "Path to file to read")
-                                'offset
-                                (hasheq 'type "integer" 'description "Line offset (1-indexed)")
-                                'limit
-                                (hasheq 'type "integer" 'description "Max lines to return")))
-                tool-read)))
+     (make-tool
+      "read"
+      "Read file contents"
+      (hasheq 'type
+              "object"
+              'required
+              '("path")
+              'properties
+              (hasheq 'path
+                      (hasheq 'type "string" 'description "Path to file to read")
+                      'offset
+                      (hasheq 'type "integer" 'description "Line offset (1-indexed)")
+                      'limit
+                      (hasheq 'type "integer" 'description "Max lines to return")))
+      tool-read
+      #:prompt-guidelines
+      "When making parallel read calls, include the 'path' parameter in EVERY call. Never pass a bare line number without a path.")))
   (when (should-register? "write")
     (register-tool!
      registry
@@ -84,7 +87,8 @@
         (hasheq 'type "string" 'description "Replacement text")))
       tool-edit
       #:prompt-guidelines
-      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior read tool result. If edit fails, re-read the file first.")))
+      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior
+read tool result. If edit fails, re-read the file first.")))
   (when (should-register? "bash")
     (register-tool!
      registry
