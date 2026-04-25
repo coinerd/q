@@ -75,7 +75,8 @@
 ;; Suite matching helpers
 ;; ---------------------------------------------------------------------------
 
-(define slow-patterns '("sandbox" "subprocess" "integration" "benchmark" "workflow-" "e2e-"))
+(define slow-patterns
+  '("sandbox" "subprocess" "integration" "benchmark" "workflow-" "e2e-" "ci-local"))
 
 (define (slow-file? f)
   (define base (file-name-from-path f))
