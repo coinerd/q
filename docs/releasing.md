@@ -1,4 +1,4 @@
-<!-- verified-against: v0.15.2 -->
+<!-- verified-against: v0.19.6 -->
 # Release Process
 
 This document describes how to cut a new release of **q**.

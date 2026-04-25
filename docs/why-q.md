@@ -1,4 +1,4 @@
-<!-- verified-against: v0.15.2 -->
+<!-- verified-against: v0.19.6 -->
 # Why q?
 
 A candid look at who q is for, what it prioritizes, and where it's intentionally narrow.
@@ -34,11 +34,11 @@ q doesn't try to be everything. These are deliberate scope boundaries:
 - **Single-user, single-session focus** — No multi-user or concurrent-session architecture.
 - **Racket ecosystem** — Not Python, not Node.js. This is a deliberate choice for a small, coherent language with excellent macro and module systems, but it means fewer existing libraries and a smaller talent pool.
 
-## Current maturity (v0.15.x)
+## Current maturity (v0.19.x)
 
 Be realistic about where things stand:
 
-- **Core architecture** — Stable and well-tested (~850+ tests). The agent loop, session management, and provider abstraction are production-quality. Iteration engine handles multi-turn tool calls with escalation.
+- **Core architecture** — Stable and well-tested (397 test files, 5800+ assertions). The agent loop, session management, and provider abstraction are production-quality. Iteration engine handles multi-turn tool calls with escalation.
 - **Interfaces** — Working CLI, TUI, JSON mode, RPC, and SDK interfaces. All functional, all terminal-based.
 - **Provider support** — OpenAI, Azure OpenAI, Anthropic, and Gemini providers with streaming. Local model support via compatible endpoints (Ollama, llama.cpp, etc.).
 - **Extension system** — Mature hook system with extension quarantine, safe-mode enforcement, and tool registration. Extension API v0.5 with context expansion.
