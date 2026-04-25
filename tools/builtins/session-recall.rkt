@@ -23,13 +23,26 @@
                   message-role
                   message-content
                   text-part?
-                  text-part-text)
-         "../../runtime/session-index.rkt")
+                  text-part-text))
 
 (provide tool-session-recall)
 
 ;; Max entries returned per recall call
 (define MAX-RECALL-ENTRIES 5)
+
+;; ── Transparent struct accessors (no runtime import) ───────
+;; session-index struct fields: by-id, children, entry-order,
+;;   bookmarks, active-leaf-id, bookmark-sem
+;; struct->vector indices: 0=name, 1=by-id, 2=children, 3=entry-order
+
+(define (idx-by-id idx)
+  (vector-ref (struct->vector idx) 1))
+
+(define (idx-entry-order idx)
+  (vector-ref (struct->vector idx) 3))
+
+(define (lookup-entry idx id)
+  (hash-ref (idx-by-id idx) id #f))
 
 ;; ============================================================
 ;; Tool definition
@@ -79,7 +92,7 @@
 
 (define (recall-by-query idx query)
   (define query-low (string-downcase query))
-  (define all-entries (vector->list (session-index-entry-order idx)))
+  (define all-entries (vector->list (idx-entry-order idx)))
   (define matches
     (for/list ([m (in-list all-entries)]
                [i (in-naturals)]
@@ -105,7 +118,7 @@
     [(not (and from-id to-id))
      (make-error-result "session_recall: range requires 'from' and 'to' IDs")]
     [else
-     (define all-entries (vector->list (session-index-entry-order idx)))
+     (define all-entries (vector->list (idx-entry-order idx)))
      ;; Walk entries, collecting those between from-id and to-id inclusive
      (define matches
        (let loop ([remaining all-entries]

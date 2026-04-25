@@ -29,11 +29,10 @@
       (define plain-hash (hasheq 'provider #f 'model "glm-5.1"))
       (check-false (q-settings? plain-hash) "A plain hash should not satisfy q-settings?"))
 
-    (test-case "sandbox-enabled? crashes with plain hash (current bug)"
+    (test-case "sandbox-enabled? works with plain hash (post-fix)"
       (define plain-hash (hasheq 'provider #f 'model "glm-5.1"))
-      (check-exn exn:fail:contract?
-                 (λ () (sandbox-enabled? plain-hash))
-                 "sandbox-enabled? should crash with contract violation when given a plain hash"))
+      (check-true (sandbox-enabled? plain-hash)
+                  "sandbox-enabled? should return default #t with plain hash"))
 
     ;; ────────────────────────────────────────────────────────
     ;; Expected behavior tests (should pass after fix)
