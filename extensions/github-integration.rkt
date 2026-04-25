@@ -19,11 +19,21 @@
          "../tools/tool.rkt"
          ;; Q01: Helpers extracted to subdirectory
          (only-in "github/helpers.rkt"
-                  gh-binary-path run-command shell-quote
-                  valid-identifier? valid-number? valid-state? valid-method?
-                  gh-binary git-binary gh-unavailable-error
-                  gh-exec-result git-exec-result
-                  gh-success gh-success-json git-success
+                  gh-binary-path
+                  run-command
+                  shell-quote
+                  valid-identifier?
+                  valid-number?
+                  valid-state?
+                  valid-method?
+                  gh-binary
+                  git-binary
+                  gh-unavailable-error
+                  gh-exec-result
+                  git-exec-result
+                  gh-success
+                  gh-success-json
+                  git-success
                   get-repo-info))
 
 (provide github-integration-extension
@@ -196,14 +206,13 @@
 
 ;; --- gh-issue ---
 
-
 ;; ============================================================
 ;; Tool handlers
 ;; ============================================================
 
 ;; --- gh-issue ---
 
-(define (handle-gh-issue args)
+(define (handle-gh-issue args [exec-ctx #f])
   (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
     (cond
       [(not (gh-binary)) (gh-unavailable-error)]
@@ -326,7 +335,7 @@
 
 ;; --- gh-pr ---
 
-(define (handle-gh-pr args)
+(define (handle-gh-pr args [exec-ctx #f])
   (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
     (cond
       [(not (gh-binary)) (gh-unavailable-error)]
@@ -457,7 +466,7 @@
 
 ;; --- gh-milestone ---
 
-(define (handle-gh-milestone args)
+(define (handle-gh-milestone args [exec-ctx #f])
   (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
     (cond
       [(not (gh-binary)) (gh-unavailable-error)]
@@ -521,7 +530,7 @@
 
 ;; --- gh-board ---
 
-(define (handle-gh-board args)
+(define (handle-gh-board args [exec-ctx #f])
   (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
     (cond
       [(not (gh-binary)) (gh-unavailable-error)]
@@ -626,7 +635,7 @@
 
 ;; --- gh-wave-start ---
 
-(define (handle-gh-wave-start args)
+(define (handle-gh-wave-start args [exec-ctx #f])
   (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
     (define issue-num (hash-ref args 'issue_number #f))
     (cond
@@ -659,7 +668,7 @@
 
 ;; --- gh-wave-finish ---
 
-(define (handle-gh-wave-finish args)
+(define (handle-gh-wave-finish args [exec-ctx #f])
   (with-handlers ([exn:fail? (lambda (e) (make-error-result (exn-message e)))])
     (define issue-num (hash-ref args 'issue_number #f))
     (define files (hash-ref args 'files '()))

@@ -32,6 +32,11 @@
 
 ;; Register a tool dynamically from an extension.
 ;; The tool-registry in the extension context must be set (not #f).
+;;
+;; FIX: The tool scheduler always calls handlers with (args exec-ctx), but
+;; extension handlers typically take only (args). We wrap the handler to
+;; accept both arguments, making all extension tools work without requiring
+;; every handler to add [exec-ctx #f].
 (define (ext-register-tool! ctx
                             name
                             description
@@ -44,7 +49,10 @@
      'ext-register-tool!
      "no tool-registry available in extension context. \
             Ensure #:tool-registry is set when creating the context."))
-  (define t (make-tool name description schema handler #:prompt-guidelines prompt-guidelines))
+  ;; Wrap handler to always accept (args exec-ctx) — defense against arity mismatch
+  ;; when the scheduler calls ((tool-execute t) args exec-ctx).
+  (define wrapped-handler (lambda (args exec-ctx) (handler args)))
+  (define t (make-tool name description schema wrapped-handler #:prompt-guidelines prompt-guidelines))
   (register-tool! reg t))
 
 ;; ============================================================

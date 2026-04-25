@@ -299,7 +299,7 @@
                      (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
                    (handler ctx (hasheq))
                    (define pr (lookup-tool reg "planning-read"))
-                   (define result ((tool-execute pr) (hasheq 'artifact "STATE" 'base_dir dir)))
+                   (define result ((tool-execute pr) (hasheq 'artifact "STATE" 'base_dir dir) #f))
                    (check-false (tool-result-is-error? result))
                    (check-true (string-contains? (result-text result) "Active")))))
 
@@ -312,7 +312,7 @@
      (handler ctx (hasheq))
      (define pw (lookup-tool reg "planning-write"))
      (define result
-       ((tool-execute pw) (hasheq 'artifact "VALIDATION" 'content "## Tests pass" 'base_dir dir)))
+       ((tool-execute pw) (hasheq 'artifact "VALIDATION" 'content "## Tests pass" 'base_dir dir) #f))
      (check-false (tool-result-is-error? result))
      ;; Verify content was written
      (check-equal? (read-planning-artifact dir "VALIDATION") "## Tests pass"))))
@@ -337,7 +337,7 @@
   (handler ctx (hasheq))
   (define pw (lookup-tool reg "planning-write"))
   (define result
-    ((tool-execute pw) (hasheq 'artifact "../../etc/crontab.md" 'content "pwned" 'base_dir dir)))
+    ((tool-execute pw) (hasheq 'artifact "../../etc/crontab.md" 'content "pwned" 'base_dir dir) #f))
   ;; Should fail gracefully (artifact name rejected)
   (check-true (or (tool-result-is-error? result)
                   (not (file-exists? (build-path dir ".planning" "../../etc/crontab.md")))))
