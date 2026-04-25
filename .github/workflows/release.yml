@@ -87,6 +87,9 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-racket
+
       - name: Download release tarball
         id: download
         env:
@@ -96,7 +99,7 @@ jobs:
           VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           # The release job just uploaded the tarball, so it should be available immediately.
-          # Use a short retry loop as a safety net (upload may take a few seconds to propagate).
+          # Use a short retry loop as a safety net.
           ASSET_URL=""
           for i in $(seq 1 10); do
             ASSET_URL=$(curl -s -H "Authorization: token $GH_TOKEN" \
@@ -114,29 +117,22 @@ jobs:
             exit 1
           fi
           curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o "q-${VERSION}.tar.gz" "$ASSET_URL"
-          ls -la "q-${VERSION}.tar.gz"
-          file "q-${VERSION}.tar.gz"
-
-      - name: Setup Racket
-        uses: actions/checkout@v6
-        # We need the repo for the composite action reference
-      - uses: ./.github/actions/setup-racket
+            -o "/tmp/q-${VERSION}.tar.gz" "$ASSET_URL"
+          ls -la "/tmp/q-${VERSION}.tar.gz"
+          file "/tmp/q-${VERSION}.tar.gz"
 
       - name: Extract and install
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
+          cd /tmp
           tar xzf "q-${VERSION}.tar.gz"
-          if [ -d "q-${VERSION}" ]; then
-            mv "q-${VERSION}" q
-          fi
           cd q
           raco pkg install --auto --batch
 
       - name: Verify q --version
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
-          cd q
+          cd /tmp/q
           OUTPUT=$(racket main.rkt --version)
           echo "$OUTPUT"
           echo "$OUTPUT" | grep -q "version ${VERSION}"
@@ -147,14 +143,13 @@ jobs:
         run: |
           VERSION="${{ steps.download.outputs.VERSION }}"
           TAG="${GITHUB_REF#refs/tags/}"
-          cd q
           curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
-            -o release-manifest.json \
+            -o /tmp/release-manifest.json \
             "https://api.github.com/repos/${{ github.repository }}/releases/download/${TAG}/release-manifest.json" || true
-          if [ -f release-manifest.json ] && [ -s release-manifest.json ]; then
+          if [ -f /tmp/release-manifest.json ] && [ -s /tmp/release-manifest.json ]; then
             python3 -c "
           import json
-          m = json.load(open('release-manifest.json'))
+          m = json.load(open('/tmp/release-manifest.json'))
           assert m['version'] == '${VERSION}', f\"manifest version {m['version']} != expected ${VERSION}\"
           print(f'Manifest OK: version={m[\"version\"]}')
           "
@@ -164,5 +159,5 @@ jobs:
 
       - name: Run full test suite
         run: |
-          cd q
+          cd /tmp/q
           racket scripts/run-tests.rkt --suite fast --jobs 4
