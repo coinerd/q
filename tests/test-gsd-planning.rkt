@@ -579,3 +579,17 @@
                      (check-equal? (hook-result-action result) 'amend)
                      (define submit-text (hash-ref (hook-result-payload result) 'submit))
                      (check-true (string-contains? submit-text "[gsd-planning]"))))))
+
+;; ============================================================
+;; W0: /plan Exploration Cap Tests
+;; ============================================================
+
+(test-case "planning-system-prompt-contains-exploration-budget"
+  (check-true (string-contains? planning-system-prompt "EXPLORATION BUDGET")
+              "prompt should contain EXPLORATION BUDGET")
+  (check-true (string-contains? planning-system-prompt "30") "prompt should mention 30-call limit")
+  (check-true (string-contains? planning-system-prompt "Maximum 30") "prompt should say Maximum 30"))
+
+(test-case "planning-system-prompt-no-unlimited-exploration"
+  (check-false (string-contains? planning-system-prompt "Do NOT limit")
+               "prompt should NOT say 'Do NOT limit'"))
