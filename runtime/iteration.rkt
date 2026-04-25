@@ -239,7 +239,8 @@
 
   (define ctx-assembled (tiered-context->message-list tc))
 
-  ;; Emit context.assembled event
+  ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
+  (define ctx-token-count (estimate-context-tokens ctx-assembled))
   (emit-session-event! bus
                        session-id
                        "context.assembled"
@@ -248,7 +249,9 @@
                                'total-messages
                                (length ctx-to-use)
                                'assembled-messages
-                               (length ctx-assembled)))
+                               (length ctx-assembled)
+                               'tokenCount
+                               ctx-token-count))
 
   ;; Dispatch 'context hook — extensions can amend final context
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))

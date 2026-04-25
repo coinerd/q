@@ -718,11 +718,18 @@
   (check-equal? (transcript-entry-kind last-entry) 'system)
   (check-not-false (string-contains? (transcript-entry-text last-entry) "tool blocked")))
 
-(test-case "context.built is passthrough"
+(test-case "context.built stores tokenCount"
   (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [session-id "s1"]))
   (define evt (make-test-event "context.built" (hash 'tokenCount 42)))
   (define s1 (apply-event-to-state s0 evt))
-  (check-eq? s1 s0 "context.built returns state unchanged"))
+  (check-equal? (ui-state-context-tokens s1) 42) ; v0.19.12 W1: stores token count
+  (check-not-equal? s1 s0 "context.built now returns new state with token count"))
+
+(test-case "context.built without tokenCount is passthrough"
+  (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [session-id "s1"]))
+  (define evt (make-test-event "context.built" (hash)))
+  (define s1 (apply-event-to-state s0 evt))
+  (check-eq? s1 s0 "context.built without tokenCount returns state unchanged"))
 
 ;; ============================================================
 ;; W4-2: Additional event handler edge cases

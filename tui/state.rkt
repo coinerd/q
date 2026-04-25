@@ -144,6 +144,7 @@
          mock-provider? ; boolean — #t when using mock/fallback provider (BUG-55)
          focused-component ; (or/c #f symbol?) — id of component with focus
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
+         context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
          )
   #:transparent)
 
@@ -264,6 +265,7 @@
             #f ; mock-provider?
             #f ; focused-component
             #f ; editor-component
+            #f ; context-tokens
             ))
 
 ;; ============================================================
@@ -495,8 +497,12 @@
     ;; Model request initiated — mark busy if not already
     [("model.request.started") (struct-copy ui-state state [busy? #t])]
 
-    ;; Context was assembled — informational, keep state
-    [("context.built") state]
+    ;; Context built — store token count (v0.19.12 W1)
+    [("context.built")
+     (define tok (hash-ref payload 'tokenCount #f))
+     (if tok
+         (struct-copy ui-state state [context-tokens tok])
+         state)]
 
     [("tool.call.blocked")
      (define name (hash-ref payload 'name "?"))

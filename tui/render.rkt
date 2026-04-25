@@ -545,8 +545,15 @@
       [else ""]))
   ;; BUG-55: Show mock provider warning in status bar
   (define mock-warning (if (ui-state-mock-provider? state) " [No API key]" ""))
+  ;; v0.19.12 W1: Show context token count in status bar
+  (define ctx-tok (ui-state-context-tokens state))
+  (define tok-str
+    (if ctx-tok
+        (format " ~aK" (quotient (max 1 ctx-tok) 1000))
+        ""))
   (define left (format " ~a q | ~a | ~a " busy-marker session model))
-  (define right (format "~a~a~a~a " status mock-warning thinking-indicator scroll-indicator))
+  (define right
+    (format "~a~a~a~a~a " status mock-warning tok-str thinking-indicator scroll-indicator))
   ;; Pad to width
   (define pad-len (max 0 (- width (string-visible-width left) (string-visible-width right))))
   (define padded (string-append left (make-string pad-len #\ ) right))
