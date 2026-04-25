@@ -1,6 +1,6 @@
 # Q Event Taxonomy Reference
 
-Complete reference for all event types in Q 0.19.11.
+Complete reference for all event types in Q 0.20.0.
 
 ## Base Types
 
@@ -198,6 +198,98 @@ No additional fields. Use `tool-call-event-tool-name` and `tool-call-event-argum
 | `text` | string | Summary text |
 | `entry-range` | list | Start/end entries |
 | `token-count` | integer | Token count |
+
+## Spiral / Recovery Events
+
+### `spiral.error-warning`
+Emitted when 6+ consecutive tool errors detected.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `consecutive-errors` | integer | Error streak count |
+| `message` | string | Steering hint to break spiral |
+
+### `spiral.bash-only-warning`
+Emitted when 10+ consecutive bash-only tool calls detected.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `consecutive-bash` | integer | Bash-only streak count |
+| `message` | string | Steering hint to use edit tool |
+
+### `spiral.bash-breaker`
+Emitted when bash-only spiral breaker is injected.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string | Forced steering message |
+
+## Steering / Budget Events
+
+### `steering.budget`
+Emitted when explore-vs-implement budget tracking fires.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `level` | string | `soft`, `hard` |
+| `explore-count` | integer | Consecutive exploration steps |
+| `message` | string | Steering message |
+
+### `steering.budget-soft`
+Emitted at soft steering threshold.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `explore-count` | integer | Consecutive exploration steps |
+
+### `steering.budget-hard`
+Emitted at hard steering cap.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `explore-count` | integer | Consecutive exploration steps |
+
+## Context Assembly Events
+
+### `context.assembled`
+Emitted after context assembly completes.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tokenCount` | integer | Estimated context token count |
+| `strategy` | string | Assembly strategy name |
+
+### `context.built`
+Emitted after context is fully built for LLM call.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tokenCount` | integer | Estimated context token count |
+| `message-count` | integer | Messages in assembled context |
+
+### `context.assembly.blocked`
+Emitted when context assembly is blocked by extension.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reason` | string | Block reason (e.g. `extension-block`) |
+
+## Queue / Followup Events
+
+### `queue.status-update`
+Emitted when message queue state changes.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pending` | integer | Pending messages in queue |
+| `status` | string | Queue status |
+
+### `followup.injected`
+Emitted when a queued followup message is injected.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string | Injected message content |
 
 ## Hook Points (47 total)
 

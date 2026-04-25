@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-<!-- verified-against: 0.19.7 -->
+<!-- verified-against: 0.20.0 -->
 
 This document tracks compatibility between q versions, Racket versions, and
 extension API versions.
@@ -9,9 +9,14 @@ extension API versions.
 
 | q Version | Min Racket | Tested Racket | Notes |
 |-----------|-----------|---------------|-------|
-| 0.15.x | 8.10 | 8.10 | Event-driven core, sandboxing, extensions, TUI |
-| 0.14.x | 8.10 | 8.10 | Trace logger, steering fixes, max_tokens resolution |
-| 0.13.x | 8.10 | 8.10 | Session tree, provider improvements |
+| 0.20.x | 8.10 | 8.10 | pi→q parity: file refs, cost tracking, tree browser, print mode, hot-reload, permission gates |
+| 0.19.x | 8.10 | 8.10 | Edit hardening, budget counter, `/plan` exploration cap, context usage visibility, benchmark suite |
+| 0.18.x | 8.10 | 8.10 | Exploration steering config, dogfooding infrastructure |
+| 0.17.x | 8.10 | 8.10 | Extensions: spawn-subagents, GSD planning, GitHub integration, skill-route, racket-tooling, remote-collab |
+| 0.16.x | 8.10 | 8.10 | Architecture hardening, shell injection fixes, Azure streaming, safe-mode, credential redaction, CI pipeline |
+| 0.15.x | 8.10 | 8.10 | Context manager, trace logger, exploration steering escalation |
+| 0.14.x | 8.10 | 8.10 | Request-cycle trace logger, steering fixes, max_tokens resolution, model timeouts |
+| 0.13.x | 8.10 | 8.10 | Session tree, context reducer, O(n²) performance fix |
 | 0.12.x | 8.10 | 8.10 | OAuth framework, credential store |
 | 0.11.x | 8.10 | 8.10 | Tool scheduler, extension hooks v2 |
 | 0.10.x | 8.10 | 8.10 | Requires `racket/base`, `rackunit` |
@@ -21,7 +26,10 @@ extension API versions.
 ## Extension API Version Compatibility
 
 | q Version | Extension API | Breaking? | Migration |
-|-----------|--------------|-----------|-----------|
+|-----------|--------------|-----------|----------|
+| 0.20.0+ | `0.7` | No | Additive — permission gates, hot-reload hooks |
+| 0.17.0+ | `0.6` | No | Additive — extension subdirectories, execute-command hook, catalog API |
+| 0.16.0+ | `0.5.1` | No | Additive — `dangerous?` tool field, one-shot safe-mode |
 | 0.15.0+ | `0.5` | No | Additive — safe-mode hooks, quarantine |
 | 0.13.0+ | `0.4` | No | Additive — session-tree hooks |
 | 0.10.0+ | `0.3` | No | Additive — new hook types |
