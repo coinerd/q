@@ -314,7 +314,9 @@
               (cond
                 [(eq? result 'quit) (set-box! (tui-ctx-running-box ctx) #f)]
                 [(and (list? result) (eq? (car result) 'submit))
-                 (define text (cadr result))
+                 (define raw-text (cadr result))
+                 ;; G3.3: Expand !! inline bash prefix
+                 (define text (expand-inline-bash raw-text (unbox (tui-ctx-last-prompt-box ctx))))
                  ;; Store prompt for /retry (#1378)
                  (set-box! (tui-ctx-last-prompt-box ctx) text)
                  ;; G3.1: If agent is busy, enqueue as followup instead of calling runner

@@ -29,23 +29,23 @@
     ;; Test 1: mode-for-config — all command mappings
     ;; --------------------------------------------------
     (test-case "mode-for-config maps 'help to 'help"
-      (define cfg (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f))
+      (define cfg (cli-config 'help #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
       (check-equal? (mode-for-config cfg) 'help))
 
     (test-case "mode-for-config maps 'version to 'version"
-      (define cfg (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f))
+      (define cfg (cli-config 'version #f #f #f 'interactive #f #f #f 10 #f '() #f #f '() #f #f))
       (check-equal? (mode-for-config cfg) 'version))
 
     (test-case "mode-for-config falls through to mode for chat"
-      (define cfg (cli-config 'chat #f #f #f 'tui #f #f #f 10 #f '() #f #f '() #f))
+      (define cfg (cli-config 'chat #f #f #f 'tui #f #f #f 10 #f '() #f #f '() #f #f))
       (check-equal? (mode-for-config cfg) 'tui))
 
     (test-case "mode-for-config maps 'single mode"
-      (define cfg (cli-config 'prompt #f "hi" #f 'single #f #f #f 10 #f '() #f #f '() #f))
+      (define cfg (cli-config 'prompt #f "hi" #f 'single #f #f #f 10 #f '() #f #f '() #f #f))
       (check-equal? (mode-for-config cfg) 'single))
 
     (test-case "mode-for-config maps 'json mode"
-      (define cfg (cli-config 'chat #f #f #f 'json #f #f #f 10 #f '() #f #f '() #f))
+      (define cfg (cli-config 'chat #f #f #f 'json #f #f #f 10 #f '() #f #f '() #f #f))
       (check-equal? (mode-for-config cfg) 'json))
 
     ;; --------------------------------------------------

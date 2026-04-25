@@ -7,6 +7,9 @@
 
 (require racket/string
          racket/list
+         racket/file
+         racket/path
+         file/glob
          "char-width.rkt"
          "command-parse.rkt"
          "terminal.rkt")
@@ -79,9 +82,15 @@
          has-cursor-markers?
          insert-cursor-marker
 
+         ;; File reference expansion (G3.2)
+         input-expand-file-ref
+
          ;; X10 mouse decoding
          decode-mouse-x10
-         decode-mouse-tui-term)
+         decode-mouse-tui-term
+
+         ;; Inline bash expansion (G3.3)
+         expand-inline-bash)
 
 ;; Maximum undo stack depth
 (define MAX-UNDO-STACK 100)
@@ -658,6 +667,97 @@
 (define (insert-cursor-marker str pos)
   (define safe-pos (min pos (string-length str)))
   (string-append (substring str 0 safe-pos) (cursor-marker-string) (substring str safe-pos)))
+
+;; ============================================================
+;; Inline bash expansion (G3.3)
+;; ============================================================
+
+;; Expand `!!` at the start of text with the last prompt.
+;; - "!!" → last-prompt (or stays as "!!" if no last-prompt)
+;; - "!! extra" → last-prompt + " extra" (or stays as "!! extra")
+;; - "!cmd" → passes through unchanged (single !, for agent to handle)
+;; - regular text → passes through unchanged
+(define (expand-inline-bash text last-prompt)
+  (cond
+    [(string-prefix? text "!!")
+     (define rest (substring text 2))
+     (if last-prompt
+         (string-append last-prompt rest)
+         text)] ; no last prompt — leave as-is
+    [else text]))
+
+;; ============================================================
+;; File reference expansion (G3.2)
+;; ============================================================
+
+;; Find the @ that starts a file reference before the cursor.
+;; Walks backward from cursor, treating non-whitespace chars as
+;; path characters. Returns position of @ or #f.
+;; The @ must be at position 0 or preceded by whitespace.
+(define (find-at-prefix buf cur)
+  (let loop ([i (sub1 cur)])
+    (cond
+      [(< i 0) #f]
+      [(char=? (string-ref buf i) #\@)
+       (if (or (zero? i) (char-whitespace? (string-ref buf (sub1 i)))) i #f)]
+      [(char-whitespace? (string-ref buf i)) #f]
+      [else (loop (sub1 i))])))
+
+;; Compute the longest common prefix of a list of strings.
+(define (longest-common-prefix strings)
+  (if (null? strings)
+      ""
+      (foldl (lambda (s prefix) (string-common-prefix prefix s)) (car strings) (cdr strings))))
+
+;; Common prefix of two strings.
+(define (string-common-prefix a b)
+  (let loop ([i 0])
+    (cond
+      [(or (>= i (string-length a)) (>= i (string-length b))) (substring a 0 i)]
+      [(char=? (string-ref a i) (string-ref b i)) (loop (add1 i))]
+      [else (substring a 0 i)])))
+
+;; Expand a partial file path using glob.
+;; Returns the expanded string or #f if no useful expansion.
+;; Results are converted to relative paths from CWD.
+(define (expand-file-path partial)
+  (if (string=? partial "")
+      #f
+      (let ([matches (glob (string-append partial "*"))])
+        (define base (current-directory))
+        (define paths
+          (for/list ([p (in-list matches)]
+                     #:when (file-exists? p))
+            (path->string (find-relative-path base p))))
+        (cond
+          [(null? paths) #f]
+          [(= (length paths) 1) (car paths)]
+          [else
+           (define common (longest-common-prefix paths))
+           ;; Only return if we actually expanded beyond the partial
+           (if (string=? common partial) #f common)]))))
+
+;; Expand @ file reference at cursor position.
+;; When the cursor is after an @ followed by a partial path,
+;; expand it using glob. Returns a new input-state with the
+;; expanded text, or the original state if no expansion is possible.
+(define (input-expand-file-ref st)
+  (define buf (input-state-buffer st))
+  (define cur (input-state-cursor st))
+  (define at-pos (find-at-prefix buf cur))
+  (cond
+    ;; No @ file reference found before cursor
+    [(not at-pos) st]
+    [else
+     (define partial (substring buf (add1 at-pos) cur))
+     (define expanded (expand-file-path partial))
+     (cond
+       [(not expanded) st]
+       [else
+        ;; Replace partial with expanded, keep @ prefix
+        (define new-buf (string-append (substring buf 0 (add1 at-pos)) expanded (substring buf cur)))
+        (define new-cursor (+ (add1 at-pos) (string-length expanded)))
+        (push-undo st (struct-copy input-state st [buffer new-buf] [cursor new-cursor]))])]))
 
 ;; Slash commands
 (define (input-slash-command text)

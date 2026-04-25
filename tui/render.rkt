@@ -8,6 +8,7 @@
          "char-width.rkt"
          "theme.rkt"
          "../util/markdown.rkt"
+         "../util/cost-tracker.rkt"
          (only-in "../extensions/custom-renderer-registry.rkt" lookup-custom-renderer-for-tool))
 
 ;; Types
@@ -551,9 +552,15 @@
     (if ctx-tok
         (format " ~aK" (quotient (max 1 ctx-tok) 1000))
         ""))
+  ;; G8.4: Show cost in status bar
+  (define ct (ui-state-cost-tracker state))
+  (define cost-str
+    (if (and ct (> (+ (cost-tracker-input-tokens-total ct) (cost-tracker-output-tokens-total ct)) 0))
+        (format " ~a" (format-cost (cost-tracker-total ct)))
+        ""))
   (define left (format " ~a q | ~a | ~a " busy-marker session model))
   (define right
-    (format "~a~a~a~a~a " status mock-warning tok-str thinking-indicator scroll-indicator))
+    (format "~a~a~a~a~a~a " status mock-warning tok-str cost-str thinking-indicator scroll-indicator))
   ;; Pad to width
   (define pad-len (max 0 (- width (string-visible-width left) (string-visible-width right))))
   (define padded (string-append left (make-string pad-len #\ ) right))
