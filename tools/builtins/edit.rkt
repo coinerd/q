@@ -225,8 +225,9 @@
                     ;; W0.3: Save backup before edit
                     (define backup-path (save-backup path-str content))
 
-                    ;; Perform replacement
-                    (define new-content (regexp-replace (regexp-quote old-text) content new-text))
+                    ;; Perform replacement (string-replace, not regexp-replace,
+                    ;; to avoid & and \digit expansion in new-text)
+                    (define new-content (string-replace content old-text new-text #:all? #f))
 
                     ;; W0.2: Post-edit line-count integrity check
                     (define expected-delta (- (line-count new-text) (line-count old-text)))

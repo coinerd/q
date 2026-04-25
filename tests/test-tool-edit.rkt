@@ -197,3 +197,12 @@
   (define guidelines (tool-prompt-guidelines t))
   ;; v0.19.10: guidelines should mention the 500-char limit
   (check-true (string-contains? guidelines "500") "should mention 500-char limit"))
+
+(test-case "tool-edit: & in new-text is not expanded (was regexp-replace bug)"
+  (define tmp (make-temporary-file "q-test-edit-~a.txt"))
+  (display-to-file "x = a & b\ny = 1" tmp #:exists 'replace)
+  ;; old-text matches first line; new-text also has & — must NOT expand & as backreference
+  (define result (tool-edit (hasheq 'path tmp 'old-text "x = a & b" 'new-text "x = a & b | c")))
+  (check-false (tool-result-is-error? result) "edit with & in new-text should succeed")
+  (check-equal? (file->string tmp) "x = a & b | c\ny = 1")
+  (delete-file tmp))
