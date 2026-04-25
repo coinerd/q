@@ -63,20 +63,28 @@
   (when (should-register? "edit")
     (register-tool!
      registry
-     (make-tool "edit"
-                "Edit a file with exact text replacement"
-                (hasheq 'type
-                        "object"
-                        'required
-                        '("path" "old-text" "new-text")
-                        'properties
-                        (hasheq 'path
-                                (hasheq 'type "string" 'description "Path to file to edit")
-                                'old-text
-                                (hasheq 'type "string" 'description "Exact text to find")
-                                'new-text
-                                (hasheq 'type "string" 'description "Replacement text")))
-                tool-edit)))
+     (make-tool
+      "edit"
+      "Edit a file by replacing exact text. old-text MUST be copied verbatim from a prior read result — do not guess."
+      (hasheq
+       'type
+       "object"
+       'required
+       '("path" "old-text" "new-text")
+       'properties
+       (hasheq
+        'path
+        (hasheq 'type "string" 'description "Path to file to edit")
+        'old-text
+        (hasheq 'type
+                "string"
+                'description
+                "EXACT text to replace, copied verbatim from a read result. Do not type from memory.")
+        'new-text
+        (hasheq 'type "string" 'description "Replacement text")))
+      tool-edit
+      #:prompt-guidelines
+      "IMPORTANT: old-text must match the file content exactly. Copy it verbatim from a prior read tool result. If edit fails, re-read the file first.")))
   (when (should-register? "bash")
     (register-tool!
      registry
