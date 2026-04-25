@@ -541,7 +541,9 @@
                  [seen-paths (set)] ;; v0.18.0: same-file dedup tracking
                  [intent-retry-count 0]
                  [consecutive-error-count 0] ;; v0.19.10: spiral breaker
-                 [recent-tool-names '()]) ;; v0.19.10: bash-only streak detection
+                 [recent-tool-names '()] ;; v0.19.10: bash-only streak detection
+                 [explore-count 0] ;; v0.19.11: cumulative explore budget
+                 [implement-count 0]) ;; v0.19.11: cumulative implement budget
 
         ;; ── Cooperative cancellation check (between iterations) ──
         ;; R2-5 + FEAT-61: Check steering queue + drain injected messages.
@@ -691,7 +693,9 @@
                                           (set)
                                           intent-retry-count
                                           0
-                                          '()))))))
+                                          '()
+                                          explore-count
+                                          implement-count))))))
                      (define base-result (if followup-continued? effective-result effective-result))
                      ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
                      ;; to write/edit but made no tool call, inject a steering nudge.
@@ -726,7 +730,9 @@
                                    (set)
                                    (add1 intent-retry-count)
                                    consecutive-error-count
-                                   recent-tool-names)))
+                                   recent-tool-names
+                                   explore-count
+                                   implement-count)))
                          base-result)))]
 
                 ;; ── Hard iteration limit reached: append and stop ──
@@ -779,7 +785,9 @@
                        seen-paths
                        intent-retry-count
                        consecutive-error-count
-                       recent-tool-names)]
+                       recent-tool-names
+                       explore-count
+                       implement-count)]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
@@ -834,6 +842,38 @@
                      [has-write-now? 0]
                      [(not should-increment?) consecutive-tool-count]
                      [else (add1 consecutive-tool-count)]))
+
+                 ;; v0.19.11: Cumulative explore vs implement budget tracking.
+                 ;; Unlike consecutive-tool-count (resets on any write), these accumulate
+                 ;; across the entire session to detect pathological explore-to-implement ratios.
+                 (define write-tools '("edit" "write" "racket_edit" "racket_codemod"))
+                 (define new-explore-count
+                   (if (not has-write-now?)
+                       (+ explore-count (length current-tool-calls))
+                       explore-count))
+                 (define new-implement-count
+                   (if has-write-now?
+                       (+ implement-count
+                          (for/sum ([tc (in-list current-tool-calls)])
+                                   (if (member (tool-call-name tc) write-tools) 1 0)))
+                       implement-count))
+
+                 ;; v0.19.11: Emit budget event and inject steering for bad ratios
+                 (when (> new-explore-count 0)
+                   (emit-session-event! bus
+                                        session-id
+                                        "steering.budget"
+                                        (hasheq 'explore
+                                                new-explore-count
+                                                'implement
+                                                new-implement-count
+                                                'ratio
+                                                (if (> new-implement-count 0)
+                                                    (exact->inexact (/ new-explore-count
+                                                                       new-implement-count))
+                                                    new-explore-count)
+                                                'iteration
+                                                (add1 iteration))))
 
                  ;; v0.19.10: Count errors in this turn's tool results.
                  ;; Scan updated-ctx for tool-result messages with error status.
@@ -898,117 +938,179 @@
                                                   'iteration
                                                   (add1 iteration)))))
 
+                 ;; v0.19.11: Wrap steering injection in error handler (#1870)
                  (define exec-context
                    (let ([base-ctx updated-ctx]
                          [steering-msg
-                          (cond
-                            ;; v0.19.10: Spiral breaker — 10+ bash-only turns
-                            [(and (>= (length new-recent-tools) 10)
-                                  (let ([bash-count (for/sum ([n (in-list new-recent-tools)])
-                                                             (if (equal? n "bash") 1 0))])
-                                    (>= bash-count 10)))
-                             (emit-session-event! bus
-                                                  session-id
-                                                  "spiral.bash-breaker"
-                                                  (hasheq 'bash-count
-                                                          (for/sum ([n (in-list new-recent-tools)])
-                                                                   (if (equal? n "bash") 1 0))
-                                                          'iteration
-                                                          (add1 iteration)))
-                             (make-message
-                              (generate-id)
-                              #f
-                              'user
-                              'message
-                              (list
-                               (make-text-part
-                                (string-append
-                                 "[steering:spiral] You've made 10+ consecutive bash calls. "
-                                 "Stop trying to fix things with bash. Use the edit tool with "
-                                 "the correct old-text (read the file first), or use git to revert. "
-                                 "Do not run any more bash commands to inspect or fix the file.")))
-                              (now-seconds)
-                              (hasheq))]
+                          (with-handlers ([exn:fail? (lambda (e)
+                                                       (log-warning 'iteration
+                                                                    "Steering injection failed: ~a"
+                                                                    (exn-message e))
+                                                       #f)])
+                            (cond
+                              ;; v0.19.10: Spiral breaker — 10+ bash-only turns
+                              [(and (>= (length new-recent-tools) 10)
+                                    (let ([bash-count (for/sum ([n (in-list new-recent-tools)])
+                                                               (if (equal? n "bash") 1 0))])
+                                      (>= bash-count 10)))
+                               (emit-session-event! bus
+                                                    session-id
+                                                    "spiral.bash-breaker"
+                                                    (hasheq 'bash-count
+                                                            (for/sum ([n (in-list new-recent-tools)])
+                                                                     (if (equal? n "bash") 1 0))
+                                                            'iteration
+                                                            (add1 iteration)))
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (string-append
+                                   "[steering:spiral] You've made 10+ consecutive bash calls. "
+                                   "Stop trying to fix things with bash. Use the edit tool with "
+                                   "the correct old-text (read the file first), or use git to revert. "
+                                   "Do not run any more bash commands to inspect or fix the file.")))
+                                (now-seconds)
+                                (hasheq))]
 
-                            ;; v0.19.10: Spiral breaker — 6+ consecutive errors
-                            [(>= new-error-count 6)
-                             (make-message
-                              (generate-id)
-                              #f
-                              'user
-                              'message
-                              (list
-                               (make-text-part
-                                (format
-                                 (string-append
-                                  "[steering:error-spiral] ~a consecutive tool errors detected. "
-                                  "Stop retrying the same approach. Re-read the file first, then "
-                                  "use a completely different strategy. Consider using git checkout "
-                                  "to revert any corrupted files.")
-                                 new-error-count)))
-                              (now-seconds)
-                              (hasheq))]
+                              ;; v0.19.10: Spiral breaker — 6+ consecutive errors
+                              [(>= new-error-count 6)
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (format
+                                   (string-append
+                                    "[steering:error-spiral] ~a consecutive tool errors detected. "
+                                    "Stop retrying the same approach. Re-read the file first, then "
+                                    "use a completely different strategy. Consider using git checkout "
+                                    "to revert any corrupted files.")
+                                   new-error-count)))
+                                (now-seconds)
+                                (hasheq))]
 
-                            ;; Level 3: Hard cap — force-stop the exploration
-                            [(>= effective-tool-count hard-at)
-                             (emit-session-event! bus
-                                                  session-id
-                                                  "exploration.hard-cap"
-                                                  (hasheq 'consecutive-tools
-                                                          effective-tool-count
-                                                          'iteration
-                                                          (add1 iteration)))
-                             (make-message
-                              (generate-id)
-                              #f
-                              'user
-                              'message
-                              (list
-                               (make-text-part
-                                (format
-                                 (string-append
-                                  "[steering:hard] You've made ~a consecutive read-only tool calls. "
-                                  "This is beyond the exploration budget. "
-                                  "You MUST now use the write or edit tool to produce output, "
-                                  "or explain what you cannot do.")
-                                 effective-tool-count)))
-                              (now-seconds)
-                              (hasheq))]
-                            ;; Level 2: Strong nudge
-                            [(>= effective-tool-count strong-at)
-                             (make-message
-                              (generate-id)
-                              #f
-                              'user
-                              'message
-                              (list
-                               (make-text-part
-                                (format
-                                 (string-append
-                                  "[steering:strong] ~a consecutive read-only tool calls detected. "
-                                  "Stop exploring. You MUST produce the actual output now "
-                                  "using the write or edit tool. "
-                                  "Do NOT run any more read-only commands.")
-                                 effective-tool-count)))
-                              (now-seconds)
-                              (hasheq))]
-                            ;; Level 1: Gentle nudge
-                            [(>= effective-tool-count gentle-at)
-                             (make-message
-                              (generate-id)
-                              #f
-                              'user
-                              'message
-                              (list (make-text-part
-                                     (format
-                                      (string-append
-                                       "[steering] You've made ~a consecutive read-only tool calls. "
-                                       "You MUST now use the write or edit tool to produce output. "
-                                       "Do not explain what you will do — just do it.")
-                                      effective-tool-count)))
-                              (now-seconds)
-                              (hasheq))]
-                            [else #f])])
+                              ;; Level 3: Hard cap — force-stop the exploration
+                              [(>= effective-tool-count hard-at)
+                               (emit-session-event! bus
+                                                    session-id
+                                                    "exploration.hard-cap"
+                                                    (hasheq 'consecutive-tools
+                                                            effective-tool-count
+                                                            'iteration
+                                                            (add1 iteration)))
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (format
+                                   (string-append
+                                    "[steering:hard] You've made ~a consecutive read-only tool calls. "
+                                    "This is beyond the exploration budget. "
+                                    "You MUST now use the write or edit tool to produce output, "
+                                    "or explain what you cannot do.")
+                                   effective-tool-count)))
+                                (now-seconds)
+                                (hasheq))]
+                              ;; Level 2: Strong nudge
+                              [(>= effective-tool-count strong-at)
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (format
+                                   (string-append
+                                    "[steering:strong] ~a consecutive read-only tool calls detected. "
+                                    "Stop exploring. You MUST produce the actual output now "
+                                    "using the write or edit tool. "
+                                    "Do NOT run any more read-only commands.")
+                                   effective-tool-count)))
+                                (now-seconds)
+                                (hasheq))]
+                              ;; Level 1: Gentle nudge
+                              ;; v0.19.11: Budget ratio steering — 20:1 hard
+                              [(and (> new-explore-count 20) (< new-implement-count 2))
+                               (emit-session-event! bus
+                                                    session-id
+                                                    "steering.budget-hard"
+                                                    (hasheq 'explore
+                                                            new-explore-count
+                                                            'implement
+                                                            new-implement-count
+                                                            'iteration
+                                                            (add1 iteration)))
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (format
+                                   (string-append
+                                    "[steering:budget-hard] ~a explore calls with only ~a implement calls. "
+                                    "You have been reading code for too long without producing output. "
+                                    "STOP reading files. Use the edit or write tool NOW. "
+                                    "If you cannot produce output, explain in one sentence why and stop.")
+                                   new-explore-count
+                                   new-implement-count)))
+                                (now-seconds)
+                                (hasheq))]
+                              ;; v0.19.11: Budget ratio steering — 15:1 gentle
+                              [(and (> new-explore-count 15) (= new-implement-count 0))
+                               (emit-session-event! bus
+                                                    session-id
+                                                    "steering.budget-soft"
+                                                    (hasheq 'explore
+                                                            new-explore-count
+                                                            'implement
+                                                            new-implement-count
+                                                            'iteration
+                                                            (add1 iteration)))
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (format
+                                   (string-append
+                                    "[steering:budget] ~a explore calls with zero implement calls. "
+                                    "You should start writing output soon. "
+                                    "Aim to use the edit or write tool within the next 2-3 turns.")
+                                   new-explore-count)))
+                                (now-seconds)
+                                (hasheq))]
+
+                              [(>= effective-tool-count gentle-at)
+                               (make-message
+                                (generate-id)
+                                #f
+                                'user
+                                'message
+                                (list
+                                 (make-text-part
+                                  (format
+                                   (string-append
+                                    "[steering] You've made ~a consecutive read-only tool calls. "
+                                    "You MUST now use the write or edit tool to produce output. "
+                                    "Do not explain what you will do — just do it.")
+                                   effective-tool-count)))
+                                (now-seconds)
+                                (hasheq))]
+                              [else #f]))])
                      (if steering-msg
                          (append base-ctx (list steering-msg))
                          base-ctx)))
@@ -1020,7 +1122,9 @@
                        new-seen-paths
                        intent-retry-count
                        new-error-count
-                       new-recent-tools)]
+                       new-recent-tools
+                       new-explore-count
+                       new-implement-count)]
 
                 ;; ── Unknown termination: append and return ──
                 [else
