@@ -421,7 +421,7 @@
     [(not (file-exists? spec-path)) (make-error-result (format "Spec file not found: ~a" spec-file))]
     [else
      (define spec-data
-       (with-handlers ([exn:fail? (lambda (e) #f)])
+       (with-handlers ([exn:fail? (lambda (e) (log-warning (format "github/spec-read: ~a" (exn-message e))) #f)])
          (call-with-input-file spec-path read-json)))
      (cond
        [(not spec-data) (make-error-result (format "Invalid JSON in spec file: ~a" spec-file))]

@@ -88,7 +88,9 @@
   (cond
     [(eq? result #f)
      (kill-thread th)
-     (with-handlers ([exn:fail? void])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (log-warning (format "llm/stream: cleanup error: ~a"
+                                                       (exn-message e))))])
        (cleanup-thunk)) ; #454: close ports
      (raise (exn:fail:network:timeout (format "HTTP request timeout (~a seconds)" timeout-secs)
                                       (current-continuation-marks)))]
@@ -183,7 +185,10 @@
         [(not data-str) acc] ; non-data line
         [(sse-done? data-str) acc] ; termination
         [else
-         (with-handlers ([exn:fail? (lambda (e) acc)]) ; skip malformed
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (log-warning (format "llm/stream: malformed SSE data: ~a"
+                                                           (exn-message e)))
+                                      acc)]) ; skip malformed
            (define parsed (string->jsexpr data-str))
            (cons parsed acc))])))
   (reverse results))
@@ -291,7 +296,9 @@
     [(not data-str) #f]
     [(sse-done? data-str) 'done]
     [else
-     (with-handlers ([exn:fail? (lambda (e) #f)])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (log-warning (format "llm/stream: parse error: ~a" (exn-message e)))
+                                  #f)])
        (string->jsexpr data-str))]))
 
 ;; ============================================================

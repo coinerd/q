@@ -45,7 +45,7 @@
   dir)
 
 (define (save-backup path-str content)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
+  (with-handlers ([exn:fail? (lambda (e) (log-warning (format "edit/backup: ~a" (exn-message e))) #f)])
     (define dir (ensure-backup-dir))
     (define basename (file-name-from-path path-str))
     (define timestamp (format "~a" (inexact->exact (current-inexact-milliseconds))))
@@ -67,7 +67,7 @@
       (last parts)))
 
 (define (prune-old-backups dir basename)
-  (with-handlers ([exn:fail? (lambda (e) (void))])
+  (with-handlers ([exn:fail? (lambda (e) (log-warning (format "edit/prune: ~a" (exn-message e))) (void))])
     (define all (directory-list dir))
     (define matching
       (filter (lambda (f) (string-contains? (path->string f) basename))
@@ -240,7 +240,7 @@
                     (cond
                       [(> delta-diff 2)
                        ;; Auto-revert: write back original content
-                       (with-handlers ([exn:fail? (lambda (e) (void))])
+                       (with-handlers ([exn:fail? (lambda (e) (log-warning (format "edit/auto-revert: ~a" (exn-message e))) (void))])
                          (display-to-file content path-str #:exists 'replace))
                        (make-error-result
                         (format

@@ -7,7 +7,10 @@
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/glob.rkt" glob->regexp)
-         (only-in "../../util/path-helpers.rkt" contains-null-bytes? bytes->display-lines expand-home-path)
+         (only-in "../../util/path-helpers.rkt"
+                  contains-null-bytes?
+                  bytes->display-lines
+                  expand-home-path)
          (only-in "../../util/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
 (provide tool-grep)
@@ -50,7 +53,9 @@
     [(not (file-exists? file-path)) (values '() #f)]
     [else
      (define raw-bytes
-       (with-handlers ([exn:fail? (lambda (e) #f)])
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning (format "grep: ~a" (exn-message e)))
+                                    #f)])
          (file->bytes file-path)))
      (cond
        [(not raw-bytes) (values '() #t)] ; unreadable → skip
@@ -108,7 +113,9 @@
   (define dir-path (string->path dir-path-str))
   ;; Use in-directory for recursive walk
   (define all-paths
-    (with-handlers ([exn:fail? (lambda (e) '())])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning (format "grep: ~a" (exn-message e)))
+                                 '())])
       (for/list ([p (in-directory dir-path)]
                  #:when (file-exists? p))
         p)))
@@ -161,7 +168,9 @@
 
 (define (search-single-file the-path path-str pattern-rx context-lines max-results files-searched)
   (define raw-bytes
-    (with-handlers ([exn:fail? (lambda (e) #f)])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-warning (format "grep: ~a" (exn-message e)))
+                                 #f)])
       (file->bytes the-path)))
   (cond
     [(not raw-bytes)
@@ -229,7 +238,9 @@
               ([f (in-list files)])
       (define f-str (path->string f))
       (define raw-bytes
-        (with-handlers ([exn:fail? (lambda (e) #f)])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (log-warning (format "grep: ~a" (exn-message e)))
+                                     #f)])
           (file->bytes f)))
       (cond
         [(not raw-bytes) acc] ; unreadable → skip
@@ -264,7 +275,9 @@
       (define match-info (second entry))
       (define match-line-num (first match-info))
       (define raw-bytes
-        (with-handlers ([exn:fail? (lambda (e) #f)])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (log-warning (format "grep: ~a" (exn-message e)))
+                                     #f)])
           (file->bytes f-str)))
       (if (not raw-bytes)
           acc

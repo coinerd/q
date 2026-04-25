@@ -115,12 +115,20 @@
 (test-case "env-backend: load from environment variable"
   (define be (make-env-credential-backend))
   (check-equal? (backend-name be) "env")
-  ;; Set env var
-  (putenv "Q_TEST_PROVIDER_API_KEY" "sk-env-test-key")
-  (define cred (backend-load be "test_provider" #:env-var "Q_TEST_PROVIDER_API_KEY"))
-  (check-not-false cred)
-  (check-equal? (hash-ref cred 'api-key) "sk-env-test-key")
-  (check-equal? (hash-ref cred 'source) "environment"))
+  ;; Set env var with guaranteed cleanup (TEST-01)
+  (define old-val (environment-variables-ref (current-environment-variables)
+                                              #"Q_TEST_PROVIDER_API_KEY"))
+  (dynamic-wind
+    (lambda () (putenv "Q_TEST_PROVIDER_API_KEY" "sk-env-test-key"))
+    (lambda ()
+      (define cred (backend-load be "test_provider" #:env-var "Q_TEST_PROVIDER_API_KEY"))
+      (check-not-false cred)
+      (check-equal? (hash-ref cred 'api-key) "sk-env-test-key")
+      (check-equal? (hash-ref cred 'source) "environment"))
+    (lambda ()
+      (if old-val
+          (putenv "Q_TEST_PROVIDER_API_KEY" (bytes->string/utf-8 old-val))
+          (putenv "Q_TEST_PROVIDER_API_KEY" "")))))
 
 (test-case "env-backend: load returns #f for unset variable"
   (define be (make-env-credential-backend))
@@ -169,14 +177,22 @@
   (check-equal? (backend-name chained) "chained")
   ;; Store in memory backend
   (backend-store! mem "test_provider" "sk-memory-key")
-  ;; env should take priority (set env var)
-  (putenv "Q_TEST_PROVIDER_API_KEY" "sk-env-key")
-  (define cred-env (backend-load chained "test_provider" #:env-var "Q_TEST_PROVIDER_API_KEY"))
-  (check-equal? (hash-ref cred-env 'api-key) "sk-env-key")
-  ;; Remove env, should fall through to memory
-  (putenv "Q_TEST_PROVIDER_API_KEY" "")
-  (define cred-mem (backend-load chained "test_provider"))
-  (check-equal? (hash-ref cred-mem 'api-key) "sk-memory-key"))
+  ;; env should take priority — use dynamic-wind for cleanup (TEST-01)
+  (define old-val (environment-variables-ref (current-environment-variables)
+                                              #"Q_TEST_PROVIDER_API_KEY"))
+  (dynamic-wind
+    (lambda () (putenv "Q_TEST_PROVIDER_API_KEY" "sk-env-key"))
+    (lambda ()
+      (define cred-env (backend-load chained "test_provider" #:env-var "Q_TEST_PROVIDER_API_KEY"))
+      (check-equal? (hash-ref cred-env 'api-key) "sk-env-key")
+      ;; Remove env, should fall through to memory
+      (putenv "Q_TEST_PROVIDER_API_KEY" "")
+      (define cred-mem (backend-load chained "test_provider"))
+      (check-equal? (hash-ref cred-mem 'api-key) "sk-memory-key"))
+    (lambda ()
+      (if old-val
+          (putenv "Q_TEST_PROVIDER_API_KEY" (bytes->string/utf-8 old-val))
+          (putenv "Q_TEST_PROVIDER_API_KEY" "")))))
 
 (test-case "chained-backend: store! writes to first writable backend"
   (define mem (make-memory-credential-backend))

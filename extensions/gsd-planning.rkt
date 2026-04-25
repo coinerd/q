@@ -148,7 +148,7 @@
     [(not path) #f]
     [(not (file-exists? path)) #f]
     [(json-artifact? name)
-     (with-handlers ([exn:fail? (lambda (e) #f)])
+     (with-handlers ([exn:fail? (lambda (e) (log-warning (format "gsd-planning/read: ~a" (exn-message e))) #f)])
        (call-with-input-file path (lambda (in) (read-json in))))]
     [else (call-with-input-file path (lambda (in) (port->string in)))]))
 
