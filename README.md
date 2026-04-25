@@ -269,8 +269,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 409 |
-| Source modules | 265 |
-| Source lines | 53043 |
+| Source modules | 264 |
+| Source lines | 52607 |
 | Test lines | 81041 |
 | Test assertions | 12376 |
 | `racket scripts/run-tests.rkt` results | 5835+ tests passing |
@@ -331,7 +331,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.19.9** — CI Hardening. Pre-commit version sync + metrics lint. Dependency parity check (info.rkt + build-deps). CI-aware test guards for out-of-repo paths. Assertion guardrails (range checks replacing exact counts). Gitignore hygiene (stray file detection). CI log preservation + failure summary artifact. 5300+ tests.
+**v0.20.0** — Feature Gap Closure. Truncation overflow handling, AGENTS.md discovery, TUI queue wiring, interactive tree browser, @ file reference, !! inline bash, cost tracker, print mode, /reload command, permission gates. 5966+ tests.
 
 **v0.19.4** — Self-Hosting Workflow Gaps. Extension tool registration fix (register-tools hook passes proper extension-ctx). Subagent tool execution (children get 7 tools + recursive dispatch). Slash commands (/milestone, /issue, /pr, /fmt, /check, /expand). 5300+ tests.
 

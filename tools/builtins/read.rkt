@@ -10,6 +10,10 @@
                   contains-null-bytes?
                   bytes->display-lines
                   expand-home-path)
+         (only-in "../../util/safe-mode-predicates.rkt"
+                  safe-mode?
+                  allowed-path?
+                  safe-mode-project-root)
          (only-in "../../util/truncation.rkt" truncate-output MAX-OUTPUT-BYTES MAX-OUTPUT-LINES))
 
 (provide tool-read)
@@ -31,9 +35,12 @@
      (define offset (hash-ref args 'offset 1))
      (define limit (hash-ref args 'limit #f))
 
-     ;; 1. File existence check
-     ;; (safe-mode path check is done by scheduler, not here)
+     ;; 1. Safe-mode defense-in-depth path check (SEC-01)
      (cond
+       [(and (safe-mode?) (not (allowed-path? path-str)))
+        (make-error-result (format "read: path '~a' outside project root (~a)"
+                                   path-str
+                                   (safe-mode-project-root)))]
        [(not (file-exists? path-str)) (make-error-result (format "File not found: ~a" path-str))]
 
        [else
