@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.19.12 — 2026-04-25
+
+### /plan Exploration Cap + Context Usage Visibility (4 waves)
+
+**W0 — /plan Exploration Cap**
+- Replaced 'Do NOT limit exploration' with 30-tool-call budget in `/plan` prompt
+- Prevents 110+ turn exploration spirals (observed in live session)
+
+**W1 — Context Usage in Events + TUI Status Bar**
+- Added `tokenCount` to `context.assembled` and `context.built` events
+- TUI status bar now displays estimated context token usage (e.g. "23K")
+- `ui-state` gains `context-tokens` field
+
+**W2 — /plan Overwrite Stale Plans**
+- Added OVERWRITE directive to planning-system-prompt
+- Detects existing PLAN.md and injects stale warning on `/plan <text>`
+- Prevents LLM from merging old+new plan content
+
+**W3 — Version Bump**
+- Version 0.19.11 → 0.19.12
+
 ## v0.19.10 — 2026-04-25
 
 ### Edit Tool Hardening — Corruption Prevention (4 waves)
