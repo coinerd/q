@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.19.9 — 2026-04-25
+
+### Edit Tool Hardening — Hallucination Prevention (4 waves)
+
+**W0 — Path Normalization Fix**
+- Fixed `expand-home-path` producing double-slash paths (`/home/user//file`)
+- Uses `simplify-path` to normalize expanded home paths
+
+**W1 — Edit Tool Near-Match Hints + Stronger Descriptions**
+- Added `find-nearest-match` helper using longest-common-substring for fuzzy line matching
+- When `old-text` not found, edit tool now shows the nearest matching line with line number
+- Updated edit tool description: "old-text MUST be copied verbatim from a prior read result"
+- Added `prompt-guidelines` to edit tool registration warning against guessing
+
+**W2 — Test Coverage**
+- 6 new near-match tests: nonexistent text, close-but-wrong text, multiple candidates, whitespace differences
+- 2 new registry tests: prompt-guidelines set, description contains "verbatim"
+
+**W3 — Version Bump**
+- Version 0.19.8 → 0.19.9
+
 ## v0.19.8 — 2026-04-25
 
 ### Extension Tool Fix & Steering Improvement (3 bugs, 3 waves)
