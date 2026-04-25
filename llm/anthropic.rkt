@@ -20,7 +20,8 @@
          "model.rkt"
          "provider.rkt"
          "stream.rkt"
-         "http-helpers.rkt")
+         "http-helpers.rkt"
+         (only-in "../util/errors.rkt" with-logged-catch))
 
 ;; Provider constructor
 (provide (contract-out [make-anthropic-provider (-> hash? provider?)])
@@ -300,12 +301,13 @@
        (raise-http-error! (format "Anthropic API forbidden (403): ~a" error-body) status-code)]
       [(= status-code 429)
        (define retry-hint
-         (with-handlers ([exn:fail? (lambda (_) "")])
-           (define err-json (string->jsexpr error-body))
-           (define retry-ms (hash-ref (hash-ref err-json 'error (hash)) 'retry_after_ms #f))
-           (if retry-ms
-               (format " Retry after ~a seconds." (quotient retry-ms 1000))
-               " Please wait and try again.")))
+         (with-logged-catch ""
+           (lambda ()
+             (define err-json (string->jsexpr error-body))
+             (define retry-ms (hash-ref (hash-ref err-json 'error (hash)) 'retry_after_ms #f))
+             (if retry-ms
+                 (format " Retry after ~a seconds." (quotient retry-ms 1000))
+                 " Please wait and try again."))))
        (raise-http-error! (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body)
                           status-code)]
       [(>= status-code 500)

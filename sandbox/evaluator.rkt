@@ -5,7 +5,8 @@
 ;; Uses Racket's built-in racket/sandbox module to evaluate Racket code
 ;; safely with timeout and resource limits.
 
-(require racket/sandbox)
+(require racket/sandbox
+         (only-in "../util/errors.rkt" with-logged-catch))
 
 (provide (struct-out eval-result)
          eval-in-sandbox
@@ -35,9 +36,10 @@
 ;; --------------------------------------------------
 
 (define (safe-get-output evaluator)
-  (with-handlers ([exn:fail? (lambda (_) "")])
-    (let ([out (get-output evaluator)])
-      (if (string? out) out ""))))
+  (with-logged-catch ""
+    (lambda ()
+      (let ([out (get-output evaluator)])
+        (if (string? out) out "")))))
 
 ;; --------------------------------------------------
 ;; Main evaluator

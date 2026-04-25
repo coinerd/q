@@ -16,7 +16,10 @@
          (struct-out session-error)
          raise-q-error
          raise-tool-error
-         raise-session-error)
+         raise-session-error
+         ;; Quality macros (Q06/Q07)
+         with-cleanup
+         with-logged-catch)
 
 ;; Base error type for all q domain errors
 (struct q-error exn:fail (context) #:transparent)
@@ -39,3 +42,26 @@
 
 (define (raise-session-error message session-id [context (hash)])
   (raise (session-error message (current-continuation-marks) context session-id)))
+
+;; ============================================================
+;; Quality macros (Q06/Q07)
+;; ============================================================
+
+;; with-cleanup: Ensure cleanup runs regardless of success/failure.
+;; (with-cleanup cleanup-expr body-expr ...)
+(define-syntax-rule (with-cleanup cleanup body ...)
+  (dynamic-wind
+    (lambda () (void))
+    (lambda () body ...)
+    (lambda () cleanup)))
+
+;; with-logged-catch: Like with-handlers but logs the exception before
+;; returning the fallback value. Prevents silent failures.
+;; Usage: (with-logged-catch fallback thunk)
+;; where thunk is a (lambda () ...)
+(define (with-logged-catch fallback thunk)
+  (with-handlers ([exn:fail?
+                   (lambda (e)
+                     (log-warning "with-logged-catch: caught ~a" (exn-message e))
+                     fallback)])
+    (thunk)))
