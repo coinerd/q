@@ -93,3 +93,34 @@
                          (tool-write (hasheq 'path tmp 'content content))))
   (check-false (tool-result-is-error? result-large))
   (delete-file tmp))
+
+;; ============================================================
+;; SEC-14: Cumulative write budget
+;; ============================================================
+
+(test-case "cumulative write budget enforced"
+  (define tmp (make-temporary-file "q-write-test-~a"))
+  (delete-file tmp)
+  (reset-cumulative-writes!)
+  (parameterize ([cumulative-write-budget 20]
+                 [current-max-write-bytes 100])
+    ;; First write under budget
+    (define r1 (tool-write (hasheq 'path tmp 'content "1234567890")))
+    (check-false (tool-result-is-error? r1))
+    ;; Second write pushes over budget
+    (define r2 (tool-write (hasheq 'path tmp 'content "123456789012")))
+    (check-true (tool-result-is-error? r2)))
+  (when (file-exists? tmp) (delete-file tmp)))
+
+(test-case "reset-cumulative-writes clears counter"
+  (define tmp (make-temporary-file "q-write-test-~a"))
+  (delete-file tmp)
+  (reset-cumulative-writes!)
+  (parameterize ([cumulative-write-budget 20]
+                 [current-max-write-bytes 100])
+    (tool-write (hasheq 'path tmp 'content "1234567890"))
+    (reset-cumulative-writes!)
+    ;; After reset, can write again
+    (define r (tool-write (hasheq 'path tmp 'content "1234567890")))
+    (check-false (tool-result-is-error? r)))
+  (when (file-exists? tmp) (delete-file tmp)))

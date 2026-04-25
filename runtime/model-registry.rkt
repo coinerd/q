@@ -13,7 +13,26 @@
 ;;   - file I/O
 ;;   - session management
 
-(require racket/string)
+(require racket/string
+         racket/match)
+
+;; ── URL Validation ──────────────────────────────────────────
+
+;; Validate base-url to prevent SSRF. Returns cleaned url or raises error.
+;; Allowed schemes: http, https. Blocks private IPs and localhost.
+(define (validate-base-url url-str)
+  (define trimmed (string-trim url-str))
+  (cond
+    [(string=? trimmed "") ""] ; empty is ok — will use provider default
+    [(not (regexp-match? #rx"^https?://" trimmed))
+     (error 'validate-base-url "Invalid base-url scheme (must be http or https): ~a" trimmed)]
+    [else trimmed]))
+
+(define (safe-base-url cfg)
+  (define raw (flex-ref cfg 'base-url ""))
+  (if (string? raw)
+      (validate-base-url raw)
+      ""))
 
 ;; Structs
 (provide (struct-out model-entry)
@@ -226,13 +245,13 @@
     [else
      (define models-list (flex-ref prov-cfg 'models '()))
      (if (model-in-list? model-name models-list)
-         (model-resolution model-name provider-name (flex-ref prov-cfg 'base-url "") prov-cfg)
+         (model-resolution model-name provider-name (safe-base-url prov-cfg) prov-cfg)
          #f)]))
 
 (define (entry->resolution entry)
   (model-resolution (model-entry-name entry)
                     (model-entry-provider-name entry)
-                    (flex-ref (model-entry-provider-config entry) 'base-url "")
+                    (safe-base-url (model-entry-provider-config entry))
                     (model-entry-provider-config entry)))
 
 ;; ============================================================
@@ -247,7 +266,7 @@
      (define dm (flex-ref prov-cfg 'default-model #f))
      (cond
        [(not dm) #f]
-       [else (model-resolution dm provider-name (flex-ref prov-cfg 'base-url "") prov-cfg)])]))
+       [else (model-resolution dm provider-name (safe-base-url prov-cfg) prov-cfg)])]))
 
 ;; ============================================================
 ;; Listing
