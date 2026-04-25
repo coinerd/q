@@ -68,7 +68,8 @@
                   #:session-runner (lambda (prompt) (run-prompt! sess prompt))
                   #:session-dir sess-dir
                   #:model-registry (hash-ref rt-config 'model-registry #f)
-                  #:extension-registry (hash-ref rt-config 'extension-registry #f)))
+                  #:extension-registry (hash-ref rt-config 'extension-registry #f)
+                  #:session-queue (agent-session-queue sess)))
 
   ;; Install UI callbacks for extensions (breaks extensions→TUI upward import)
   (install-ui-callbacks!

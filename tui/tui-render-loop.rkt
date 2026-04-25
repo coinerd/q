@@ -30,7 +30,8 @@
          "../agent/event-bus.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/terminal-input.rkt"
-         "../util/output-guard.rkt")
+         "../util/output-guard.rkt"
+         "../agent/queue.rkt")
 
 (define (tui-output-port)
   (or (guarded-real-output-port) (current-output-port)))
@@ -309,31 +310,48 @@
               (define text (cadr result))
               ;; Store prompt for /retry (#1378)
               (set-box! (tui-ctx-last-prompt-box ctx) text)
-              ;; Submit to runtime (non-blocking)
-              (define runner (tui-ctx-session-runner ctx))
-              ;; Wrap runner thread with exception handler to prevent TUI hang
-              (thread
-               (lambda ()
-                 (with-handlers
-                     ([exn:fail?
-                       (lambda (e)
-                         (define bus (tui-ctx-event-bus ctx))
-                         (define sid (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
-                         (when (and bus sid)
-                           (publish! bus
-                                     (make-event
-                                      "runtime.error"
-                                      (current-inexact-milliseconds)
-                                      sid
-                                      #f
-                                      (hasheq 'error (exn-message e) 'errorType 'internal-error)))
-                           (publish! bus
-                                     (make-event "turn.completed"
-                                                 (current-inexact-milliseconds)
-                                                 sid
-                                                 #f
-                                                 (hasheq 'reason "error")))))])
-                   (runner text))))]
+              ;; G3.1: If agent is busy, enqueue as followup instead of calling runner
+              (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
+              (define busy? (ui-state-busy? cur-state))
+              (define q (unbox (tui-ctx-session-queue-box ctx)))
+              (cond
+                [(and busy? q (queue? q))
+                 ;; Agent is streaming — enqueue as followup
+                 (enqueue-followup! q text)
+                 ;; Show system notification in transcript
+                 (define queued-entry
+                   (make-entry 'system
+                               "[Queued \u2014 will run after current task]"
+                               (current-inexact-milliseconds)
+                               (hasheq 'queued #t)))
+                 (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry cur-state queued-entry))
+                 (mark-dirty! ctx)]
+                [else
+                 ;; Not busy (or no queue) — submit to runtime (non-blocking)
+                 (define runner (tui-ctx-session-runner ctx))
+                 ;; Wrap runner thread with exception handler to prevent TUI hang
+                 (thread
+                  (lambda ()
+                    (with-handlers
+                        ([exn:fail?
+                          (lambda (e)
+                            (define bus (tui-ctx-event-bus ctx))
+                            (define sid (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
+                            (when (and bus sid)
+                              (publish! bus
+                                        (make-event
+                                         "runtime.error"
+                                         (current-inexact-milliseconds)
+                                         sid
+                                         #f
+                                         (hasheq 'error (exn-message e) 'errorType 'internal-error)))
+                              (publish! bus
+                                        (make-event "turn.completed"
+                                                    (current-inexact-milliseconds)
+                                                    sid
+                                                    #f
+                                                    (hasheq 'reason "error")))))])
+                      (runner text))))])]
              [(and (list? result) (eq? (car result) 'command))
               (define cmd (cadr result))
               (define raw-text
