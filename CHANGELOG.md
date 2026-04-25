@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.19.8 — 2026-04-25
+
+### Extension Tool Fix & Steering Improvement (3 bugs, 3 waves)
+
+**W0 — Extension Tool Arity Fix (Bug A)**
+- Fixed 8/16 extension tool handlers that crashed with arity mismatch
+- Central wrapper in `dynamic-tools.rkt`: all extension handlers now accept `(args exec-ctx)`
+- Defense-in-depth: added `[exec-ctx #f]` to all 8 broken handlers in gsd-planning.rkt and github-integration.rkt
+- Affected tools: planning-read, planning-write, gh-issue, gh-pr, gh-milestone, gh-board, gh-wave-start, gh-wave-finish
+
+**W1 — Exploration Steering Fix (Bug B)**
+- Replaced write-tools whitelist with read-tools blacklist approach
+- Any tool not in `('read 'find 'grep 'ls 'planning-read)` now resets the steering counter
+- Extension tools (planning-write, bash, gh-*) no longer waste iteration budget
+
+**W2 — Planning Preamble Fix + Integration Tests (Bug C)**
+- Updated planning-system-prompt: removed exploration encouragement, added 5-call exploration limit
+- Added `test-extension-tool-dispatch.rkt`: 5 integration tests verifying scheduler dispatch
+
 ## v0.19.7 — 2026-04-25
 
 ### CI Workflow Hardening (6 root causes, 5 waves)
