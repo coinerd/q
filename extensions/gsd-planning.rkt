@@ -63,7 +63,9 @@
    "Each wave must be directly executable without further exploration.\n"
    "\n"
    "STEP 3 — FINISH: Tell the user: 'Use /go to start implementing.'\n"
-   "Do NOT implement — only plan.\n\n"
+   "Do NOT implement — only plan.\n"
+   "OVERWRITE: Replace the entire existing PLAN.md. Do NOT append or merge with old content.\n"
+   "Write the new plan from scratch.\n\n"
    "User request: "))
 
 (define artifact-extensions
@@ -330,7 +332,14 @@
                          (and (> (string-length rest) 0) rest)))))
            =>
            (lambda (args)
-             (define augmented-text (string-append planning-system-prompt args))
+             ;; v0.19.12 W2: Detect stale existing PLAN.md and inject warning
+             (define existing-plan (read-planning-artifact base-dir "PLAN"))
+             (define stale-warning
+               (if existing-plan
+                   (format
+                    "\nNOTE: An existing PLAN.md was found. OVERWRITE it completely with the new plan. Do NOT keep or merge old content.\n")
+                   ""))
+             (define augmented-text (string-append planning-system-prompt stale-warning args))
              (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" args))))]
           [else
            ;; Display artifact content (always for /state, /handoff; no-args /plan)

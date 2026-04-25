@@ -593,3 +593,40 @@
 (test-case "planning-system-prompt-no-unlimited-exploration"
   (check-false (string-contains? planning-system-prompt "Do NOT limit")
                "prompt should NOT say 'Do NOT limit'"))
+
+;; ============================================================
+;; W2: /plan Overwrite Stale Plans Tests
+;; ============================================================
+
+(test-case "planning-system-prompt-contains-overwrite-directive"
+  (check-true (string-contains? planning-system-prompt "OVERWRITE")
+              "prompt should contain OVERWRITE directive")
+  (check-true (string-contains? planning-system-prompt "Replace the entire existing PLAN.md")
+              "prompt should say to replace entire existing plan"))
+
+(test-case "/plan-with-text-injects-stale-warning-when-plan-exists"
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                              (lambda (out) (display "# Old Plan\nWave 0: old stuff" out))
+                              #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/plan" 'input "/plan fix the bug")))
+       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (check-true (string-contains? submit-text "existing PLAN.md was found")
+                   "should inject stale warning when PLAN.md exists")
+       (check-true (string-contains? submit-text "OVERWRITE")
+                   "stale warning should mention OVERWRITE")))))
+
+(test-case "/plan-with-text-no-warning-when-no-plan"
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     (make-directory* (build-path dir ".planning"))
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/plan" 'input "/plan fix the bug")))
+                     (define submit-text (hash-ref (hook-result-payload result) 'submit))
+                     (check-false (string-contains? submit-text "existing PLAN.md was found")
+                                  "should NOT inject stale warning when no PLAN.md exists")))))
