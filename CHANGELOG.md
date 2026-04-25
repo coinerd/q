@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.19.7 — 2026-04-25
+
+### CI Workflow Hardening (6 root causes, 5 waves)
+
+**W0 — Merge Post-Release into Release workflow**
+- Merged `post-release.yml` smoke tests into `release.yml` as sequential `smoke` job
+- Eliminated Release→Post-Release race condition (7/7 failures before this fix)
+- `release.yml` now has 3 sequential jobs: `test` → `release` → `smoke`
+
+**W1 — Fix metrics fragility**
+- Excluded `__pycache__/`, `.git/` from `rkt-files` in `scripts/metrics.rkt`
+- Fixes CI vs local count mismatches that caused cascading failures
+
+**W2 — Normalize workflows to composite action**
+- `benchmark.yml`: upgraded to `checkout@v6`, removed redundant `Install dependencies` step
+- `setup-racket` composite action: added stale bytecode cleanup step
+
+**W3 — CI dry-run + workflow validation**
+- Added `workflow-lint` job: validates all workflow YAML + composite actions on every PR
+- Added `release-dry-run` job: builds tarball, verifies manifest + notes generation on every PR
+
+**CI Status**: All workflows green (CI ✅, Release ✅, Benchmark ✅)
+
 ## v0.19.6 — 2026-04-25
 
 ### Project Review Remediation (55 findings across 6 axes)

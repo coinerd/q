@@ -1,7 +1,7 @@
-<!-- verified-against: v0.19.6 -->
+<!-- verified-against: 0.19.7 -->
 # API Stability Tiers
 
-<!-- verified-against: v0.19.6 -->
+<!-- verified-against: 0.19.7 -->
 
 This document defines the stability tiers for q's public interfaces. Each module
 is assigned a tier that determines the backwards-compatibility guarantees and

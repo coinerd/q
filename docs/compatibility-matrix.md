@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-<!-- verified-against: v0.19.6 -->
+<!-- verified-against: 0.19.7 -->
 
 This document tracks compatibility between q versions, Racket versions, and
 extension API versions.
