@@ -19,7 +19,13 @@
          racket/hash
          racket/list
          json
-         "../util/config-paths.rkt")
+         "../util/config-paths.rkt"
+         (only-in "../util/sandbox-config.rkt"
+                  sandbox-enabled?
+                  sandbox-timeout
+                  sandbox-memory-limit
+                  sandbox-max-output
+                  sandbox-max-processes))
 
 ;; Structs
 (provide (struct-out q-settings)
@@ -275,33 +281,8 @@
   (setting-ref settings 'warn-on-destructive #f))
 
 ;; ============================================================
-;; Sandbox settings
+;; Sandbox settings — re-exported from util/sandbox-config.rkt
 ;; ============================================================
-
-;; Whether sandboxing is enabled for bash tool execution.
-;; Reads 'tools.use-sandbox' from merged settings, defaults to #t.
-(define (sandbox-enabled? settings)
-  (setting-ref* settings '(tools use-sandbox) #t))
-
-;; Sandbox timeout in seconds. Reads 'tools.sandbox-timeout'.
-;; Defaults to 120 seconds.
-(define (sandbox-timeout settings)
-  (setting-ref* settings '(tools sandbox-timeout) 120))
-
-;; Sandbox memory limit in bytes. Reads 'tools.sandbox-memory'.
-;; Defaults to 536870912 (512 MB).
-(define (sandbox-memory-limit settings)
-  (setting-ref* settings '(tools sandbox-memory) 536870912))
-
-;; Sandbox max output in bytes. Reads 'tools.sandbox-max-output'.
-;; Defaults to 1048576 (1 MB).
-(define (sandbox-max-output settings)
-  (setting-ref* settings '(tools sandbox-max-output) 1048576))
-
-;; Sandbox max concurrent processes. Reads 'tools.sandbox-max-processes'.
-;; Defaults to 10.
-(define (sandbox-max-processes settings)
-  (setting-ref* settings '(tools sandbox-max-processes) 10))
 
 ;; ============================================================
 ;; Defaults and derived paths

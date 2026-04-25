@@ -32,7 +32,6 @@
                   tool-call-id
                   tool-result-content
                   tool-result-is-error?)
-         (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          (only-in "../../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/scheduler.rkt"
@@ -83,11 +82,17 @@
 ;; Returns the real provider if available, or falls back to a mock.
 ;; Extract a value from runtime-settings which may be a q-settings struct or a plain hash.
 ;; #1241: After settings-contract fix, runtime-settings is a q-settings struct.
-;; Fall back to hash access for backward compat (tests, SDK path).
+;; Uses struct->vector for transparent struct access (no runtime import needed).
 (define (rt-settings-ref rt key [default #f])
   (cond
-    [(q-settings? rt) (setting-ref rt key default)]
     [(hash? rt) (hash-ref rt key default)]
+    [(struct? rt)
+     ;; q-settings is transparent: fields are global, project, merged
+     ;; merged is at vector index 3 (0=name, 1=global, 2=project, 3=merged)
+     (define merged (vector-ref (struct->vector rt) 3))
+     (if (hash? merged)
+         (hash-ref merged key default)
+         default)]
     [else default]))
 
 ;; #1204: Provider injection from parent session.

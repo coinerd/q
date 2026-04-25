@@ -30,7 +30,7 @@
                   exec-context-runtime-settings)
          "../../sandbox/subprocess.rkt"
          "../../sandbox/limits.rkt"
-         (only-in "../../runtime/settings.rkt"
+         (only-in "../../util/sandbox-config.rkt"
                   sandbox-enabled?
                   sandbox-timeout
                   sandbox-memory-limit
@@ -120,6 +120,7 @@
 (define current-block-destructive (make-parameter #f))
 
 ;; Resolve exec-limits from settings (if provided) or defaults.
+;; settings may be a q-settings? struct or #f.
 (define (resolve-exec-limits timeout-arg settings)
   (define timeout-secs
     (or timeout-arg (and settings (sandbox-timeout settings)) DEFAULT-TIMEOUT-SECONDS))
