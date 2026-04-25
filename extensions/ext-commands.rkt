@@ -9,13 +9,7 @@
 (require racket/contract
          racket/list
          "context.rkt"
-         (only-in "../tui/palette.rkt"
-                  cmd-entry
-                  cmd-entry-name
-                  cmd-entry?
-                  cmd-entry-summary
-                  register-command!
-                  lookup-command))
+         "../util/command-types.rkt")
 
 (provide (contract-out
           [ext-register-command!

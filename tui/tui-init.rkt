@@ -84,7 +84,18 @@
            'make-styled-line
            styled-line
            'make-styled-segment
-           styled-segment))
+           styled-segment
+           ;; LAYER-01: status message callback for dialog-api
+           'set-status-message
+           (lambda (box msg)
+             (set-box! box (struct-copy ui-state (unbox box) [status-message msg])))
+           ;; LAYER-02: widget callbacks for widget-api
+           'set-extension-widget
+           set-extension-widget
+           'remove-extension-widget
+           remove-extension-widget
+           'remove-all-extension-widgets
+           remove-all-extension-widgets))
 
   ;; Subscribe to events
   (subscribe-runtime-events! ctx)

@@ -8,22 +8,20 @@
 ;;   #727: Parent feature
 
 (require racket/contract
-         racket/match
-         "../tui/render.rkt")
+         racket/match)
 
-(provide
- ;; #726: Message renderer registry
- (struct-out message-renderer)
- make-message-renderer
- register-message-renderer!
- unregister-message-renderer!
- lookup-message-renderer
- list-message-renderers
- render-custom-message
+;; #726: Message renderer registry
+(provide (struct-out message-renderer)
+         make-message-renderer
+         register-message-renderer!
+         unregister-message-renderer!
+         lookup-message-renderer
+         list-message-renderers
+         render-custom-message
 
- ;; #727: Registry struct
- (struct-out renderer-registry)
- make-renderer-registry)
+         ;; #727: Registry struct
+         (struct-out renderer-registry)
+         make-renderer-registry)
 
 ;; ============================================================
 ;; Structs
@@ -31,17 +29,17 @@
 
 ;; A custom message renderer registered by an extension
 (struct message-renderer
-  (message-type  ; symbol — the message kind to match
-   renderer-fn   ; (hash? -> (listof styled-line)) — renders payload to styled lines
-   ext-name      ; string — registering extension name
-   )
+        (message-type ; symbol — the message kind to match
+         renderer-fn ; (hash? -> (listof styled-line)) — renders payload to styled lines
+         ext-name ; string — registering extension name
+         )
   #:transparent)
 
 ;; Thread-safe renderer registry
 (struct renderer-registry
-  (renderers-box   ; box of (hash/c symbol? message-renderer?)
-   semaphore       ; semaphore for thread safety
-   )
+        (renderers-box ; box of (hash/c symbol? message-renderer?)
+         semaphore ; semaphore for thread safety
+         )
   #:transparent)
 
 ;; ============================================================
@@ -52,20 +50,19 @@
   (renderer-registry (box (hash)) (make-semaphore 1)))
 
 (define (register-message-renderer! registry renderer)
-  (call-with-semaphore (renderer-registry-semaphore registry)
-    (lambda ()
-      (define renderers (unbox (renderer-registry-renderers-box registry)))
-      (set-box! (renderer-registry-renderers-box registry)
-                (hash-set renderers
-                          (message-renderer-message-type renderer)
-                          renderer)))))
+  (call-with-semaphore
+   (renderer-registry-semaphore registry)
+   (lambda ()
+     (define renderers (unbox (renderer-registry-renderers-box registry)))
+     (set-box! (renderer-registry-renderers-box registry)
+               (hash-set renderers (message-renderer-message-type renderer) renderer)))))
 
 (define (unregister-message-renderer! registry message-type)
   (call-with-semaphore (renderer-registry-semaphore registry)
-    (lambda ()
-      (define renderers (unbox (renderer-registry-renderers-box registry)))
-      (set-box! (renderer-registry-renderers-box registry)
-                (hash-remove renderers message-type)))))
+                       (lambda ()
+                         (define renderers (unbox (renderer-registry-renderers-box registry)))
+                         (set-box! (renderer-registry-renderers-box registry)
+                                   (hash-remove renderers message-type)))))
 
 (define (lookup-message-renderer registry message-type)
   (define renderers (unbox (renderer-registry-renderers-box registry)))
