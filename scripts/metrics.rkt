@@ -40,6 +40,8 @@
                          (string-suffix? (path->string f) ".rkt")
                          (not (string-contains? (path->string f) "/compiled/"))
                          (not (string-contains? (path->string f) ".zo"))
+                         (not (string-contains? (path->string f) "/__pycache__/"))
+                         (not (string-contains? (path->string f) "/.git/"))
                          (if exclude?
                              (not (string-contains? (path->string f) "/tests/"))
                              #t)))
