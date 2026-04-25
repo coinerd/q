@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.19.5-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.19.6-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.19.5
+racket main.rkt --version  # q version 0.19.6
 raco test tests/           # run the full test suite
 ```
 
@@ -331,7 +331,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.19.5** — CI Hardening. Pre-commit version sync + metrics lint. Dependency parity check (info.rkt + build-deps). CI-aware test guards for out-of-repo paths. Assertion guardrails (range checks replacing exact counts). Gitignore hygiene (stray file detection). CI log preservation + failure summary artifact. 5300+ tests.
+**v0.19.6** — CI Hardening. Pre-commit version sync + metrics lint. Dependency parity check (info.rkt + build-deps). CI-aware test guards for out-of-repo paths. Assertion guardrails (range checks replacing exact counts). Gitignore hygiene (stray file detection). CI log preservation + failure summary artifact. 5300+ tests.
 
 **v0.19.4** — Self-Hosting Workflow Gaps. Extension tool registration fix (register-tools hook passes proper extension-ctx). Subagent tool execution (children get 7 tools + recursive dispatch). Slash commands (/milestone, /issue, /pr, /fmt, /check, /expand). 5300+ tests.
 
