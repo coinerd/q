@@ -9,6 +9,7 @@
          racket/port
          racket/string
          racket/file
+         racket/path
          json
          "define-extension.rkt"
          "dynamic-tools.rkt"
@@ -26,13 +27,40 @@
          write-planning-artifact!
          handle-planning-read
          handle-planning-write
-         planning-implement-prompt)
+         planning-implement-prompt
+         pinned-planning-dir)
 
 ;; ============================================================
 ;; Constants
 ;; ============================================================
 
 (define planning-dir-name ".planning")
+
+;; Pinned planning directory — set once during tool registration from ctx-cwd.
+;; Ensures all planning-read/planning-write calls within a session use the
+;; same .planning/ folder, even if the LLM guesses a different base_dir.
+;; Uses a parameter so tests can override it per-scope.
+(define pinned-planning-dir (make-parameter #f))
+
+;; Resolve the project root by walking up from 'start-dir' looking for
+;; a directory containing .planning/, q/, BLUEPRINT/, or .git/.
+(define (resolve-project-root start-dir)
+  (let loop ([dir (if (string? start-dir)
+                      (string->path start-dir)
+                      start-dir)])
+    (define planning (build-path dir planning-dir-name))
+    (cond
+      ;; Found .planning/ — use this directory
+      [(directory-exists? planning) dir]
+      ;; Found project markers
+      [(or (directory-exists? (build-path dir "q"))
+           (directory-exists? (build-path dir "BLUEPRINT"))
+           (directory-exists? (build-path dir ".git")))
+       dir]
+      ;; Reached filesystem root — fall back to start-dir
+      [(let ([parent (simple-form-path (build-path dir 'up))]) (equal? parent (simple-form-path dir)))
+       start-dir]
+      [else (loop (simple-form-path (build-path dir 'up)))])))
 
 ;; Planning preamble prepended to user text when /plan <text> submits.
 ;; Gives the agent explicit GSD planning instructions.
@@ -106,6 +134,14 @@
 ;; File I/O
 ;; ============================================================
 
+;; Get the base-dir for planning operations.
+;; Priority: explicit base_dir arg > pinned dir from session start > exec-ctx cwd > current-directory.
+(define (get-base-dir args [exec-ctx #f])
+  (or (hash-ref args 'base_dir #f)
+      (pinned-planning-dir)
+      (and exec-ctx (ctx-cwd exec-ctx))
+      (current-directory)))
+
 (define (read-planning-artifact base-dir name)
   (define path (planning-artifact-path base-dir name))
   (cond
@@ -137,20 +173,25 @@
 ;; ============================================================
 
 (define planning-read-schema
-  (hasheq 'type
-          "object"
-          'properties
-          (hasheq 'artifact
-                  (hasheq 'type
-                          "string"
-                          'description
-                          (string-append "Artifact name. Canonical: "
-                                         (string-join (map car artifact-extensions) ", ")
-                                         ". Or any .md/.json filename."))
-                  'base_dir
-                  (hasheq 'type "string" 'description "Project root directory. Defaults to cwd."))
-          'required
-          '("artifact")))
+  (hasheq
+   'type
+   "object"
+   'properties
+   (hasheq
+    'artifact
+    (hasheq 'type
+            "string"
+            'description
+            (string-append "Artifact name. Canonical: "
+                           (string-join (map car artifact-extensions) ", ")
+                           ". Or any .md/.json filename."))
+    'base_dir
+    (hasheq 'type
+            "string"
+            'description
+            "Project root directory. Auto-resolved at session start. Override only if needed."))
+   'required
+   '("artifact")))
 
 (define planning-write-schema
   (hasheq
@@ -163,7 +204,10 @@
     'content
     (hasheq 'type "string" 'description "Content to write (string for .md, JSON string for .json)")
     'base_dir
-    (hasheq 'type "string" 'description "Project root directory. Defaults to cwd."))
+    (hasheq 'type
+            "string"
+            'description
+            "Project root directory. Auto-resolved at session start. Override only if needed."))
    'required
    '("artifact" "content")))
 
@@ -173,7 +217,7 @@
 
 (define (handle-planning-read args [exec-ctx #f])
   (define name (hash-ref args 'artifact ""))
-  (define base-dir (hash-ref args 'base_dir (current-directory)))
+  (define base-dir (get-base-dir args exec-ctx))
   (cond
     [(string=? name "") (make-error-result "Missing required argument: artifact")]
     [(not (valid-artifact-name? name))
@@ -192,7 +236,7 @@
 (define (handle-planning-write args [exec-ctx #f])
   (define name (hash-ref args 'artifact ""))
   (define content-str (hash-ref args 'content ""))
-  (define base-dir (hash-ref args 'base_dir (current-directory)))
+  (define base-dir (get-base-dir args exec-ctx))
   (cond
     [(string=? name "") (make-error-result "Missing required argument: artifact")]
     [(string=? content-str "") (make-error-result "Missing required argument: content")]
@@ -223,6 +267,13 @@
 ;; ============================================================
 
 (define (register-gsd-tools ctx _payload)
+  ;; Pin the planning directory from the extension context.
+  ;; Walk up from cwd to find project root with .planning/, q/, or .git/.
+  ;; Only pin when we have a real working-directory (not in tests).
+  (unless (pinned-planning-dir)
+    (define cwd (ctx-cwd ctx))
+    (when cwd
+      (pinned-planning-dir (resolve-project-root cwd))))
   (ext-register-tool!
    ctx
    "planning-read"
@@ -281,7 +332,7 @@
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
-  (define base-dir (current-directory))
+  (define base-dir (or (pinned-planning-dir) (current-directory)))
   (cond
     ;; /go, /implement, /i → start implementing the plan
     [(member cmd '("/go" "/implement" "/i"))
