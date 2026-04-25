@@ -41,6 +41,8 @@
                   message-content
                   make-message
                   make-tool-result-part
+                  tool-result-part?
+                  tool-result-part-is-error?
                   make-text-part
                   text-part?
                   text-part-text
@@ -463,6 +465,12 @@
 
 ;; Compute the new seen-paths set and whether to increment the counter.
 ;; Returns (values new-seen-paths should-increment?)
+;; v0.19.10: Keep at most n elements from the front of a list.
+(define (take-at-most lst n)
+  (if (<= (length lst) n)
+      lst
+      (take lst n)))
+
 (define (update-seen-paths tool-calls seen-paths)
   ;; FIX: Use read-tools blacklist instead of write-tools whitelist.
   ;; Extension tools (planning-write, bash, gh-*) are not in the old whitelist,
@@ -531,7 +539,9 @@
                  [iteration 0]
                  [consecutive-tool-count 0]
                  [seen-paths (set)] ;; v0.18.0: same-file dedup tracking
-                 [intent-retry-count 0])
+                 [intent-retry-count 0]
+                 [consecutive-error-count 0] ;; v0.19.10: spiral breaker
+                 [recent-tool-names '()]) ;; v0.19.10: bash-only streak detection
 
         ;; ── Cooperative cancellation check (between iterations) ──
         ;; R2-5 + FEAT-61: Check steering queue + drain injected messages.
@@ -649,38 +659,40 @@
                      ;; #662: Drain follow-up queue — if follow-ups exist,
                      ;; inject as user messages and continue the loop.
                      ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
-                     (define base-result
-                       (if steering-queue
-                           (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
-                                                (let ([one (dequeue-followup! steering-queue)])
-                                                  (if one
-                                                      (list one)
-                                                      '()))
-                                                (dequeue-all-followups! steering-queue))])
-                             (if (null? followups)
-                                 effective-result
-                                 (let ([followup-msgs (for/list ([fu (in-list followups)])
-                                                        (make-message (generate-id)
-                                                                      #f
-                                                                      'user
-                                                                      'text
-                                                                      (list (make-text-part fu))
-                                                                      (now-seconds)
-                                                                      (hasheq 'source "followup")))])
-                                   (emit-session-event! bus
-                                                        session-id
-                                                        "followup.injected"
-                                                        (hasheq 'count
-                                                                (length followups)
-                                                                'mode
-                                                                (symbol->string follow-up-mode)))
-                                   (append-entries! log-path followup-msgs)
-                                   (loop (append ctx-with-injected new-msgs followup-msgs)
-                                         (add1 iteration)
-                                         0
-                                         (set)
-                                         intent-retry-count))))
-                           effective-result))
+                     (define followup-continued?
+                       (and steering-queue
+                            (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
+                                                 (let ([one (dequeue-followup! steering-queue)])
+                                                   (if one
+                                                       (list one)
+                                                       '()))
+                                                 (dequeue-all-followups! steering-queue))])
+                              (if (null? followups)
+                                  #f
+                                  (let ([followup-msgs (for/list ([fu (in-list followups)])
+                                                         (make-message (generate-id)
+                                                                       #f
+                                                                       'user
+                                                                       'text
+                                                                       (list (make-text-part fu))
+                                                                       (now-seconds)
+                                                                       (hasheq 'source "followup")))])
+                                    (emit-session-event! bus
+                                                         session-id
+                                                         "followup.injected"
+                                                         (hasheq 'count
+                                                                 (length followups)
+                                                                 'mode
+                                                                 (symbol->string follow-up-mode)))
+                                    (append-entries! log-path followup-msgs)
+                                    (loop (append ctx-with-injected new-msgs followup-msgs)
+                                          (add1 iteration)
+                                          0
+                                          (set)
+                                          intent-retry-count
+                                          0
+                                          '()))))))
+                     (define base-result (if followup-continued? effective-result effective-result))
                      ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
                      ;; to write/edit but made no tool call, inject a steering nudge.
                      (define assistant-text (extract-last-assistant-text ctx-with-injected))
@@ -711,7 +723,9 @@
                                    (add1 iteration)
                                    0
                                    (set)
-                                   (add1 intent-retry-count))))
+                                   (add1 intent-retry-count)
+                                   consecutive-error-count
+                                   recent-tool-names)))
                          base-result)))]
 
                 ;; ── Hard iteration limit reached: append and stop ──
@@ -762,7 +776,9 @@
                        (add1 iteration)
                        (add1 consecutive-tool-count)
                        seen-paths
-                       intent-retry-count)]
+                       intent-retry-count
+                       consecutive-error-count
+                       recent-tool-names)]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
@@ -817,6 +833,32 @@
                      [has-write-now? 0]
                      [(not should-increment?) consecutive-tool-count]
                      [else (add1 consecutive-tool-count)]))
+
+                 ;; v0.19.10: Count errors in this turn's tool results.
+                 ;; Scan updated-ctx for tool-result messages with error status.
+                 (define this-turn-errors
+                   (for/sum ([msg (in-list updated-ctx)]
+                             #:when (and (message? msg) (eq? (message-role msg) 'tool-result)))
+                            (define content (message-content msg))
+                            (for/sum ([part
+                                       (in-list (if (list? content)
+                                                    content
+                                                    '()))]
+                                      #:when (tool-result-part? part))
+                                     (if (tool-result-part-is-error? part) 1 0))))
+                 (define new-error-count
+                   (if (> this-turn-errors 0)
+                       (+ consecutive-error-count this-turn-errors)
+                       0))
+
+                 ;; v0.19.10: Track recent tool names for bash-only streak detection.
+                 ;; Keep last 15 tool names to check for bash-only loops.
+                 (define turn-tool-names
+                   (for/list ([tc (in-list current-tool-calls)])
+                     (tool-call-name tc)))
+                 (define new-recent-tools
+                   (take-at-most (append recent-tool-names turn-tool-names) 15))
+
                  ;; v0.14.1: emit exploration progress after 4+ consecutive tool-only turns
                  (when (>= effective-tool-count 4)
                    (define tool-names
@@ -833,10 +875,79 @@
                                                 (set-count new-seen-paths)
                                                 'iteration
                                                 (add1 iteration))))
+
+                 ;; v0.19.10: Emit spiral-warning events
+                 (when (>= new-error-count 6)
+                   (emit-session-event!
+                    bus
+                    session-id
+                    "spiral.error-warning"
+                    (hasheq 'consecutive-errors new-error-count 'iteration (add1 iteration))))
+                 (when (>= (length new-recent-tools) 10)
+                   (define bash-count
+                     (for/sum ([n (in-list new-recent-tools)]) (if (equal? n "bash") 1 0)))
+                   (when (>= bash-count 10)
+                     (emit-session-event! bus
+                                          session-id
+                                          "spiral.bash-only-warning"
+                                          (hasheq 'bash-count
+                                                  bash-count
+                                                  'total-tools
+                                                  (length new-recent-tools)
+                                                  'iteration
+                                                  (add1 iteration)))))
+
                  (define exec-context
                    (let ([base-ctx updated-ctx]
                          [steering-msg
                           (cond
+                            ;; v0.19.10: Spiral breaker — 10+ bash-only turns
+                            [(and (>= (length new-recent-tools) 10)
+                                  (let ([bash-count (for/sum ([n (in-list new-recent-tools)])
+                                                             (if (equal? n "bash") 1 0))])
+                                    (>= bash-count 10)))
+                             (emit-session-event! bus
+                                                  session-id
+                                                  "spiral.bash-breaker"
+                                                  (hasheq 'bash-count
+                                                          (for/sum ([n (in-list new-recent-tools)])
+                                                                   (if (equal? n "bash") 1 0))
+                                                          'iteration
+                                                          (add1 iteration)))
+                             (make-message
+                              (generate-id)
+                              #f
+                              'user
+                              'message
+                              (list
+                               (make-text-part
+                                (string-append
+                                 "[steering:spiral] You've made 10+ consecutive bash calls. "
+                                 "Stop trying to fix things with bash. Use the edit tool with "
+                                 "the correct old-text (read the file first), or use git to revert. "
+                                 "Do not run any more bash commands to inspect or fix the file.")))
+                              (now-seconds)
+                              (hasheq))]
+
+                            ;; v0.19.10: Spiral breaker — 6+ consecutive errors
+                            [(>= new-error-count 6)
+                             (make-message
+                              (generate-id)
+                              #f
+                              'user
+                              'message
+                              (list
+                               (make-text-part
+                                (format
+                                 (string-append
+                                  "[steering:error-spiral] ~a consecutive tool errors detected. "
+                                  "Stop retrying the same approach. Re-read the file first, then "
+                                  "use a completely different strategy. Consider using git checkout "
+                                  "to revert any corrupted files.")
+                                 new-error-count)))
+                              (now-seconds)
+                              (hasheq))]
+
                             ;; Level 3: Hard cap — force-stop the exploration
                             [(>= effective-tool-count hard-at)
                              (emit-session-event! bus
@@ -906,7 +1017,9 @@
                        (add1 iteration)
                        effective-tool-count
                        new-seen-paths
-                       intent-retry-count)]
+                       intent-retry-count
+                       new-error-count
+                       new-recent-tools)]
 
                 ;; ── Unknown termination: append and return ──
                 [else
