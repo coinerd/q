@@ -76,7 +76,14 @@
 ;; ---------------------------------------------------------------------------
 
 (define slow-patterns
-  '("sandbox" "subprocess" "integration" "benchmark" "workflow-" "e2e-" "ci-local"))
+  '("sandbox" "subprocess"
+              "integration"
+              "benchmark"
+              "workflow-"
+              "e2e-"
+              "ci-local"
+              "metrics-readme"
+              "bump-version"))
 
 (define (slow-file? f)
   (define base (file-name-from-path f))
