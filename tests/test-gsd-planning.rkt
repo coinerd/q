@@ -397,6 +397,25 @@
   (check-true (string-contains? planning-system-prompt "PLAN.md"))
   (check-true (string-contains? planning-system-prompt "Do NOT implement")))
 
+;; ============================================================
+;; W0 (#1864): /plan prompt content tests
+;; ============================================================
+
+(test-case "planning-system-prompt does NOT limit exploration to 5 tool calls"
+  (check-false (string-contains? planning-system-prompt "Limit exploration to 5")))
+
+(test-case "planning-system-prompt requires root cause identification"
+  (check-true (string-contains? planning-system-prompt "Root cause"))
+  (check-true (string-contains? planning-system-prompt "old-text")))
+
+(test-case "planning-system-prompt requires old-text for edit matching"
+  (check-true (string-contains? planning-system-prompt "old-text")))
+
+(test-case "planning-system-prompt specifies actionable plan format"
+  (check-true (string-contains? planning-system-prompt "Old text:"))
+  (check-true (string-contains? planning-system-prompt "New text:"))
+  (check-true (string-contains? planning-system-prompt "Verify:")))
+
 (test-case "/plan <text> returns augmented submit payload"
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
   (define result (handler (hasheq 'command "/plan" 'input "/plan refactor the module")))
