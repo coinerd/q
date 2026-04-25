@@ -10,6 +10,14 @@
 ;;     working-directory  (string, optional) — working dir for subprocess
 ;;   Returns: tool-result with output or error
 ;;
+;; Security considerations:
+;;   - Commands run in the user's shell environment (SEC-20)
+;;   - Environment is sanitized: API keys, tokens, passwords stripped (SEC-05)
+;;   - Working directory is confined to project root in safe-mode (SEC-09)
+;;   - Process count limits prevent fork bombs (SEC-12)
+;;   - Timeout prevents infinite hangs (default 120s)
+;;   - Output is truncated at max-output-bytes to prevent memory exhaustion
+;;
 ;; GC-02: Sandbox limits now read from runtime/settings when available.
 ;; Process tracking (SEC-12) is wired into every invocation.
 

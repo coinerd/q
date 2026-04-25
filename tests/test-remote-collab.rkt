@@ -132,3 +132,22 @@
 
 (test-case "remote-tmux rejects invalid session name"
   (check-exn exn:fail? (lambda () (remote-tmux "host" "; rm -rf /" 'status (hasheq)))))
+
+;; ============================================================
+;; S16: SSH host validation
+;; ============================================================
+
+(test-case "valid-ssh-host? accepts valid hosts"
+  (check-true (valid-ssh-host? "example.com"))
+  (check-true (valid-ssh-host? "user@example.com"))
+  (check-true (valid-ssh-host? "192.168.1.1"))
+  (check-true (valid-ssh-host? "user@10.0.0.1")))
+
+(test-case "valid-ssh-host? rejects shell injection"
+  (check-false (valid-ssh-host? "host; rm -rf /"))
+  (check-false (valid-ssh-host? "host$(pwned)"))
+  (check-false (valid-ssh-host? "host`id`"))
+  (check-false (valid-ssh-host? "host|cat"))
+  (check-false (valid-ssh-host? "host'inject"))
+  (check-false (valid-ssh-host? ""))
+  (check-false (valid-ssh-host? 123)))
