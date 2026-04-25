@@ -5,7 +5,7 @@
 (require rackunit
          rackunit/text-ui
          "../agent/event-bus.rkt"
-         "../agent/types.rkt")
+         "../util/protocol-types.rkt")
 
 (define (make-test-event topic payload)
   (make-event topic (current-inexact-milliseconds) "test-session" "test-turn" payload))

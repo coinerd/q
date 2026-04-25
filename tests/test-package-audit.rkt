@@ -7,7 +7,7 @@
 (require rackunit
          racket/file
          racket/port
-         "../util/package-audit.rkt"
+         "../extensions/package-audit.rkt"
          "../extensions/manifest.rkt")
 
 ;; ============================================================

@@ -15,7 +15,7 @@
 
 (require racket/contract
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "api.rkt")
 
 (define-logger ext-events)

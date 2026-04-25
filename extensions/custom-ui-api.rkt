@@ -8,8 +8,7 @@
 ;;   #719: Custom tool rendering in transcript
 ;;   #720: Parent feature
 
-(require "../tui/state.rkt"
-         "../tui/render.rkt"
+(require "ui-surface.rkt"
          (only-in "custom-renderer-registry.rkt"
                   custom-renderer
                   custom-renderer?
@@ -38,20 +37,16 @@
 ;; ============================================================
 
 (define (ctx-set-footer ui-state-box lines)
-  (define state (unbox ui-state-box))
-  (set-box! ui-state-box (set-custom-footer state lines)))
+  (ui-set-footer! ui-state-box lines))
 
 (define (ctx-set-header ui-state-box lines)
-  (define state (unbox ui-state-box))
-  (set-box! ui-state-box (set-custom-header state lines)))
+  (ui-set-header! ui-state-box lines))
 
 (define (ctx-clear-footer ui-state-box)
-  (define state (unbox ui-state-box))
-  (set-box! ui-state-box (clear-custom-footer state)))
+  (ui-clear-footer! ui-state-box))
 
 (define (ctx-clear-header ui-state-box)
-  (define state (unbox ui-state-box))
-  (set-box! ui-state-box (clear-custom-header state)))
+  (ui-clear-header! ui-state-box))
 
 ;; ============================================================
 ;; #718-#719: Custom tool rendering
@@ -67,7 +62,7 @@
   (if (and renderer (custom-renderer-render-call renderer))
       ((custom-renderer-render-call renderer) args-text)
       ;; Default rendering
-      (list (styled-line (list (styled-segment (format "[TOOL: ~a] ~a" tool-name args-text) '()))))))
+      (list (ui-make-styled-line (list (ui-make-styled-segment (format "[TOOL: ~a] ~a" tool-name args-text) '()))))))
 
 ;; Render a tool result using custom renderer if available, else default.
 (define (render-tool-result tool-name result custom-renderers)
@@ -76,7 +71,7 @@
   (if (and renderer (custom-renderer-render-result renderer))
       ((custom-renderer-render-result renderer) result)
       ;; Default rendering
-      (list (styled-line (list (styled-segment (format "[OK: ~a]" tool-name) '()))))))
+      (list (ui-make-styled-line (list (ui-make-styled-segment (format "[OK: ~a]" tool-name) '()))))))
 
 ;; ============================================================
 ;; FEAT-70: Custom renderer registry

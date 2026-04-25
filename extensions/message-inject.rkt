@@ -18,7 +18,7 @@
 
 (require racket/contract
          "../agent/event-bus.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/ids.rkt"
          "../util/protocol-types.rkt")
 

@@ -13,7 +13,7 @@
          "../agent/event-bus.rkt"
          "../llm/provider.rkt"
          "../llm/model.rkt"
-         "../agent/types.rkt"
+         "../util/protocol-types.rkt"
          "../util/protocol-types.rkt")
 
 (define streaming-tool-event-tests
