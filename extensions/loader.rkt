@@ -321,37 +321,33 @@
     (cons (path->string (path-replace-suffix (file-name-from-path f) #"")) f)))
 
 ;; reload-extensions! : extension-registry? (listof path-string?) -> (listof string?)
-;; Reload extensions from configured paths.
-;; 1. Discover all .rkt files in extension-paths
-;; 2. For each file, try dynamic-require of 'the-extension
-;; 3. If new extension (not in registry), register it
-;; 4. If extension file removed, unregister it
-;; 5. Return list of names loaded
+;; Full hot-reload: unload ALL loaded extensions, then re-discover and
+;; re-load from the given directory paths.
+;; 1. Unload every currently loaded extension
+;; 2. Discover all .rkt files in extension-paths
+;; 3. Load each one; log errors but continue with others
+;; 4. Return list of names successfully loaded
 (define (reload-extensions! registry extension-paths)
-  (define discovered (discover-extension-files extension-paths))
+  ;; 1. Unload all current extensions
   (define existing-names (map extension-name (list-extensions registry)))
-  (define discovered-names (map car discovered))
-  ;; Unregister removed extensions
-  (for ([name (in-list existing-names)]
-        #:unless (member name discovered-names))
+  (for ([name (in-list existing-names)])
     (with-handlers ([exn:fail? (lambda (e)
                                  (log-warning
                                   (format "Failed to unregister ~a: ~a" name (exn-message e))))])
       (unregister-extension! registry name)))
-  ;; Register new extensions
+  ;; 2. Discover and load all extensions
+  (define discovered (discover-extension-files extension-paths))
   (define loaded '())
   (for ([pair (in-list discovered)])
     (define name (car pair))
     (define path (cdr pair))
-    (unless (member name existing-names)
-      (with-handlers ([exn:fail? (lambda (e)
-                                   (log-warning
-                                    (format "Failed to load ~a: ~a" name (exn-message e))))])
-        (define ext
-          (dynamic-require (simplify-path (resolve-path (path->complete-path path))) 'the-extension))
-        (when (extension? ext)
-          (register-extension! registry ext)
-          (set! loaded (cons name loaded))))))
+    (with-handlers
+        ([exn:fail? (lambda (e) (log-warning (format "Failed to load ~a: ~a" name (exn-message e))))])
+      (define ext
+        (dynamic-require (simplify-path (resolve-path (path->complete-path path))) 'the-extension))
+      (when (extension? ext)
+        (register-extension! registry ext)
+        (set! loaded (cons name loaded)))))
   (reverse loaded))
 
 ;; ═══════════════════════════════════════════════════════════════════
