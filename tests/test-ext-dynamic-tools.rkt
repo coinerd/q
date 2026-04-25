@@ -59,7 +59,7 @@
                                                 (hash-ref args 'b 0)
                                                 (+ (hash-ref args 'a 0) (hash-ref args 'b 0))))))))
   (define t (lookup-tool reg "adder"))
-  (define result ((tool-execute t) (hasheq 'a 3 'b 4)))
+  (define result ((tool-execute t) (hasheq 'a 3 'b 4) #f))
   (check-false (tool-result-is-error? result)))
 
 (test-case "ext-register-tool! errors when tool-registry is #f"

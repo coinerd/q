@@ -151,7 +151,7 @@
 ;; Tool handlers
 ;; ============================================================
 
-(define (handle-planning-read args)
+(define (handle-planning-read args [exec-ctx #f])
   (define name (hash-ref args 'artifact ""))
   (define base-dir (hash-ref args 'base_dir (current-directory)))
   (cond
@@ -169,7 +169,7 @@
           (make-success-result (list (hasheq 'type "text" 'text (jsexpr->string content))))]
          [else (make-success-result (list (hasheq 'type "text" 'text content)))]))]))
 
-(define (handle-planning-write args)
+(define (handle-planning-write args [exec-ctx #f])
   (define name (hash-ref args 'artifact ""))
   (define content-str (hash-ref args 'content ""))
   (define base-dir (hash-ref args 'base_dir (current-directory)))
