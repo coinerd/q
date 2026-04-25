@@ -20,7 +20,8 @@
 (require racket/file
          json
          "../util/jsonl.rkt"
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         (only-in "../util/errors.rkt" with-logged-catch))
 
 (provide current-session-version
          read-session-version
@@ -50,14 +51,15 @@
 
 ;; Read only the first entry from a JSONL log
 (define (read-first-log-entry path)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (call-with-input-file path
-      (lambda (in)
-        (define line (read-line in))
-        (if (eof-object? line)
-            #f
-            (jsexpr->message (string->jsexpr line))))
-      #:mode 'text)))
+  (with-logged-catch #f
+    (lambda ()
+      (call-with-input-file path
+        (lambda (in)
+          (define line (read-line in))
+          (if (eof-object? line)
+              #f
+              (jsexpr->message (string->jsexpr line))))
+        #:mode 'text))))
 
 ;; Migrate a session log from one version to another.
 ;; Currently supports: v1 → v2 (add version header)

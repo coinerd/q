@@ -8,6 +8,7 @@
          ;; 3.2: Thread-safe registry access
          (only-in racket/base make-semaphore call-with-semaphore)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
+         (only-in "../util/errors.rkt" with-logged-catch)
          ;; ARCH-01: tool-call and tool-result structs from util/protocol-types.rkt
          (only-in "../util/protocol-types.rkt"
                   tool-call
@@ -221,9 +222,10 @@
 ;; Check whether a value is JSON-serializable.
 ;; Returns #t if jsexpr->string would succeed, #f otherwise.
 (define (json-serializable? v)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (jsexpr->string v)
-    #t))
+  (with-logged-catch #f
+    (lambda ()
+      (jsexpr->string v)
+      #t)))
 
 ;; ============================================================
 ;; Tool result helpers (struct imported from agent/types.rkt)
