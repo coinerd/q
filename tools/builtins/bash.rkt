@@ -85,18 +85,26 @@
         #rx"^git[ ]+push[ ]+.*--force" ;; force push
         ;; Root directory operations
         #rx"^mv[ ]+/[ ]+" ;; mv /
+        ;; Download-to-shell combos (SEC-A)
+        #rx"curl[ ]+.*[|][ ]*sh[ ]*$" ;; curl ... | sh
+        #rx"wget[ ]+.*[|][ ]*sh[ ]*$" ;; wget ... | sh
+        #rx"eval[ ]+\"[$][(]curl" ;; eval "$(curl ...)"
+        #rx"source[ ]+/tmp/" ;; source from temp
         ))
 
-;; User-configurable override patterns (loaded from settings).
-;; When non-#f, these replace the default destructive-patterns.
+;; User-configurable extra patterns (loaded from settings).
+;; When non-#f, these EXTEND the default destructive-patterns (SEC-A).
 (define current-extra-destructive-patterns (make-parameter #f))
 
 ;; Check if a command matches any destructive pattern.
 ;; Uses regexp matching for token-awareness to avoid false positives.
 (define (destructive-command? command)
   (define lower (string-downcase command))
-  ;; Use user-configured patterns if provided, otherwise defaults
-  (define patterns (or (current-extra-destructive-patterns) destructive-patterns))
+  ;; Extend defaults with extra patterns (never replace)
+  (define patterns
+    (if (current-extra-destructive-patterns)
+        (append destructive-patterns (current-extra-destructive-patterns))
+        destructive-patterns))
   (for/or ([pattern (in-list patterns)])
     (regexp-match? pattern lower)))
 

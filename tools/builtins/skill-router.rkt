@@ -19,6 +19,7 @@
          json
          "../../skills/resource-loader.rkt"
          "../../util/config-paths.rkt"
+         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/tool.rkt")
 
 (provide tool-skill-route)
@@ -54,7 +55,8 @@
 (define (tool-skill-route args [exec-ctx #f])
   (define action (hash-ref args 'action "list"))
   (with-handlers ([exn:fail? (lambda (e)
-                               (make-error-result (format "skill-route error: ~a" (exn-message e))))])
+                               (make-error-result (sanitize-error-message
+                                                   (format "skill-route error: ~a" (exn-message e)))))])
     (cond
       ;; list: return all skills with name + description
       [(string=? action "list")
