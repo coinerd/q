@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.19.10 — 2026-04-25
+
+### Edit Tool Hardening — Corruption Prevention (4 waves)
+
+**W0 — Post-Edit Integrity Check + Backup**
+- 500-character `old-text` limit to prevent large-block edits
+- Post-edit line-count delta check with ±2 tolerance and auto-revert
+- Pre-edit backup saved to `~/.q/edit-backups/` (last 10 per file)
+- Updated prompt-guidelines to mention safeguards
+
+**W1 — Recovery Spiral Breaker**
+- Consecutive error tracking in iteration loop (resets on success)
+- Steering injection at 6+ consecutive tool errors ("re-read + git revert")
+- Bash-only streak detection (10+ consecutive bash calls)
+- Steering injection to break bash spirals ("use edit tool instead")
+- Events: `spiral.error-warning`, `spiral.bash-only-warning`, `spiral.bash-breaker`
+
+**W2 — Test Coverage**
+- 6 new edit tests: 500-char limit, boundary acceptance, backup creation, line-count integrity
+- 3 new iteration tests: spiral event structure, multi-tool paths, seen-path dedup
+
+**W3 — Version Bump**
+- Version 0.19.9 → 0.19.10
+
 ## v0.19.9 — 2026-04-25
 
 ### Edit Tool Hardening — Hallucination Prevention (4 waves)
