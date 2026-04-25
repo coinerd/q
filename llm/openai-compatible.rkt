@@ -10,7 +10,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
-         (only-in "../runtime/model-defaults.rkt" OPENAI-DEFAULT-MODEL)
+         (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
          racket/generator
          racket/port
