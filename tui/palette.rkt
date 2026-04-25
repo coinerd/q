@@ -7,7 +7,8 @@
          racket/function
          racket/set
          "command-parse.rkt"
-         "render.rkt")
+         "render.rkt"
+         "../util/command-types.rkt")
 
 (provide (struct-out cmd-entry)
          make-command-registry
@@ -23,20 +24,8 @@
          merge-extension-commands)
 
 ;; ---------------------------------------------------------------------------
-;; Struct: command entry in the registry
-;; ---------------------------------------------------------------------------
-
-(struct cmd-entry
-        (name ; string — e.g. "/help"
-         summary ; string — one-line description
-         category ; symbol — 'general | 'session | 'model | 'debug
-         args-spec ; (listof string) — arg names for display, e.g. '("<id>")
-         aliases ; (listof string) — short forms, e.g. '("h" "?")
-         )
-  #:transparent)
-
-;; ---------------------------------------------------------------------------
-;; Registry operations
+;; cmd-entry struct + register-command!/lookup-command: re-exported from
+;; util/command-types.rkt (pure data, no TUI dependency)
 ;; ---------------------------------------------------------------------------
 
 ;; Returns a hash of all built-in commands: command-name-string → cmd-entry
@@ -69,13 +58,7 @@
     (for/fold ([h2 h]) ([a (in-list (cmd-entry-aliases e))])
       (hash-set h2 (string-append "/" a) e))))
 
-;; Adds or replaces a command in the registry
-(define (register-command! reg entry)
-  (hash-set reg (cmd-entry-name entry) entry))
-
-;; Returns cmd-entry or #f
-(define (lookup-command reg name)
-  (hash-ref reg name #f))
+;; register-command! and lookup-command are re-exported from util/command-types.rkt
 
 ;; Resolve a slash command string to (values cmd-entry args) or (values #f #f).
 ;; Uses command-parse.rkt for name→symbol mapping, then looks up in registry.
