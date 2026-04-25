@@ -87,8 +87,10 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-racket
+      - name: Install Racket
+        run: |
+          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
 
       - name: Download release tarball
         id: download
@@ -98,8 +100,6 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          # The release job just uploaded the tarball, so it should be available immediately.
-          # Use a short retry loop as a safety net.
           ASSET_URL=""
           for i in $(seq 1 10); do
             ASSET_URL=$(curl -s -H "Authorization: token $GH_TOKEN" \
@@ -119,7 +119,6 @@ jobs:
           curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
             -o "/tmp/q-${VERSION}.tar.gz" "$ASSET_URL"
           ls -la "/tmp/q-${VERSION}.tar.gz"
-          file "/tmp/q-${VERSION}.tar.gz"
 
       - name: Extract and install
         run: |
@@ -157,7 +156,7 @@ jobs:
             echo "No release-manifest.json found (optional)"
           fi
 
-      - name: Run full test suite
+      - name: Run test suite
         run: |
           cd /tmp/q
           racket scripts/run-tests.rkt --suite fast --jobs 4
