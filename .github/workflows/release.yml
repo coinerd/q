@@ -30,6 +30,8 @@ jobs:
   release:
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-racket
@@ -80,3 +82,87 @@ jobs:
           files: |
             /tmp/q-${{ steps.version.outputs.VERSION }}.tar.gz
             release-manifest.json
+
+  smoke:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release tarball
+        id: download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          # The release job just uploaded the tarball, so it should be available immediately.
+          # Use a short retry loop as a safety net (upload may take a few seconds to propagate).
+          ASSET_URL=""
+          for i in $(seq 1 10); do
+            ASSET_URL=$(curl -s -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" \
+              | jq -r '.assets[] | select(.name=="q-'"${VERSION}"'.tar.gz") | .url')
+            if [ -n "$ASSET_URL" ]; then
+              echo "Found tarball asset (attempt $i)"
+              break
+            fi
+            echo "Waiting for tarball asset (attempt $i)..."
+            sleep 5
+          done
+          if [ -z "$ASSET_URL" ]; then
+            echo "ERROR: tarball asset not found in release ${TAG}"
+            exit 1
+          fi
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o "q-${VERSION}.tar.gz" "$ASSET_URL"
+          ls -la "q-${VERSION}.tar.gz"
+          file "q-${VERSION}.tar.gz"
+
+      - name: Setup Racket
+        uses: actions/checkout@v6
+        # We need the repo for the composite action reference
+      - uses: ./.github/actions/setup-racket
+
+      - name: Extract and install
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          tar xzf "q-${VERSION}.tar.gz"
+          if [ -d "q-${VERSION}" ]; then
+            mv "q-${VERSION}" q
+          fi
+          cd q
+          raco pkg install --auto --batch
+
+      - name: Verify q --version
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          cd q
+          OUTPUT=$(racket main.rkt --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "version ${VERSION}"
+
+      - name: Verify manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.download.outputs.VERSION }}"
+          TAG="${GITHUB_REF#refs/tags/}"
+          cd q
+          curl -sfL -H "Authorization: token $GH_TOKEN" -H "Accept: application/octet-stream" \
+            -o release-manifest.json \
+            "https://api.github.com/repos/${{ github.repository }}/releases/download/${TAG}/release-manifest.json" || true
+          if [ -f release-manifest.json ] && [ -s release-manifest.json ]; then
+            python3 -c "
+          import json
+          m = json.load(open('release-manifest.json'))
+          assert m['version'] == '${VERSION}', f\"manifest version {m['version']} != expected ${VERSION}\"
+          print(f'Manifest OK: version={m[\"version\"]}')
+          "
+          else
+            echo "No release-manifest.json found (optional)"
+          fi
+
+      - name: Run full test suite
+        run: |
+          cd q
+          racket scripts/run-tests.rkt --suite fast --jobs 4

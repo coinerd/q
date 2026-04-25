@@ -10,6 +10,57 @@ on:
     branches: [main]
 
 jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate workflow YAML
+        run: |
+          pip install pyyaml
+          python3 -c "
+          import yaml, glob, sys
+          errors = []
+          for f in glob.glob('.github/workflows/*.yml'):
+            try: yaml.safe_load(open(f))
+            except Exception as e: errors.append(f'{f}: {e}')
+          for f in glob.glob('.github/actions/*/action.yml'):
+            try: yaml.safe_load(open(f))
+            except Exception as e: errors.append(f'{f}: {e}')
+          if errors:
+            for e in errors: print(f'ERROR: {e}')
+            sys.exit(1)
+          print('All workflows and actions valid YAML')
+          "
+
+  release-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-racket
+
+      - name: Build tarball (dry-run)
+        run: |
+          VERSION=$(racket -e '(require "util/version.rkt") (display q-version)')
+          mkdir -p /tmp/q
+          cp -r . /tmp/q/
+          cd /tmp
+          tar czf /tmp/q-${VERSION}.tar.gz \
+            --exclude='.git' --exclude='compiled' --exclude='*.zo' q/
+          echo "Tarball size: $(du -h /tmp/q-${VERSION}.tar.gz | cut -f1)"
+
+      - name: Verify manifest generation
+        run: |
+          VERSION=$(racket -e '(require "util/version.rkt") (display q-version)')
+          racket scripts/gen-release-manifest.rkt /tmp/q-${VERSION}.tar.gz > /tmp/manifest.json
+          python3 -c "import json,sys; m=json.load(open('/tmp/manifest.json')); print(f'Manifest valid: version={m[\"version\"]}')"
+
+      - name: Verify release notes generation
+        run: |
+          VERSION=$(racket -e '(require "util/version.rkt") (display q-version)')
+          racket scripts/gen-release-notes.rkt "${VERSION}" > /tmp/notes.md
+          echo "Release notes generated ($(wc -l < /tmp/notes.md) lines)"
+
   version-consistency:
     runs-on: ubuntu-latest
     steps:

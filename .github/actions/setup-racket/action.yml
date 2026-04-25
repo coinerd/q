@@ -1,5 +1,5 @@
 name: 'Setup Racket'
-description: 'Install Racket 8.10 with caching and dependencies'
+description: 'Install Racket with caching and dependencies'
 inputs:
   racket-version:
     description: 'Racket version to install'
@@ -49,6 +49,10 @@ runs:
     - name: Verify Racket Installation
       shell: bash
       run: racket --version
+
+    - name: Clean stale compiled bytecode
+      shell: bash
+      run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
 
     - name: Install dependencies
       shell: bash
