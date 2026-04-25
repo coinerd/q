@@ -534,3 +534,87 @@
            (copy-text! text)))
        'continue]
       [else 'continue])))
+
+;; ============================================================
+;; Tree browser overlay key handling (G1.1)
+;; ============================================================
+
+(require "tree-view.rkt")
+(require racket/set)
+
+(define (handle-tree-overlay-key ctx keycode)
+  ;; Handle key events when tree-browser overlay is active.
+  ;; Returns 'handled (consumed), 'dismiss (close overlay), or 'pass (not ours).
+  (define state (unbox (tui-ctx-ui-state-box ctx)))
+  (define ov (ui-state-active-overlay state))
+  (define tbs (and ov (overlay-state-extra ov)))
+  (cond
+    [(not (and ov (eq? (overlay-state-type ov) 'tree-browser) (tree-browser-state? tbs))) 'pass]
+    ;; Escape — dismiss overlay
+    [(memq keycode '(escape #\e))
+     (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
+     (mark-dirty! ctx)
+     'handled]
+    ;; Down arrow — move selection down
+    [(memq keycode '(down kp-down))
+     (define new-idx
+       (tree-next-node (tree-browser-state-rendered-lines tbs) (tree-browser-state-selected-idx tbs)))
+     (update-tree-overlay! ctx state ov tbs new-idx (tree-browser-state-folded-set tbs))
+     'handled]
+    ;; Up arrow — move selection up
+    [(memq keycode '(up kp-up))
+     (define new-idx
+       (tree-prev-node (tree-browser-state-rendered-lines tbs) (tree-browser-state-selected-idx tbs)))
+     (update-tree-overlay! ctx state ov tbs new-idx (tree-browser-state-folded-set tbs))
+     'handled]
+    ;; Enter — toggle fold or navigate to entry
+    [(memq keycode '(return kp-return enter kp-enter #\return))
+     (define nodes (tree-browser-state-nodes tbs))
+     (define idx (tree-browser-state-selected-idx tbs))
+     (cond
+       [(and (>= idx 0) (< idx (length nodes)))
+        (define entry (list-ref nodes idx))
+        (define entry-id (list-ref entry 0))
+        (define new-folded (tree-toggle-fold (tree-browser-state-folded-set tbs) entry-id))
+        (update-tree-overlay! ctx state ov tbs idx new-folded)]
+       [else (void)])
+     'handled]
+    ;; f — fold/unfold
+    [(eq? keycode #\f)
+     (define nodes (tree-browser-state-nodes tbs))
+     (define idx (tree-browser-state-selected-idx tbs))
+     (cond
+       [(and (>= idx 0) (< idx (length nodes)))
+        (define entry (list-ref nodes idx))
+        (define entry-id (list-ref entry 0))
+        (define new-folded (tree-toggle-fold (tree-browser-state-folded-set tbs) entry-id))
+        (update-tree-overlay! ctx state ov tbs idx new-folded)]
+       [else (void)])
+     'handled]
+    ;; q — dismiss
+    [(eq? keycode #\q)
+     (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
+     (mark-dirty! ctx)
+     'handled]
+    [else 'pass]))
+
+(define (update-tree-overlay! ctx state ov tbs new-idx new-folded)
+  ;; Re-render tree with updated selection/fold state and update overlay
+  (define nodes (tree-browser-state-nodes tbs))
+  (define-values (cols rows) (tui-screen-size))
+  (define active-leaf-id #f) ;; Could look up from session index
+  (define rendered (render-session-tree-folded nodes active-leaf-id cols new-folded))
+  ;; Build styled lines with selection highlight
+  (define styled-lines
+    (for/list ([line (in-list rendered)]
+               [i (in-naturals)])
+      (if (= i new-idx)
+          (list (cons (format "► ~a" line) '()))
+          (list (cons (format "  ~a" line) '())))))
+  (define new-tbs (tree-browser-state nodes new-idx new-folded rendered))
+  (define new-ov (struct-copy overlay-state ov [content styled-lines] [extra new-tbs]))
+  (set-box! (tui-ctx-ui-state-box ctx) (struct-copy ui-state state [active-overlay new-ov]))
+  (mark-dirty! ctx))
+
+(provide handle-tree-overlay-key
+         update-tree-overlay!)
