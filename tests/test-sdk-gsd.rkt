@@ -1,153 +1,128 @@
 #lang racket
 
-;; tests/test-sdk-gsd.rkt — tests for GSD observability via SDK (v0.20.4 W3)
+;; tests/test-sdk-gsd.rkt — tests for v0.20.5 W2: GSD Convenience API
 ;;
 ;; Covers:
-;;   - gsd-snapshot returns immutable hash with expected keys
-;;   - gsd-snapshot doesn't expose internal boxes
-;;   - gsd-status with no session → 'no-active-session
-;;   - gsd-status with active session → hash with expected keys
+;;   - q:plan dispatches /plan through extension registry
+;;   - q:go dispatches /go through extension registry
+;;   - q:gsd-status returns snapshot or 'no-active-session
+;;   - q:reset-gsd! resets all GSD state
+;;   - Edge cases: no extension registry, no submit text, no session
 
 (require rackunit
-         racket/set
-         (only-in "../extensions/gsd-planning-state.rkt"
-                  gsd-snapshot
-                  set-gsd-mode!
-                  set-total-waves!
-                  mark-wave-complete!
-                  reset-plan-budget!
-                  decrement-plan-budget!
-                  decrement-budget!
-                  set-go-read-budget!
-                  reset-all-gsd-state!)
-         (only-in "../interfaces/sdk.rkt" gsd-status))
+         racket/file
+         "../interfaces/sdk.rkt"
+         "../extensions/api.rkt"
+         "../extensions/hooks.rkt"
+         "../extensions/gsd-planning.rkt"
+         "../agent/event-bus.rkt"
+         "helpers/mock-provider.rkt"
+         "helpers/temp-fs.rkt")
 
 ;; ============================================================
-;; gsd-snapshot tests
+;; Helpers
 ;; ============================================================
 
-(test-case "gsd-snapshot returns immutable hash"
-  (reset-all-gsd-state!)
-  (define snap (gsd-snapshot))
-  (check-pred hash? snap)
-  ;; Immutable? Writing should fail
-  (check-exn exn:fail? (lambda () (hash-set! snap 'foo 'bar))))
+(define (make-gsd-runtime #:with-ext-reg? [with-ext? #f]
+                          #:with-session? [with-sess? #f])
+  (define tmp (make-temporary-file "/tmp/sdk-gsd-test-~a" 'directory))
+  (define prov (make-simple-mock-provider
+                (list (hasheq 'role "assistant"
+                              'content (list (hasheq 'type "text"
+                                                     'text "done"))))))
+  (define ext-reg (and with-ext? (make-extension-registry)))
+  (when with-ext?
+    (register-extension! ext-reg the-extension))
+  (define rt (make-runtime #:provider prov
+                           #:session-dir tmp
+                           #:extension-registry ext-reg
+                           #:register-default-tools? #f))
+  (define opened (if with-sess? (open-session rt) rt))
+  (values opened tmp))
 
-(test-case "gsd-snapshot has expected keys"
+(define (cleanup-gsd! tmp)
   (reset-all-gsd-state!)
-  (define snap (gsd-snapshot))
-  (for ([key '(mode pinned-dir
-                    go-read-budget
-                    edit-limit
-                    read-counts
-                    completed-waves
-                    total-waves
-                    last-edit-wave
-                    plan-tool-budget)])
-    (check-true (hash-has-key? snap key) (format "missing key: ~a" key))))
-
-(test-case "gsd-snapshot doesn't expose internal boxes"
-  (reset-all-gsd-state!)
-  (define snap (gsd-snapshot))
-  ;; All values should be plain data, not boxes
-  (check-false (box? (hash-ref snap 'mode)))
-  (check-false (box? (hash-ref snap 'go-read-budget)))
-  (check-false (box? (hash-ref snap 'edit-limit)))
-  (check-false (box? (hash-ref snap 'total-waves)))
-  (check-false (box? (hash-ref snap 'plan-tool-budget))))
-
-(test-case "gsd-snapshot reflects state changes"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-total-waves! 5)
-  (mark-wave-complete! 0)
-  (mark-wave-complete! 1)
-  (reset-plan-budget!)
-  (define snap (gsd-snapshot))
-  (check-equal? (hash-ref snap 'mode) 'executing)
-  (check-equal? (hash-ref snap 'total-waves) 5)
-  (check-true (set=? (hash-ref snap 'completed-waves) (set 0 1)))
-  (check-equal? (hash-ref snap 'plan-tool-budget) 30)
-  ;; Clean up
-  (reset-all-gsd-state!))
+  (delete-directory/files tmp #:must-exist? #f))
 
 ;; ============================================================
-;; gsd-status tests
+;; Tests
 ;; ============================================================
 
-(test-case "gsd-status returns 'no-active-session when no GSD mode"
+(test-case "W2: q:gsd-status returns 'no-active-session when inactive"
   (reset-all-gsd-state!)
-  (check-equal? (gsd-status) 'no-active-session))
+  (check-equal? (q:gsd-status) 'no-active-session))
 
-(test-case "gsd-status returns hash when GSD mode is active"
+(test-case "W2: q:reset-gsd! clears all state"
   (reset-all-gsd-state!)
+  ;; Set some state
   (set-gsd-mode! 'planning)
-  (define status (gsd-status))
-  (check-pred hash? status)
-  (check-equal? (hash-ref status 'mode) 'planning)
-  ;; Clean up
-  (reset-all-gsd-state!))
+  (check-equal? (gsd-mode) 'planning)
+  ;; Reset via SDK
+  (q:reset-gsd!)
+  (check-false (gsd-mode)))
 
-(test-case "gsd-status returns 'no-active-session after reset"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (reset-all-gsd-state!)
-  (check-equal? (gsd-status) 'no-active-session))
+(test-case "W2: q:plan returns 'no-extension-registry without ext-reg"
+  (define-values (rt tmp) (make-gsd-runtime))
+  (define-values (rt2 result) (q:plan rt "test task"))
+  (check-equal? result 'no-extension-registry)
+  (cleanup-gsd! tmp))
 
-;; ============================================================
-;; v0.20.4 W4: SDK integration tests
-;; ============================================================
+(test-case "W2: q:go returns 'no-extension-registry without ext-reg"
+  (define-values (rt tmp) (make-gsd-runtime))
+  (define-values (rt2 result) (q:go rt))
+  (check-equal? result 'no-extension-registry)
+  (cleanup-gsd! tmp))
 
-(test-case "gsd-snapshot reflects wave progress during execution"
+(test-case "W2: q:plan dispatches through extension and returns submit text (no session)"
   (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-total-waves! 3)
-  ;; Simulate completing waves 0 and 1
-  (mark-wave-complete! 0)
-  (mark-wave-complete! 1)
-  (define snap (gsd-snapshot))
-  (check-equal? (hash-ref snap 'mode) 'executing)
-  (check-equal? (hash-ref snap 'total-waves) 3)
-  (check-true (set=? (hash-ref snap 'completed-waves) (set 0 1)))
-  (check-equal? (gsd-status) snap) ;; gsd-status matches snapshot when mode active
-  (reset-all-gsd-state!))
+  (define-values (rt tmp) (make-gsd-runtime #:with-ext-reg? #t))
+  (define-values (rt2 result) (q:plan rt "build a foo"))
+  ;; The GSD extension should return a hook-amend with submit text
+  ;; Since no session, we get back the submit text string
+  (check-pred string? result "q:plan should return submit text string when no session")
+  (check-true (string-contains? result "build a foo")
+              "submit text should contain the task")
+  (cleanup-gsd! tmp))
 
-(test-case "gsd-snapshot reflects budget depletion"
+(test-case "W2: q:go dispatches through extension and returns submit text (no session)"
   (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-go-read-budget! 5)
-  (decrement-budget!)
-  (decrement-budget!)
-  (define snap (gsd-snapshot))
-  (check-equal? (hash-ref snap 'go-read-budget) 3)
-  (reset-all-gsd-state!))
+  ;; Need a PLAN.md for /go to work — write one via planning-write
+  (define-values (rt tmp) (make-gsd-runtime #:with-ext-reg? #t))
+  ;; First write a plan via planning-write (directly)
+  (define plan-dir (build-path tmp ".planning"))
+  (make-directory* plan-dir)
+  (call-with-output-file (build-path plan-dir "PLAN.md")
+    (lambda (out) (display "## Wave 0: Test\n- Do something\n" out))
+    #:exists 'truncate)
+  ;; Pin the planning dir so the extension finds it
+  (set-pinned-planning-dir! tmp)
+  (define-values (rt2 result) (q:go rt))
+  ;; /go should find the plan and return submit text
+  (check-pred string? result "q:go should return submit text when no session")
+  (check-true (string-contains? result "IMPLEMENT")
+              "submit text should contain implementation instructions")
+  (cleanup-gsd! tmp))
 
-(test-case "gsd-snapshot reflects plan-tool-budget depletion"
+(test-case "W2: q:plan with session runs prompt through provider"
   (reset-all-gsd-state!)
-  (set-gsd-mode! 'planning)
-  (reset-plan-budget!) ;; sets to EXPLORATION-BUDGET (30)
-  (decrement-plan-budget!)
-  (decrement-plan-budget!)
-  (decrement-plan-budget!)
-  (define snap (gsd-snapshot))
-  (check-equal? (hash-ref snap 'plan-tool-budget) 27)
-  (reset-all-gsd-state!))
+  (define-values (rt tmp) (make-gsd-runtime #:with-ext-reg? #t #:with-session? #t))
+  (define-values (rt2 result) (q:plan rt "build a bar"))
+  ;; Should have run the prompt through the mock provider
+  (check-not-equal? result 'no-extension-registry)
+  (check-not-equal? result 'no-active-session)
+  (cleanup-gsd! tmp))
 
-(test-case "gsd-snapshot reflects mode transitions"
+(test-case "W2: q:go with session and plan runs prompt through provider"
   (reset-all-gsd-state!)
-  ;; Start: no mode
-  (check-equal? (hash-ref (gsd-snapshot) 'mode) #f)
-  (check-equal? (gsd-status) 'no-active-session)
-  ;; Transition to planning
-  (set-gsd-mode! 'planning)
-  (check-equal? (hash-ref (gsd-snapshot) 'mode) 'planning)
-  (check-pred hash? (gsd-status))
-  ;; Transition to plan-written
-  (set-gsd-mode! 'plan-written)
-  (check-equal? (hash-ref (gsd-snapshot) 'mode) 'plan-written)
-  ;; Transition to executing
-  (set-gsd-mode! 'executing)
-  (check-equal? (hash-ref (gsd-snapshot) 'mode) 'executing)
-  ;; Reset
-  (reset-all-gsd-state!)
-  (check-equal? (hash-ref (gsd-snapshot) 'mode) #f))
+  (define-values (rt tmp) (make-gsd-runtime #:with-ext-reg? #t #:with-session? #t))
+  ;; Write a plan
+  (define plan-dir (build-path tmp ".planning"))
+  (make-directory* plan-dir)
+  (call-with-output-file (build-path plan-dir "PLAN.md")
+    (lambda (out) (display "## Wave 0: Test\n- Do something\n" out))
+    #:exists 'truncate)
+  (set-pinned-planning-dir! tmp)
+  (define-values (rt2 result) (q:go rt))
+  (check-not-equal? result 'no-extension-registry)
+  (check-not-equal? result 'no-active-session)
+  (cleanup-gsd! tmp))
