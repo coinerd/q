@@ -79,7 +79,10 @@
   (eq? (gsd-mode) v))
 
 (define (set-gsd-mode! v)
-  (call-with-semaphore state-sem (lambda () (set-box! gsd-mode-box v))))
+  (call-with-semaphore state-sem
+                       (lambda ()
+                         (log-debug (format "gsd-planning: mode ~a → ~a" (unbox gsd-mode-box) v))
+                         (set-box! gsd-mode-box v))))
 
 ;; --- pinned-planning-dir ---
 
