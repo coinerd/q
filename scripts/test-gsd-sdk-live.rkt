@@ -3,59 +3,35 @@
 
 ;; scripts/test-gsd-sdk-live.rkt — Live GSD planning test via SDK
 ;;
-;; Exercises the /plan → /go workflow against the real LLM provider
+;; Exercises the q:plan → q:go workflow against the real LLM provider
 ;; from ~/.q/config.json, observing GSD state transitions.
+;;
+;; Updated for v0.20.5: uses q:plan / q:go convenience API instead of
+;; manual hook dispatch.
 
 (require racket/port
          racket/string
+         racket/set
          "../runtime/settings.rkt"
          (only-in "../llm/provider.rkt" provider-name)
          "../runtime/provider-factory.rkt"
          "../extensions/loader.rkt"
-         "../extensions/hooks.rkt"
-         (only-in "../extensions/api.rkt"
-                  make-extension-registry
-                  register-extension!
-                  list-extensions
-                  extension-name)
+         "../extensions/gsd-planning.rkt"
          "../agent/event-bus.rkt"
-         (only-in "../util/event.rkt" event-event event-payload)
+         (only-in "../util/event.rkt" event-ev event-payload)
          "../tools/tool.rkt"
-         "../tools/registry-defaults.rkt"
          "../interfaces/sdk.rkt"
-         "../extensions/gsd-planning-state.rkt"
+         (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot)
          "../util/cancellation.rkt")
 
-(define (fmt-hash h)
-  (if (hash? h)
-      (string-join (for/list ([(k v) (in-hash h)])
-                     (format "~a=~a" k v))
-                   ", ")
-      ""))
-
 ;; ============================================================
-;; 1. Build real provider + tools + extensions
+;; 1. Build real provider + extensions via SDK
 ;; ============================================================
 (displayln "=== Step 1: Setup ===")
 (define project-dir (current-directory))
 (define settings (load-settings project-dir))
 (define prov (build-provider (hasheq 'project-dir project-dir) settings))
 (displayln (format "  Provider: ~a" (provider-name prov)))
-
-(define bus (make-event-bus))
-(define tool-reg (make-tool-registry))
-(register-default-tools! tool-reg)
-(displayln (format "  Tools: ~a registered" (length (list-tools tool-reg))))
-
-(define ext-reg (make-extension-registry))
-(for ([ext (discover-extensions project-dir)])
-  (register-extension! ext-reg ext))
-(displayln (format "  Extensions: ~a"
-                   (string-join (map extension-name (list-extensions ext-reg)) ", ")))
-
-;; Event subscriber
-(define event-log (box '()))
-(subscribe! bus (λ (evt) (set-box! event-log (append (unbox event-log) (list evt)))))
 
 ;; Clean stale artifacts
 (reset-all-gsd-state!)
@@ -66,46 +42,46 @@
 
 (define rt
   (make-runtime #:provider prov
-                #:tool-registry tool-reg
-                #:extension-registry ext-reg
-                #:event-bus bus
+                #:auto-load-extensions? #t
+                #:project-dir project-dir
                 #:max-iterations 25
                 #:session-dir "/tmp/q-gsd-sdk-test"))
 
+;; Show registered tools + extensions
+(define tool-reg (runtime-config-tool-registry (runtime-rt-config rt)))
+(displayln (format "  Tools: ~a registered" (length (list-tools tool-reg))))
+
+;; Subscribe to events
+(define bus (runtime-config-event-bus (runtime-rt-config rt)))
+(define event-log (box '()))
+(subscribe! bus (λ (evt) (set-box! event-log (append (unbox event-log) (list evt)))))
+
 ;; ============================================================
-;; 2. Open session
+;; 2. Open session (extensions pre-registered automatically)
 ;; ============================================================
 (displayln "")
 (displayln "=== Step 2: Open session ===")
 (define rt-open (open-session rt))
-(displayln (format "  GSD: ~a" (gsd-status)))
+(displayln (format "  GSD: ~a" (q:gsd-status)))
+;; Show tools now that extensions are registered
+(define tool-reg2 (runtime-config-tool-registry (runtime-rt-config rt-open)))
+(displayln (format "  Tools after open-session: ~a" (length (list-tools tool-reg2))))
 (displayln "")
 
 ;; ============================================================
-;; 3. /plan — dispatch hook, then run prompt
+;; 3. q:plan — one-liner GSD planning
 ;; ============================================================
 (displayln "════════════════════════════════════════════════════════")
-(displayln "=== Step 3: /plan ===")
+(displayln "=== Step 3: q:plan ===")
 (displayln "════════════════════════════════════════════════════════")
-
-(define plan-input "/plan Create a file /tmp/hello.txt containing just 'Hello World'")
-(define plan-hook
-  (dispatch-hooks 'execute-command (hasheq 'command "/plan" 'input plan-input) ext-reg))
-(define plan-prompt
-  (if (and plan-hook
-           (eq? (hook-result-action plan-hook) 'amend)
-           (hash-ref (hook-result-payload plan-hook) 'submit #f))
-      (hash-ref (hook-result-payload plan-hook) 'submit)
-      plan-input))
-
-(displayln (format "  Prompt: ~a chars" (string-length plan-prompt)))
-(displayln "  Running...")
+(displayln "  Running q:plan...")
 (displayln "")
 
-(define-values (rt-after-plan plan-result) (run-prompt! rt-open plan-prompt))
+(define-values (rt-after-plan plan-result)
+  (q:plan rt-open "Create a file /tmp/hello.txt containing just 'Hello World'"))
 
 (displayln "")
-(displayln "=== After /plan ===")
+(displayln "=== After q:plan ===")
 (define snap1 (gsd-snapshot))
 (displayln (format "  mode: ~a" (hash-ref snap1 'mode)))
 (displayln (format "  plan-tool-budget: ~a" (hash-ref snap1 'plan-tool-budget)))
@@ -121,35 +97,23 @@
 (displayln "")
 
 ;; ============================================================
-;; 4. /go — dispatch hook, then run prompt
+;; 4. q:go — one-liner GSD execution
 ;; ============================================================
 (displayln "════════════════════════════════════════════════════════")
-(displayln "=== Step 4: /go ===")
+(displayln "=== Step 4: q:go ===")
 (displayln "════════════════════════════════════════════════════════")
-
-(define go-hook (dispatch-hooks 'execute-command (hasheq 'command "/go" 'input "/go") ext-reg))
-(define go-prompt
-  (if (and go-hook
-           (eq? (hook-result-action go-hook) 'amend)
-           (hash-ref (hook-result-payload go-hook) 'submit #f))
-      (hash-ref (hook-result-payload go-hook) 'submit)
-      "/go"))
-
-(displayln (format "  Prompt: ~a chars" (string-length go-prompt)))
-(displayln "  Running...")
+(displayln "  Running q:go...")
 (displayln "")
 
-(define-values (rt-after-go go-result) (run-prompt! rt-after-plan go-prompt))
+(define-values (rt-after-go go-result) (q:go rt-after-plan))
 
 (displayln "")
-(displayln "=== After /go ===")
+(displayln "=== After q:go ===")
 (define snap2 (gsd-snapshot))
 (displayln (format "  mode: ~a" (hash-ref snap2 'mode)))
 (displayln (format "  total-waves: ~a" (hash-ref snap2 'total-waves)))
 (displayln (format "  completed-waves: ~a" (set-count (hash-ref snap2 'completed-waves))))
 (displayln (format "  go-read-budget: ~a" (hash-ref snap2 'go-read-budget)))
-(displayln (format "  edit-limit: ~a" (hash-ref snap2 'edit-limit)))
-(displayln (format "  read-counts: ~a files" (hash-count (hash-ref snap2 'read-counts))))
 (displayln "")
 
 ;; ============================================================
@@ -169,7 +133,7 @@
 (displayln "════════════════════════════════════════════════════════")
 (displayln "=== Event Summary ===")
 (displayln "════════════════════════════════════════════════════════")
-(define names (remove-duplicates (map event-event (unbox event-log))))
+(define names (remove-duplicates (map (lambda (e) (event-ev e)) (unbox event-log))))
 (displayln (format "  Event types: ~a" names))
 (displayln (format "  Total events: ~a" (length (unbox event-log))))
 (displayln "")
