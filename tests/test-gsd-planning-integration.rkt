@@ -9,7 +9,34 @@
 (require rackunit
          racket/file
          "../extensions/gsd-planning.rkt"
-         "../extensions/gsd-planning-state.rkt"
+         (only-in "../extensions/gsd-planning-state.rkt"
+                  gsd-mode
+                  set-gsd-mode!
+                  gsd-mode?
+                  pinned-planning-dir
+                  set-pinned-planning-dir!
+                  go-read-budget
+                  set-go-read-budget!
+                  decrement-budget!
+                  reset-go-budget!
+                  GO-READ-BUDGET
+                  read-counts
+                  get-read-count
+                  increment-read-count!
+                  clear-read-counts!
+                  current-max-old-text-len
+                  set-current-max-old-text-len!
+                  completed-waves
+                  total-waves
+                  set-total-waves!
+                  mark-wave-complete!
+                  wave-complete?
+                  next-pending-wave
+                  plan-tool-budget
+                  decrement-plan-budget!
+                  reset-plan-budget!
+                  gsd-snapshot
+                  reset-all-gsd-state!)
          "../extensions/api.rkt"
          "../tools/tool.rkt"
          "../extensions/hooks.rkt")
@@ -211,8 +238,8 @@
      (define amended (hash-ref (hook-result-payload post) 'result))
      (define content (tool-result-content amended))
      (define all-text (apply string-append (map (lambda (p) (hash-ref p 'text "")) content)))
-     (check-true (string-contains? all-text "HINT") "should contain read hint")
-     (check-true (string-contains? all-text "BUDGET WARNING") "should contain budget warning")
+     (check-true (string-contains? all-text "SYSTEM NOTICE") "should contain read hint")
+     (check-true (string-contains? all-text "SYSTEM NOTICE: BUDGET WARNING") "should contain budget warning")
      (set-gsd-mode! #f))))
 
 ;; ============================================================

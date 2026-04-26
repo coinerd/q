@@ -148,18 +148,18 @@
               (format "Expected BUDGET WARNING in result, got: ~a" all-text))
   (set-gsd-mode! #f))
 
-(test-case "no budget warning when budget > 5"
+(test-case "no budget warning when budget > soft threshold"
   (reset-read-counts!)
   (set-gsd-mode! 'executing)
   (reset-go-budget!)
-  ;; Only 20 calls used, budget = 10
-  (for ([_ (in-range 20)])
+  ;; Only 15 calls used, budget = 15, above soft warning threshold (10)
+  (for ([_ (in-range 15)])
     (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
-  (check-equal? (go-read-budget) 10)
+  (check-equal? (go-read-budget) 15)
   ;; read-tracker should NOT inject budget warning
   (define result (make-success-read-result "/tmp/no-warn.txt" "content"))
   (define hook-res (gsd-read-tracker (hasheq 'tool-name "read" 'result result)))
-  ;; Should pass (not amend) since no hint threshold hit and budget OK
+  ;; Should pass (not amend) since budget > soft threshold
   (check-eq? (hook-result-action hook-res) 'pass)
   (set-gsd-mode! #f))
 
