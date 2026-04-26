@@ -1,6 +1,6 @@
 # Publish & Verify Workflow
 
-<!-- verified-against: 0.20.3 -->
+<!-- verified-against: 0.20.4 -->
 
 This document describes the workflow for publishing a q extension package
 and verifying it works correctly.
