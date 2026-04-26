@@ -47,6 +47,8 @@
 (define CURRENT-EVENT-VERSION 1)
 
 ;; Deserialize jsexpr (hash) to event.
+;; For typed event deserialization, see agent/event-types.rkt:jsexpr->typed-event
+;; which handles type-tagged events with structured fields.
 (define (jsexpr->event h)
   (define ver (hash-ref h 'version 1))
   (when (> ver CURRENT-EVENT-VERSION)

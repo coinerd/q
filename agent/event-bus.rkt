@@ -11,7 +11,8 @@
 ;;   - publish! returns the event for chaining
 
 (require racket/contract
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         "event-types.rkt")
 
 ;; Pub/sub event bus
 (provide (contract-out [make-event-bus (-> event-bus?)]
@@ -20,6 +21,8 @@
                        [unsubscribe! (-> event-bus? any/c void?)]
                        [publish! (-> event-bus? any/c any/c)])
          event-bus?
+         bus-emit-typed!
+         typed-event->event
          ;; Error handler parameter — reserved for SDK consumers
          current-event-bus-error-handler
          ;; Circuit breaker configuration
@@ -174,4 +177,31 @@
            ((subscription-handler s) evt)
            (record-success! sub-id))]
         [else (void)])))
+  evt)
+
+;; ============================================================
+;; Typed event bridge (EVT-01)
+;; ============================================================
+
+;; Convert a typed-event to a raw event struct for bus transport.
+;; The typed event's type field becomes the event name.
+;; Extra fields are serialized via typed-event->jsexpr and stripped
+;; of the base fields (type, timestamp, sessionId, turnId).
+(define (typed-event->event te)
+  (define h (typed-event->jsexpr te))
+  (define payload
+    (for/hash ([(k v) (in-hash h)]
+               #:when (not (memq k '(type timestamp sessionId turnId))))
+      (values k v)))
+  (make-event (typed-event-type te)
+              (typed-event-timestamp te)
+              (typed-event-session-id te)
+              (typed-event-turn-id te)
+              payload))
+
+;; Publish a typed event on the bus, converting to raw event first.
+;; Returns the raw event struct.
+(define (bus-emit-typed! bus te)
+  (define evt (typed-event->event te))
+  (publish! bus evt)
   evt)
