@@ -23,13 +23,14 @@
          (only-in "../../util/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
 
-(provide tool-edit)
+(provide tool-edit
+         current-max-old-text-len)
 
 ;; --------------------------------------------------
 ;; Constants
 ;; --------------------------------------------------
 
-(define MAX-OLD-TEXT-LEN 500)
+(define current-max-old-text-len (make-parameter 500))
 (define MAX-BACKUPS-PER-FILE 10)
 
 ;; --------------------------------------------------
@@ -45,7 +46,9 @@
   dir)
 
 (define (save-backup path-str content)
-  (with-handlers ([exn:fail? (lambda (e) (log-warning (format "edit/backup: ~a" (exn-message e))) #f)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "edit/backup: ~a" (exn-message e)))
+                               #f)])
     (define dir (ensure-backup-dir))
     (define basename (file-name-from-path path-str))
     (define timestamp (format "~a" (inexact->exact (current-inexact-milliseconds))))
@@ -67,7 +70,9 @@
       (last parts)))
 
 (define (prune-old-backups dir basename)
-  (with-handlers ([exn:fail? (lambda (e) (log-warning (format "edit/prune: ~a" (exn-message e))) (void))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "edit/prune: ~a" (exn-message e)))
+                               (void))])
     (define all (directory-list dir))
     (define matching
       (filter (lambda (f) (string-contains? (path->string f) basename))
@@ -204,12 +209,12 @@
 
               ;; W0.1: Old-text length limit
               (cond
-                [(> (string-length old-text) MAX-OLD-TEXT-LEN)
+                [(> (string-length old-text) (current-max-old-text-len))
                  (make-error-result
                   (format
                    "old-text is too long (~a chars, max ~a). Break your edit into smaller pieces — each edit should change ≤20 lines."
                    (string-length old-text)
-                   MAX-OLD-TEXT-LEN))]
+                   (current-max-old-text-len)))]
 
                 [else
                  ;; Check for ambiguity (multiple matches)
@@ -240,7 +245,10 @@
                     (cond
                       [(> delta-diff 2)
                        ;; Auto-revert: write back original content
-                       (with-handlers ([exn:fail? (lambda (e) (log-warning (format "edit/auto-revert: ~a" (exn-message e))) (void))])
+                       (with-handlers ([exn:fail? (lambda (e)
+                                                    (log-warning (format "edit/auto-revert: ~a"
+                                                                         (exn-message e)))
+                                                    (void))])
                          (display-to-file content path-str #:exists 'replace))
                        (make-error-result
                         (format
@@ -256,8 +264,8 @@
                        (with-handlers ([exn:fail:filesystem?
                                         (lambda (e)
                                           (make-error-result (sanitize-error-message
-                                                               (format "Write error: ~a"
-                                                                       (exn-message e)))))])
+                                                              (format "Write error: ~a"
+                                                                      (exn-message e)))))])
                          (call-with-output-file path-str
                                                 (lambda (out) (display new-content out))
                                                 #:exists 'replace)
