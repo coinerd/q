@@ -245,3 +245,39 @@
   (define r (gsd-show-status))
   (check-eq? (hash-ref r 'mode) 'idle)
   (check-true (list? (hash-ref r 'valid-next-states))))
+
+;; ============================================================
+;; Write guard hardening (DD-6)
+;; ============================================================
+
+(test-case "write guard: blocks .. traversal to PLAN.md"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (define r (gsd-write-guard "src/../.planning/PLAN.md" ".planning"))
+  (check-true (hash? r))
+  (check-equal? (hash-ref r 'blocked) #t))
+
+(test-case "write guard: blocks multiple .. traversal"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (define r (gsd-write-guard "a/b/../../.planning/PLAN.md" ".planning"))
+  (check-true (hash? r))
+  (check-equal? (hash-ref r 'blocked) #t))
+
+(test-case "write guard: allows other .planning files during executing"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (check-true (gsd-write-guard ".planning/STATE.md" ".planning")))
+
+(test-case "write guard: allows files outside .planning"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (check-true (gsd-write-guard "src/fix.rkt" ".planning")))
