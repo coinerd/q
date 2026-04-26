@@ -143,7 +143,9 @@
          check-mid-turn-budget!
          ;; v0.20.4 W2: stall detection
          detect-stall?
-         MAX-STALL-RETRIES)
+         MAX-STALL-RETRIES
+         ;; v0.20.5 W3: pre-registration on session open
+         register-session-extensions!)
 
 ;; ============================================================
 ;; Shared helpers
@@ -262,6 +264,38 @@
 
   ctx-final)
 
+;; ============================================================
+;; v0.20.5 W3: Extension Pre-Registration
+;; ============================================================
+
+;;; register-session-extensions! : tool-registry? extension-registry? event-bus?
+;;;                                  string? -> (listof hash?)
+;;;
+;;; Dispatches the 'register-tools hook through the extension registry
+;;; so that extension tools are available and extension state (event bus,
+;;; pinned dir) is initialized BEFORE the first run-prompt! call.
+;;;
+;;; Returns the list of extension-provided tools (as jsexpr hashes),
+;;; or '() if no extensions or no tools registered.
+;;;
+;;; Idempotent: extensions track their own registration state internally.
+;;; Safe to call multiple times.
+(define (register-session-extensions! tool-reg ext-reg bus session-id)
+  (cond
+    [(not ext-reg) '()]
+    [else
+     (define the-ext-ctx
+       (make-extension-ctx #:session-id session-id
+                           #:session-dir #f
+                           #:event-bus bus
+                           #:extension-registry ext-reg
+                           #:tool-registry tool-reg))
+     (define-values (_amended hook-res)
+       (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))
+     (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
+         (hash-ref (hook-result-payload hook-res) 'tools '())
+         '())]))
+
 ;; Run the provider turn: dispatch before-provider-request hook, then run agent turn.
 ;; Returns the loop-result from run-agent-turn.
 (define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config)
@@ -275,27 +309,13 @@
   (define base-tools (and reg (list-tools-jsexpr reg)))
 
   ;; #673: Merge extension-provided tools into the tool list
-  ;; v0.19.4 GAP-2 fix: create proper extension-ctx so register-tools handlers
-  ;; can call ext-register-tool! without contract violations.
+  ;; v0.20.5 W3: Uses shared register-session-extensions! function.
+  ;; Idempotent — extensions track their own state.
+  (define ext-tools (and ext-reg (register-session-extensions! reg ext-reg bus session-id)))
   (define tools
-    (let ([ext-tools
-           (and ext-reg
-                (let ()
-                  ;; Build extension-ctx with available session components
-                  (define the-ext-ctx
-                    (make-extension-ctx #:session-id session-id
-                                        #:session-dir #f
-                                        #:event-bus bus
-                                        #:extension-registry ext-reg
-                                        #:tool-registry reg))
-                  (define-values (amended hook-res)
-                    (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))
-                  (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
-                      (hash-ref (hook-result-payload hook-res) 'tools '())
-                      '())))])
-      (if (and base-tools (pair? ext-tools))
-          (merge-tool-lists base-tools ext-tools)
-          base-tools)))
+    (if (and base-tools (pair? ext-tools))
+        (merge-tool-lists base-tools ext-tools)
+        base-tools))
 
   ;; v0.14.4 Wave 2 FIX: Extract ONLY provider-specific settings from config.
   ;; The full config is a mutable hash with event-bus, extension-registry, etc.
