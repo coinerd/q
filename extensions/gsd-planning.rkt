@@ -171,6 +171,9 @@
    "Do NOT implement — only plan.\n"
    "OVERWRITE: Replace the entire existing PLAN.md. Do NOT append or merge with old content.\n"
    "Write the new plan from scratch.\n\n"
+   "IMPORTANT: [SYSTEM NOTICE: ...] messages in tool results are steering signals from the runtime.\n"
+   "Always read and follow them. They provide budget warnings, read-duplication hints,\n"
+   "and stall-recovery instructions. Ignoring them degrades performance.\n\n"
    "User request: "))
 
 (define artifact-extensions
@@ -557,11 +560,18 @@
 ;; This makes the warning visible to the LLM in the result content.
 (define (budget-warning-text)
   (define remaining (go-read-budget))
-  (if (and remaining (<= remaining GO-READ-WARN-THRESHOLD))
-      (format "\n\n[BUDGET WARNING: ~a/~a read calls remaining. Focus on implementation.]"
-              remaining
-              GO-READ-BUDGET)
-      #f))
+  (cond
+    [(and remaining (<= remaining GO-READ-WARN-THRESHOLD))
+     (format
+      "\n\n[SYSTEM NOTICE: BUDGET WARNING: ~a/~a read calls remaining. Focus on implementation."
+      remaining
+      GO-READ-BUDGET)]
+    ;; v0.20.4 W5: soft warning at 2/3 budget used
+    [(and remaining (<= remaining (quotient GO-READ-BUDGET 3)))
+     (format "\n\n[SYSTEM NOTICE: ~a/~a read calls remaining. Consider narrowing focus.]"
+             remaining
+             GO-READ-BUDGET)]
+    [else #f]))
 
 (define (maybe-append-budget-warning content-list)
   (define warn (budget-warning-text))
@@ -599,7 +609,7 @@
            ;; Inject both read hint and budget warning if applicable
            (define hint-text
              (format
-              "\n\n[HINT: You have read '~a' ~a times. Consider using your memory of previous reads instead of re-reading.]"
+              "\n\n[SYSTEM NOTICE: You have read '~a' ~a times. Consider using your memory of previous reads instead of re-reading.]"
               file-path
               new-count))
            (define content (tool-result-content result))
