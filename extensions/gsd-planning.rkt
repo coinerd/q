@@ -31,7 +31,9 @@
          planning-implement-prompt
          pinned-planning-dir
          gsd-mode
-         gsd-tool-guard)
+         gsd-tool-guard
+         reset-read-counts!
+         gsd-read-tracker)
 
 ;; ============================================================
 ;; Constants
@@ -360,6 +362,8 @@
         (gsd-mode 'executing)
         ;; Raise edit limit during execution mode (500 → 1200)
         (current-max-old-text-len 1200)
+        ;; Reset read counter for fresh execution
+        (reset-read-counts!)
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
           (if state-content
@@ -406,6 +410,8 @@
              (gsd-mode 'planning)
              ;; Reset edit limit to default during planning
              (current-max-old-text-len 500)
+             ;; Reset read counter for fresh planning
+             (reset-read-counts!)
              ;; v0.19.12 W2: Detect stale existing PLAN.md and inject warning
              (define existing-plan (read-planning-artifact base-dir "PLAN"))
              (define stale-warning
@@ -424,6 +430,50 @@
                [(hash? content) (jsexpr->string content)]
                [else content]))
            (hook-amend (hasheq 'text text))])])]))
+
+;; ============================================================
+;; Redundant read detection (tool-result-post hook)
+;; ============================================================
+
+;; Tracks per-file read count to detect redundant reads.
+(define read-counts (make-hash))
+
+(define READ_HINT_THRESHOLD 3)
+
+(define (gsd-read-tracker payload)
+  (define tool-name (hash-ref payload 'tool-name #f))
+  (define result (hash-ref payload 'result #f))
+  (cond
+    ;; Only track successful reads with path info
+    [(and (equal? tool-name "read") result (tool-result? result) (not (tool-result-is-error? result)))
+     (define details (tool-result-details result))
+     (define file-path (and (hash? details) (hash-ref details 'path #f)))
+     (cond
+       [(not file-path) (hook-pass payload)]
+       [else
+        (define new-count (add1 (hash-ref read-counts file-path 0)))
+        (hash-set! read-counts file-path new-count)
+        (cond
+          [(and (>= new-count READ_HINT_THRESHOLD) (= 0 (modulo new-count READ_HINT_THRESHOLD)))
+           (define hint-text
+             (format
+              "\n\n[HINT: You have read '~a' ~a times. Consider using your memory of previous reads instead of re-reading.]"
+              file-path
+              new-count))
+           (define content (tool-result-content result))
+           (define new-content
+             (append (if (list? content)
+                         content
+                         (list content))
+                     (list (hasheq 'type "text" 'text hint-text))))
+           (hook-amend (hasheq 'result
+                               (make-success-result new-content (tool-result-details result))))]
+          [else (hook-pass payload)])])]
+    [else (hook-pass payload)]))
+
+;; Reset read counts when entering a new mode
+(define (reset-read-counts!)
+  (hash-clear! read-counts))
 
 ;; ============================================================
 ;; GSD mode tool guard (tool-call-pre hook handler)
@@ -454,6 +504,8 @@
                     #:on execute-command
                     handle-execute-command
                     #:on tool-call-pre
-                    gsd-tool-guard)
+                    gsd-tool-guard
+                    #:on tool-result-post
+                    gsd-read-tracker)
 
 (define the-extension gsd-planning-extension)
