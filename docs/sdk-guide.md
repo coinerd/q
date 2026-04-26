@@ -170,6 +170,62 @@ Options: `'off`, `'low`, `'medium`, `'high`
 | `q:session-navigate` | Navigate to entry |
 | `q:session-tree-info` | Tree metadata |
 
+## GSD Planning via SDK
+
+The SDK provides convenience functions for GSD (Goal-driven Structured Development) planning workflows. These wrap the `/plan` and `/go` slash commands into simple function calls.
+
+### Quick Start
+
+```racket
+(require "interfaces/sdk.rkt")
+
+;; 1. Create a runtime with extensions
+(define rt (make-runtime #:provider my-provider
+                          #:session-dir "/tmp/my-session"
+                          #:auto-load-extensions? #t
+                          #:project-dir "/path/to/project"))
+
+;; 2. Open session (extensions pre-registered automatically)
+(define rt-open (open-session rt))
+
+;; 3. Plan a task
+(define-values (rt2 result) (q:plan rt-open "build a hello world module"))
+
+;; 4. Execute the plan
+(define-values (rt3 result2) (q:go rt2))
+```
+
+### GSD Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `q:plan` | `(runtime? string?) → (values runtime? any/c)` | Dispatch `/plan` task, run planning prompt |
+| `q:go` | `(runtime? [wave #f]) → (values runtime? any/c)` | Execute plan, optionally starting at a specific wave |
+| `q:gsd-status` | `→ (or/c 'no-active-session hash?)` | Get current GSD state snapshot |
+| `q:reset-gsd!` | `→ void?` | Reset all GSD planning state |
+
+### Extension Pre-Registration
+
+As of v0.20.5, `open-session` automatically registers extension tools (like `planning-read` and `planning-write`) before the first `run-prompt!` call. This means:
+
+- Extension tools appear in `list-tools` immediately after `open-session`
+- GSD event bus is initialized and ready to emit events
+- No need to call `run-prompt!` once just to trigger tool registration
+
+### Events
+
+GSD operations emit events to the runtime's event bus:
+
+- `gsd.mode.changed` — emitted when GSD mode transitions (planning → plan-written → executing)
+
+Subscribe with:
+
+```racket
+(subscribe-events! rt
+  (lambda (event)
+    (printf "GSD event: ~a~n" (event-ev event))))
+```
+
 ## Examples
 
 See `examples/sdk/` for 8 graduated examples from minimal to full control.
