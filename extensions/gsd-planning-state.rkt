@@ -8,7 +8,8 @@
 ;; Wave 0 of v0.20.3: Addresses C1 (race condition), C2 (pinned-planning-dir parameter),
 ;; W2 (non-atomic resets).
 
-(require racket/contract)
+(require racket/contract
+         racket/set)
 
 (provide gsd-mode
          gsd-mode?
@@ -28,6 +29,18 @@
          clear-read-counts!
          current-max-old-text-len
          set-current-max-old-text-len!
+         ;; Wave tracking
+         completed-waves
+         total-waves
+         set-total-waves!
+         mark-wave-complete!
+         wave-complete?
+         next-pending-wave
+         ;; Plan tool budget
+         plan-tool-budget
+         decrement-plan-budget!
+         reset-plan-budget!
+         EXPLORATION-BUDGET
          reset-all-gsd-state!
          READ-ONLY-TOOLS)
 
@@ -55,6 +68,15 @@
 
 ;; Per-file read count for redundant-read detection.
 (define read-counts-box (box (make-hash)))
+
+;; Wave tracking state (v0.20.4 W0).
+(define completed-waves-box (box (set)))
+(define total-waves-box (box 0))
+(define last-edit-wave-box (box #f))
+
+;; Plan tool budget counter (v0.20.4 W0).
+(define EXPLORATION-BUDGET 30)
+(define plan-tool-budget-box (box #f))
 
 ;; ============================================================
 ;; Constants
@@ -147,6 +169,56 @@
 
 ;; Resets ALL GSD state atomically under the semaphore.
 ;; Called on session-shutdown and between test runs.
+;; --- wave tracking ---
+
+(define (completed-waves)
+  (call-with-semaphore state-sem (lambda () (set-copy (unbox completed-waves-box)))))
+
+(define (total-waves)
+  (call-with-semaphore state-sem (lambda () (unbox total-waves-box))))
+
+(define (set-total-waves! n)
+  (call-with-semaphore state-sem (lambda () (set-box! total-waves-box n))))
+
+(define (mark-wave-complete! idx)
+  (call-with-semaphore state-sem
+                       (lambda ()
+                         (set-box! completed-waves-box (set-add (unbox completed-waves-box) idx)))))
+
+(define (wave-complete? idx)
+  (call-with-semaphore state-sem (lambda () (set-member? (unbox completed-waves-box) idx))))
+
+(define (next-pending-wave)
+  (call-with-semaphore state-sem
+                       (lambda ()
+                         (define tw (unbox total-waves-box))
+                         (define cw (unbox completed-waves-box))
+                         (for/first ([i (in-range tw)]
+                                     #:when (not (set-member? cw i)))
+                           i))))
+
+;; --- plan tool budget ---
+
+(define (plan-tool-budget)
+  (call-with-semaphore state-sem (lambda () (unbox plan-tool-budget-box))))
+
+(define (decrement-plan-budget!)
+  (call-with-semaphore state-sem
+                       (lambda ()
+                         (define cur (unbox plan-tool-budget-box))
+                         (when cur
+                           (set-box! plan-tool-budget-box (sub1 cur)))
+                         (unbox plan-tool-budget-box))))
+
+(define (reset-plan-budget!)
+  (call-with-semaphore state-sem (lambda () (set-box! plan-tool-budget-box EXPLORATION-BUDGET))))
+
+;; ============================================================
+;; Atomic reset
+;; ============================================================
+
+;; Resets ALL GSD state atomically under the semaphore.
+;; Called on session-shutdown and between test runs.
 (define (reset-all-gsd-state!)
   (call-with-semaphore state-sem
                        (lambda ()
@@ -154,4 +226,9 @@
                          (set-box! pinned-dir-box #f)
                          (set-box! budget-box #f)
                          (set-box! edit-limit-box 500)
-                         (set-box! read-counts-box (make-hash)))))
+                         (set-box! read-counts-box (make-hash))
+                         ;; v0.20.4 W0: wave + budget state
+                         (set-box! completed-waves-box (set))
+                         (set-box! total-waves-box 0)
+                         (set-box! last-edit-wave-box #f)
+                         (set-box! plan-tool-budget-box #f))))

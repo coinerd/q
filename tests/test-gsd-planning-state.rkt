@@ -205,3 +205,131 @@
   (check-equal? GO-READ-WARN-THRESHOLD 5)
   (check-equal? GO-READ-BLOCK-THRESHOLD -3)
   (check-equal? READ-ONLY-TOOLS '("read" "grep" "find" "ls" "glob")))
+
+;; ============================================================
+;; Wave tracking tests (v0.20.4 W0)
+;; ============================================================
+
+(test-case "completed-waves starts empty"
+  (reset-all-gsd-state!)
+  (check-equal? (set-count (completed-waves)) 0))
+
+(test-case "total-waves defaults to 0"
+  (reset-all-gsd-state!)
+  (check-equal? (total-waves) 0))
+
+(test-case "set-total-waves! sets and reads back"
+  (reset-all-gsd-state!)
+  (set-total-waves! 5)
+  (check-equal? (total-waves) 5))
+
+(test-case "mark-wave-complete! adds wave to completed set"
+  (reset-all-gsd-state!)
+  (set-total-waves! 3)
+  (mark-wave-complete! 0)
+  (check-true (wave-complete? 0))
+  (check-false (wave-complete? 1))
+  (mark-wave-complete! 2)
+  (check-true (wave-complete? 2)))
+
+(test-case "next-pending-wave returns first incomplete wave"
+  (reset-all-gsd-state!)
+  (set-total-waves! 4)
+  (check-equal? (next-pending-wave) 0)
+  (mark-wave-complete! 0)
+  (check-equal? (next-pending-wave) 1)
+  (mark-wave-complete! 1)
+  (mark-wave-complete! 2)
+  (check-equal? (next-pending-wave) 3)
+  (mark-wave-complete! 3)
+  (check-equal? (next-pending-wave) #f))
+
+(test-case "next-pending-wave returns #f when total-waves is 0"
+  (reset-all-gsd-state!)
+  (check-equal? (next-pending-wave) #f))
+
+;; ============================================================
+;; Plan tool budget tests (v0.20.4 W0)
+;; ============================================================
+
+(test-case "plan-tool-budget defaults to #f"
+  (reset-all-gsd-state!)
+  (check-false (plan-tool-budget)))
+
+(test-case "reset-plan-budget! sets budget to EXPLORATION-BUDGET"
+  (reset-all-gsd-state!)
+  (reset-plan-budget!)
+  (check-equal? (plan-tool-budget) 30)
+  (check-equal? (plan-tool-budget) EXPLORATION-BUDGET))
+
+(test-case "decrement-plan-budget! decrements and returns new value"
+  (reset-all-gsd-state!)
+  (reset-plan-budget!)
+  (check-equal? (decrement-plan-budget!) 29)
+  (check-equal? (decrement-plan-budget!) 28)
+  (check-equal? (plan-tool-budget) 28))
+
+(test-case "decrement-plan-budget! does nothing when budget is #f"
+  (reset-all-gsd-state!)
+  (check-false (decrement-plan-budget!))
+  (check-false (plan-tool-budget)))
+
+(test-case "reset-plan-budget! can be called multiple times"
+  (reset-all-gsd-state!)
+  (reset-plan-budget!)
+  (decrement-plan-budget!)
+  (decrement-plan-budget!)
+  (check-equal? (plan-tool-budget) 28)
+  (reset-plan-budget!)
+  (check-equal? (plan-tool-budget) 30))
+
+;; ============================================================
+;; reset-all-gsd-state! resets wave + budget state (v0.20.4 W0)
+;; ============================================================
+
+(test-case "reset-all-gsd-state! resets wave tracking"
+  (reset-all-gsd-state!)
+  (set-total-waves! 5)
+  (mark-wave-complete! 0)
+  (mark-wave-complete! 3)
+  (reset-all-gsd-state!)
+  (check-equal? (total-waves) 0)
+  (check-equal? (set-count (completed-waves)) 0)
+  (check-false (next-pending-wave)))
+
+(test-case "reset-all-gsd-state! resets plan budget"
+  (reset-all-gsd-state!)
+  (reset-plan-budget!)
+  (decrement-plan-budget!)
+  (reset-all-gsd-state!)
+  (check-false (plan-tool-budget)))
+
+(test-case "EXPLORATION-BUDGET constant is 30"
+  (check-equal? EXPLORATION-BUDGET 30))
+
+;; ============================================================
+;; Concurrent wave tracking tests
+;; ============================================================
+
+(test-case "concurrent mark-wave-complete! has no lost updates"
+  (reset-all-gsd-state!)
+  (set-total-waves! 50)
+  (define threads
+    (for/list ([i (in-range 50)])
+      (thread (lambda () (mark-wave-complete! i)))))
+  (for-each sync threads)
+  ;; All 50 waves should be complete
+  (for ([i (in-range 50)])
+    (check-true (wave-complete? i) (format "wave ~a should be complete" i))))
+
+(test-case "concurrent decrement-plan-budget! has no lost updates"
+  (reset-all-gsd-state!)
+  (reset-plan-budget!)
+  (define threads
+    (for/list ([_ (in-range 10)])
+      (thread (lambda ()
+                (for ([_ (in-range 3)])
+                  (decrement-plan-budget!))))))
+  (for-each sync threads)
+  ;; Expected: 30 - 30 = 0
+  (check-equal? (plan-tool-budget) 0))
