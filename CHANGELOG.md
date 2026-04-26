@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.20.3 — 2026-04-26
+
+### GSD Planning Architecture Remediation (6 waves)
+
+**Wave 0 — Thread-Safe State Foundation** (PR #1983)
+- Extract all shared state into `gsd-planning-state.rkt` with semaphore protection
+- Fix C1: Atomic `decrement-budget!` for concurrent read tracking
+- Fix C2: Replace `make-parameter` with box+semaphore for `pinned-planning-dir`
+- Add `reset-all-gsd-state!` for full atomic reset
+- 23 new tests for thread safety
+
+**Wave 1 — Invisible Budget Warning Fix** (PR #1984)
+- Fix C3: Move budget warning from `tool-call-pre` (args, invisible) to `tool-result-post` (result content, visible)
+- Tool guard now only handles pass/block decisions
+- Budget warning fires at ≤5 remaining, works for all read-only tools
+- 5 new tests + 1 updated test
+
+**Wave 2 — Lifecycle Management & Logging** (PR #1985)
+- Register `session-shutdown` hook for cleanup (resets all state)
+- Add `log-debug` at every mode transition for easier debugging
+- 4 new tests
+
+**Wave 3 — Prompt Constants & Artifact Registry** (PR #1986)
+- Extract prompt magic numbers into named constants
+- Fix I1: Allow `planning-read` during `/go` (align prompt with behavior)
+- Fix I6: Add REVIEW and ANALYSIS to artifact registry
+- 8 new tests + 1 updated test
+
+**Wave 4 — Integration Test Suite** (PR #1987)
+- New `test-gsd-planning-integration.rkt` with 15 full-pipeline tests
+- Tests cover concurrent budget, warning visibility, lifecycle, hard block
+- These would have caught the C2 parameter→box and C3 invisible warning bugs
+
+**Wave 5 — Version Bump**
+- Bump 0.20.2 → 0.20.3
+
+**Total**: 176 GSD tests across 7 files. 0 failures.
+
 ## v0.20.2 — 2026-04-26
 
 ### GSD Planning Hardening (5 waves)
