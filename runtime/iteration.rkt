@@ -140,7 +140,10 @@
          ;; FEAT-66: overflow recovery (for testing)
          call-with-overflow-recovery
          ;; v0.14.1: mid-turn token budget check (for testing)
-         check-mid-turn-budget!)
+         check-mid-turn-budget!
+         ;; v0.20.4 W2: stall detection
+         detect-stall?
+         MAX-STALL-RETRIES)
 
 ;; ============================================================
 ;; Shared helpers
@@ -454,6 +457,33 @@
         (string-join texts " "))))
 
 ;; ============================================================
+;; v0.20.4 W2: Stall detection
+;; ============================================================
+
+(define MAX-STALL-RETRIES 2)
+
+(define (detect-stall? ctx)
+  (define last-assistant
+    (for/first ([msg (in-list (reverse ctx))]
+                #:when (eq? (message-role msg) 'assistant))
+      msg))
+  (cond
+    [(not last-assistant) #f]
+    [else
+     (define content (message-content last-assistant))
+     (define has-text?
+       (for/or ([part (in-list (if (list? content)
+                                   content
+                                   '()))])
+         (and (text-part? part) (> (string-length (string-trim (text-part-text part))) 0))))
+     (define has-tool-calls?
+       (for/or ([part (in-list (if (list? content)
+                                   content
+                                   '()))])
+         (tool-call-part? part)))
+     (and (not has-text?) (not has-tool-calls?))]))
+
+;; ============================================================
 ;; Iteration loop
 ;; ============================================================
 ;; v0.18.0: Context-aware exploration steering helpers
@@ -547,7 +577,8 @@
                  [consecutive-error-count 0] ;; v0.19.10: spiral breaker
                  [recent-tool-names '()] ;; v0.19.10: bash-only streak detection
                  [explore-count 0] ;; v0.19.11: cumulative explore budget
-                 [implement-count 0]) ;; v0.19.11: cumulative implement budget
+                 [implement-count 0] ;; v0.19.11: cumulative implement budget
+                 [stall-retry-count 0]) ;; v0.20.4 W2: stall detection
 
         ;; ── Cooperative cancellation check (between iterations) ──
         ;; R2-5 + FEAT-61: Check steering queue + drain injected messages.
@@ -699,7 +730,8 @@
                                           0
                                           '()
                                           explore-count
-                                          implement-count))))))
+                                          implement-count
+                                          0))))))
                      (define base-result (if followup-continued? effective-result effective-result))
                      ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
                      ;; to write/edit but made no tool call, inject a steering nudge.
@@ -709,6 +741,7 @@
                      (define intent-detected? (detect-intent-pattern assistant-text))
                      (define had-tool-calls?
                        (not (null? (extract-tool-calls-from-messages new-msgs))))
+                     (define stalled? (detect-stall? (append ctx-with-injected new-msgs)))
                      ;; Check if the last tool-result in context is a successful planning-write PLAN
                      (define recent-plan-write?
                        (let ([tool-results (for/list ([msg (in-list (reverse ctx-with-injected))]
@@ -760,8 +793,42 @@
                                    consecutive-error-count
                                    recent-tool-names
                                    explore-count
-                                   implement-count)))
-                         base-result)))]
+                                   implement-count
+                                   stall-retry-count)))
+                         (cond
+                           [(and stalled? (< stall-retry-count MAX-STALL-RETRIES))
+                            (emit-session-event! bus
+                                                 session-id
+                                                 "iteration.stall-detected"
+                                                 (hasheq 'stall-retry-count
+                                                         (add1 stall-retry-count)
+                                                         'iteration
+                                                         iteration))
+                            (loop
+                             (append ctx-with-injected
+                                     new-msgs
+                                     (list (make-message
+                                            (generate-id)
+                                            #f
+                                            'user
+                                            'message
+                                            (list (make-text-part
+                                                   (string-append
+                                                    "[steering:stall] Your last response was empty. "
+                                                    "You MUST produce output now. "
+                                                    "Use a tool or write a response.")))
+                                            (now-seconds)
+                                            (hasheq 'source "stall-detection"))))
+                             (add1 iteration)
+                             0
+                             (set)
+                             intent-retry-count
+                             consecutive-error-count
+                             recent-tool-names
+                             explore-count
+                             implement-count
+                             (add1 stall-retry-count))]
+                           [else base-result]))))]
 
                 ;; ── Hard iteration limit reached: append and stop ──
                 [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
@@ -815,7 +882,8 @@
                        consecutive-error-count
                        recent-tool-names
                        explore-count
-                       implement-count)]
+                       implement-count
+                       stall-retry-count)]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
                 [(eq? termination 'tool-calls-pending)
@@ -1152,7 +1220,8 @@
                        new-error-count
                        new-recent-tools
                        new-explore-count
-                       new-implement-count)]
+                       new-implement-count
+                       stall-retry-count)]
 
                 ;; ── Unknown termination: append and return ──
                 [else
