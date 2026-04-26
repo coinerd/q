@@ -9,12 +9,16 @@
 ;;   - gsd-status with active session → hash with expected keys
 
 (require rackunit
+         racket/set
          (only-in "../extensions/gsd-planning-state.rkt"
                   gsd-snapshot
                   set-gsd-mode!
                   set-total-waves!
                   mark-wave-complete!
                   reset-plan-budget!
+                  decrement-plan-budget!
+                  decrement-budget!
+                  set-go-read-budget!
                   reset-all-gsd-state!)
          (only-in "../interfaces/sdk.rkt" gsd-status))
 
@@ -89,3 +93,61 @@
   (set-gsd-mode! 'executing)
   (reset-all-gsd-state!)
   (check-equal? (gsd-status) 'no-active-session))
+
+;; ============================================================
+;; v0.20.4 W4: SDK integration tests
+;; ============================================================
+
+(test-case "gsd-snapshot reflects wave progress during execution"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 3)
+  ;; Simulate completing waves 0 and 1
+  (mark-wave-complete! 0)
+  (mark-wave-complete! 1)
+  (define snap (gsd-snapshot))
+  (check-equal? (hash-ref snap 'mode) 'executing)
+  (check-equal? (hash-ref snap 'total-waves) 3)
+  (check-true (set=? (hash-ref snap 'completed-waves) (set 0 1)))
+  (check-equal? (gsd-status) snap) ;; gsd-status matches snapshot when mode active
+  (reset-all-gsd-state!))
+
+(test-case "gsd-snapshot reflects budget depletion"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-go-read-budget! 5)
+  (decrement-budget!)
+  (decrement-budget!)
+  (define snap (gsd-snapshot))
+  (check-equal? (hash-ref snap 'go-read-budget) 3)
+  (reset-all-gsd-state!))
+
+(test-case "gsd-snapshot reflects plan-tool-budget depletion"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (reset-plan-budget!) ;; sets to EXPLORATION-BUDGET (30)
+  (decrement-plan-budget!)
+  (decrement-plan-budget!)
+  (decrement-plan-budget!)
+  (define snap (gsd-snapshot))
+  (check-equal? (hash-ref snap 'plan-tool-budget) 27)
+  (reset-all-gsd-state!))
+
+(test-case "gsd-snapshot reflects mode transitions"
+  (reset-all-gsd-state!)
+  ;; Start: no mode
+  (check-equal? (hash-ref (gsd-snapshot) 'mode) #f)
+  (check-equal? (gsd-status) 'no-active-session)
+  ;; Transition to planning
+  (set-gsd-mode! 'planning)
+  (check-equal? (hash-ref (gsd-snapshot) 'mode) 'planning)
+  (check-pred hash? (gsd-status))
+  ;; Transition to plan-written
+  (set-gsd-mode! 'plan-written)
+  (check-equal? (hash-ref (gsd-snapshot) 'mode) 'plan-written)
+  ;; Transition to executing
+  (set-gsd-mode! 'executing)
+  (check-equal? (hash-ref (gsd-snapshot) 'mode) 'executing)
+  ;; Reset
+  (reset-all-gsd-state!)
+  (check-equal? (hash-ref (gsd-snapshot) 'mode) #f))

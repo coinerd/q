@@ -1,0 +1,15 @@
+{
+  "name": "wf-gsd-planning",
+  "category": "planning-workflow",
+  "difficulty": 1,
+  "description": "Basic GSD planning workflow: /plan → plan written → /go → execute",
+  "prompt": "/plan Create a hello function in hello.rkt that returns 'hello world'",
+  "max_iterations": 10,
+  "max_tokens": 50000,
+  "time_limit_seconds": 60,
+  "scoring": {
+    "tools_used": ["write"],
+    "max_iterations": 10
+  },
+  "teardown": []
+}
