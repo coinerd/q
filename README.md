@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.20.0-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.20.1-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.20.0
+racket main.rkt --version  # q version 0.20.1
 raco test tests/           # run the full test suite
 ```
 
@@ -333,7 +333,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.20.0** — Feature Gap Closure. Truncation overflow handling, AGENTS.md discovery, TUI queue wiring, interactive tree browser, @ file reference, !! inline bash, cost tracker, print mode, /reload command, permission gates. 5966+ tests.
+**v0.20.1** — Audit Remediation. Typed event bridge, HTTP helper consolidation, CI version matrix, security hardening, dead code removal, documentation consistency, layer extraction, protocol types split, sandbox config extraction. 44 findings resolved across 10 waves.
 
 **v0.19.4** — Self-Hosting Workflow Gaps. Extension tool registration fix (register-tools hook passes proper extension-ctx). Subagent tool execution (children get 7 tools + recursive dispatch). Slash commands (/milestone, /issue, /pr, /fmt, /check, /expand). 5300+ tests.
 
