@@ -679,7 +679,8 @@
 ;;; if no GSD mode is active.
 (define (gsd-status)
   (define snap (gsd-snapshot))
-  (if (hash-ref snap 'mode #f) snap 'no-active-session))
+  (define mode (hash-ref snap 'mode #f))
+  (if (or (not mode) (eq? mode 'idle)) 'no-active-session snap))
 
 ;; ============================================================
 ;; v0.20.5 W0: SDK Command Dispatch
