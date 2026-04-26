@@ -10,7 +10,7 @@
          racket/string
          "../llm/model.rkt"
          "../llm/provider.rkt"
-         (only-in "../tools/tool.rkt" make-tool-registry tool-registry? register-tool!)
+         (only-in "../tools/tool.rkt" make-tool-registry tool-registry? register-tool! list-tools)
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt"
          (only-in "../extensions/api.rkt"
@@ -18,6 +18,12 @@
                   extension-registry?
                   extension
                   register-extension!)
+         (only-in "../extensions/hooks.rkt"
+                  dispatch-hooks
+                  hook-result?
+                  hook-result-action
+                  hook-result-payload)
+         (only-in "../util/hook-types.rkt" hook-amend)
          (only-in "../runtime/compactor.rkt" compaction-result-removed-count compact-and-persist!)
          (only-in "../runtime/token-compaction.rkt" token-compaction-config)
          "helpers/compaction-helpers.rkt"
@@ -946,4 +952,85 @@
       (check-equal? (hash-ref (event-payload e) 'persist? #f)
                     #t
                     (format "event ~a should have persist?=#t" (event-event e))))
+    (cleanup-dir tmp)))
+
+;; ============================================================
+;; v0.20.5 W0: register-default-tools? and dispatch-command!
+;; ============================================================
+
+(test-case "W0: make-runtime with #:register-default-tools? #t registers default tools"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp #:register-default-tools? #t))
+    (define reg (runtime-config-tool-registry (runtime-rt-config rt)))
+    (define tools (list-tools reg))
+    (check-true (> (length tools) 0) "make-runtime with register-default-tools? #t should have tools")
+    (cleanup-dir tmp)))
+
+(test-case "W0: make-runtime default registers default tools (#t is default)"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (define reg (runtime-config-tool-registry (runtime-rt-config rt)))
+    (define tools (list-tools reg))
+    (check-true (> (length tools) 0) "make-runtime defaults to register-default-tools? #t")
+    (cleanup-dir tmp)))
+
+(test-case "W0: make-runtime with #:register-default-tools? #f has empty registry"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp #:register-default-tools? #f))
+    (define reg (runtime-config-tool-registry (runtime-rt-config rt)))
+    (define tools (list-tools reg))
+    (check-equal? (length tools)
+                  0
+                  "make-runtime with register-default-tools? #f should have no tools")
+    (cleanup-dir tmp)))
+
+(test-case "W0: dispatch-command! returns 'no-extension-registry when no ext-reg"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define rt (make-runtime #:provider prov #:session-dir tmp))
+    (define-values (rt2 result) (dispatch-command! rt "/plan" "test task"))
+    (check-pred runtime? rt2)
+    (check-equal? result 'no-extension-registry)
+    (cleanup-dir tmp)))
+
+(test-case "W0: dispatch-command! dispatches through extension registry"
+  (define tmp (make-temp-session-dir))
+  (with-handlers ([exn:fail? (lambda (e)
+                               (cleanup-dir tmp)
+                               (raise e))])
+    (define prov (make-test-provider))
+    (define ext-reg (make-extension-registry))
+    ;; Register a test extension that handles execute-command
+    (register-extension! ext-reg
+                         (extension "test-cmd-handler"
+                                    "1.0"
+                                    "0.1"
+                                    (hasheq 'execute-command
+                                            (lambda (payload)
+                                              (hook-amend (hash-set payload 'handled #t))))))
+    (define rt
+      (make-runtime #:provider prov
+                    #:session-dir tmp
+                    #:extension-registry ext-reg
+                    #:register-default-tools? #f))
+    (define-values (rt2 result) (dispatch-command! rt "/test" "input"))
+    (check-pred runtime? rt2)
+    (check-pred hook-result? result)
+    (check-equal? (hook-result-action result) 'amend)
+    (check-true (hash-ref (hook-result-payload result) 'handled #f))
     (cleanup-dir tmp)))

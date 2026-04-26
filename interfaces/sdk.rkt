@@ -15,8 +15,10 @@
 (require racket/contract
          racket/math
          racket/list
+         racket/string
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
+         (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt"
          (prefix-in session: "../runtime/agent-session.rkt")
@@ -36,7 +38,13 @@
                   context-usage-usage-percent
                   context-usage-compaction-threshold
                   context-usage-near-threshold?)
-         (only-in "../extensions/api.rkt" list-extensions)
+         (only-in "../extensions/api.rkt" list-extensions make-extension-registry)
+         (only-in "../extensions/hooks.rkt"
+                  dispatch-hooks
+                  hook-result?
+                  hook-result-action
+                  hook-result-payload)
+         (only-in "../extensions/loader.rkt" discover-extensions load-extension!)
          (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
          (only-in "../runtime/session-index.rkt"
@@ -80,8 +88,12 @@
                                             #:max-iterations exact-positive-integer?
                                             #:system-instructions (listof string?)
                                             #:token-budget-threshold exact-positive-integer?
-                                            #:cancellation-token any/c)
+                                            #:cancellation-token any/c
+                                            #:register-default-tools? any/c
+                                            #:auto-load-extensions? any/c
+                                            #:project-dir (or/c path-string? path? #f))
                              runtime?)]
+                       [dispatch-command! (-> runtime? string? string? (values runtime? any/c))]
                        [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
                        [run-prompt! (runtime? string? . -> . (values runtime? any/c))]
                        [subscribe-events!
@@ -211,7 +223,21 @@
                       #:token-budget-threshold [token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD]
                       #:cancellation-token [cancellation-token #f]
                       #:resource-loader [resource-loader #f]
-                      #:session-manager [session-mgr #f])
+                      #:session-manager [session-mgr #f]
+                      #:register-default-tools? [register-default-tools? #t]
+                      #:auto-load-extensions? [auto-load-extensions? #f]
+                      #:project-dir [project-dir #f])
+  ;; v0.20.5 W0: Auto-register default tools unless disabled
+  (when register-default-tools?
+    (register-default-tools! tool-registry))
+  ;; v0.20.5 W0: Auto-load extensions from project-dir when requested
+  (when (and auto-load-extensions? project-dir)
+    (define ext-dir (build-path project-dir "extensions"))
+    (when (directory-exists? ext-dir)
+      (for ([ext (in-list (discover-extensions ext-dir))])
+        (load-extension! (or extension-registry (make-extension-registry))
+                         ext
+                         #:event-bus event-bus))))
   (make-runtime-internal (runtime-config provider
                                          tool-registry
                                          extension-registry
@@ -639,3 +665,25 @@
 (define (gsd-status)
   (define snap (gsd-snapshot))
   (if (hash-ref snap 'mode #f) snap 'no-active-session))
+
+;; ============================================================
+;; v0.20.5 W0: SDK Command Dispatch
+;; ============================================================
+
+;;; dispatch-command! : runtime? string? string? -> (values runtime? any/c)
+;;;
+;;; Dispatches an 'execute-command hook through the extension registry.
+;;; This enables SDK users to trigger extension-registered commands
+;;; (e.g., GSD /plan, /go) without manually wiring hook dispatch.
+;;;
+;;; Returns (values runtime? hook-result-or-symbol) where the second value
+;;; is either a hook-result from the extension or 'no-extension-registry.
+(define (dispatch-command! rt command input)
+  (define cfg (rt-cfg rt))
+  (define ext-reg (runtime-config-extension-registry cfg))
+  (cond
+    [(not ext-reg) (values rt 'no-extension-registry)]
+    [else
+     (define payload (hasheq 'command command 'input input))
+     (define result (dispatch-hooks 'execute-command payload ext-reg))
+     (values rt result)]))
