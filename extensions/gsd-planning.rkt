@@ -69,7 +69,12 @@
          plan-tool-budget
          decrement-plan-budget!
          reset-plan-budget!
-         gsd-session-cleanup)
+         gsd-session-cleanup
+         ;; v0.20.5 W1: re-exported from gsd-planning-state
+         gsd-event-bus
+         set-gsd-event-bus!
+         ;; v0.20.5 W1: exported for testing
+         emit-gsd-event!)
 
 ;; ============================================================
 ;; Event emission helper (v0.20.4 W1)
@@ -77,13 +82,11 @@
 
 ;; Emit a GSD event to the current session's event bus.
 ;; No-op if no event bus is available (e.g. during tests).
+;; v0.20.5 W1: reads from semaphore-protected box instead of thread-local parameter.
 (define (emit-gsd-event! type payload)
-  (define bus (current-gsd-event-bus))
+  (define bus (gsd-event-bus))
   (when bus
     (publish! bus (make-event type (current-seconds) #f #f payload))))
-
-;; Lazy reference to the current event bus — resolved at call time.
-(define current-gsd-event-bus (make-parameter #f))
 
 ;; ============================================================
 ;; Constants
@@ -364,8 +367,8 @@
     (define cwd (ctx-cwd ctx))
     (when cwd
       (set-pinned-planning-dir! (resolve-project-root cwd))))
-  ;; v0.20.4 W1: capture event bus for later event emission
-  (current-gsd-event-bus (ctx-event-bus ctx))
+  ;; v0.20.5 W1: store event bus in shared state (not parameter)
+  (set-gsd-event-bus! (ctx-event-bus ctx))
   (ext-register-tool!
    ctx
    "planning-read"

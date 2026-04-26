@@ -44,7 +44,10 @@
          ;; v0.20.4 W3: observability
          gsd-snapshot
          reset-all-gsd-state!
-         READ-ONLY-TOOLS)
+         READ-ONLY-TOOLS
+         ;; v0.20.5 W1: event bus (parameter → registry-stored)
+         gsd-event-bus
+         set-gsd-event-bus!)
 
 ;; ============================================================
 ;; Internal state storage
@@ -54,6 +57,10 @@
 ;; This is simpler and more correct than per-value semaphores because
 ;; cross-thread operations (e.g. budget check + decrement) need to be atomic.
 (define state-sem (make-semaphore 1))
+
+;; v0.20.5 W1: Event bus stored in shared state (not parameter).
+;; Was a thread-local parameter; now a semaphore-protected box for cross-thread access.
+(define gsd-event-bus-box (box #f))
 
 ;; GSD workflow mode: #f | 'planning | 'plan-written | 'executing
 (define gsd-mode-box (box #f))
@@ -67,6 +74,13 @@
 
 ;; Dynamic edit limit (moved from tools/builtins/edit.rkt).
 (define edit-limit-box (box 500))
+
+;; v0.20.5 W1: Event bus accessors (semaphore-protected)
+(define (gsd-event-bus)
+  (call-with-semaphore state-sem (lambda () (unbox gsd-event-bus-box))))
+
+(define (set-gsd-event-bus! v)
+  (call-with-semaphore state-sem (lambda () (set-box! gsd-event-bus-box v))))
 
 ;; Per-file read count for redundant-read detection.
 (define read-counts-box (box (make-hash)))
@@ -259,4 +273,6 @@
                          (set-box! completed-waves-box (set))
                          (set-box! total-waves-box 0)
                          (set-box! last-edit-wave-box #f)
-                         (set-box! plan-tool-budget-box #f))))
+                         (set-box! plan-tool-budget-box #f)
+                         ;; v0.20.5 W1: clear event bus on reset
+                         (set-box! gsd-event-bus-box #f))))
