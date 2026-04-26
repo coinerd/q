@@ -33,7 +33,11 @@
          gsd-mode
          gsd-tool-guard
          reset-read-counts!
-         gsd-read-tracker)
+         gsd-read-tracker
+         go-read-budget
+         reset-go-budget!
+         GO-READ-BUDGET
+         READ-ONLY-TOOLS)
 
 ;; ============================================================
 ;; Constants
@@ -364,6 +368,8 @@
         (current-max-old-text-len 1200)
         ;; Reset read counter for fresh execution
         (reset-read-counts!)
+        ;; Reset read budget for fresh execution
+        (reset-go-budget!)
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
           (if state-content
@@ -412,6 +418,8 @@
              (current-max-old-text-len 500)
              ;; Reset read counter for fresh planning
              (reset-read-counts!)
+             ;; Reset budget
+             (go-read-budget #f)
              ;; v0.19.12 W2: Detect stale existing PLAN.md and inject warning
              (define existing-plan (read-planning-artifact base-dir "PLAN"))
              (define stale-warning
@@ -476,11 +484,29 @@
   (hash-clear! read-counts))
 
 ;; ============================================================
+;; /go Budget Counter
+;; ============================================================
+
+;; Read-only tools that count against the budget
+(define READ-ONLY-TOOLS '("read" "grep" "find" "ls" "glob"))
+
+;; Budget: 30 read-only calls per /go session
+(define GO-READ-BUDGET 30)
+(define GO-READ-WARN-THRESHOLD 5) ; warn at ≤5 remaining
+(define GO-READ-BLOCK-THRESHOLD -3) ; block at <−3 (i.e., 33+ calls)
+
+(define go-read-budget (make-parameter #f))
+
+(define (reset-go-budget!)
+  (go-read-budget GO-READ-BUDGET))
+
+;; ============================================================
 ;; GSD mode tool guard (tool-call-pre hook handler)
 ;; ============================================================
 
 ;; Block edit/write/bash after PLAN written (awaiting /go).
 ;; Block planning-write during /go (plan is frozen during execution).
+;; Budget enforcement for read-only tools during /go.
 ;; All other tool calls pass through.
 (define (gsd-tool-guard payload)
   (define mode (gsd-mode))
@@ -492,6 +518,27 @@
     ;; During /go, block plan rewrites
     [(and (eq? mode 'executing) (equal? tool-name "planning-write"))
      (hook-block "Cannot update plan during /go. Focus on executing the existing plan.")]
+    ;; During /go, enforce read budget
+    [(and (eq? mode 'executing) (member tool-name READ-ONLY-TOOLS) (go-read-budget))
+     (define remaining (sub1 (go-read-budget)))
+     (go-read-budget remaining)
+     (cond
+       [(< remaining GO-READ-BLOCK-THRESHOLD)
+        ;; Hard block: way over budget
+        (hook-block
+         (format
+          "Read budget exhausted (~a read calls used, budget is ~a). Stop exploring and implement."
+          (- GO-READ-BUDGET remaining)
+          GO-READ-BUDGET))]
+       [(<= remaining GO-READ-WARN-THRESHOLD)
+        ;; Warning: amend tool call args to include a budget reminder
+        (hook-amend (hasheq 'args
+                            (hash-set (hash-ref payload 'args (hasheq))
+                                      '_budget-warning
+                                      (format "[BUDGET WARNING: ~a/~a read calls remaining]"
+                                              remaining
+                                              GO-READ-BUDGET))))]
+       [else (hook-pass payload)])]
     [else (hook-pass payload)]))
 
 (define-q-extension gsd-planning-extension
