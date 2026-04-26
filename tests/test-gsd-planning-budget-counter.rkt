@@ -55,7 +55,7 @@
   (check-eq? (hook-result-action res) 'pass)
   (set-gsd-mode! #f))
 
-(test-case "tool-guard warns when budget ≤5"
+(test-case "tool-guard passes reads at warning threshold (warning now in result)"
   (set-gsd-mode! 'executing)
   (reset-go-budget!)
   ;; Burn through 25 calls
@@ -63,9 +63,9 @@
     (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
   ;; Budget should be 5 now
   (check-equal? (go-read-budget) 5)
-  ;; Next read should trigger warning
+  ;; Next read should still pass (warning is now in tool-result-post)
   (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
-  (check-eq? (hook-result-action res) 'amend)
+  (check-eq? (hook-result-action res) 'pass)
   (set-gsd-mode! #f))
 
 (test-case "tool-guard blocks when budget goes below -3"

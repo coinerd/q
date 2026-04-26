@@ -122,3 +122,87 @@
   (reset-read-counts!)
   (define hook-res (gsd-read-tracker (hasheq 'tool-name "read" 'result "not a result")))
   (check-eq? (hook-result-action hook-res) 'pass))
+
+;; ============================================================
+;; Budget warning injection via tool-result-post (C3 fix)
+;; ============================================================
+;; Budget warnings are now injected into tool results (visible to LLM),
+;; not into tool call args (invisible to LLM).
+
+(test-case "budget warning appears in result when budget ≤5"
+  (reset-read-counts!)
+  (set-gsd-mode! 'executing)
+  (reset-go-budget!)
+  ;; Burn through 25 calls via tool-guard (decrements budget)
+  (for ([_ (in-range 25)])
+    (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
+  (check-equal? (go-read-budget) 5)
+  ;; Now read-tracker should inject budget warning into result
+  (define result (make-success-read-result "/tmp/budget-warn.txt" "content"))
+  (define hook-res (gsd-read-tracker (hasheq 'tool-name "read" 'result result)))
+  (check-eq? (hook-result-action hook-res) 'amend)
+  (define amended-result (hash-ref (hook-result-payload hook-res) 'result))
+  (define content (tool-result-content amended-result))
+  (define all-text (apply string-append (map (lambda (p) (hash-ref p 'text "")) content)))
+  (check-true (string-contains? all-text "BUDGET WARNING")
+              (format "Expected BUDGET WARNING in result, got: ~a" all-text))
+  (set-gsd-mode! #f))
+
+(test-case "no budget warning when budget > 5"
+  (reset-read-counts!)
+  (set-gsd-mode! 'executing)
+  (reset-go-budget!)
+  ;; Only 20 calls used, budget = 10
+  (for ([_ (in-range 20)])
+    (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
+  (check-equal? (go-read-budget) 10)
+  ;; read-tracker should NOT inject budget warning
+  (define result (make-success-read-result "/tmp/no-warn.txt" "content"))
+  (define hook-res (gsd-read-tracker (hasheq 'tool-name "read" 'result result)))
+  ;; Should pass (not amend) since no hint threshold hit and budget OK
+  (check-eq? (hook-result-action hook-res) 'pass)
+  (set-gsd-mode! #f))
+
+(test-case "budget warning shows remaining count"
+  (reset-read-counts!)
+  (set-gsd-mode! 'executing)
+  (reset-go-budget!)
+  (for ([_ (in-range 28)])
+    (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
+  (check-equal? (go-read-budget) 2)
+  (define result (make-success-read-result "/tmp/remaining.txt" "content"))
+  (define hook-res (gsd-read-tracker (hasheq 'tool-name "read" 'result result)))
+  (check-eq? (hook-result-action hook-res) 'amend)
+  (define amended-result (hash-ref (hook-result-payload hook-res) 'result))
+  (define content (tool-result-content amended-result))
+  (define all-text (apply string-append (map (lambda (p) (hash-ref p 'text "")) content)))
+  (check-true (string-contains? all-text "2/30")
+              (format "Expected '2/30' in warning, got: ~a" all-text))
+  (set-gsd-mode! #f))
+
+(test-case "budget warning works for grep and find (non-read tools)"
+  (reset-read-counts!)
+  (set-gsd-mode! 'executing)
+  (reset-go-budget!)
+  (for ([_ (in-range 26)])
+    (gsd-tool-guard (hasheq 'tool-name "grep" 'args (hasheq))))
+  ;; Budget should be 4 now
+  (check-equal? (go-read-budget) 4)
+  (define result (make-success-result (list (hasheq 'type "text" 'text "grep output")) (hasheq)))
+  (define hook-res (gsd-read-tracker (hasheq 'tool-name "grep" 'result result)))
+  (check-eq? (hook-result-action hook-res) 'amend)
+  (define amended-result (hash-ref (hook-result-payload hook-res) 'result))
+  (define content (tool-result-content amended-result))
+  (define all-text (apply string-append (map (lambda (p) (hash-ref p 'text "")) content)))
+  (check-true (string-contains? all-text "BUDGET WARNING")
+              (format "Expected BUDGET WARNING for grep, got: ~a" all-text))
+  (set-gsd-mode! #f))
+
+(test-case "no budget warning when budget is #f"
+  (reset-read-counts!)
+  (set-gsd-mode! 'executing)
+  (set-go-read-budget! #f)
+  (define result (make-success-read-result "/tmp/no-budget.txt" "content"))
+  (define hook-res (gsd-read-tracker (hasheq 'tool-name "read" 'result result)))
+  (check-eq? (hook-result-action hook-res) 'pass)
+  (set-gsd-mode! #f))

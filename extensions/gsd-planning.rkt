@@ -449,13 +449,43 @@
            (hook-amend (hasheq 'text text))])])]))
 
 ;; ============================================================
-;; Redundant read detection (tool-result-post hook)
+;; Budget warning injection + Redundant read detection (tool-result-post hook)
 ;; ============================================================
 
 ;; Tracks per-file read count to detect redundant reads.
 ;; State lives in gsd-planning-state.rkt.
+;; Also injects budget warnings into tool results so the LLM can see them.
 
 (define READ_HINT_THRESHOLD 3)
+
+;; Helper: inject budget warning into tool result via tool-result-post.
+;; This makes the warning visible to the LLM in the result content.
+(define (budget-warning-text)
+  (define remaining (go-read-budget))
+  (if (and remaining (<= remaining GO-READ-WARN-THRESHOLD))
+      (format "\n\n[BUDGET WARNING: ~a/~a read calls remaining. Focus on implementation.]"
+              remaining
+              GO-READ-BUDGET)
+      #f))
+
+(define (maybe-append-budget-warning content-list)
+  (define warn (budget-warning-text))
+  (if warn
+      (append content-list (list (hasheq 'type "text" 'text warn)))
+      content-list))
+
+(define (maybe-inject-budget-warning payload)
+  (define warn (budget-warning-text))
+  (if warn
+      (let* ([result (hash-ref payload 'result #f)]
+             [content (and result (tool-result? result) (tool-result-content result))]
+             [base-content (if (list? content)
+                               content
+                               (list content))]
+             [final-content (append base-content (list (hasheq 'type "text" 'text warn)))])
+        (hook-amend (hasheq 'result
+                            (make-success-result final-content (tool-result-details result)))))
+      (hook-pass payload)))
 
 (define (gsd-read-tracker payload)
   (define tool-name (hash-ref payload 'tool-name #f))
@@ -466,25 +496,33 @@
      (define details (tool-result-details result))
      (define file-path (and (hash? details) (hash-ref details 'path #f)))
      (cond
-       [(not file-path) (hook-pass payload)]
+       [(not file-path) (maybe-inject-budget-warning payload)]
        [else
         (define new-count (increment-read-count! file-path))
         (cond
           [(and (>= new-count READ_HINT_THRESHOLD) (= 0 (modulo new-count READ_HINT_THRESHOLD)))
+           ;; Inject both read hint and budget warning if applicable
            (define hint-text
              (format
               "\n\n[HINT: You have read '~a' ~a times. Consider using your memory of previous reads instead of re-reading.]"
               file-path
               new-count))
            (define content (tool-result-content result))
-           (define new-content
+           (define base-content
              (append (if (list? content)
                          content
                          (list content))
                      (list (hasheq 'type "text" 'text hint-text))))
+           (define final-content (maybe-append-budget-warning base-content))
            (hook-amend (hasheq 'result
-                               (make-success-result new-content (tool-result-details result))))]
-          [else (hook-pass payload)])])]
+                               (make-success-result final-content (tool-result-details result))))]
+          [else (maybe-inject-budget-warning payload)])])]
+    ;; For other read-only tools (grep, find, ls, glob), still inject budget warning
+    [(and (member tool-name READ-ONLY-TOOLS)
+          result
+          (tool-result? result)
+          (not (tool-result-is-error? result)))
+     (maybe-inject-budget-warning payload)]
     [else (hook-pass payload)]))
 
 ;; Reset read counts when entering a new mode
@@ -528,14 +566,6 @@
           "Read budget exhausted (~a read calls used, budget is ~a). Stop exploring and implement."
           (- GO-READ-BUDGET remaining)
           GO-READ-BUDGET))]
-       [(<= remaining GO-READ-WARN-THRESHOLD)
-        ;; Warning: amend tool call args to include a budget reminder
-        (hook-amend (hasheq 'args
-                            (hash-set (hash-ref payload 'args (hasheq))
-                                      '_budget-warning
-                                      (format "[BUDGET WARNING: ~a/~a read calls remaining]"
-                                              remaining
-                                              GO-READ-BUDGET))))]
        [else (hook-pass payload)])]
     [else (hook-pass payload)]))
 
