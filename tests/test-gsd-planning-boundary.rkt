@@ -42,12 +42,21 @@
 
 (define (with-mode mode proc)
   (define saved (gsd-mode))
-  (gsd-mode mode)
+  (set-gsd-mode! mode)
   (with-handlers ([exn:fail? (lambda (e)
-                               (gsd-mode saved)
+                               (set-gsd-mode! saved)
                                (raise e))])
     (begin0 (proc)
-      (gsd-mode saved))))
+      (set-gsd-mode! saved))))
+
+(define (with-pinned-dir dir proc)
+  (define saved (pinned-planning-dir))
+  (set-pinned-planning-dir! dir)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (set-pinned-planning-dir! saved)
+                               (raise e))])
+    (begin0 (proc)
+      (set-pinned-planning-dir! saved))))
 
 ;; ============================================================
 ;; gsd-mode state machine tests
@@ -68,7 +77,7 @@
 (test-case "gsd-mode can be reset to #f"
   (with-mode 'planning
              (lambda ()
-               (gsd-mode #f)
+               (set-gsd-mode! #f)
                (check-equal? (gsd-mode) #f))))
 
 ;; ============================================================
@@ -182,33 +191,39 @@
 (test-case "planning-write PLAN transitions mode from 'planning to 'plan-written"
   (with-temp-dir
    (lambda (dir)
-     (parameterize ([pinned-planning-dir dir])
-       (with-mode
-        'planning
-        (lambda ()
-          (define args (hasheq 'artifact "PLAN" 'content "# Test Plan"))
-          (define result (handle-planning-write args))
-          (check-false (tool-result-is-error? result) "planning-write should succeed")
-          (check-eq? (gsd-mode) 'plan-written "mode should transition to plan-written")))))))
+     (with-pinned-dir
+      dir
+      (lambda ()
+        (with-mode
+         'planning
+         (lambda ()
+           (define args (hasheq 'artifact "PLAN" 'content "# Test Plan"))
+           (define result (handle-planning-write args))
+           (check-false (tool-result-is-error? result) "planning-write should succeed")
+           (check-eq? (gsd-mode) 'plan-written "mode should transition to plan-written"))))))))
 
 (test-case "planning-write non-PLAN artifact does not change mode"
-  (with-temp-dir (lambda (dir)
-                   (parameterize ([pinned-planning-dir dir])
-                     (with-mode 'planning
-                                (lambda ()
-                                  (define args (hasheq 'artifact "STATE" 'content "# State"))
-                                  (define result (handle-planning-write args))
-                                  (check-false (tool-result-is-error? result))
-                                  (check-eq? (gsd-mode) 'planning "mode should remain planning")))))))
+  (with-temp-dir
+   (lambda (dir)
+     (with-pinned-dir
+      dir
+      (lambda ()
+        (with-mode 'planning
+                   (lambda ()
+                     (define args (hasheq 'artifact "STATE" 'content "# State"))
+                     (define result (handle-planning-write args))
+                     (check-false (tool-result-is-error? result))
+                     (check-eq? (gsd-mode) 'planning "mode should remain planning"))))))))
 
 (test-case "planning-write PLAN does not change mode when not in 'planning"
   (with-temp-dir (lambda (dir)
-                   (parameterize ([pinned-planning-dir dir])
-                     ;; Mode is #f by default
-                     (define args (hasheq 'artifact "PLAN" 'content "# Plan"))
-                     (define result (handle-planning-write args))
-                     (check-false (tool-result-is-error? result))
-                     (check-equal? (gsd-mode) #f "mode should remain #f")))))
+                   (with-pinned-dir dir
+                                    (lambda ()
+                                      ;; Mode is #f by default
+                                      (define args (hasheq 'artifact "PLAN" 'content "# Plan"))
+                                      (define result (handle-planning-write args))
+                                      (check-false (tool-result-is-error? result))
+                                      (check-equal? (gsd-mode) #f "mode should remain #f"))))))
 
 ;; ============================================================
 ;; Full workflow integration tests
@@ -216,45 +231,47 @@
 
 (test-case "full workflow: /plan → write PLAN → blocked edit → /go → edit allowed"
   (with-temp-dir (lambda (dir)
-                   (parameterize ([pinned-planning-dir dir])
-                     ;; Step 1: /plan sets mode to 'planning
-                     (gsd-mode 'planning)
-                     (check-eq? (gsd-mode) 'planning)
+                   (with-pinned-dir
+                    dir
+                    (lambda ()
+                      ;; Step 1: /plan sets mode to 'planning
+                      (set-gsd-mode! 'planning)
+                      (check-eq? (gsd-mode) 'planning)
 
-                     ;; Step 2: writing PLAN transitions to 'plan-written
-                     (define write-result
-                       (handle-planning-write (hasheq 'artifact "PLAN" 'content "# Plan")))
-                     (check-false (tool-result-is-error? write-result))
-                     (check-eq? (gsd-mode) 'plan-written)
+                      ;; Step 2: writing PLAN transitions to 'plan-written
+                      (define write-result
+                        (handle-planning-write (hasheq 'artifact "PLAN" 'content "# Plan")))
+                      (check-false (tool-result-is-error? write-result))
+                      (check-eq? (gsd-mode) 'plan-written)
 
-                     ;; Step 3: edit is blocked in 'plan-written mode
-                     (define guard-result (gsd-tool-guard (hasheq 'tool-name "edit")))
-                     (check-eq? (hook-result-action guard-result) 'block)
+                      ;; Step 3: edit is blocked in 'plan-written mode
+                      (define guard-result (gsd-tool-guard (hasheq 'tool-name "edit")))
+                      (check-eq? (hook-result-action guard-result) 'block)
 
-                     ;; Step 4: /go sets mode to 'executing
-                     (gsd-mode 'executing)
-                     (check-eq? (gsd-mode) 'executing)
+                      ;; Step 4: /go sets mode to 'executing
+                      (set-gsd-mode! 'executing)
+                      (check-eq? (gsd-mode) 'executing)
 
-                     ;; Step 5: edit is allowed in 'executing mode
-                     (define guard-result2 (gsd-tool-guard (hasheq 'tool-name "edit")))
-                     (check-eq? (hook-result-action guard-result2) 'pass)
+                      ;; Step 5: edit is allowed in 'executing mode
+                      (define guard-result2 (gsd-tool-guard (hasheq 'tool-name "edit")))
+                      (check-eq? (hook-result-action guard-result2) 'pass)
 
-                     ;; Step 6: planning-write is blocked in 'executing mode
-                     (define guard-result3 (gsd-tool-guard (hasheq 'tool-name "planning-write")))
-                     (check-eq? (hook-result-action guard-result3) 'block)
+                      ;; Step 6: planning-write is blocked in 'executing mode
+                      (define guard-result3 (gsd-tool-guard (hasheq 'tool-name "planning-write")))
+                      (check-eq? (hook-result-action guard-result3) 'block)
 
-                     ;; Cleanup
-                     (gsd-mode #f)))))
+                      ;; Cleanup
+                      (set-gsd-mode! #f))))))
 
 (test-case "new /plan resets mode from 'plan-written"
   ;; Simulating starting a fresh planning session
   (with-mode 'plan-written
              (lambda ()
-               (gsd-mode 'planning)
+               (set-gsd-mode! 'planning)
                (check-eq? (gsd-mode) 'planning))))
 
 (test-case "new /go resets mode from 'plan-written"
   (with-mode 'plan-written
              (lambda ()
-               (gsd-mode 'executing)
+               (set-gsd-mode! 'executing)
                (check-eq? (gsd-mode) 'executing))))
