@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.20.2 — 2026-04-26
+
+### GSD Planning Hardening (5 waves)
+
+**W0 — Planning/Execution Boundary Enforcement**
+- `gsd-mode` parameter: `#f` → `'planning` → `'plan-written` → `'executing`
+- `gsd-tool-guard` blocks edit/write/bash after PLAN written
+- `gsd-tool-guard` blocks planning-write during execution
+- `tool-call-pre` hook integration
+
+**W1 — Dynamic Edit Limit**
+- `current-max-old-text-len` parameter (was constant 500)
+- Raised to 1200 during `/go` execution
+- Reset to 500 during `/plan`
+
+**W2 — Redundant Read Detection**
+- Per-file read count tracking via `tool-result-post` hook
+- Hint injected after 3+ reads of the same file
+- Resets on `/plan` and `/go` transitions
+
+**W3 — /go Budget Counter**
+- 30 read-only call budget per `/go` session
+- Warning at ≤5 remaining, block at <−3 overage
+- Tracks read/grep/find/ls/glob calls
+
 ## v0.20.0 — 2026-04-25
 
 ### Feature Gap Closure — pi→q Parity (4 waves, 16 features)
