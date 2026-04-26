@@ -28,7 +28,9 @@
          handle-planning-read
          handle-planning-write
          planning-implement-prompt
-         pinned-planning-dir)
+         pinned-planning-dir
+         gsd-mode
+         gsd-tool-guard)
 
 ;; ============================================================
 ;; Constants
@@ -41,6 +43,12 @@
 ;; same .planning/ folder, even if the LLM guesses a different base_dir.
 ;; Uses a parameter so tests can override it per-scope.
 (define pinned-planning-dir (make-parameter #f))
+
+;; GSD workflow mode: #f | 'planning | 'plan-written | 'executing
+;; Set by /plan (→ 'planning), transitions to 'plan-written after planning-write PLAN
+;; succeeds. Set to 'executing on /go. Used by tool-call-pre hook to block
+;; out-of-scope calls.
+(define gsd-mode (make-parameter #f))
 
 ;; Resolve the project root by walking up from 'start-dir' looking for
 ;; a directory containing .planning/, q/, BLUEPRINT/, or .git/.
@@ -148,7 +156,9 @@
     [(not path) #f]
     [(not (file-exists? path)) #f]
     [(json-artifact? name)
-     (with-handlers ([exn:fail? (lambda (e) (log-warning (format "gsd-planning/read: ~a" (exn-message e))) #f)])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (log-warning (format "gsd-planning/read: ~a" (exn-message e)))
+                                  #f)])
        (call-with-input-file path (lambda (in) (read-json in))))]
     [else (call-with-input-file path (lambda (in) (port->string in)))]))
 
@@ -256,11 +266,16 @@
           (let ([result-path (write-planning-artifact! base-dir name parsed-content)])
             (if (not result-path)
                 (make-error-result (format "Failed to write artifact '~a'" name))
-                (make-success-result (list (hasheq 'type
-                                                   "text"
-                                                   'text
-                                                   (format "Written: ~a"
-                                                           (path->string result-path)))))))]))]))
+                (begin
+                  ;; Transition from planning to plan-written mode.
+                  ;; This blocks further write/edit/bash calls until /go is invoked.
+                  (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
+                    (gsd-mode 'plan-written))
+                  (make-success-result (list (hasheq 'type
+                                                     "text"
+                                                     'text
+                                                     (format "Written: ~a"
+                                                             (path->string result-path))))))))]))]))
 
 ;; ============================================================
 ;; Extension definition
@@ -341,6 +356,7 @@
        [(not plan-content)
         (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
        [else
+        (gsd-mode 'executing)
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
           (if state-content
@@ -383,6 +399,8 @@
                          (and (> (string-length rest) 0) rest)))))
            =>
            (lambda (args)
+             ;; Reset mode for new planning session
+             (gsd-mode 'planning)
              ;; v0.19.12 W2: Detect stale existing PLAN.md and inject warning
              (define existing-plan (read-planning-artifact base-dir "PLAN"))
              (define stale-warning
@@ -402,6 +420,25 @@
                [else content]))
            (hook-amend (hasheq 'text text))])])]))
 
+;; ============================================================
+;; GSD mode tool guard (tool-call-pre hook handler)
+;; ============================================================
+
+;; Block edit/write/bash after PLAN written (awaiting /go).
+;; Block planning-write during /go (plan is frozen during execution).
+;; All other tool calls pass through.
+(define (gsd-tool-guard payload)
+  (define mode (gsd-mode))
+  (define tool-name (hash-ref payload 'tool-name #f))
+  (cond
+    ;; After plan written, block write tools until /go
+    [(and (eq? mode 'plan-written) (member tool-name '("edit" "write" "bash")))
+     (hook-block "Plan written to PLAN.md. Use /go to start implementing.")]
+    ;; During /go, block plan rewrites
+    [(and (eq? mode 'executing) (equal? tool-name "planning-write"))
+     (hook-block "Cannot update plan during /go. Focus on executing the existing plan.")]
+    [else (hook-pass payload)]))
+
 (define-q-extension gsd-planning-extension
                     #:version "1.0.0"
                     #:api-version "1"
@@ -410,6 +447,8 @@
                     #:on register-shortcuts
                     register-gsd-commands
                     #:on execute-command
-                    handle-execute-command)
+                    handle-execute-command
+                    #:on tool-call-pre
+                    gsd-tool-guard)
 
 (define the-extension gsd-planning-extension)
