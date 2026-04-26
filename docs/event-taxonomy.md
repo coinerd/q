@@ -1,6 +1,6 @@
 # Q Event Taxonomy Reference
 
-Complete reference for all event types in Q 0.20.1.
+Complete reference for all event types in Q 0.20.2.
 
 ## Base Types
 

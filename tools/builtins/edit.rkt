@@ -30,7 +30,12 @@
 ;; Constants
 ;; --------------------------------------------------
 
-(define current-max-old-text-len (make-parameter 500))
+(define current-max-old-text-len-box (box 500))
+
+(define (current-max-old-text-len . v)
+  (if (null? v)
+      (unbox current-max-old-text-len-box)
+      (set-box! current-max-old-text-len-box (car v))))
 (define MAX-BACKUPS-PER-FILE 10)
 
 ;; --------------------------------------------------

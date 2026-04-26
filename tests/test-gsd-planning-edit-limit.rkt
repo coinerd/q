@@ -3,6 +3,7 @@
 ;; tests/test-gsd-planning-edit-limit.rkt — Dynamic edit limit tests
 ;;
 ;; Tests for v0.20.2 Wave 1: Dynamic edit limit (500 default, 1200 during /go).
+;; Uses box-based current-max-old-text-len (not parameter) for thread safety.
 
 (require rackunit
          racket/file
@@ -11,27 +12,27 @@
          (only-in "../tools/tool.rkt" tool-result-is-error?))
 
 ;; ============================================================
-;; Parameter tests
+;; Box-based state tests
 ;; ============================================================
 
 (test-case "current-max-old-text-len defaults to 500"
   (check-equal? (current-max-old-text-len) 500))
 
-(test-case "current-max-old-text-len can be raised"
-  (parameterize ([current-max-old-text-len 1200])
-    (check-equal? (current-max-old-text-len) 1200)))
-
-(test-case "current-max-old-text-len resets after parameterize"
-  (parameterize ([current-max-old-text-len 1200])
-    (check-equal? (current-max-old-text-len) 1200))
-  (check-equal? (current-max-old-text-len) 500))
-
-(test-case "current-max-old-text-len can be set and restored"
+(test-case "current-max-old-text-len can be raised and restored"
   (define saved (current-max-old-text-len))
   (current-max-old-text-len 1200)
   (check-equal? (current-max-old-text-len) 1200)
   (current-max-old-text-len saved)
-  (check-equal? (current-max-old-text-len) saved))
+  (check-equal? (current-max-old-text-len) 500))
+
+(test-case "current-max-old-text-len persists across threads"
+  (define saved (current-max-old-text-len))
+  (current-max-old-text-len 1200)
+  (define result-box (box #f))
+  (thread (lambda () (set-box! result-box (current-max-old-text-len))))
+  (sync (system-idle-evt))
+  (check-equal? (unbox result-box) 1200)
+  (current-max-old-text-len saved))
 
 ;; ============================================================
 ;; Edit tool respects dynamic limit
@@ -77,10 +78,12 @@
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-path f)
                                (raise e))])
-    (parameterize ([current-max-old-text-len 1200])
-      (define result
-        (tool-edit (hasheq 'path (path->string f) 'old-text long-text 'new-text "REPLACED")))
-      (check-false (tool-result-is-error? result)))
+    (define saved (current-max-old-text-len))
+    (current-max-old-text-len 1200)
+    (define result
+      (tool-edit (hasheq 'path (path->string f) 'old-text long-text 'new-text "REPLACED")))
+    (check-false (tool-result-is-error? result))
+    (current-max-old-text-len saved)
     (cleanup-path f)))
 
 (test-case "edit rejects old-text > 1200 at raised limit"
@@ -88,8 +91,10 @@
   (with-handlers ([exn:fail? (lambda (e)
                                (cleanup-path f)
                                (raise e))])
-    (parameterize ([current-max-old-text-len 1200])
-      (define result
-        (tool-edit (hasheq 'path (path->string f) 'old-text (make-string 1201 #\x) 'new-text "new")))
-      (check-true (tool-result-is-error? result)))
+    (define saved (current-max-old-text-len))
+    (current-max-old-text-len 1200)
+    (define result
+      (tool-edit (hasheq 'path (path->string f) 'old-text (make-string 1201 #\x) 'new-text "new")))
+    (check-true (tool-result-is-error? result))
+    (current-max-old-text-len saved)
     (cleanup-path f)))

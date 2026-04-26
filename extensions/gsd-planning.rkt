@@ -55,7 +55,12 @@
 ;; Set by /plan (→ 'planning), transitions to 'plan-written after planning-write PLAN
 ;; succeeds. Set to 'executing on /go. Used by tool-call-pre hook to block
 ;; out-of-scope calls.
-(define gsd-mode (make-parameter #f))
+(define gsd-mode-box (box #f))
+
+(define (gsd-mode . v)
+  (if (null? v)
+      (unbox gsd-mode-box)
+      (set-box! gsd-mode-box (car v))))
 
 ;; Resolve the project root by walking up from 'start-dir' looking for
 ;; a directory containing .planning/, q/, BLUEPRINT/, or .git/.
@@ -495,7 +500,12 @@
 (define GO-READ-WARN-THRESHOLD 5) ; warn at ≤5 remaining
 (define GO-READ-BLOCK-THRESHOLD -3) ; block at <−3 (i.e., 33+ calls)
 
-(define go-read-budget (make-parameter #f))
+(define go-read-budget-box (box #f))
+
+(define (go-read-budget . v)
+  (if (null? v)
+      (unbox go-read-budget-box)
+      (set-box! go-read-budget-box (car v))))
 
 (define (reset-go-budget!)
   (go-read-budget GO-READ-BUDGET))
