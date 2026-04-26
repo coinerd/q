@@ -86,10 +86,15 @@ jobs:
   smoke:
     needs: release
     runs-on: ubuntu-latest
+    env:
+      # Smoke job installs Racket directly to test the release tarball
+      # against a clean environment. The URL is parameterized here so
+      # it can be updated independently of the composite action version.
+      RACKET_VERSION: '8.12'
     steps:
       - name: Install Racket
         run: |
-          curl -L https://download.racket-lang.org/installers/8.10/racket-8.10-x86_64-linux-cs.sh -o /tmp/racket.sh
+          curl -L https://download.racket-lang.org/installers/${{ env.RACKET_VERSION }}/racket-${{ env.RACKET_VERSION }}-x86_64-linux-cs.sh -o /tmp/racket.sh
           echo "2" | sudo sh /tmp/racket.sh --in-place --create-links /usr/local
 
       - name: Download release tarball

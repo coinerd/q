@@ -119,41 +119,18 @@
 
 (define (do-http-request base-url api-key path body)
   (define url-str (string-append (string-trim base-url "/") path))
-  (define uri (string->url url-str))
-  (define host (url-host uri))
-  (define port (url-port uri))
-  (define ssl? (equal? (url-scheme uri) "https"))
-  (define path-str
-    (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
   (define headers (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
-  (define body-bytes (jsexpr->bytes body))
   ;; v0.14.2 Wave 3: per-model timeout via effective-request-timeout-for
   (define model-name (and (hash? body) (hash-ref body 'model #f)))
   (define timeout-secs
     (if model-name
         (effective-request-timeout-for model-name)
         (current-http-request-timeout)))
-  ;; Wrap entire request in overall timeout (SEC-11)
-  (call-with-request-timeout (lambda ()
-                               (define-values (status-line response-headers response-port)
-                                 (if port
-                                     (http-sendrecv host
-                                                    path-str
-                                                    #:port port
-                                                    #:ssl? ssl?
-                                                    #:method "POST"
-                                                    #:headers headers
-                                                    #:data body-bytes)
-                                     (http-sendrecv host
-                                                    path-str
-                                                    #:ssl? ssl?
-                                                    #:method "POST"
-                                                    #:headers headers
-                                                    #:data body-bytes)))
-                               (define response-body (read-response-body/timeout response-port))
-                               (check-http-status! status-line response-body)
-                               (bytes->jsexpr response-body))
-                             #:timeout timeout-secs))
+  (make-provider-http-request url-str
+                              headers
+                              (jsexpr->bytes body)
+                              #:timeout timeout-secs
+                              #:status-checker check-http-status!))
 
 ;; ============================================================
 ;; HTTP status check helper

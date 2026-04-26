@@ -323,20 +323,14 @@
 
 (define (anthropic-do-http-request base-url api-key path body)
   (define url-str (string-append (string-trim base-url "/") path))
-  (define uri (string->url url-str))
   (define headers
     (list (format "x-api-key: ~a" api-key)
           (format "anthropic-version: ~a" ANTHROPIC-VERSION)
           "Content-Type: application/json"))
-  (define body-bytes (jsexpr->bytes body))
-  ;; Wrap entire request in overall timeout (SEC-11)
-  (call-with-request-timeout (lambda ()
-                               (define-values (status-line response-headers response-port)
-                                 (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-                               (define response-body (read-response-body response-port))
-                               ;; Check HTTP status
-                               (anthropic-check-http-status! status-line response-body)
-                               (bytes->jsexpr response-body))))
+  (make-provider-http-request url-str
+                              headers
+                              (jsexpr->bytes body)
+                              #:status-checker anthropic-check-http-status!))
 
 ;; ============================================================
 ;; Provider constructor
