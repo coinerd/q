@@ -95,12 +95,15 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        racket-version: ['8.10', '8.12']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup Racket
         uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ matrix.racket-version }}
 
       - name: Clean bytecode cache
         run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true

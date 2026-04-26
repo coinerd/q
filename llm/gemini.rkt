@@ -383,17 +383,11 @@
 (define (gemini-do-http-request base-url api-key model body)
   (define url-str
     (string-append (string-trim base-url "/") "/v1beta/models/" model ":generateContent"))
-  (define uri (string->url url-str))
   (define headers (list "Content-Type: application/json" (format "x-goog-api-key: ~a" api-key)))
-  (define body-bytes (jsexpr->bytes body))
-  ;; Wrap entire request in overall timeout (SEC-11)
-  (call-with-request-timeout (lambda ()
-                               (define-values (status-line response-headers response-port)
-                                 (http-sendrecv uri 'POST #:headers headers #:data body-bytes))
-                               (define response-body (read-response-body response-port))
-                               ;; Check HTTP status
-                               (gemini-check-http-status! status-line response-body)
-                               (bytes->jsexpr response-body))))
+  (make-provider-http-request url-str
+                              headers
+                              (jsexpr->bytes body)
+                              #:status-checker gemini-check-http-status!))
 
 ;; ============================================================
 ;; Provider constructor

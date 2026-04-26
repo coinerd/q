@@ -41,33 +41,11 @@
                    (if (string-contains? path "?") "&" "?")
                    "api-version="
                    api-version))
-  (define uri (string->url url-str))
-  (define host (url-host uri))
-  (define url-port (url-port uri))
-  (define ssl? (equal? (url-scheme uri) "https"))
-  (define path-str
-    (string-append "/" (string-join (map (lambda (p) (path/param-path p)) (url-path uri)) "/")))
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
-  (define body-bytes (jsexpr->bytes body))
-  (call-with-request-timeout (lambda ()
-                               (define-values (status-line response-headers response-port)
-                                 (if url-port
-                                     (http-sendrecv host
-                                                    path-str
-                                                    #:port url-port
-                                                    #:ssl? ssl?
-                                                    #:method "POST"
-                                                    #:headers headers
-                                                    #:data body-bytes)
-                                     (http-sendrecv host
-                                                    path-str
-                                                    #:ssl? ssl?
-                                                    #:method "POST"
-                                                    #:headers headers
-                                                    #:data body-bytes)))
-                               (define response-body (read-response-body/timeout response-port))
-                               (check-azure-status! status-line response-body)
-                               (bytes->jsexpr response-body))))
+  (make-provider-http-request url-str
+                              headers
+                              (jsexpr->bytes body)
+                              #:status-checker check-azure-status!))
 
 (define (check-azure-status! status-line body-bytes)
   (define status-code

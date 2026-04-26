@@ -4,7 +4,7 @@ inputs:
   racket-version:
     description: 'Racket version to install'
     required: false
-    default: '8.10'
+    default: '8.12'
 runs:
   using: 'composite'
   steps:
