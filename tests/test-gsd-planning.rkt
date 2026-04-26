@@ -673,3 +673,135 @@
   (define res (gsd-tool-guard (hasheq 'tool-name "planning-read" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'pass)
   (set-gsd-mode! #f))
+
+;; ============================================================
+;; W1 (v0.20.4): parse-wave-headers tests
+;; ============================================================
+
+(test-case "parse-wave-headers extracts wave indices from plan text"
+  (define plan-text
+    "## Wave 0: Foundation\nSome content\n## Wave 1: Core\nMore content\n## Wave 2: Tests")
+  (define indices (parse-wave-headers plan-text))
+  (check-equal? indices '(0 1 2)))
+
+(test-case "parse-wave-headers returns empty list for plan with no waves"
+  (define indices (parse-wave-headers "# Plan\nJust text"))
+  (check-equal? indices '()))
+
+(test-case "parse-wave-headers handles single wave"
+  (define indices (parse-wave-headers "## Wave 3: Only Wave"))
+  (check-equal? indices '(3)))
+
+(test-case "parse-wave-headers handles non-consecutive waves"
+  (define indices (parse-wave-headers "## Wave 0: Start\n## Wave 5: End"))
+  (check-equal? indices '(0 5)))
+
+;; ============================================================
+;; W1 (v0.20.4): /go sets total waves from plan
+;; ============================================================
+
+(test-case "/go parses plan and sets total waves"
+  (reset-all-gsd-state!)
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file
+        (build-path dir ".planning" "PLAN.md")
+        (lambda (out) (display "## Wave 0: Setup\n## Wave 1: Implement\n## Wave 2: Test" out))
+        #:exists 'truncate)
+       (set-pinned-planning-dir! dir)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/go" 'input "/go")))
+       (check-eq? (hook-result-action result) 'amend)
+       (check-equal? (total-waves) 3)
+       ;; Plan budget should be reset for /go phase
+       (check-equal? (plan-tool-budget) EXPLORATION-BUDGET)))))
+
+;; ============================================================
+;; W1 (v0.20.4): /plan initializes plan budget
+;; ============================================================
+
+(test-case "/plan <text> initializes plan budget"
+  (reset-all-gsd-state!)
+  (with-temp-dir (lambda (dir)
+                   (parameterize ([current-directory dir])
+                     (set-pinned-planning-dir! dir)
+                     (define handler
+                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+                     (define result (handler (hasheq 'command "/plan" 'input "/plan fix the bug")))
+                     (check-eq? (hook-result-action result) 'amend)
+                     (check-equal? (plan-tool-budget) EXPLORATION-BUDGET)))))
+
+;; ============================================================
+;; W1 (v0.20.4): /gsd status command tests
+;; ============================================================
+
+(test-case "/gsd shows status when inactive"
+  (reset-all-gsd-state!)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/gsd" 'input "/gsd")))
+  (check-eq? (hook-result-action result) 'amend)
+  (define text (hash-ref (hook-result-payload result) 'text))
+  (check-true (string-contains? text "Mode: inactive")))
+
+(test-case "/gsd shows mode when planning"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (reset-plan-budget!)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/gsd" 'input "/gsd")))
+  (define text (hash-ref (hook-result-payload result) 'text))
+  (check-true (string-contains? text "Mode: planning"))
+  (check-true (string-contains? text "Plan budget: 30/30")))
+
+(test-case "/gsd shows wave progress during execution"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 4)
+  (mark-wave-complete! 0)
+  (mark-wave-complete! 1)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/gsd" 'input "/gsd")))
+  (define text (hash-ref (hook-result-payload result) 'text))
+  (check-true (string-contains? text "Mode: executing"))
+  (check-true (string-contains? text "Waves: 2/4 complete")))
+
+;; ============================================================
+;; W1 (v0.20.4): /plan budget enforcement
+;; ============================================================
+
+(test-case "gsd-tool-guard enforces exploration budget during planning mode"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (reset-plan-budget!)
+  ;; Exhaust the budget
+  (for ([_ (in-range EXPLORATION-BUDGET)])
+    (decrement-plan-budget!))
+  ;; Next call should be blocked
+  (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
+  (check-eq? (hook-result-action res) 'block)
+  (set-gsd-mode! #f))
+
+(test-case "gsd-tool-guard allows reads within planning budget"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (reset-plan-budget!)
+  ;; Use 10 reads — should still be within budget
+  (for ([_ (in-range 10)])
+    (decrement-plan-budget!))
+  (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
+  (check-eq? (hook-result-action res) 'pass)
+  (set-gsd-mode! #f))
+
+(test-case "gsd-tool-guard enforces exploration budget for planning-read"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (reset-plan-budget!)
+  ;; Exhaust the budget
+  (for ([_ (in-range EXPLORATION-BUDGET)])
+    (decrement-plan-budget!))
+  ;; planning-read should be blocked too
+  (define res (gsd-tool-guard (hasheq 'tool-name "planning-read" 'args (hasheq))))
+  (check-eq? (hook-result-action res) 'block)
+  (set-gsd-mode! #f))

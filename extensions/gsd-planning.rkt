@@ -10,6 +10,7 @@
          racket/string
          racket/file
          racket/path
+         racket/set
          json
          "define-extension.rkt"
          "dynamic-tools.rkt"
@@ -17,6 +18,8 @@
          "context.rkt"
          "hooks.rkt"
          "../tools/tool.rkt"
+         "../util/event.rkt"
+         "../agent/event-bus.rkt"
          "gsd-planning-state.rkt")
 
 (provide the-extension
@@ -56,7 +59,31 @@
          get-read-count
          increment-read-count!
          clear-read-counts!
+         parse-wave-headers
+         completed-waves
+         total-waves
+         set-total-waves!
+         mark-wave-complete!
+         wave-complete?
+         next-pending-wave
+         plan-tool-budget
+         decrement-plan-budget!
+         reset-plan-budget!
          gsd-session-cleanup)
+
+;; ============================================================
+;; Event emission helper (v0.20.4 W1)
+;; ============================================================
+
+;; Emit a GSD event to the current session's event bus.
+;; No-op if no event bus is available (e.g. during tests).
+(define (emit-gsd-event! type payload)
+  (define bus (current-gsd-event-bus))
+  (when bus
+    (publish! bus (make-event type (current-seconds) #f #f payload))))
+
+;; Lazy reference to the current event bus — resolved at call time.
+(define current-gsd-event-bus (make-parameter #f))
 
 ;; ============================================================
 ;; Constants
@@ -89,6 +116,21 @@
       [(let ([parent (simple-form-path (build-path dir 'up))]) (equal? parent (simple-form-path dir)))
        start-dir]
       [else (loop (simple-form-path (build-path dir 'up)))])))
+
+;; ============================================================
+;; Wave header parsing (v0.20.4 W1.1)
+;; ============================================================
+
+;; Parse wave headers from PLAN.md content.
+;; Returns a sorted list of wave indices found in the plan.
+;; Matches lines like: ## Wave 0:, ## Wave 1:, ## Wave N:
+(define (parse-wave-headers plan-text)
+  (define matches (regexp-match* #rx"## [Ww]ave +([0-9]+)" plan-text))
+  (for/list ([m (in-list matches)])
+    (define num-match (regexp-match #rx"([0-9]+)$" m))
+    (if num-match
+        (string->number (cadr num-match))
+        0)))
 
 ;; Planning preamble prepended to user text when /plan <text> submits.
 ;; Gives the agent explicit GSD planning instructions.
@@ -299,7 +341,8 @@
                   ;; Transition from planning to plan-written mode.
                   ;; This blocks further write/edit/bash calls until /go is invoked.
                   (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
-                    (set-gsd-mode! 'plan-written))
+                    (set-gsd-mode! 'plan-written)
+                    (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'plan-written)))
                   (make-success-result (list (hasheq 'type
                                                      "text"
                                                      'text
@@ -318,6 +361,8 @@
     (define cwd (ctx-cwd ctx))
     (when cwd
       (set-pinned-planning-dir! (resolve-project-root cwd))))
+  ;; v0.20.4 W1: capture event bus for later event emission
+  (current-gsd-event-bus (ctx-event-bus ctx))
   (ext-register-tool!
    ctx
    "planning-read"
@@ -374,6 +419,7 @@
                          'general
                          '()
                          '("implement" "i"))
+  (ext-register-command! ctx "/gsd" "Show GSD workflow status" 'general '() '())
   (hook-pass #f))
 
 ;; Execute command handler: responds to /plan, /state, /handoff, /go dispatch
@@ -390,12 +436,20 @@
         (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
        [else
         (set-gsd-mode! 'executing)
+        ;; v0.20.4 W1: emit mode-changed event
+        (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'executing))
         ;; Raise edit limit during execution mode (500 → 1200)
         (set-current-max-old-text-len! 1200)
         ;; Reset read counter for fresh execution
         (reset-read-counts!)
         ;; Reset read budget for fresh execution
         (reset-go-budget!)
+        ;; v0.20.4 W1.1: Parse wave headers and set total waves
+        (define wave-indices (parse-wave-headers plan-content))
+        (when (not (null? wave-indices))
+          (set-total-waves! (add1 (apply max wave-indices))))
+        ;; v0.20.4 W1: reset plan budget for /go phase
+        (reset-plan-budget!)
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
           (if state-content
@@ -415,6 +469,27 @@
           (string-append planning-implement-prompt "Plan:\n" plan-content "\n" state-note wave-arg))
         (hook-amend
          (hasheq 'submit augmented-text 'text (format "Implementing plan~a..." wave-arg)))])]
+    ;; /gsd status command (v0.20.4 W1.4)
+    [(equal? cmd "/gsd")
+     (define mode (gsd-mode))
+     (define tw (total-waves))
+     (define cw (completed-waves))
+     (define pb (plan-tool-budget))
+     (define budget (go-read-budget))
+     (define rc (hash-count (read-counts)))
+     (define parts
+       (list (format "Mode: ~a" (or mode "inactive"))
+             (if (> tw 0)
+                 (format "Waves: ~a/~a complete" (set-count cw) tw)
+                 "Waves: not set")
+             (if pb
+                 (format "Plan budget: ~a/~a remaining" pb EXPLORATION-BUDGET)
+                 "Plan budget: inactive")
+             (if budget
+                 (format "Read budget: ~a/~a" budget GO-READ-BUDGET)
+                 "Read budget: inactive")
+             (format "Files read: ~a" rc)))
+     (hook-amend (hasheq 'text (string-join parts "\n")))]
     ;; Artifact display commands
     [else
      (define artifact
@@ -440,6 +515,9 @@
            (lambda (args)
              ;; Reset mode for new planning session
              (set-gsd-mode! 'planning)
+             ;; v0.20.4 W1: emit mode-changed event + init plan budget
+             (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'planning))
+             (reset-plan-budget!)
              ;; Reset edit limit to default during planning
              (set-current-max-old-text-len! 500)
              ;; Reset read counter for fresh planning
@@ -540,6 +618,37 @@
           (tool-result? result)
           (not (tool-result-is-error? result)))
      (maybe-inject-budget-warning payload)]
+    ;; v0.20.4 W1.2: Wave progress injection after successful edit during executing mode
+    [(and (eq? (gsd-mode) 'executing)
+          (member tool-name '("edit" "write"))
+          result
+          (tool-result? result)
+          (not (tool-result-is-error? result)))
+     ;; Check if assistant text contains a wave header completion pattern
+     ;; We detect which wave was being executed based on completed-waves state
+     (define npw (next-pending-wave))
+     (when npw
+       (mark-wave-complete! npw)
+       (emit-gsd-event! "gsd.wave.complete" (hasheq 'wave npw)))
+     (define tw (total-waves))
+     (define cw (completed-waves))
+     (define progress-text
+       (if (> tw 0)
+           (format "\n\n[PROGRESS: Wave ~a/~a complete. ~a remaining.]"
+                   (set-count cw)
+                   tw
+                   (- tw (set-count cw)))
+           ""))
+     (if (string=? progress-text "")
+         (hook-pass payload)
+         (let* ([content (tool-result-content result)]
+                [base-content (if (list? content)
+                                  content
+                                  (list content))]
+                [final-content (append base-content
+                                       (list (hasheq 'type "text" 'text progress-text)))])
+           (hook-amend (hasheq 'result
+                               (make-success-result final-content (tool-result-details result))))))]
     [else (hook-pass payload)]))
 
 ;; Reset read counts when entering a new mode
@@ -572,6 +681,19 @@
     ;; During /go, block plan rewrites
     [(and (eq? mode 'executing) (equal? tool-name "planning-write"))
      (hook-block "Cannot update plan during /go. Focus on executing the existing plan.")]
+    ;; v0.20.4 W1.3: During planning mode, enforce exploration budget
+    [(and (eq? mode 'planning)
+          (member tool-name '("read" "grep" "find" "ls" "glob" "planning-read"))
+          (plan-tool-budget))
+     (define remaining (decrement-plan-budget!))
+     (cond
+       [(and remaining (<= remaining 0))
+        (emit-gsd-event! "gsd.budget.warning" (hasheq 'budget-type 'exploration 'remaining 0))
+        (hook-block (format "Exploration budget exhausted (~a calls used). Write your plan now."
+                            EXPLORATION-BUDGET))]
+       ;; Soft warning at 2/3 budget — pass through but will be warned via tracker
+       [(and remaining (<= remaining 10)) (hook-pass payload)]
+       [else (hook-pass payload)])]
     ;; During /go, enforce read budget
     [(and (eq? mode 'executing) (member tool-name READ-ONLY-TOOLS) (go-read-budget))
      (define remaining (decrement-budget!))
