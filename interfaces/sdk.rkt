@@ -37,6 +37,7 @@
                   context-usage-compaction-threshold
                   context-usage-near-threshold?)
          (only-in "../extensions/api.rkt" list-extensions)
+         (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
          (only-in "../runtime/session-index.rkt"
                   navigate-to-entry!
@@ -141,7 +142,10 @@
          q:session-info
          q:session-branch
          q:session-navigate
-         q:session-tree-info)
+         q:session-tree-info
+
+         ;; v0.20.4 W3: GSD observability
+         gsd-status)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt
@@ -624,3 +628,14 @@
        [(not (file-exists? log-path))
         (hasheq 'total-entries 0 'branch-count 0 'navigation-count 0 'summary-count 0 'leaf-ids '())]
        [else (store:tree-info (store:load-tree log-path))])]))
+
+;; ============================================================
+;; v0.20.4 W3: GSD Observability
+;; ============================================================
+
+;;; gsd-status : -> (or/c 'no-active-session hash?)
+;;; Returns an immutable snapshot of all GSD state, or 'no-active-session
+;;; if no GSD mode is active.
+(define (gsd-status)
+  (define snap (gsd-snapshot))
+  (if (hash-ref snap 'mode #f) snap 'no-active-session))

@@ -41,6 +41,8 @@
          decrement-plan-budget!
          reset-plan-budget!
          EXPLORATION-BUDGET
+         ;; v0.20.4 W3: observability
+         gsd-snapshot
          reset-all-gsd-state!
          READ-ONLY-TOOLS)
 
@@ -219,6 +221,32 @@
 
 ;; Resets ALL GSD state atomically under the semaphore.
 ;; Called on session-shutdown and between test runs.
+;; ============================================================
+;; v0.20.4 W3: Observability — immutable snapshot of all GSD state
+;; ============================================================
+
+(define (gsd-snapshot)
+  (call-with-semaphore state-sem
+                       (lambda ()
+                         (hasheq 'mode
+                                 (unbox gsd-mode-box)
+                                 'pinned-dir
+                                 (unbox pinned-dir-box)
+                                 'go-read-budget
+                                 (unbox budget-box)
+                                 'edit-limit
+                                 (unbox edit-limit-box)
+                                 'read-counts
+                                 (hash-copy (unbox read-counts-box))
+                                 'completed-waves
+                                 (set-copy (unbox completed-waves-box))
+                                 'total-waves
+                                 (unbox total-waves-box)
+                                 'last-edit-wave
+                                 (unbox last-edit-wave-box)
+                                 'plan-tool-budget
+                                 (unbox plan-tool-budget-box)))))
+
 (define (reset-all-gsd-state!)
   (call-with-semaphore state-sem
                        (lambda ()
