@@ -16,6 +16,9 @@
          racket/string
          (only-in racket/list last drop)
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../../extensions/gsd-planning-state.rkt"
+                  current-max-old-text-len
+                  set-current-max-old-text-len!)
          (only-in "../../util/safe-mode-predicates.rkt"
                   safe-mode?
                   allowed-path?
@@ -24,22 +27,19 @@
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
 
 (provide tool-edit
-         current-max-old-text-len)
+         current-max-old-text-len
+         set-current-max-old-text-len!)
 
+;; --------------------------------------------------
+;; Backup helpers
 ;; --------------------------------------------------
 ;; Constants
 ;; --------------------------------------------------
 
-(define current-max-old-text-len-box (box 500))
-
-(define (current-max-old-text-len . v)
-  (if (null? v)
-      (unbox current-max-old-text-len-box)
-      (set-box! current-max-old-text-len-box (car v))))
 (define MAX-BACKUPS-PER-FILE 10)
 
 ;; --------------------------------------------------
-;; Backup helpers
+;; Helpers
 ;; --------------------------------------------------
 
 (define (ensure-backup-dir)

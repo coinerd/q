@@ -13,7 +13,7 @@
 ;; ============================================================
 
 (test-case "go-read-budget defaults to #f"
-  (go-read-budget #f)
+  (set-go-read-budget! #f)
   (check-false (go-read-budget)))
 
 (test-case "reset-go-budget! sets budget to 30"
@@ -33,30 +33,30 @@
 ;; ============================================================
 
 (test-case "tool-guard passes write tools during executing without budget change"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   (define res (gsd-tool-guard (hasheq 'tool-name "edit" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'pass)
   ;; Budget should NOT be decremented for write tools
   (check-equal? (go-read-budget) 30)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard decrements budget for read during executing"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq)))
   (check-equal? (go-read-budget) 29)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard passes reads with plenty of budget"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'pass)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard warns when budget ≤5"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   ;; Burn through 25 calls
   (for ([_ (in-range 25)])
@@ -66,10 +66,10 @@
   ;; Next read should trigger warning
   (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'amend)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard blocks when budget goes below -3"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   ;; Burn through 33 calls (30 budget + 3 overage)
   (for ([_ (in-range 33)])
@@ -79,42 +79,42 @@
   ;; Next read should pass (block threshold is < -3, not ≤ -3)
   (define res-at-neg3 (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
   (check-eq? (hook-result-action res-at-neg3) 'block)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard does not enforce budget when not in executing mode"
-  (gsd-mode 'planning)
+  (set-gsd-mode! 'planning)
   (reset-go-budget!)
   ;; Call read many times
   (for ([_ (in-range 40)])
     (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
   ;; Budget should still be 30 — not decremented in planning mode
   (check-equal? (go-read-budget) 30)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard does not enforce budget when budget is #f"
-  (gsd-mode 'executing)
-  (go-read-budget #f)
+  (set-gsd-mode! 'executing)
+  (set-go-read-budget! #f)
   (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'pass)
   ;; Budget should still be #f
   (check-false (go-read-budget))
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard blocks edit during plan-written"
-  (gsd-mode 'plan-written)
+  (set-gsd-mode! 'plan-written)
   (define res (gsd-tool-guard (hasheq 'tool-name "edit" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'block)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "tool-guard blocks planning-write during executing"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   (define res (gsd-tool-guard (hasheq 'tool-name "planning-write" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'block)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))
 
 (test-case "budget is independent of read counter"
-  (gsd-mode 'executing)
+  (set-gsd-mode! 'executing)
   (reset-go-budget!)
   (reset-read-counts!)
   ;; Budget counts all read-only tools, not just file reads
@@ -122,4 +122,4 @@
   (gsd-tool-guard (hasheq 'tool-name "find" 'args (hasheq)))
   (gsd-tool-guard (hasheq 'tool-name "ls" 'args (hasheq)))
   (check-equal? (go-read-budget) 27)
-  (gsd-mode #f))
+  (set-gsd-mode! #f))

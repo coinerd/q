@@ -17,7 +17,7 @@
          "context.rkt"
          "hooks.rkt"
          "../tools/tool.rkt"
-         (only-in "../tools/builtins/edit.rkt" current-max-old-text-len))
+         "gsd-planning-state.rkt")
 
 (provide the-extension
          gsd-planning-extension
@@ -29,15 +29,30 @@
          handle-planning-read
          handle-planning-write
          planning-implement-prompt
-         pinned-planning-dir
          gsd-mode
+         set-gsd-mode!
          gsd-tool-guard
          reset-read-counts!
          gsd-read-tracker
          go-read-budget
+         set-go-read-budget!
          reset-go-budget!
          GO-READ-BUDGET
-         READ-ONLY-TOOLS)
+         GO-READ-WARN-THRESHOLD
+         GO-READ-BLOCK-THRESHOLD
+         READ-ONLY-TOOLS
+         ;; Re-export state module accessors for backward compat
+         pinned-planning-dir
+         set-pinned-planning-dir!
+         current-max-old-text-len
+         set-current-max-old-text-len!
+         reset-all-gsd-state!
+         gsd-mode?
+         decrement-budget!
+         read-counts
+         get-read-count
+         increment-read-count!
+         clear-read-counts!)
 
 ;; ============================================================
 ;; Constants
@@ -45,22 +60,11 @@
 
 (define planning-dir-name ".planning")
 
-;; Pinned planning directory — set once during tool registration from ctx-cwd.
-;; Ensures all planning-read/planning-write calls within a session use the
-;; same .planning/ folder, even if the LLM guesses a different base_dir.
-;; Uses a parameter so tests can override it per-scope.
-(define pinned-planning-dir (make-parameter #f))
+;; pinned-planning-dir is now in gsd-planning-state.rkt (box with semaphore).
+;; Tests and call sites use (pinned-planning-dir) / (set-pinned-planning-dir! v).
 
 ;; GSD workflow mode: #f | 'planning | 'plan-written | 'executing
-;; Set by /plan (→ 'planning), transitions to 'plan-written after planning-write PLAN
-;; succeeds. Set to 'executing on /go. Used by tool-call-pre hook to block
-;; out-of-scope calls.
-(define gsd-mode-box (box #f))
-
-(define (gsd-mode . v)
-  (if (null? v)
-      (unbox gsd-mode-box)
-      (set-box! gsd-mode-box (car v))))
+;; NOW in gsd-planning-state.rkt — semaphore-protected.
 
 ;; Resolve the project root by walking up from 'start-dir' looking for
 ;; a directory containing .planning/, q/, BLUEPRINT/, or .git/.
@@ -282,7 +286,7 @@
                   ;; Transition from planning to plan-written mode.
                   ;; This blocks further write/edit/bash calls until /go is invoked.
                   (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
-                    (gsd-mode 'plan-written))
+                    (set-gsd-mode! 'plan-written))
                   (make-success-result (list (hasheq 'type
                                                      "text"
                                                      'text
@@ -300,7 +304,7 @@
   (unless (pinned-planning-dir)
     (define cwd (ctx-cwd ctx))
     (when cwd
-      (pinned-planning-dir (resolve-project-root cwd))))
+      (set-pinned-planning-dir! (resolve-project-root cwd))))
   (ext-register-tool!
    ctx
    "planning-read"
@@ -368,9 +372,9 @@
        [(not plan-content)
         (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
        [else
-        (gsd-mode 'executing)
+        (set-gsd-mode! 'executing)
         ;; Raise edit limit during execution mode (500 → 1200)
-        (current-max-old-text-len 1200)
+        (set-current-max-old-text-len! 1200)
         ;; Reset read counter for fresh execution
         (reset-read-counts!)
         ;; Reset read budget for fresh execution
@@ -418,13 +422,13 @@
            =>
            (lambda (args)
              ;; Reset mode for new planning session
-             (gsd-mode 'planning)
+             (set-gsd-mode! 'planning)
              ;; Reset edit limit to default during planning
-             (current-max-old-text-len 500)
+             (set-current-max-old-text-len! 500)
              ;; Reset read counter for fresh planning
              (reset-read-counts!)
              ;; Reset budget
-             (go-read-budget #f)
+             (set-go-read-budget! #f)
              ;; v0.19.12 W2: Detect stale existing PLAN.md and inject warning
              (define existing-plan (read-planning-artifact base-dir "PLAN"))
              (define stale-warning
@@ -449,7 +453,7 @@
 ;; ============================================================
 
 ;; Tracks per-file read count to detect redundant reads.
-(define read-counts (make-hash))
+;; State lives in gsd-planning-state.rkt.
 
 (define READ_HINT_THRESHOLD 3)
 
@@ -464,8 +468,7 @@
      (cond
        [(not file-path) (hook-pass payload)]
        [else
-        (define new-count (add1 (hash-ref read-counts file-path 0)))
-        (hash-set! read-counts file-path new-count)
+        (define new-count (increment-read-count! file-path))
         (cond
           [(and (>= new-count READ_HINT_THRESHOLD) (= 0 (modulo new-count READ_HINT_THRESHOLD)))
            (define hint-text
@@ -486,29 +489,15 @@
 
 ;; Reset read counts when entering a new mode
 (define (reset-read-counts!)
-  (hash-clear! read-counts))
+  (clear-read-counts!))
 
 ;; ============================================================
 ;; /go Budget Counter
 ;; ============================================================
 
-;; Read-only tools that count against the budget
-(define READ-ONLY-TOOLS '("read" "grep" "find" "ls" "glob"))
-
-;; Budget: 30 read-only calls per /go session
-(define GO-READ-BUDGET 30)
-(define GO-READ-WARN-THRESHOLD 5) ; warn at ≤5 remaining
-(define GO-READ-BLOCK-THRESHOLD -3) ; block at <−3 (i.e., 33+ calls)
-
-(define go-read-budget-box (box #f))
-
-(define (go-read-budget . v)
-  (if (null? v)
-      (unbox go-read-budget-box)
-      (set-box! go-read-budget-box (car v))))
-
-(define (reset-go-budget!)
-  (go-read-budget GO-READ-BUDGET))
+;; Budget constants now in gsd-planning-state.rkt.
+;; READ-ONLY-TOOLS, GO-READ-BUDGET, GO-READ-WARN-THRESHOLD, GO-READ-BLOCK-THRESHOLD
+;; are imported from there.
 
 ;; ============================================================
 ;; GSD mode tool guard (tool-call-pre hook handler)
@@ -530,8 +519,7 @@
      (hook-block "Cannot update plan during /go. Focus on executing the existing plan.")]
     ;; During /go, enforce read budget
     [(and (eq? mode 'executing) (member tool-name READ-ONLY-TOOLS) (go-read-budget))
-     (define remaining (sub1 (go-read-budget)))
-     (go-read-budget remaining)
+     (define remaining (decrement-budget!))
      (cond
        [(< remaining GO-READ-BLOCK-THRESHOLD)
         ;; Hard block: way over budget
