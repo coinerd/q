@@ -1,0 +1,15 @@
+{
+  "name": "wf-gsd-exploration-cap",
+  "category": "planning-workflow",
+  "difficulty": 2,
+  "description": "GSD exploration cap: plan phase should respect read budget",
+  "prompt": "/plan Analyze all modules in src/ and propose a refactoring strategy",
+  "max_iterations": 15,
+  "max_tokens": 80000,
+  "time_limit_seconds": 90,
+  "scoring": {
+    "tools_not_used": ["bash"],
+    "max_iterations": 15
+  },
+  "teardown": []
+}

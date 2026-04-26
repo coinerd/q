@@ -115,7 +115,7 @@
     (if (symbol? raw-category)
         raw-category
         (string->symbol raw-category)))
-  (unless (member category '(implementation bug-fix planning full-workflow))
+  (unless (member category '(implementation bug-fix planning planning-workflow full-workflow))
     (error 'validate-benchmark-task
            "Category must be one of: implementation, bug-fix, planning, full-workflow, got: ~a"
            category))

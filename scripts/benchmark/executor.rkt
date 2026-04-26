@@ -29,13 +29,16 @@
          (only-in "../../llm/model.rkt" make-model-response)
          (only-in "../../util/protocol-types.rkt" message-role message-content text-part-text)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
+         (only-in "../../extensions/gsd-planning-state.rkt" gsd-snapshot)
          "task.rkt")
 
 (provide (struct-out execution-result)
          execute-task/mock
          execute-task/live
+         execute-task/gsd-workflow
          build-live-provider
-         trace-tool-calls)
+         trace-tool-calls
+         trace-gsd-events)
 
 ;; ============================================================
 ;; Result struct
@@ -210,6 +213,45 @@
                     error-msg
                     tmp-dir
                     raw-result))
+
+;; ============================================================
+;; v0.20.4 W4: GSD workflow execution + event filtering
+;; ============================================================
+
+;; trace-gsd-events : path? -> (listof hash?)
+;; Extracts GSD-related events from trace JSONL.
+(define (trace-gsd-events trace-path)
+  (if (not (and trace-path (file-exists? trace-path)))
+      '()
+      (for/list ([entry (in-list (jsonl-read-all-valid trace-path))]
+                 #:when (and (hash? entry)
+                             (let ([ph (hash-ref entry 'phase #f)])
+                               (and (string? ph)
+                                    (or (string-prefix? ph "gsd.")
+                                        (string-prefix? ph "agent.stall"))))))
+        entry)))
+
+;; execute-task/gsd-workflow : benchmark-task? [(or/c string? #f)] [(or/c path? #f)] -> execution-result?
+;; Specialized execution for planning-workflow tasks.
+;; Captures GSD events and includes snapshot in the result.
+(define (execute-task/gsd-workflow task [provider-override #f] [output-dir #f])
+  (define provider
+    (if provider-override
+        (build-live-provider provider-override)
+        (build-mock-provider-for-task task)))
+  (define result (execute-task-internal task provider provider-override output-dir))
+  (define gsd-events (trace-gsd-events (execution-result-trace-path result)))
+  (if (null? gsd-events)
+      result
+      (struct-copy execution-result
+                   result
+                   [raw-result
+                    (hasheq 'gsd-events
+                            gsd-events
+                            'gsd-snapshot
+                            (gsd-snapshot)
+                            'original-result
+                            (execution-result-raw-result result))])))
 
 ;; trace-tool-call-count : path? -> exact-nonnegative-integer?
 ;; Count tool.call.started events in trace JSONL as iteration proxy.
