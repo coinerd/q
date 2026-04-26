@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.21.0 — 2026-04-26
+
+### GSD Extension Rewrite (5 waves)
+
+Complete rewrite of scattered GSD state management into a proper state machine
+with structured plan types, validation, and error recovery.
+
+**Wave 0 — State Machine + Structured Plan Types** (PR #2058)
+- `extensions/gsd/state-machine.rkt`: Explicit state transitions, tool guards,
+  semaphore-protected, transition history, snapshot
+- `extensions/gsd/plan-types.rkt`: gsd-plan/gsd-wave/gsd-task structs,
+  markdown parsing, validation, accessor aliases
+- 57 new tests
+
+**Wave 1 — Core Module + Context Assembly** (PR #2059)
+- `extensions/gsd/core.rkt`: Command dispatch (/plan, /go, /replan, /skip,
+  /reset, /gsd), tool guard, write guard
+- `extensions/gsd/context-bundle.rkt`: Role-specific context assembly
+  (explorer/executor/verifier), bundle size warnings
+- `extensions/gsd/steering.rkt`: Mode-aware stall detection, only active
+  during executing, consecutive-identical-reads trigger
+- 48 new tests
+
+**Wave 2 — Plan Validation + Wave Executor** (PR #2060)
+- `extensions/gsd/plan-validator.rkt`: Strict validation before /go.
+  Error rules (no waves, missing title, no files) block execution.
+  Warning rules (no verify, no root-cause) allow with notice.
+- `extensions/gsd/wave-executor.rkt`: Wave lifecycle tracking with error
+  recovery (DD-5). Failed waves don't block subsequent waves.
+- 21 new tests
+
+**Wave 3 — Prompts + Bash Detection + Write Guard Hardening** (PR #2061)
+- `extensions/gsd/prompts.rkt`: 5 prompt templates (exploring, executing,
+  wave-failure, verifying, status)
+- `extensions/gsd/bash-detect.rkt`: File-read bypass detection for sed,
+  cat, head, tail, awk, python open (DD-2)
+- Write guard hardened with path normalization (DD-6)
+- 37 new tests
+
+**Wave 4 — Migration + Backward Compatibility** (PR #2062)
+- `extensions/gsd-planning-state.rkt` rewritten as thin shim over new modules
+- Legacy API preserved: gsd-mode maps idle↔#f, exploring↔planning
+- Multi-step transitions for legacy direct planning→executing paths
+- `interfaces/sdk.rkt`: gsd-status recognizes 'idle as inactive
+- 11 integration tests, all 207 legacy tests pass unchanged
+
+
 ## v0.20.3 — 2026-04-26
 
 ### GSD Planning Architecture Remediation (6 waves)
