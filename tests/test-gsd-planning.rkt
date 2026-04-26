@@ -528,11 +528,16 @@
 (test-case "planning-implement-prompt forbids writing a new plan"
   (check-true (string-contains? planning-implement-prompt "Do NOT write a new plan")))
 
-(test-case "planning-implement-prompt forbids planning-read during implementation"
-  (check-true (string-contains? planning-implement-prompt "Do NOT use planning-read")))
+(test-case "planning-implement-prompt allows planning-read but blocks planning-write"
+  (check-false (string-contains? planning-implement-prompt
+                                 "Do NOT use planning-read or planning-write")
+               "prompt should NOT say planning-read is prohibited")
+  (check-true (string-contains? planning-implement-prompt "Do NOT use planning-write")
+              "prompt should say planning-write is prohibited"))
 
 (test-case "planning-implement-prompt sets read-only budget per wave"
-  (check-true (string-contains? planning-implement-prompt "Max 2 read-only tool calls per wave")))
+  (check-true (string-contains? planning-implement-prompt
+                                (format "Max ~a read-only" IMPL-READ-PER-WAVE))))
 
 (test-case "planning-implement-prompt does NOT tell agent to use planning-read"
   (check-false (string-contains? planning-implement-prompt "Use planning-read")))
@@ -630,3 +635,41 @@
                      (define submit-text (hash-ref (hook-result-payload result) 'submit))
                      (check-false (string-contains? submit-text "existing PLAN.md was found")
                                   "should NOT inject stale warning when no PLAN.md exists")))))
+
+;; ============================================================
+;; Wave 3 tests: Prompt constants, artifact registry, I1 fix
+;; ============================================================
+
+(test-case "planning-system-prompt references EXPLORATION-BUDGET constant"
+  (check-true (string-contains? planning-system-prompt (format "~a" EXPLORATION-BUDGET))
+              "prompt should contain the exploration budget number"))
+
+(test-case "planning-implement-prompt references IMPL-READ-PER-WAVE"
+  (check-true (string-contains? planning-implement-prompt (format "~a" IMPL-READ-PER-WAVE))
+              "implement prompt should contain per-wave read limit"))
+
+(test-case "planning-implement-prompt references IMPL-READ-TOTAL-WARN"
+  (check-true (string-contains? planning-implement-prompt (format "~a" IMPL-READ-TOTAL-WARN))
+              "implement prompt should contain total read warning threshold"))
+
+(test-case "planning-implement-prompt allows planning-read during execution (I1 fix)"
+  (check-true (string-contains? planning-implement-prompt "planning-read is allowed")
+              "prompt should say planning-read is allowed during /go")
+  (check-false (string-contains? planning-implement-prompt
+                                 "Do NOT use planning-read or planning-write")
+               "prompt should NOT say planning-read is prohibited"))
+
+(test-case "valid-artifact-name? accepts BUG_REPORT"
+  (check-true (valid-artifact-name? "BUG_REPORT")))
+
+(test-case "valid-artifact-name? accepts REVIEW"
+  (check-true (valid-artifact-name? "REVIEW")))
+
+(test-case "valid-artifact-name? accepts ANALYSIS"
+  (check-true (valid-artifact-name? "ANALYSIS")))
+
+(test-case "gsd-tool-guard allows planning-read during executing (I1 fix)"
+  (set-gsd-mode! 'executing)
+  (define res (gsd-tool-guard (hasheq 'tool-name "planning-read" 'args (hasheq))))
+  (check-eq? (hook-result-action res) 'pass)
+  (set-gsd-mode! #f))

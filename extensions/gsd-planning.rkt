@@ -41,6 +41,9 @@
          GO-READ-WARN-THRESHOLD
          GO-READ-BLOCK-THRESHOLD
          READ-ONLY-TOOLS
+         EXPLORATION-BUDGET
+         IMPL-READ-PER-WAVE
+         IMPL-READ-TOTAL-WARN
          ;; Re-export state module accessors for backward compat
          pinned-planning-dir
          set-pinned-planning-dir!
@@ -89,6 +92,12 @@
 
 ;; Planning preamble prepended to user text when /plan <text> submits.
 ;; Gives the agent explicit GSD planning instructions.
+
+;; Prompt constants (W4 fix: avoid hardcoded magic numbers)
+(define EXPLORATION-BUDGET 30)
+(define IMPL-READ-PER-WAVE 2)
+(define IMPL-READ-TOTAL-WARN 5)
+
 (define planning-system-prompt
   (string-append
    "[gsd-planning] Create a structured implementation plan for the following request.\n"
@@ -99,7 +108,8 @@
    "  - Exact file path and line numbers\n"
    "  - The old-text that the edit tool will match\n"
    "  - The new-text replacement code\n"
-   "EXPLORATION BUDGET: Maximum 30 tool calls (read, grep, find, planning-read).\n"
+   (format "EXPLORATION BUDGET: Maximum ~a tool calls (read, grep, find, planning-read).\n"
+           EXPLORATION-BUDGET)
    "After 30 calls, write the plan with what you know. Partial plans are better than no plans.\n"
    "Prioritize files most likely to contain the root cause. Skip tangential exploration.\n"
    "\n"
@@ -129,7 +139,9 @@
                      ("BUG_PLAN" . ".md")
                      ("BUG_STATE" . ".md")
                      ("BUG_VALIDATION" . ".md")
-                     ("SUMMARY" . ".md")))
+                     ("SUMMARY" . ".md")
+                     ("REVIEW" . ".md")
+                     ("ANALYSIS" . ".md")))
 
 ;; ============================================================
 ;; Path helpers
@@ -338,12 +350,16 @@
                  "CRITICAL RULES:\n"
                  "1. Do NOT re-read the plan. It is provided below in full.\n"
                  "2. Do NOT write a new plan. Execute the existing one.\n"
-                 "3. Do NOT use planning-read or planning-write during implementation.\n"
+                 "3. Do NOT use planning-write during implementation.\n"
+                 ;; I1 fix: planning-read IS allowed during /go (harmless, may need to re-check STATE)
+                 "   planning-read is allowed to check STATE or VALIDATION.\n"
                  "4. Do NOT run read-only tools (read, find, grep, ls) unless a wave's\n"
                  "   old-text match fails and you need to re-read the target file ONCE.\n"
                  "5. Use the edit or write tool for EVERY wave. Your budget is:\n"
-                 "   - Max 2 read-only tool calls per wave before you MUST write/edit.\n"
-                 "   - After 5 total read-only calls across all waves, STOP and summarize.\n"
+                 (format "   - Max ~a read-only tool calls per wave before you MUST write/edit.\n"
+                         IMPL-READ-PER-WAVE)
+                 (format "   - After ~a total read-only calls across all waves, STOP and summarize.\n"
+                         IMPL-READ-TOTAL-WARN)
                  "6. After completing each wave, run its verify command.\n"
                  "\n"
                  "The plan follows. Start implementing immediately.\n\n"))
