@@ -146,7 +146,7 @@
   (reset-all-gsd-state!)
   ;; Set all state to non-default values
   (set-gsd-mode! 'executing)
-  (set-pinned-planning-dir! "/some/dir")
+  (set-pinned-planning-dir! "/tmp/gsd-test-dir")
   (reset-go-budget!)
   (set-current-max-old-text-len! 1200)
   (increment-read-count! "/tmp/x.txt")

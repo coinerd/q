@@ -121,6 +121,6 @@ Use relative paths from the test file:
 4. Use `(check-true ...)` for boolean assertions
 5. Keep tests independent — no shared mutable state between test-cases
 
-## Version 0.20.2
+## Version 0.20.3
 
-This documentation reflects q 0.20.2.
+This documentation reflects q 0.20.3.
