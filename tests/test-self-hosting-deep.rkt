@@ -191,7 +191,7 @@
   (define ver-path (build-path project-root "q" "util" "version.rkt"))
   (check-true (file-exists? ver-path))
   (define content (file->string ver-path))
-  (check-true (string-contains? content "0.19") "version must be in 0.19.x series"))
+  (check-true (string-contains? content "0.20") "version must be in 0.20.x series"))
 
 ;; ============================================================
 ;; Deep Test 10: Benchmark suite infrastructure

@@ -8,7 +8,8 @@
 ;;
 ;; This breaks the upward import from extensions/ → tui/ (ARCH-02).
 
-(require racket/contract)
+(require racket/contract
+         (only-in "../tui/state.rkt" ui-state ui-state-extension-widgets))
 
 ;; Setter/Getter parameter callbacks
 (provide ui-set-footer!
@@ -78,25 +79,35 @@
     (cb ui-state-box message)))
 
 ;; Set a widget from an extension
+;; Falls back to direct struct-copy when no TUI callback is installed
 (define (ui-set-extension-widget! state ext-name key lines)
   (define cb (ui-set-extension-widget-param))
   (if cb
       (cb state ext-name key lines)
-      state))
+      ;; Fallback: directly update the extension-widgets hash
+      (let* ([widgets (ui-state-extension-widgets state)]
+             [new-widgets (hash-set widgets (cons ext-name key) lines)])
+        (struct-copy ui-state state [extension-widgets new-widgets]))))
 
 ;; Remove a specific widget
 (define (ui-remove-extension-widget! state ext-name key)
   (define cb (ui-remove-extension-widget-param))
   (if cb
       (cb state ext-name key)
-      state))
+      (let* ([widgets (ui-state-extension-widgets state)]
+             [new-widgets (hash-remove widgets (cons ext-name key))])
+        (struct-copy ui-state state [extension-widgets new-widgets]))))
 
 ;; Remove all widgets for an extension
 (define (ui-remove-all-extension-widgets! state ext-name)
   (define cb (ui-remove-all-extension-widgets-param))
   (if cb
       (cb state ext-name)
-      state))
+      (let* ([widgets (ui-state-extension-widgets state)]
+             [new-widgets (for/hash ([(k v) (in-hash widgets)]
+                                      #:when (not (equal? (car k) ext-name)))
+                            (values k v))])
+        (struct-copy ui-state state [extension-widgets new-widgets]))))
 
 (define (ui-callbacks-installed?)
   (and (ui-set-footer-param)
