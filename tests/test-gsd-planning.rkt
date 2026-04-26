@@ -21,7 +21,8 @@
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
          "../tools/tool.rkt"
-         "../agent/event-bus.rkt")
+         "../agent/event-bus.rkt"
+         "../util/event.rkt")
 
 ;; ============================================================
 ;; Helpers
@@ -805,3 +806,36 @@
   (define res (gsd-tool-guard (hasheq 'tool-name "planning-read" 'args (hasheq))))
   (check-eq? (hook-result-action res) 'block)
   (set-gsd-mode! #f))
+
+;; ============================================================
+;; v0.20.5 W1: Event bus — parameter → registry-stored
+;; ============================================================
+
+(test-case "W1: set-gsd-event-bus! and gsd-event-bus roundtrip"
+  (reset-all-gsd-state!)
+  (check-false (gsd-event-bus) "event bus should start as #f")
+  (define bus (make-event-bus))
+  (set-gsd-event-bus! bus)
+  (check-eq? (gsd-event-bus) bus "event bus should be the one we set")
+  (reset-all-gsd-state!)
+  (check-false (gsd-event-bus) "event bus should be #f after reset"))
+
+(test-case "W1: emit-gsd-event! publishes when bus is set"
+  (reset-all-gsd-state!)
+  (define bus (make-event-bus))
+  (set-gsd-event-bus! bus)
+  (define received (box '()))
+  (subscribe! bus (lambda (evt) (set-box! received (cons evt (unbox received)))))
+  ;; emit-gsd-event! is defined in gsd-planning.rkt
+  (emit-gsd-event! "gsd.test.event" (hasheq 'key 'value))
+  (check-equal? (length (unbox received)) 1 "should receive one event")
+  (define evt (car (unbox received)))
+  (check-equal? (event-event evt) "gsd.test.event")
+  (check-equal? (hash-ref (event-payload evt) 'key) 'value)
+  (reset-all-gsd-state!))
+
+(test-case "W1: emit-gsd-event! is no-op when bus is #f"
+  (reset-all-gsd-state!)
+  ;; Should not raise an error
+  (emit-gsd-event! "gsd.test.noop" (hasheq 'key 'value))
+  (check-false (gsd-event-bus) "bus should still be #f"))
