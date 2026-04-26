@@ -45,7 +45,7 @@
                   hook-result-action
                   hook-result-payload)
          (only-in "../extensions/loader.rkt" discover-extensions load-extension!)
-         (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot)
+         (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot reset-all-gsd-state!)
          (only-in "../agent/queue.rkt" enqueue-steering! enqueue-followup!)
          (only-in "../runtime/session-index.rkt"
                   navigate-to-entry!
@@ -157,7 +157,13 @@
          q:session-tree-info
 
          ;; v0.20.4 W3: GSD observability
-         gsd-status)
+         gsd-status
+
+         ;; v0.20.5 W2: GSD convenience API
+         q:plan
+         q:go
+         q:gsd-status
+         q:reset-gsd!)
 
 ;; ============================================================
 ;; Cancellation token — imported from util/cancellation.rkt
@@ -687,3 +693,58 @@
      (define payload (hasheq 'command command 'input input))
      (define result (dispatch-hooks 'execute-command payload ext-reg))
      (values rt result)]))
+
+;; ============================================================
+;; v0.20.5 W2: GSD Convenience API
+;; ============================================================
+
+;;; q:plan : runtime? string? -> (values runtime? any/c)
+;;;
+;;; One-liner GSD planning: dispatches /plan <task> through the
+;;; extension registry, extracts the submit text, and runs it.
+;;; Returns (values rt 'no-extension-registry) if no ext-reg,
+;;; (values rt 'no-plan-text) if extension returned no submit text.
+(define (q:plan rt task)
+  (define-values (rt2 cmd-result) (dispatch-command! rt "/plan" (string-append "/plan " task)))
+  (cond
+    [(symbol? cmd-result) (values rt2 cmd-result)] ; 'no-extension-registry
+    [(not (hook-result? cmd-result)) (values rt2 'unexpected-result)]
+    [else
+     (define payload (hook-result-payload cmd-result))
+     (define submit-text (and (hash? payload) (hash-ref payload 'submit #f)))
+     (cond
+       [(not submit-text) (values rt2 'no-plan-text)]
+       ;; No session open — just return the submit text for caller to use
+       [(not (runtime-rt-session rt2)) (values rt2 submit-text)]
+       [else (run-prompt! rt2 submit-text)])]))
+
+;;; q:go : runtime? [(or/c exact-nonnegative-integer? #f)] -> (values runtime? any/c)
+;;;
+;;; One-liner GSD execution: dispatches /go through the extension registry,
+;;; extracts the submit text, and runs it. Optional wave number starts
+;;; execution at a specific wave.
+(define (q:go rt [wave #f])
+  (define input
+    (if wave
+        (format "~a" wave)
+        ""))
+  (define-values (rt2 cmd-result) (dispatch-command! rt "/go" input))
+  (cond
+    [(symbol? cmd-result) (values rt2 cmd-result)]
+    [(not (hook-result? cmd-result)) (values rt2 'unexpected-result)]
+    [else
+     (define payload (hook-result-payload cmd-result))
+     (define submit-text (and (hash? payload) (hash-ref payload 'submit #f)))
+     (cond
+       [(not submit-text) (values rt2 'no-plan-text)]
+       [(not (runtime-rt-session rt2)) (values rt2 submit-text)]
+       [else (run-prompt! rt2 submit-text)])]))
+
+;;; q:gsd-status : -> (or/c 'no-active-session hash?)
+;;; Alias for gsd-status — returns GSD state snapshot.
+(define q:gsd-status gsd-status)
+
+;;; q:reset-gsd! : -> void?
+;;; Resets all GSD planning state (mode, budgets, read counts, etc.).
+(define (q:reset-gsd!)
+  (reset-all-gsd-state!))
