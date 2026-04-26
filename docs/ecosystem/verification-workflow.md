@@ -1,6 +1,6 @@
 # Verification Workflow
 
-<!-- verified-against: 0.20.0 -->
+<!-- verified-against: 0.20.1 -->
 
 How to verify a third-party q extension package before and after
 installation.

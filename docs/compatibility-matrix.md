@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-<!-- verified-against: 0.20.0 -->
+<!-- verified-against: 0.20.1 -->
 
 This document tracks compatibility between q versions, Racket versions, and
 extension API versions.
@@ -27,7 +27,7 @@ extension API versions.
 
 | q Version | Extension API | Breaking? | Migration |
 |-----------|--------------|-----------|----------|
-| 0.20.0+ | `0.7` | No | Additive — permission gates, hot-reload hooks |
+| 0.20.1+ | `0.7` | No | Additive — permission gates, hot-reload hooks |
 | 0.17.0+ | `0.6` | No | Additive — extension subdirectories, execute-command hook, catalog API |
 | 0.16.0+ | `0.5.1` | No | Additive — `dangerous?` tool field, one-shot safe-mode |
 | 0.15.0+ | `0.5` | No | Additive — safe-mode hooks, quarantine |

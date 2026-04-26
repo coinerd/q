@@ -1,6 +1,6 @@
 # Package Registry Specification
 
-<!-- verified-against: 0.20.0 -->
+<!-- verified-against: 0.20.1 -->
 
 This document specifies the q extension package registry format and conventions.
 
