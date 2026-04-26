@@ -22,6 +22,7 @@
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt"
          (prefix-in session: "../runtime/agent-session.rkt")
+         (only-in "../runtime/iteration.rkt" register-session-extensions!)
          (only-in "../runtime/compactor.rkt"
                   compact-history
                   compact-and-persist!
@@ -294,6 +295,14 @@
     (if session-id
         (session:resume-agent-session session-id agent-cfg)
         (session:make-agent-session agent-cfg)))
+  ;; v0.20.5 W3: Pre-register extensions immediately on session open
+  ;; This ensures extension tools are available and extension state
+  ;; (event bus, pinned dir) is initialized before first run-prompt!
+  (define ext-reg (runtime-config-extension-registry cfg))
+  (define tool-reg (runtime-config-tool-registry cfg))
+  (define bus (runtime-config-event-bus cfg))
+  (when (and ext-reg tool-reg bus sess)
+    (register-session-extensions! tool-reg ext-reg bus (session:session-id sess)))
   (make-runtime-internal cfg sess (rt-token rt)))
 
 ;; ============================================================
