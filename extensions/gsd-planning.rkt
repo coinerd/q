@@ -16,7 +16,8 @@
          "ext-commands.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt")
+         "../tools/tool.rkt"
+         (only-in "../tools/builtins/edit.rkt" current-max-old-text-len))
 
 (provide the-extension
          gsd-planning-extension
@@ -357,6 +358,8 @@
         (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
        [else
         (gsd-mode 'executing)
+        ;; Raise edit limit during execution mode (500 → 1200)
+        (current-max-old-text-len 1200)
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
           (if state-content
@@ -401,6 +404,8 @@
            (lambda (args)
              ;; Reset mode for new planning session
              (gsd-mode 'planning)
+             ;; Reset edit limit to default during planning
+             (current-max-old-text-len 500)
              ;; v0.19.12 W2: Detect stale existing PLAN.md and inject warning
              (define existing-plan (read-planning-artifact base-dir "PLAN"))
              (define stale-warning
