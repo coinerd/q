@@ -52,7 +52,8 @@
          read-counts
          get-read-count
          increment-read-count!
-         clear-read-counts!)
+         clear-read-counts!
+         gsd-session-cleanup)
 
 ;; ============================================================
 ;; Constants
@@ -569,6 +570,11 @@
        [else (hook-pass payload)])]
     [else (hook-pass payload)]))
 
+(define (gsd-session-cleanup payload)
+  (log-debug "gsd-planning: session shutdown, resetting state")
+  (reset-all-gsd-state!)
+  (hook-pass payload))
+
 (define-q-extension gsd-planning-extension
                     #:version "1.0.0"
                     #:api-version "1"
@@ -581,6 +587,8 @@
                     #:on tool-call-pre
                     gsd-tool-guard
                     #:on tool-result-post
-                    gsd-read-tracker)
+                    gsd-read-tracker
+                    #:on session-shutdown
+                    gsd-session-cleanup)
 
 (define the-extension gsd-planning-extension)

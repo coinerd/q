@@ -275,3 +275,28 @@
              (lambda ()
                (set-gsd-mode! 'executing)
                (check-eq? (gsd-mode) 'executing))))
+
+;; ============================================================
+;; Session shutdown cleanup (W1 fix)
+;; ============================================================
+
+(test-case "gsd-session-cleanup resets mode to #f"
+  (set-gsd-mode! 'executing)
+  (gsd-session-cleanup (hasheq))
+  (check-equal? (gsd-mode) #f))
+
+(test-case "gsd-session-cleanup resets budget to #f"
+  (set-gsd-mode! 'executing)
+  (reset-go-budget!)
+  (gsd-session-cleanup (hasheq))
+  (check-false (go-read-budget)))
+
+(test-case "gsd-session-cleanup resets read counts"
+  (reset-read-counts!)
+  (increment-read-count! "/tmp/test.txt")
+  (gsd-session-cleanup (hasheq))
+  (check-equal? (hash-count (read-counts)) 0))
+
+(test-case "gsd-session-cleanup returns hook-pass"
+  (define result (gsd-session-cleanup (hasheq 'session-id "test-session" 'duration 100)))
+  (check-eq? (hook-result-action result) 'pass))
