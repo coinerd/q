@@ -5,6 +5,7 @@
 ;; Wave 1a of v0.21.0: Main extension with command handlers,
 ;; tool guard, and write guard. Uses state-machine for mode
 ;; management and delegates steering to steering module.
+;; Wave 3c: Hardened write guard with path normalization.
 ;;
 ;; Commands:
 ;;   /plan  → transition to exploring
@@ -40,10 +41,50 @@
                                                     (gsd "/gsd" "Show GSD status" ())))
 
 ;; ============================================================
+;; Internal helpers (must be defined before use)
+;; ============================================================
+
+(define (non-empty? s)
+  (and (string? s) (> (string-length s) 0)))
+
+;; Normalize a file path: collapse .. and . components.
+(define (normalize-path p)
+  (cond
+    [(not (string? p)) p]
+    [else
+     (define parts (string-split (string-trim p) "/"))
+     (define resolved (resolve-dotdots parts))
+     (string-join resolved "/")]))
+
+;; Resolve .. by folding: each .. pops the last component.
+(define (resolve-dotdots parts)
+  (define rev
+    (foldl (lambda (part acc)
+             (cond
+               [(string=? part "..")
+                (if (null? acc)
+                    acc
+                    (cdr acc))]
+               [(string=? part ".") acc]
+               [(string=? part "") acc]
+               [else (cons part acc)]))
+           '()
+           parts))
+  (reverse rev))
+
+;; Check if a normalized path targets PLAN.md in the planning dir.
+;; Handles suffix matching for relative paths and .. traversal.
+(define (path-targets-plan? normalized plan-path)
+  (cond
+    [(not (non-empty? plan-path)) #f]
+    [(string=? normalized plan-path) #t]
+    ;; Suffix match: does the path end with .planning/PLAN.md?
+    [else (string-suffix? normalized ".planning/PLAN.md")]))
+
+;; ============================================================
 ;; Command dispatch
 ;; ============================================================
 
-;; Dispatch a GSD command. Returns a result hash or #f if unknown.
 (define (gsd-command-dispatch command args)
   (define cmd
     (if (string? command)
@@ -87,8 +128,7 @@
     (if (string? args)
         (string-trim args)
         ""))
-  (define target-state 'executing)
-  (define result (gsm-transition! target-state))
+  (define result (gsm-transition! 'executing))
   (if (ok? result)
       (hasheq 'success
               #t
@@ -149,8 +189,6 @@
 ;; Tool guard (tool-call-pre)
 ;; ============================================================
 
-;; Check if a tool call is allowed in the current state.
-;; Returns #t if allowed, or a hash with 'blocked #t and 'reason.
 (define (gsd-tool-guard tool-name tool-args)
   (if (gsm-tool-allowed? tool-name)
       #t
@@ -164,11 +202,11 @@
               (format "Tool '~a' is not allowed in ~a mode" tool-name (gsm-current)))))
 
 ;; ============================================================
-;; Write guard
+;; Write guard (hardened — DD-6)
 ;; ============================================================
 
 ;; During executing mode, block writes to .planning/PLAN.md.
-;; Returns #t if allowed, or a hash with 'blocked #t and 'reason.
+;; Uses path normalization to catch .. traversal and other tricks.
 (define (gsd-write-guard target-path planning-dir)
   (define mode (gsm-current))
   (cond
@@ -180,7 +218,7 @@
        (if (string? planning-dir)
            (normalize-path (string-append planning-dir "/PLAN.md"))
            ""))
-     (if (and (non-empty? plan-path) (string=? normalized plan-path))
+     (if (path-targets-plan? normalized plan-path)
          (hasheq 'blocked
                  #t
                  'tool
@@ -208,15 +246,3 @@
    (length (hash-ref snapshot 'history))
    'message
    (format "GSD Status: ~a | Next: ~a" mode (string-join (map symbol->string valid-next) ", "))))
-
-;; ============================================================
-;; Internal helpers
-;; ============================================================
-
-(define (non-empty? s)
-  (and (string? s) (> (string-length s) 0)))
-
-(define (normalize-path p)
-  (define collapsed (regexp-replace* #rx"/\\.\\./" p ""))
-  (define no-dot (regexp-replace* #rx"/\\./" collapsed "/"))
-  (string-trim no-dot))
