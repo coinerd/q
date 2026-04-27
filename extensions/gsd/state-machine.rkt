@@ -52,9 +52,9 @@
   '((idle . exploring) (exploring . plan-written)
                        (exploring . idle)
                        (plan-written . executing)
-                       (plan-written . exploring)
+                       (plan-written . idle)
                        (executing . verifying)
-                       (executing . exploring)
+                       (executing . idle)
                        (verifying . idle)
                        (verifying . executing)))
 

@@ -67,12 +67,12 @@
   (check-eq? (gsm-current) 'executing)
   (check-true (ok? r)))
 
-(test-case "plan-written → exploring via /replan"
+(test-case "plan-written → idle via /reset"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
-  (define r (gsm-transition! 'exploring))
-  (check-eq? (gsm-current) 'exploring)
+  (define r (gsm-transition! 'idle))
+  (check-eq? (gsm-current) 'idle)
   (check-true (ok? r)))
 
 (test-case "executing → verifying after all waves attempted"
@@ -84,13 +84,13 @@
   (check-eq? (gsm-current) 'verifying)
   (check-true (ok? r)))
 
-(test-case "executing → exploring on catastrophic plan failure"
+(test-case "executing → idle on completion or failure"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (define r (gsm-transition! 'exploring))
-  (check-eq? (gsm-current) 'exploring)
+  (define r (gsm-transition! 'idle))
+  (check-eq? (gsm-current) 'idle)
   (check-true (ok? r)))
 
 (test-case "verifying → idle when all verifications pass"
@@ -156,6 +156,15 @@
   (check-eq? (gsm-current) 'executing)
   (check-false (ok? r)))
 
+(test-case "executing → exploring is invalid (v0.21.4: forward-only)"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (define r (gsm-transition! 'exploring))
+  (check-eq? (gsm-current) 'executing)
+  (check-false (ok? r)))
+
 (test-case "verifying → exploring is invalid"
   (reset-gsm!)
   (gsm-transition! 'exploring)
@@ -201,14 +210,14 @@
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
-  (check-equal? (sort (gsm-valid-next-states) symbol<?) '(executing exploring)))
+  (check-equal? (sort (gsm-valid-next-states) symbol<?) '(executing idle)))
 
 (test-case "valid-next-states returns correct set for executing"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (check-equal? (gsm-valid-next-states) '(verifying exploring)))
+  (check-equal? (gsm-valid-next-states) '(verifying idle)))
 
 (test-case "valid-next-states returns correct set for verifying"
   (reset-gsm!)
@@ -253,15 +262,13 @@
 (test-case "idle: all tools allowed"
   (reset-gsm!)
   (for ([tool '("read" "edit" "write" "bash" "planning-read" "planning-write")])
-    (check-true (gsm-tool-allowed? tool)
-                (format "~a should be allowed in idle" tool))))
+    (check-true (gsm-tool-allowed? tool) (format "~a should be allowed in idle" tool))))
 
 (test-case "exploring: all tools allowed (free exploration)"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (for ([tool '("read" "edit" "write" "bash" "planning-read" "planning-write")])
-    (check-true (gsm-tool-allowed? tool)
-                (format "~a should be allowed in exploring" tool))))
+    (check-true (gsm-tool-allowed? tool) (format "~a should be allowed in exploring" tool))))
 
 (test-case "plan-written: edit/write/bash blocked, read allowed"
   (reset-gsm!)
