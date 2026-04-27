@@ -418,29 +418,33 @@
                                                    "No PLAN found"))))))
 
 (test-case "planning-system-prompt has GSD planning instructions"
-  (check-true (string-contains? planning-system-prompt "[gsd-planning]"))
-  (check-true (string-contains? planning-system-prompt "planning-write"))
-  (check-true (string-contains? planning-system-prompt "PLAN.md"))
-  (check-true (string-contains? planning-system-prompt "Do NOT implement")))
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "planning-write"))
+  (check-true (string-contains? p "PLAN.md"))
+  (check-true (string-contains? p "Do NOT implement")))
 
 ;; ============================================================
 ;; W0 (#1864): /plan prompt content tests
 ;; ============================================================
 
-(test-case "planning-system-prompt does NOT limit exploration to 5 tool calls"
-  (check-false (string-contains? planning-system-prompt "Limit exploration to 5")))
+(test-case "planning-system-prompt limits exploration to 5 tool calls"
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "MAXIMUM 5 tool calls")))
 
 (test-case "planning-system-prompt requires root cause identification"
-  (check-true (string-contains? planning-system-prompt "Root cause"))
-  (check-true (string-contains? planning-system-prompt "old-text")))
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "Root Cause"))
+  (check-true (string-contains? p "old-text")))
 
 (test-case "planning-system-prompt requires old-text for edit matching"
-  (check-true (string-contains? planning-system-prompt "old-text")))
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "old-text")))
 
 (test-case "planning-system-prompt specifies actionable plan format"
-  (check-true (string-contains? planning-system-prompt "old-text"))
-  (check-true (string-contains? planning-system-prompt "new-text"))
-  (check-true (string-contains? planning-system-prompt "Verify")))
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "old-text"))
+  (check-true (string-contains? p "new-text"))
+  (check-true (string-contains? p "Verify")))
 
 (test-case "/plan <text> returns augmented submit payload"
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
@@ -449,7 +453,7 @@
   (define payload (hook-result-payload result))
   ;; Submit text is augmented with planning preamble
   (define submit-text (hash-ref payload 'submit))
-  (check-true (string-contains? submit-text "[gsd-planning]"))
+  (check-true (string-contains? submit-text "GSD Planning"))
   (check-true (string-contains? submit-text "planning-write"))
   (check-true (string-contains? submit-text "refactor the module"))
   (check-true (string-contains? (hash-ref payload 'text) "refactor the module")))
@@ -460,7 +464,7 @@
   (check-equal? (hook-result-action result) 'amend)
   (define payload (hook-result-payload result))
   (define submit-text (hash-ref payload 'submit))
-  (check-true (string-contains? submit-text "[gsd-planning]"))
+  (check-true (string-contains? submit-text "GSD Planning"))
   (check-true (string-contains? submit-text "quick fix")))
 
 (test-case "/plan (no args) returns display text"
@@ -628,17 +632,19 @@
 ;; ============================================================
 
 (test-case "planning-system-prompt-no-unlimited-exploration"
-  (check-false (string-contains? planning-system-prompt "Do NOT limit")
-               "prompt should NOT say 'Do NOT limit'"))
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "MAXIMUM 5 tool calls")
+               "prompt should limit exploration to 5 calls"))
 
 ;; ============================================================
 ;; W2: /plan Overwrite Stale Plans Tests
 ;; ============================================================
 
 (test-case "planning-system-prompt-references-wave-docs"
-  (check-true (string-contains? planning-system-prompt "waves/")
+  (define p (planning-system-prompt ""))
+  (check-true (string-contains? p "waves/")
               "prompt should reference wave documents")
-  (check-true (string-contains? planning-system-prompt "planning-write")
+  (check-true (string-contains? p "planning-write")
               "prompt should mention planning-write tool"))
 
 (test-case "/plan-with-text-injects-stale-warning-when-plan-exists"

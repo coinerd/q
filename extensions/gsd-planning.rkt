@@ -223,34 +223,7 @@
 ;; Prompts
 ;; ============================================================
 
-(define planning-system-prompt
-  (string-append
-   "[gsd-planning] Create a structured implementation plan for the following request.\n"
-   "Write individual wave documents and a PLAN.md index.\n"
-   "\n"
-   "STEP 1 — READ (1–2 calls): Read ONLY the primary file(s) mentioned in the request.\n"
-   "  - Identify root cause, exact file path, and line numbers\n"
-   "  - Get the old-text that edit tool will match\n"
-   "  - NEVER re-read a file you've already read\n"
-   "  - NEVER investigate tangential concerns\n"
-   "\n"
-   "STEP 2 — WRITE WAVE DOCS (the MAIN work): For each wave, write a separate file:\n"
-   "  planning-write artifact=\"waves/W0-short-title.md\" content=\"...\"\n"
-   "Each wave doc must contain:\n"
-   "  - Root cause, Files, Action, Verify command, Done criteria\n"
-   "  - Include actual code snippets (old-text / new-text)\n"
-   "\n"
-   "STEP 3 — WRITE INDEX: Write PLAN.md with:\n"
-   "  # Plan: <title>\n"
-   "  ## Overview\n"
-   "  <description>\n"
-   "  ## Waves\n"
-   "  - [Inbox] W0: <title> → waves/W0-slug.md\n"
-   "  - [Inbox] W1: <title> → waves/W1-slug.md\n"
-   "\n"
-   "STEP 4 — FINISH: Tell the user: 'Use /go to start implementing.'\n"
-   "Do NOT implement — only plan.\n\n"
-   "User request: "))
+(define planning-system-prompt planning-prompt)
 
 (define planning-implement-prompt
   (string-append "[gsd-planning] EXECUTE the plan below. IMPLEMENT NOW — do NOT explore.\n"
@@ -591,7 +564,7 @@
           (if existing-plan
               "\nNOTE: An existing PLAN.md was found. OVERWRITE it completely with the new plan. Do NOT keep or merge old content.\n"
               ""))
-        (define augmented-text (string-append planning-system-prompt stale-warning args-text))
+        (define augmented-text (string-append (planning-system-prompt args-text) stale-warning))
         (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" args-text)))]
        [else
         ;; Display artifact content

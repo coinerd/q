@@ -10,28 +10,43 @@
          "../extensions/gsd/wave-executor.rkt")
 
 ;; ============================================================
-;; Exploring prompt
+;; Planning prompt (W0: renamed from exploring-prompt)
 ;; ============================================================
 
-(test-case "exploring-prompt includes planning instructions"
-  (define p (exploring-prompt "Fix the bug"))
+(test-case "planning-prompt includes planning instructions"
+  (define p (planning-prompt "Fix the bug"))
   (check-true (or (string-contains? p "Plan") (string-contains? p "plan")) "mentions plan")
   (check-true (string-contains? p "planning-write") "mentions planning-write"))
 
-(test-case "exploring-prompt includes user request"
-  (define p (exploring-prompt "Fix the login bug"))
+(test-case "planning-prompt includes user request"
+  (define p (planning-prompt "Fix the login bug"))
   (check-true (string-contains? p "Fix the login bug")))
 
-(test-case "exploring-prompt works with empty request"
-  (define p (exploring-prompt ""))
+(test-case "planning-prompt works with empty request"
+  (define p (planning-prompt ""))
   (check-true (string? p))
   (check-false (string-contains? p "User request:")))
 
-(test-case "exploring-prompt enforces write-immediately workflow"
-  (define p (exploring-prompt "test"))
+(test-case "planning-prompt enforces write-immediately workflow"
+  (define p (planning-prompt "test"))
   (check-true (string-contains? p "IMMEDIATELY write") "mentions write-immediately")
   (check-true (string-contains? p "NEVER re-read") "mentions never re-read")
   (check-true (string-contains? p "MAXIMUM 5 tool calls") "mentions 5-call limit"))
+
+(test-case "W0: planning-prompt contains - File: format instruction"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "- File: <path>") "shows exact File syntax"))
+
+(test-case "W0: planning-prompt contains SEPARATE instruction"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "SEPARATE") "emphasizes separate files per wave"))
+
+(test-case "W0: planning-prompt contains STEP 1-4 structure"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "STEP 1") "has step 1")
+  (check-true (string-contains? p "STEP 2") "has step 2")
+  (check-true (string-contains? p "STEP 3") "has step 3")
+  (check-true (string-contains? p "STEP 4") "has step 4"))
 
 ;; ============================================================
 ;; Executing prompt
