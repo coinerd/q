@@ -26,7 +26,8 @@
            (box #f) ;; last-prompt-box
            #f ;; session-runner
            (box "") ;; input-text-box
-           (box #f))) ;; extension-registry-box
+           (box #f) ;; extension-registry-box
+           #f)) ;; session-factory-runner
 
 ;; Helper: get transcript text entries from cctx state
 (define (get-transcript-texts cctx)

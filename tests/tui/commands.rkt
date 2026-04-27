@@ -22,7 +22,8 @@
            (box #f) ;; last-prompt-box
            #f ;; session-runner
            (box "") ;; input-text-box
-           (box #f))) ;; extension-registry-box
+           (box #f) ;; extension-registry-box
+           #f)) ;; session-factory-runner
 
 (define commands-tests
   (test-suite "TUI Commands"
@@ -154,6 +155,31 @@
       (define transcript (ui-state-transcript state))
       (check-equal? (length transcript) 1)
       (check-equal? (transcript-entry-kind (first transcript)) 'system)
-      (check-true (string-contains? (transcript-entry-text (first transcript)) "retry")))))
+      (check-true (string-contains? (transcript-entry-text (first transcript)) "retry")))
+
+    ;; ============================================================
+    ;; session-factory-runner dispatch (v0.21.4)
+    ;; ============================================================
+
+    (test-case "cmd-ctx-session-factory-runner is #f by default"
+      (define cctx (make-test-cctx))
+      (check-false (cmd-ctx-session-factory-runner cctx)))
+
+    (test-case "cmd-ctx-session-factory-runner can be set to a procedure"
+      (define called-with (box #f))
+      (define factory (lambda (prompt) (set-box! called-with prompt)))
+      (define cctx
+        (cmd-ctx (box (initial-ui-state))
+                 (box #t)
+                 #f
+                 #f
+                 (box #f)
+                 #f
+                 (box #f)
+                 #f
+                 (box "")
+                 (box #f)
+                 factory))
+      (check-true (procedure? (cmd-ctx-session-factory-runner cctx))))))
 
 (run-tests commands-tests)

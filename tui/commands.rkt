@@ -47,7 +47,8 @@
          cmd-ctx-extension-registry-box
 
          ;; Main command dispatcher
-         process-slash-command)
+         process-slash-command
+         cmd-ctx-session-factory-runner)
 
 ;; ============================================================
 ;; Command context — lightweight alternative to tui-ctx
@@ -65,7 +66,8 @@
          last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
          session-runner ; (string -> void) or #f — for /retry resubmission
          input-text-box ; (boxof string?) — raw input text for commands like /activate
-         extension-registry-box) ; (or/c (boxof (or/c extension-registry? #f)) #f) — for ext command dispatch
+         extension-registry-box
+         session-factory-runner) ; (or/c (boxof (or/c extension-registry? #f)) #f) — for ext command dispatch
   #:transparent)
 
 ;; ============================================================
@@ -857,9 +859,25 @@
           [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
            ;; Extension handled the command
            (define payload (hook-result-payload ext-result))
+           (define new-session-text (hash-ref payload 'new-session #f))
            (define submit-text (hash-ref payload 'submit #f))
            (define display-text (hash-ref payload 'text #f))
            (cond
+             [new-session-text
+              ;; Extension wants a fresh session (e.g. /go)
+              (when display-text
+                (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+                (set-box! (cmd-ctx-state-box cctx)
+                          (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
+              (define factory (cmd-ctx-session-factory-runner cctx))
+              (cond
+                ;; Fresh session: call factory with the prompt
+                [factory (thread (lambda () (factory new-session-text)))]
+                [else
+                 ;; Fallback: append to existing session
+                 (define runner (cmd-ctx-session-runner cctx))
+                 (when runner
+                   (thread (lambda () (runner new-session-text))))])]
              [submit-text
               ;; Extension wants to submit text as a prompt to the agent
               (when display-text

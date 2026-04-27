@@ -28,7 +28,8 @@
            (box #f) ; last-prompt
            (lambda (prompt) (void))
            (box input-text)
-           (box #f))) ; extension-registry-box
+           (box #f)
+           #f)) ; extension-registry-box + session-factory-runner
 
 ;; ============================================================
 ;; Tests

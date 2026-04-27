@@ -21,6 +21,7 @@
          "../runtime/agent-session.rkt"
          "../runtime/provider-factory.rkt"
          "../runtime/session-index.rkt"
+         "../runtime/session-switch.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
          "../cli/args.rkt"
@@ -64,12 +65,35 @@
   (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
 
   (define ctx
-    (make-tui-ctx #:event-bus bus
-                  #:session-runner (lambda (prompt) (run-prompt! sess prompt))
-                  #:session-dir sess-dir
-                  #:model-registry (hash-ref rt-config 'model-registry #f)
-                  #:extension-registry (hash-ref rt-config 'extension-registry #f)
-                  #:session-queue (agent-session-queue sess)))
+    (make-tui-ctx
+     #:event-bus bus
+     #:session-runner (lambda (prompt) (run-prompt! sess prompt))
+     #:session-dir sess-dir
+     #:model-registry (hash-ref rt-config 'model-registry #f)
+     #:extension-registry (hash-ref rt-config 'extension-registry #f)
+     #:session-queue (agent-session-queue sess)
+     #:session-factory-runner
+     (lambda (prompt)
+       ;; v0.21.4: /go creates fresh session with no planning history
+       (define new-sess (make-agent-session rt-config))
+       (define new-sid (session-id new-sess))
+       (define new-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+       ;; Switch extensions: teardown old, rebind to new
+       (switch-session! #:old-session-id (session-id sess)
+                        #:old-bus bus
+                        #:old-extension-registry (hash-ref rt-config 'extension-registry #f)
+                        #:new-session-id new-sid
+                        #:new-session-dir new-dir
+                        #:new-bus bus
+                        #:new-extension-registry (hash-ref rt-config 'extension-registry #f)
+                        #:reason 'fork)
+       ;; Clear TUI transcript for new session
+       (set-box! (tui-ctx-ui-state-box ctx)
+                 (initial-ui-state #:session-id new-sid
+                                   #:model-name (hash-ref rt-config 'model-name #f)))
+       (set-box! (tui-ctx-needs-redraw-box ctx) #t)
+       ;; Run prompt in new session
+       (run-prompt! new-sess prompt))))
 
   ;; Install UI callbacks for extensions (breaks extensions→TUI upward import)
   (install-ui-callbacks!
@@ -87,8 +111,7 @@
            styled-segment
            ;; LAYER-01: status message callback for dialog-api
            'set-status-message
-           (lambda (box msg)
-             (set-box! box (struct-copy ui-state (unbox box) [status-message msg])))
+           (lambda (box msg) (set-box! box (struct-copy ui-state (unbox box) [status-message msg])))
            ;; LAYER-02: widget callbacks for widget-api
            'set-extension-widget
            set-extension-widget

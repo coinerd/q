@@ -87,7 +87,8 @@
          previous-frame-box ; (boxof (or/c (listof string) #f)) — last rendered frame for diffing
          last-prompt-box ; (boxof (or/c string? #f)) — last user prompt for /retry
          extension-registry-box ; (or/c (boxof (or/c extension-registry? #f)) #f)
-         session-queue-box) ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
+         session-queue-box ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
+         session-factory-runner) ; (or/c (string -> void) #f) — creates fresh session for /go
   #:transparent)
 
 (define (make-tui-ctx #:event-bus [bus #f]
@@ -95,7 +96,8 @@
                       #:session-dir [sess-dir #f]
                       #:model-registry [reg #f]
                       #:extension-registry [ext-reg #f]
-                      #:session-queue [sess-queue #f])
+                      #:session-queue [sess-queue #f]
+                      #:session-factory-runner [factory #f])
   (tui-ctx (box (initial-ui-state))
            (box (initial-input-state))
            bus
@@ -110,7 +112,8 @@
            (box #f) ; previous-frame-box - #f means no previous frame
            (box #f) ; last-prompt-box - #f until first submit
            (box ext-reg) ; extension-registry-box
-           (box sess-queue))) ; session-queue-box
+           (box sess-queue) ; session-queue-box
+           factory))
 
 ;; ============================================================
 ;; mark-dirty!
@@ -198,7 +201,8 @@
                     (tui-ctx-last-prompt-box ctx)
                     (tui-ctx-session-runner ctx)
                     (box "")
-                    (tui-ctx-extension-registry-box ctx)))
+                    (tui-ctx-extension-registry-box ctx)
+                    (tui-ctx-session-factory-runner ctx)))
 
 ;; Process a slash command. Returns 'continue | 'quit
 ;; cmd can be: symbol | (list symbol args...)

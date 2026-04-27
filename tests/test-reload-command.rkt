@@ -63,7 +63,8 @@
            (box #f) ; last-prompt-box
            #f ; session-runner
            (box #f) ; input-text-box
-           (box ext-reg))) ; extension-registry-box
+           (box ext-reg)
+           #f)) ; session-factory-runner
 
 ;; ============================================================
 ;; Test suite
