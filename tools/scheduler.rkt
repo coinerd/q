@@ -54,13 +54,20 @@
 (provide (struct-out scheduler-result)
 
          ;; ── Main entry point ──
-         run-tool-batch)
+         run-tool-batch
+
+         ;; ── Configuration ──
+         max-parallel-tools)
 
 ;; ============================================================
 ;; Scheduler result struct
 ;; ============================================================
 
 (struct scheduler-result (results metadata) #:transparent)
+
+;; v0.21.5 (F6): Maximum parallel tool execution threads.
+;; Default 8 — prevents unbounded thread spawning.
+(define max-parallel-tools (make-parameter 8))
 
 ;; ============================================================
 ;; Internal: preflight outcome for a single tool call
@@ -292,18 +299,26 @@
   ;; Execute ready calls
   (define execution-results
     (if parallel?
-        ;; Parallel execution using threads
-        (let ([channels
-               (for/list ([ie (in-list indexed-ready)])
-                 (define ch (make-channel))
-                 (define idx (car ie))
-                 (define entry (cdr ie))
-                 (define tc (hash-ref entry 'tool-call))
-                 (define t (hash-ref entry 'tool))
-                 (thread (lambda ()
-                           (channel-put ch
-                                        (cons idx (execute-single tc t exec-ctx hook-dispatcher)))))
-                 ch)])
+        ;; Parallel execution using threads with bounded pool (F6)
+        (let* ([sem (make-semaphore (max-parallel-tools))]
+               [channels (for/list ([ie (in-list indexed-ready)])
+                           (define ch (make-channel))
+                           (define idx (car ie))
+                           (define entry (cdr ie))
+                           (define tc (hash-ref entry 'tool-call))
+                           (define t (hash-ref entry 'tool))
+                           (thread (lambda ()
+                                     (semaphore-wait sem)
+                                     (define result
+                                       (with-handlers ([exn:fail? (lambda (e)
+                                                                    (make-error-result
+                                                                     (format "tool '~a' raised: ~a"
+                                                                             (tool-call-name tc)
+                                                                             (exn-message e))))])
+                                         (execute-single tc t exec-ctx hook-dispatcher)))
+                                     (semaphore-post sem)
+                                     (channel-put ch (cons idx result))))
+                           ch)])
           (for/list ([ch (in-list channels)])
             (channel-get ch)))
         ;; Serial execution
