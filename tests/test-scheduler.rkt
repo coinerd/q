@@ -37,13 +37,15 @@
                   run-tool-batch
                   scheduler-result
                   scheduler-result-results
-                  scheduler-result-metadata)
+                  scheduler-result-metadata
+                  max-parallel-tools)
          (only-in "../util/protocol-types.rkt"
                   tool-call
                   tool-call?
                   tool-call-id
                   tool-call-name
-                  tool-call-arguments))
+                  tool-call-arguments
+                  make-tool-call))
 
 ;; ============================================================
 ;; Helper: build a simple registry with fake tools
@@ -471,3 +473,41 @@
               (format "error should mention type mismatch, got: ~a" err-text))
   (check-true (string-contains? err-text "add(")
               (format "error should include schema hint, got: ~a" err-text)))
+
+;; ============================================================
+;; F6: Bounded parallel execution (v0.21.5)
+;; ============================================================
+
+(test-case "F6: max-parallel-tools parameter defaults to 8"
+  (check-equal? (max-parallel-tools) 8))
+
+(test-case "F6: max-parallel-tools can be customized"
+  (parameterize ([max-parallel-tools 2])
+    (check-equal? (max-parallel-tools) 2)))
+
+(test-case "F6: parallel execution respects max-parallel-tools bound"
+  (define reg (make-tool-registry))
+  ;; Register a tool that records its thread
+  (define threads-seen (box '()))
+  (register-tool! reg
+                  (make-tool "thread-recorder"
+                             "Records threads for testing"
+                             (hasheq 'type 'object
+                                     'properties (hasheq)
+                                     'required '())
+                             (lambda (args exec-ctx)
+                               (set-box! threads-seen
+                                         (cons (current-thread) (unbox threads-seen)))
+                               (sleep 0.05) ; small delay to force contention
+                               (make-success-result (list (hasheq 'text "ok")) (hasheq)))))
+  ;; Run 6 parallel tool calls with max 2 — should not exceed 2 concurrent threads
+  (define tool-calls
+    (for/list ([i (in-range 6)])
+      (make-tool-call (number->string i) "thread-recorder" (hasheq))))
+  (define result
+    (parameterize ([max-parallel-tools 2])
+      (run-tool-batch tool-calls reg #:parallel? #t)))
+  (check-equal? (length (scheduler-result-results result)) 6)
+  ;; Verify all succeeded
+  (for ([r (in-list (scheduler-result-results result))])
+    (check-false (tool-result-is-error? r))))

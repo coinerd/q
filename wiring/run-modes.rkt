@@ -204,8 +204,11 @@
 
 (define (load-extensions-from-dir! ext-reg dir #:event-bus [event-bus #f])
   (when (directory-exists? dir)
+    ;; v0.21.5 (F1): Sort by filename for deterministic load order across platforms.
     (define files
-      (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f))) (directory-list dir #:build? #t)))
+      (sort (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f)))
+                    (directory-list dir #:build? #t))
+            (λ (a b) (string<? (path->string a) (path->string b)))))
     (for ([f (in-list files)])
       (with-handlers ([exn:fail? (λ (e)
                                    (fprintf (current-error-port)
