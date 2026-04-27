@@ -206,3 +206,17 @@
   (check-false (tool-result-is-error? result) "edit with & in new-text should succeed")
   (check-equal? (file->string tmp) "x = a & b | c\ny = 1")
   (delete-file tmp))
+
+;; v0.21.2 W3: Enhanced edit error messages with common-cause hints
+(test-case "edit.rkt contains enhanced error hints"
+  (define source
+    (file->string
+     (if (file-exists? "tools/builtins/edit.rkt")
+         "tools/builtins/edit.rkt"
+         "../tools/builtins/edit.rkt")))
+  (check-not-false
+   (regexp-match? #rx"leading whitespace" source)
+   "should hint about leading whitespace")
+  (check-not-false
+   (regexp-match? #rx"smaller unique snippet" source)
+   "should hint about long single-line old-text"))

@@ -171,15 +171,29 @@
            (values best-line best-num best-score)))]))
 
 ;; Build enhanced error message when old-text is not found.
+;; v0.21.2: Enhanced with common-cause hints to speed up recovery.
 (define (make-not-found-error path-str old-text content)
   (define-values (line-num line-text) (find-nearest-match content old-text))
+  (define hint
+    (cond
+      [(and (string? old-text) (regexp-match? #rx"^ +" old-text))
+       "Hint: old-text has leading whitespace — check indentation."]
+      [(and (string? old-text)
+            (> (string-length old-text) 200)
+            (< (length (string-split old-text "\n")) 2))
+       "Hint: old-text is very long and single-line — try a smaller unique snippet."]
+      [else ""]))
   (cond
     [line-num
      (string-append
       (format "old-text not found in ~a.\nNearest match at line ~a:\n  \"" path-str line-num)
       (string-trim line-text)
-      "\"\nRe-read the file to get exact text.")]
-    [else (format "old-text not found in ~a. Read the file first to get exact text." path-str)]))
+      "\"\nRe-read the file to get exact text.\n"
+      hint)]
+    [else
+     (string-append (format "old-text not found in ~a. Read the file first to get exact text.\n"
+                            path-str)
+                    hint)]))
 
 ;; --------------------------------------------------
 ;; Main tool function
