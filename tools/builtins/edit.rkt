@@ -79,8 +79,10 @@
                                (log-warning (format "edit/prune: ~a" (exn-message e)))
                                (void))])
     (define all (directory-list dir))
+    ;; v0.21.5 (F5): Use suffix match to avoid pruning backups for unrelated
+    ;; files whose basename happens to be a substring (e.g. "bar" inside "foobar").
     (define matching
-      (filter (lambda (f) (string-contains? (path->string f) basename))
+      (filter (lambda (f) (string-suffix? (path->string f) (format "_~a" basename)))
               (sort (map path->string all) string>?)))
     (when (> (length matching) MAX-BACKUPS-PER-FILE)
       (for ([f (in-list (drop matching MAX-BACKUPS-PER-FILE))])

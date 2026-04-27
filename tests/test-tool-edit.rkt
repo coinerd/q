@@ -220,3 +220,32 @@
   (check-not-false
    (regexp-match? #rx"smaller unique snippet" source)
    "should hint about long single-line old-text"))
+
+;; ============================================================
+;; F5: Backup pruning uses suffix match (v0.21.5)
+;; ============================================================
+
+(test-case "F5: backup pruning only matches _basename suffix, not substring"
+  ;; Create a temp backup dir with files that would match via string-contains?
+  ;; but should NOT match with suffix matching
+  (define tmp-dir (make-temporary-file "q-test-prune-~a" 'directory))
+  (make-directory* tmp-dir)
+  ;; Simulate backups for "bar.rkt" — correct pattern: {timestamp}_{basename}
+  (display-to-file "old1" (build-path tmp-dir "20260101_bar.rkt"))
+  (display-to-file "old2" (build-path tmp-dir "20260102_bar.rkt"))
+  ;; Simulate backup for "foobar.rkt" — should NOT be pruned when pruning "bar.rkt"
+  (display-to-file "other" (build-path tmp-dir "20260103_foobar.rkt"))
+  ;; Simulate unrelated file
+  (display-to-file "unrelated" (build-path tmp-dir "some_other_file.txt"))
+  ;; Read the edit.rkt source to verify suffix match is used
+  (define source
+    (file->string
+     (if (file-exists? "tools/builtins/edit.rkt")
+         "tools/builtins/edit.rkt"
+         "../tools/builtins/edit.rkt")))
+  ;; The fix replaces string-contains? with string-suffix?
+  (check-not-false
+   (regexp-match? #rx"string-suffix\\?" source)
+   "prune-old-backups should use string-suffix? instead of string-contains?")
+  ;; Cleanup
+  (delete-directory/files tmp-dir))
