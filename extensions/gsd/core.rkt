@@ -253,13 +253,12 @@
 (define (gsd-show-status)
   (define mode (gsm-current))
   (define valid-next (gsm-valid-next-states))
-  (define snapshot (gsm-snapshot))
   (hasheq
    'mode
    mode
    'valid-next-states
    valid-next
    'history-length
-   (length (hash-ref snapshot 'history))
+   (length (gsm-history))
    'message
    (format "GSD Status: ~a | Next: ~a" mode (string-join (map symbol->string valid-next) ", "))))

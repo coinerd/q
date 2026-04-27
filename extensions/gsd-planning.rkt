@@ -451,9 +451,14 @@
     [(equal? cmd "/skip")
      (define args-text (extract-cmd-args input-text))
      (define result (cmd-skip args-text))
-     ;; Mark wave as DEFERRED on disk if skip succeeded
-     (when (and (hash-ref result 'success #f) base-dir (string->number (string-trim args-text)))
-       (mark-wave-status! base-dir (string->number (string-trim args-text)) "DEFERRED"))
+     ;; Mark wave as DEFERRED on disk + executor if skip succeeded
+     (when (and (hash-ref result 'success #f) base-dir)
+       (define idx (and (string->number (string-trim args-text))))
+       (when idx
+         (mark-wave-status! base-dir idx "DEFERRED")
+         (define exec (gsm-wave-executor))
+         (when exec
+           (wave-skip! exec idx))))
      (hook-amend (hasheq 'text (hash-ref result 'message "")))]
     [(equal? cmd "/reset")
      (define result (cmd-reset))
@@ -512,6 +517,7 @@
           (set-total-waves! (add1 (apply max wave-indices))))
         (set-current-wave-index! 0)
         (define executor (make-wave-executor plan))
+        (gsm-set-wave-executor! executor)
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
           (if state-content
