@@ -52,7 +52,8 @@
            (box #f) ; last-prompt-box
            #f ; session-runner
            (box "") ; input-text-box
-           (box #f))) ; extension-registry-box
+           (box #f)
+           #f)) ; extension-registry-box + session-factory-runner
 
 ;; Extract transcript text from a cmd-ctx
 (define (cctx-transcript-text cctx)
