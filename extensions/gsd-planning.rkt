@@ -158,12 +158,21 @@
     [else #f]))
 
 (define (valid-artifact-name? name)
-  (and (string? name)
-       (not (string-contains? name "/"))
-       (not (string-contains? name ".."))
-       (not (string-contains? name "\x00"))
-       (or (assoc name artifact-extensions) (string-suffix? name ".md") (string-suffix? name ".json"))
-       #t))
+  (and
+   (string? name)
+   (not (string-contains? name ".."))
+   (not (string-contains? name "\x00"))
+   (cond
+     ;; Allow waves/ prefix for wave documents
+     [(string-prefix? name "waves/")
+      (define rest (substring name 6))
+      (and (not (string=? rest "")) (string-suffix? rest ".md") (not (string-contains? rest "/")))]
+     [else
+      (and (not (string-contains? name "/"))
+           (or (assoc name artifact-extensions)
+               (string-suffix? name ".md")
+               (string-suffix? name ".json")))])
+   #t))
 
 (define (json-artifact? name)
   (or (string-suffix? name ".json")
@@ -226,7 +235,7 @@
 (define planning-system-prompt
   (string-append
    "[gsd-planning] Create a structured implementation plan for the following request.\n"
-   "Write your plan to .planning/PLAN.md using the planning-write tool.\n"
+   "Write individual wave documents and a PLAN.md index.\n"
    "\n"
    "STEP 1 — EXPLORE: Read the codebase thoroughly. For each wave you MUST identify:\n"
    "  - Root cause: what causes the bug or what needs to change, and where exactly\n"
@@ -238,25 +247,24 @@
    "After 30 calls, write the plan with what you know. Partial plans are better than no plans.\n"
    "Prioritize files most likely to contain the root cause. Skip tangential exploration.\n"
    "\n"
-   "STEP 2 — PLAN: Write PLAN.md with this exact format per wave:\n"
+   "STEP 2 — WRITE WAVE DOCS: For each wave, write a separate file:\n"
+   "  planning-write artifact=\"waves/W0-short-title.md\" content=\"...\"\n"
+   "Each wave doc must contain:\n"
+   "  - Root cause, Files, Action, Verify command, Done criteria\n"
+   "  - Include actual code snippets (old-text / new-text)\n"
    "\n"
-   "## Wave N: <title>\n"
-   "- Root cause: <what causes the bug, where>\n"
-   "- File: <path>, lines <start>-<end>\n"
-   "- Old text: <exact code to find, must be unique in file>\n"
-   "- New text: <exact replacement code>\n"
-   "- Verify: <command to run>\n"
+   "STEP 3 — WRITE INDEX: Write PLAN.md with:\n"
+   "  # Plan: <title>\n"
+   "  ## Overview\n"
+   "  <description>\n"
+   "  ## Waves\n"
+   "  - [Inbox] W0: <title> → waves/W0-slug.md\n"
+   "  - [Inbox] W1: <title> → waves/W1-slug.md\n"
    "\n"
-   "Include actual code snippets in old-text and new-text fields.\n"
-   "Each wave must be directly executable without further exploration.\n"
-   "\n"
-   "STEP 3 — FINISH: Tell the user: 'Use /go to start implementing.'\n"
-   "Do NOT implement — only plan.\n"
-   "OVERWRITE: Replace the entire existing PLAN.md. Do NOT append or merge with old content.\n"
-   "Write the new plan from scratch.\n\n"
-   "IMPORTANT: [SYSTEM NOTICE: ...] messages in tool results are steering signals from the runtime.\n"
-   "Always read and follow them. They provide budget warnings, read-duplication hints,\n"
-   "and stall-recovery instructions. Ignoring them degrades performance.\n\n"
+   "STEP 4 — FINISH: Tell the user: 'Use /go to start implementing.'\n"
+   "Do NOT implement — only plan.\n\n"
+   "IMPORTANT: [SYSTEM NOTICE: ...] messages in tool results are steering signals.\n"
+   "Always read and follow them. They provide budget warnings and hints.\n\n"
    "User request: "))
 
 (define planning-implement-prompt
@@ -310,7 +318,12 @@
    'properties
    (hasheq
     'artifact
-    (hasheq 'type "string" 'description "Artifact name (e.g. PLAN, STATE, HANDOFF)")
+    (hasheq 'type
+            "string"
+            'description
+            (string-append "Artifact name. Use: PLAN, STATE, HANDOFF, etc. "
+                           "For wave documents use: waves/W0-slug.md, waves/W1-slug.md. "
+                           "Or any .md/.json filename in .planning/."))
     'content
     (hasheq 'type "string" 'description "Content to write (string for .md, JSON string for .json)")
     'base_dir
