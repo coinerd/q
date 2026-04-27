@@ -308,10 +308,7 @@
   (call-with-semaphore (tool-registry-sem reg)
                        (lambda ()
                          (define tbl (tool-registry-tools-box reg))
-                         (define n (tool-name t))
-                         (when (hash-has-key? tbl n)
-                           (error 'register-tool! "tool already registered: ~a" n))
-                         (hash-set! tbl n t))))
+                         (hash-set! tbl (tool-name t) t))))
 
 (define (unregister-tool! reg name)
   (call-with-semaphore (tool-registry-sem reg)

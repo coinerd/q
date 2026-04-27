@@ -99,10 +99,14 @@
   (check-equal? (lookup-tool reg "read") t)
   (check-false (lookup-tool reg "write")))
 
-(test-case "register-tool! rejects duplicates"
+(test-case "register-tool! overwrites on re-registration (idempotent)"
   (define reg (make-tool-registry))
   (register-tool! reg (make-tool "x" "first" (hasheq) (λ (_) 'ok)))
-  (check-exn exn:fail? (λ () (register-tool! reg (make-tool "x" "second" (hasheq) (λ (_) 'ok))))))
+  (register-tool! reg (make-tool "x" "second" (hasheq) (λ (_) 'replaced)))
+  ;; Last registration wins
+  (define t (lookup-tool reg "x"))
+  (check-not-false t)
+  (check-equal? (tool-description t) "second"))
 
 (test-case "register-tool! rejects non-tool"
   (define reg (make-tool-registry))
