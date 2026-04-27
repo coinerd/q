@@ -781,10 +781,21 @@
                                   (and (hash? c)
                                        (equal? (hash-ref c 'type #f) "text")
                                        (string-contains? (hash-ref c 'text "") "PLAN")))))))
+                     ;; v0.21.2 (BUG-3): Also suppress intent nudge when the assistant
+                     ;; text indicates planning is complete (STEP 4, "use /go").
+                     ;; Prevents steering from nudging the LLM to implement during planning.
+                     (define planning-complete-text?
+                       (and (string? assistant-text)
+                            (or (string-contains? assistant-text "STEP 4")
+                                (string-contains? assistant-text "/go")
+                                (string-contains? assistant-text "use /go")
+                                (regexp-match? #rx"(?i:plan(?:ning)? +(?:is +)?complete)"
+                                               assistant-text))))
                      (if (and intent-detected?
                               (not had-tool-calls?)
                               (< intent-retry-count 1)
-                              (not recent-plan-write?))
+                              (not recent-plan-write?)
+                              (not planning-complete-text?))
                          (begin
                            (emit-session-event!
                             bus
