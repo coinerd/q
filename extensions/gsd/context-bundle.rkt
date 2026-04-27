@@ -66,21 +66,22 @@
 ;; Executor bundle
 ;; ============================================================
 
-;; Executor gets: plan text + STATE + current wave context + referenced files
+;; Executor gets: current wave doc + STATE + referenced files
+;; NOT the full plan — wave docs contain wave-specific context.
 (define (executor-bundle artifacts files)
-  (define plan-text (hash-ref artifacts 'plan ""))
+  (define wave-doc (hash-ref artifacts 'wave-doc ""))
+  (define plan-index (hash-ref artifacts 'plan-index ""))
   (define state-text (hash-ref artifacts 'state ""))
   (define wave-index (hash-ref artifacts 'wave-index 0))
-  (define wave-text (extract-wave-context plan-text wave-index))
   (define referenced-files (format-referenced-files files))
   (define parts
-    (filter-string (list "## Plan (Full)"
-                         (if (non-empty? plan-text) plan-text "(no plan)")
+    (filter-string (list (format "## Current Wave (W~a)" wave-index)
+                         (if (non-empty? wave-doc) wave-doc "(no wave document loaded)")
+                         (if (non-empty? plan-index)
+                             (format "## Plan Index\n~a" plan-index)
+                             #f)
                          (if (non-empty? state-text)
                              (format "## Current State\n~a" state-text)
-                             #f)
-                         (if (non-empty? wave-text)
-                             (format "## Current Wave\n~a" wave-text)
                              #f)
                          (if (non-empty? referenced-files)
                              (format "## Referenced Files\n~a" referenced-files)
