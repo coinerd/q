@@ -12,14 +12,12 @@
 ;; ============================================================
 
 (test-case "explorer bundle: includes user request"
-  (define artifacts (hasheq 'user-request "Fix the login bug"
-                            'project-context "A web app"))
+  (define artifacts (hasheq 'user-request "Fix the login bug" 'project-context "A web app"))
   (define bundle (assemble-context 'explorer artifacts (hasheq)))
   (check-true (string-contains? bundle "Fix the login bug")))
 
 (test-case "explorer bundle: includes project context"
-  (define artifacts (hasheq 'user-request ""
-                            'project-context "Racket coding agent"))
+  (define artifacts (hasheq 'user-request "" 'project-context "Racket coding agent"))
   (define bundle (assemble-context 'explorer artifacts (hasheq)))
   (check-true (string-contains? bundle "Racket coding agent")))
 
@@ -33,24 +31,27 @@
 ;; Executor bundle
 ;; ============================================================
 
-(test-case "executor bundle: includes plan text"
-  (define artifacts (hasheq 'plan "## Wave 0: Fix bug\n- File: src/fix.rkt\n- Verify: test\n"
-                            'state "In progress"
-                            'wave-index 0))
+(test-case "executor bundle: includes wave doc content"
+  (define artifacts
+    (hasheq 'wave-doc
+            "## Wave 0: Fix bug\n- File: src/fix.rkt\n- Verify: test\n"
+            'state
+            "In progress"
+            'wave-index
+            0
+            'plan-index
+            ""))
   (define bundle (assemble-context 'executor artifacts (hasheq)))
   (check-true (string-contains? bundle "Wave 0")))
 
 (test-case "executor bundle: includes state"
-  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- File: a\n- Verify: t\n"
-                            'state "Wave 0 in progress"
-                            'wave-index 0))
+  (define artifacts
+    (hasheq 'wave-doc "Fix bug" 'state "Wave 0 in progress" 'wave-index 0 'plan-index ""))
   (define bundle (assemble-context 'executor artifacts (hasheq)))
   (check-true (string-contains? bundle "Wave 0 in progress")))
 
 (test-case "executor bundle: includes referenced files"
-  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- File: src/fix.rkt\n- Verify: t\n"
-                            'state ""
-                            'wave-index 0))
+  (define artifacts (hasheq 'wave-doc "Fix bug" 'state "" 'wave-index 0 'plan-index ""))
   (define files (hasheq "src/fix.rkt" "(define (fix) 42)"))
   (define bundle (assemble-context 'executor artifacts files))
   (check-true (string-contains? bundle "src/fix.rkt"))
@@ -61,20 +62,18 @@
 ;; ============================================================
 
 (test-case "verifier bundle: includes plan"
-  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- Verify: raco test tests/\n"
-                            'summaries "Wave 0: fixed the bug"))
+  (define artifacts
+    (hasheq 'plan "## Wave 0: Fix\n- Verify: raco test tests/\n" 'summaries "Wave 0: fixed the bug"))
   (define bundle (assemble-context 'verifier artifacts (hasheq)))
   (check-true (string-contains? bundle "Wave 0")))
 
 (test-case "verifier bundle: includes summaries"
-  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- Verify: t\n"
-                            'summaries "All waves completed"))
+  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- Verify: t\n" 'summaries "All waves completed"))
   (define bundle (assemble-context 'verifier artifacts (hasheq)))
   (check-true (string-contains? bundle "All waves completed")))
 
 (test-case "verifier bundle: extracts verify commands"
-  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- Verify: raco test tests/\n"
-                            'summaries ""))
+  (define artifacts (hasheq 'plan "## Wave 0: Fix\n- Verify: raco test tests/\n" 'summaries ""))
   (define bundle (assemble-context 'verifier artifacts (hasheq)))
   (check-true (string-contains? bundle "raco test")))
 
@@ -88,8 +87,8 @@
   (check-false (bundle-size-warning? bundle)))
 
 (test-case "bundle-size-warning?: returns #t for large bundles"
-  (define big-plan (make-string 5000 #\X))
-  (define artifacts (hasheq 'plan big-plan 'state big-plan 'wave-index 0))
+  (define big-doc (make-string 5000 #\X))
+  (define artifacts (hasheq 'wave-doc big-doc 'state big-doc 'wave-index 0 'plan-index ""))
   (define bundle (assemble-context 'executor artifacts (hasheq)))
   (check-true (bundle-size-warning? bundle)))
 
@@ -98,5 +97,4 @@
 ;; ============================================================
 
 (test-case "assemble-context: unknown role raises error"
-  (check-exn exn:fail?
-             (lambda () (assemble-context 'unknown (hasheq) (hasheq)))))
+  (check-exn exn:fail? (lambda () (assemble-context 'unknown (hasheq) (hasheq)))))
