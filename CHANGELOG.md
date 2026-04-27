@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.21.7 — 2026-04-27
+
+### Fixed
+- Planning prompt now shows exact `- File:` syntax with concrete template
+- LLM instructed to write N separate wave docs for N waves
+- Parser accepts `- File:`, `- Files:`, and `## Files` heading formats
+- Validation relaxed: individual waves can be file-less (plan-level check remains)
+- Planning prompt consolidated into `prompts.rkt` (single source of truth)
+
 ## v0.21.0 — 2026-04-26
 
 ### GSD Extension Rewrite (5 waves)

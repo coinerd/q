@@ -160,11 +160,12 @@
   (define result (validate-plan p))
   (check-not-equal? (validation-errors result) '()))
 
-(test-case "validate-plan: wave with no files has warning"
+(test-case "validate-plan: wave with no files → error (all waves file-less)"
   (define w (make-gsd-wave 0 "No Files" "RC" '() '() "test" '("done")))
   (define p (gsd-plan (list w) "" '() '()))
   (define result (validate-plan p))
-  (check-equal? (validation-errors result) '())
+  (check-not-equal? (validation-errors result) '())
+  (check-true (ormap (lambda (e) (string-contains? e "no file references in any wave")) (validation-errors result)))
   (check-not-equal? (validation-warnings result) '()))
 
 (test-case "validate-plan: wave with no title has error"

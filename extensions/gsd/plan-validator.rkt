@@ -42,9 +42,10 @@
     ;; Warning: missing title (plans may omit title after wave number)
     (when (string=? (gsd-wave-title w) "")
       (set! warnings (cons (format "~a: no explicit title" prefix) warnings)))
-    ;; Error: no file references — waves must specify files to modify
+    ;; Warning: no file references in this wave (some waves are verify-only)
     (when (null? (gsd-wave-files w))
-      (set! errors (cons (format "~a: no files — wave must specify files to modify" prefix) errors)))
+      (set! warnings
+            (cons (format "~a: no file references — wave may not produce changes" prefix) warnings)))
     ;; Warning: no verify command
     (when (or (not (gsd-wave-verify w)) (string=? (gsd-wave-verify w) ""))
       (set! warnings (cons (format "~a: no verify command" prefix) warnings)))
@@ -55,6 +56,11 @@
     (when (string=? (gsd-wave-title w) "")
       (set! warnings
             (cons (format "~a: cannot derive wave doc slug (empty title)" prefix) warnings))))
+  ;; Error: ALL waves are file-less — plan has nothing to execute on
+  (when (and (not (null? waves))
+             (for/and ([w waves])
+               (null? (gsd-wave-files w))))
+    (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
   (validation-result (reverse errors) (reverse warnings)))
 
 ;; ============================================================
