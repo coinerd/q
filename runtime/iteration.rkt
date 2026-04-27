@@ -81,14 +81,7 @@
                   list-tools-jsexpr
                   merge-tool-lists)
          ;; Settings struct for exec-context runtime-settings (#1240)
-         (only-in "../runtime/settings.rkt"
-                  make-minimal-settings
-                  setting-ref
-                  setting-ref*
-                  steering-gentle-threshold
-                  steering-strong-threshold
-                  steering-hard-cap
-                  steering-same-file-dedup?)
+         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
          ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
          ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
@@ -141,9 +134,6 @@
          call-with-overflow-recovery
          ;; v0.14.1: mid-turn token budget check (for testing)
          check-mid-turn-budget!
-         ;; v0.20.4 W2: stall detection
-         detect-stall?
-         MAX-STALL-RETRIES
          ;; v0.20.5 W3: pre-registration on session open
          register-session-extensions!)
 
@@ -453,14 +443,8 @@
 
 ;; Regex matching intent-to-act phrases followed by action verbs.
 ;; Case-insensitive via pregexp (?i:...) syntax.
-(define INTENT-ACTION-RX
-  #px"(?i:(?:I'll|I will|let me|now I'll|now let me) (?:write|create|rewrite|edit|update|modify|fix|refactor|implement|build|generate))")
-
-;; detect-intent-pattern : (or/c string? #f) -> boolean?
-;; Returns #t if the text matches intent-to-act patterns like
-;; "I'll rewrite the file" or "Let me create a new script".
-(define (detect-intent-pattern text)
-  (and (string? text) (> (string-length text) 0) (regexp-match? INTENT-ACTION-RX text)))
+;; v0.21.3: Intent detection removed. The prompt is self-correcting by design.
+;; detect-intent-pattern, INTENT-ACTION-RX, detect-stall?, MAX-STALL-RETRIES all removed.
 
 ;; extract-last-assistant-text : (listof message?) -> (or/c string? #f)
 ;; Extracts the text content from the last assistant message in the context.
@@ -475,33 +459,6 @@
     (if (null? texts)
         #f
         (string-join texts " "))))
-
-;; ============================================================
-;; v0.20.4 W2: Stall detection
-;; ============================================================
-
-(define MAX-STALL-RETRIES 2)
-
-(define (detect-stall? ctx)
-  (define last-assistant
-    (for/first ([msg (in-list (reverse ctx))]
-                #:when (eq? (message-role msg) 'assistant))
-      msg))
-  (cond
-    [(not last-assistant) #f]
-    [else
-     (define content (message-content last-assistant))
-     (define has-text?
-       (for/or ([part (in-list (if (list? content)
-                                   content
-                                   '()))])
-         (and (text-part? part) (> (string-length (string-trim (text-part-text part))) 0))))
-     (define has-tool-calls?
-       (for/or ([part (in-list (if (list? content)
-                                   content
-                                   '()))])
-         (tool-call-part? part)))
-     (and (not has-text?) (not has-tool-calls?))]))
 
 ;; ============================================================
 ;; Iteration loop
@@ -753,114 +710,9 @@
                                           implement-count
                                           0))))))
                      (define base-result (if followup-continued? effective-result effective-result))
-                     ;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): If model expressed intent
-                     ;; to write/edit but made no tool call, inject a steering nudge.
-                     ;; Exception: don't nudge after planning-write PLAN succeeds
-                     ;; (the plan is complete — assistant should stop, not implement).
-                     (define assistant-text (extract-last-assistant-text ctx-with-injected))
-                     (define intent-detected? (detect-intent-pattern assistant-text))
-                     (define had-tool-calls?
-                       (not (null? (extract-tool-calls-from-messages new-msgs))))
-                     (define stalled? (detect-stall? (append ctx-with-injected new-msgs)))
-                     ;; Check if the last tool-result in context is a successful planning-write PLAN
-                     (define recent-plan-write?
-                       (let ([tool-results (for/list ([msg (in-list (reverse ctx-with-injected))]
-                                                      #:when (eq? (message-role msg) 'tool-result)
-                                                      #:when (message-content msg))
-                                             (for/list ([p (in-list (if (list? (message-content msg))
-                                                                        (message-content msg)
-                                                                        '()))]
-                                                        #:when (tool-result-part? p))
-                                               p))])
-                         (for/or ([tr (in-list (apply append tool-results))]
-                                  #:break #f)
-                           (define content (tool-result-part-content tr))
-                           (and (not (tool-result-part-is-error? tr))
-                                (pair? content)
-                                (for/or ([c (in-list content)])
-                                  (and (hash? c)
-                                       (equal? (hash-ref c 'type #f) "text")
-                                       (string-contains? (hash-ref c 'text "") "PLAN")))))))
-                     ;; v0.21.2 (BUG-3): Also suppress intent nudge when the assistant
-                     ;; text indicates planning is complete (STEP 4, "use /go").
-                     ;; Prevents steering from nudging the LLM to implement during planning.
-                     (define planning-complete-text?
-                       (and (string? assistant-text)
-                            (or (string-contains? assistant-text "STEP 4")
-                                (string-contains? assistant-text "/go")
-                                (string-contains? assistant-text "use /go")
-                                (regexp-match? #rx"(?i:plan(?:ning)? +(?:is +)?complete)"
-                                               assistant-text))))
-                     (if (and intent-detected?
-                              (not had-tool-calls?)
-                              (< intent-retry-count 1)
-                              (not recent-plan-write?)
-                              (not planning-complete-text?))
-                         (begin
-                           (emit-session-event!
-                            bus
-                            session-id
-                            "intent.nudge"
-                            (hasheq 'text assistant-text 'intent-retry-count intent-retry-count))
-                           (let ([nudge
-                                  (make-message
-                                   (generate-id)
-                                   #f
-                                   'user
-                                   'message
-                                   (list
-                                    (make-text-part
-                                     (string-append
-                                      "[steering:intent] Your previous message said you would perform an action "
-                                      "but no tool was used. Use the write or edit tool now. Do not explain — act.")))
-                                   (now-seconds)
-                                   (hasheq 'source "intent-without-action"))])
-                             (append-entries! log-path (list nudge))
-                             (loop (append ctx-with-injected new-msgs (list nudge))
-                                   (add1 iteration)
-                                   0
-                                   (set)
-                                   (add1 intent-retry-count)
-                                   consecutive-error-count
-                                   recent-tool-names
-                                   explore-count
-                                   implement-count
-                                   stall-retry-count)))
-                         (cond
-                           [(and stalled? (< stall-retry-count MAX-STALL-RETRIES))
-                            (emit-session-event! bus
-                                                 session-id
-                                                 "iteration.stall-detected"
-                                                 (hasheq 'stall-retry-count
-                                                         (add1 stall-retry-count)
-                                                         'iteration
-                                                         iteration))
-                            (loop
-                             (append ctx-with-injected
-                                     new-msgs
-                                     (list (make-message
-                                            (generate-id)
-                                            #f
-                                            'user
-                                            'message
-                                            (list (make-text-part
-                                                   (string-append
-                                                    "[steering:stall] Your last response was empty. "
-                                                    "You MUST produce output now. "
-                                                    "Use a tool or write a response.")))
-                                            (now-seconds)
-                                            (hasheq 'source "stall-detection"))))
-                             (add1 iteration)
-                             0
-                             (set)
-                             intent-retry-count
-                             consecutive-error-count
-                             recent-tool-names
-                             explore-count
-                             implement-count
-                             (add1 stall-retry-count))]
-                           [else base-result]))))]
-
+                     ;; v0.21.3: Intent/stall detection removed.
+                     ;; The prompt is self-correcting by design - no runtime nudging.
+                     base-result))]
                 ;; ── Hard iteration limit reached: append and stop ──
                 [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
                  (append-entries! log-path new-msgs)
@@ -929,321 +781,32 @@
                                               log-path
                                               token
                                               config))
-                 ;; v0.18.0: Context-aware exploration steering with same-file dedup.
-                 ;; - Tracks seen file paths across consecutive read-only tool calls
-                 ;; - Same file reads don't increment the counter (configurable)
-                 ;; - Counter resets on any write tool call
-                 ;; - Thresholds configurable via steering.gentle_threshold etc.
-                 (define current-settings (hash-ref config 'settings #f))
-                 (define gentle-at
-                   (if current-settings
-                       (steering-gentle-threshold current-settings)
-                       8))
-                 (define strong-at
-                   (if current-settings
-                       (steering-strong-threshold current-settings)
-                       12))
-                 (define hard-at
-                   (if current-settings
-                       (steering-hard-cap current-settings)
-                       20))
-                 (define same-file-dedup?
-                   (if current-settings
-                       (steering-same-file-dedup? current-settings)
-                       #t))
-                 (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
-                 ;; Detect non-read tools — any tool not in read-tools resets counter
-                 ;; FIX: Was write-tools whitelist that missed extension tools.
-                 (define read-tools '("read" "find" "grep" "ls" "planning-read"))
-                 (define has-write-now?
-                   (for/or ([tc (in-list current-tool-calls)])
-                     (not (member (tool-call-name tc) read-tools))))
+                 ;; v0.21.3: Exploration steering removed. Compute counters without steering.
                  (define-values (new-seen-paths should-increment?)
-                   (cond
-                     [has-write-now? (values (set) #f)] ;; Reset: empty set, don't increment
-                     [(not same-file-dedup?)
-                      (values seen-paths #t)] ;; No dedup: keep set, always increment
-                     [else (update-seen-paths current-tool-calls seen-paths)]))
+                   (update-seen-paths new-msgs seen-paths config))
                  (define effective-tool-count
-                   (cond
-                     [has-write-now? 0]
-                     [(not should-increment?) consecutive-tool-count]
-                     [else (add1 consecutive-tool-count)]))
-
-                 ;; v0.19.11: Cumulative explore vs implement budget tracking.
-                 ;; Unlike consecutive-tool-count (resets on any write), these accumulate
-                 ;; across the entire session to detect pathological explore-to-implement ratios.
-                 (define write-tools '("edit" "write" "racket_edit" "racket_codemod"))
+                   (if should-increment?
+                       (add1 consecutive-tool-count)
+                       consecutive-tool-count))
                  (define new-explore-count
-                   (if (not has-write-now?)
-                       (+ explore-count (length current-tool-calls))
-                       explore-count))
+                   (+ explore-count
+                      (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
+                               (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
                  (define new-implement-count
-                   (if has-write-now?
-                       (+ implement-count
-                          (for/sum ([tc (in-list current-tool-calls)])
-                                   (if (member (tool-call-name tc) write-tools) 1 0)))
-                       implement-count))
-
-                 ;; v0.19.11: Emit budget event and inject steering for bad ratios
-                 (when (> new-explore-count 0)
-                   (emit-session-event! bus
-                                        session-id
-                                        "steering.budget"
-                                        (hasheq 'explore
-                                                new-explore-count
-                                                'implement
-                                                new-implement-count
-                                                'ratio
-                                                (if (> new-implement-count 0)
-                                                    (exact->inexact (/ new-explore-count
-                                                                       new-implement-count))
-                                                    new-explore-count)
-                                                'iteration
-                                                (add1 iteration))))
-
-                 ;; v0.19.10: Count errors in this turn's tool results.
-                 ;; Scan updated-ctx for tool-result messages with error status.
-                 (define this-turn-errors
-                   (for/sum ([msg (in-list updated-ctx)]
-                             #:when (and (message? msg) (eq? (message-role msg) 'tool-result)))
-                            (define content (message-content msg))
-                            (for/sum ([part
-                                       (in-list (if (list? content)
-                                                    content
-                                                    '()))]
-                                      #:when (tool-result-part? part))
-                                     (if (tool-result-part-is-error? part) 1 0))))
+                   (+ implement-count
+                      (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
+                               (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
                  (define new-error-count
-                   (if (> this-turn-errors 0)
-                       (+ consecutive-error-count this-turn-errors)
-                       0))
-
-                 ;; v0.19.10: Track recent tool names for bash-only streak detection.
-                 ;; Keep last 15 tool names to check for bash-only loops.
-                 (define turn-tool-names
-                   (for/list ([tc (in-list current-tool-calls)])
-                     (tool-call-name tc)))
+                   (+ consecutive-error-count
+                      (for/sum
+                       ([tr (filter tool-result-part? (apply append (map message-content new-msgs)))])
+                       (if (tool-result-part-is-error? tr) 1 0))))
                  (define new-recent-tools
-                   (take-at-most (append recent-tool-names turn-tool-names) 15))
-
-                 ;; v0.14.1: emit exploration progress after 4+ consecutive tool-only turns
-                 (when (>= effective-tool-count 4)
-                   (define tool-names
-                     (for/list ([tc (in-list current-tool-calls)])
-                       (tool-call-name tc)))
-                   (emit-session-event! bus
-                                        session-id
-                                        "exploration.progress"
-                                        (hasheq 'consecutive-tools
-                                                effective-tool-count
-                                                'tool-names
-                                                tool-names
-                                                'seen-paths
-                                                (set-count new-seen-paths)
-                                                'iteration
-                                                (add1 iteration))))
-
-                 ;; v0.19.10: Emit spiral-warning events
-                 (when (>= new-error-count 6)
-                   (emit-session-event!
-                    bus
-                    session-id
-                    "spiral.error-warning"
-                    (hasheq 'consecutive-errors new-error-count 'iteration (add1 iteration))))
-                 (when (>= (length new-recent-tools) 10)
-                   (define bash-count
-                     (for/sum ([n (in-list new-recent-tools)]) (if (equal? n "bash") 1 0)))
-                   (when (>= bash-count 10)
-                     (emit-session-event! bus
-                                          session-id
-                                          "spiral.bash-only-warning"
-                                          (hasheq 'bash-count
-                                                  bash-count
-                                                  'total-tools
-                                                  (length new-recent-tools)
-                                                  'iteration
-                                                  (add1 iteration)))))
-
-                 ;; v0.19.11: Wrap steering injection in error handler (#1870)
-                 (define exec-context
-                   (let ([base-ctx updated-ctx]
-                         [steering-msg
-                          (with-handlers ([exn:fail? (lambda (e)
-                                                       (log-warning 'iteration
-                                                                    "Steering injection failed: ~a"
-                                                                    (exn-message e))
-                                                       #f)])
-                            (cond
-                              ;; v0.19.10: Spiral breaker — 10+ bash-only turns
-                              [(and (>= (length new-recent-tools) 10)
-                                    (let ([bash-count (for/sum ([n (in-list new-recent-tools)])
-                                                               (if (equal? n "bash") 1 0))])
-                                      (>= bash-count 10)))
-                               (emit-session-event! bus
-                                                    session-id
-                                                    "spiral.bash-breaker"
-                                                    (hasheq 'bash-count
-                                                            (for/sum ([n (in-list new-recent-tools)])
-                                                                     (if (equal? n "bash") 1 0))
-                                                            'iteration
-                                                            (add1 iteration)))
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (string-append
-                                   "[steering:spiral] You've made 10+ consecutive bash calls. "
-                                   "Stop trying to fix things with bash. Use the edit tool with "
-                                   "the correct old-text (read the file first), or use git to revert. "
-                                   "Do not run any more bash commands to inspect or fix the file.")))
-                                (now-seconds)
-                                (hasheq))]
-
-                              ;; v0.19.10: Spiral breaker — 6+ consecutive errors
-                              [(>= new-error-count 6)
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (format
-                                   (string-append
-                                    "[steering:error-spiral] ~a consecutive tool errors detected. "
-                                    "Stop retrying the same approach. Re-read the file first, then "
-                                    "use a completely different strategy. Consider using git checkout "
-                                    "to revert any corrupted files.")
-                                   new-error-count)))
-                                (now-seconds)
-                                (hasheq))]
-
-                              ;; Level 3: Hard cap — force-stop the exploration
-                              [(>= effective-tool-count hard-at)
-                               (emit-session-event! bus
-                                                    session-id
-                                                    "exploration.hard-cap"
-                                                    (hasheq 'consecutive-tools
-                                                            effective-tool-count
-                                                            'iteration
-                                                            (add1 iteration)))
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (format
-                                   (string-append
-                                    "[steering:hard] You've made ~a consecutive read-only tool calls. "
-                                    "This is beyond the exploration budget. "
-                                    "You MUST now use the write or edit tool to produce output, "
-                                    "or explain what you cannot do.")
-                                   effective-tool-count)))
-                                (now-seconds)
-                                (hasheq))]
-                              ;; Level 2: Strong nudge
-                              [(>= effective-tool-count strong-at)
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (format
-                                   (string-append
-                                    "[steering:strong] ~a consecutive read-only tool calls detected. "
-                                    "Stop exploring. You MUST produce the actual output now "
-                                    "using the write or edit tool. "
-                                    "Do NOT run any more read-only commands.")
-                                   effective-tool-count)))
-                                (now-seconds)
-                                (hasheq))]
-                              ;; Level 1: Gentle nudge
-                              ;; v0.19.11: Budget ratio steering — 20:1 hard
-                              [(and (> new-explore-count 20) (< new-implement-count 2))
-                               (emit-session-event! bus
-                                                    session-id
-                                                    "steering.budget-hard"
-                                                    (hasheq 'explore
-                                                            new-explore-count
-                                                            'implement
-                                                            new-implement-count
-                                                            'iteration
-                                                            (add1 iteration)))
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (format
-                                   (string-append
-                                    "[steering:budget-hard] ~a explore calls with only ~a implement calls. "
-                                    "You have been reading code for too long without producing output. "
-                                    "STOP reading files. Use the edit or write tool NOW. "
-                                    "If you cannot produce output, explain in one sentence why and stop.")
-                                   new-explore-count
-                                   new-implement-count)))
-                                (now-seconds)
-                                (hasheq))]
-                              ;; v0.19.11: Budget ratio steering — 15:1 gentle
-                              [(and (> new-explore-count 15) (= new-implement-count 0))
-                               (emit-session-event! bus
-                                                    session-id
-                                                    "steering.budget-soft"
-                                                    (hasheq 'explore
-                                                            new-explore-count
-                                                            'implement
-                                                            new-implement-count
-                                                            'iteration
-                                                            (add1 iteration)))
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (format
-                                   (string-append
-                                    "[steering:budget] ~a explore calls with zero implement calls. "
-                                    "You should start writing output soon. "
-                                    "Aim to use the edit or write tool within the next 2-3 turns.")
-                                   new-explore-count)))
-                                (now-seconds)
-                                (hasheq))]
-
-                              [(>= effective-tool-count gentle-at)
-                               (make-message
-                                (generate-id)
-                                #f
-                                'user
-                                'message
-                                (list
-                                 (make-text-part
-                                  (format
-                                   (string-append
-                                    "[steering] You've made ~a consecutive read-only tool calls. "
-                                    "You MUST now use the write or edit tool to produce output. "
-                                    "Do not explain what you will do — just do it.")
-                                   effective-tool-count)))
-                                (now-seconds)
-                                (hasheq))]
-                              [else #f]))])
-                     (if steering-msg
-                         (append base-ctx (list steering-msg))
-                         base-ctx)))
-                 ;; v0.14.1: mid-turn token budget check
-                 (check-mid-turn-budget! exec-context bus session-id config)
-                 (loop exec-context
+                   (take-at-most (append recent-tool-names
+                                         (map tool-call-name
+                                              (extract-tool-calls-from-messages new-msgs)))
+                                 20))
+                 (loop updated-ctx
                        (add1 iteration)
                        effective-tool-count
                        new-seen-paths

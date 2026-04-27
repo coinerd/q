@@ -2,19 +2,8 @@
 
 ;; extensions/gsd-planning-state.rkt — Thin shim over new gsd/ modules
 ;;
-;; Wave 4a of v0.21.0: Backward-compatible re-export layer.
-;; All state management now lives in extensions/gsd/state-machine.rkt.
-;; This module provides the OLD public API by delegating to the new modules.
-;;
-;; Migration map:
-;;   gsd-mode              → gsm-current (from state-machine)
-;;   set-gsd-mode!         → gsm-transition! (from state-machine)
-;;   gsd-mode?             → (eq? (gsm-current) v)
-;;   reset-all-gsd-state!  → gsm-reset! + reset-steering-state!
-;;   gsd-snapshot          → gsm-snapshot + budget/counts from here
-;;
-;; Budget-related functions are kept here for now (DD-2 removes budgets
-;; in a later pass). Wave tracking delegates to state-machine transitions.
+;; v0.21.3: Budget/read-count/steering state removed. Only wave tracking
+;; and mode delegation remain.
 
 (require racket/set
          "gsd/state-machine.rkt"
@@ -25,17 +14,6 @@
          set-gsd-mode!
          pinned-planning-dir
          set-pinned-planning-dir!
-         go-read-budget
-         set-go-read-budget!
-         decrement-budget!
-         reset-go-budget!
-         GO-READ-BUDGET
-         GO-READ-WARN-THRESHOLD
-         GO-READ-BLOCK-THRESHOLD
-         read-counts
-         get-read-count
-         increment-read-count!
-         clear-read-counts!
          current-max-old-text-len
          set-current-max-old-text-len!
          ;; Wave tracking
@@ -47,41 +25,25 @@
          next-pending-wave
          current-wave-index
          set-current-wave-index!
-         ;; Plan tool budget
-         plan-tool-budget
-         decrement-plan-budget!
-         reset-plan-budget!
-         EXPLORATION-BUDGET
          ;; Observability
          gsd-snapshot
          reset-all-gsd-state!
-         READ-ONLY-TOOLS
          ;; Event bus
          gsd-event-bus
          set-gsd-event-bus!)
 
 ;; ============================================================
-;; Legacy state: kept for budget/count features not yet migrated
+;; State boxes (semaphore-protected)
 ;; ============================================================
 
 (define state-sem (make-semaphore 1))
 
 (define pinned-dir-box (box #f))
-(define budget-box (box #f))
 (define edit-limit-box (box 500))
-(define read-counts-box (box (make-hash)))
 (define completed-waves-box (box (set)))
 (define total-waves-box (box 0))
 (define current-wave-box (box 0))
-(define EXPLORATION-BUDGET 30)
-(define plan-tool-budget-box (box #f))
 (define gsd-event-bus-box (box #f))
-
-(define GO-READ-BUDGET 30)
-(define GO-READ-WARN-THRESHOLD 5)
-(define GO-READ-BLOCK-THRESHOLD -3)
-
-(define READ-ONLY-TOOLS '("read" "grep" "find" "ls" "glob"))
 
 ;; ============================================================
 ;; Mode delegation to state machine
@@ -104,12 +66,10 @@
     [(not v) (gsm-reset!)]
     [(eq? v 'planning) (gsm-transition! 'exploring)]
     [(eq? v 'plan-written)
-     ;; May need to go through exploring first
      (when (eq? (gsm-current) 'idle)
        (gsm-transition! 'exploring))
      (gsm-transition! 'plan-written)]
     [(eq? v 'executing)
-     ;; Legacy allows direct planning→executing; state machine requires plan-written intermediate
      (when (eq? (gsm-current) 'exploring)
        (gsm-transition! 'plan-written))
      (when (eq? (gsm-current) 'idle)
@@ -119,7 +79,7 @@
     [else (gsm-transition! v)]))
 
 ;; ============================================================
-;; Legacy accessors (semaphore-protected)
+;; Accessors (semaphore-protected)
 ;; ============================================================
 
 (define (pinned-planning-dir)
@@ -128,39 +88,6 @@
 (define (set-pinned-planning-dir! v)
   (call-with-semaphore state-sem (lambda () (set-box! pinned-dir-box v))))
 
-(define (go-read-budget)
-  (call-with-semaphore state-sem (lambda () (unbox budget-box))))
-
-(define (set-go-read-budget! v)
-  (call-with-semaphore state-sem (lambda () (set-box! budget-box v))))
-
-(define (decrement-budget!)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (define new-val (sub1 (unbox budget-box)))
-                         (set-box! budget-box new-val)
-                         new-val)))
-
-(define (reset-go-budget!)
-  (call-with-semaphore state-sem (lambda () (set-box! budget-box GO-READ-BUDGET))))
-
-(define (read-counts)
-  (call-with-semaphore state-sem (lambda () (hash-copy (unbox read-counts-box)))))
-
-(define (get-read-count key)
-  (call-with-semaphore state-sem (lambda () (hash-ref (unbox read-counts-box) key 0))))
-
-(define (increment-read-count! key)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (define h (unbox read-counts-box))
-                         (define new-count (add1 (hash-ref h key 0)))
-                         (hash-set! h key new-count)
-                         new-count)))
-
-(define (clear-read-counts!)
-  (call-with-semaphore state-sem (lambda () (set-box! read-counts-box (make-hash)))))
-
 (define (current-max-old-text-len)
   (call-with-semaphore state-sem (lambda () (unbox edit-limit-box))))
 
@@ -168,7 +95,7 @@
   (call-with-semaphore state-sem (lambda () (set-box! edit-limit-box v))))
 
 ;; ============================================================
-;; Wave tracking (legacy)
+;; Wave tracking
 ;; ============================================================
 
 (define (completed-waves)
@@ -204,24 +131,6 @@
                            i))))
 
 ;; ============================================================
-;; Plan tool budget
-;; ============================================================
-
-(define (plan-tool-budget)
-  (call-with-semaphore state-sem (lambda () (unbox plan-tool-budget-box))))
-
-(define (decrement-plan-budget!)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (define cur (unbox plan-tool-budget-box))
-                         (when cur
-                           (set-box! plan-tool-budget-box (sub1 cur)))
-                         (unbox plan-tool-budget-box))))
-
-(define (reset-plan-budget!)
-  (call-with-semaphore state-sem (lambda () (set-box! plan-tool-budget-box EXPLORATION-BUDGET))))
-
-;; ============================================================
 ;; Event bus
 ;; ============================================================
 
@@ -242,20 +151,14 @@
                                  (gsm-current)
                                  'pinned-dir
                                  (unbox pinned-dir-box)
-                                 'go-read-budget
-                                 (unbox budget-box)
                                  'edit-limit
                                  (unbox edit-limit-box)
-                                 'read-counts
-                                 (hash-copy (unbox read-counts-box))
                                  'completed-waves
                                  (set-copy (unbox completed-waves-box))
                                  'total-waves
                                  (unbox total-waves-box)
                                  'current-wave
-                                 (unbox current-wave-box)
-                                 'plan-tool-budget
-                                 (unbox plan-tool-budget-box)))))
+                                 (unbox current-wave-box)))))
 
 (define (reset-all-gsd-state!)
   (call-with-semaphore state-sem
@@ -263,11 +166,8 @@
                          (gsm-reset!)
                          (reset-steering-state!)
                          (set-box! pinned-dir-box #f)
-                         (set-box! budget-box #f)
                          (set-box! edit-limit-box 500)
-                         (set-box! read-counts-box (make-hash))
                          (set-box! completed-waves-box (set))
                          (set-box! total-waves-box 0)
                          (set-box! current-wave-box 0)
-                         (set-box! plan-tool-budget-box #f)
                          (set-box! gsd-event-bus-box #f))))

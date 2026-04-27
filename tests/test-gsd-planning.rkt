@@ -564,10 +564,6 @@
   (check-true (string-contains? planning-implement-prompt "Do NOT use planning-write")
               "prompt should say planning-write is prohibited"))
 
-(test-case "planning-implement-prompt sets read-only budget per wave"
-  (check-true (string-contains? planning-implement-prompt
-                                (format "Max ~a read-only" IMPL-READ-PER-WAVE))))
-
 (test-case "planning-implement-prompt does NOT tell agent to use planning-read"
   (check-false (string-contains? planning-implement-prompt "Use planning-read")))
 
@@ -628,12 +624,6 @@
 ;; W0: /plan Exploration Cap Tests
 ;; ============================================================
 
-(test-case "planning-system-prompt-contains-exploration-budget"
-  (check-true (string-contains? planning-system-prompt "EXPLORATION BUDGET")
-              "prompt should contain EXPLORATION BUDGET")
-  (check-true (string-contains? planning-system-prompt "30") "prompt should mention 30-call limit")
-  (check-true (string-contains? planning-system-prompt "Maximum 30") "prompt should say Maximum 30"))
-
 (test-case "planning-system-prompt-no-unlimited-exploration"
   (check-false (string-contains? planning-system-prompt "Do NOT limit")
                "prompt should NOT say 'Do NOT limit'"))
@@ -683,18 +673,6 @@
 ;; Wave 3 tests: Prompt constants, artifact registry, I1 fix
 ;; ============================================================
 
-(test-case "planning-system-prompt references EXPLORATION-BUDGET constant"
-  (check-true (string-contains? planning-system-prompt (format "~a" EXPLORATION-BUDGET))
-              "prompt should contain the exploration budget number"))
-
-(test-case "planning-implement-prompt references IMPL-READ-PER-WAVE"
-  (check-true (string-contains? planning-implement-prompt (format "~a" IMPL-READ-PER-WAVE))
-              "implement prompt should contain per-wave read limit"))
-
-(test-case "planning-implement-prompt references IMPL-READ-TOTAL-WARN"
-  (check-true (string-contains? planning-implement-prompt (format "~a" IMPL-READ-TOTAL-WARN))
-              "implement prompt should contain total read warning threshold"))
-
 (test-case "planning-implement-prompt allows planning-read during execution (I1 fix)"
   (check-true (string-contains? planning-implement-prompt "planning-read is allowed")
               "prompt should say planning-read is allowed during /go")
@@ -743,38 +721,9 @@
 ;; W1 (v0.20.4): /go sets total waves from plan
 ;; ============================================================
 
-(test-case "/go parses plan and sets total waves"
-  (reset-all-gsd-state!)
-  (with-temp-dir
-   (lambda (dir)
-     (parameterize ([current-directory dir])
-       (make-directory* (build-path dir ".planning"))
-       (call-with-output-file
-        (build-path dir ".planning" "PLAN.md")
-        (lambda (out) (display "## Wave 0: Setup\n## Wave 1: Implement\n## Wave 2: Test" out))
-        #:exists 'truncate)
-       (set-pinned-planning-dir! dir)
-       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
-       (define result (handler (hasheq 'command "/go" 'input "/go")))
-       (check-eq? (hook-result-action result) 'amend)
-       (check-equal? (total-waves) 3)
-       ;; Plan budget should be reset for /go phase
-       (check-equal? (plan-tool-budget) EXPLORATION-BUDGET)))))
-
 ;; ============================================================
 ;; W1 (v0.20.4): /plan initializes plan budget
 ;; ============================================================
-
-(test-case "/plan <text> initializes plan budget"
-  (reset-all-gsd-state!)
-  (with-temp-dir (lambda (dir)
-                   (parameterize ([current-directory dir])
-                     (set-pinned-planning-dir! dir)
-                     (define handler
-                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
-                     (define result (handler (hasheq 'command "/plan" 'input "/plan fix the bug")))
-                     (check-eq? (hook-result-action result) 'amend)
-                     (check-equal? (plan-tool-budget) EXPLORATION-BUDGET)))))
 
 ;; ============================================================
 ;; W1 (v0.20.4): /gsd status command tests
@@ -787,16 +736,6 @@
   (check-eq? (hook-result-action result) 'amend)
   (define text (hash-ref (hook-result-payload result) 'text))
   (check-true (string-contains? text "Mode: inactive")))
-
-(test-case "/gsd shows mode when planning"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'planning)
-  (reset-plan-budget!)
-  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
-  (define result (handler (hasheq 'command "/gsd" 'input "/gsd")))
-  (define text (hash-ref (hook-result-payload result) 'text))
-  (check-true (string-contains? text "Mode: planning"))
-  (check-true (string-contains? text "Plan budget: 30/30")))
 
 (test-case "/gsd shows wave progress during execution"
   (reset-all-gsd-state!)
@@ -813,41 +752,6 @@
 ;; ============================================================
 ;; W1 (v0.20.4): /plan budget enforcement
 ;; ============================================================
-
-(test-case "gsd-tool-guard enforces exploration budget during planning mode"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'planning)
-  (reset-plan-budget!)
-  ;; Exhaust the budget
-  (for ([_ (in-range EXPLORATION-BUDGET)])
-    (decrement-plan-budget!))
-  ;; Next call should be blocked
-  (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
-  (check-eq? (hook-result-action res) 'block)
-  (set-gsd-mode! #f))
-
-(test-case "gsd-tool-guard allows reads within planning budget"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'planning)
-  (reset-plan-budget!)
-  ;; Use 10 reads — should still be within budget
-  (for ([_ (in-range 10)])
-    (decrement-plan-budget!))
-  (define res (gsd-tool-guard (hasheq 'tool-name "read" 'args (hasheq))))
-  (check-eq? (hook-result-action res) 'pass)
-  (set-gsd-mode! #f))
-
-(test-case "gsd-tool-guard enforces exploration budget for planning-read"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'planning)
-  (reset-plan-budget!)
-  ;; Exhaust the budget
-  (for ([_ (in-range EXPLORATION-BUDGET)])
-    (decrement-plan-budget!))
-  ;; planning-read should be blocked too
-  (define res (gsd-tool-guard (hasheq 'tool-name "planning-read" 'args (hasheq))))
-  (check-eq? (hook-result-action res) 'block)
-  (set-gsd-mode! #f))
 
 ;; ============================================================
 ;; v0.20.5 W1: Event bus — parameter → registry-stored
@@ -885,66 +789,3 @@
 ;; ============================================================
 ;; Wave progress tracking tests (v0.21.2 W1)
 ;; ============================================================
-
-(test-case "W1: handle-wave-progress does not auto-advance on edit"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-total-waves! 4)
-  (set-current-wave-index! 0)
-  ;; Simulate edit on a file with no wave marker
-  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
-  (define payload (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "some-file.rkt")))
-  (handle-wave-progress payload result)
-  ;; Wave 0 should NOT be marked complete just from an edit
-  (check-false (wave-complete? 0))
-  (check-equal? (current-wave-index) 0))
-
-(test-case "W1: handle-wave-progress detects wave from file path and advances"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-total-waves! 4)
-  (set-current-wave-index! 0)
-  ;; Simulate edit on W1 file — should mark W0 complete and move to W1
-  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
-  (define payload
-    (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "waves/W1-fix-bug.md")))
-  (handle-wave-progress payload result)
-  (check-true (wave-complete? 0))
-  (check-false (wave-complete? 1))
-  (check-equal? (current-wave-index) 1))
-
-(test-case "W1: handle-wave-progress advances through multiple waves"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-total-waves! 4)
-  (set-current-wave-index! 0)
-  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
-  ;; Edit W1 file → W0 complete, current=1
-  (handle-wave-progress
-   (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "waves/W1-first.md"))
-   result)
-  (check-true (wave-complete? 0))
-  (check-equal? (current-wave-index) 1)
-  ;; Edit W2 file → W1 complete, current=2
-  (handle-wave-progress
-   (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "waves/W2-second.md"))
-   result)
-  (check-true (wave-complete? 1))
-  (check-equal? (current-wave-index) 2))
-
-(test-case "W1: multiple edits within same wave don't advance"
-  (reset-all-gsd-state!)
-  (set-gsd-mode! 'executing)
-  (set-total-waves! 3)
-  (set-current-wave-index! 1)
-  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
-  ;; Three edits on the same wave
-  (for ([_ (in-range 3)])
-    (handle-wave-progress
-     (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "src/core.rkt"))
-     result))
-  ;; Still on wave 1
-  (check-equal? (current-wave-index) 1)
-  (check-false (wave-complete? 1))
-  ;; Only 0 completed waves (none explicitly completed yet)
-  (check-equal? (set-count (completed-waves)) 0))
