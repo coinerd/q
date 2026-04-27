@@ -45,7 +45,8 @@
          "gsd/plan-validator.rkt"
          (except-in "gsd/wave-executor.rkt" next-pending-wave)
          "gsd/prompts.rkt"
-         "gsd/context-bundle.rkt")
+         "gsd/context-bundle.rkt"
+         "gsd/wave-docs.rkt")
 
 (provide the-extension
          gsd-planning-extension
@@ -462,6 +463,24 @@
     [(equal? cmd "/gsd") (handle-gsd-status)]
     [else (handle-artifact-command cmd input-text base-dir payload)]))
 
+;; Helper: Build wave docs summary for plan prompt
+(define (wave-docs-summary plan)
+  (define waves (gsd-plan-waves plan))
+  (string-join (for/list ([w waves])
+                 (define idx (gsd-wave-index w))
+                 (define title (gsd-wave-title w))
+                 (define slug (gsd-wave-slug w))
+                 (define status (wave-status->string (gsd-wave-status w)))
+                 (format "## W~a: ~a (~a)\n~a"
+                         idx
+                         title
+                         status
+                         (if (and (string? (gsd-wave-root-cause w))
+                                  (> (string-length (gsd-wave-root-cause w)) 0))
+                             (gsd-wave-root-cause w)
+                             "(no details)")))
+               "\n\n"))
+
 ;; Handler for /go command
 (define (handle-go-command base-dir input-text)
   (define plan-content (read-planning-artifact base-dir "PLAN"))
@@ -469,9 +488,12 @@
     [(not plan-content)
      (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
     [else
-     ;; v0.21.0: Validate plan before allowing /go
-     (define waves (parse-waves-from-markdown plan-content))
-     (define plan (gsd-plan waves "" '() '()))
+     ;; v0.21.1: Try loading from wave doc index first, fall back to inline parse
+     (define plan-from-index (load-plan-from-index base-dir))
+     (define plan
+       (or plan-from-index
+           (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
+     ;; Validate
      (define validation (validate-plan-strict plan))
      (cond
        [(not (validation-valid? validation))
@@ -486,7 +508,9 @@
         (set-current-max-old-text-len! 1200)
         (reset-read-counts!)
         (reset-go-budget!)
-        (define wave-indices (parse-wave-headers plan-content))
+        (define wave-indices
+          (for/list ([w (gsd-plan-waves plan)])
+            (gsd-wave-index w)))
         (when (not (null? wave-indices))
           (set-total-waves! (add1 (apply max wave-indices))))
         (reset-plan-budget!)
@@ -505,12 +529,17 @@
                       (format "\nStart with wave ~a." maybe-num)
                       ""))
                 "")))
+        ;; Build plan text from wave docs or inline content
+        (define plan-text-for-prompt
+          (if plan-from-index
+              (string-append plan-content "\n\n" (wave-docs-summary plan-from-index))
+              plan-content))
         (define exec-prompt (executing-prompt plan executor))
         (define augmented-text
           (string-append planning-implement-prompt
                          exec-prompt
                          "\nPlan:\n"
-                         plan-content
+                         plan-text-for-prompt
                          "\n"
                          state-note
                          wave-arg))
