@@ -2,12 +2,12 @@
 
 ;; extensions/gsd-planning-state.rkt — Thin shim over new gsd/ modules
 ;;
-;; v0.21.3: Budget/read-count/steering state removed. Only wave tracking
+;; v0.21.6: steering.rkt import removed (dead code).
+;; Only wave tracking
 ;; and mode delegation remain.
 
 (require racket/set
-         "gsd/state-machine.rkt"
-         "gsd/steering.rkt")
+         "gsd/state-machine.rkt")
 
 (provide gsd-mode
          gsd-mode?
@@ -164,7 +164,6 @@
   (call-with-semaphore state-sem
                        (lambda ()
                          (gsm-reset!)
-                         (reset-steering-state!)
                          (set-box! pinned-dir-box #f)
                          (set-box! edit-limit-box 500)
                          (set-box! completed-waves-box (set))

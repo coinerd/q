@@ -4,7 +4,7 @@
 ;;
 ;; Wave 1a of v0.21.0: Main extension with command handlers,
 ;; tool guard, and write guard. Uses state-machine for mode
-;; management and delegates steering to steering module.
+;; management and delegates to plan-types and context-bundle modules.
 ;; Wave 3c: Hardened write guard with path normalization.
 ;;
 ;; Commands:
@@ -19,8 +19,7 @@
          racket/format
          "state-machine.rkt"
          "plan-types.rkt"
-         "context-bundle.rkt"
-         "steering.rkt")
+         "context-bundle.rkt")
 
 (provide gsd-command-dispatch
          gsd-tool-guard
@@ -193,7 +192,6 @@
 ;; /reset → idle
 (define (cmd-reset)
   (define result (gsm-reset!))
-  (reset-steering-state!)
   (hasheq 'success #t 'mode 'idle 'message "GSD reset to idle."))
 
 ;; ============================================================

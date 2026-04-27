@@ -9,8 +9,6 @@
 ;; New modules used:
 ;;   gsd/state-machine.rkt — central state machine (gsm-transition!, gsm-current)
 ;;   gsd/core.rkt          — command dispatch, tool guard, write guard
-;;   gsd/steering.rkt      — mode-aware stall detection during executing
-;;   gsd/bash-detect.rkt   — detects bash used for file reads
 ;;   gsd/plan-types.rkt    — structured plan/wave/task types
 ;;   gsd/plan-validator.rkt — validates plan before /go
 ;;   gsd/wave-executor.rkt — wave lifecycle with error recovery
@@ -39,9 +37,7 @@
          ;; v0.21.0 new modules
          "gsd/state-machine.rkt"
          "gsd/core.rkt"
-         ;; v0.21.3: steering.rkt and bash-detect.rkt gutted (no-op stubs)
-         "gsd/steering.rkt"
-         "gsd/bash-detect.rkt"
+
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
          (except-in "gsd/wave-executor.rkt" next-pending-wave)
@@ -570,18 +566,11 @@
         (hook-amend (hasheq 'text text))])]))
 
 ;; ============================================================
-;; v0.21.3: gsd-read-tracker removed (no-op passthrough)
-;; Steering, budgets, and read tracking are all removed.
-;; ============================================================
-
-(define (gsd-read-tracker payload)
-  (hook-pass payload))
-
 ;; ============================================================
 ;; GSD mode tool guard (tool-call-pre hook)
 ;; ============================================================
 
-;; v0.21.3: Only mode-based blocking. No budgets, no steering.
+;; v0.21.3: Only mode-based blocking. No budgets.
 (define (gsd-tool-guard payload)
   (define mode (gsd-mode))
   (define tool-name (hash-ref payload 'tool-name #f))
@@ -617,8 +606,6 @@
                     handle-execute-command
                     #:on tool-call-pre
                     gsd-tool-guard
-                    #:on tool-result-post
-                    gsd-read-tracker
                     #:on session-shutdown
                     gsd-session-cleanup)
 
