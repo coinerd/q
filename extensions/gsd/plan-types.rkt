@@ -87,31 +87,49 @@
   (define files '())
   (define verify-cmd "")
   (define done-criteria '())
+  (define in-files-section #f) ; track ## Files heading section
   (for ([line lines]
         [i (in-naturals)])
+    (define trimmed (string-trim line))
+    ;; Update section tracking BEFORE cond dispatch
+    (when (regexp-match? #rx"^## " trimmed)
+      (set! in-files-section (string-prefix? trimmed "## Files")))
     (cond
-      ;; Bullet-style fields
-      [(regexp-match #rx"^- +[Rr]oot *[Cc]ause *: *(.+)$" line)
-       =>
-       (lambda (m) (set! root-cause (string-trim (cadr m))))]
-      [(regexp-match #rx"^- +[Ff]ile *: *(.+)$" line)
-       =>
-       (lambda (m) (set! files (append files (list (string-trim (cadr m))))))]
-      [(regexp-match #rx"^- +[Vv]erify *: *(.+)$" line)
-       =>
-       (lambda (m) (set! verify-cmd (string-trim (cadr m))))]
-      [(regexp-match #rx"^- +[Dd]one *: *(.+)$" line)
-       =>
-       (lambda (m) (set! done-criteria (append done-criteria (list (string-trim (cadr m))))))]
       ;; Heading-style: ## Verify — collect non-empty, non-backtick lines after heading
-      [(string-prefix? (string-trim line) "## Verify")
+      [(string-prefix? trimmed "## Verify")
        (define after
          (for/list ([j (in-range (add1 i) (min n (+ i 5)))]
                     #:when (and (> (string-length (string-trim (list-ref lines j))) 0)
                                 (not (string-contains? (list-ref lines j) "```"))))
            (string-trim (list-ref lines j))))
        (when (and (string=? verify-cmd "") (not (null? after)))
-         (set! verify-cmd (string-join after "; ")))]))
+         (set! verify-cmd (string-join after "; ")))]
+      ;; Bullet-style Root cause
+      [(regexp-match #rx"^- +[Rr]oot *[Cc]ause *: *(.+)$" line)
+       =>
+       (lambda (m) (set! root-cause (string-trim (cadr m))))]
+      ;; Bullet-style Files (plural, comma-separated)
+      [(regexp-match #rx"^- +[Ff]iles *: *(.+)$" line)
+       =>
+       (lambda (m)
+         (define paths (string-split (string-trim (cadr m)) ","))
+         (set! files (append files (map string-trim paths))))]
+      ;; Bullet-style File (singular)
+      [(regexp-match #rx"^- +[Ff]ile *: *(.+)$" line)
+       =>
+       (lambda (m) (set! files (append files (list (string-trim (cadr m))))))]
+      ;; Bare bullets inside ## Files section
+      [(and in-files-section (regexp-match #rx"^- +(.+)$" line))
+       =>
+       (lambda (m) (set! files (append files (list (string-trim (cadr m))))))]
+      ;; Bullet-style Verify
+      [(regexp-match #rx"^- +[Vv]erify *: *(.+)$" line)
+       =>
+       (lambda (m) (set! verify-cmd (string-trim (cadr m))))]
+      ;; Bullet-style Done
+      [(regexp-match #rx"^- +[Dd]one *: *(.+)$" line)
+       =>
+       (lambda (m) (set! done-criteria (append done-criteria (list (string-trim (cadr m))))))]))
   (hasheq 'root-cause root-cause 'files files 'verify verify-cmd 'done done-criteria))
 
 ;; Parse a single wave section (list of lines, first is header).
