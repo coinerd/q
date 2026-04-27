@@ -14,7 +14,8 @@
          "../llm/gemini.rkt"
          "../llm/anthropic.rkt"
          "../llm/azure-openai.rkt"
-         racket/string)
+         racket/string
+         net/url)
 
 (provide build-provider
          build-mock-provider
@@ -53,20 +54,27 @@
 
 ;; Helper: Check if a URL points to a local/self-hosted provider.
 ;; Local providers don't require API keys.
+;; v0.21.5 (F2): URL-aware host matching — parses URL and checks host only.
 (define (local-provider? base-url)
   (and (string? base-url)
        (> (string-length base-url) 0)
-       (or (string-contains? base-url "localhost")
-           (string-contains? base-url "127.0.0.1")
-           (string-contains? base-url "192.168.")
-           (string-contains? base-url "10.")
-           (rfc1918-172? base-url))))
+       (with-handlers ([exn:fail? (λ (_) #f)])
+         (define parsed (string->url base-url))
+         (define host (url-host parsed))
+         (and host
+              (> (string-length host) 0)
+              (or (string=? host "localhost")
+                  (string=? host "127.0.0.1")
+                  (string=? host "::1")
+                  (string-prefix? host "192.168.")
+                  (string-prefix? host "10.")
+                  (rfc1918-172-host? host))))))
 
 ;; RFC 1918 172.16.0.0/12 check — only 172.16.x.x through 172.31.x.x
-(define (rfc1918-172? url-str)
-  (and (string-contains? url-str "172.")
-       (regexp-match? #rx"172\\.([0-9]+)\\." url-str)
-       (let ([m (regexp-match #rx"172\\.([0-9]+)\\." url-str)])
+;; v0.21.5 (F2): Host-only check (not full URL string)
+(define (rfc1918-172-host? host)
+  (and (string-prefix? host "172.")
+       (let ([m (regexp-match #rx"^172\\.([0-9]+)\\." host)])
          (and m (let ([octet (string->number (cadr m))]) (and octet (<= 16 octet 31)))))))
 
 ;; Build the provider from CLI config + settings.
