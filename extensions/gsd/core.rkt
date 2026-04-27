@@ -25,6 +25,10 @@
          gsd-tool-guard
          gsd-write-guard
          gsd-show-status
+         ;; Individual command handlers for direct wiring
+         cmd-replan
+         cmd-skip
+         cmd-reset
          ;; Command names for registration
          gsd-commands)
 

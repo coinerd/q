@@ -792,3 +792,64 @@
 ;; ============================================================
 ;; Wave progress tracking tests (v0.21.2 W1)
 ;; ============================================================
+
+;; ============================================================
+;; W1: Command Unification — wired dispatch tests (v0.21.6)
+;; ============================================================
+
+(test-case "W1: /replan wired through execute-command from plan-written"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/replan" 'input "/replan")))
+  (check-equal? (hook-result-action result) 'amend)
+  (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "Re-planning"))
+  (reset-all-gsd-state!))
+
+(test-case "W1: /replan from idle returns error through execute-command"
+  (reset-all-gsd-state!)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/replan" 'input "/replan")))
+  (check-equal? (hook-result-action result) 'amend)
+  (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "Cannot re-plan"))
+  (reset-all-gsd-state!))
+
+(test-case "W1: /skip wired through execute-command during executing"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (set-gsd-mode! 'executing)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/skip" 'input "/skip 1")))
+  (check-equal? (hook-result-action result) 'amend)
+  (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "skipped"))
+  (reset-all-gsd-state!))
+
+(test-case "W1: /skip without arg returns usage through execute-command"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (set-gsd-mode! 'executing)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/skip" 'input "/skip")))
+  (check-equal? (hook-result-action result) 'amend)
+  (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "Usage"))
+  (reset-all-gsd-state!))
+
+(test-case "W1: /reset wired through execute-command"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/reset" 'input "/reset")))
+  (check-equal? (hook-result-action result) 'amend)
+  (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "reset"))
+  (reset-all-gsd-state!))
+
+(test-case "W1: unknown command returns hook-pass through execute-command"
+  (reset-all-gsd-state!)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/unknown-cmd" 'input "/unknown-cmd")))
+  (check-equal? (hook-result-action result) 'pass)
+  (reset-all-gsd-state!))

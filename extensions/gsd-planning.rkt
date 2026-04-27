@@ -37,6 +37,8 @@
          ;; v0.21.0 new modules
          "gsd/state-machine.rkt"
          "gsd/core.rkt"
+         ;; v0.21.6: direct command handlers for wiring
+         (only-in "gsd/core.rkt" cmd-replan cmd-skip cmd-reset)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
@@ -78,6 +80,18 @@
          gsd-event-bus
          set-gsd-event-bus!
          emit-gsd-event!)
+
+;; ============================================================
+;; Argument extraction helper
+;; ============================================================
+
+(define (extract-cmd-args input-text)
+  (define trimmed (string-trim input-text))
+  (define parts
+    (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/) (string-split trimmed)))
+  (if (and (pair? parts) (> (length parts) 1))
+      (string-trim (string-join (cdr parts) " "))
+      ""))
 
 ;; ============================================================
 ;; Event emission helper
@@ -416,6 +430,9 @@
                          'general
                          '()
                          '("implement" "i"))
+  (ext-register-command! ctx "/replan" "Return to planning phase" 'general '() '())
+  (ext-register-command! ctx "/skip" "Skip a wave (usage: /skip N)" 'general '() '())
+  (ext-register-command! ctx "/reset" "Reset GSD to idle state" 'general '() '())
   (ext-register-command! ctx "/gsd" "Show GSD workflow status" 'general '() '())
   (hook-pass #f))
 
@@ -427,6 +444,21 @@
   (cond
     [(member cmd '("/go" "/implement" "/i")) (handle-go-command base-dir input-text)]
     [(equal? cmd "/gsd") (handle-gsd-status)]
+    [(equal? cmd "/replan")
+     (define result (cmd-replan))
+     (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'exploring))
+     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+    [(equal? cmd "/skip")
+     (define args-text (extract-cmd-args input-text))
+     (define result (cmd-skip args-text))
+     ;; Mark wave as DEFERRED on disk if skip succeeded
+     (when (and (hash-ref result 'success #f) base-dir (string->number (string-trim args-text)))
+       (mark-wave-status! base-dir (string->number (string-trim args-text)) "DEFERRED"))
+     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+    [(equal? cmd "/reset")
+     (define result (cmd-reset))
+     (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'idle))
+     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
     [else (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; Helper: Build wave docs summary for plan prompt
