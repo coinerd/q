@@ -46,7 +46,7 @@
     (when (null? (gsd-wave-files w))
       (set! warnings (cons (format "~a: no explicit file references" prefix) warnings)))
     ;; Warning: no verify command
-    (when (string=? (gsd-wave-verify w) "")
+    (when (or (not (gsd-wave-verify w)) (string=? (gsd-wave-verify w) ""))
       (set! warnings (cons (format "~a: no verify command" prefix) warnings)))
     ;; Warning: no root-cause/objective
     (when (string=? (gsd-wave-root-cause w) "")
