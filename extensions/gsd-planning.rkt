@@ -250,10 +250,9 @@
                  "2. Do NOT write a new plan. Execute the existing one.\n"
                  "3. Do NOT use planning-write during implementation.\n"
                  "   planning-read is allowed to check STATE or VALIDATION.\n"
-                 "4. Do NOT run read-only tools (read, find, grep, ls) unless a wave's\n"
-                 "   old-text match fails and you need to re-read the target file ONCE.\n"
-                 "5. Use the edit or write tool for EVERY wave.\n"
-                 "   Re-read a file ONLY if the old-text match fails.\n"
+                 "4. Read each target file BEFORE editing it. You need the current content\n"
+                 "   to apply edits correctly. Read is necessary and expected.\n"
+                 "5. After reading, apply the edits specified in the wave doc actions.\n"
                  "6. After completing each wave, run its verify command.\n"
                  "\n"
                  "The plan follows. Start implementing immediately.\n\n"))
@@ -514,7 +513,7 @@
                          state-note
                          wave-arg))
         (hook-amend
-         (hasheq 'submit augmented-text 'text (format "Implementing plan~a..." wave-arg)))])]))
+         (hasheq 'new-session augmented-text 'text (format "Implementing plan~a..." wave-arg)))])]))
 
 ;; Handler for /gsd status
 (define (handle-gsd-status)

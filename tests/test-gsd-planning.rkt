@@ -526,7 +526,7 @@
                      (check-false (hash-ref payload 'submit #f) "no submit without plan")
                      (check-true (string-contains? (hash-ref payload 'text) "No PLAN found"))))))
 
-(test-case "/go submits implementation prompt with plan content"
+(test-case "/go returns new-session payload with plan content"
   (reset-all-gsd-state!)
   (with-temp-dir
    (lambda (dir)
@@ -541,10 +541,10 @@
        (define result (handler (hasheq 'command "/go" 'input "/go")))
        (check-equal? (hook-result-action result) 'amend)
        (define payload (hook-result-payload result))
-       (define submit-text (hash-ref payload 'submit))
-       (check-true (string-contains? submit-text "[gsd-planning]"))
-       (check-true (string-contains? submit-text "IMPLEMENT NOW"))
-       (check-true (string-contains? submit-text "Wave 0"))
+       (define new-session-text (hash-ref payload 'new-session))
+       (check-true (string-contains? new-session-text "[gsd-planning]"))
+       (check-true (string-contains? new-session-text "IMPLEMENT NOW"))
+       (check-true (string-contains? new-session-text "Wave 0"))
        (check-true (string-contains? (hash-ref payload 'text) "Implementing"))))))
 
 ;; ============================================================
@@ -553,6 +553,9 @@
 
 (test-case "planning-implement-prompt forbids re-reading the plan"
   (check-true (string-contains? planning-implement-prompt "Do NOT re-read the plan")))
+
+(test-case "planning-implement-prompt instructs to read target files before editing"
+  (check-true (string-contains? planning-implement-prompt "Read each target file BEFORE editing")))
 
 (test-case "planning-implement-prompt forbids writing a new plan"
   (check-true (string-contains? planning-implement-prompt "Do NOT write a new plan")))
@@ -582,7 +585,7 @@
                               #:exists 'truncate)
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/go" 'input "/go")))
-       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (define submit-text (hash-ref (hook-result-payload result) 'new-session))
        (check-true (string-contains? submit-text "W0: done"))))))
 
 (test-case "/go N starts at specified wave"
@@ -601,7 +604,7 @@
         #:exists 'truncate)
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/go" 'input "/go 2")))
-       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (define submit-text (hash-ref (hook-result-payload result) 'new-session))
        (check-true (string-contains? submit-text "wave 2"))))))
 
 (test-case "/implement alias works"
@@ -617,7 +620,7 @@
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/implement" 'input "/implement")))
        (check-equal? (hook-result-action result) 'amend)
-       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (define submit-text (hash-ref (hook-result-payload result) 'new-session))
        (check-true (string-contains? submit-text "[gsd-planning]"))))))
 
 ;; ============================================================
