@@ -77,27 +77,20 @@
              [end wave-end-idxs])
     (parse-wave-section (take (drop lines start) (add1 (- end start))))))
 
-;; Parse a single wave section (list of lines, first is header).
-(define (parse-wave-section lines)
-  (define header (car lines))
-  (define body-lines (cdr lines))
-  ;; Extract index and title from header
-  (define header-match (regexp-match #rx"^## +[Ww]ave +([0-9]+) *: *(.+)$" header))
-  (define idx
-    (if header-match
-        (string->number (cadr header-match))
-        0))
-  (define title
-    (if header-match
-        (string-trim (caddr header-match))
-        ""))
-  ;; Extract fields from bullet points
+;; Parse structured fields from wave document content.
+;; Handles both bullet-style and heading-style formats.
+;; Single source of truth for field extraction (F3 consolidation).
+(define (parse-wave-content content)
+  (define lines (string-split content "\n"))
+  (define n (length lines))
   (define root-cause "")
   (define files '())
   (define verify-cmd "")
   (define done-criteria '())
-  (for ([line body-lines])
+  (for ([line lines]
+        [i (in-naturals)])
     (cond
+      ;; Bullet-style fields
       [(regexp-match #rx"^- +[Rr]oot *[Cc]ause *: *(.+)$" line)
        =>
        (lambda (m) (set! root-cause (string-trim (cadr m))))]
@@ -109,8 +102,42 @@
        (lambda (m) (set! verify-cmd (string-trim (cadr m))))]
       [(regexp-match #rx"^- +[Dd]one *: *(.+)$" line)
        =>
-       (lambda (m) (set! done-criteria (append done-criteria (list (string-trim (cadr m))))))]))
-  (gsd-wave idx title 'pending root-cause files '() verify-cmd done-criteria))
+       (lambda (m) (set! done-criteria (append done-criteria (list (string-trim (cadr m))))))]
+      ;; Heading-style: ## Verify — collect non-empty, non-backtick lines after heading
+      [(string-prefix? (string-trim line) "## Verify")
+       (define after
+         (for/list ([j (in-range (add1 i) (min n (+ i 5)))]
+                    #:when (and (> (string-length (string-trim (list-ref lines j))) 0)
+                                (not (string-contains? (list-ref lines j) "```"))))
+           (string-trim (list-ref lines j))))
+       (when (and (string=? verify-cmd "") (not (null? after)))
+         (set! verify-cmd (string-join after "; ")))]))
+  (hasheq 'root-cause root-cause 'files files 'verify verify-cmd 'done done-criteria))
+
+;; Parse a single wave section (list of lines, first is header).
+;; Uses unified parse-wave-content for field extraction.
+(define (parse-wave-section lines)
+  (define header (car lines))
+  (define body-lines (cdr lines))
+  (define header-match (regexp-match #rx"^## +[Ww]ave +([0-9]+) *: *(.+)$" header))
+  (define idx
+    (if header-match
+        (string->number (cadr header-match))
+        0))
+  (define title
+    (if header-match
+        (string-trim (caddr header-match))
+        ""))
+  ;; Use unified parser
+  (define fields (parse-wave-content (string-join body-lines "\n")))
+  (gsd-wave idx
+            title
+            'pending
+            (hash-ref fields 'root-cause "")
+            (hash-ref fields 'files '())
+            '()
+            (hash-ref fields 'verify "")
+            (hash-ref fields 'done '())))
 
 ;; ============================================================
 ;; Validation
@@ -231,6 +258,7 @@
 
          ;; Parsing
          parse-waves-from-markdown
+         parse-wave-content
 
          ;; Validation
          validation-result

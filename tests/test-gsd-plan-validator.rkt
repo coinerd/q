@@ -51,11 +51,11 @@
   (check-true (validation-valid? result))
   (check-true (ormap (lambda (w) (string-contains? w "title")) (validation-warnings result))))
 
-(test-case "wave without files → warning, not error"
+(test-case "wave without files → error (F2: upgraded from warning)"
   (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '() '() "test" '())) "" '() '()))
   (define result (validate-plan-strict plan))
-  (check-true (validation-valid? result))
-  (check-true (ormap (lambda (w) (string-contains? w "file")) (validation-warnings result))))
+  (check-false (validation-valid? result))
+  (check-true (ormap (lambda (e) (string-contains? e "no files")) (validation-errors result))))
 
 ;; ============================================================
 ;; Warning cases (allow /go)

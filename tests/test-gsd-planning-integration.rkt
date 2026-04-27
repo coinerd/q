@@ -130,7 +130,7 @@
      (with-temp-planning-dir
       (lambda (dir)
         (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                               (lambda (out) (display "## Wave 0\n" out))
+                               (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
                                #:exists 'truncate)
         (check-equal? (current-max-old-text-len) 500 "default should be 500")
         (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))

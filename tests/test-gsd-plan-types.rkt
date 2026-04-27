@@ -223,3 +223,41 @@
   (define w0 (gsd-wave 0 "A" 'completed "" '("a") '() "t" '()))
   (define p (gsd-plan (list w0) "" '() '()))
   (check-false (plan-next-pending-wave p)))
+
+;; ============================================================
+;; W2: Unified parse-wave-content tests (F3 consolidation)
+;; ============================================================
+
+(test-case "W2: parse-wave-content extracts bullet-style fields"
+  (define content "- Root cause: missing import\n- File: q/foo.rkt\n- File: q/bar.rkt\n- Verify: raco test q/tests/foo.rkt\n- Done: tests pass")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'root-cause) "missing import")
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt"))
+  (check-equal? (hash-ref result 'verify) "raco test q/tests/foo.rkt")
+  (check-equal? (hash-ref result 'done) '("tests pass")))
+
+(test-case "W2: parse-wave-content extracts heading-style ## Verify"
+  (define content "## Verify\nbash test.sh\n")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'verify) "bash test.sh"))
+
+(test-case "W2: parse-wave-content captures non-fence lines in ## Verify"
+  (define content "## Verify\n```bash\nraco test\n```\n")
+  (define result (parse-wave-content content))
+  ;; raco test is captured (not a fence line), fence lines are skipped
+  (check-equal? (hash-ref result 'verify) "raco test"))
+
+(test-case "W2: parse-wave-content empty content returns empty fields"
+  (define result (parse-wave-content ""))
+  (check-equal? (hash-ref result 'root-cause) "")
+  (check-equal? (hash-ref result 'files) '())
+  (check-equal? (hash-ref result 'verify) "")
+  (check-equal? (hash-ref result 'done) '()))
+
+(test-case "W2: parse-wave-content mixed bullet + heading formats"
+  (define content "- Root cause: bug\n- Verify: inline check\n## Verify\nraco test\n- File: q/baz.rkt")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'root-cause) "bug")
+  (check-equal? (hash-ref result 'files) '("q/baz.rkt"))
+  ;; bullet-style - Verify: takes priority since it appears first
+  (check-equal? (hash-ref result 'verify) "inline check"))
