@@ -100,3 +100,25 @@
   (define p (create-provider-for-name "openai" "https://api.openai.com/v1" "test-key" "gpt-4o"))
   (check-pred provider? p)
   (check-equal? (provider-name p) "openai-compatible"))
+
+;; ============================================================
+;; F2: URL-aware host matching (v0.21.5)
+;; ============================================================
+
+(test-case "F2: local-provider? rejects URL with localhost in path"
+  (check-false (local-provider? "https://api.example.com/proxy/localhost/v1")))
+
+(test-case "F2: local-provider? rejects URL with 127.0.0.1 in query"
+  (check-false (local-provider? "https://remote.host.com/api?host=127.0.0.1")))
+
+(test-case "F2: local-provider? rejects URL with 10. in path"
+  (check-false (local-provider? "https://example.com/10.data/file")))
+
+(test-case "F2: local-provider? recognizes ::1 (IPv6 loopback)"
+  (check-true (local-provider? "http://[::1]:8080/v1")))
+
+(test-case "F2: local-provider? rejects malformed URL"
+  (check-false (local-provider? "not-a-url")))
+
+(test-case "F2: local-provider? rejects #f"
+  (check-false (local-provider? #f)))

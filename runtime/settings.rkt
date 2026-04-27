@@ -40,6 +40,7 @@
 
          ;; Merging
          merge-settings
+         deep-merge-hash
 
          ;; Query
          setting-ref
@@ -132,11 +133,16 @@
 ;; Only hashes are merged recursively — scalars, lists, etc. are
 ;; replaced outright by the right-hand value.
 (define (deep-merge-hash left right)
-  (for/fold ([acc left]) ([(k v) (in-hash right)])
-    (define left-v (hash-ref acc k #f))
-    (cond
-      [(and (hash? left-v) (hash? v)) (hash-set acc k (deep-merge-hash left-v v))]
-      [else (hash-set acc k v)])))
+  (cond
+    [(and (hash? left) (not (hash? right))) left]
+    [(and (not (hash? left)) (hash? right)) right]
+    [(not (and (hash? left) (hash? right))) (hash)]
+    [else
+     (for/fold ([acc left]) ([(k v) (in-hash right)])
+       (define left-v (hash-ref acc k #f))
+       (cond
+         [(and (hash? left-v) (hash? v)) (hash-set acc k (deep-merge-hash left-v v))]
+         [else (hash-set acc k v)]))]))
 
 ;; Sentinel for distinguishing "not found" from "found #f"
 (define NOT-FOUND (gensym 'not-found))
@@ -186,7 +192,10 @@
     (if config-path
         (if (file-exists? config-path)
             (with-handlers ([exn:fail? (λ (_) (hash))])
-              (call-with-input-file config-path (λ (in) (read-json in))))
+              (let ([result (call-with-input-file config-path (λ (in) (read-json in)))])
+                (if (hash? result)
+                    result
+                    (hash))))
             (hash))
         (load-global-settings home-dir)))
   (define project-hash (load-project-settings project-dir))

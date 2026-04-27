@@ -54,3 +54,30 @@
    #:exists 'replace)
   (check-false (config-parse-error tmp))
   (delete-file tmp))
+
+;; ============================================================
+;; F3: Config shape validation (v0.21.5)
+;; ============================================================
+
+(test-case "F3: load-settings with non-object config file returns empty merged"
+  (define tmp (make-temporary-file "q-test-config-~a.json"))
+  (with-output-to-file tmp (lambda () (display "[1,2,3]")) #:exists 'replace)
+  (define settings (load-settings "/tmp" #:config-path tmp))
+  (check-true (hash? (q-settings-merged settings)))
+  (delete-file tmp))
+
+(test-case "F3: load-settings with scalar config file returns empty merged"
+  (define tmp (make-temporary-file "q-test-config-~a.json"))
+  (with-output-to-file tmp (lambda () (display "\"hello\"")) #:exists 'replace)
+  (define settings (load-settings "/tmp" #:config-path tmp))
+  (check-true (hash? (q-settings-merged settings)))
+  (delete-file tmp))
+
+(test-case "F3: deep-merge-hash with non-hash left returns right"
+  (check-equal? (deep-merge-hash "not-a-hash" (hash 'a 1)) (hash 'a 1)))
+
+(test-case "F3: deep-merge-hash with non-hash right returns left"
+  (check-equal? (deep-merge-hash (hash 'a 1) "not-a-hash") (hash 'a 1)))
+
+(test-case "F3: deep-merge-hash with both non-hash returns empty"
+  (check-equal? (deep-merge-hash 42 "string") (hash)))
