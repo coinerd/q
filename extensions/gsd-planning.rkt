@@ -205,9 +205,10 @@
   (define path (planning-artifact-path base-dir name))
   (if (not path)
       #f
-      (let ([dir (build-path base-dir planning-dir-name)])
-        (unless (directory-exists? dir)
-          (make-directory* dir))
+      (let ([parent (path-only path)])
+        (when parent
+          (unless (directory-exists? parent)
+            (make-directory* parent)))
         (if (json-artifact? name)
             (call-with-output-file path
                                    (lambda (out)
