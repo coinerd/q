@@ -17,6 +17,7 @@
 
 (require racket/string
          racket/format
+         racket/path
          "state-machine.rkt"
          "plan-types.rkt"
          "context-bundle.rkt")
@@ -51,42 +52,42 @@
   (and (string? s) (> (string-length s) 0)))
 
 ;; Normalize a file path: collapse .. and . components.
-(define (normalize-path p)
+;; Canonical path comparison for write guard.
+;; Uses simple-form-path to resolve .., ., symlinks, and relative paths.
+;; Blocks ALL writes to .planning/ directory during execution.
+
+(define (gsd-write-guard target-path planning-dir)
+  (define mode (gsm-current))
+  (define planning-dir-str
+    (if (path? planning-dir)
+        (path->string planning-dir)
+        planning-dir))
   (cond
-    [(not (string? p)) p]
+    [(not (eq? mode 'executing)) #t]
+    [(not (string? target-path)) #t]
+    [(not planning-dir-str) #t]
     [else
-     (define trimmed (string-trim p))
-     (define absolute? (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/)))
-     (define parts (string-split trimmed "/"))
-     (define resolved (resolve-dotdots parts))
-     (if absolute?
-         (string-append "/" (string-join resolved "/"))
-         (string-join resolved "/"))]))
-
-;; Resolve .. by folding: each .. pops the last component.
-(define (resolve-dotdots parts)
-  (define rev
-    (foldl (lambda (part acc)
-             (cond
-               [(string=? part "..")
-                (if (null? acc)
-                    acc
-                    (cdr acc))]
-               [(string=? part ".") acc]
-               [(string=? part "") acc]
-               [else (cons part acc)]))
-           '()
-           parts))
-  (reverse rev))
-
-;; Check if a normalized path targets PLAN.md in the planning dir.
-;; Handles suffix matching for relative paths and .. traversal.
-(define (path-targets-plan? normalized plan-path)
-  (cond
-    [(not (non-empty? plan-path)) #f]
-    [(string=? normalized plan-path) #t]
-    ;; Suffix match: does the path end with .planning/PLAN.md?
-    [else (string-suffix? normalized ".planning/PLAN.md")]))
+     ;; Resolve both paths to canonical form
+     (define canonical-target
+       (with-handlers ([exn:fail? (λ (_) target-path)])
+         (path->string (simple-form-path (string->path target-path)))))
+     (define canonical-planning
+       (with-handlers ([exn:fail? (λ (_) planning-dir-str)])
+         (path->string (simple-form-path (string->path planning-dir-str)))))
+     ;; Check if target is inside .planning/ directory
+     (define in-planning-dir?
+       (or (string=? canonical-target canonical-planning)
+           (string-prefix? canonical-target (string-append canonical-planning "/"))))
+     (if in-planning-dir?
+         (hasheq 'blocked
+                 #t
+                 'tool
+                 "write"
+                 'mode
+                 'executing
+                 'reason
+                 (format "Cannot write to ~a during execution (use /replan to modify)" target-path))
+         #t)]))
 
 ;; ============================================================
 ;; Command dispatch
@@ -217,34 +218,6 @@
 ;; ============================================================
 ;; Write guard (hardened — DD-6)
 ;; ============================================================
-
-;; During executing mode, block writes to .planning/PLAN.md.
-;; Uses path normalization to catch .. traversal and other tricks.
-(define (gsd-write-guard target-path planning-dir)
-  (define mode (gsm-current))
-  (define planning-dir-str
-    (if (path? planning-dir)
-        (path->string planning-dir)
-        planning-dir))
-  (cond
-    [(not (eq? mode 'executing)) #t]
-    [(not (string? target-path)) #t]
-    [else
-     (define normalized (normalize-path target-path))
-     (define plan-path
-       (if (string? planning-dir-str)
-           (normalize-path (string-append planning-dir-str "/PLAN.md"))
-           ""))
-     (if (path-targets-plan? normalized plan-path)
-         (hasheq 'blocked
-                 #t
-                 'tool
-                 "write"
-                 'mode
-                 'executing
-                 'reason
-                 (format "Cannot write to ~a during execution (use /replan to modify)" target-path))
-         #t)]))
 
 ;; ============================================================
 ;; Status display
