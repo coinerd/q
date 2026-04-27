@@ -268,12 +268,13 @@
   (check-true (hash? r))
   (check-equal? (hash-ref r 'blocked) #t))
 
-(test-case "write guard: allows other .planning files during executing"
+(test-case "write guard: blocks other .planning files during executing"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (check-true (gsd-write-guard ".planning/STATE.md" ".planning")))
+  (define r (gsd-write-guard ".planning/STATE.md" ".planning"))
+  (check-true (hash-ref r 'blocked #f)))
 
 (test-case "write guard: allows files outside .planning"
   (reset-gsm!)
@@ -281,3 +282,31 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (check-true (gsd-write-guard "src/fix.rkt" ".planning")))
+
+;; ============================================================
+;; W4: Hardened path guard tests (F6)
+;; ============================================================
+
+(test-case "W4: write guard blocks .planning/waves/W0-slug.md during executing"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (define r (gsd-write-guard ".planning/waves/W0-slug.md" ".planning"))
+  (check-true (hash-ref r 'blocked #f)))
+
+(test-case "W4: write guard allows q/foo.rkt during executing"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (check-true (gsd-write-guard "q/foo.rkt" ".planning")))
+
+(test-case "W4: write guard allows during exploring mode"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
+
+(test-case "W4: write guard allows during idle mode"
+  (reset-gsm!)
+  (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
