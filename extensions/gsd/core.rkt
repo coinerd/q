@@ -104,11 +104,16 @@
     [else #f]))
 
 ;; /plan <text> → exploring
+;; v0.21.5: Multi-step transition — go via idle if needed.
 (define (cmd-plan args)
   (define user-text
     (if (string? args)
         (string-trim args)
         ""))
+  ;; If current state blocks direct → exploring, go via idle first.
+  (define current (gsm-current))
+  (unless (or (eq? current 'idle) (eq? current 'exploring))
+    (gsm-transition! 'idle))
   (define result (gsm-transition! 'exploring))
   (if (ok? result)
       (hasheq 'success
@@ -154,6 +159,8 @@
   (define current (gsm-current))
   (cond
     [(or (eq? current 'plan-written) (eq? current 'executing))
+     ;; v0.21.5: Multi-step transition — go via idle first.
+     (gsm-transition! 'idle)
      (define result (gsm-transition! 'exploring))
      (if (ok? result)
          (hasheq 'success #t 'mode 'exploring 'message "Re-planning. Modify the plan freely.")

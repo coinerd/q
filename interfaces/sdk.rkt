@@ -744,7 +744,9 @@
     [(not (hook-result? cmd-result)) (values rt2 'unexpected-result)]
     [else
      (define payload (hook-result-payload cmd-result))
-     (define submit-text (and (hash? payload) (hash-ref payload 'submit #f)))
+     (define submit-text (and (hash? payload)
+                              (or (hash-ref payload 'new-session #f)
+                                  (hash-ref payload 'submit #f))))
      (cond
        [(not submit-text) (values rt2 'no-plan-text)]
        [(not (runtime-rt-session rt2)) (values rt2 submit-text)]
