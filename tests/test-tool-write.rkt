@@ -124,3 +124,37 @@
     (define r (tool-write (hasheq 'path tmp 'content "1234567890")))
     (check-false (tool-result-is-error? r)))
   (when (file-exists? tmp) (delete-file tmp)))
+
+;; ============================================================
+;; F4: Per-session write budget isolation (v0.21.5)
+;; ============================================================
+
+(test-case "F4: init-session-writes! resets to fresh counter"
+  (reset-cumulative-writes!)
+  (parameterize ([cumulative-write-budget 20]
+                 [current-max-write-bytes 100])
+    (define tmp (make-temporary-file "q-write-test-~a"))
+    (delete-file tmp)
+    ;; Write 10 bytes
+    (tool-write (hasheq 'path tmp 'content "1234567890"))
+    ;; Switch to new session — fresh counter
+    (init-session-writes!)
+    ;; Can write again even though previous session had 10 bytes
+    (define r (tool-write (hasheq 'path tmp 'content "123456789012")))
+    (check-false (tool-result-is-error? r))
+    (when (file-exists? tmp) (delete-file tmp))))
+
+(test-case "F4: parameterize isolation between sessions"
+  (init-session-writes!)
+  (parameterize ([cumulative-write-budget 15]
+                 [current-max-write-bytes 100])
+    (define tmp (make-temporary-file "q-write-test-~a"))
+    (delete-file tmp)
+    ;; Session A: write 10 bytes
+    (tool-write (hasheq 'path tmp 'content "1234567890"))
+    ;; Simulate session B with fresh counter
+    (init-session-writes!)
+    ;; Session B should have fresh budget
+    (define r (tool-write (hasheq 'path tmp 'content "123456789012")))
+    (check-false (tool-result-is-error? r))
+    (when (file-exists? tmp) (delete-file tmp))))
