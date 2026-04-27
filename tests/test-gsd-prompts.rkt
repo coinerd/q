@@ -15,8 +15,7 @@
 
 (test-case "exploring-prompt includes planning instructions"
   (define p (exploring-prompt "Fix the bug"))
-  (check-true (or (string-contains? p "Explore") (string-contains? p "explore")) "mentions explore")
-  (check-true (string-contains? p "plan") "mentions plan")
+  (check-true (or (string-contains? p "Plan") (string-contains? p "plan")) "mentions plan")
   (check-true (string-contains? p "planning-write") "mentions planning-write"))
 
 (test-case "exploring-prompt includes user request"
@@ -28,20 +27,24 @@
   (check-true (string? p))
   (check-false (string-contains? p "User request:")))
 
-(test-case "exploring-prompt mentions no limits"
+(test-case "exploring-prompt enforces write-immediately workflow"
   (define p (exploring-prompt "test"))
-  (check-true (string-contains? p "No time or call limits")))
+  (check-true (string-contains? p "IMMEDIATELY write") "mentions write-immediately")
+  (check-true (string-contains? p "NEVER re-read") "mentions never re-read")
+  (check-true (string-contains? p "MAXIMUM 5 tool calls") "mentions 5-call limit"))
 
 ;; ============================================================
 ;; Executing prompt
 ;; ============================================================
 
 (test-case "executing-prompt includes wave count"
-  (define plan (gsd-plan
-                (list (gsd-wave 0 "Setup" 'pending "" '("a.rkt") '() "test" '())
-                      (gsd-wave 1 "Fix" 'pending "" '("b.rkt") '() "test" '())
-                      (gsd-wave 2 "Verify" 'pending "" '("c.rkt") '() "test" '()))
-                "" '() '()))
+  (define plan
+    (gsd-plan (list (gsd-wave 0 "Setup" 'pending "" '("a.rkt") '() "test" '())
+                    (gsd-wave 1 "Fix" 'pending "" '("b.rkt") '() "test" '())
+                    (gsd-wave 2 "Verify" 'pending "" '("c.rkt") '() "test" '()))
+              ""
+              '()
+              '()))
   (define exec (make-wave-executor plan))
   (define p (executing-prompt plan exec))
   (check-true (string-contains? p "3 waves")))
@@ -89,14 +92,16 @@
 ;; ============================================================
 
 (test-case "verifying-prompt includes PASS/FAIL"
-  (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "raco test" '())) "" '() '()))
+  (define plan
+    (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "raco test" '())) "" '() '()))
   (define exec (make-wave-executor plan))
   (define p (verifying-prompt plan exec))
   (check-true (string-contains? p "PASS") "mentions PASS")
   (check-true (string-contains? p "FAIL") "mentions FAIL"))
 
 (test-case "verifying-prompt includes verify commands"
-  (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "raco test a" '())) "" '() '()))
+  (define plan
+    (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "raco test a" '())) "" '() '()))
   (define exec (make-wave-executor plan))
   (define p (verifying-prompt plan exec))
   (check-true (string-contains? p "raco test a")))
