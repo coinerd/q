@@ -237,17 +237,18 @@
        [else
         ;; Execute the tool (with file mutation queue for write tools)
         (define file-mutating-tools '("write" "edit"))
+        (define args (tool-call-arguments tc-to-execute))
         (define exec-result
           (with-handlers ([exn:fail? (lambda (e)
                                        (make-error-result
                                         (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
-            (define args (tool-call-arguments tc-to-execute))
             (define path-arg
               (and (member tc-name file-mutating-tools) (hash? args) (hash-ref args 'path #f)))
             (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx)))))
 
         ;; Dispatch 'tool-result-post hook
-        (define post-payload (hasheq 'tool-name tc-name 'result exec-result 'entry-id tc-id))
+        (define post-payload
+          (hasheq 'tool-name tc-name 'result exec-result 'entry-id tc-id 'arguments args))
 
         (define post-hook-result
           (if hook-dispatcher

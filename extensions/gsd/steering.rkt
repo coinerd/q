@@ -28,7 +28,9 @@
 ;; ============================================================
 
 ;; Track last N (tool-name . argument) pairs for stall detection
-(define steering-history (make-parameter '()))
+;; Uses a box (not parameter) because hook handlers run in timeout threads
+;; and parameters are thread-local (v0.20.2 lesson)
+(define steering-history-box (box '()))
 (define steering-history-max 10)
 
 ;; ============================================================
@@ -53,7 +55,7 @@
 
 ;; Reset steering state (called on mode transition)
 (define (reset-steering-state!)
-  (steering-history '()))
+  (set-box! steering-history-box '()))
 
 ;; ============================================================
 ;; Internal: stall detection
@@ -63,11 +65,11 @@
   (cond
     [(string=? tool-name "read")
      (define entry (cons tool-name (simplify-args tool-name tool-args)))
-     (define current (steering-history))
+     (define current (unbox steering-history-box))
      (define new-history (take-at-most (cons entry current) steering-history-max))
-     (steering-history new-history)]
+     (set-box! steering-history-box new-history)]
     ;; Non-read tool: reset stall counter
-    [else (steering-history '())]))
+    [else (set-box! steering-history-box '())]))
 
 ;; Simplify args: for read tool, extract file path; for others, empty
 (define (simplify-args tool-name tool-args)
@@ -86,7 +88,7 @@
 
 ;; Check if the last stall-threshold reads are all the same file
 (define (detect-stall)
-  (define history (steering-history))
+  (define history (unbox steering-history-box))
   (define reads (filter (lambda (e) (string=? (car e) "read")) history))
   (cond
     [(< (length reads) stall-threshold) #f]

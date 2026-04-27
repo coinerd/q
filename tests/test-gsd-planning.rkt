@@ -261,7 +261,7 @@
 
 (test-case "gsd-planning-extension has correct name and version"
   (check-equal? (extension-name gsd-planning-extension) "gsd-planning-extension")
-  (check-equal? (extension-version gsd-planning-extension) "1.0.0"))
+  (check-equal? (extension-version gsd-planning-extension) "1.1.0"))
 
 (test-case "gsd-planning-extension has register-tools hook"
   (define hooks (extension-hooks gsd-planning-extension))
@@ -502,12 +502,15 @@
                      (check-true (string-contains? (hash-ref payload 'text) "No PLAN found"))))))
 
 (test-case "/go submits implementation prompt with plan content"
+  (reset-all-gsd-state!)
   (with-temp-dir
    (lambda (dir)
      (parameterize ([current-directory dir])
+       (set-pinned-planning-dir! dir)
        (make-directory* (build-path dir ".planning"))
        (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                              (lambda (out) (display "# Plan\n## Wave 0\n- Fix bug" out))
+                              (lambda (out)
+                                (display "# Plan\n## Wave 0: Fix bug\n- File: foo.rkt" out))
                               #:exists 'truncate)
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/go" 'input "/go")))
@@ -544,47 +547,57 @@
   (check-false (string-contains? planning-implement-prompt "Use planning-read")))
 
 (test-case "/go includes state when available"
-  (with-temp-dir (lambda (dir)
-                   (parameterize ([current-directory dir])
-                     (make-directory* (build-path dir ".planning"))
-                     (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                                            (lambda (out) (display "# Plan\nWave 0" out))
-                                            #:exists 'truncate)
-                     (call-with-output-file (build-path dir ".planning" "STATE.md")
-                                            (lambda (out) (display "W0: done" out))
-                                            #:exists 'truncate)
-                     (define handler
-                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
-                     (define result (handler (hasheq 'command "/go" 'input "/go")))
-                     (define submit-text (hash-ref (hook-result-payload result) 'submit))
-                     (check-true (string-contains? submit-text "W0: done"))))))
-
-(test-case "/go N starts at specified wave"
+  (reset-all-gsd-state!)
   (with-temp-dir
    (lambda (dir)
      (parameterize ([current-directory dir])
+       (set-pinned-planning-dir! dir)
        (make-directory* (build-path dir ".planning"))
        (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                              (lambda (out) (display "# Plan\nWave 0\nWave 1\nWave 2" out))
+                              (lambda (out) (display "# Plan\n## Wave 0: Fix\n- File: foo.rkt" out))
                               #:exists 'truncate)
+       (call-with-output-file (build-path dir ".planning" "STATE.md")
+                              (lambda (out) (display "W0: done" out))
+                              #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/go" 'input "/go")))
+       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (check-true (string-contains? submit-text "W0: done"))))))
+
+(test-case "/go N starts at specified wave"
+  (reset-all-gsd-state!)
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (set-pinned-planning-dir! dir)
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file
+        (build-path dir ".planning" "PLAN.md")
+        (lambda (out)
+          (display
+           "# Plan\n## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Core\n- File: bar.rkt\n## Wave 2: Test\n- File: baz.rkt"
+           out))
+        #:exists 'truncate)
        (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
        (define result (handler (hasheq 'command "/go" 'input "/go 2")))
        (define submit-text (hash-ref (hook-result-payload result) 'submit))
        (check-true (string-contains? submit-text "wave 2"))))))
 
 (test-case "/implement alias works"
-  (with-temp-dir (lambda (dir)
-                   (parameterize ([current-directory dir])
-                     (make-directory* (build-path dir ".planning"))
-                     (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                                            (lambda (out) (display "# Plan\nWave 0" out))
-                                            #:exists 'truncate)
-                     (define handler
-                       (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
-                     (define result (handler (hasheq 'command "/implement" 'input "/implement")))
-                     (check-equal? (hook-result-action result) 'amend)
-                     (define submit-text (hash-ref (hook-result-payload result) 'submit))
-                     (check-true (string-contains? submit-text "[gsd-planning]"))))))
+  (reset-all-gsd-state!)
+  (with-temp-dir
+   (lambda (dir)
+     (parameterize ([current-directory dir])
+       (set-pinned-planning-dir! dir)
+       (make-directory* (build-path dir ".planning"))
+       (call-with-output-file (build-path dir ".planning" "PLAN.md")
+                              (lambda (out) (display "# Plan\n## Wave 0: Fix\n- File: foo.rkt" out))
+                              #:exists 'truncate)
+       (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+       (define result (handler (hasheq 'command "/implement" 'input "/implement")))
+       (check-equal? (hook-result-action result) 'amend)
+       (define submit-text (hash-ref (hook-result-payload result) 'submit))
+       (check-true (string-contains? submit-text "[gsd-planning]"))))))
 
 ;; ============================================================
 ;; W0: /plan Exploration Cap Tests
@@ -611,9 +624,11 @@
               "prompt should say to replace entire existing plan"))
 
 (test-case "/plan-with-text-injects-stale-warning-when-plan-exists"
+  (reset-all-gsd-state!)
   (with-temp-dir
    (lambda (dir)
      (parameterize ([current-directory dir])
+       (set-pinned-planning-dir! dir)
        (make-directory* (build-path dir ".planning"))
        (call-with-output-file (build-path dir ".planning" "PLAN.md")
                               (lambda (out) (display "# Old Plan\nWave 0: old stuff" out))
@@ -627,8 +642,10 @@
                    "stale warning should mention OVERWRITE")))))
 
 (test-case "/plan-with-text-no-warning-when-no-plan"
+  (reset-all-gsd-state!)
   (with-temp-dir (lambda (dir)
                    (parameterize ([current-directory dir])
+                     (set-pinned-planning-dir! dir)
                      (make-directory* (build-path dir ".planning"))
                      (define handler
                        (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))

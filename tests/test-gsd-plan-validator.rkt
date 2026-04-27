@@ -21,18 +21,18 @@
 
 (test-case "well-formed plan with 3 waves passes validation"
   (define plan
-    (gsd-plan
-     (list (valid-wave 0 "Setup" '("a.rkt") "raco test a")
-           (valid-wave 1 "Implement" '("b.rkt") "raco test b")
-           (valid-wave 2 "Verify" '("c.rkt") "raco test c"))
-     "" '() '()))
+    (gsd-plan (list (valid-wave 0 "Setup" '("a.rkt") "raco test a")
+                    (valid-wave 1 "Implement" '("b.rkt") "raco test b")
+                    (valid-wave 2 "Verify" '("c.rkt") "raco test c"))
+              ""
+              '()
+              '()))
   (define result (validate-plan-strict plan))
   (check-true (validation-valid? result))
   (check-equal? (length (validation-errors result)) 0))
 
 (test-case "valid-plan->go? returns #t for valid plan"
-  (define plan
-    (gsd-plan (list (valid-wave 0 "Fix" '("x.rkt") "raco test")) "" '() '()))
+  (define plan (gsd-plan (list (valid-wave 0 "Fix" '("x.rkt") "raco test")) "" '() '()))
   (check-true (valid-plan->go? plan)))
 
 ;; ============================================================
@@ -43,54 +43,43 @@
   (define plan (gsd-plan '() "" '() '()))
   (define result (validate-plan-strict plan))
   (check-false (validation-valid? result))
-  (check-true (ormap (lambda (e) (string-contains? e "no waves"))
-                     (validation-errors result))))
+  (check-true (ormap (lambda (e) (string-contains? e "no waves")) (validation-errors result))))
 
-(test-case "wave without title → error"
-  (define plan
-    (gsd-plan (list (gsd-wave 0 "" 'pending "" '("a.rkt") '() "test" '())) "" '() '()))
+(test-case "wave without title → warning, not error"
+  (define plan (gsd-plan (list (gsd-wave 0 "" 'pending "" '("a.rkt") '() "test" '())) "" '() '()))
   (define result (validate-plan-strict plan))
-  (check-false (validation-valid? result))
-  (check-true (ormap (lambda (e) (string-contains? e "missing title"))
-                     (validation-errors result))))
+  (check-true (validation-valid? result))
+  (check-true (ormap (lambda (w) (string-contains? w "title")) (validation-warnings result))))
 
-(test-case "wave without files → error"
-  (define plan
-    (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '() '() "test" '())) "" '() '()))
+(test-case "wave without files → warning, not error"
+  (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '() '() "test" '())) "" '() '()))
   (define result (validate-plan-strict plan))
-  (check-false (validation-valid? result))
-  (check-true (ormap (lambda (e) (string-contains? e "no file"))
-                     (validation-errors result))))
+  (check-true (validation-valid? result))
+  (check-true (ormap (lambda (w) (string-contains? w "file")) (validation-warnings result))))
 
 ;; ============================================================
 ;; Warning cases (allow /go)
 ;; ============================================================
 
 (test-case "wave without verify → warning, not error"
-  (define plan
-    (gsd-plan (list (valid-wave 0 "Fix" '("a.rkt") "")) "" '() '()))
+  (define plan (gsd-plan (list (valid-wave 0 "Fix" '("a.rkt") "")) "" '() '()))
   (define result (validate-plan-strict plan))
   (check-true (validation-valid? result))
   (check-equal? (length (validation-errors result)) 0)
-  (check-true (ormap (lambda (w) (string-contains? w "verify"))
-                     (validation-warnings result))))
+  (check-true (ormap (lambda (w) (string-contains? w "verify")) (validation-warnings result))))
 
 (test-case "wave without root-cause → warning"
-  (define plan
-    (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "test" '()))
-              "" '() '()))
+  (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "test" '())) "" '() '()))
   (define result (validate-plan-strict plan))
   (check-true (validation-valid? result))
-  (check-true (ormap (lambda (w) (string-contains? w "root-cause"))
-                     (validation-warnings result))))
+  (check-true (ormap (lambda (w) (string-contains? w "root-cause")) (validation-warnings result))))
 
 ;; ============================================================
 ;; Format report
 ;; ============================================================
 
 (test-case "format-validation-report shows checkmark for valid plan"
-  (define plan
-    (gsd-plan (list (valid-wave 0 "Fix" '("a.rkt") "test")) "" '() '()))
+  (define plan (gsd-plan (list (valid-wave 0 "Fix" '("a.rkt") "test")) "" '() '()))
   (define result (validate-plan-strict plan))
   (define report (format-validation-report result))
   (check-true (string-contains? report "valid")))

@@ -39,12 +39,12 @@
   (for ([w waves])
     (define widx (gsd-wave-index w))
     (define prefix (format "Wave ~a" widx))
-    ;; Error: missing title
+    ;; Warning: missing title (plans may omit title after wave number)
     (when (string=? (gsd-wave-title w) "")
-      (set! errors (cons (format "~a: missing title" prefix) errors)))
-    ;; Error: no file references (DD-4: strict)
+      (set! warnings (cons (format "~a: no explicit title" prefix) warnings)))
+    ;; Warning: no file references (often implicit in plan text)
     (when (null? (gsd-wave-files w))
-      (set! errors (cons (format "~a: no file references" prefix) errors)))
+      (set! warnings (cons (format "~a: no explicit file references" prefix) warnings)))
     ;; Warning: no verify command
     (when (string=? (gsd-wave-verify w) "")
       (set! warnings (cons (format "~a: no verify command" prefix) warnings)))

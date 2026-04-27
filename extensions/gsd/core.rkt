@@ -52,9 +52,13 @@
   (cond
     [(not (string? p)) p]
     [else
-     (define parts (string-split (string-trim p) "/"))
+     (define trimmed (string-trim p))
+     (define absolute? (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/)))
+     (define parts (string-split trimmed "/"))
      (define resolved (resolve-dotdots parts))
-     (string-join resolved "/")]))
+     (if absolute?
+         (string-append "/" (string-join resolved "/"))
+         (string-join resolved "/"))]))
 
 ;; Resolve .. by folding: each .. pops the last component.
 (define (resolve-dotdots parts)
@@ -209,14 +213,18 @@
 ;; Uses path normalization to catch .. traversal and other tricks.
 (define (gsd-write-guard target-path planning-dir)
   (define mode (gsm-current))
+  (define planning-dir-str
+    (if (path? planning-dir)
+        (path->string planning-dir)
+        planning-dir))
   (cond
     [(not (eq? mode 'executing)) #t]
     [(not (string? target-path)) #t]
     [else
      (define normalized (normalize-path target-path))
      (define plan-path
-       (if (string? planning-dir)
-           (normalize-path (string-append planning-dir "/PLAN.md"))
+       (if (string? planning-dir-str)
+           (normalize-path (string-append planning-dir-str "/PLAN.md"))
            ""))
      (if (path-targets-plan? normalized plan-path)
          (hasheq 'blocked
