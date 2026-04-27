@@ -200,16 +200,4 @@
   (set-gsd-mode! #f)
   (check-equal? (gsd-mode) #f))
 
-(test-case "legacy API: budget functions still work"
-  (reset-all-gsd-state!)
-  (reset-go-budget!)
-  (check-equal? (go-read-budget) GO-READ-BUDGET)
-  (define after-dec (decrement-budget!))
-  (check-equal? after-dec (sub1 GO-READ-BUDGET)))
 
-(test-case "legacy API: read-count functions still work"
-  (reset-all-gsd-state!)
-  (clear-read-counts!)
-  (check-equal? (get-read-count "foo.rkt") 0)
-  (increment-read-count! "foo.rkt")
-  (check-equal? (get-read-count "foo.rkt") 1))

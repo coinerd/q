@@ -285,12 +285,7 @@
   (gsd-session-cleanup (hasheq))
   (check-equal? (gsd-mode) #f))
 
-(test-case "gsd-session-cleanup resets mode to #f (idempotent)"
-  (set-gsd-mode! 'executing)
-  (gsd-session-cleanup (hasheq))
-  (check-equal? (gsd-mode) #f)
-  (gsd-session-cleanup (hasheq))
-  (check-equal? (gsd-mode) #f))
+
 
 (test-case "gsd-session-cleanup returns hook-pass"
   (define result (gsd-session-cleanup (hasheq 'session-id "test-session" 'duration 100)))

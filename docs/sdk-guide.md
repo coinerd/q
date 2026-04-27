@@ -206,7 +206,7 @@ The SDK provides convenience functions for GSD (Goal-driven Structured Developme
 
 ### Extension Pre-Registration
 
-As of v0.21.1, `open-session` automatically registers extension tools (like `planning-read` and `planning-write`) before the first `run-prompt!` call. This means:
+As of v0.21.3, `open-session` automatically registers extension tools (like `planning-read` and `planning-write`) before the first `run-prompt!` call. This means:
 
 - Extension tools appear in `list-tools` immediately after `open-session`
 - GSD event bus is initialized and ready to emit events

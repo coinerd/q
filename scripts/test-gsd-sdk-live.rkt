@@ -84,7 +84,6 @@
 (displayln "=== After q:plan ===")
 (define snap1 (gsd-snapshot))
 (displayln (format "  mode: ~a" (hash-ref snap1 'mode)))
-(displayln (format "  plan-tool-budget: ~a" (hash-ref snap1 'plan-tool-budget)))
 (displayln (format "  PLAN.md exists: ~a" (file-exists? plan-path)))
 (when (file-exists? plan-path)
   (define txt (file->string plan-path))
@@ -113,7 +112,6 @@
 (displayln (format "  mode: ~a" (hash-ref snap2 'mode)))
 (displayln (format "  total-waves: ~a" (hash-ref snap2 'total-waves)))
 (displayln (format "  completed-waves: ~a" (set-count (hash-ref snap2 'completed-waves))))
-(displayln (format "  go-read-budget: ~a" (hash-ref snap2 'go-read-budget)))
 (displayln "")
 
 ;; ============================================================
