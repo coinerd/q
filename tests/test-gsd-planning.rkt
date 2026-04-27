@@ -881,3 +881,70 @@
   ;; Should not raise an error
   (emit-gsd-event! "gsd.test.noop" (hasheq 'key 'value))
   (check-false (gsd-event-bus) "bus should still be #f"))
+
+;; ============================================================
+;; Wave progress tracking tests (v0.21.2 W1)
+;; ============================================================
+
+(test-case "W1: handle-wave-progress does not auto-advance on edit"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 4)
+  (set-current-wave-index! 0)
+  ;; Simulate edit on a file with no wave marker
+  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
+  (define payload (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "some-file.rkt")))
+  (handle-wave-progress payload result)
+  ;; Wave 0 should NOT be marked complete just from an edit
+  (check-false (wave-complete? 0))
+  (check-equal? (current-wave-index) 0))
+
+(test-case "W1: handle-wave-progress detects wave from file path and advances"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 4)
+  (set-current-wave-index! 0)
+  ;; Simulate edit on W1 file — should mark W0 complete and move to W1
+  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
+  (define payload
+    (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "waves/W1-fix-bug.md")))
+  (handle-wave-progress payload result)
+  (check-true (wave-complete? 0))
+  (check-false (wave-complete? 1))
+  (check-equal? (current-wave-index) 1))
+
+(test-case "W1: handle-wave-progress advances through multiple waves"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 4)
+  (set-current-wave-index! 0)
+  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
+  ;; Edit W1 file → W0 complete, current=1
+  (handle-wave-progress
+   (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "waves/W1-first.md"))
+   result)
+  (check-true (wave-complete? 0))
+  (check-equal? (current-wave-index) 1)
+  ;; Edit W2 file → W1 complete, current=2
+  (handle-wave-progress
+   (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "waves/W2-second.md"))
+   result)
+  (check-true (wave-complete? 1))
+  (check-equal? (current-wave-index) 2))
+
+(test-case "W1: multiple edits within same wave don't advance"
+  (reset-all-gsd-state!)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 3)
+  (set-current-wave-index! 1)
+  (define result (make-success-result (list (hasheq 'type "text" 'text "ok")) (hasheq)))
+  ;; Three edits on the same wave
+  (for ([_ (in-range 3)])
+    (handle-wave-progress
+     (hasheq 'tool-name "edit" 'result result 'arguments (hasheq 'path "src/core.rkt"))
+     result))
+  ;; Still on wave 1
+  (check-equal? (current-wave-index) 1)
+  (check-false (wave-complete? 1))
+  ;; Only 0 completed waves (none explicitly completed yet)
+  (check-equal? (set-count (completed-waves)) 0))

@@ -92,13 +92,18 @@
          mark-wave-complete!
          wave-complete?
          next-pending-wave
+         current-wave-index
+         set-current-wave-index!
          plan-tool-budget
          decrement-plan-budget!
          reset-plan-budget!
          gsd-session-cleanup
          gsd-event-bus
          set-gsd-event-bus!
-         emit-gsd-event!)
+         emit-gsd-event!
+         handle-wave-progress
+         current-wave-index
+         set-current-wave-index!)
 
 ;; ============================================================
 ;; Event emission helper
@@ -514,6 +519,7 @@
             (gsd-wave-index w)))
         (when (not (null? wave-indices))
           (set-total-waves! (add1 (apply max wave-indices))))
+        (set-current-wave-index! 0)
         (reset-plan-budget!)
         (define executor (make-wave-executor plan))
         (define state-content (read-planning-artifact base-dir "STATE"))
@@ -750,18 +756,42 @@
     [else (hook-pass payload)]))
 
 ;; Handle wave progress after successful edit/write during executing
+;;
+;; v0.21.2 fix: No longer auto-advances waves on every edit.
+;; Instead, detects the current wave from the file path being edited
+;; (e.g., editing W2-something.rkt means wave 2). Only marks a wave
+;; complete when we detect the assistant has moved to the NEXT wave.
+;; Progress shows 'Wave N/T in progress' instead of 'complete'.
 (define (handle-wave-progress payload result)
-  (define npw (next-pending-wave))
-  (when npw
-    (mark-wave-complete! npw)
-    (emit-gsd-event! "gsd.wave.complete" (hasheq 'wave npw)))
+  (define args (or (hash-ref payload 'arguments #f) (hash-ref payload 'tool-args #f)))
+  (define path-arg (and (hash? args) (hash-ref args 'path #f)))
+  ;; Try to detect wave index from file path
+  (define detected-wave
+    (and path-arg
+         (let ([m (regexp-match? #rx"[Ww]ave[-_ ]?([0-9]+)|W([0-9]+)[-_.]" path-arg)])
+           (and m
+                (let ([num-match (regexp-match #rx"[Ww]ave[-_ ]?([0-9]+)|W([0-9]+)[-_.]" path-arg)])
+                  (and num-match
+                       (or (and (cadr num-match) (string->number (cadr num-match)))
+                           (and (caddr num-match) (string->number (caddr num-match))))))))))
+  ;; Update current wave if detected and different from tracked
+  (define prev-wave (current-wave-index))
+  (when (and detected-wave (not (= detected-wave prev-wave)))
+    ;; Assistant moved to a new wave — mark the previous one complete
+    (when (and (>= prev-wave 0) (not (wave-complete? prev-wave)))
+      (mark-wave-complete! prev-wave)
+      (emit-gsd-event! "gsd.wave.complete" (hasheq 'wave prev-wave)))
+    (set-current-wave-index! detected-wave)
+    (emit-gsd-event! "gsd.wave.started" (hasheq 'wave detected-wave)))
   (define tw (total-waves))
   (define cw (completed-waves))
+  (define cur (current-wave-index))
   (define progress-text
     (if (> tw 0)
-        (format "\n\n[PROGRESS: Wave ~a/~a complete. ~a remaining.]"
-                (set-count cw)
+        (format "\n\n[PROGRESS: Wave ~a/~a in progress. ~a completed. ~a remaining.]"
+                cur
                 tw
+                (set-count cw)
                 (- tw (set-count cw)))
         ""))
   (if (string=? progress-text "")
