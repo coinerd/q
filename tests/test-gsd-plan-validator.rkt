@@ -51,11 +51,19 @@
   (check-true (validation-valid? result))
   (check-true (ormap (lambda (w) (string-contains? w "title")) (validation-warnings result))))
 
-(test-case "wave without files → error (F2: upgraded from warning)"
+(test-case "wave without files → warning (relaxed in v0.21.7)"
   (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '() '() "test" '())) "" '() '()))
   (define result (validate-plan-strict plan))
+  ;; Single wave with no files = plan-level error (all waves file-less)
   (check-false (validation-valid? result))
-  (check-true (ormap (lambda (e) (string-contains? e "no files")) (validation-errors result))))
+  (check-true (ormap (lambda (e) (string-contains? e "no file references in any wave")) (validation-errors result))))
+
+(test-case "plan with some file-less waves passes (v0.21.7)"
+  (define plan (gsd-plan (list (valid-wave 0 "Fix" '("a.rkt") "")
+                                (gsd-wave 1 "Verify" 'pending "" '() '() "test" '())) "" '() '()))
+  (define result (validate-plan-strict plan))
+  (check-true (validation-valid? result))
+  (check-true (ormap (lambda (w) (string-contains? w "no file references")) (validation-warnings result))))
 
 ;; ============================================================
 ;; Warning cases (allow /go)

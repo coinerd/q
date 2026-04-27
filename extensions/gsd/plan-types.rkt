@@ -178,6 +178,10 @@
       (set! warnings (cons (format "~a: no file references" prefix) warnings)))
     (when (string=? (gsd-wave-verify w) "")
       (set! warnings (cons (format "~a: no verify command" prefix) warnings))))
+  ;; Error: ALL waves are file-less — plan has nothing to execute on
+  (when (and (not (null? waves))
+             (for/and ([w waves]) (null? (gsd-wave-files w))))
+    (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
   (validation-result (reverse errors) (reverse warnings)))
 
 ;; ============================================================
