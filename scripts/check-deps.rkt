@@ -53,7 +53,8 @@
             "wiki"
             "collab"
             "helpers"
-            "examples"))
+            "examples"
+            "gsd"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))

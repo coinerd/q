@@ -92,7 +92,7 @@
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
   (call-with-output-file (build-path plan-dir "PLAN.md")
-    (lambda (out) (display "## Wave 0: Test\n- Do something\n" out))
+    (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
     #:exists 'truncate)
   ;; Pin the planning dir so the extension finds it
   (set-pinned-planning-dir! tmp)
@@ -119,7 +119,7 @@
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
   (call-with-output-file (build-path plan-dir "PLAN.md")
-    (lambda (out) (display "## Wave 0: Test\n- Do something\n" out))
+    (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
     #:exists 'truncate)
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result) (q:go rt))

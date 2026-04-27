@@ -116,13 +116,12 @@
   (reset-all-gsd-state!)
   ;; Verify initial state
   (check-equal? (set-count (completed-waves)) 0)
-  ;; Simulate marking a wave complete (what the /go handler does)
-  (define cw (completed-waves))
-  (set-add! cw 0)
-  (check-equal? (set-count cw) 1)
+  ;; Use proper API to mark wave complete
+  (mark-wave-complete! 0)
+  (check-true (wave-complete? 0))
   ;; Reset clears it
   (reset-all-gsd-state!)
-  (check-equal? (set-count (completed-waves)) 0))
+  (check-false (wave-complete? 0)))
 
 
 (test-case "W4-live: full plan→go with tool call simulation"
