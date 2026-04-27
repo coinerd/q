@@ -124,15 +124,15 @@
   (reset-all-gsd-state!)
   (check-equal? (set-count (completed-waves)) 0))
 
-(test-case "W4-live: read budget is reset during planning"
+(test-case "W4-live: gsd state resets cleanly during planning"
   (reset-all-gsd-state!)
-  ;; Set an initial budget
-  (set-go-read-budget! 100)
-  (check-equal? (go-read-budget) 100)
+  ;; Set a mode to verify it clears
+  (set-gsd-mode! 'planning)
+  (check-equal? (gsd-mode) 'planning)
   ;; Reset (simulating new plan cycle)
   (reset-all-gsd-state!)
-  ;; After reset, budget should be cleared
-  (check-false (go-read-budget)))
+  ;; After reset, mode should be cleared
+  (check-false (gsd-mode)))
 
 (test-case "W4-live: full plan→go with tool call simulation"
   (reset-all-gsd-state!)

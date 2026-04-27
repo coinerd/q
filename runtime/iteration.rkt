@@ -782,19 +782,20 @@
                                               token
                                               config))
                  ;; v0.21.3: Exploration steering removed. Compute counters without steering.
+                 (define new-tcs (extract-tool-calls-from-messages new-msgs))
                  (define-values (new-seen-paths should-increment?)
-                   (update-seen-paths new-msgs seen-paths config))
+                   (update-seen-paths new-tcs seen-paths))
                  (define effective-tool-count
                    (if should-increment?
                        (add1 consecutive-tool-count)
                        consecutive-tool-count))
                  (define new-explore-count
                    (+ explore-count
-                      (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
+                      (for/sum ([tc (in-list new-tcs)])
                                (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
                  (define new-implement-count
                    (+ implement-count
-                      (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
+                      (for/sum ([tc (in-list new-tcs)])
                                (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
                  (define new-error-count
                    (+ consecutive-error-count
