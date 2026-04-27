@@ -45,6 +45,8 @@
          mark-wave-complete!
          wave-complete?
          next-pending-wave
+         current-wave-index
+         set-current-wave-index!
          ;; Plan tool budget
          plan-tool-budget
          decrement-plan-budget!
@@ -70,6 +72,7 @@
 (define read-counts-box (box (make-hash)))
 (define completed-waves-box (box (set)))
 (define total-waves-box (box 0))
+(define current-wave-box (box 0))
 (define EXPLORATION-BUDGET 30)
 (define plan-tool-budget-box (box #f))
 (define gsd-event-bus-box (box #f))
@@ -185,6 +188,12 @@
 (define (wave-complete? idx)
   (call-with-semaphore state-sem (lambda () (set-member? (unbox completed-waves-box) idx))))
 
+(define (current-wave-index)
+  (call-with-semaphore state-sem (lambda () (unbox current-wave-box))))
+
+(define (set-current-wave-index! n)
+  (call-with-semaphore state-sem (lambda () (set-box! current-wave-box n))))
+
 (define (next-pending-wave)
   (call-with-semaphore state-sem
                        (lambda ()
@@ -243,6 +252,8 @@
                                  (set-copy (unbox completed-waves-box))
                                  'total-waves
                                  (unbox total-waves-box)
+                                 'current-wave
+                                 (unbox current-wave-box)
                                  'plan-tool-budget
                                  (unbox plan-tool-budget-box)))))
 
@@ -257,5 +268,6 @@
                          (set-box! read-counts-box (make-hash))
                          (set-box! completed-waves-box (set))
                          (set-box! total-waves-box 0)
+                         (set-box! current-wave-box 0)
                          (set-box! plan-tool-budget-box #f)
                          (set-box! gsd-event-bus-box #f))))

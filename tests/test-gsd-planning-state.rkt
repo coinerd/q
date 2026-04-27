@@ -248,6 +248,21 @@
   (reset-all-gsd-state!)
   (check-equal? (next-pending-wave) #f))
 
+(test-case "current-wave-index defaults to 0"
+  (reset-all-gsd-state!)
+  (check-equal? (current-wave-index) 0))
+
+(test-case "set-current-wave-index! sets and reads back"
+  (reset-all-gsd-state!)
+  (set-current-wave-index! 2)
+  (check-equal? (current-wave-index) 2))
+
+(test-case "current-wave-index included in snapshot"
+  (reset-all-gsd-state!)
+  (set-current-wave-index! 3)
+  (define snap (gsd-snapshot))
+  (check-equal? (hash-ref snap 'current-wave) 3))
+
 ;; ============================================================
 ;; Plan tool budget tests (v0.20.4 W0)
 ;; ============================================================
