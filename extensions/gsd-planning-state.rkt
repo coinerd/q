@@ -6,8 +6,7 @@
 ;; Only wave tracking
 ;; and mode delegation remain.
 
-(require racket/set
-         "gsd/state-machine.rkt")
+(require "gsd/state-machine.rkt")
 
 (provide gsd-mode
          gsd-mode?
@@ -40,9 +39,6 @@
 
 (define pinned-dir-box (box #f))
 (define edit-limit-box (box 500))
-(define completed-waves-box (box (set)))
-(define total-waves-box (box 0))
-(define current-wave-box (box 0))
 (define gsd-event-bus-box (box #f))
 
 ;; ============================================================
@@ -95,40 +91,25 @@
   (call-with-semaphore state-sem (lambda () (set-box! edit-limit-box v))))
 
 ;; ============================================================
-;; Wave tracking
+;; Wave tracking (delegated to state machine — F4 consolidation)
 ;; ============================================================
 
 (define (completed-waves)
-  (call-with-semaphore state-sem (lambda () (set-copy (unbox completed-waves-box)))))
-
+  (gsm-completed-waves))
 (define (total-waves)
-  (call-with-semaphore state-sem (lambda () (unbox total-waves-box))))
-
+  (gsm-total-waves))
 (define (set-total-waves! n)
-  (call-with-semaphore state-sem (lambda () (set-box! total-waves-box n))))
-
+  (gsm-set-total-waves! n))
 (define (mark-wave-complete! idx)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (set-box! completed-waves-box (set-add (unbox completed-waves-box) idx)))))
-
+  (gsm-mark-wave-complete! idx))
 (define (wave-complete? idx)
-  (call-with-semaphore state-sem (lambda () (set-member? (unbox completed-waves-box) idx))))
-
+  (gsm-wave-complete? idx))
 (define (current-wave-index)
-  (call-with-semaphore state-sem (lambda () (unbox current-wave-box))))
-
+  (gsm-current-wave))
 (define (set-current-wave-index! n)
-  (call-with-semaphore state-sem (lambda () (set-box! current-wave-box n))))
-
+  (gsm-set-current-wave! n))
 (define (next-pending-wave)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (define tw (unbox total-waves-box))
-                         (define cw (unbox completed-waves-box))
-                         (for/first ([i (in-range tw)]
-                                     #:when (not (set-member? cw i)))
-                           i))))
+  (gsm-next-pending-wave))
 
 ;; ============================================================
 ;; Event bus
@@ -153,20 +134,19 @@
                                  (unbox pinned-dir-box)
                                  'edit-limit
                                  (unbox edit-limit-box)
-                                 'completed-waves
-                                 (set-copy (unbox completed-waves-box))
                                  'total-waves
-                                 (unbox total-waves-box)
+                                 (gsm-total-waves)
                                  'current-wave
-                                 (unbox current-wave-box)))))
+                                 (gsm-current-wave)
+                                 'completed-waves
+                                 (gsm-completed-waves)
+                                 'wave-executor
+                                 (and (gsm-wave-executor) #t)))))
 
 (define (reset-all-gsd-state!)
   (call-with-semaphore state-sem
                        (lambda ()
-                         (gsm-reset!)
+                         (reset-gsm!)
                          (set-box! pinned-dir-box #f)
                          (set-box! edit-limit-box 500)
-                         (set-box! completed-waves-box (set))
-                         (set-box! total-waves-box 0)
-                         (set-box! current-wave-box 0)
                          (set-box! gsd-event-bus-box #f))))

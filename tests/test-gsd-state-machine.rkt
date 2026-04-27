@@ -231,13 +231,12 @@
 ;; Snapshot
 ;; ============================================================
 
-(test-case "gsm-snapshot captures current state and history"
+(test-case "gsm-snapshot captures current state"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (define snap (gsm-snapshot))
-  (check-eq? (hash-ref snap 'current) 'plan-written)
-  (check-true (list? (hash-ref snap 'history))))
+  (check-eq? (hash-ref snap 'mode) 'plan-written))
 
 ;; ============================================================
 ;; State predicates
@@ -302,3 +301,52 @@
   (check-false (gsm-tool-allowed? "edit"))
   (check-false (gsm-tool-allowed? "write"))
   (check-false (gsm-tool-allowed? "bash")))
+
+;; ============================================================
+;; W3: Wave state in FSM (F4 consolidation)
+;; ============================================================
+
+(test-case "W3: initial state has no executor, 0 waves"
+  (reset-gsm!)
+  (check-false (gsm-wave-executor))
+  (check-equal? (gsm-total-waves) 0)
+  (check-equal? (gsm-current-wave) 0))
+
+(test-case "W3: gsm-set-total-waves! and gsm-total-waves round-trip"
+  (reset-gsm!)
+  (gsm-set-total-waves! 5)
+  (check-equal? (gsm-total-waves) 5))
+
+(test-case "W3: gsm-mark-wave-complete! tracks completed waves"
+  (reset-gsm!)
+  (gsm-set-total-waves! 3)
+  (gsm-mark-wave-complete! 0)
+  (check-true (gsm-wave-complete? 0))
+  (check-false (gsm-wave-complete? 1)))
+
+(test-case "W3: gsm-next-pending-wave skips completed waves"
+  (reset-gsm!)
+  (gsm-set-total-waves! 3)
+  (gsm-mark-wave-complete! 0)
+  (gsm-mark-wave-complete! 1)
+  (check-equal? (gsm-next-pending-wave) 2))
+
+(test-case "W3: reset-gsm! clears all wave state"
+  (reset-gsm!)
+  (gsm-set-total-waves! 5)
+  (gsm-mark-wave-complete! 0)
+  (gsm-set-wave-executor! 'some-executor)
+  (reset-gsm!)
+  (check-false (gsm-wave-executor))
+  (check-equal? (gsm-total-waves) 0)
+  (check-false (gsm-wave-complete? 0)))
+
+(test-case "W3: executor cleared on transition from executing"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (gsm-set-wave-executor! 'test-exec)
+  (check-eq? (gsm-wave-executor) 'test-exec)
+  (gsm-transition! 'idle)
+  (check-false (gsm-wave-executor)))
