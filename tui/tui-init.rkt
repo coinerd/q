@@ -74,26 +74,35 @@
      #:session-queue (agent-session-queue sess)
      #:session-factory-runner
      (lambda (prompt)
-       ;; v0.21.4: /go creates fresh session with no planning history
-       (define new-sess (make-agent-session rt-config))
-       (define new-sid (session-id new-sess))
-       (define new-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
-       ;; Switch extensions: teardown old, rebind to new
-       (switch-session! #:old-session-id (session-id sess)
-                        #:old-bus bus
-                        #:old-extension-registry (hash-ref rt-config 'extension-registry #f)
-                        #:new-session-id new-sid
-                        #:new-session-dir new-dir
-                        #:new-bus bus
-                        #:new-extension-registry (hash-ref rt-config 'extension-registry #f)
-                        #:reason 'fork)
-       ;; Clear TUI transcript for new session
-       (set-box! (tui-ctx-ui-state-box ctx)
-                 (initial-ui-state #:session-id new-sid
-                                   #:model-name (hash-ref rt-config 'model-name #f)))
-       (set-box! (tui-ctx-needs-redraw-box ctx) #t)
-       ;; Run prompt in new session
-       (run-prompt! new-sess prompt))))
+       (with-handlers ([exn:fail?
+                        (lambda (e)
+                          ;; Display error as system message in TUI transcript
+                          (define err-msg (format "[ERROR] /go failed: ~a" (exn-message e)))
+                          (define entry
+                            (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                          (set-box! (tui-ctx-ui-state-box ctx)
+                                    (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) entry))
+                          (set-box! (tui-ctx-needs-redraw-box ctx) #t))])
+         ;; v0.21.4: /go creates fresh session with no planning history
+         (define new-sess (make-agent-session rt-config))
+         (define new-sid (session-id new-sess))
+         (define new-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+         ;; Switch extensions: teardown old, rebind to new
+         (switch-session! #:old-session-id (session-id sess)
+                          #:old-bus bus
+                          #:old-extension-registry (hash-ref rt-config 'extension-registry #f)
+                          #:new-session-id new-sid
+                          #:new-session-dir new-dir
+                          #:new-bus bus
+                          #:new-extension-registry (hash-ref rt-config 'extension-registry #f)
+                          #:reason 'fork)
+         ;; Clear TUI transcript for new session
+         (set-box! (tui-ctx-ui-state-box ctx)
+                   (initial-ui-state #:session-id new-sid
+                                     #:model-name (hash-ref rt-config 'model-name #f)))
+         (set-box! (tui-ctx-needs-redraw-box ctx) #t)
+         ;; Run prompt in new session
+         (run-prompt! new-sess prompt)))))
 
   ;; Install UI callbacks for extensions (breaks extensions→TUI upward import)
   (install-ui-callbacks!

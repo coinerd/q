@@ -872,12 +872,36 @@
               (define factory (cmd-ctx-session-factory-runner cctx))
               (cond
                 ;; Fresh session: call factory with the prompt
-                [factory (thread (lambda () (factory new-session-text)))]
+                [factory
+                 (thread
+                  (lambda ()
+                    (with-handlers
+                        ([exn:fail?
+                          (lambda (e)
+                            (define err-msg (format "[ERROR] /go failed: ~a" (exn-message e)))
+                            (define entry
+                              (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                            (set-box! (cmd-ctx-state-box cctx)
+                                      (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                            (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                      (factory new-session-text))))]
                 [else
                  ;; Fallback: append to existing session
                  (define runner (cmd-ctx-session-runner cctx))
                  (when runner
-                   (thread (lambda () (runner new-session-text))))])]
+                   (thread
+                    (lambda ()
+                      (with-handlers
+                          ([exn:fail?
+                            (lambda (e)
+                              (define err-msg
+                                (format "[ERROR] Session runner failed: ~a" (exn-message e)))
+                              (define entry
+                                (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                              (set-box! (cmd-ctx-state-box cctx)
+                                        (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                              (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                        (runner new-session-text)))))])]
              [submit-text
               ;; Extension wants to submit text as a prompt to the agent
               (when display-text
@@ -886,7 +910,18 @@
                           (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
               (define runner (cmd-ctx-session-runner cctx))
               (when runner
-                (thread (lambda () (runner submit-text))))]
+                (thread
+                 (lambda ()
+                   (with-handlers
+                       ([exn:fail?
+                         (lambda (e)
+                           (define err-msg (format "[ERROR] Prompt failed: ~a" (exn-message e)))
+                           (define entry
+                             (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                           (set-box! (cmd-ctx-state-box cctx)
+                                     (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                           (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                     (runner submit-text)))))]
              [display-text
               ;; Extension provided display text
               (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
