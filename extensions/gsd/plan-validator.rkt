@@ -50,7 +50,11 @@
       (set! warnings (cons (format "~a: no verify command" prefix) warnings)))
     ;; Warning: no root-cause/objective
     (when (string=? (gsd-wave-root-cause w) "")
-      (set! warnings (cons (format "~a: no root-cause/objective" prefix) warnings))))
+      (set! warnings (cons (format "~a: no root-cause/objective" prefix) warnings)))
+    ;; Warning: no slug for wave doc lookup
+    (when (string=? (gsd-wave-title w) "")
+      (set! warnings
+            (cons (format "~a: cannot derive wave doc slug (empty title)" prefix) warnings))))
   (validation-result (reverse errors) (reverse warnings)))
 
 ;; ============================================================
