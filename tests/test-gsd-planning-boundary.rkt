@@ -263,10 +263,13 @@
                       ;; Cleanup
                       (set-gsd-mode! #f))))))
 
-(test-case "new /plan resets mode from 'plan-written"
-  ;; Simulating starting a fresh planning session
+(test-case "new /plan resets mode from 'plan-written (via reset then exploring)"
+  ;; Starting a fresh planning session requires reset first
   (with-mode 'plan-written
              (lambda ()
+               ;; Cannot go directly plan-written → exploring (v0.21.4)
+               ;; Must reset to idle first
+               (set-gsd-mode! #f)
                (set-gsd-mode! 'planning)
                (check-eq? (gsd-mode) 'planning))))
 
