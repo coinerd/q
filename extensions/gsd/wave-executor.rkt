@@ -208,7 +208,22 @@
 
 (define (extract-verify-from-content content)
   (define lines (string-split content "\n"))
-  (for/first ([line lines]
-              #:when (string-contains? (string-trim line) "- Verify:"))
-    (define m (regexp-match-positions #rx"- Verify:" line))
-    (string-trim (substring line (cdar m)))))
+  (define n (length lines))
+  ;; Look for ## Verify heading and capture code block after it
+  (or (for/first ([i (in-range n)]
+                  #:when (string-contains? (string-trim (list-ref lines i)) "## Verify"))
+        ;; Collect non-empty, non-backtick lines after the heading
+        (define after
+          (for/list ([j (in-range (add1 i) (min n (+ i 5)))]
+                     #:when (and (> (string-length (string-trim (list-ref lines j))) 0)
+                                 (not (string-contains? (list-ref lines j) "```"))))
+            (string-trim (list-ref lines j))))
+        (if (null? after)
+            ""
+            (string-join after "; ")))
+      ;; Fallback: look for - Verify: inline
+      (for/first ([line lines]
+                  #:when (string-contains? (string-trim line) "- Verify:"))
+        (define m (regexp-match-positions #rx"- Verify:" line))
+        (string-trim (substring line (cdar m))))
+      ""))
