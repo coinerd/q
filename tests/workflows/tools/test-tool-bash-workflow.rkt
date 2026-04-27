@@ -137,7 +137,7 @@
                                        (set-box! settings-validated? #t)))
                                    (make-success-result (list (hasheq 'type "text" 'text "test"))))))
 
-      (define wr (run-workflow prov "Run echo test" #:tools reg #:files '()))
+      (define wr (run-workflow prov "Run echo test" #:tools reg #:register-default-tools? #f #:files '()))
 
       ;; OUTCOME: loop completed
       (define output (workflow-result-output wr))

@@ -39,8 +39,8 @@
      (define prov (make-scripted-provider
                    (list (tool-call-response "tc-1" "bash"
                                              (hash 'command "ls")))))
-     ;; Empty tool registry (default)
-     (define wr (run-workflow prov "List the files"))
+     ;; Empty tool registry (no default tools)
+     (define wr (run-workflow prov "List the files" #:register-default-tools? #f))
 
      ;; OUTCOME: loop terminates — either with 'completed (after tool-error)
      ;; or 'error, depending on iteration loop error handling.
@@ -184,7 +184,7 @@
                    (list (tool-call-response "tc-1" "bash"
                                              (hash 'command "rm -rf /"))
                          (text-response "I couldn't run that command"))))
-     (define wr (run-workflow prov "Delete everything" #:tools reg))
+     (define wr (run-workflow prov "Delete everything" #:tools reg #:register-default-tools? #f))
 
      ;; OUTCOME: loop completes (tool error is fed back to model)
      (define output (workflow-result-output wr))

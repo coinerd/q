@@ -199,11 +199,12 @@
      (check-equal? (tool-name (lookup-tool reg "read_file")) "read_file")
      (check-false (lookup-tool reg "nonexistent")))
 
-   (test-case "registry: duplicate registration raises error"
+   (test-case "registry: duplicate registration overwrites (idempotent)"
      (define reg (make-tool-registry))
      (register-tool! reg t)
-     (check-exn exn:fail?
-                (lambda () (register-tool! reg t))))
+     ;; Re-register same name — should succeed (last wins)
+     (register-tool! reg t)
+     (check-not-false (lookup-tool reg (tool-name t))))
 
    (test-case "registry: register second tool and verify both listed"
      (define reg (make-tool-registry))

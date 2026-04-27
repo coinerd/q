@@ -75,7 +75,8 @@
                       #:system-instructions [system-instrs '()]
                       #:extensions [ext-paths '()]
                       #:extension-registry [ext-reg #f]
-                      #:skills-dir [skills-dir #f])
+                      #:skills-dir [skills-dir #f]
+                      #:register-default-tools? [register-defaults? #t])
   (define-values (project-dir session-dir)
     (if (null? files)
         (values #f (make-temp-session-dir))
@@ -115,7 +116,8 @@
                       #:event-bus bus
                       #:max-iterations max-iter
                       #:system-instructions effective-system-instrs
-                      #:extension-registry effective-ext-reg))
+                      #:extension-registry effective-ext-reg
+                      #:register-default-tools? register-defaults?))
   (define rt2 (sdk:open-session rt))
   (define sid (hash-ref (sdk:session-info rt2) 'session-id))
   (define-values (rt3 result)

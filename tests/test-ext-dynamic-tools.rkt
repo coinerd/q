@@ -76,7 +76,7 @@
                                    (hasheq 'type "object")
                                    (lambda (args) (make-success-result "x"))))))
 
-(test-case "ext-register-tool! errors on duplicate name"
+(test-case "ext-register-tool! overwrites on duplicate name (idempotent)"
   (define reg (make-tool-registry))
   (define ctx
     (make-extension-ctx #:session-id "s-dup"
@@ -89,13 +89,13 @@
                       "first"
                       (hasheq 'type "object")
                       (lambda (args) (make-success-result "1")))
-  (check-exn exn:fail?
-             (lambda ()
-               (ext-register-tool! ctx
-                                   "dup"
-                                   "second"
-                                   (hasheq 'type "object")
-                                   (lambda (args) (make-success-result "2"))))))
+  ;; Re-registration succeeds (last wins)
+  (ext-register-tool! ctx
+                      "dup"
+                      "second"
+                      (hasheq 'type "object")
+                      (lambda (args) (make-success-result "2")))
+  (check-not-false (lookup-tool reg "dup")))
 
 ;; ============================================================
 ;; ext-unregister-tool!

@@ -54,6 +54,7 @@
                     (make-success-result "file content here"))))
 
      (define wr (run-workflow prov "Read hello.txt" #:tools reg
+                              #:register-default-tools? #f
                               #:files (list (cons "hello.txt" "file content here"))))
 
      ;; OUTCOME: completed

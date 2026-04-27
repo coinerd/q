@@ -144,7 +144,8 @@
                            #:session-dir session-dir
                            #:tool-registry reg
                            #:event-bus bus
-                           #:max-iterations 10))
+                           #:max-iterations 10
+                           #:register-default-tools? #f))
        (define rt-open (sdk:open-session rt))
        (define sid (hash-ref (sdk:session-info rt-open) 'session-id))
 
@@ -205,7 +206,8 @@
                            #:session-dir session-dir
                            #:tool-registry reg
                            #:event-bus bus
-                           #:max-iterations 10))
+                           #:max-iterations 10
+                           #:register-default-tools? #f))
        (define rt-open (sdk:open-session rt))
        (define sid (hash-ref (sdk:session-info rt-open) 'session-id))
 
@@ -259,7 +261,8 @@
                            #:session-dir session-dir
                            #:tool-registry reg
                            #:event-bus bus
-                           #:max-iterations 10))
+                           #:max-iterations 10
+                           #:register-default-tools? #f))
        (define rt-open (sdk:open-session rt))
        (define sid (hash-ref (sdk:session-info rt-open) 'session-id))
 
