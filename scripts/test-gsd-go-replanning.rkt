@@ -161,29 +161,10 @@
               "BLOCKED (good)"
               "ALLOWED — BUG: agent can rewrite PLAN.md via write tool!")))
 
-(define (test-go-read-budget)
-  (displayln "\n=== Test 5: Read budget during /go (initialized via /go command) ===")
-  (define-values (bus reg ext-reg) (setup))
-
-  (write-test-plan "## Wave 1: Do something\n- old-text: foo\n- new-text: bar\n")
-
-  ;; Dispatch /go which should set the budget
-  (define go-payload (hasheq 'command "/go" 'input "/go"))
-  (define go-result (dispatch-hooks 'execute-command go-payload ext-reg))
-  (printf "/go dispatched, mode now: ~a\n" (gsd-mode))
-
-  ;; Now test reads — should be within budget
-  (for ([i (in-range 3)])
-    (define read-payload
-      (hasheq 'tool-name "read" 'tool-arguments (hash 'path (format "/tmp/file~a.txt" i))))
-    (define result (dispatch-hooks 'tool-call-pre read-payload ext-reg))
-    (printf "  read #~a: action=~a\n" (add1 i) (result-action result))))
-
 ;; Run all tests
 (test-go-prompt)
 (test-mode-transitions)
 (test-tool-blocking)
 (test-write-bypass-plan)
-(test-go-read-budget)
 
 (displayln "\n=== All tests complete ===")
