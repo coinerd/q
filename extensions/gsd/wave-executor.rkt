@@ -10,7 +10,10 @@
 
 (require racket/format
          racket/string
-         "plan-types.rkt")
+         racket/file
+         racket/port
+         "plan-types.rkt"
+         "../gsd/wave-docs.rkt")
 
 (provide wave-status
          wave-status?
@@ -20,6 +23,7 @@
          wave-status-attempt-count
          wave-status-timestamp
          make-wave-executor
+         load-plan-from-index
          wave-start!
          wave-complete!
          wave-fail!
@@ -145,3 +149,66 @@
                       (format "🔄 In Progress: ~a" n-in-progress)
                       #f))))
   (string-join parts "\n"))
+
+;; ============================================================
+;; Load plan from disk (PLAN.md index + wave docs)
+
+;; ============================================================
+;; Load plan from disk (PLAN.md index + wave docs)
+;; ============================================================
+
+(define (load-plan-from-index base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (if (not (file-exists? plan-path))
+      #f
+      (let* ([text (call-with-input-file plan-path port->string)]
+             [entries (parse-plan-index text)])
+        (if (null? entries)
+            #f
+            (let* ([title (extract-plan-title text)]
+                   [waves (for/list ([e entries])
+                            (define idx (wave-index-entry-idx e))
+                            (define slug (wave-index-entry-slug e))
+                            (define wave-data (read-wave-doc base-dir idx slug))
+                            (define wave-content
+                              (if wave-data
+                                  (hash-ref wave-data 'content)
+                                  ""))
+                            (gsd-wave idx
+                                      (wave-index-entry-title e)
+                                      (string->wave-status-from-entry e)
+                                      wave-content
+                                      (extract-files-from-content wave-content)
+                                      '()
+                                      (extract-verify-from-content wave-content)
+                                      ""))])
+              (gsd-plan waves '() '() '()))))))
+
+(define (extract-plan-title text)
+  (define lines (string-split text "\n"))
+  (for/first ([line lines]
+              #:when (string-prefix? line "# Plan:"))
+    (string-trim (substring line 7))))
+
+(define (string->wave-status-from-entry e)
+  (define s (wave-index-entry-status e))
+  (cond
+    [(string=? s "DONE") 'completed]
+    [(string=? s "FAILED") 'failed]
+    [(string=? s "DEFERRED") 'skipped]
+    [(string=? s "In-Progress") 'in-progress]
+    [else 'pending]))
+
+(define (extract-files-from-content content)
+  (define lines (string-split content "\n"))
+  (for/list ([line lines]
+             #:when (string-contains? (string-trim line) "- File:"))
+    (define m (regexp-match-positions #rx"- File:" line))
+    (string-trim (substring line (cdar m)))))
+
+(define (extract-verify-from-content content)
+  (define lines (string-split content "\n"))
+  (for/first ([line lines]
+              #:when (string-contains? (string-trim line) "- Verify:"))
+    (define m (regexp-match-positions #rx"- Verify:" line))
+    (string-trim (substring line (cdar m)))))

@@ -6,17 +6,19 @@
 
 (require rackunit
          "../extensions/gsd/wave-executor.rkt"
-         "../extensions/gsd/plan-types.rkt")
+         "../extensions/gsd/plan-types.rkt"
+         "../extensions/gsd/wave-docs.rkt")
 
 ;; ============================================================
 ;; Helper
 ;; ============================================================
 
 (define (make-test-plan n)
-  (gsd-plan
-   (for/list ([i (in-range n)])
-     (gsd-wave i (format "Wave ~a" i) 'pending "" '("file.rkt") '() "test" '()))
-   "" '() '()))
+  (gsd-plan (for/list ([i (in-range n)])
+              (gsd-wave i (format "Wave ~a" i) 'pending "" '("file.rkt") '() "test" '()))
+            ""
+            '()
+            '()))
 
 ;; ============================================================
 ;; Lifecycle: pending → in-progress → completed
@@ -136,3 +138,57 @@
   (wave-start! exec 0) ;; restart
   (define s0 (car (wave-executor-statuses exec)))
   (check-equal? (wave-status-attempt-count s0) 2))
+
+;; ============================================================
+;; load-plan-from-index
+;; ============================================================
+
+(test-case "load-plan-from-index returns #f when no PLAN.md"
+  (check-false (load-plan-from-index "/tmp/nonexistent-dir-for-test")))
+
+(test-case "load-plan-from-index loads waves from disk"
+  (define dir (make-temporary-file "gsd-index-test-~a" 'directory))
+  (define planning-dir (build-path dir ".planning"))
+  (make-directory planning-dir)
+  (make-directory (build-path planning-dir "waves"))
+  ;; Write PLAN.md index
+  (define plan-md
+    (string-append "# Plan: Test Plan\n\n"
+                   "## Waves\n"
+                   "- [Inbox] W0: Fix bug → waves/W0-fix-bug.md\n"
+                   "- [Inbox] W1: Add tests → waves/W1-add-tests.md\n"))
+  (call-with-output-file (build-path planning-dir "PLAN.md")
+                         (lambda (out) (display plan-md out))
+                         #:exists 'truncate)
+  ;; Write wave docs
+  (write-wave-doc! dir 0 "fix-bug" "- File: foo.rkt\n- Verify: raco test\n" "Inbox")
+  (write-wave-doc! dir 1 "add-tests" "- File: test-foo.rkt\n- Verify: raco test\n" "Inbox")
+  ;; Load and verify
+  (define plan (load-plan-from-index dir))
+  (check-not-false plan)
+  (check-equal? (length (gsd-plan-waves plan)) 2)
+  (define w0 (list-ref (gsd-plan-waves plan) 0))
+  (check-equal? (gsd-wave-index w0) 0)
+  (check-true (string-contains? (gsd-wave-title w0) "Fix bug"))
+  ;; Cleanup
+  (delete-directory/files dir #:must-exist? #f))
+
+(test-case "load-plan-from-index preserves completed status"
+  (define dir (make-temporary-file "gsd-index-status-~a" 'directory))
+  (define planning-dir (build-path dir ".planning"))
+  (make-directory planning-dir)
+  (make-directory (build-path planning-dir "waves"))
+  (define plan-md
+    "# Plan: Status Test\n\n## Waves\n- [DONE] W0: Done wave → waves/W0-done-wave.md\n- [Inbox] W1: Todo wave → waves/W1-todo-wave.md\n")
+  (call-with-output-file (build-path planning-dir "PLAN.md")
+                         (lambda (out) (display plan-md out))
+                         #:exists 'truncate)
+  (write-wave-doc! dir 0 "done-wave" "Content" "DONE")
+  (write-wave-doc! dir 1 "todo-wave" "Content" "Inbox")
+  (define plan (load-plan-from-index dir))
+  (check-not-false plan)
+  (define w0 (list-ref (gsd-plan-waves plan) 0))
+  (check-eq? (gsd-wave-status w0) 'completed)
+  (define w1 (list-ref (gsd-plan-waves plan) 1))
+  (check-eq? (gsd-wave-status w1) 'pending)
+  (delete-directory/files dir #:must-exist? #f))

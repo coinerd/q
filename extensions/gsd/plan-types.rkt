@@ -153,6 +153,45 @@
     w))
 
 ;; ============================================================
+;; Status conversion helpers
+;; ============================================================
+
+(define (wave-status->string sym)
+  (cond
+    [(eq? sym 'pending) "Inbox"]
+    [(eq? sym 'in-progress) "In-Progress"]
+    [(eq? sym 'completed) "DONE"]
+    [(eq? sym 'failed) "FAILED"]
+    [(eq? sym 'skipped) "DEFERRED"]
+    [else (symbol->string sym)]))
+
+(define (string->wave-status str)
+  (cond
+    [(string=? str "Inbox") 'pending]
+    [(string=? str "In-Progress") 'in-progress]
+    [(string=? str "DONE") 'completed]
+    [(string=? str "FAILED") 'failed]
+    [(string=? str "DEFERRED") 'skipped]
+    [else 'pending]))
+
+(define (gsd-wave-slug w)
+  (define title (gsd-wave-title w))
+  (if (and (string? title) (> (string-length title) 0))
+      (let* ([s (string-trim title)]
+             [chars (for/list ([c (in-string s)])
+                      (cond
+                        [(char-alphabetic? c) (char-downcase c)]
+                        [(char-numeric? c) c]
+                        [(char=? c #\-) #\-]
+                        [(char=? c #\space) #\-]
+                        [else #f]))]
+             [result (list->string (filter values chars))])
+        (if (> (string-length result) 40)
+            (string-trim (substring result 0 40) "-" #:right? #t)
+            (if (string=? result "") "wave" result)))
+      "wave"))
+
+;; ============================================================
 ;; Provide (after all definitions)
 ;; ============================================================
 
@@ -204,4 +243,9 @@
          ;; Plan utilities
          plan-wave-ref
          plan-pending-waves
-         plan-next-pending-wave)
+         plan-next-pending-wave
+
+         ;; Status conversion helpers
+         wave-status->string
+         string->wave-status
+         gsd-wave-slug)
