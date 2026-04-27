@@ -39,6 +39,7 @@
          ;; v0.21.0 new modules
          "gsd/state-machine.rkt"
          "gsd/core.rkt"
+         ;; v0.21.3: steering.rkt and bash-detect.rkt gutted (no-op stubs)
          "gsd/steering.rkt"
          "gsd/bash-detect.rkt"
          "gsd/plan-types.rkt"
@@ -61,18 +62,6 @@
          gsd-mode
          set-gsd-mode!
          gsd-tool-guard
-         reset-read-counts!
-         gsd-read-tracker
-         go-read-budget
-         set-go-read-budget!
-         reset-go-budget!
-         GO-READ-BUDGET
-         GO-READ-WARN-THRESHOLD
-         GO-READ-BLOCK-THRESHOLD
-         READ-ONLY-TOOLS
-         EXPLORATION-BUDGET
-         IMPL-READ-PER-WAVE
-         IMPL-READ-TOTAL-WARN
          ;; Re-export state module accessors for backward compat
          pinned-planning-dir
          set-pinned-planning-dir!
@@ -80,11 +69,6 @@
          set-current-max-old-text-len!
          reset-all-gsd-state!
          gsd-mode?
-         decrement-budget!
-         read-counts
-         get-read-count
-         increment-read-count!
-         clear-read-counts!
          parse-wave-headers
          completed-waves
          total-waves
@@ -94,16 +78,10 @@
          next-pending-wave
          current-wave-index
          set-current-wave-index!
-         plan-tool-budget
-         decrement-plan-budget!
-         reset-plan-budget!
          gsd-session-cleanup
          gsd-event-bus
          set-gsd-event-bus!
-         emit-gsd-event!
-         handle-wave-progress
-         current-wave-index
-         set-current-wave-index!)
+         emit-gsd-event!)
 
 ;; ============================================================
 ;; Event emission helper
@@ -119,10 +97,6 @@
 ;; ============================================================
 
 (define planning-dir-name ".planning")
-
-(define EXPLORATION-BUDGET 30)
-(define IMPL-READ-PER-WAVE 2)
-(define IMPL-READ-TOTAL-WARN 5)
 
 (define artifact-extensions
   '(("PLAN" . ".md") ("STATE" . ".md")
@@ -249,10 +223,8 @@
    "  - Exact file path and line numbers\n"
    "  - The old-text that the edit tool will match\n"
    "  - The new-text replacement code\n"
-   (format "EXPLORATION BUDGET: Maximum ~a tool calls (read, grep, find, planning-read).\n"
-           EXPLORATION-BUDGET)
-   "After 30 calls, write the plan with what you know. Partial plans are better than no plans.\n"
-   "Prioritize files most likely to contain the root cause. Skip tangential exploration.\n"
+   "Read the primary files needed to understand the problem. Prioritize files most likely\n"
+   "to contain the root cause. Skip tangential exploration.\n"
    "\n"
    "STEP 2 — WRITE WAVE DOCS: For each wave, write a separate file:\n"
    "  planning-write artifact=\"waves/W0-short-title.md\" content=\"...\"\n"
@@ -270,8 +242,6 @@
    "\n"
    "STEP 4 — FINISH: Tell the user: 'Use /go to start implementing.'\n"
    "Do NOT implement — only plan.\n\n"
-   "IMPORTANT: [SYSTEM NOTICE: ...] messages in tool results are steering signals.\n"
-   "Always read and follow them. They provide budget warnings and hints.\n\n"
    "User request: "))
 
 (define planning-implement-prompt
@@ -285,10 +255,7 @@
                  "4. Do NOT run read-only tools (read, find, grep, ls) unless a wave's\n"
                  "   old-text match fails and you need to re-read the target file ONCE.\n"
                  "5. Use the edit or write tool for EVERY wave. Your budget is:\n"
-                 (format "   - Max ~a read-only tool calls per wave before you MUST write/edit.\n"
-                         IMPL-READ-PER-WAVE)
-                 (format "   - After ~a total read-only calls across all waves, STOP and summarize.\n"
-                         IMPL-READ-TOTAL-WARN)
+                 "   - Re-read a file ONLY if the old-text match fails.\n"
                  "6. After completing each wave, run its verify command.\n"
                  "\n"
                  "The plan follows. Start implementing immediately.\n\n"))
@@ -512,15 +479,13 @@
         (set-gsd-mode! 'executing)
         (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'executing))
         (set-current-max-old-text-len! 1200)
-        (reset-read-counts!)
-        (reset-go-budget!)
+        ;; v0.21.3: No more budget resets
         (define wave-indices
           (for/list ([w (gsd-plan-waves plan)])
             (gsd-wave-index w)))
         (when (not (null? wave-indices))
           (set-total-waves! (add1 (apply max wave-indices))))
         (set-current-wave-index! 0)
-        (reset-plan-budget!)
         (define executor (make-wave-executor plan))
         (define state-content (read-planning-artifact base-dir "STATE"))
         (define state-note
@@ -558,21 +523,11 @@
   (define mode (gsd-mode))
   (define tw (total-waves))
   (define cw (completed-waves))
-  (define pb (plan-tool-budget))
-  (define budget (go-read-budget))
-  (define rc (hash-count (read-counts)))
   (define parts
     (list (format "Mode: ~a" (or mode "inactive"))
           (if (> tw 0)
               (format "Waves: ~a/~a complete" (set-count cw) tw)
-              "Waves: not set")
-          (if pb
-              (format "Plan budget: ~a/~a remaining" pb EXPLORATION-BUDGET)
-              "Plan budget: inactive")
-          (if budget
-              (format "Read budget: ~a/~a" budget GO-READ-BUDGET)
-              "Read budget: inactive")
-          (format "Files read: ~a" rc)))
+              "Waves: not set")))
   (hook-amend (hasheq 'text (string-join parts "\n"))))
 
 ;; Handler for artifact display and /plan <text> commands
@@ -599,10 +554,7 @@
        [(and (member cmd '("/plan" "/p")) args-text)
         (set-gsd-mode! 'planning)
         (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'planning))
-        (reset-plan-budget!)
         (set-current-max-old-text-len! 500)
-        (reset-read-counts!)
-        (set-go-read-budget! #f)
         (define existing-plan (read-planning-artifact base-dir "PLAN"))
         (define stale-warning
           (if existing-plan
@@ -621,197 +573,18 @@
         (hook-amend (hasheq 'text text))])]))
 
 ;; ============================================================
-;; Budget warning injection + redundant read detection (tool-result-post)
+;; v0.21.3: gsd-read-tracker removed (no-op passthrough)
+;; Steering, budgets, and read tracking are all removed.
 ;; ============================================================
 
-(define READ_HINT_THRESHOLD 3)
-
-(define (budget-warning-text)
-  (define remaining (go-read-budget))
-  (cond
-    [(and remaining (<= remaining GO-READ-WARN-THRESHOLD))
-     (format
-      "\n\n[SYSTEM NOTICE: BUDGET WARNING: ~a/~a read calls remaining. Focus on implementation."
-      remaining
-      GO-READ-BUDGET)]
-    [(and remaining (<= remaining (quotient GO-READ-BUDGET 3)))
-     (format "\n\n[SYSTEM NOTICE: ~a/~a read calls remaining. Consider narrowing focus.]"
-             remaining
-             GO-READ-BUDGET)]
-    [else #f]))
-
-(define (maybe-append-budget-warning content-list)
-  (define warn (budget-warning-text))
-  (if warn
-      (append content-list (list (hasheq 'type "text" 'text warn)))
-      content-list))
-
-(define (maybe-inject-budget-warning payload)
-  (define warn (budget-warning-text))
-  (if warn
-      (let* ([result (hash-ref payload 'result #f)]
-             [content (and result (tool-result? result) (tool-result-content result))]
-             [base-content (if (list? content)
-                               content
-                               (list content))]
-             [final-content (append base-content (list (hasheq 'type "text" 'text warn)))])
-        (hook-amend (hasheq 'result
-                            (make-success-result final-content (tool-result-details result)))))
-      (hook-pass payload)))
-
-;; v0.21.0: gsd-read-tracker now also:
-;;   - Runs stall detection via gsd/steering.rkt during executing mode
-;;   - Detects bash file-read bypass via gsd/bash-detect.rkt
-;;   - Tracks wave progress during executing mode
 (define (gsd-read-tracker payload)
-  (define tool-name (hash-ref payload 'tool-name #f))
-  (define result (hash-ref payload 'result #f))
-  (cond
-    ;; Track successful reads with path info
-    [(and (equal? tool-name "read") result (tool-result? result) (not (tool-result-is-error? result)))
-     (handle-read-result payload tool-name result)]
-    ;; Detect bash file-read bypass
-    [(and (equal? tool-name "bash") result (tool-result? result) (not (tool-result-is-error? result)))
-     (handle-bash-result payload result)]
-    ;; Other read-only tools: inject budget warning
-    [(and (member tool-name READ-ONLY-TOOLS)
-          result
-          (tool-result? result)
-          (not (tool-result-is-error? result)))
-     (maybe-inject-budget-warning payload)]
-    ;; Wave progress after successful edit during executing mode
-    [(and (eq? (gsd-mode) 'executing)
-          (member tool-name '("edit" "write"))
-          result
-          (tool-result? result)
-          (not (tool-result-is-error? result)))
-     (handle-wave-progress payload result)]
-    [else (hook-pass payload)]))
-
-;; Handle read tool results: read-count tracking + stall detection + budget warnings
-(define (handle-read-result payload tool-name result)
-  (define details (tool-result-details result))
-  (define file-path (and (hash? details) (hash-ref details 'path #f)))
-  (cond
-    [(not file-path) (maybe-inject-budget-warning payload)]
-    [else
-     (define new-count (increment-read-count! file-path))
-     ;; v0.21.0: Run steering stall detection during executing mode
-     (define stall-prompt (gsd-steering-check tool-name (hasheq 'path file-path) result))
-     (cond
-       ;; At hint threshold: inject read hint + stall + budget
-       [(and (>= new-count READ_HINT_THRESHOLD) (= 0 (modulo new-count READ_HINT_THRESHOLD)))
-        (define hint-text
-          (format
-           "\n\n[SYSTEM NOTICE: You have read '~a' ~a times. Consider using your memory of previous reads instead of re-reading.]"
-           file-path
-           new-count))
-        (define content (tool-result-content result))
-        (define base-content
-          (append (if (list? content)
-                      content
-                      (list content))
-                  (list (hasheq 'type "text" 'text hint-text))))
-        (define with-stall
-          (if stall-prompt
-              (append base-content (list (hasheq 'type "text" 'text stall-prompt)))
-              base-content))
-        (define final-content (maybe-append-budget-warning with-stall))
-        (hook-amend (hasheq 'result (make-success-result final-content (tool-result-details result))))]
-       ;; Stall detected but not at hint threshold
-       [stall-prompt
-        (define content (tool-result-content result))
-        (define base-content
-          (if (list? content)
-              content
-              (list content)))
-        (define with-stall (append base-content (list (hasheq 'type "text" 'text stall-prompt))))
-        (define final-content (maybe-append-budget-warning with-stall))
-        (hook-amend (hasheq 'result
-                            (make-success-result final-content (tool-result-details result))))]
-       [else (maybe-inject-budget-warning payload)])]))
-
-;; Handle bash tool results: detect file-read bypass
-(define (handle-bash-result payload result)
-  (define args (or (hash-ref payload 'arguments #f) (hash-ref payload 'tool-args #f)))
-  (define cmd-str
-    (if (hash? args)
-        (hash-ref args 'command "")
-        ""))
-  (define-values (is-read? detail) (detect-file-read-bash cmd-str))
-  (cond
-    [is-read?
-     (emit-gsd-event! "gsd.bash.read-bypass" (hasheq 'command cmd-str 'detail detail))
-     (define bypass-text
-       (format
-        "\n\n[SYSTEM NOTICE: Detected file read via bash (~a). Consider using the read tool for better tracking.]"
-        (or detail cmd-str)))
-     (define content (tool-result-content result))
-     (define base-content
-       (if (list? content)
-           content
-           (list content)))
-     (define final-content (append base-content (list (hasheq 'type "text" 'text bypass-text))))
-     (hook-amend (hasheq 'result (make-success-result final-content (tool-result-details result))))]
-    [else (hook-pass payload)]))
-
-;; Handle wave progress after successful edit/write during executing
-;;
-;; v0.21.2 fix: No longer auto-advances waves on every edit.
-;; Instead, detects the current wave from the file path being edited
-;; (e.g., editing W2-something.rkt means wave 2). Only marks a wave
-;; complete when we detect the assistant has moved to the NEXT wave.
-;; Progress shows 'Wave N/T in progress' instead of 'complete'.
-(define (handle-wave-progress payload result)
-  (define args (or (hash-ref payload 'arguments #f) (hash-ref payload 'tool-args #f)))
-  (define path-arg (and (hash? args) (hash-ref args 'path #f)))
-  ;; Try to detect wave index from file path
-  (define detected-wave
-    (and path-arg
-         (let ([m (regexp-match? #rx"[Ww]ave[-_ ]?([0-9]+)|W([0-9]+)[-_.]" path-arg)])
-           (and m
-                (let ([num-match (regexp-match #rx"[Ww]ave[-_ ]?([0-9]+)|W([0-9]+)[-_.]" path-arg)])
-                  (and num-match
-                       (or (and (cadr num-match) (string->number (cadr num-match)))
-                           (and (caddr num-match) (string->number (caddr num-match))))))))))
-  ;; Update current wave if detected and different from tracked
-  (define prev-wave (current-wave-index))
-  (when (and detected-wave (not (= detected-wave prev-wave)))
-    ;; Assistant moved to a new wave — mark the previous one complete
-    (when (and (>= prev-wave 0) (not (wave-complete? prev-wave)))
-      (mark-wave-complete! prev-wave)
-      (emit-gsd-event! "gsd.wave.complete" (hasheq 'wave prev-wave)))
-    (set-current-wave-index! detected-wave)
-    (emit-gsd-event! "gsd.wave.started" (hasheq 'wave detected-wave)))
-  (define tw (total-waves))
-  (define cw (completed-waves))
-  (define cur (current-wave-index))
-  (define progress-text
-    (if (> tw 0)
-        (format "\n\n[PROGRESS: Wave ~a/~a in progress. ~a completed. ~a remaining.]"
-                cur
-                tw
-                (set-count cw)
-                (- tw (set-count cw)))
-        ""))
-  (if (string=? progress-text "")
-      (hook-pass payload)
-      (let* ([content (tool-result-content result)]
-             [base-content (if (list? content)
-                               content
-                               (list content))]
-             [final-content (append base-content (list (hasheq 'type "text" 'text progress-text)))])
-        (hook-amend (hasheq 'result
-                            (make-success-result final-content (tool-result-details result)))))))
-
-(define (reset-read-counts!)
-  (clear-read-counts!))
+  (hook-pass payload))
 
 ;; ============================================================
 ;; GSD mode tool guard (tool-call-pre hook)
 ;; ============================================================
 
-;; v0.21.0: Uses gsm-tool-allowed? from state-machine.rkt for mode-aware blocking.
+;; v0.21.3: Only mode-based blocking. No budgets, no steering.
 (define (gsd-tool-guard payload)
   (define mode (gsd-mode))
   (define tool-name (hash-ref payload 'tool-name #f))
@@ -825,29 +598,6 @@
      (hook-block "Plan written to PLAN.md. Use /go to start implementing.")]
     ;; State machine says tool is blocked
     [(not allowed) (hook-block (format "Tool '~a' blocked in ~a mode." tool-name mode))]
-    ;; During planning mode, enforce exploration budget
-    [(and (eq? mode 'planning)
-          (member tool-name '("read" "grep" "find" "ls" "glob" "planning-read"))
-          (plan-tool-budget))
-     (define remaining (decrement-plan-budget!))
-     (cond
-       [(and remaining (<= remaining 0))
-        (emit-gsd-event! "gsd.budget.warning" (hasheq 'budget-type 'exploration 'remaining 0))
-        (hook-block (format "Exploration budget exhausted (~a calls used). Write your plan now."
-                            EXPLORATION-BUDGET))]
-       [(and remaining (<= remaining 10)) (hook-pass payload)]
-       [else (hook-pass payload)])]
-    ;; During /go, enforce read budget
-    [(and (eq? mode 'executing) (member tool-name READ-ONLY-TOOLS) (go-read-budget))
-     (define remaining (decrement-budget!))
-     (cond
-       [(< remaining GO-READ-BLOCK-THRESHOLD)
-        (hook-block
-         (format
-          "Read budget exhausted (~a read calls used, budget is ~a). Stop exploring and implement."
-          (- GO-READ-BUDGET remaining)
-          GO-READ-BUDGET))]
-       [else (hook-pass payload)])]
     [else (hook-pass payload)]))
 
 (define (gsd-session-cleanup payload)
