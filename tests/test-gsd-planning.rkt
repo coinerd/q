@@ -112,6 +112,14 @@
   (check-true (valid-artifact-name? "state.json"))
   (check-true (valid-artifact-name? "data.json")))
 
+(test-case "valid-artifact-name? accepts wave document names"
+  (check-true (valid-artifact-name? "waves/W0-fix-bug.md"))
+  (check-true (valid-artifact-name? "waves/W1-add-tests.md"))
+  (check-false (valid-artifact-name? "waves/"))
+  (check-false (valid-artifact-name? "waves/no-md"))
+  (check-false (valid-artifact-name? "waves/sub/dir.md"))
+  (check-false (valid-artifact-name? "waves/../etc.md")))
+
 (test-case "valid-artifact-name? rejects bare names without extension"
   (check-false (valid-artifact-name? "RANDOM"))
   (check-false (valid-artifact-name? "foo.txt")))
@@ -413,9 +421,9 @@
   (check-true (string-contains? planning-system-prompt "old-text")))
 
 (test-case "planning-system-prompt specifies actionable plan format"
-  (check-true (string-contains? planning-system-prompt "Old text:"))
-  (check-true (string-contains? planning-system-prompt "New text:"))
-  (check-true (string-contains? planning-system-prompt "Verify:")))
+  (check-true (string-contains? planning-system-prompt "old-text"))
+  (check-true (string-contains? planning-system-prompt "new-text"))
+  (check-true (string-contains? planning-system-prompt "Verify")))
 
 (test-case "/plan <text> returns augmented submit payload"
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
@@ -617,11 +625,11 @@
 ;; W2: /plan Overwrite Stale Plans Tests
 ;; ============================================================
 
-(test-case "planning-system-prompt-contains-overwrite-directive"
-  (check-true (string-contains? planning-system-prompt "OVERWRITE")
-              "prompt should contain OVERWRITE directive")
-  (check-true (string-contains? planning-system-prompt "Replace the entire existing PLAN.md")
-              "prompt should say to replace entire existing plan"))
+(test-case "planning-system-prompt-references-wave-docs"
+  (check-true (string-contains? planning-system-prompt "waves/")
+              "prompt should reference wave documents")
+  (check-true (string-contains? planning-system-prompt "planning-write")
+              "prompt should mention planning-write tool"))
 
 (test-case "/plan-with-text-injects-stale-warning-when-plan-exists"
   (reset-all-gsd-state!)
