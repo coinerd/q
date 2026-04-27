@@ -261,3 +261,40 @@
   (check-equal? (hash-ref result 'files) '("q/baz.rkt"))
   ;; bullet-style - Verify: takes priority since it appears first
   (check-equal? (hash-ref result 'verify) "inline check"))
+
+;; ============================================================
+;; W1 (#2129): Broadened parser format tests
+;; ============================================================
+
+(test-case "W1: parse-wave-content accepts - Files: comma-separated"
+  (define content "- Files: q/foo.rkt, q/bar.rkt, q/baz.rkt")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt" "q/baz.rkt")))
+
+(test-case "W1: parse-wave-content accepts - files: lowercase"
+  (define content "- files: q/foo.rkt")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt")))
+
+(test-case "W1: parse-wave-content accepts ## Files heading with bare bullets"
+  (define content "## Files\n- q/foo.rkt\n- q/bar.rkt\n## Action\nDo stuff")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt")))
+
+(test-case "W1: parse-wave-content ## Files section ends at next heading"
+  (define content "## Files\n- q/foo.rkt\n## Action\n- q/bar.rkt")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt"))
+  ;; q/bar.rkt is under ## Action, not ## Files, so it should not be collected as a file
+  )
+
+(test-case "W1: parse-wave-content mixed - File: singular and - Files: plural"
+  (define content "- File: q/foo.rkt\n- Files: q/bar.rkt, q/baz.rkt")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt" "q/baz.rkt")))
+
+(test-case "W1: parse-wave-content ## Files with - File: prefix bullets"
+  (define content "## Files\n- File: q/foo.rkt\n- File: q/bar.rkt")
+  (define result (parse-wave-content content))
+  ;; - File: matches the singular regex first (before bare bullet), so these should be captured
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt")))
