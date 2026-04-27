@@ -8,7 +8,7 @@
 ;; Error rules (block /go):
 ;;   - Plan has < 1 wave
 ;;   - Wave missing title
-;;   - Wave has no files (was warning, upgraded to error per spec)
+;;   - Wave has no files (F2: upgraded from warning to error)
 ;;
 ;; Warning rules (display but allow):
 ;;   - Wave missing verify command
@@ -42,9 +42,9 @@
     ;; Warning: missing title (plans may omit title after wave number)
     (when (string=? (gsd-wave-title w) "")
       (set! warnings (cons (format "~a: no explicit title" prefix) warnings)))
-    ;; Warning: no file references (often implicit in plan text)
+    ;; Error: no file references — waves must specify files to modify
     (when (null? (gsd-wave-files w))
-      (set! warnings (cons (format "~a: no explicit file references" prefix) warnings)))
+      (set! errors (cons (format "~a: no files — wave must specify files to modify" prefix) errors)))
     ;; Warning: no verify command
     (when (or (not (gsd-wave-verify w)) (string=? (gsd-wave-verify w) ""))
       (set! warnings (cons (format "~a: no verify command" prefix) warnings)))
