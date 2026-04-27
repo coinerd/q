@@ -180,6 +180,23 @@
 (test-case "write-planning-artifact! returns #f for invalid name"
   (with-temp-dir (lambda (dir) (check-false (write-planning-artifact! dir "BADNAME" "content")))))
 
+(test-case "write-planning-artifact! auto-creates waves/ subdirectory"
+  (with-temp-dir (lambda (dir)
+                   ;; The waves/ subdir doesn't exist yet — write-planning-artifact! must create it
+                   (define result
+                     (write-planning-artifact! dir "waves/W0-fix-bug.md" "# Wave 0\nFix the bug."))
+                   (check-not-false result)
+                   (check-true (file-exists? (build-path dir ".planning" "waves" "W0-fix-bug.md")))
+                   (define content (read-planning-artifact dir "waves/W0-fix-bug.md"))
+                   (check-true (string-contains? content "Fix the bug")))))
+
+(test-case "write-planning-artifact! writes multiple wave docs to new waves/ dir"
+  (with-temp-dir (lambda (dir)
+                   (write-planning-artifact! dir "waves/W0-first.md" "# W0")
+                   (write-planning-artifact! dir "waves/W1-second.md" "# W1")
+                   (check-true (file-exists? (build-path dir ".planning" "waves" "W0-first.md")))
+                   (check-true (file-exists? (build-path dir ".planning" "waves" "W1-second.md"))))))
+
 ;; ============================================================
 ;; planning-read tool handler tests
 ;; ============================================================
