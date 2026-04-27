@@ -9,7 +9,8 @@
          racket/list
          json
          "../util/protocol-types.rkt"
-         "../util/cost-tracker.rkt")
+         "../util/cost-tracker.rkt"
+         "../util/content-helpers.rkt")
 
 ;; Structs
 (provide (struct-out transcript-entry)
@@ -338,7 +339,9 @@
      (define result-raw (hash-ref payload 'result #f))
      (define result-summary
        (if result-raw
-           (string-replace (truncate-string (format "~a" result-raw) 80) "\n" " \u23ce ")
+           (string-replace (truncate-string (tool-result-content->string result-raw) 80)
+                           "\n"
+                           " \u23ce ")
            ""))
      (define text
        (if (string=? result-summary "")

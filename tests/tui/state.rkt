@@ -494,6 +494,17 @@
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-kind entry) 'tool-fail)
+        ;; v0.21.2 W2 Bug A fix: tool result with hash content shows text, not #hasheq
+        (test-case "apply-event: tool.call.completed with hash content shows text not hasheq"
+          (let* ([s (initial-ui-state)]
+                 [result-raw (list (hash 'type "text" 'text "Edited file successfully"))]
+                 [evt (make-test-event "tool.call.completed" (hash 'name "edit" 'result result-raw))]
+                 [s2 (apply-event-to-state s evt)])
+            (define entry (first (ui-state-transcript s2)))
+            (check-false (string-contains? (transcript-entry-text entry) "#hasheq")
+                         "should not show raw #hasheq")
+            (check-true (string-contains? (transcript-entry-text entry) "Edited file successfully")
+                        "should show extracted text")))
         (check-true (string-contains? (transcript-entry-text entry) "[FAIL: bash]"))
         (check-true (string-contains? (transcript-entry-text entry) "exit 1") "error shown in text")))
 
