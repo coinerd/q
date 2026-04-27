@@ -140,7 +140,10 @@
 ;; ============================================================
 
 (define sample-plan-index
-  "# Plan: Fix all the bugs\n\n## Waves\n\n- [Inbox] W0: Fix the bug → waves/W0-fix-the-bug.md\n- [Inbox] W1: Add tests → waves/W1-add-tests.md\n- [Inbox] W2: Update docs → waves/W2-update-docs.md\n")
+  (string-append "# Plan: Fix all the bugs\n\n## Waves\n\n"
+                 "- [Inbox] W0: Fix the bug → waves/W0-fix-the-bug.md\n"
+                 "- [Inbox] W1: Add tests → waves/W1-add-tests.md\n"
+                 "- [Inbox] W2: Update docs → waves/W2-update-docs.md\n"))
 
 (test-case "parse-plan-index: extracts all waves"
   (define entries (parse-plan-index sample-plan-index))
