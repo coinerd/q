@@ -6,7 +6,8 @@
 ;; Only wave tracking
 ;; and mode delegation remain.
 
-(require "gsd/state-machine.rkt")
+(require "gsd/state-machine.rkt"
+         "gsd/wave-docs.rkt")
 
 (provide gsd-mode
          gsd-mode?
@@ -101,7 +102,12 @@
 (define (set-total-waves! n)
   (gsm-set-total-waves! n))
 (define (mark-wave-complete! idx)
-  (gsm-mark-wave-complete! idx))
+  (gsm-mark-wave-complete! idx)
+  ;; Also update PLAN.md status marker (#2157)
+  (define base-dir (pinned-planning-dir))
+  (when base-dir
+    (with-handlers ([exn:fail? (lambda (e) (void))])
+      (mark-wave-status! base-dir idx "DONE"))))
 (define (wave-complete? idx)
   (gsm-wave-complete? idx))
 (define (current-wave-index)
