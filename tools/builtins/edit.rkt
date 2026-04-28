@@ -203,7 +203,15 @@
 
 (define (tool-edit args [exec-ctx #f])
   (define raw-path (hash-ref args 'path #f))
-  (define path-str (and raw-path (expand-home-path raw-path)))
+  (define expanded (and raw-path (expand-home-path raw-path)))
+  ;; SEC-03 (v0.22.0): Canonicalize path to prevent traversal attacks
+  (define path-str
+    (and expanded
+         (let ([p (if (string? expanded)
+                      expanded
+                      (path->string expanded))])
+           (with-handlers ([exn:fail? (lambda (_) p)])
+             (path->string (simplify-path (resolve-path p)))))))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
     [else
