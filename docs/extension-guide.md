@@ -1,4 +1,4 @@
-<!-- verified-against: 0.22.0 -->
+<!-- verified-against: 0.22.1 -->
 # Extension Development Guide
 
 This guide walks you through creating, testing, and activating a custom

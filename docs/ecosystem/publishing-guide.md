@@ -1,6 +1,6 @@
 # Publishing Guide
 
-<!-- verified-against: 0.22.0 -->
+<!-- verified-against: 0.22.1 -->
 
 How to package, validate, and publish a q extension to the package
 index.
@@ -90,7 +90,7 @@ package ecosystem. It is read, validated, and serialized by
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `compat` | `string` | `null` | SemVer range for q compatibility (e.g. `">=0.22.0"`) |
+| `compat` | `string` | `null` | SemVer range for q compatibility (e.g. `">=0.22.1"`) |
 | `files` | `string[]` | `[]` | List of files included in the package |
 | `checksum` | `string` | `null` | SHA-256 hex digest of all listed files (sorted, concatenated) |
 | `entry` | `string` | `null` | Entry-point module path (e.g. `"main.rkt"`) |
@@ -139,10 +139,10 @@ package is compatible with. Use semver range notation:
 
 | Example | Meaning |
 |---------|---------|
-| `">=0.22.0"` | q 0.22.0 or later |
-| `">=0.22.0 <1.0.0"` | q 0.10.x only |
-| `"^0.22.0"` | Compatible with 0.22.0 (semver caret) |
-| `"~0.22.0"` | Patch-level changes only (0.10.x) |
+| `">=0.22.1"` | q 0.22.1 or later |
+| `">=0.22.1 <1.0.0"` | q 0.10.x only |
+| `"^0.22.1"` | Compatible with 0.22.1 (semver caret) |
+| `"~0.22.1"` | Patch-level changes only (0.10.x) |
 
 The extension loader checks these ranges at load time and refuses to
 load incompatible packages.
@@ -156,7 +156,7 @@ boundaries with explicit fields:
 {
   "name": "my-extension",
   "version": "1.0.0",
-  "min-q-version": "0.22.0",
+  "min-q-version": "0.22.1",
   "max-q-version": "1.0.0",
   "description": "...",
   "author": "...",
@@ -185,7 +185,7 @@ fields to filter packages during `q pkg install`:
   "type": "skill",
   "description": "Adds a greeting command that personalizes messages",
   "author": "jane-dev",
-  "compat": ">=0.22.0",
+  "compat": ">=0.22.1",
   "files": [
     "main.rkt",
     "greeting.rkt",
@@ -204,12 +204,12 @@ fields to filter packages during `q pkg install`:
 ```json
 {
   "name": "q-provider-cohere",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "api_version": "1",
   "type": "extension",
   "description": "Cohere provider adapter for q — supports command-r-plus and embed models",
   "author": "acme-ai",
-  "compat": ">=0.22.0 <1.0.0",
+  "compat": ">=0.22.1 <1.0.0",
   "files": [
     "main.rkt",
     "cohere-adapter.rkt",
@@ -335,7 +335,7 @@ Submit a pull request to add your package to `q/pkg/index.json`:
   "repo": "https://github.com/you/my-extension",
   "tarball": "https://github.com/you/my-extension/releases/download/v1.0.0/my-extension-1.0.0.tar.gz",
   "checksum": "sha256-hex-of-tarball",
-  "min-q-version": "0.22.0",
+  "min-q-version": "0.22.1",
   "max-q-version": "1.0.0"
 }
 ```
