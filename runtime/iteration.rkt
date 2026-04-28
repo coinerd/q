@@ -13,18 +13,12 @@
 ;; This module resides in the runtime/ layer but imports upward into
 ;; the tools/ and extensions/ layers:
 ;;
-;;   tools/tool.rkt       → make-exec-context, tool-result accessors, list-tools-jsexpr
-;;   tools/scheduler.rkt  → run-tool-batch, scheduler-result-results
+;;   tools/tool.rkt       → list-tools-jsexpr, merge-tool-lists (registry queries)
 ;;   extensions/hooks.rkt → dispatch-hooks
 ;;
-;; These upward imports exist because the iteration loop is the single
-;; coordination point that wires together tool execution and extension
-;; hooks within each agent turn. Moving this wiring into tools/ or
-;; extensions/ would create a circular dependency back into runtime/
-;; (the loop needs session-store, compactor, and queue). A full
-;; dependency-injection refactor to eliminate the upward imports is
-;; deferred to a future major version; the current trade-off keeps
-;; the coordination logic in one well-documented place.
+;; v0.22.0 (ARCH-01): Removed dead imports (scheduler.rkt, make-exec-context,
+;; make-error-result, tool-result-content, tool-result-is-error?).
+;; The scheduler is called via tool-coordinator.rkt, not directly.
 ;; ───────────────────────────────────────────────────────────────
 
 (require racket/contract
@@ -70,20 +64,13 @@
                   dequeue-all-followups!
                   queue-status)
          "../agent/loop.rkt"
-         ;; ARCH-01 upward import — runtime→tools: iteration loop builds exec
-         ;; contexts and queries the tool registry to pass tool definitions to
+         ;; ARCH-01: tool registry queries for LLM tool definitions
          ;; the LLM and to construct tool-result messages.
          (only-in "../tools/tool.rkt"
-                  make-exec-context
-                  make-error-result
-                  tool-result-content
-                  tool-result-is-error?
                   list-tools-jsexpr
                   merge-tool-lists)
          ;; Settings struct for exec-context runtime-settings (#1240)
          (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
-         ;; ARCH-01 upward import — runtime→tools: iteration loop is the sole
-         ;; call site for run-tool-batch, coordinating parallel tool execution
          ;; within each agent turn.
          "../tools/scheduler.rkt"
          ;; ARCH-01 upward import — runtime→extensions: iteration loop
