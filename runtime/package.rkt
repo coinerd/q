@@ -107,6 +107,13 @@
     (define-values (valid? errors) (validate-manifest m))
     (unless valid?
       (return (string-append "error: invalid manifest — " (string-join errors "; "))))
+    ;; Checksum enforcement (backward compatible — only when present)
+    (define expected-checksum (qpm-manifest-checksum m))
+    (when expected-checksum
+      (define actual (compute-manifest-checksum source-dir))
+      (unless (string=? actual expected-checksum)
+        (return
+         (format "error: package checksum mismatch (expected ~a, got ~a)" expected-checksum actual))))
     ;; Create target directory
     (ensure-packages-dir!)
     (define target-dir (build-path (current-packages-dir) (qpm-manifest-name m)))

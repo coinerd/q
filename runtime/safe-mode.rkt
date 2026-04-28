@@ -133,12 +133,24 @@
      (cond
        [(and (list? allowed-paths) (not (eq? allowed-paths 'default)))
         (for/or ([ap (in-list allowed-paths)])
-          (string-prefix? (if (path? path)
-                              (path->string path)
-                              path)
-                          (if (path? ap)
-                              (path->string ap)
-                              ap)))]
+          (define resolved-path
+            (with-handlers ([exn:fail? (λ (_) #f)])
+              (resolve-path path)))
+          (define resolved-ap
+            (with-handlers ([exn:fail? (λ (_) #f)])
+              (resolve-path ap)))
+          (and resolved-path
+               resolved-ap
+               (let* ([path-str (path->string (if (complete-path? resolved-path)
+                                                  resolved-path
+                                                  (path->complete-path resolved-path)))]
+                      [ap-str (path->string (if (complete-path? resolved-ap)
+                                                resolved-ap
+                                                (path->complete-path resolved-ap)))]
+                      [ap-prefix (if (string-suffix? ap-str "/")
+                                     ap-str
+                                     (string-append ap-str "/"))])
+                 (or (string=? path-str ap-str) (string-prefix? path-str ap-prefix)))))]
        [else
         ;; Default: check against project root
         ;; W3.1 (S4-11): resolve-path failure -> deny (#f), not fallback

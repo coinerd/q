@@ -210,6 +210,88 @@
                                             (check-true (package-installed? "q-test-pkg")))))
                 (lambda () (cleanup-source-dir srcdir))))
 
+(test-case "install-package-from-dir succeeds when checksum matches"
+  (define srcdir (make-temporary-file "q-pkg-cksum-ok-~a" 'directory))
+  (call-with-output-file (build-path srcdir "main.rkt")
+                         (lambda (out) (display "#lang racket/base\n(define x 1)\n" out))
+                         #:exists 'replace)
+  (define m-no-cksum
+    (qpm-manifest "cksum-match-test"
+                  "1.0.0"
+                  "1"
+                  'extension
+                  "Test"
+                  "tester"
+                  #f
+                  #f
+                  '("main.rkt")
+                  #f
+                  #f
+                  #f
+                  #f))
+  (write-qpm-manifest m-no-cksum (build-path srcdir "qpm.json"))
+  ;; Now compute and write the correct checksum
+  (define cksum (compute-manifest-checksum srcdir))
+  (define m-with-cksum
+    (qpm-manifest "cksum-match-test"
+                  "1.0.0"
+                  "1"
+                  'extension
+                  "Test"
+                  "tester"
+                  #f
+                  #f
+                  '("main.rkt")
+                  cksum
+                  #f
+                  #f
+                  #f))
+  (write-qpm-manifest m-with-cksum (build-path srcdir "qpm.json"))
+  (dynamic-wind void
+                (lambda ()
+                  (with-test-packages-dir (lambda ()
+                                            (define result (install-package-from-dir srcdir))
+                                            (check-pred qpm-package? result))))
+                (lambda () (cleanup-source-dir srcdir))))
+
+(test-case "install-package-from-dir fails on checksum mismatch"
+  (define srcdir (make-temporary-file "q-pkg-cksum-fail-~a" 'directory))
+  (call-with-output-file (build-path srcdir "main.rkt")
+                         (lambda (out) (display "#lang racket/base\n(define x 1)\n" out))
+                         #:exists 'replace)
+  (define m
+    (qpm-manifest "cksum-fail-test"
+                  "1.0.0"
+                  "1"
+                  'extension
+                  "Test"
+                  "tester"
+                  #f
+                  #f
+                  '("main.rkt")
+                  "deadbeef00"
+                  #f
+                  #f
+                  #f))
+  (write-qpm-manifest m (build-path srcdir "qpm.json"))
+  (dynamic-wind void
+                (lambda ()
+                  (with-test-packages-dir (lambda ()
+                                            (define result (install-package-from-dir srcdir))
+                                            (check-pred string? result)
+                                            (check-true (string-contains? result
+                                                                          "checksum mismatch")))))
+                (lambda () (cleanup-source-dir srcdir))))
+
+(test-case "install-package-from-dir proceeds when checksum absent"
+  (define srcdir (make-test-source-package))
+  (dynamic-wind void
+                (lambda ()
+                  (with-test-packages-dir (lambda ()
+                                            (define result (install-package-from-dir srcdir))
+                                            (check-pred qpm-package? result))))
+                (lambda () (cleanup-source-dir srcdir))))
+
 (test-case "install-package-from-dir rejects path traversal in files"
   ;; Create a manifest with a path traversal entry
   (define srcdir (make-temporary-file "q-pkg-traversal-~a" 'directory))
