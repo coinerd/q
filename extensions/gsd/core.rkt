@@ -205,15 +205,16 @@
   (hasheq 'success #t 'mode 'idle 'message "GSD reset to idle."))
 
 ;; /done → archive completed plan
-(define (cmd-done base-dir)
-  (define result (archive-completed-plan! base-dir))
+;; force? skips the wave completion check.
+(define (cmd-done base-dir [force? #f])
+  (define result (archive-completed-plan! base-dir force?))
   (if (hash-ref result 'success #f)
       (hasheq 'success
               #t
               'mode
               'idle
               'message
-              (format "✅ Plan archived to ~a (~a files)"
+              (format "\u2705 Plan archived to ~a (~a files)"
                       (hash-ref result 'archive-path "?")
                       (hash-ref result 'files-archived 0)))
       (hasheq 'success #f 'mode (gsm-current) 'message (hash-ref result 'error "Archive failed"))))

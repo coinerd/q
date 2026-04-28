@@ -440,7 +440,9 @@
      (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'idle))
      (hook-amend (hasheq 'text (hash-ref result 'message "")))]
     [(equal? cmd "/done")
-     (define result (cmd-done base-dir))
+     (define done-args (extract-cmd-args input-text))
+     (define force? (and done-args (string-contains? done-args "--force")))
+     (define result (cmd-done base-dir force?))
      (when (hash-ref result 'success #f)
        (emit-gsd-event! "gsd.plan.archived" (hasheq 'path (hash-ref result 'archive-path ""))))
      (hook-amend (hasheq 'text (hash-ref result 'message "")))]
@@ -563,6 +565,7 @@
      (cond
        ;; /plan <text> → submit as planning prompt
        [(and (member cmd '("/plan" "/p")) args-text)
+        (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
         (set-gsd-mode! 'planning)
         (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'planning))
         (set-current-max-old-text-len! 500)

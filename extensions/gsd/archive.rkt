@@ -107,16 +107,35 @@
 
 ;; Archive a completed plan.
 ;; Steps: validate → create archive dir → move files → reset state.
+;; When force? is #f and waves are incomplete, returns a warning with incomplete count.
+;; When force? is #t, archives regardless of wave completion status.
 ;; Returns (hasheq 'success #t 'archive-path ...) on success.
 ;; Returns (hasheq 'success #f 'error ...) on failure.
-(define (archive-completed-plan! base-dir)
+(define (archive-completed-plan! base-dir [force? #f])
   (define planning-dir (build-path base-dir ".planning"))
   (define plan-path (build-path planning-dir "PLAN.md"))
   (cond
     [(not (file-exists? plan-path)) (hasheq 'success #f 'error "No PLAN.md found")]
-    [(not (all-waves-complete? base-dir)) (hasheq 'success #f 'error "Not all waves are complete")]
+    [(and (not force?) (not (all-waves-complete? base-dir)))
+     (define text (call-with-input-file plan-path port->string))
+     (define entries (parse-plan-index text))
+     (define incomplete
+       (for/list ([e entries]
+                  #:when (not (member (wave-index-entry-status e) '("DONE" "DEFERRED"))))
+         (wave-index-entry-status e)))
+     (hasheq
+      'success
+      #f
+      'error
+      (format
+       "Not all waves are complete (~a/~a have status: ~a). Use /done --force to archive anyway."
+       (length incomplete)
+       (length entries)
+       (string-join incomplete ", ")))]
     [else
      (define plan-text (call-with-input-file plan-path port->string))
+     ;; Update any remaining [Inbox] markers to [DONE] before archiving
+     (update-all-wave-statuses! base-dir)
      (define title (extract-plan-title plan-text))
      (define archive-dir (archive-path-for-plan base-dir title))
      (define moved-files '())
@@ -140,6 +159,17 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
+
+;; Update all wave status markers in PLAN.md to [DONE] before archiving.
+;; base-dir is the directory CONTAINING .planning/ (not .planning/ itself).
+(define (update-all-wave-statuses! base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (when (file-exists? plan-path)
+    (define plan-text (call-with-input-file plan-path port->string))
+    (define entries (parse-plan-index plan-text))
+    (for ([e entries]
+          #:when (not (string=? (wave-index-entry-status e) "DONE")))
+      (update-wave-in-index! base-dir (wave-index-entry-idx e) "DONE"))))
 
 (define (extract-plan-title plan-text)
   (define lines (string-split plan-text "\n"))

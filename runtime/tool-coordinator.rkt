@@ -47,6 +47,7 @@
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../runtime/session-store.rkt" append-entries!)
          (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
+         (only-in "../util/content-helpers.rkt" tool-result-content->string)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?))
@@ -182,11 +183,13 @@
         (emit-session-event! bus
                              session-id
                              "tool.call.failed"
-                             (hasheq 'name (tool-call-name tc) 'error (tool-result-content tr)))
+                             (hasheq 'name (tool-call-name tc)
+                                     'error (tool-result-content->string (tool-result-content tr))))
         (emit-session-event! bus
                              session-id
                              "tool.call.completed"
-                             (hasheq 'name (tool-call-name tc) 'result (tool-result-content tr)))))
+                             (hasheq 'name (tool-call-name tc)
+                                     'result (tool-result-content tr)))))
 
   ;; Convert scheduler results to tool-result messages.
   (define tool-result-msgs
