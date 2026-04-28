@@ -8,7 +8,9 @@
 
 (require racket/port
          racket/string
-         "limits.rkt")
+         "limits.rkt"
+         ;; SEC-16 (v0.22.0): consolidated shell-quote
+         (only-in "../util/shell-quote.rkt" shell-quote))
 
 (define-logger subprocess)
 
@@ -96,14 +98,8 @@
 ;; --------------------------------------------------
 
 ;; shell-quote — POSIX single-quote escaping for command arguments.
-;;
-;; SECURITY NOTE: This function is designed for quoting LLM-generated arguments
-;; within a trusted agent loop. It is NOT intended as a defense against
-;; adversarial input. The sandbox layer (custodians, timeouts, environment
-;; sanitization, output limits) provides defense-in-depth, but callers must
-;; not rely on shell-quote alone to prevent injection from untrusted sources.
-(define (shell-quote s)
-  (format "'~a'" (string-replace s "'" "'\\''")))
+;; SEC-16 (v0.22.0): Consolidated into util/shell-quote.rkt.
+;; This file imports from there; no local definition needed.
 
 ;; --------------------------------------------------
 ;; Resolve command to executable path

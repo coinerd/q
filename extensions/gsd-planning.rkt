@@ -36,9 +36,10 @@
          "gsd-planning-state.rkt"
          ;; v0.21.0 new modules
          "gsd/state-machine.rkt"
-         "gsd/core.rkt"
-         ;; v0.21.6: direct command handlers for wiring
-         (only-in "gsd/core.rkt" cmd-replan cmd-skip cmd-reset cmd-done cmd-wave-done)
+         (only-in "gsd/core.rkt"
+                  gsd-write-guard
+                  gsd-show-status
+                  cmd-replan cmd-skip cmd-reset cmd-done cmd-wave-done)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"

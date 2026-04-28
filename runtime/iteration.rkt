@@ -118,9 +118,12 @@
          ;; FEAT-61: message injection support
          (only-in "../extensions/message-inject.rkt" injection-event-topic)
          ;; v0.14.1: mid-turn token budget check
-         (only-in "../llm/token-budget.rkt" estimate-context-tokens))
+         (only-in "../llm/token-budget.rkt" estimate-context-tokens)
+         ;; QUAL-01 (v0.22.0): shared runtime helpers
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 
 (provide run-iteration-loop
+         ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
          emit-session-event!
          maybe-dispatch-hooks
          ensure-hash-args ;; for testing
@@ -138,21 +141,8 @@
          register-session-extensions!)
 
 ;; ============================================================
-;; Shared helpers
+;; Shared helpers (QUAL-01: re-exported from runtime-helpers.rkt)
 ;; ============================================================
-
-(define (emit-session-event! bus sid event-name payload)
-  (define evt (make-event event-name (now-seconds) sid #f payload))
-  (publish! bus evt)
-  evt)
-
-;; Safely dispatch hooks if extension-registry is present.
-;; Returns (values amended-payload hook-result) or (values payload #f) if no registry.
-(define (maybe-dispatch-hooks ext-reg hook-point payload #:ctx [ctx #f])
-  (if ext-reg
-      (let ([result (dispatch-hooks hook-point payload ext-reg #:ctx ctx)])
-        (values (hook-result-payload result) result))
-      (values payload #f)))
 
 ;; v0.14.1: Check if context exceeds mid-turn token budget.
 ;; Returns estimated token count. Emits event if over budget.
