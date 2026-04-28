@@ -10,6 +10,8 @@
          racket/string
          racket/system
          json
+         ;; SEC-16 (v0.22.0): consolidated shell-quote
+         (only-in "../../util/shell-quote.rkt" shell-quote)
          (only-in "../../tools/tool.rkt" make-success-result make-error-result))
 
 (provide gh-binary-path
@@ -39,12 +41,7 @@
 ;; Shell helpers + input validation
 ;; ============================================================
 
-(define (shell-quote s)
-  (define str
-    (if (string? s)
-        s
-        (~a s)))
-  (string-append "'" (string-replace str "'" "'\\''") "'"))
+;; shell-quote imported from util/shell-quote.rkt (SEC-16 consolidation)
 
 ;; Validate that a string contains only safe identifier characters
 (define (valid-identifier? s)

@@ -50,29 +50,20 @@
          (only-in "../util/content-helpers.rkt" tool-result-content->string)
          (only-in "../util/ids.rkt" generate-id now-seconds)
          (only-in "../util/cancellation.rkt" cancellation-token?)
-         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?))
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
+         ;; QUAL-01 (v0.22.0): shared runtime helpers
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 
 (provide extract-tool-calls-from-messages
          make-tool-result-messages
          handle-tool-calls-pending)
 
 ;; ============================================================
-;; Helpers
+;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
+;;           now imported from runtime-helpers.rkt)
 ;; ============================================================
 
 ;; now-seconds imported from util/ids.rkt
-
-(define (emit-session-event! bus sid event-name payload)
-  (define evt (make-event event-name (now-seconds) sid #f payload))
-  (publish! bus evt)
-  evt)
-
-;; Safely dispatch hooks if extension-registry is present.
-(define (maybe-dispatch-hooks ext-reg hook-point payload #:ctx [ctx #f])
-  (if ext-reg
-      (let ([result (dispatch-hooks hook-point payload ext-reg #:ctx ctx)])
-        (values (hook-result-payload result) result))
-      (values payload #f)))
 
 ;; ============================================================
 ;; Exported functions

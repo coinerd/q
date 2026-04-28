@@ -23,7 +23,7 @@
          "http-helpers.rkt")
 
 ;; Provider constructor
-(provide make-openai-compatible-provider
+(provide (contract-out [make-openai-compatible-provider (-> hash? provider?)])
          ;; Request/response helpers (exported for testing)
          openai-build-request-body
          openai-parse-response

@@ -26,7 +26,7 @@
          "http-helpers.rkt"
          (only-in "openai-compatible.rkt" openai-build-request-body openai-parse-response))
 
-(provide make-azure-openai-provider
+(provide (contract-out [make-azure-openai-provider (-> hash? provider?)])
          openai-parse-response-from-jsexpr
          check-azure-status!)
 
