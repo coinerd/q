@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.21.8 — 2026-04-28
+
+### Security
+- `safe-manifest-file-path?` predicate rejects `..`, absolute paths, Windows drive letters
+- Defense-in-depth path check in `install-package-from-dir` copy loop
+- `clean-file-path` strips backticks from GSD parser file paths
+- Checksum enforcement during package install (backward compatible)
+- Canonicalized `allowed-paths` with `resolve-path` + boundary matching
+
+### Improvements
+- `oauth-available?` predicate for OAuth stub detection
+- Planning prompt: max 3 reads, must write wave docs after reading
+- Documented planning-write mode-set timing (no race found)
+
 ## v0.21.7 — 2026-04-27
 
 ### Fixed
