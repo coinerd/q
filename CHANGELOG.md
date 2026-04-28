@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.21.10 — 2026-04-28
+
+### Execution Architecture Improvements
+- **delete-lines tool**: Line-range deletion tool (avoids chunked edit for removals of 3+ consecutive lines)
+- **/wave-done command**: Marks wave complete in PLAN.md + STATE.md, emits `gsd.wave.completed` event
+- **Planning path resolution**: `.planning/` write paths auto-rewrite to pinned project root
+- **Backup timestamp fix**: Eliminated rational numbers in backup filenames (`inexact->exact` → `current-milliseconds`)
+- **Execution prompt**: Updated to mention `/wave-done N` for wave completion
+
 ## v0.21.9 — 2026-04-28
 
 ### GSD Plan Archival + Execution Polish
