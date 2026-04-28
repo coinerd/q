@@ -47,6 +47,7 @@
          (only-in "../extensions/api.rkt" extension-name list-extensions)
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
+         (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
          (only-in "auto-retry.rkt"
@@ -541,18 +542,7 @@
                           (hasheq))
             context-messages)))
 
-;; extract-path-settings — walk context messages to find latest
-;;   model-change and thinking-level-change entries.
-;;   Returns a hash with 'model and 'thinking-level keys.
-(define (extract-path-settings messages)
-  (for/fold ([settings (hasheq)]) ([msg (in-list messages)])
-    (define kind (message-kind msg))
-    (cond
-      [(and (eq? kind 'model-change) (hash? (message-meta msg)))
-       (hash-set settings 'model (hash-ref (message-meta msg) 'model #f))]
-      [(and (eq? kind 'thinking-level-change) (hash? (message-meta msg)))
-       (hash-set settings 'thinking-level (hash-ref (message-meta msg) 'level #f))]
-      [else settings])))
+;; extract-path-settings imported from runtime/session-context.rkt
 
 ;; maybe-compact-context — token budget check and compaction triggering.
 ;;   May mutate context (return a compacted version). Returns the
