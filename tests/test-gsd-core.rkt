@@ -7,7 +7,9 @@
 
 (require rackunit
          "../extensions/gsd/core.rkt"
-         "../extensions/gsd/state-machine.rkt")
+         "../extensions/gsd/state-machine.rkt"
+         (only-in "../extensions/gsd-planning.rkt" gsd-tool-guard)
+         (only-in "../util/hook-types.rkt" hook-result-action))
 
 ;; ============================================================
 ;; Command dispatch: /plan
@@ -30,13 +32,6 @@
   (define r (gsd-command-dispatch 'plan "re-plan"))
   (check-equal? (hash-ref r 'success) #t)
   (check-eq? (hash-ref r 'mode) 'exploring))
-
-
-
-
-
-
-
 
 ;; ============================================================
 ;; Command dispatch: /go
@@ -155,38 +150,40 @@
 (test-case "tool guard: allows all tools in idle"
   (reset-gsm!)
   (for ([tool '("read" "edit" "write" "bash" "planning-read" "planning-write")])
-    (check-true (gsd-tool-guard tool #f) (format "~a in idle" tool))))
+    (check-eq? (hook-result-action (gsd-tool-guard (hasheq 'tool-name tool)))
+               'pass
+               (format "~a in idle" tool))))
 
 (test-case "tool guard: allows all tools in exploring"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (for ([tool '("read" "edit" "write" "bash" "planning-read" "planning-write")])
-    (check-true (gsd-tool-guard tool #f) (format "~a in exploring" tool))))
+    (check-eq? (hook-result-action (gsd-tool-guard (hasheq 'tool-name tool)))
+               'pass
+               (format "~a in exploring" tool))))
 
 (test-case "tool guard: blocks edit/write/bash in plan-written"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (for ([tool '("edit" "write" "bash")])
-    (define r (gsd-tool-guard tool #f))
-    (check-true (hash? r) (format "~a should be blocked" tool))
-    (check-equal? (hash-ref r 'blocked) #t)))
+    (define r (gsd-tool-guard (hasheq 'tool-name tool)))
+    (check-eq? (hook-result-action r) 'block (format "~a should be blocked" tool))))
 
 (test-case "tool guard: allows read/planning-read in plan-written"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
-  (check-true (gsd-tool-guard "read" #f))
-  (check-true (gsd-tool-guard "planning-read" #f)))
+  (check-eq? (hook-result-action (gsd-tool-guard (hasheq 'tool-name "read"))) 'pass)
+  (check-eq? (hook-result-action (gsd-tool-guard (hasheq 'tool-name "planning-read"))) 'pass))
 
 (test-case "tool guard: blocks planning-write in executing"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (define r (gsd-tool-guard "planning-write" #f))
-  (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked) #t))
+  (define r (gsd-tool-guard (hasheq 'tool-name "planning-write")))
+  (check-eq? (hook-result-action r) 'block))
 
 (test-case "tool guard: allows edit/write/bash in executing"
   (reset-gsm!)
@@ -194,7 +191,9 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (for ([tool '("edit" "write" "bash" "read")])
-    (check-true (gsd-tool-guard tool #f) (format "~a in executing" tool))))
+    (check-eq? (hook-result-action (gsd-tool-guard (hasheq 'tool-name tool)))
+               'pass
+               (format "~a in executing" tool))))
 
 (test-case "tool guard: blocks edit/write/bash in verifying"
   (reset-gsm!)
@@ -203,9 +202,8 @@
   (gsm-transition! 'executing)
   (gsm-transition! 'verifying)
   (for ([tool '("edit" "write" "bash")])
-    (define r (gsd-tool-guard tool #f))
-    (check-true (hash? r) (format "~a should be blocked" tool))
-    (check-equal? (hash-ref r 'blocked) #t)))
+    (define r (gsd-tool-guard (hasheq 'tool-name tool)))
+    (check-eq? (hook-result-action r) 'block (format "~a should be blocked" tool))))
 
 ;; ============================================================
 ;; Write guard
@@ -218,7 +216,7 @@
   (gsm-transition! 'executing)
   (define r (gsd-write-guard ".planning/PLAN.md" ".planning"))
   (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked) #t))
+  (check-equal? (hash-ref r 'blocked #f) #t))
 
 (test-case "write guard: allows non-PLAN.md during executing"
   (reset-gsm!)
@@ -257,7 +255,7 @@
   (gsm-transition! 'executing)
   (define r (gsd-write-guard "src/../.planning/PLAN.md" ".planning"))
   (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked) #t))
+  (check-equal? (hash-ref r 'blocked #f) #t))
 
 (test-case "write guard: blocks multiple .. traversal"
   (reset-gsm!)
@@ -266,7 +264,7 @@
   (gsm-transition! 'executing)
   (define r (gsd-write-guard "a/b/../../.planning/PLAN.md" ".planning"))
   (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked) #t))
+  (check-equal? (hash-ref r 'blocked #f) #t))
 
 (test-case "write guard: blocks other .planning files during executing"
   (reset-gsm!)
