@@ -20,6 +20,7 @@
          "../extensions/ext-commands.rkt"
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
+         (only-in "../extensions/gsd/core.rkt" cmd-wave-done)
          "../tools/tool.rkt"
          "../agent/event-bus.rkt"
          "../util/event.rkt")
@@ -634,7 +635,7 @@
 (test-case "planning-system-prompt-no-unlimited-exploration"
   (define p (planning-system-prompt ""))
   (check-true (string-contains? p "MAXIMUM 5 tool calls")
-               "prompt should limit exploration to 5 calls"))
+              "prompt should limit exploration to 5 calls"))
 
 ;; ============================================================
 ;; W2: /plan Overwrite Stale Plans Tests
@@ -642,10 +643,8 @@
 
 (test-case "planning-system-prompt-references-wave-docs"
   (define p (planning-system-prompt ""))
-  (check-true (string-contains? p "waves/")
-              "prompt should reference wave documents")
-  (check-true (string-contains? p "planning-write")
-              "prompt should mention planning-write tool"))
+  (check-true (string-contains? p "waves/") "prompt should reference wave documents")
+  (check-true (string-contains? p "planning-write") "prompt should mention planning-write tool"))
 
 (test-case "/plan-with-text-injects-stale-warning-when-plan-exists"
   (reset-all-gsd-state!)
@@ -858,4 +857,120 @@
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
   (define result (handler (hasheq 'command "/unknown-cmd" 'input "/unknown-cmd")))
   (check-equal? (hook-result-action result) 'pass)
+  (reset-all-gsd-state!))
+
+;; ============================================================
+;; /wave-done command tests (v0.21.10)
+;; ============================================================
+
+(test-case "wave-done: marks wave complete with valid index"
+  (reset-all-gsd-state!)
+  (define tmp-dir (make-temporary-file "q-test-wave-done-~a" 'directory))
+  (define planning-dir (build-path tmp-dir ".planning"))
+  (make-directory planning-dir)
+  ;; Create a minimal PLAN.md with wave index
+  (display-to-file "# Test Plan\n\n- [Inbox] W0: First wave\n- [Inbox] W1: Second wave\n"
+                   (build-path planning-dir "PLAN.md")
+                   #:exists 'replace)
+  ;; Create STATE.md
+  (display-to-file "# Project State\n\nStatus: Active\n"
+                   (build-path planning-dir "STATE.md")
+                   #:exists 'replace)
+  ;; Set up GSD state
+  (set-pinned-planning-dir! tmp-dir)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 2)
+  ;; Call cmd-wave-done
+  (define result (cmd-wave-done tmp-dir "0"))
+  (check-true (hash-ref result 'success))
+  (check-equal? (hash-ref result 'wave) 0)
+  (check-true (string-contains? (hash-ref result 'message) "Wave 0"))
+  ;; Verify PLAN.md updated
+  (define plan-content (file->string (build-path planning-dir "PLAN.md")))
+  (check-true (string-contains? plan-content "[DONE] W0:"))
+  (check-true (string-contains? plan-content "[Inbox] W1:"))
+  ;; Verify STATE.md updated
+  (define state-content (file->string (build-path planning-dir "STATE.md")))
+  (check-true (string-contains? state-content "W0: completed"))
+  ;; Cleanup
+  (delete-directory/files tmp-dir)
+  (reset-all-gsd-state!))
+
+(test-case "wave-done: without index returns usage"
+  (reset-all-gsd-state!)
+  (define result (cmd-wave-done #f ""))
+  (check-false (hash-ref result 'success))
+  (check-true (string-contains? (hash-ref result 'message) "Usage"))
+  (reset-all-gsd-state!))
+
+(test-case "wave-done: non-numeric index returns error"
+  (reset-all-gsd-state!)
+  (define result (cmd-wave-done #f "abc"))
+  (check-false (hash-ref result 'success))
+  (check-true (string-contains? (hash-ref result 'message) "Invalid"))
+  (reset-all-gsd-state!))
+
+(test-case "wave-done: negative index returns error"
+  (reset-all-gsd-state!)
+  (define result (cmd-wave-done #f "-1"))
+  (check-false (hash-ref result 'success))
+  (check-true (string-contains? (hash-ref result 'message) "non-negative"))
+  (reset-all-gsd-state!))
+
+(test-case "wave-done: multiple waves can be marked"
+  (reset-all-gsd-state!)
+  (define tmp-dir (make-temporary-file "q-test-wave-done-~a" 'directory))
+  (define planning-dir (build-path tmp-dir ".planning"))
+  (make-directory planning-dir)
+  (display-to-file "# Test Plan\n\n- [Inbox] W0: First\n- [Inbox] W1: Second\n"
+                   (build-path planning-dir "PLAN.md")
+                   #:exists 'replace)
+  (display-to-file "# Project State\n\nStatus: Active\n"
+                   (build-path planning-dir "STATE.md")
+                   #:exists 'replace)
+  (set-pinned-planning-dir! tmp-dir)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 2)
+  ;; Mark W0
+  (define r0 (cmd-wave-done tmp-dir "0"))
+  (check-true (hash-ref r0 'success))
+  ;; Mark W1
+  (define r1 (cmd-wave-done tmp-dir "1"))
+  (check-true (hash-ref r1 'success))
+  ;; Both marked in PLAN.md
+  (define plan-content (file->string (build-path planning-dir "PLAN.md")))
+  (check-true (string-contains? plan-content "[DONE] W0:"))
+  (check-true (string-contains? plan-content "[DONE] W1:"))
+  ;; Both in STATE.md
+  (define state-content (file->string (build-path planning-dir "STATE.md")))
+  (check-true (string-contains? state-content "W0: completed"))
+  (check-true (string-contains? state-content "W1: completed"))
+  (delete-directory/files tmp-dir)
+  (reset-all-gsd-state!))
+
+(test-case "wave-done: works through execute-command handler"
+  (reset-all-gsd-state!)
+  (define tmp-dir (make-temporary-file "q-test-wave-done-~a" 'directory))
+  (define planning-dir (build-path tmp-dir ".planning"))
+  (make-directory planning-dir)
+  (display-to-file "# Test Plan\n\n- [Inbox] W0: First\n"
+                   (build-path planning-dir "PLAN.md")
+                   #:exists 'replace)
+  (display-to-file "# Project State\n\nStatus: Active\n"
+                   (build-path planning-dir "STATE.md")
+                   #:exists 'replace)
+  (set-pinned-planning-dir! tmp-dir)
+  (set-gsd-mode! 'planning)
+  (set-gsd-mode! 'plan-written)
+  (set-gsd-mode! 'executing)
+  (set-total-waves! 1)
+  (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+  (define result (handler (hasheq 'command "/wave-done" 'input "/wave-done 0")))
+  (check-equal? (hook-result-action result) 'amend)
+  (check-true (string-contains? (hash-ref (hook-result-payload result) 'text) "Wave 0"))
+  (delete-directory/files tmp-dir)
   (reset-all-gsd-state!))

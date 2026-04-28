@@ -38,7 +38,7 @@
          "gsd/state-machine.rkt"
          "gsd/core.rkt"
          ;; v0.21.6: direct command handlers for wiring
-         (only-in "gsd/core.rkt" cmd-replan cmd-skip cmd-reset cmd-done)
+         (only-in "gsd/core.rkt" cmd-replan cmd-skip cmd-reset cmd-done cmd-wave-done)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
@@ -407,6 +407,12 @@
   (ext-register-command! ctx "/replan" "Return to planning phase" 'general '() '())
   (ext-register-command! ctx "/skip" "Skip a wave (usage: /skip N)" 'general '() '())
   (ext-register-command! ctx "/reset" "Reset GSD to idle state" 'general '() '())
+  (ext-register-command! ctx
+                         "/wave-done"
+                         "Mark wave N complete, update PLAN.md and STATE.md"
+                         'general
+                         '()
+                         '("wd"))
   (ext-register-command! ctx "/done" "Archive completed plan" 'general '() '("d"))
   (ext-register-command! ctx "/gsd" "Show GSD workflow status" 'general '() '())
   (hook-pass #f))
@@ -438,6 +444,14 @@
     [(equal? cmd "/reset")
      (define result (cmd-reset))
      (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'idle))
+     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+    [(member cmd '("/wave-done" "/wd"))
+     (define wd-args (extract-cmd-args input-text))
+     (define result (cmd-wave-done base-dir wd-args))
+     (when (hash-ref result 'success #f)
+       (define wave-idx (hash-ref result 'wave #f))
+       (when wave-idx
+         (emit-gsd-event! "gsd.wave.completed" (hasheq 'wave wave-idx))))
      (hook-amend (hasheq 'text (hash-ref result 'message "")))]
     [(equal? cmd "/done")
      (define done-args (extract-cmd-args input-text))

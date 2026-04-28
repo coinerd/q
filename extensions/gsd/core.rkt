@@ -19,10 +19,13 @@
 (require racket/string
          racket/format
          racket/path
+         racket/port
          "state-machine.rkt"
          "plan-types.rkt"
          "context-bundle.rkt"
-         "archive.rkt")
+         "archive.rkt"
+         ;; v0.21.10: wave-done needs mark-wave-complete! which also updates PLAN.md
+         (only-in "../gsd-planning-state.rkt" mark-wave-complete! pinned-planning-dir))
 
 (provide gsd-command-dispatch
          gsd-tool-guard
@@ -33,6 +36,7 @@
          cmd-skip
          cmd-reset
          cmd-done
+         cmd-wave-done
          ;; Command names for registration
          gsd-commands)
 
@@ -41,12 +45,14 @@
 ;; ============================================================
 
 (define gsd-commands
-  '((plan "/plan" "Start GSD planning phase" ("p")) (go "/go" "Begin executing the plan" ())
-                                                    (replan "/replan" "Return to planning phase" ())
-                                                    (skip "/skip" "Skip current wave" ("s"))
-                                                    (done "/done" "Archive completed plan" ("d"))
-                                                    (reset "/reset" "Reset GSD to idle state" ())
-                                                    (gsd "/gsd" "Show GSD status" ())))
+  '((plan "/plan" "Start GSD planning phase" ("p"))
+    (go "/go" "Begin executing the plan" ())
+    (replan "/replan" "Return to planning phase" ())
+    (skip "/skip" "Skip current wave" ("s"))
+    (done "/done" "Archive completed plan" ("d"))
+    (reset "/reset" "Reset GSD to idle state" ())
+    (wave-done "/wave-done" "Mark wave N as complete, update PLAN.md and STATE.md" ("wd"))
+    (gsd "/gsd" "Show GSD status" ())))
 
 ;; ============================================================
 ;; Internal helpers (must be defined before use)
@@ -109,6 +115,7 @@
     [(skip) (cmd-skip args)]
     [(reset) (cmd-reset)]
     [(done) (hasheq 'success #t 'mode 'idle 'message "Use /done from the planning context.")]
+    [(wave-done) (cmd-wave-done #f args)]
     [(gsd) (gsd-show-status)]
     [else #f]))
 
@@ -198,6 +205,65 @@
                     'message
                     (format "Wave ~a marked as skipped" wave-num))
             (hasheq 'success #f 'mode 'executing 'message "Usage: /skip <wave-number>")))))
+
+;; /wave-done <N> → mark wave complete, update PLAN.md + STATE.md
+(define (cmd-wave-done base-dir args)
+  (define idx-str
+    (if (string? args)
+        (string-trim args)
+        ""))
+  (cond
+    [(string=? idx-str "") (hasheq 'success #f 'message "Usage: /wave-done <wave-number>")]
+    [else
+     (define idx (string->number idx-str))
+     (cond
+       [(not idx) (hasheq 'success #f 'message (format "Invalid wave number: ~a" idx-str))]
+       [(< idx 0) (hasheq 'success #f 'message "Wave number must be non-negative")]
+       [else
+        ;; Mark wave complete in state machine + PLAN.md
+        (mark-wave-complete! idx)
+        ;; Update STATE.md with wave completion
+        (when base-dir
+          (with-handlers ([exn:fail? (lambda (e)
+                                       (log-warning (format "cmd-wave-done/state-update: ~a"
+                                                            (exn-message e))))])
+            (update-state-with-wave! base-dir idx)))
+        (hasheq 'success
+                #t
+                'wave
+                idx
+                'message
+                (format "Wave ~a marked complete. PLAN.md and STATE.md updated." idx))])]))
+
+;; Helper: update STATE.md with wave completion note
+(define (update-state-with-wave! base-dir wave-idx)
+  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (when (file-exists? state-path)
+    (define content (call-with-input-file state-path port->string))
+    (define wave-header "## Wave Progress")
+    (define entry-line (format "- [x] W~a: completed" wave-idx))
+    (define new-content
+      (cond
+        [(string-contains? content wave-header)
+         ;; Update existing progress section — replace or append entry
+         (define lines (string-split content "\n"))
+         (define prefix-rx (format "- \\[.\\] W~a:" wave-idx))
+         (define updated
+           (for/list ([line lines])
+             (if (regexp-match? (regexp prefix-rx) line) entry-line line)))
+         ;; If the entry wasn't found, append it after the header
+         (if (member entry-line updated)
+             (string-join updated "\n")
+             (let loop ([ls updated]
+                        [acc '()])
+               (cond
+                 [(null? ls) (string-join (reverse acc) "\n")]
+                 [(string=? (car ls) wave-header)
+                  (string-join (append (reverse acc) (list wave-header entry-line) (cdr ls)) "\n")]
+                 [else (loop (cdr ls) (cons (car ls) acc))])))]
+        ;; Append a new wave progress section
+        [else (string-append content "\n\n" wave-header "\n\n" entry-line "\n")]))
+    (call-with-output-file state-path (lambda (out) (display new-content out)) #:exists 'truncate)))
 
 ;; /reset → idle
 (define (cmd-reset)
