@@ -45,7 +45,8 @@
          (except-in "gsd/wave-executor.rkt" next-pending-wave)
          "gsd/prompts.rkt"
          "gsd/context-bundle.rkt"
-         "gsd/wave-docs.rkt")
+         "gsd/wave-docs.rkt"
+         (only-in "gsd/archive.rkt" ensure-state-md!))
 
 (provide the-extension
          gsd-planning-extension
@@ -565,6 +566,8 @@
         (set-gsd-mode! 'planning)
         (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'planning))
         (set-current-max-old-text-len! 500)
+        ;; Auto-create STATE.md if missing (#2164)
+        (ensure-state-md! base-dir)
         (define existing-plan (read-planning-artifact base-dir "PLAN"))
         (define stale-warning
           (if existing-plan

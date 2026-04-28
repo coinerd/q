@@ -20,7 +20,8 @@
          archive-path-for-plan
          move-to-archive!
          reset-gsd-after-archive!
-         cleanup-empty-subdirs!)
+         cleanup-empty-subdirs!
+         ensure-state-md!)
 
 ;; ============================================================
 ;; Validation
@@ -164,3 +165,17 @@
         (with-handlers ([exn:fail? (lambda (e) (void))])
           (when (null? (directory-list sub-path))
             (delete-directory sub-path)))))))
+
+;; Auto-create minimal STATE.md if it doesn't exist (#2164).
+;; Called from /plan initialization.
+(define (ensure-state-md! base-dir)
+  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (unless (file-exists? state-path)
+    (define planning-dir (build-path base-dir ".planning"))
+    (unless (directory-exists? planning-dir)
+      (make-directory* planning-dir))
+    (call-with-output-file
+     state-path
+     (lambda (out)
+       (display "# Project State\n\nStatus: Active\n\n## Progress\n\n- [ ] Initial state\n" out))
+     #:exists 'error)))
