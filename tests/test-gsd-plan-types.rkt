@@ -165,7 +165,8 @@
   (define p (gsd-plan (list w) "" '() '()))
   (define result (validate-plan p))
   (check-not-equal? (validation-errors result) '())
-  (check-true (ormap (lambda (e) (string-contains? e "no file references in any wave")) (validation-errors result)))
+  (check-true (ormap (lambda (e) (string-contains? e "no file references in any wave"))
+                     (validation-errors result)))
   (check-not-equal? (validation-warnings result) '()))
 
 (test-case "validate-plan: wave with no title has error"
@@ -230,7 +231,8 @@
 ;; ============================================================
 
 (test-case "W2: parse-wave-content extracts bullet-style fields"
-  (define content "- Root cause: missing import\n- File: q/foo.rkt\n- File: q/bar.rkt\n- Verify: raco test q/tests/foo.rkt\n- Done: tests pass")
+  (define content
+    "- Root cause: missing import\n- File: q/foo.rkt\n- File: q/bar.rkt\n- Verify: raco test q/tests/foo.rkt\n- Done: tests pass")
   (define result (parse-wave-content content))
   (check-equal? (hash-ref result 'root-cause) "missing import")
   (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt"))
@@ -256,7 +258,8 @@
   (check-equal? (hash-ref result 'done) '()))
 
 (test-case "W2: parse-wave-content mixed bullet + heading formats"
-  (define content "- Root cause: bug\n- Verify: inline check\n## Verify\nraco test\n- File: q/baz.rkt")
+  (define content
+    "- Root cause: bug\n- Verify: inline check\n## Verify\nraco test\n- File: q/baz.rkt")
   (define result (parse-wave-content content))
   (check-equal? (hash-ref result 'root-cause) "bug")
   (check-equal? (hash-ref result 'files) '("q/baz.rkt"))
@@ -298,4 +301,41 @@
   (define content "## Files\n- File: q/foo.rkt\n- File: q/bar.rkt")
   (define result (parse-wave-content content))
   ;; - File: matches the singular regex first (before bare bullet), so these should be captured
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt")))
+
+;; ============================================================
+;; clean-file-path tests
+;; ============================================================
+
+(test-case "clean-file-path: no backticks returns as-is"
+  (check-equal? (clean-file-path "file.rkt") "file.rkt"))
+
+(test-case "clean-file-path: strips single backticks"
+  (check-equal? (clean-file-path "`file.rkt`") "file.rkt"))
+
+(test-case "clean-file-path: strips triple backticks"
+  (check-equal? (clean-file-path "```file.rkt```") "file.rkt"))
+
+(test-case "clean-file-path: strips whitespace then backticks"
+  (check-equal? (clean-file-path "  `file.rkt`  ") "file.rkt"))
+
+(test-case "clean-file-path: single char with backtick"
+  (check-equal? (clean-file-path "`a`") "a"))
+
+(test-case "clean-file-path: empty string"
+  (check-equal? (clean-file-path "") ""))
+
+(test-case "parse-wave-content strips backticks from - File:"
+  (define content "- File: `q/foo.rkt`")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt")))
+
+(test-case "parse-wave-content strips backticks from - Files:"
+  (define content "- Files: `q/foo.rkt`, `q/bar.rkt`")
+  (define result (parse-wave-content content))
+  (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt")))
+
+(test-case "parse-wave-content strips backticks in ## Files bare bullets"
+  (define content "## Files\n- `q/foo.rkt`\n- ```q/bar.rkt```\n## Action\nDo stuff")
+  (define result (parse-wave-content content))
   (check-equal? (hash-ref result 'files) '("q/foo.rkt" "q/bar.rkt")))

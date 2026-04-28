@@ -77,6 +77,27 @@
              [end wave-end-idxs])
     (parse-wave-section (take (drop lines start) (add1 (- end start))))))
 
+;; Clean file path: strip surrounding backticks and whitespace.
+;; Handles: `path` → path, ```path``` → path, path → path
+(define (clean-file-path s)
+  (define trimmed (string-trim s))
+  (cond
+    [(>= (string-length trimmed) 6)
+     ;; Check for triple backticks: ```path```
+     (define triple-back (string-prefix? trimmed "```"))
+     (define triple-end (string-suffix? trimmed "```"))
+     (if (and triple-back triple-end)
+         (string-trim (substring trimmed 3 (- (string-length trimmed) 3)))
+         ;; Check for single backticks: `path`
+         (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
+             (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
+             trimmed))]
+    [(>= (string-length trimmed) 2)
+     (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
+         (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
+         trimmed)]
+    [else trimmed]))
+
 ;; Parse structured fields from wave document content.
 ;; Handles both bullet-style and heading-style formats.
 ;; Single source of truth for field extraction (F3 consolidation).
@@ -113,15 +134,15 @@
        =>
        (lambda (m)
          (define paths (string-split (string-trim (cadr m)) ","))
-         (set! files (append files (map string-trim paths))))]
+         (set! files (append files (map (lambda (p) (clean-file-path (string-trim p))) paths))))]
       ;; Bullet-style File (singular)
       [(regexp-match #rx"^- +[Ff]ile *: *(.+)$" line)
        =>
-       (lambda (m) (set! files (append files (list (string-trim (cadr m))))))]
+       (lambda (m) (set! files (append files (list (clean-file-path (string-trim (cadr m)))))))]
       ;; Bare bullets inside ## Files section
       [(and in-files-section (regexp-match #rx"^- +(.+)$" line))
        =>
-       (lambda (m) (set! files (append files (list (string-trim (cadr m))))))]
+       (lambda (m) (set! files (append files (list (clean-file-path (string-trim (cadr m)))))))]
       ;; Bullet-style Verify
       [(regexp-match #rx"^- +[Vv]erify *: *(.+)$" line)
        =>
@@ -180,7 +201,8 @@
       (set! warnings (cons (format "~a: no verify command" prefix) warnings))))
   ;; Error: ALL waves are file-less — plan has nothing to execute on
   (when (and (not (null? waves))
-             (for/and ([w waves]) (null? (gsd-wave-files w))))
+             (for/and ([w waves])
+               (null? (gsd-wave-files w))))
     (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
   (validation-result (reverse errors) (reverse warnings)))
 
@@ -281,6 +303,7 @@
          ;; Parsing
          parse-waves-from-markdown
          parse-wave-content
+         clean-file-path
 
          ;; Validation
          validation-result
