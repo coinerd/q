@@ -30,6 +30,30 @@
 (test-case "SEC-01: backtick command substitution is destructive"
   (check-true (destructive-command? "echo `rm -rf /`")))
 
+;; ── AUDIT-01: Backtick regex false-positive fix ──
+;; The backtick pattern was changed from #rx"`" (matches any single backtick)
+;; to #rx"`[^`]+`" (matches only paired backticks like `command`).
+;; This prevents false positives from markdown inline code or lone backticks.
+
+(test-case "AUDIT-01: paired backticks with benign content IS flagged (intentional)"
+  ;; In bash, backticks always trigger command substitution regardless of content.
+  ;; `code` would run the command "code". This is a deliberate false positive.
+  (check-true (destructive-command? "echo \"use `code` blocks\"")))
+
+(test-case "AUDIT-01: single backtick is NOT destructive"
+  (check-false (destructive-command? "echo 'single backtick: `'")))
+
+(test-case "AUDIT-01: paired backticks with command IS destructive"
+  (check-true (destructive-command? "echo `ls`")))
+
+;; ── AUDIT-02: $() regex tradeoff documentation ──
+;; AUDIT-02: The $() regex intentionally matches broadly. Commands like
+;; echo "$(date)" would be flagged. This is a deliberate tradeoff:
+;; false positives are safer than false negatives for command substitution.
+
+(test-case "AUDIT-02: echo with $(date) is flagged (intentional false positive)"
+  (check-true (destructive-command? "echo \"result: $(date)\"")))
+
 (test-case "SEC-01: eval indirection is destructive"
   (check-true (destructive-command? "eval $(echo boom)")))
 

@@ -74,3 +74,9 @@
                  (format "key=sk-abc email=user@example.com tmp=/tmp/secret/dir home=~astuff"
                          home-str))
                 "key=[REDACTED] email=[REDACTED] tmp=[REDACTED] home=~/stuff"))
+
+;; ── AUDIT-12: non-string input edge case ──────────────────────────
+
+(test-case "sanitize-error-message handles non-string input gracefully"
+  ;; If called with #f, should raise a clear error
+  (check-exn exn:fail? (lambda () (sanitize-error-message #f))))

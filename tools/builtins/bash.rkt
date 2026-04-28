@@ -56,50 +56,51 @@
 ;; Patterns are matched case-insensitively against the full command.
 (define destructive-patterns
   ;; Recursive / forceful deletion — anchored at command start
-  (list #rx"^rm[ ]+.*-[a-zA-Z]*r.*-[a-zA-Z]*f" ;; rm with -r and -f flags
-        #rx"^rm[ ]+-rf[ ]+" ;; rm -rf shorthand
-        #rx"^rm[ ]+-fr[ ]+" ;; rm -fr shorthand
-        #rx"^rm[ ]+-r[ ]+-f[ ]+" ;; rm -r -f
-        #rx"^rmdir[ ]+" ;; rmdir
-        ;; Also match after pipe/semicolon/&& operators
-        #rx"[|;&][ ]*rm[ ]+-rf[ ]+" ;; piped rm -rf
-        ;; Disk/filesystem destruction
-        #rx"^mkfs[.]" ;; mkfs.*
-        #rx"^dd[ ]+if=" ;; dd if=
-        #rx"^dd[ ]+.*of=/dev/" ;; dd of=/dev/
-        #rx">[ ]*/dev/sd" ;; device file write
-        ;; System commands — anchored at command start
-        #rx"^shutdown([ ]|$)" ;; shutdown
-        #rx"^reboot([ ]|$)" ;; reboot
-        #rx"^format[ ]+[A-Za-z]:" ;; Windows format
-        #rx"^del[ ]+/" ;; Windows del
-        ;; Permission destruction
-        #rx"^chmod[ ]+-r[ ]+777[ ]+/" ;; recursive 777 on root
-        #rx"^chmod[ ]+000[ ]+/" ;; lock out root
-        ;; Pipe-to-shell (must be at pipe boundary)
-        #rx"[|][ ]*sh[ ]*$" ;; | sh
-        #rx"[|][ ]*bash[ ]*$" ;; | bash
-        ;; Critical system file overwrite
-        #rx">[ ]*/etc/passwd" ;; passwd overwrite
-        #rx">[ ]*/etc/shadow" ;; shadow overwrite
-        ;; Git destructive
-        #rx"^git[ ]+push[ ]+.*--force" ;; force push
-        ;; Root directory operations
-        #rx"^mv[ ]+/[ ]+" ;; mv /
-        ;; Download-to-shell combos (SEC-A)
-        #rx"curl[ ]+.*[|][ ]*sh[ ]*$" ;; curl ... | sh
-        #rx"wget[ ]+.*[|][ ]*sh[ ]*$" ;; wget ... | sh
-        #rx"eval[ ]+\"[$][(]curl" ;; eval "$(curl ...)"
-        #rx"source[ ]+/tmp/" ;; source from temp
-        ;; SEC-01 (v0.22.0): Bypass-vector patterns — encoding tricks,
-        ;; substitution, and indirection that evade simple pattern matching.
-        #rx"[|].*base64" ;; base64 decode pipe bypass
-        #rx"[|].*xxd" ;; xxd hex decode pipe bypass
-        #rx"\\$\\(" ;; $(...) command substitution
-        #rx"`" ;; backtick command substitution
-        #rx"^eval[ ]+" ;; eval indirection
-        #rx"^exec[ ]+" ;; exec replacement
-        ))
+  (list
+   #rx"^rm[ ]+.*-[a-zA-Z]*r.*-[a-zA-Z]*f" ;; rm with -r and -f flags
+   #rx"^rm[ ]+-rf[ ]+" ;; rm -rf shorthand
+   #rx"^rm[ ]+-fr[ ]+" ;; rm -fr shorthand
+   #rx"^rm[ ]+-r[ ]+-f[ ]+" ;; rm -r -f
+   #rx"^rmdir[ ]+" ;; rmdir
+   ;; Also match after pipe/semicolon/&& operators
+   #rx"[|;&][ ]*rm[ ]+-rf[ ]+" ;; piped rm -rf
+   ;; Disk/filesystem destruction
+   #rx"^mkfs[.]" ;; mkfs.*
+   #rx"^dd[ ]+if=" ;; dd if=
+   #rx"^dd[ ]+.*of=/dev/" ;; dd of=/dev/
+   #rx">[ ]*/dev/sd" ;; device file write
+   ;; System commands — anchored at command start
+   #rx"^shutdown([ ]|$)" ;; shutdown
+   #rx"^reboot([ ]|$)" ;; reboot
+   #rx"^format[ ]+[A-Za-z]:" ;; Windows format
+   #rx"^del[ ]+/" ;; Windows del
+   ;; Permission destruction
+   #rx"^chmod[ ]+-r[ ]+777[ ]+/" ;; recursive 777 on root
+   #rx"^chmod[ ]+000[ ]+/" ;; lock out root
+   ;; Pipe-to-shell (must be at pipe boundary)
+   #rx"[|][ ]*sh[ ]*$" ;; | sh
+   #rx"[|][ ]*bash[ ]*$" ;; | bash
+   ;; Critical system file overwrite
+   #rx">[ ]*/etc/passwd" ;; passwd overwrite
+   #rx">[ ]*/etc/shadow" ;; shadow overwrite
+   ;; Git destructive
+   #rx"^git[ ]+push[ ]+.*--force" ;; force push
+   ;; Root directory operations
+   #rx"^mv[ ]+/[ ]+" ;; mv /
+   ;; Download-to-shell combos (SEC-A)
+   #rx"curl[ ]+.*[|][ ]*sh[ ]*$" ;; curl ... | sh
+   #rx"wget[ ]+.*[|][ ]*sh[ ]*$" ;; wget ... | sh
+   #rx"eval[ ]+\"[$][(]curl" ;; eval "$(curl ...)"
+   #rx"source[ ]+/tmp/" ;; source from temp
+   ;; SEC-01 (v0.22.0): Bypass-vector patterns — encoding tricks,
+   ;; substitution, and indirection that evade simple pattern matching.
+   #rx"[|].*base64" ;; base64 decode pipe bypass
+   #rx"[|].*xxd" ;; xxd hex decode pipe bypass
+   #rx"\\$\\(" ;; $(...) command substitution
+   #rx"`[^`]+`" ;; AUDIT-01: paired backtick command substitution (avoids false positives on lone backticks)
+   #rx"^eval[ ]+" ;; eval indirection
+   #rx"^exec[ ]+" ;; exec replacement
+   ))
 
 ;; User-configurable extra patterns (loaded from settings).
 ;; When non-#f, these EXTEND the default destructive-patterns (SEC-A).
