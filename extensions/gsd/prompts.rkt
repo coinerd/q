@@ -91,7 +91,7 @@
    (format "Executing plan with ~a waves. Starting from wave ~a.\n\n" wave-count (or next-idx 0))
    "Instructions:\n"
    "- Follow the plan strictly — do not expand scope\n"
-   "- After completing each wave's tasks, mark it complete\n"
+   "- After completing each wave's tasks, use /wave-done N to update PLAN.md and STATE.md\n"
    "- If a wave fails, use `/skip <N>` to skip it and proceed\n"
    "- Use `/replan` if the plan needs fundamental changes\n"
    "- Run verify commands after each wave\n\n"
