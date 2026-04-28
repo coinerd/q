@@ -11,6 +11,7 @@
          "builtins/read.rkt"
          "builtins/write.rkt"
          "builtins/edit.rkt"
+         "builtins/delete-lines.rkt"
          "builtins/bash.rkt"
          "builtins/grep.rkt"
          "builtins/find.rkt"
@@ -323,6 +324,27 @@
                        'description
                        "Retrieve a range of entries by ID (inclusive)")))
       tool-session-recall)))
+
+  (when (should-register? "delete-lines")
+    (register-tool!
+     registry
+     (make-tool
+      "delete-lines"
+      "Delete a range of lines from a file by line number. Use instead of edit for removing 3+ consecutive lines."
+      (hasheq 'type
+              "object"
+              'required
+              '("path" "start-line" "end-line")
+              'properties
+              (hasheq 'path
+                      (hasheq 'type "string" 'description "Path to file")
+                      'start-line
+                      (hasheq 'type "integer" 'description "1-based start line (inclusive)")
+                      'end-line
+                      (hasheq 'type "integer" 'description "1-based end line (inclusive)")))
+      tool-delete-lines
+      #:prompt-guidelines
+      "Prefer delete-lines over edit for removing 3+ consecutive lines. Read the file first to identify exact line numbers.")))
 
   ;; skill-route: discover and search skills by description match
   (when (should-register? "skill-route")
