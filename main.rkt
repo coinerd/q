@@ -3,6 +3,10 @@
 ;; main.rkt — Entry point for q agent
 ;; Thin facade: CLI parsing → runtime construction → mode dispatch.
 ;; All business logic lives in wiring/ and interface modules.
+;;
+;; SDK consumers: prefer (require "interfaces/sdk-public.rkt") for the
+;; stable, contracted public API. This module exports everything for
+;; backward compatibility but includes many internal symbols.
 
 (require "interfaces/cli.rkt"
          "interfaces/json-mode.rkt"
