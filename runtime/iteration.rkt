@@ -2,23 +2,18 @@
 
 ;; runtime/iteration.rkt — agent iteration loop
 ;;
-;; Extracted from agent-session.rkt for single-responsibility separation.
 ;; Handles the multi-turn tool-call iteration loop: run agent turn → check
 ;; for tool calls → execute tools → feed results back → repeat.
 ;;
 ;; Also provides shared helpers used by agent-session.rkt:
 ;;   now-seconds, emit-session-event!, maybe-dispatch-hooks
 ;;
-;; ── LAYER EXCEPTION (ARCH-01 / #341) ──────────────────────────
-;; This module resides in the runtime/ layer but imports upward into
-;; the tools/ and extensions/ layers:
+;; Provider turn execution and context assembly live in turn-orchestrator.rkt.
+;; This module re-exports those symbols for backward compatibility.
 ;;
-;;   tools/tool.rkt       → list-tools-jsexpr, merge-tool-lists (registry queries)
-;;   extensions/hooks.rkt → dispatch-hooks
-;;
-;; v0.22.0 (ARCH-01): Removed dead imports (scheduler.rkt, make-exec-context,
-;; make-error-result, tool-result-content, tool-result-is-error?).
-;; The scheduler is called via tool-coordinator.rkt, not directly.
+;; ── LAYER NOTE ────────────────────────────────────────────────
+;; Since v0.22.4 (MOD-01): This module NO LONGER imports upward into
+;; tools/ or extensions/. All upward imports moved to turn-orchestrator.rkt.
 ;; ───────────────────────────────────────────────────────────────
 
 (require racket/contract
@@ -30,23 +25,14 @@
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
-                  message-id
                   message-role
                   message-content
                   make-message
-                  make-tool-result-part
                   tool-result-part?
                   tool-result-part-is-error?
-                  tool-result-part-content
                   make-text-part
                   text-part?
                   text-part-text
-                  tool-call-part?
-                  tool-call-part-id
-                  tool-call-part-name
-                  tool-call-part-arguments
-                  make-tool-call
-                  tool-call-id
                   tool-call-name
                   tool-call-arguments
                   make-loop-result
@@ -64,25 +50,11 @@
                   dequeue-all-followups!
                   queue-status)
          "../agent/loop.rkt"
-         ;; ARCH-01: tool registry queries for LLM tool definitions
-         ;; the LLM and to construct tool-result messages.
-         (only-in "../tools/tool.rkt"
-                  list-tools-jsexpr
-                  merge-tool-lists)
          ;; Settings struct for exec-context runtime-settings (#1240)
-         (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
-         ;; within each agent turn.
-         "../tools/scheduler.rkt"
-         ;; ARCH-01 upward import — runtime→extensions: iteration loop
-         ;; dispatches lifecycle hooks (turn-start, tool-call, tool-result,
-         ;; turn-end, etc.) so extensions can observe/amend/block each step.
-         "../extensions/hooks.rkt"
-         (only-in "../extensions/context.rkt" make-extension-ctx)
+         (only-in "../runtime/settings.rkt" make-minimal-settings)
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/compactor.rkt"
-                  build-tiered-context-with-hooks
-                  tiered-context->message-list
                   compact-history
                   compaction-result-removed-count
                   compaction-result-kept-messages)
@@ -92,22 +64,22 @@
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
-         "../runtime/cutpoint-rules.rkt"
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
-         (only-in "../runtime/auto-retry.rkt"
-                  with-auto-retry
-                  retryable-error?
-                  context-overflow-error?
-                  timeout-error?)
+         (only-in "../runtime/auto-retry.rkt" context-overflow-error?)
          ;; FEAT-61: message injection support
          (only-in "../extensions/message-inject.rkt" injection-event-topic)
          ;; v0.14.1: mid-turn token budget check
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
-         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         ;; v0.22.4 (MOD-01): provider turn + context assembly + extension registration
+         (only-in "turn-orchestrator.rkt"
+                  run-provider-turn
+                  build-assembled-context
+                  register-session-extensions!))
 
 (provide run-iteration-loop
          ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
@@ -124,7 +96,7 @@
          call-with-overflow-recovery
          ;; v0.14.1: mid-turn token budget check (for testing)
          check-mid-turn-budget!
-         ;; v0.20.5 W3: pre-registration on session open
+         ;; v0.20.5 W3: pre-registration on session open (now from turn-orchestrator)
          register-session-extensions!)
 
 ;; ============================================================
@@ -177,176 +149,6 @@
     (if msg
         (loop (append acc (list msg)))
         acc)))
-
-;; ============================================================
-;; Extracted iteration-loop sub-procedures (QUAL-08)
-;; ============================================================
-
-;; Build assembled context using tiered context assembly with hooks.
-;; Returns the assembled message list.
-(define (build-assembled-context ctx-to-use config ext-reg bus session-id iteration)
-  ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
-  (define tier-b-count (hash-ref config 'tier-b-count 20))
-  (define tier-c-count (hash-ref config 'tier-c-count 4))
-  (define max-tokens (hash-ref config 'max-tokens 8192))
-
-  ;; R2-6: Create hook dispatcher function for context assembly
-  (define ctx-assembly-hook-dispatcher
-    (and ext-reg
-         (lambda (hook-point payload)
-           (define result (dispatch-hooks hook-point payload ext-reg))
-           result)))
-
-  ;; Build tiered context with hook support
-  (define-values (tc assembly-hook-result)
-    (build-tiered-context-with-hooks ctx-to-use
-                                     #:hook-dispatcher ctx-assembly-hook-dispatcher
-                                     #:tier-b-count tier-b-count
-                                     #:tier-c-count tier-c-count
-                                     #:max-tokens max-tokens))
-
-  ;; Handle block action from context-assembly hook
-  (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
-    (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
-    (raise (exn:fail "Context assembly blocked by extension" (current-continuation-marks))))
-
-  (define ctx-assembled (tiered-context->message-list tc))
-
-  ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
-  (define ctx-token-count (estimate-context-tokens ctx-assembled))
-  (emit-session-event! bus
-                       session-id
-                       "context.assembled"
-                       (hasheq 'iteration
-                               iteration
-                               'total-messages
-                               (length ctx-to-use)
-                               'assembled-messages
-                               (length ctx-assembled)
-                               'tokenCount
-                               ctx-token-count))
-
-  ;; Dispatch 'context hook — extensions can amend final context
-  (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
-
-  ctx-final)
-
-;; ============================================================
-;; v0.20.5 W3: Extension Pre-Registration
-;; ============================================================
-
-;;; register-session-extensions! : tool-registry? extension-registry? event-bus?
-;;;                                  string? -> (listof hash?)
-;;;
-;;; Dispatches the 'register-tools hook through the extension registry
-;;; so that extension tools are available and extension state (event bus,
-;;; pinned dir) is initialized BEFORE the first run-prompt! call.
-;;;
-;;; Returns the list of extension-provided tools (as jsexpr hashes),
-;;; or '() if no extensions or no tools registered.
-;;;
-;;; Idempotent: extensions track their own registration state internally.
-;;; Safe to call multiple times.
-(define (register-session-extensions! tool-reg ext-reg bus session-id)
-  (cond
-    [(not ext-reg) '()]
-    [else
-     (define the-ext-ctx
-       (make-extension-ctx #:session-id session-id
-                           #:session-dir #f
-                           #:event-bus bus
-                           #:extension-registry ext-reg
-                           #:tool-registry tool-reg))
-     (define-values (_amended hook-res)
-       (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))
-     (if (and hook-res (eq? (hook-result-action hook-res) 'amend))
-         (hash-ref (hook-result-payload hook-res) 'tools '())
-         '())]))
-
-;; Run the provider turn: dispatch before-provider-request hook, then run agent turn.
-;; Returns the loop-result from run-agent-turn.
-(define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config)
-  ;; Dispatch 'before-provider-request hook (informational)
-  (define-values (_bpr-payload _bpr-res)
-    (maybe-dispatch-hooks ext-reg
-                          'before-provider-request
-                          (hasheq 'session-id session-id 'turn-id turn-id)))
-
-  ;; Get tools from registry for the LLM request
-  (define base-tools (and reg (list-tools-jsexpr reg)))
-
-  ;; #673: Merge extension-provided tools into the tool list
-  ;; v0.20.5 W3: Uses shared register-session-extensions! function.
-  ;; Idempotent — extensions track their own state.
-  (define ext-tools (and ext-reg (register-session-extensions! reg ext-reg bus session-id)))
-  (define tools
-    (if (and base-tools (pair? ext-tools))
-        (merge-tool-lists base-tools ext-tools)
-        base-tools))
-
-  ;; v0.14.4 Wave 2 FIX: Extract ONLY provider-specific settings from config.
-  ;; The full config is a mutable hash with event-bus, extension-registry, etc.
-  ;; Passing it to make-model-request causes hash-set contract violations
-  ;; because provider.rkt's ensure-model-setting calls hash-set (immutable-only).
-  (define provider-settings-raw
-    (for/hash ([(k v) (in-hash config)]
-               #:when (memq k '(max-tokens temperature top_p frequency_penalty presence_penalty)))
-      (values k v)))
-  ;; v0.15.1 Wave 1: Also resolve max-tokens from config if not in flat runtime hash.
-  ;; Config may have max-tokens in: top-level, providers.<name>.max-tokens, or models.default.max-tokens.
-  (define provider-settings
-    (let* ([settings (hash-ref config 'settings #f)]
-           [model-name (hash-ref config 'model-name #f)]
-           [resolve-max-tokens
-            (lambda ()
-              (or
-               (hash-has-key? provider-settings-raw 'max-tokens)
-               (and settings (setting-ref settings 'max-tokens #f))
-               (and settings
-                    model-name
-                    (setting-ref* settings `(providers ,(string->symbol model-name) max-tokens) #f))
-               (and settings (setting-ref* settings '(providers openai-compatible max-tokens) #f))
-               (and settings (setting-ref* settings '(models default max-tokens) #f))))])
-      (if (and settings (not (hash-has-key? provider-settings-raw 'max-tokens)))
-          (let ([mt (resolve-max-tokens)])
-            (if mt
-                (hash-set provider-settings-raw 'max-tokens mt)
-                provider-settings-raw))
-          provider-settings-raw)))
-
-  (define ctx-for-retry (box ctx-final))
-
-  (with-auto-retry (lambda ()
-                     (run-agent-turn (unbox ctx-for-retry)
-                                     prov
-                                     bus
-                                     #:session-id session-id
-                                     #:turn-id turn-id
-                                     #:tools tools
-                                     #:cancellation-token token
-                                     #:provider-settings provider-settings))
-                   #:max-retries 2
-                   #:base-delay-ms 1000
-                   #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
-                                (publish! bus
-                                          (make-event "auto-retry.start"
-                                                      (current-inexact-milliseconds)
-                                                      session-id
-                                                      turn-id
-                                                      (hasheq 'attempt
-                                                              attempt
-                                                              'max-retries
-                                                              max-retries
-                                                              'delay-ms
-                                                              delay-ms
-                                                              'error
-                                                              error-msg
-                                                              'errorType
-                                                              error-type))))))
-
-;; Handle tool-calls-pending: extract calls, run through scheduler, emit events,
-;; and return (values tool-result-messages updated-ctx) for the next loop iteration.
-;; handle-tool-calls-pending: moved to runtime/tool-coordinator.rkt
 
 ;; ============================================================
 ;; FEAT-66: Context overflow recovery
@@ -415,11 +217,9 @@
   collected)
 
 ;; ============================================================
-;; v0.15.2 (BUG-INTENT-WITHOUT-ACTION): Intent-without-action detection
+;; v0.15.2 (BUG-INTENT-WITH-ACTION): Intent-without-action detection
 ;; ============================================================
 
-;; Regex matching intent-to-act phrases followed by action verbs.
-;; Case-insensitive via pregexp (?i:...) syntax.
 ;; v0.21.3: Intent detection removed. The prompt is self-correcting by design.
 ;; detect-intent-pattern, INTENT-ACTION-RX, detect-stall?, MAX-STALL-RETRIES all removed.
 
@@ -610,11 +410,11 @@
               (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
 
              [else
-              ;; Build assembled context (tiered + hooks)
+              ;; Build assembled context (tiered + hooks) — from turn-orchestrator.rkt
               (define ctx-final
                 (build-assembled-context ctx-to-use config ext-reg bus session-id iteration))
 
-              ;; Run provider turn
+              ;; Run provider turn — from turn-orchestrator.rkt
               (define result
                 (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config))
 

@@ -59,8 +59,7 @@
       ;; Known exceptions:
       ;;   - runtime/package.rkt imports extensions/manifest.rkt for package audit
       (define runtime-files (rkt-files-in "runtime"))
-      (define known-exceptions
-        '("iteration.rkt" "package.rkt" "extension-catalog.rkt"))
+      (define known-exceptions '("iteration.rkt" "package.rkt" "extension-catalog.rkt"))
       (define violations
         (for/list ([f (in-list runtime-files)]
                    #:when (not (member (path->string (file-name-from-path f)) known-exceptions)))
