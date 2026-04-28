@@ -1,6 +1,6 @@
 # ADR-0012: Context Manager Strategy Engine
 
-Date: 2024-11 (v0.21.10)
+Date: 2024-11 (v0.22.0)
 
 ## Status
 Accepted
