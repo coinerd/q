@@ -39,7 +39,11 @@
          (only-in "gsd/core.rkt"
                   gsd-write-guard
                   gsd-show-status
-                  cmd-replan cmd-skip cmd-reset cmd-done cmd-wave-done)
+                  cmd-replan
+                  cmd-skip
+                  cmd-reset
+                  cmd-done
+                  cmd-wave-done)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
@@ -580,7 +584,13 @@
      (cond
        ;; /plan <text> → submit as planning prompt
        [(and (member cmd '("/plan" "/p")) args-text)
+        (define saved-bus (gsd-event-bus)) ;; Preserve event bus across reset
+        (define saved-dir (pinned-planning-dir)) ;; Preserve pinned dir
         (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
+        (when saved-bus
+          (set-gsd-event-bus! saved-bus))
+        (when saved-dir
+          (set-pinned-planning-dir! saved-dir))
         (set-gsd-mode! 'planning)
         (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'planning))
         (set-current-max-old-text-len! 500)
