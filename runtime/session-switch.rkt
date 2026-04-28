@@ -16,6 +16,7 @@
 
 (require racket/contract
          racket/match
+         racket/runtime-path
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt")
 
@@ -43,6 +44,11 @@
 ;; Lazy extension imports (DI defaults)
 ;; ============================================================
 
+;; Capture absolute paths at module-load time so dynamic-require works
+;; regardless of (current-directory) at call time.
+(define-runtime-path hooks-rkt-path "../extensions/hooks.rkt")
+(define-runtime-path context-rkt-path "../extensions/context.rkt")
+
 ;; Default dispatch-hooks: lazy-load from extensions/hooks.rkt
 (define (default-dispatch-hooks hook-point payload registry)
   (define dispatch-fn
@@ -50,7 +56,7 @@
                                             (error 'default-dispatch-hooks
                                                    "Cannot load extensions/hooks.rkt: ~a"
                                                    (exn-message e)))])
-      (dynamic-require "../extensions/hooks.rkt" 'dispatch-hooks)))
+      (dynamic-require hooks-rkt-path 'dispatch-hooks)))
   (dispatch-fn hook-point payload registry))
 
 ;; Default make-extension-ctx: lazy-load from extensions/context.rkt
@@ -65,7 +71,7 @@
                                             (error 'default-make-extension-ctx
                                                    "Cannot load extensions/context.rkt: ~a"
                                                    (exn-message e)))])
-      (dynamic-require "../extensions/context.rkt" 'make-extension-ctx)))
+      (dynamic-require context-rkt-path 'make-extension-ctx)))
   (make-ctx-fn #:session-id sid
                #:session-dir sdir
                #:event-bus bus
