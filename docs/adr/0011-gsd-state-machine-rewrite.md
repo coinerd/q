@@ -1,6 +1,6 @@
 # ADR-0011: GSD State Machine Rewrite
 
-Date: 2025-01 (v0.21.10)
+Date: 2025-01 (v0.22.0)
 
 ## Status
 Accepted

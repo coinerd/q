@@ -1,4 +1,4 @@
-<!-- verified-against: 0.21.10 -->
+<!-- verified-against: 0.22.0 -->
 # Release Process
 
 This document describes how to cut a new release of **q**.
@@ -47,7 +47,7 @@ Edit the canonical source:
 
 ```racket
 ;; util/version.rkt
-(define q-version "0.21.10")
+(define q-version "0.22.0")
 ```
 
 Then propagate:
@@ -67,13 +67,13 @@ racket scripts/lint-version.rkt  # verify
 
 ```bash
 git add -A
-git commit -m "Release v0.21.10"
+git commit -m "Release v0.22.0"
 ```
 
 ### 4. Tag
 
 ```bash
-git tag -a v0.21.10 -m "Release v0.21.10"
+git tag -a v0.22.0 -m "Release v0.22.0"
 ```
 
 ### 5. Push

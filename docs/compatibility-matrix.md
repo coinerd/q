@@ -1,6 +1,6 @@
 # Compatibility Matrix
 
-<!-- verified-against: 0.20.4 -->
+<!-- verified-against: 0.22.0 -->
 
 This document tracks compatibility between q versions, Racket versions, and
 extension API versions.
@@ -27,23 +27,23 @@ extension API versions.
 
 | q Version | Extension API | Breaking? | Migration |
 |-----------|--------------|-----------|----------|
-| 0.20.4+ | `0.7` | No | Additive — permission gates, hot-reload hooks |
-| 0.17.0+ | `0.6` | No | Additive — extension subdirectories, execute-command hook, catalog API |
-| 0.16.0+ | `0.5.1` | No | Additive — `dangerous?` tool field, one-shot safe-mode |
-| 0.15.0+ | `0.5` | No | Additive — safe-mode hooks, quarantine |
-| 0.13.0+ | `0.4` | No | Additive — session-tree hooks |
-| 0.10.0+ | `0.3` | No | Additive — new hook types |
-| 0.9.0+ | `0.2` | No | Additive — extension context fields |
-| 0.8.0+ | `0.1` | Yes | Changed `extension` struct to 4-arg |
+| 0.22.0+ | `0.7` | No | Additive — permission gates, hot-reload hooks |
+| 0.22.0+ | `0.6` | No | Additive — extension subdirectories, execute-command hook, catalog API |
+| 0.22.0+ | `0.22.0` | No | Additive — `dangerous?` tool field, one-shot safe-mode |
+| 0.22.0+ | `0.5` | No | Additive — safe-mode hooks, quarantine |
+| 0.22.0+ | `0.4` | No | Additive — session-tree hooks |
+| 0.22.0+ | `0.3` | No | Additive — new hook types |
+| 0.22.0+ | `0.2` | No | Additive — extension context fields |
+| 0.22.0+ | `0.1` | Yes | Changed `extension` struct to 4-arg |
 
 ## Provider Compatibility
 
 | Provider | Min q Version | Status |
 |----------|--------------|--------|
-| OpenAI-compatible | 0.1.0 | Stable |
-| Anthropic (Claude) | 0.5.0 | Stable |
-| Gemini | 0.7.0 | Stable |
-| Local (llama.cpp server) | 0.6.0 | Stable |
+| OpenAI-compatible | 0.22.0 | Stable |
+| Anthropic (Claude) | 0.22.0 | Stable |
+| Gemini | 0.22.0 | Stable |
+| Local (llama.cpp server) | 0.22.0 | Stable |
 
 ## TUI Dependencies
 

@@ -1,6 +1,6 @@
 # Verification Workflow
 
-<!-- verified-against: 0.20.4 -->
+<!-- verified-against: 0.22.0 -->
 
 How to verify a third-party q extension package before and after
 installation.
@@ -122,7 +122,7 @@ Check a package's compatibility before installing:
 (printf "Max q version: ~a~n" max-v)
 
 ;; Resolve for your current q version
-(define resolved (resolve-version index "my-extension" "0.11.2"))
+(define resolved (resolve-version index "my-extension" "0.22.0"))
 (unless resolved
   (displayln "Package is NOT compatible with your q version"))
 ```
@@ -131,8 +131,8 @@ Check a package's compatibility before installing:
 
 | Field | Location | Format | Example |
 |-------|----------|--------|---------|
-| `compat` | `qpm.json` | Semver range | `">=0.10.0 <1.0.0"` |
-| `min-q-version` | `index.json` | SemVer | `"0.10.0"` |
+| `compat` | `qpm.json` | Semver range | `">=0.22.0 <1.0.0"` |
+| `min-q-version` | `index.json` | SemVer | `"0.22.0"` |
 | `max-q-version` | `index.json` | SemVer (exclusive) | `"1.0.0"` |
 
 The `compat` field in `qpm.json` is checked at extension load time by
