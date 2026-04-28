@@ -1,0 +1,101 @@
+#lang racket/base
+
+;; runtime/session-controls.rkt — session control functions
+;;
+;; Extracted from agent-session.rkt (ARCH-05c).
+;; Model switching, thinking level, and shutdown controls.
+;; Uses session-types.rkt for struct accessors to avoid circular deps.
+
+(require racket/contract
+         racket/list
+         (only-in "model-registry.rkt" available-models model-entry-name)
+         "session-types.rkt")
+
+(provide set-model!
+         cycle-model!
+         ;; Thinking level control (#1153)
+         thinking-levels
+         thinking-level?
+         thinking-level->budget
+         set-thinking-level!
+         ;; Graceful shutdown (#1158)
+         request-shutdown!
+         force-shutdown!
+         shutdown-requested?
+         force-shutdown-requested?
+         reset-shutdown-flags!)
+
+;; ============================================================
+;; FEAT-65: Runtime model control
+;; ============================================================
+
+;; set-model! : agent-session? string? -> void?
+;; Sets the active model name for the session.
+(define (set-model! sess model-name)
+  (unless (string? model-name)
+    (raise-argument-error 'set-model! "string?" model-name))
+  (set-agent-session-model-name! sess model-name))
+
+;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
+;; Cycles to the next model in the registry's available models list.
+(define (cycle-model! sess registry)
+  (define models (available-models registry))
+  (if (null? models)
+      #f
+      (let* ([current (or (agent-session-model-name sess) "")]
+             [names (map model-entry-name models)]
+             [unique-names (remove-duplicates names)]
+             [current-idx (for/first ([n (in-list unique-names)]
+                                      [i (in-naturals)]
+                                      #:when (equal? n current))
+                            i)]
+             [next-idx (if current-idx
+                           (modulo (add1 current-idx) (length unique-names))
+                           0)]
+             [next-model (list-ref unique-names next-idx)])
+        (set-agent-session-model-name! sess next-model)
+        next-model)))
+
+;; ============================================================
+;; Thinking level control (#1153)
+;; ============================================================
+
+(define thinking-levels '(off minimal low medium high xhigh))
+
+(define (thinking-level? v)
+  (and (symbol? v) (member v thinking-levels) #t))
+
+(define (thinking-level->budget level)
+  (case level
+    [(off) 0]
+    [(minimal) 1024]
+    [(low) 4096]
+    [(medium) 8192]
+    [(high) 16384]
+    [(xhigh) 32768]
+    [else 0]))
+
+(define (set-thinking-level! sess level)
+  (unless (thinking-level? level)
+    (raise-argument-error 'set-thinking-level! "thinking level" level))
+  (set-agent-session-thinking-level! sess level))
+
+;; ============================================================
+;; Graceful shutdown (#1158)
+;; ============================================================
+
+(define (request-shutdown! sess)
+  (set-agent-session-shutdown-requested?! sess #t))
+
+(define (force-shutdown! sess)
+  (set-agent-session-force-shutdown?! sess #t))
+
+(define (shutdown-requested? sess)
+  (agent-session-shutdown-requested? sess))
+
+(define (force-shutdown-requested? sess)
+  (agent-session-force-shutdown? sess))
+
+(define (reset-shutdown-flags! sess)
+  (set-agent-session-shutdown-requested?! sess #f)
+  (set-agent-session-force-shutdown?! sess #f))

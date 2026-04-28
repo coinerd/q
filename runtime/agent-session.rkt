@@ -37,9 +37,7 @@
                   loop-result-termination-reason
                   make-loop-result)
          "../agent/queue.rkt"
-         (only-in "model-registry.rkt" available-models model-entry-name)
          "../agent/event-bus.rkt"
-         "../llm/token-budget.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
@@ -50,6 +48,22 @@
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
+         "session-types.rkt"
+         (only-in "session-events.rkt" wire-session-event-handlers!)
+         (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
+         (only-in "session-compaction.rkt" maybe-compact-context)
+         (only-in "session-controls.rkt"
+                  set-model!
+                  cycle-model!
+                  thinking-levels
+                  thinking-level?
+                  thinking-level->budget
+                  set-thinking-level!
+                  request-shutdown!
+                  force-shutdown!
+                  shutdown-requested?
+                  force-shutdown-requested?
+                  reset-shutdown-flags!)
          (only-in "auto-retry.rkt"
                   classify-error
                   retry-exhausted?
@@ -104,32 +118,11 @@
          reset-shutdown-flags!)
 
 ;; ============================================================
-;; Internal struct
+;; ARCH-05: struct definition moved to session-types.rkt
 ;; ============================================================
-
-(struct agent-session
-        (session-id ; string
-         session-dir ; path
-         provider ; provider?
-         tool-registry ; tool-registry?
-         event-bus ; event-bus?
-         extension-registry ; extension-registry? or #f
-         [model-name #:mutable] ; string or #f
-         system-instructions ; (listof string)
-         [index #:mutable] ; session-index? or #f
-         queue ; queue?
-         config ; hash (runtime settings)
-         [active? #:mutable] ; boolean
-         [start-time #:mutable] ; integer (seconds since epoch)
-         [compacting? #:mutable] ; boolean — guard against recursive compaction
-         [last-compaction-time #:mutable] ; integer or #f — timestamp of last compaction
-         [persisted? #:mutable] ; boolean — #f until directory + first write
-         [pending-entries #:mutable] ; (listof message?) — buffered before persistence
-         [thinking-level #:mutable] ; symbol — one of thinking-levels (#1153)
-         [shutdown-requested? #:mutable] ; boolean — graceful shutdown flag (#1158)
-         [force-shutdown? #:mutable]
-         [prompt-running? #:mutable]) ; boolean — concurrent prompt execution guard
-  #:transparent)
+;; agent-session struct is imported from session-types.rkt.
+;; This allows extracted sub-modules (session-events, etc.) to
+;; access the struct without circular dependencies.
 
 ;; ============================================================
 ;; Helpers
@@ -237,7 +230,7 @@
                           session-start-payload))
 
   ;; Subscribe to fork.requested and compact.requested events from TUI/CLI
-  (wire-session-event-handlers! sess)
+  (wire-session-event-handlers! sess fork-session)
 
   ;; #668: Emit resources.discover event — extensions can discover skill/prompt/theme paths
   (let ([ext-reg (hash-ref config 'extension-registry #f)])
@@ -328,7 +321,7 @@
   (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start resume-start-payload)
 
   ;; Subscribe to fork/compact events from TUI/CLI
-  (wire-session-event-handlers! sess)
+  (wire-session-event-handlers! sess fork-session)
 
   sess)
 
@@ -544,97 +537,7 @@
 
 ;; extract-path-settings imported from runtime/session-context.rkt
 
-;; maybe-compact-context — token budget check and compaction triggering.
-;;   May mutate context (return a compacted version). Returns the
-;;   (possibly compacted) context message list.
-;;; maybe-compact-context : agent-session? (listof message?) integer?
-;;;                        -> (listof message?)
-;;;
-;;; Checks if context token count exceeds budget threshold. If so (and
-;;; not in recursive-compaction guard or stale-usage cooldown), dispatches
-;;; 'session-before-compact hook, runs compact-history, emits compaction
-;;; events, and returns compacted message list. Otherwise returns input
-;;; unchanged.
-(define (maybe-compact-context sess context-with-system token-budget-threshold)
-  (define bus (agent-session-event-bus sess))
-  (define sid (agent-session-session-id sess))
-
-  (define raw-messages
-    (for/list ([msg (in-list context-with-system)])
-      (hasheq 'role
-              (symbol->string (message-role msg))
-              'content
-              (map content-part->jsexpr (message-content msg)))))
-  (define token-count (estimate-context-tokens raw-messages))
-  (cond
-    [(not (should-compact? token-count token-budget-threshold)) context-with-system]
-    [else
-     ;; #770: Stale usage guard — skip if compaction just completed
-     (define last-compact (agent-session-last-compaction-time sess))
-     (define now-ms (current-inexact-milliseconds))
-     (cond
-       [(and last-compact (< (- now-ms last-compact) 2000))
-        context-with-system] ; too soon after last compaction
-       [(agent-session-compacting? sess) context-with-system] ; recursive compaction guard
-       [else
-        (set-agent-session-compacting?! sess #t)
-        (emit-session-event! bus
-                             sid
-                             "compaction.start"
-                             (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
-        (dynamic-wind
-         (lambda () (void))
-         (lambda ()
-           (maybe-compact-context-internal sess
-                                           context-with-system
-                                           token-count
-                                           token-budget-threshold
-                                           bus
-                                           sid))
-         (lambda ()
-           (set-agent-session-compacting?! sess #f)
-           (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
-           (emit-session-event! bus sid "compaction.end" (hasheq 'tokenCount token-count))))])]))
-
-;; Internal compaction logic (extracted from maybe-compact-context for dynamic-wind)
-(define (maybe-compact-context-internal sess
-                                        context-with-system
-                                        token-count
-                                        token-budget-threshold
-                                        bus
-                                        sid)
-  ;; Dispatch 'session-before-compact hook
-  (define compact-payload
-    (hasheq 'session-id
-            sid
-            'token-count
-            token-count
-            'budget-threshold
-            token-budget-threshold
-            'message-count
-            (length context-with-system)))
-  (define-values (_amended-compact compact-hook-res)
-    (maybe-dispatch-hooks (agent-session-extension-registry sess)
-                          'session-before-compact
-                          compact-payload))
-  (cond
-    [(and compact-hook-res (eq? (hook-result-action compact-hook-res) 'block)) context-with-system]
-    [else
-     (emit-session-event! bus
-                          sid
-                          "compaction.warning"
-                          (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
-     (define compact-result (compact-history context-with-system))
-     (emit-session-event! bus
-                          sid
-                          "compaction.completed"
-                          (hasheq 'removedCount
-                                  (compaction-result-removed-count compact-result)
-                                  'keptCount
-                                  (length (compaction-result-kept-messages compact-result))
-                                  'tokenCount
-                                  token-count))
-     (compaction-result->message-list compact-result)]))
+;; ARCH-05: maybe-compact-context extracted to session-compaction.rkt
 
 ;; dispatch-iteration — model-select hook + iteration loop dispatch.
 ;;   Runs the core agent loop with error handling. Returns a loop-result.
@@ -856,161 +759,11 @@
     (set-agent-session-active?! sess #f)))
 
 ;; ============================================================
-;; Event bus wiring — handle fork/compact requests from TUI/CLI
+;; Event bus wiring — ARCH-05b: extracted to session-events.rkt
 ;; ============================================================
-
-;; Wire event-bus subscribers for fork.requested and compact.requested events.
-;; These events are published by TUI/CLI commands and need runtime handlers.
-(define (wire-session-event-handlers! sess)
-  (define bus (agent-session-event-bus sess))
-  (when bus
-    ;; Subscribe to fork.requested — call fork-session with the entry-id
-    (subscribe! bus
-                (lambda (evt)
-                  (define payload (event-payload evt))
-                  (define entry-id (and (hash? payload) (hash-ref payload 'entry-id #f)))
-                  (with-handlers ([exn:fail? (lambda (e)
-                                               (emit-session-event! bus
-                                                                    (agent-session-session-id sess)
-                                                                    "session.fork.failed"
-                                                                    (hasheq 'error
-                                                                            (exn-message e))))])
-                    (define new-sess (fork-session sess entry-id))
-                    (emit-session-event! bus
-                                         (agent-session-session-id sess)
-                                         "session.fork.completed"
-                                         (hasheq 'newSessionId
-                                                 (agent-session-session-id new-sess)
-                                                 'forkPoint
-                                                 (or entry-id "latest")))))
-                #:filter (lambda (evt) (equal? (event-ev evt) "fork.requested")))
-
-    ;; Subscribe to compact.requested — compact the session context
-    (subscribe!
-     bus
-     (lambda (evt)
-       (with-handlers ([exn:fail? (lambda (e)
-                                    (emit-session-event! bus
-                                                         (agent-session-session-id sess)
-                                                         "session.compact.failed"
-                                                         (hasheq 'error (exn-message e))))])
-         (define log-path (session-log-path (agent-session-session-dir sess)))
-         (when (file-exists? log-path)
-           (define history (load-session-log log-path))
-           (when (and (not (null? history)) (not (agent-session-compacting? sess)))
-             (set-agent-session-compacting?! sess #t)
-             (define compact-result (compact-history history))
-             (set-agent-session-compacting?! sess #f)
-             (emit-session-event! bus
-                                  (agent-session-session-id sess)
-                                  "session.compact.completed"
-                                  (hasheq 'removedCount
-                                          (compaction-result-removed-count compact-result)))))))
-     #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))))
+;; wire-session-event-handlers! is imported from session-events.rkt.
+;; It now receives fork-handler as a parameter to avoid circular deps.
 
 ;; ============================================================
-;; FEAT-65: Runtime model control
+;; ARCH-05: Model/thinking/shutdown controls extracted to session-controls.rkt
 ;; ============================================================
-
-;; set-model! : agent-session? string? -> void?
-;; Switch the active model for this session.
-;;; set-model! : agent-session? string? -> void?
-;;; Sets the active model name for the session.
-;;; Raises argument-error if model-name is not a string.
-(define (set-model! sess model-name)
-  (unless (string? model-name)
-    (raise-argument-error 'set-model! "string?" model-name))
-  (set-agent-session-model-name! sess model-name))
-
-;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
-;; Cycle to the next available model. Returns the new model name, or #f if
-;; no models are available.
-;;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
-;;; Cycles to the next model in the registry's available models list
-;;; (wrapping around). Returns the new model name, or #f if no models.
-(define (cycle-model! sess registry)
-  (define models (available-models registry))
-  (if (null? models)
-      #f
-      (let* ([current (or (agent-session-model-name sess) "")]
-             [names (map model-entry-name models)]
-             [unique-names (remove-duplicates names)]
-             [current-idx (for/first ([n (in-list unique-names)]
-                                      [i (in-naturals)]
-                                      #:when (equal? n current))
-                            i)]
-             [next-idx (if current-idx
-                           (modulo (add1 current-idx) (length unique-names))
-                           0)]
-             [next-model (list-ref unique-names next-idx)])
-        (set-agent-session-model-name! sess next-model)
-        next-model)))
-
-;; ============================================================
-;; Thinking level control (#1153)
-;; ============================================================
-
-;; Valid thinking levels for reasoning models.
-;;   off     — no extended thinking
-;;   minimal — brief reasoning (1k tokens)
-;;   low     — light reasoning (4k tokens)
-;;   medium  — moderate reasoning (8k tokens, default)
-;;   high    — deep reasoning (16k tokens)
-;;   xhigh   — maximum reasoning (32k tokens)
-(define thinking-levels '(off minimal low medium high xhigh))
-
-;; thinking-level? : any/c -> boolean?
-;; Returns #t if v is a valid thinking level symbol.
-(define (thinking-level? v)
-  (and (symbol? v) (member v thinking-levels) #t))
-
-;; thinking-level->budget : symbol? -> exact-nonnegative-integer?
-;; Maps a thinking level to an approximate token budget for
-;; Anthropic-style extended thinking. Returns 0 for unknown levels.
-(define (thinking-level->budget level)
-  (case level
-    [(off) 0]
-    [(minimal) 1024]
-    [(low) 4096]
-    [(medium) 8192]
-    [(high) 16384]
-    [(xhigh) 32768]
-    [else 0]))
-
-;; set-thinking-level! : agent-session? symbol? -> void?
-;; Sets the thinking level for the session. Raises error if level
-;; is not valid.
-(define (set-thinking-level! sess level)
-  (unless (thinking-level? level)
-    (raise-argument-error 'set-thinking-level! "thinking level" level))
-  (set-agent-session-thinking-level! sess level))
-
-;; ============================================================
-;; Graceful shutdown (#1158)
-;; ============================================================
-
-;; request-shutdown! : agent-session? -> void?
-;; Request graceful shutdown — agent exits after current turn completes.
-(define (request-shutdown! sess)
-  (set-agent-session-shutdown-requested?! sess #t))
-
-;; force-shutdown! : agent-session? -> void?
-;; Force immediate shutdown — for double Ctrl+C.
-(define (force-shutdown! sess)
-  (set-agent-session-force-shutdown?! sess #t))
-
-;; shutdown-requested? : agent-session? -> boolean?
-;; Check if a graceful shutdown has been requested.
-(define (shutdown-requested? sess)
-  (agent-session-shutdown-requested? sess))
-
-;; force-shutdown-requested? : agent-session? -> boolean?
-;; Check if a forced shutdown has been requested.
-(define (force-shutdown-requested? sess)
-  (agent-session-force-shutdown? sess))
-
-;; reset-shutdown-flags! : agent-session? -> void?
-;; Reset both shutdown flags (primarily for testing).
-(define (reset-shutdown-flags! sess)
-  (set-agent-session-shutdown-requested?! sess #f)
-  (set-agent-session-force-shutdown?! sess #f))
