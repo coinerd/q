@@ -58,12 +58,13 @@
 ;; ============================================================
 
 (test-case "round-trip manifest→jsexpr→manifest preserves data"
-  (define m (sample-manifest #:compat ">=0.4.2"
-                             #:files '("main.rkt" "helpers.rkt")
-                             #:checksum "abc123"
-                             #:entry "main.rkt"
-                             #:homepage "https://example.com"
-                             #:license "MIT"))
+  (define m
+    (sample-manifest #:compat ">=0.4.2"
+                     #:files '("main.rkt" "helpers.rkt")
+                     #:checksum "abc123"
+                     #:entry "main.rkt"
+                     #:homepage "https://example.com"
+                     #:license "MIT"))
   (define j (qpm-manifest->jsexpr m))
   (define m2 (jsexpr->qpm-manifest j))
   (check-not-false m2)
@@ -74,10 +75,11 @@
 ;; ============================================================
 
 (test-case "round-trip manifest→file→manifest preserves data"
-  (define m (sample-manifest #:compat "^0.4.0"
-                             #:files '("todo.rkt")
-                             #:entry "todo.rkt"
-                             #:license "Apache-2.0"))
+  (define m
+    (sample-manifest #:compat "^0.4.0"
+                     #:files '("todo.rkt")
+                     #:entry "todo.rkt"
+                     #:license "Apache-2.0"))
   (define tmp (make-temporary-file "q-manifest-test-~a"))
   (write-qpm-manifest m tmp)
   (define m2 (read-qpm-manifest tmp))
@@ -99,8 +101,7 @@
 ;; ============================================================
 
 (test-case "validation fails for empty name"
-  (define-values (ok? errors)
-    (validate-manifest (sample-manifest #:name "")))
+  (define-values (ok? errors) (validate-manifest (sample-manifest #:name "")))
   (check-false ok?)
   (check-true (ormap (λ (e) (string-contains? e "name")) errors)))
 
@@ -109,8 +110,7 @@
 ;; ============================================================
 
 (test-case "validation fails for bad version"
-  (define-values (ok? errors)
-    (validate-manifest (sample-manifest #:version "not-semver")))
+  (define-values (ok? errors) (validate-manifest (sample-manifest #:version "not-semver")))
   (check-false ok?)
   (check-true (ormap (λ (e) (string-contains? e "version")) errors)))
 
@@ -121,8 +121,7 @@
 (test-case "validation fails for bad type"
   ;; We can't pass a bad type through the constructor because the contract
   ;; enforces it. Instead we build a raw struct.
-  (define bad-m (qpm-manifest "q-todo" "1.0.0" "1" 'invalid
-                              "desc" "author" #f #f '() #f #f #f #f))
+  (define bad-m (qpm-manifest "q-todo" "1.0.0" "1" 'invalid "desc" "author" #f #f '() #f #f #f #f))
   (define-values (ok? errors) (validate-manifest bad-m))
   (check-false ok?)
   (check-true (ormap (λ (e) (string-contains? e "type")) errors)))
@@ -132,8 +131,7 @@
 ;; ============================================================
 
 (test-case "validation fails for non-digit api-version"
-  (define-values (ok? errors)
-    (validate-manifest (sample-manifest #:api-version "v1")))
+  (define-values (ok? errors) (validate-manifest (sample-manifest #:api-version "v1")))
   (check-false ok?)
   (check-true (ormap (λ (e) (string-contains? e "api-version")) errors)))
 
@@ -219,10 +217,8 @@
 ;; ============================================================
 
 (test-case "write-qpm-manifest creates file that read-qpm-manifest can parse"
-  (define m (sample-manifest #:compat ">=0.4.2"
-                             #:files '("main.rkt")
-                             #:entry "main.rkt"
-                             #:license "MIT"))
+  (define m
+    (sample-manifest #:compat ">=0.4.2" #:files '("main.rkt") #:entry "main.rkt" #:license "MIT"))
   (define tmp (make-temporary-file "q-manifest-write-~a"))
   (write-qpm-manifest m tmp)
   (check-pred file-exists? tmp)
@@ -248,7 +244,46 @@
 ;; ============================================================
 
 (test-case "validation fails for empty description"
-  (define-values (ok? errors)
-    (validate-manifest (sample-manifest #:description "")))
+  (define-values (ok? errors) (validate-manifest (sample-manifest #:description "")))
   (check-false ok?)
   (check-true (ormap (λ (e) (string-contains? e "description")) errors)))
+
+;; ============================================================
+;; 18. safe-manifest-file-path? predicate
+;; ============================================================
+
+(test-case "safe-manifest-file-path? accepts legitimate relative paths"
+  (check-true (safe-manifest-file-path? "main.rkt"))
+  (check-true (safe-manifest-file-path? "lib/helper.rkt"))
+  (check-true (safe-manifest-file-path? "src/deep/nested/file.rkt")))
+
+(test-case "safe-manifest-file-path? rejects path traversal"
+  (check-false (safe-manifest-file-path? "../etc/passwd"))
+  (check-false (safe-manifest-file-path? "foo/../../bar"))
+  (check-false (safe-manifest-file-path? "..")))
+
+(test-case "safe-manifest-file-path? rejects absolute paths"
+  (check-false (safe-manifest-file-path? "/etc/passwd"))
+  (check-false (safe-manifest-file-path? "/tmp/evil.rkt")))
+
+(test-case "safe-manifest-file-path? rejects Windows drive prefixes"
+  (check-false (safe-manifest-file-path? "C:\\Windows\\evil"))
+  (check-false (safe-manifest-file-path? "D:data.txt")))
+
+(test-case "safe-manifest-file-path? rejects empty string"
+  (check-false (safe-manifest-file-path? "")))
+
+;; ============================================================
+;; 19. Validation: unsafe file paths fail
+;; ============================================================
+
+(test-case "validation fails for manifest with path traversal in files"
+  (define-values (ok? errors)
+    (validate-manifest (sample-manifest #:files '("../etc/passwd" "main.rkt"))))
+  (check-false ok?)
+  (check-true (ormap (λ (e) (string-contains? e "unsafe component")) errors)))
+
+(test-case "validation fails for manifest with absolute path in files"
+  (define-values (ok? errors) (validate-manifest (sample-manifest #:files '("/etc/shadow"))))
+  (check-false ok?)
+  (check-true (ormap (λ (e) (string-contains? e "unsafe component")) errors)))

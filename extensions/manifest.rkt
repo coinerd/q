@@ -43,7 +43,8 @@
                        [read-qpm-manifest (-> (or/c path-string? path?) (or/c qpm-manifest? #f))]
                        [write-qpm-manifest (-> qpm-manifest? (or/c path-string? path?) void?)]
                        [qpm-manifest=? (-> qpm-manifest? qpm-manifest? boolean?)]
-                       [compute-manifest-checksum (-> (or/c path-string? path?) string?)]))
+                       [compute-manifest-checksum (-> (or/c path-string? path?) string?)]
+                       [safe-manifest-file-path? (-> string? boolean?)]))
 
 ;; ============================================================
 ;; Struct definition
@@ -102,6 +103,17 @@
                 entry
                 homepage
                 license))
+
+;; ============================================================
+;; Safe file path predicate
+;; ============================================================
+
+(define (safe-manifest-file-path? path-str)
+  (and (string? path-str)
+       (> (string-length path-str) 0)
+       (not (string-contains? path-str ".."))
+       (not (string-prefix? path-str "/"))
+       (not (regexp-match? #rx"^[A-Za-z]:" path-str))))
 
 ;; ============================================================
 ;; Validation helpers
@@ -167,6 +179,10 @@
           (unless (and (string? (hash-ref comp 'min-q-version))
                        (looks-like-semver? (hash-ref comp 'min-q-version)))
             (add-error! "compatibility min-q-version must be a semver string"))))))
+  ;; files: check each path for unsafe components
+  (for ([f (in-list (qpm-manifest-files m))])
+    (unless (safe-manifest-file-path? f)
+      (add-error! (format "file path contains unsafe component: ~a" f))))
   ;; Return
   (values (null? errors) errors))
 

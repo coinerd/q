@@ -13,22 +13,21 @@
          racket/file
          racket/port
          racket/string
+         racket/path
          "../extensions/manifest.rkt")
 
 ;; ============================================================
 ;; Provides
 ;; ============================================================
 
-(provide
- (struct-out qpm-package)
- (contract-out
-  [current-packages-dir     (parameter/c path?)]
-  [list-packages            (-> (listof qpm-package?))]
-  [package-installed?       (-> string? boolean?)]
-  [install-package-from-dir (-> path-string? (or/c qpm-package? string?))]
-  [install-package-from-git (-> string? (or/c qpm-package? string?))]
-  [remove-package           (-> string? boolean?)]
-  [package-info             (-> string? (or/c qpm-package? #f))]))
+(provide (struct-out qpm-package)
+         (contract-out [current-packages-dir (parameter/c path?)]
+                       [list-packages (-> (listof qpm-package?))]
+                       [package-installed? (-> string? boolean?)]
+                       [install-package-from-dir (-> path-string? (or/c qpm-package? string?))]
+                       [install-package-from-git (-> string? (or/c qpm-package? string?))]
+                       [remove-package (-> string? boolean?)]
+                       [package-info (-> string? (or/c qpm-package? #f))]))
 
 ;; ============================================================
 ;; Struct
@@ -88,8 +87,7 @@
 
 (define (package-installed? name)
   (define dir (build-path (current-packages-dir) name))
-  (and (directory-exists? dir)
-       (file-exists? (build-path dir "qpm.json"))))
+  (and (directory-exists? dir) (file-exists? (build-path dir "qpm.json"))))
 
 ;; ============================================================
 ;; install-package-from-dir : path-string? -> (or/c qpm-package? string?)
@@ -108,12 +106,10 @@
     ;; Validate
     (define-values (valid? errors) (validate-manifest m))
     (unless valid?
-      (return (string-append "error: invalid manifest — "
-                             (string-join errors "; "))))
+      (return (string-append "error: invalid manifest — " (string-join errors "; "))))
     ;; Create target directory
     (ensure-packages-dir!)
-    (define target-dir (build-path (current-packages-dir)
-                                   (qpm-manifest-name m)))
+    (define target-dir (build-path (current-packages-dir) (qpm-manifest-name m)))
     (when (directory-exists? target-dir)
       (delete-directory/files target-dir))
     (make-directory* target-dir)
@@ -121,6 +117,28 @@
     (for ([rel (in-list (qpm-manifest-files m))])
       (define src-file (build-path source-dir rel))
       (define dst-file (build-path target-dir rel))
+      ;; Defense-in-depth: verify destination stays under target directory
+      (define resolved-dst
+        (with-handlers ([exn:fail? (λ (_) #f)])
+          (resolve-path dst-file)))
+      (define resolved-target
+        (with-handlers ([exn:fail? (λ (_) #f)])
+          (resolve-path target-dir)))
+      (when (and resolved-dst resolved-target)
+        (define dst-str
+          (path->string (if (complete-path? resolved-dst)
+                            resolved-dst
+                            (path->complete-path resolved-dst))))
+        (define target-str
+          (path->string (if (complete-path? resolved-target)
+                            resolved-target
+                            (path->complete-path resolved-target))))
+        (define target-prefix
+          (if (string-suffix? target-str "/")
+              target-str
+              (string-append target-str "/")))
+        (unless (or (string=? dst-str target-str) (string-prefix? dst-str target-prefix))
+          (return (format "error: file path escapes target directory: ~a" rel))))
       (when (file-exists? src-file)
         ;; Ensure parent directory exists
         (define dst-parent (parent-dir dst-file))
@@ -139,7 +157,9 @@
 (define (remove-package name)
   (define dir (build-path (current-packages-dir) name))
   (if (directory-exists? dir)
-      (begin (delete-directory/files dir) #t)
+      (begin
+        (delete-directory/files dir)
+        #t)
       #f))
 
 ;; ============================================================
@@ -177,11 +197,11 @@
                                  (with-handlers ([exn:fail? void])
                                    (delete-directory/files tmp-dir))
                                  (return (format "error: git clone failed — ~a" (exn-message e))))])
-      (define clone-args (if tag
-                            (list "git" "clone" "--branch" tag "--depth" "1" repo-url (path->string tmp-dir))
-                            (list "git" "clone" "--depth" "1" repo-url (path->string tmp-dir))))
-      (define-values (sp out in err)
-        (apply subprocess #f #f #f #f clone-args))
+      (define clone-args
+        (if tag
+            (list "git" "clone" "--branch" tag "--depth" "1" repo-url (path->string tmp-dir))
+            (list "git" "clone" "--depth" "1" repo-url (path->string tmp-dir))))
+      (define-values (sp out in err) (apply subprocess #f #f #f #f clone-args))
       (subprocess-wait sp)
       (close-output-port in)
       (close-input-port out)
@@ -190,7 +210,6 @@
         (delete-directory/files tmp-dir #:must-exist? #f)
         (return (format "error: git clone exited with status ~a" (subprocess-status sp)))))
     ;; Delegate to dir-based install
-    (begin0
-      (install-package-from-dir tmp-dir)
+    (begin0 (install-package-from-dir tmp-dir)
       (with-handlers ([exn:fail? void])
         (delete-directory/files tmp-dir)))))
