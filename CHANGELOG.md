@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.22.3 — 2026-04-28
+
+### CI Pipeline Hardening
+- **CI-01**: Fixed `wave_finish()` docs-sync bug — `git diff --name-only` ran without `cwd=Q_DIR`, so auto-fixed docs were never committed
+- **CI-02**: Extended `sync-version.rkt` with `--all` flag to sync all `.md` files (not just info.rkt + README.md)
+- **CI-03**: Simplified `ci_preflight()` to use `sync-version.rkt --write --all` instead of inline Python regex
+- **CI-04**: Consolidated CI jobs: single lint gate → focused test matrix → smoke/release
+- **CI-05**: Added concurrency group to cancel superseded CI runs
+- **CI-06**: Removed redundant lint checks from test matrix cells
+
 ## v0.22.2 — 2026-04-28
 
 ### Review Remediation
