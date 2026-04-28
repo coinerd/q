@@ -37,7 +37,8 @@
                   sandbox-max-output
                   sandbox-max-processes)
          (only-in "../../util/path-helpers.rkt" expand-home-path)
-         (only-in "../../util/truncation.rkt" truncate-output))
+         (only-in "../../util/truncation.rkt" truncate-output)
+         (only-in "../../util/safe-mode-predicates.rkt" safe-mode?))
 
 (provide tool-bash
          current-warn-on-destructive
@@ -90,6 +91,14 @@
         #rx"wget[ ]+.*[|][ ]*sh[ ]*$" ;; wget ... | sh
         #rx"eval[ ]+\"[$][(]curl" ;; eval "$(curl ...)"
         #rx"source[ ]+/tmp/" ;; source from temp
+        ;; SEC-01 (v0.22.0): Bypass-vector patterns — encoding tricks,
+        ;; substitution, and indirection that evade simple pattern matching.
+        #rx"[|].*base64" ;; base64 decode pipe bypass
+        #rx"[|].*xxd" ;; xxd hex decode pipe bypass
+        #rx"\\$\\(" ;; $(...) command substitution
+        #rx"`" ;; backtick command substitution
+        #rx"^eval[ ]+" ;; eval indirection
+        #rx"^exec[ ]+" ;; exec replacement
         ))
 
 ;; User-configurable extra patterns (loaded from settings).
@@ -117,7 +126,10 @@
 ;; When #t, destructive commands return an error result instead of executing.
 ;; When #f (default), commands execute (with optional warning).
 ;; Blocking takes priority over warning.
-(define current-block-destructive (make-parameter #f))
+;; SEC-13 (v0.22.0): Default now defers to safe-mode.
+;; When 'safe-mode-default, resolves to (safe-mode?) at call time.
+;; Explicitly setting #t/#f overrides this behavior.
+(define current-block-destructive (make-parameter 'safe-mode-default))
 
 ;; Resolve exec-limits from settings (if provided) or defaults.
 ;; settings may be a q-settings? struct or #f.
@@ -148,10 +160,16 @@
     [(not command) (make-error-result "Missing required argument: command")]
     [(not (non-empty-string? command)) (make-error-result "command must be a non-empty string")]
     [else
+     ;; SEC-13 (v0.22.0): Resolve safe-mode default at call time
+     (define block-destructive?
+       (let ([v (current-block-destructive)])
+         (cond
+           [(eq? v 'safe-mode-default) (safe-mode?)]
+           [else v])))
      ;; Destructive command handling (SEC-01 / SEC-03)
      (cond
        ;; Block takes priority
-       [(and (current-block-destructive) (destructive-command? command))
+       [(and block-destructive? (destructive-command? command))
         (make-error-result (format "Blocked destructive command: ~a" command))]
        [else
         ;; Optional warning

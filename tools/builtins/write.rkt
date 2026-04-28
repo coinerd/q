@@ -42,9 +42,17 @@
 (define (tool-write args [exec-ctx #f])
   (define raw-path (hash-ref args 'path #f))
   (define expanded (and raw-path (expand-home-path raw-path)))
-  ;; v0.21.10 (F7): Rewrite .planning/ paths to pinned project root
-  ;; when the resolved path would land outside the project.
-  (define path-str (resolve-planning-path expanded))
+  ;; v0.21.10 (F7): Rewrite .planning/ paths to pinned project root FIRST
+  ;; (before canonicalization, so prefix detection works on original path)
+  (define resolved (and expanded (resolve-planning-path expanded)))
+  ;; SEC-02 (v0.22.0): Canonicalize path to prevent traversal attacks
+  (define path-str
+    (and resolved
+         (let ([p (if (string? resolved)
+                      resolved
+                      (path->string resolved))])
+           (with-handlers ([exn:fail? (lambda (_) p)])
+             (path->string (simplify-path (resolve-path p)))))))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
     [(and (safe-mode?) (not (allowed-path? path-str)))
