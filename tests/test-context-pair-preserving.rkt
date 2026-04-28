@@ -6,6 +6,7 @@
 
 (require rackunit
          racket/list
+         racket/string
          "../util/protocol-types.rkt"
          "../runtime/context-builder.rkt"
          "../llm/token-budget.rkt")
@@ -106,3 +107,27 @@
 
   (check-pairing result "large-budget")
   (check-equal? (length result) (length all-msgs)))
+
+;; Test 4: TH-11 — system-instruction preserved under budget pressure
+(test-case "system-instruction preserved under 95% budget pressure"
+  ;; Build a message list with system-instruction first, then many pairs
+  ;; Set a tight budget (95% of token count)
+  ;; Verify system-instruction message survives truncation
+  (define sys (make-text-msg 'system "You are a helpful coding assistant." 'system-instruction))
+  (define user (make-text-msg 'user "hello"))
+  (define pairs
+    (for/list ([i (in-range 20)])
+      (define tc-id (format "tc-~a" i))
+      (define ass (make-assistant-with-tool-call tc-id "bash" (format "{\"command\":\"echo ~a\"}" i)))
+      (define tr (make-tool-result-msg tc-id (message-id ass) (make-string 500 #\X)))
+      (list ass tr)))
+  (define all-msgs (append (list sys user) (append* pairs)))
+  ;; Tight budget: 3000 tokens — should truncate most pairs
+  (define result (truncate-messages-to-budget all-msgs 3000))
+  ;; System instruction must be present
+  (define sys-msgs (filter (lambda (m) (eq? (message-role m) 'system)) result))
+  (check-true (> (length sys-msgs) 0) "system-instruction must survive truncation")
+  ;; Content preserved
+  (define sys-text (text-part-text (first (message-content (first sys-msgs)))))
+  (check-true (string-contains? sys-text "helpful coding assistant")
+              "system-instruction content must be preserved"))

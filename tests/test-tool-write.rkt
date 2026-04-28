@@ -6,7 +6,8 @@
          racket/file
          (only-in "../extensions/gsd-planning-state.rkt"
                   set-pinned-planning-dir!
-                  reset-all-gsd-state!))
+                  reset-all-gsd-state!)
+         (only-in "../util/safe-mode-state.rkt" current-safe-mode-config make-safe-mode-config))
 
 ;; ============================================================
 ;; tool-write — basic write
@@ -230,3 +231,92 @@
   (delete-directory/files tmp-dir)
   (delete-directory/files pinned-dir)
   (reset-all-gsd-state!))
+
+;; ============================================================
+;; TH-01: Additional coverage tests
+;; ============================================================
+
+(test-case "TH-01: safe-mode rejects write outside project root"
+  (init-session-writes!)
+  (define tmpdir (make-temporary-file "q-test-safe-~a" 'directory))
+  (define outside-path "/tmp/outside-root-TH01.txt")
+  (define result
+    (parameterize ([current-safe-mode-config (make-safe-mode-config #:active #t
+                                                                    #:project-root tmpdir)])
+      (tool-write (hasheq 'path outside-path 'content "should fail"))))
+  (check-true (tool-result-is-error? result))
+  (delete-directory/files tmpdir))
+
+(test-case "TH-01: cumulative budget boundary — exact limit succeeds"
+  (init-session-writes!)
+  (define tmp (make-temporary-file "q-write-budget-~a.txt"))
+  (delete-file tmp)
+  (reset-cumulative-writes!)
+  (parameterize ([cumulative-write-budget 10]
+                 [current-max-write-bytes 100])
+    ;; Exactly 10 bytes — should succeed
+    (define r (tool-write (hasheq 'path tmp 'content "1234567890")))
+    (check-false (tool-result-is-error? r)))
+  (when (file-exists? tmp)
+    (delete-file tmp)))
+
+(test-case "TH-01: cumulative budget boundary — one byte over fails"
+  (init-session-writes!)
+  (define tmp (make-temporary-file "q-write-budget-~a.txt"))
+  (delete-file tmp)
+  (reset-cumulative-writes!)
+  (parameterize ([cumulative-write-budget 10]
+                 [current-max-write-bytes 100])
+    ;; Write 10 bytes — fills budget exactly
+    (tool-write (hasheq 'path tmp 'content "1234567890"))
+    ;; One more byte (11 total) — should exceed budget
+    (define r2 (tool-write (hasheq 'path tmp 'content "1")))
+    (check-true (tool-result-is-error? r2)))
+  (when (file-exists? tmp)
+    (delete-file tmp)))
+
+(test-case "TH-01: expand-home-path — write to ~/test-q-write-home.txt"
+  (init-session-writes!)
+  (reset-cumulative-writes!)
+  (define home (find-system-path 'home-dir))
+  (define target (build-path home "test-q-write-home.txt"))
+  (define result (tool-write (hasheq 'path "~/test-q-write-home.txt" 'content "home write")))
+  (check-false (tool-result-is-error? result))
+  (check-pred file-exists? target)
+  (check-equal? (file->string target) "home write")
+  (delete-file target))
+
+(test-case "TH-01: directory creation via deeply nested path"
+  (init-session-writes!)
+  (reset-cumulative-writes!)
+  (define tmpdir (make-temporary-file "q-test-nested-~a" 'directory))
+  (define filepath (build-path tmpdir "a" "b" "c" "file.txt"))
+  (define result (tool-write (hasheq 'path (path->string filepath) 'content "deeply nested")))
+  (check-false (tool-result-is-error? result))
+  (check-pred file-exists? filepath)
+  (check-equal? (file->string filepath) "deeply nested")
+  (delete-directory/files tmpdir))
+
+(test-case "TH-01: empty content write"
+  (init-session-writes!)
+  (reset-cumulative-writes!)
+  (define tmp (make-temporary-file "q-write-empty-~a.txt"))
+  (delete-file tmp)
+  (define result (tool-write (hasheq 'path tmp 'content "")))
+  (check-false (tool-result-is-error? result))
+  (check-pred file-exists? tmp)
+  (check-equal? (file-size tmp) 0)
+  (delete-file tmp))
+
+(test-case "TH-01: path with .. components canonicalizes correctly"
+  (init-session-writes!)
+  (reset-cumulative-writes!)
+  (define tmpdir (make-temporary-file "q-test-dotdot-~a" 'directory))
+  (make-directory (build-path tmpdir "sub"))
+  (define raw-path (path->string (build-path tmpdir "sub" ".." "file.txt")))
+  (define result (tool-write (hasheq 'path raw-path 'content "dotdot write")))
+  (check-false (tool-result-is-error? result))
+  ;; After canonicalization, file should be in tmpdir/file.txt
+  (check-pred file-exists? (build-path tmpdir "file.txt"))
+  (check-equal? (file->string (build-path tmpdir "file.txt")) "dotdot write")
+  (delete-directory/files tmpdir))
