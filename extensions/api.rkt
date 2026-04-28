@@ -9,9 +9,17 @@
 ;;   - list-extensions, handlers-for-point
 
 (require racket/contract
-         racket/list)
+         racket/list
+         ;; ARCH-04 (v0.22.0): event bus re-exports for extensions
+         (only-in "../agent/event-bus.rkt"
+                  publish! subscribe! unsubscribe!
+                  make-event-bus event-bus?))
 
 (provide
+ ;; Event bus re-exports (ARCH-04)
+ publish! subscribe! unsubscribe!
+ make-event-bus event-bus?
+
  ;; Extension struct and registry
  (struct-out extension)
  extension-registry?

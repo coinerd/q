@@ -16,7 +16,7 @@
          "ext-commands.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt"
+         "tool-api.rkt"
          ;; Q01: Helpers extracted to subdirectory
          (only-in "github/helpers.rkt"
                   gh-binary-path

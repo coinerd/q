@@ -14,7 +14,7 @@
 ;;   - Safe publish with error isolation
 
 (require racket/contract
-         "../agent/event-bus.rkt"
+         "api.rkt"
          "../util/protocol-types.rkt"
          "api.rkt")
 

@@ -13,7 +13,7 @@
 
 (require racket/contract
          "context.rkt"
-         "../tools/tool.rkt")
+         "tool-api.rkt")
 
 (provide (contract-out [ext-register-tool!
                         (->* (extension-ctx? string? ; name

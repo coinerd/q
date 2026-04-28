@@ -10,7 +10,7 @@
          "dynamic-tools.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt")
+         "tool-api.rkt")
 
 (provide the-extension
          session-export-extension

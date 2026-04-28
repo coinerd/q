@@ -19,7 +19,7 @@
          racket/string
          json
          "../util/protocol-types.rkt"
-         "../agent/event-bus.rkt"
+         "api.rkt"
          "../util/checksum.rkt"
          "../util/version.rkt"
          "api.rkt"

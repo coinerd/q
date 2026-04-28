@@ -12,7 +12,7 @@
          json
          ;; SEC-16 (v0.22.0): consolidated shell-quote
          (only-in "../../util/shell-quote.rkt" shell-quote)
-         (only-in "../../tools/tool.rkt" make-success-result make-error-result))
+         (only-in "../tool-api.rkt" make-success-result make-error-result))
 
 (provide gh-binary-path
          shell-quote

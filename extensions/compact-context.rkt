@@ -15,7 +15,7 @@
          "dynamic-tools.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt")
+         "tool-api.rkt")
 
 (provide compact-context-extension
          handle-compact-context

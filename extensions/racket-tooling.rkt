@@ -18,7 +18,7 @@
          "ext-commands.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt")
+         "tool-api.rkt")
 
 (provide the-extension
          racket-tooling-extension

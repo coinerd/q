@@ -10,7 +10,7 @@
 
 (require racket/contract
          racket/match
-         "../agent/event-bus.rkt"
+         "api.rkt"
          "../util/protocol-types.rkt"
          "ui-surface.rkt")
 
