@@ -134,8 +134,8 @@
     ;; ── Test 2: Known runtime exceptions are stable ────────────
     (test-case "Known runtime layer exceptions are stable"
       ;; These files are known to import from tools/ or extensions/
-      ;; iteration.rkt may drop after W1 refactoring (3 → 2)
-      (define known-exceptions '("iteration.rkt" "package.rkt" "extension-catalog.rkt"))
+      ;; v0.22.4 (MOD-01): iteration.rkt upward imports moved to turn-orchestrator.rkt
+      (define known-exceptions '("turn-orchestrator.rkt" "package.rkt" "extension-catalog.rkt"))
       (for ([name (in-list known-exceptions)])
         (define fpath (build-path q-dir "runtime" name))
         (check-true (file-exists? fpath) (format "Known exception runtime/~a no longer exists" name)))
