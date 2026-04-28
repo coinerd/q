@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require racket/file
+         racket/string
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/path-helpers.rkt" path-only expand-home-path)
          (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
@@ -8,7 +9,9 @@
                   safe-mode?
                   allowed-path?
                   safe-mode-project-root)
-         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
+         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
+         ;; v0.21.10: planning path resolution hardening (F7)
+         (only-in "../../extensions/gsd-planning-state.rkt" pinned-planning-dir))
 
 (provide tool-write
          current-max-write-bytes
@@ -38,7 +41,10 @@
 ;; Main tool function
 (define (tool-write args [exec-ctx #f])
   (define raw-path (hash-ref args 'path #f))
-  (define path-str (and raw-path (expand-home-path raw-path)))
+  (define expanded (and raw-path (expand-home-path raw-path)))
+  ;; v0.21.10 (F7): Rewrite .planning/ paths to pinned project root
+  ;; when the resolved path would land outside the project.
+  (define path-str (resolve-planning-path expanded))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
     [(and (safe-mode?) (not (allowed-path? path-str)))
@@ -83,5 +89,26 @@
        (make-success-result
         (list (format "Wrote ~a bytes to ~a" bytes-count path-str))
         (hasheq 'path path-str 'bytes-written bytes-count 'session-total new-total)))]))
+
+;; v0.21.10 (F7): If path contains .planning/ as a leading component
+;; and pinned-planning-dir is set, rewrite to use the pinned dir.
+;; This prevents writes to ~/.planning/ when TUI launched from ~/.
+(define (resolve-planning-path path-str)
+  (cond
+    [(not path-str) #f]
+    [(path? path-str) (resolve-planning-path (path->string path-str))]
+    [else
+     (define pinned (pinned-planning-dir))
+     (cond
+       [(not pinned) path-str]
+       ;; Only rewrite simple .planning/ prefix paths (not ../other/.planning/)
+       [(and (or (string-prefix? path-str ".planning/") (string-prefix? path-str "./.planning/"))
+             (not (string-contains? (substring path-str 0 (min (string-length path-str) 20)) "..")))
+        (define suffix
+          (if (string-prefix? path-str "./.planning/")
+              (substring path-str (string-length "./.planning/"))
+              (substring path-str (string-length ".planning/"))))
+        (build-path pinned ".planning" suffix)]
+       [else path-str])]))
 
 ;; path-only imported from util/path-helpers.rkt

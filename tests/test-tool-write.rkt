@@ -3,7 +3,10 @@
 (require rackunit
          "../tools/builtins/write.rkt"
          "../tools/tool.rkt"
-         racket/file)
+         racket/file
+         (only-in "../extensions/gsd-planning-state.rkt"
+                  set-pinned-planning-dir!
+                  reset-all-gsd-state!))
 
 ;; ============================================================
 ;; tool-write — basic write
@@ -11,7 +14,7 @@
 
 (test-case "tool-write creates a new file"
   (define tmp (make-temporary-file "q-test-write-~a.txt"))
-  (delete-file tmp)  ; ensure doesn't exist
+  (delete-file tmp) ; ensure doesn't exist
   (define result (tool-write (hasheq 'path tmp 'content "hello world")))
   (check-false (tool-result-is-error? result))
   (check-pred file-exists? tmp)
@@ -59,8 +62,9 @@
   (define tmp (make-temporary-file "q-test-write-~a.txt"))
   (delete-file tmp)
   (define small-content (make-string 100 #\A))
-  (define result (parameterize ([current-max-write-bytes 200])
-                   (tool-write (hasheq 'path tmp 'content small-content))))
+  (define result
+    (parameterize ([current-max-write-bytes 200])
+      (tool-write (hasheq 'path tmp 'content small-content))))
   (check-false (tool-result-is-error? result))
   (check-pred file-exists? tmp)
   (delete-file tmp))
@@ -69,8 +73,9 @@
   (define tmp (make-temporary-file "q-test-write-~a.txt"))
   (delete-file tmp)
   (define big-content (make-string 200 #\B))
-  (define result (parameterize ([current-max-write-bytes 100])
-                   (tool-write (hasheq 'path tmp 'content big-content))))
+  (define result
+    (parameterize ([current-max-write-bytes 100])
+      (tool-write (hasheq 'path tmp 'content big-content))))
   (check-true (tool-result-is-error? result))
   ;; Error message should mention the limit
   (define content (tool-result-content result))
@@ -85,12 +90,14 @@
   ;; 50 bytes is over a 10-byte limit but under the default 1MB limit
   (define content (make-string 50 #\C))
   ;; With tiny limit: should fail
-  (define result-small (parameterize ([current-max-write-bytes 10])
-                         (tool-write (hasheq 'path tmp 'content content))))
+  (define result-small
+    (parameterize ([current-max-write-bytes 10])
+      (tool-write (hasheq 'path tmp 'content content))))
   (check-true (tool-result-is-error? result-small))
   ;; With larger limit: should succeed
-  (define result-large (parameterize ([current-max-write-bytes 100])
-                         (tool-write (hasheq 'path tmp 'content content))))
+  (define result-large
+    (parameterize ([current-max-write-bytes 100])
+      (tool-write (hasheq 'path tmp 'content content))))
   (check-false (tool-result-is-error? result-large))
   (delete-file tmp))
 
@@ -110,7 +117,8 @@
     ;; Second write pushes over budget
     (define r2 (tool-write (hasheq 'path tmp 'content "123456789012")))
     (check-true (tool-result-is-error? r2)))
-  (when (file-exists? tmp) (delete-file tmp)))
+  (when (file-exists? tmp)
+    (delete-file tmp)))
 
 (test-case "reset-cumulative-writes clears counter"
   (define tmp (make-temporary-file "q-write-test-~a"))
@@ -123,7 +131,8 @@
     ;; After reset, can write again
     (define r (tool-write (hasheq 'path tmp 'content "1234567890")))
     (check-false (tool-result-is-error? r)))
-  (when (file-exists? tmp) (delete-file tmp)))
+  (when (file-exists? tmp)
+    (delete-file tmp)))
 
 ;; ============================================================
 ;; F4: Per-session write budget isolation (v0.21.5)
@@ -142,7 +151,8 @@
     ;; Can write again even though previous session had 10 bytes
     (define r (tool-write (hasheq 'path tmp 'content "123456789012")))
     (check-false (tool-result-is-error? r))
-    (when (file-exists? tmp) (delete-file tmp))))
+    (when (file-exists? tmp)
+      (delete-file tmp))))
 
 (test-case "F4: parameterize isolation between sessions"
   (init-session-writes!)
@@ -157,4 +167,66 @@
     ;; Session B should have fresh budget
     (define r (tool-write (hasheq 'path tmp 'content "123456789012")))
     (check-false (tool-result-is-error? r))
-    (when (file-exists? tmp) (delete-file tmp))))
+    (when (file-exists? tmp)
+      (delete-file tmp))))
+
+;; ============================================================
+;; v0.21.10 (F7): Planning path resolution hardening
+;; ============================================================
+
+(test-case "F7: .planning/ path rewritten to pinned dir"
+  (reset-all-gsd-state!)
+  (init-session-writes!)
+  (define pinned-dir (make-temporary-file "q-test-pinned-~a" 'directory))
+  (define pinned-planning (build-path pinned-dir ".planning"))
+  (make-directory pinned-planning)
+  (set-pinned-planning-dir! pinned-dir)
+  (define result (tool-write (hasheq 'path ".planning/test.md" 'content "planning content")))
+  (check-false (tool-result-is-error? result))
+  (check-true (file-exists? (build-path pinned-planning "test.md")))
+  (check-equal? (file->string (build-path pinned-planning "test.md")) "planning content")
+  (delete-directory/files pinned-dir)
+  (reset-all-gsd-state!))
+
+(test-case "F7: ./.planning/ path rewritten to pinned dir"
+  (reset-all-gsd-state!)
+  (init-session-writes!)
+  (define pinned-dir (make-temporary-file "q-test-pinned-~a" 'directory))
+  (define pinned-planning (build-path pinned-dir ".planning"))
+  (make-directory pinned-planning)
+  (set-pinned-planning-dir! pinned-dir)
+  (define result (tool-write (hasheq 'path "./.planning/other.md" 'content "other")))
+  (check-false (tool-result-is-error? result))
+  (check-true (file-exists? (build-path pinned-planning "other.md")))
+  (delete-directory/files pinned-dir)
+  (reset-all-gsd-state!))
+
+(test-case "F7: non-.planning/ path unchanged with pinned dir"
+  (reset-all-gsd-state!)
+  (init-session-writes!)
+  (define pinned-dir (make-temporary-file "q-test-pinned-~a" 'directory))
+  (set-pinned-planning-dir! pinned-dir)
+  (define tmp (make-temporary-file "q-test-write-~a.txt"))
+  (delete-file tmp)
+  (define result (tool-write (hasheq 'path tmp 'content "normal write")))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (file->string tmp) "normal write")
+  (delete-file tmp)
+  (delete-directory/files pinned-dir)
+  (reset-all-gsd-state!))
+
+(test-case "F7: absolute path unchanged with pinned dir"
+  (reset-all-gsd-state!)
+  (init-session-writes!)
+  (define pinned-dir (make-temporary-file "q-test-pinned-~a" 'directory))
+  (set-pinned-planning-dir! pinned-dir)
+  (define tmp-dir (make-temporary-file "q-test-~a" 'directory))
+  (define planning-dir (build-path tmp-dir ".planning"))
+  (make-directory planning-dir)
+  (define target (build-path planning-dir "free.md"))
+  (define result (tool-write (hasheq 'path (path->string target) 'content "free write")))
+  (check-false (tool-result-is-error? result))
+  (check-equal? (file->string target) "free write")
+  (delete-directory/files tmp-dir)
+  (delete-directory/files pinned-dir)
+  (reset-all-gsd-state!))
