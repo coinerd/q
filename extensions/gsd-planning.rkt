@@ -30,9 +30,9 @@
          "ext-commands.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt"
+         "tool-api.rkt"
          "../util/event.rkt"
-         "../agent/event-bus.rkt"
+         "api.rkt"
          "gsd-planning-state.rkt"
          ;; v0.21.0 new modules
          "gsd/state-machine.rkt"

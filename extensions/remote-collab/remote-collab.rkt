@@ -12,7 +12,7 @@
          "../dynamic-tools.rkt"
          "../context.rkt"
          "../hooks.rkt"
-         "../../tools/tool.rkt"
+         "../tool-api.rkt"
          "ssh-helpers.rkt"
          "tmux-helpers.rkt")
 

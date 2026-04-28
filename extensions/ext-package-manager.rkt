@@ -11,7 +11,7 @@
          "dynamic-tools.rkt"
          "context.rkt"
          "hooks.rkt"
-         "../tools/tool.rkt"
+         "tool-api.rkt"
          "../runtime/package.rkt"
          "../extensions/manifest.rkt")
 

@@ -17,7 +17,7 @@
 ;;   (inject-user-message! (ctx-event-bus ctx) "session-id" "User note")
 
 (require racket/contract
-         "../agent/event-bus.rkt"
+         "api.rkt"
          "../util/protocol-types.rkt"
          "../util/ids.rkt"
          "../util/protocol-types.rkt")
