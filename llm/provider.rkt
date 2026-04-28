@@ -2,24 +2,26 @@
 
 ;; llm/provider.rkt — provider interface contract
 ;;
-;; Defines the provider struct and the generic interface that all
-;; LLM provider adapters must satisfy. A provider wraps a dispatch
-;; procedure that maps operation symbols to implementations.
+;; Defines the provider generic interface that all LLM provider adapters
+;; must satisfy. Uses racket/generic for type-safe dispatch.
 ;;
-;; Dispatch protocol:
-;;   'name          → string
-;;   'capabilities  → hash
-;;   'send          → (model-request → model-response) procedure
-;;   'stream        → (model-request → (listof stream-chunk)) procedure
+;; Generic methods:
+;;   provider-name         → string
+;;   provider-capabilities → hash
+;;   provider-send         → (model-request → model-response)
+;;   provider-stream       → (model-request → generator)
+;;   provider-count-tokens → (model-request → (or/c #f integer?))
 
 (require racket/contract
          racket/generator
+         racket/generic
          racket/string
          "model.rkt")
 
 (provide provider?
          validate-api-key!
          ensure-model-setting
+         gen:provider
          (contract-out [provider-name (-> provider? string?)]
                        [provider-send (-> provider? model-request? any/c)]
                        [provider-stream (-> provider? model-request? any/c)]
@@ -32,10 +34,6 @@
 ;; Model-setting helper (ARCH-08)
 ;; ============================================================
 
-;; Ensure the model-request has a 'model setting; if missing, set it to default-model.
-;;; ensure-model-setting : model-request? string? -> model-request?
-;;; If the request has no 'model key in its settings, returns a new request
-;;; with default-model set; otherwise returns the request unchanged.
 (define (ensure-model-setting req default-model)
   (if (hash-has-key? (model-request-settings req) 'model)
       req
@@ -47,13 +45,6 @@
 ;; API key validation helper
 ;; ============================================================
 
-;; Validates that the API key is present and non-empty.
-;; Raises exn:fail with a provider-specific message if missing.
-;;; validate-api-key! : string? string? hash? -> void?
-;;;
-;;; Takes (provider-name env-var config). Checks that config['api-key] is
-;;; a non-empty string; raises exn:fail with a setup message if missing.
-;;; Used by provider implementations to fail fast on missing credentials.
 (define (validate-api-key! provider-name env-var config)
   (define api-key (hash-ref config 'api-key ""))
   (when (or (not api-key) (not (string? api-key)) (string=? (string-trim api-key) ""))
@@ -66,54 +57,24 @@
       (current-continuation-marks)))))
 
 ;; ============================================================
-;; Provider struct
+;; Generic provider interface
 ;; ============================================================
 
-;; A provider wraps a dispatch function that takes a symbol and returns
-;; the corresponding implementation.
-(struct provider (dispatch) #:transparent)
+(define-generics provider
+                 (provider-name provider)
+                 (provider-capabilities provider)
+                 (provider-send provider req)
+                 (provider-stream provider req)
+                 (provider-count-tokens provider req)
+                 #:fallbacks [(define (provider-count-tokens p req)
+                                #f)])
 
 ;; ============================================================
-;; Generic interface
+;; Helper
 ;; ============================================================
 
-;; provider-name : provider? -> string?
-;; Returns the provider's display name.
-(define (provider-name p)
-  ((provider-dispatch p) 'name))
-
-;; provider-send : provider? model-request? -> any/c
-;; Sends a non-streaming request. Returns a model-response.
-(define (provider-send p req)
-  (define send-proc ((provider-dispatch p) 'send))
-  (send-proc req))
-
-;; provider-stream : provider? model-request? -> any/c
-;; Sends a streaming request. Returns a generator that yields
-;; stream-chunk? values then #f.
-(define (provider-stream p req)
-  (define stream-proc ((provider-dispatch p) 'stream))
-  (stream-proc req))
-
-;; provider-capabilities : provider? -> hash?
-;; Returns the provider's capability map (e.g., #hasheq((streaming . #t))).
-(define (provider-capabilities p)
-  ((provider-dispatch p) 'capabilities))
-
-;; ============================================================
-;; Constructor
-;; ============================================================
-
-;; Creates a provider from four thunks/procs:
-;;   name-proc:  (→ string)
-;;   caps-proc:  (→ hash)
-;;   send-proc:  (model-request → model-response)
-;;   stream-proc: (model-request → (or/c generator? (listof stream-chunk?))) procedure
-;;     The stream proc may return a generator (yielding stream-chunk? values then #f)
-;;     or a list of stream-chunk? values (automatically wrapped in a generator).
 (define (stream-result->generator result)
   (cond
-    ;; Already a generator (generators are procedures)
     [(procedure? result) result]
     [(list? result)
      (generator ()
@@ -125,36 +86,38 @@
             "expected generator or list of stream-chunks, got: ~a"
             result)]))
 
-;;; make-provider : procedure? procedure? procedure? procedure? -> provider?
-;;;
-;;; Creates a provider from four procedures:
-;;;   name-proc  : thunk -> string (display name)
-;;;   caps-proc  : thunk -> hash (capability map)
-;;;   send-proc  : model-request -> model-response (non-streaming)
-;;;   stream-proc: model-request -> generator-or-list (streaming)
-;;; The stream result is automatically wrapped in a generator if a list is
-;;; returned.
+;; ============================================================
+;; Internal struct implementing gen:provider
+;; ============================================================
+
+;; Simple procedure-based provider. Adapters create this via make-provider.
+;; Direct struct users can implement gen:provider themselves for custom behavior.
+(struct proc-provider (name-proc caps-proc send-proc stream-proc)
+  #:transparent
+  #:methods gen:provider
+  [(define (provider-name p)
+     ((proc-provider-name-proc p)))
+   (define (provider-capabilities p)
+     ((proc-provider-caps-proc p)))
+   (define (provider-send p req)
+     ((proc-provider-send-proc p) req))
+   (define (provider-stream p req)
+     (stream-result->generator ((proc-provider-stream-proc p) req)))
+   (define (provider-count-tokens p req)
+     #f)])
+
+;; ============================================================
+;; Backward-compatible constructor
+;; ============================================================
+
+;; Creates a provider implementing gen:provider from four procedures.
 (define (make-provider name-proc caps-proc send-proc stream-proc)
-  (provider (lambda (op)
-              (case op
-                [(name) (name-proc)] ; name-proc is a thunk, call it
-                [(capabilities) (caps-proc)] ; caps-proc is a thunk, call it
-                [(send) send-proc]
-                [(stream) (lambda (req) (stream-result->generator (stream-proc req)))]
-                [(count-tokens) (lambda (req) #f)] ; not supported by default
-                [else (error 'provider "unknown operation: ~a" op)]))))
+  (proc-provider name-proc caps-proc send-proc stream-proc))
 
 ;; ============================================================
 ;; Mock provider (for testing)
 ;; ============================================================
 
-;;; make-mock-provider : any/c [#:name string?] [#:stream-chunks (or/c #f list?)]
-;;;                    -> provider?
-;;;
-;;; Creates a mock provider for testing. Always returns the given response
-;;; for send. For stream, yields either the provided #:stream-chunks or
-;;; auto-generated chunks derived from the response content text parts,
-;;; followed by a final chunk with usage + done?.
 (define (make-mock-provider response #:name [name "mock"] #:stream-chunks [stream-chunks #f])
   (define chunks
     (or stream-chunks
@@ -168,7 +131,6 @@
                  (lambda () (hasheq 'streaming #t 'token-counting #t))
                  (lambda (req) response)
                  (lambda (req)
-                   ;; Return a generator that yields each chunk then #f
                    (generator ()
                               (for ([ch (in-list chunks)])
                                 (yield ch))
