@@ -1,4 +1,4 @@
-<!-- verified-against: 0.20.4 -->
+<!-- verified-against: 0.21.10 -->
 # Release Process
 
 This document describes how to cut a new release of **q**.
@@ -47,7 +47,7 @@ Edit the canonical source:
 
 ```racket
 ;; util/version.rkt
-(define q-version "0.10.3")
+(define q-version "0.21.10")
 ```
 
 Then propagate:
@@ -67,13 +67,13 @@ racket scripts/lint-version.rkt  # verify
 
 ```bash
 git add -A
-git commit -m "Release v0.10.3"
+git commit -m "Release v0.21.10"
 ```
 
 ### 4. Tag
 
 ```bash
-git tag -a v0.10.3 -m "Release v0.10.3"
+git tag -a v0.21.10 -m "Release v0.21.10"
 ```
 
 ### 5. Push
@@ -93,15 +93,18 @@ The tag push triggers `.github/workflows/release.yml` which:
 5. **Generates** the release manifest (`release-manifest.json` with SHA-256 checksums)
 6. **Creates** a GitHub Release with notes, tarball, and manifest as assets
 
-### 7. Post-release Smoke Test
+### 7. Smoke Test
 
-`.github/workflows/post-release.yml` triggers automatically on release publication:
+The smoke test runs as a dedicated job (`smoke`) inside `.github/workflows/release.yml`, triggered on tag push. It runs after the `release` job completes:
 
-1. Downloads the tarball from release assets
-2. Installs from tarball (`raco pkg install --auto`)
-3. Verifies `racket main.rkt --version` output matches the tag
-4. Verifies `release-manifest.json` matches
-5. Runs the full test suite
+1. Installs a clean Racket runtime (no composite action — tests the tarball against a pristine environment)
+2. Downloads the release tarball from GitHub Release assets
+3. Installs from tarball (`raco pkg install --auto --batch`)
+4. Verifies `racket main.rkt --version` output matches the tag
+5. Verifies `release-manifest.json` checksums and version
+6. Runs the test suite (`racket scripts/run-tests.rkt --suite fast --jobs 4`)
+
+> **Note:** The smoke job is merged into `release.yml` rather than a separate `post-release.yml` workflow. This ensures the smoke test runs as part of the same release pipeline and gates the overall workflow status.
 
 ## Post-release
 

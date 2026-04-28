@@ -28,6 +28,9 @@
 ;; Track cumulative bytes written in current session.
 ;; v0.21.5 (F4): Parameter-based for per-session isolation.
 ;; Each session gets its own box via init-session-writes!.
+;; Thread-safety: Racket parameters are per-thread. Each session runs in its own
+;; thread via `runtime/agent-session.rkt` session-thread. Therefore
+;; `session-bytes-written` is isolated per session — no cross-session leakage.
 (define session-bytes-written (make-parameter (box 0)))
 
 ;; Initialize a fresh write tracker for a new session.

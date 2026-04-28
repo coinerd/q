@@ -23,7 +23,8 @@
          "benchmark/task.rkt"
          "benchmark/executor.rkt"
          "benchmark/scorer.rkt"
-         "benchmark/report.rkt")
+         "benchmark/report.rkt"
+         (only-in "benchmark/compare.rkt" compare-to-baseline))
 
 ;; ============================================================
 ;; CLI parameters
@@ -40,6 +41,7 @@
 (define json-output (make-parameter #f))
 (define parallel-count (make-parameter 1))
 (define baseline-path (make-parameter #f))
+(define fail-on-regression (make-parameter #f))
 
 (define task-files
   (command-line
@@ -55,6 +57,9 @@
    [("--json") "Output as JSON" (json-output #t)]
    [("--parallel") n "Run N tasks in parallel (default: 1)" (parallel-count (string->number n))]
    [("--baseline") path "Compare against baseline report" (baseline-path path)]
+   [("--fail-on-regression")
+    "Exit with code 1 if baseline comparison shows regressions"
+    (fail-on-regression #t)]
    #:args files
    files))
 
@@ -188,8 +193,29 @@
               (execution-result-error-msg result))))
   (hasheq 'total_tasks (length results-list) 'results results-data))
 
+;; ── Baseline comparison (for --fail-on-regression) ──
+
+(define regression-exit-code 0)
+
+(when (and (fail-on-regression) (baseline-path))
+  (define current-report
+    (generate-report (for/list ([r (in-list results)])
+                       (third r))))
+  (define comp (compare-to-baseline current-report (baseline-path)))
+  (define regressions (comparison-result-regressions comp))
+  (when (not (null? regressions))
+    (eprintf "\nFAIL: ~a regression(s) detected against baseline ~a:\n"
+             (length regressions)
+             (baseline-path))
+    (for ([r (in-list regressions)])
+      (eprintf "  ~a: ~a → ~a (Δ~a)\n" (car r) (cadr r) (caddr r) (- (caddr r) (cadr r))))
+    (set! regression-exit-code 1)))
+
 ;; ── Print output ──
 
 (cond
   [(json-output) (displayln (jsexpr->string (results->json results)))]
   [else (displayln (format-results-human results))])
+
+(when (> regression-exit-code 0)
+  (exit regression-exit-code))

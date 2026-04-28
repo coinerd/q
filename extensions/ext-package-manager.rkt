@@ -2,7 +2,9 @@
 
 ;; extensions/ext-package-manager.rkt — Extension Package Manager
 ;;
-;; Phase E: Wraps runtime/package.rkt as a tool.
+;; Provides a tool interface for discovering, installing, removing, and querying
+;; extension packages. Wraps runtime/package.rkt so the agent can manage
+;; extension packages through the tool protocol.
 ;; Actions: list, install, remove, info
 
 (require racket/contract
@@ -18,12 +20,15 @@
 (provide ext-package-manager-extension
          handle-ext-pkg)
 
+;; Format a list of package records into a human-readable string.
 (define (format-pkg-list pkgs)
   (string-join (for/list ([p pkgs])
                  (define m (qpm-package-manifest p))
                  (format "- ~a (~a)" (qpm-manifest-name m) (qpm-manifest-version m)))
                "\n"))
 
+;; Handle an ext-package tool invocation.
+;; Supported actions: list, info, install, remove.
 (define (handle-ext-pkg args [exec-ctx #f])
   (define action (hash-ref args 'action "list"))
 
@@ -60,6 +65,7 @@
          (make-error-result (format "Failed to remove ~a." name)))]
     [else (make-error-result (format "Unknown action: ~a" action))]))
 
+;; Register the ext-package tool with the extension context.
 (define (register-ext-pkg-tools ctx _payload)
   (ext-register-tool!
    ctx
