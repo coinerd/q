@@ -12,6 +12,7 @@
 ;;   /go    → transition to executing
 ;;   /replan → back to exploring from plan-written/executing
 ;;   /skip  → mark wave as skipped
+;;   /done  → archive completed plan
 ;;   /reset → go to idle
 ;;   /gsd   → show status
 
@@ -20,7 +21,8 @@
          racket/path
          "state-machine.rkt"
          "plan-types.rkt"
-         "context-bundle.rkt")
+         "context-bundle.rkt"
+         "archive.rkt")
 
 (provide gsd-command-dispatch
          gsd-tool-guard
@@ -30,6 +32,7 @@
          cmd-replan
          cmd-skip
          cmd-reset
+         cmd-done
          ;; Command names for registration
          gsd-commands)
 
@@ -41,6 +44,7 @@
   '((plan "/plan" "Start GSD planning phase" ("p")) (go "/go" "Begin executing the plan" ())
                                                     (replan "/replan" "Return to planning phase" ())
                                                     (skip "/skip" "Skip current wave" ("s"))
+                                                    (done "/done" "Archive completed plan" ("d"))
                                                     (reset "/reset" "Reset GSD to idle state" ())
                                                     (gsd "/gsd" "Show GSD status" ())))
 
@@ -104,6 +108,7 @@
     [(replan) (cmd-replan)]
     [(skip) (cmd-skip args)]
     [(reset) (cmd-reset)]
+    [(done) (hasheq 'success #t 'mode 'idle 'message "Use /done from the planning context.")]
     [(gsd) (gsd-show-status)]
     [else #f]))
 
@@ -198,6 +203,20 @@
 (define (cmd-reset)
   (define result (gsm-reset!))
   (hasheq 'success #t 'mode 'idle 'message "GSD reset to idle."))
+
+;; /done → archive completed plan
+(define (cmd-done base-dir)
+  (define result (archive-completed-plan! base-dir))
+  (if (hash-ref result 'success #f)
+      (hasheq 'success
+              #t
+              'mode
+              'idle
+              'message
+              (format "✅ Plan archived to ~a (~a files)"
+                      (hash-ref result 'archive-path "?")
+                      (hash-ref result 'files-archived 0)))
+      (hasheq 'success #f 'mode (gsm-current) 'message (hash-ref result 'error "Archive failed"))))
 
 ;; ============================================================
 ;; Tool guard (tool-call-pre)

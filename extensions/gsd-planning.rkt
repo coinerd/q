@@ -38,7 +38,7 @@
          "gsd/state-machine.rkt"
          "gsd/core.rkt"
          ;; v0.21.6: direct command handlers for wiring
-         (only-in "gsd/core.rkt" cmd-replan cmd-skip cmd-reset)
+         (only-in "gsd/core.rkt" cmd-replan cmd-skip cmd-reset cmd-done)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
@@ -406,6 +406,7 @@
   (ext-register-command! ctx "/replan" "Return to planning phase" 'general '() '())
   (ext-register-command! ctx "/skip" "Skip a wave (usage: /skip N)" 'general '() '())
   (ext-register-command! ctx "/reset" "Reset GSD to idle state" 'general '() '())
+  (ext-register-command! ctx "/done" "Archive completed plan" 'general '() '("d"))
   (ext-register-command! ctx "/gsd" "Show GSD workflow status" 'general '() '())
   (hook-pass #f))
 
@@ -436,6 +437,11 @@
     [(equal? cmd "/reset")
      (define result (cmd-reset))
      (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'idle))
+     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+    [(equal? cmd "/done")
+     (define result (cmd-done base-dir))
+     (when (hash-ref result 'success #f)
+       (emit-gsd-event! "gsd.plan.archived" (hasheq 'path (hash-ref result 'archive-path ""))))
      (hook-amend (hasheq 'text (hash-ref result 'message "")))]
     [else (handle-artifact-command cmd input-text base-dir payload)]))
 

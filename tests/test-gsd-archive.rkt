@@ -1,0 +1,225 @@
+#lang racket
+
+;; tests/test-gsd-archive.rkt — Tests for GSD archive workflow
+;; Issues #2155, #2156, #2157, #2158
+
+(require rackunit
+         racket/file
+         racket/path
+         racket/string
+         "../extensions/gsd/archive.rkt"
+         "../extensions/gsd/state-machine.rkt"
+         "../extensions/gsd/wave-docs.rkt"
+         "../extensions/gsd/plan-types.rkt")
+
+;; ============================================================
+;; Helpers
+;; ============================================================
+
+(define (make-tmp-planning-dir)
+  (define tmp (make-temporary-file "gsd-archive-test-~a" 'directory))
+  (define planning (build-path tmp ".planning"))
+  (make-directory planning)
+  tmp)
+
+(define (write-plan! base-dir #:status-lines [status-lines #f])
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (define content
+    (string-append
+     "# Plan: Test Archive Plan\n\n## Overview\nTest.\n\n## Waves\n"
+     (or status-lines
+         "- [DONE] W0: setup → waves/W0-setup.md\n- [DONE] W1: implement → waves/W1-implement.md\n")))
+  (call-with-output-file plan-path (lambda (out) (display content out)) #:exists 'truncate))
+
+(define (write-plan-incomplete! base-dir)
+  (write-plan!
+   base-dir
+   #:status-lines
+   "- [DONE] W0: setup → waves/W0-setup.md\n- [Inbox] W1: implement → waves/W1-implement.md\n"))
+
+(define (write-state! base-dir)
+  (define state-path (build-path base-dir ".planning" "STATE.md"))
+  (call-with-output-file state-path
+                         (lambda (out) (display "# State\nAll done." out))
+                         #:exists 'truncate))
+
+(define (write-wave! base-dir idx slug status content)
+  (write-wave-doc! base-dir idx slug content status))
+
+(define (cleanup-tmp base-dir)
+  (when (directory-exists? base-dir)
+    (delete-directory/files base-dir)))
+
+;; ============================================================
+;; Tests: all-waves-complete? (#2155)
+;; ============================================================
+
+(test-case "all-waves-complete?: #t when all DONE"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (write-plan! tmp)
+                  (check-true (all-waves-complete? tmp)))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "all-waves-complete?: #f when some Inbox"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (write-plan-incomplete! tmp)
+                  (check-false (all-waves-complete? tmp)))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "all-waves-complete?: #f when no PLAN.md"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda () (check-false (all-waves-complete? tmp)))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "all-waves-complete?: #t with DONE + DEFERRED"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [DONE] W0: setup → waves/W0-setup.md\n- [DEFERRED] W1: optional → waves/W1-optional.md\n")
+     (check-true (all-waves-complete? tmp)))
+   (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: archive-path-for-plan (#2155)
+;; ============================================================
+
+(test-case "archive-path-for-plan: generates correct path"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define result (archive-path-for-plan tmp "My Cool Plan"))
+                  (check-true (string-suffix? (path->string result) "my-cool-plan")))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "archive-path-for-plan: collision appends timestamp"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  ;; Create existing archive dir
+                  (define first-path (archive-path-for-plan tmp "Test Plan"))
+                  (make-directory* first-path)
+                  ;; Now ask for same plan — should get timestamp suffix
+                  (define second-path (archive-path-for-plan tmp "Test Plan"))
+                  (check-not-equal? first-path second-path)
+                  (check-true (string-contains? (path->string second-path) "test-plan-")))
+                (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: archive-completed-plan! (#2155)
+;; ============================================================
+
+(test-case "archive-completed-plan!: archives all files"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan! tmp)
+     (write-state! tmp)
+     (write-wave! tmp 0 "setup" "DONE" "## Root Cause\nSetup needed.\n## Action\nDo setup.")
+     (write-wave! tmp 1 "implement" "DONE" "## Root Cause\nNeed impl.\n## Action\nImplement.")
+
+     (define result (archive-completed-plan! tmp))
+     (check-true (hash-ref result 'success))
+     (check-true (string-contains? (hash-ref result 'archive-path) "archive"))
+     ;; PLAN.md should no longer exist in .planning/
+     (check-false (file-exists? (build-path tmp ".planning" "PLAN.md")))
+     ;; Archive dir should exist with files
+     (define archive-dir (string->path (hash-ref result 'archive-path)))
+     (check-true (directory-exists? archive-dir))
+     (check-true (file-exists? (build-path archive-dir "PLAN.md"))))
+   (lambda () (cleanup-tmp tmp))))
+
+(test-case "archive-completed-plan!: fails when incomplete"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (write-plan-incomplete! tmp)
+                  (define result (archive-completed-plan! tmp))
+                  (check-false (hash-ref result 'success))
+                  (check-true (string-contains? (hash-ref result 'error) "Not all waves")))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "archive-completed-plan!: fails when no PLAN.md"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define result (archive-completed-plan! tmp))
+                  (check-false (hash-ref result 'success))
+                  (check-true (string-contains? (hash-ref result 'error) "No PLAN.md")))
+                (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: reset-gsd-after-archive! (#2155)
+;; ============================================================
+
+(test-case "reset-gsd-after-archive!: resets state machine"
+  ;; Transition to exploring first
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (check-eq? (gsm-current) 'exploring)
+  ;; Reset
+  (reset-gsd-after-archive!)
+  (check-eq? (gsm-current) 'idle))
+
+;; ============================================================
+;; Tests: move-to-archive! (#2160)
+;; ============================================================
+
+(test-case "move-to-archive!: moves waves/ dir"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (write-plan! tmp)
+                  (write-state! tmp)
+                  (write-wave! tmp 0 "setup" "DONE" "Root cause.\nAction.\nVerify.")
+
+                  (define archive-dir (build-path tmp ".planning" "archive" "test"))
+                  (move-to-archive! tmp archive-dir)
+
+                  ;; waves/ should have moved to archive
+                  (check-true (directory-exists? (build-path archive-dir "waves")))
+                  (check-false (directory-exists? (build-path tmp ".planning" "waves"))))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "move-to-archive!: handles missing files gracefully"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (write-plan! tmp)
+                  ;; No STATE.md, no wave docs
+                  (define archive-dir (build-path tmp ".planning" "archive" "minimal"))
+                  (move-to-archive! tmp archive-dir)
+                  ;; Just PLAN.md moved
+                  (check-true (file-exists? (build-path archive-dir "PLAN.md")))
+                  (check-false (file-exists? (build-path archive-dir "STATE.md"))))
+                (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: mark-wave-status! updates PLAN.md (#2157)
+;; ============================================================
+
+(test-case "mark-wave-status! updates PLAN.md status marker"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Inbox] W0: setup → waves/W0-setup.md\n- [Inbox] W1: implement → waves/W1-implement.md\n")
+     ;; Mark W0 as DONE
+     (mark-wave-status! tmp 0 "DONE")
+     ;; Read PLAN.md and verify marker changed
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[DONE] W0:"))
+     (check-true (string-contains? plan-text "[Inbox] W1:")))
+   (lambda () (cleanup-tmp tmp))))
