@@ -59,6 +59,13 @@
                  (hash-ref c 'text ""))
                ""))
 
+;; TH-02: Dynamic-wind wrapper ensuring GSD state cleanup even on test failure
+(define (with-gsd-cleanup thunk)
+  (dynamic-wind
+    (lambda () (void))
+    thunk
+    (lambda () (reset-all-gsd-state!))))
+
 ;; ============================================================
 ;; Path resolution tests
 ;; ============================================================
@@ -66,25 +73,25 @@
 (test-case "planning-artifact-path resolves canonical PLAN"
   (with-temp-dir (lambda (dir)
                    (define path (planning-artifact-path dir "PLAN"))
-                   (check-not-false path)
+                   (check-true (path? path))
                    (check-true (string-suffix? (path->string path) ".planning/PLAN.md")))))
 
 (test-case "planning-artifact-path resolves canonical HANDOFF"
   (with-temp-dir (lambda (dir)
                    (define path (planning-artifact-path dir "HANDOFF"))
-                   (check-not-false path)
+                   (check-true (path? path))
                    (check-true (string-suffix? (path->string path) ".planning/HANDOFF.json")))))
 
 (test-case "planning-artifact-path resolves custom .md filename"
   (with-temp-dir (lambda (dir)
                    (define path (planning-artifact-path dir "CUSTOM_PLAN.md"))
-                   (check-not-false path)
+                   (check-true (path? path))
                    (check-true (string-suffix? (path->string path) ".planning/CUSTOM_PLAN.md")))))
 
 (test-case "planning-artifact-path resolves custom .json filename"
   (with-temp-dir (lambda (dir)
                    (define path (planning-artifact-path dir "wave-state.json"))
-                   (check-not-false path)
+                   (check-true (path? path))
                    (check-true (string-suffix? (path->string path) ".planning/wave-state.json")))))
 
 (test-case "planning-artifact-path returns #f for invalid name"
@@ -103,7 +110,7 @@
                        "BUG_STATE"
                        "BUG_VALIDATION"
                        "SUMMARY")])
-    (check-not-false (valid-artifact-name? name) name)))
+    (check-true (valid-artifact-name? name) name)))
 
 (test-case "valid-artifact-name? accepts .md files"
   (check-true (valid-artifact-name? "CUSTOM.md"))
@@ -136,14 +143,14 @@
   (with-temp-dir (lambda (dir)
                    (write-planning-artifact! dir "PLAN" "# Test Plan\nContent here")
                    (define content (read-planning-artifact dir "PLAN"))
-                   (check-not-false content)
+                   (check-true (string? content))
                    (check-true (string-contains? content "# Test Plan")))))
 
 (test-case "read-planning-artifact reads JSON content as hash"
   (with-temp-dir (lambda (dir)
                    (write-planning-artifact! dir "HANDOFF" (hasheq 'machine "local" 'wave "A2"))
                    (define content (read-planning-artifact dir "HANDOFF"))
-                   (check-not-false content)
+                   (check-true (hash? content))
                    (check-true (hash? content))
                    (check-equal? (hash-ref content 'machine) "local"))))
 
@@ -157,7 +164,7 @@
 (test-case "write-planning-artifact! creates .planning dir and writes md"
   (with-temp-dir (lambda (dir)
                    (define result (write-planning-artifact! dir "STATE" "# State\nAll good"))
-                   (check-not-false result)
+                   (check-true (path? result))
                    (check-true (file-exists? (build-path dir ".planning" "STATE.md")))
                    (define content (read-planning-artifact dir "STATE"))
                    (check-true (string-contains? content "All good")))))
@@ -166,7 +173,7 @@
   (with-temp-dir (lambda (dir)
                    (define result
                      (write-planning-artifact! dir "HANDOFF" (hasheq 'machine "vps" 'wave "A2")))
-                   (check-not-false result)
+                   (check-true (path? result))
                    (check-true (file-exists? (build-path dir ".planning" "HANDOFF.json")))
                    (define content (read-planning-artifact dir "HANDOFF"))
                    (check-true (hash? content))
@@ -186,7 +193,7 @@
                    ;; The waves/ subdir doesn't exist yet — write-planning-artifact! must create it
                    (define result
                      (write-planning-artifact! dir "waves/W0-fix-bug.md" "# Wave 0\nFix the bug."))
-                   (check-not-false result)
+                   (check-true (path? result))
                    (check-true (file-exists? (build-path dir ".planning" "waves" "W0-fix-bug.md")))
                    (define content (read-planning-artifact dir "waves/W0-fix-bug.md"))
                    (check-true (string-contains? content "Fix the bug")))))
@@ -298,8 +305,8 @@
   (define ctx (make-test-ctx #:tool-registry reg))
   (define handler (hash-ref (extension-hooks gsd-planning-extension) 'register-tools))
   (handler ctx (hasheq))
-  (check-not-false (lookup-tool reg "planning-read"))
-  (check-not-false (lookup-tool reg "planning-write"))
+  (check-true (tool? (lookup-tool reg "planning-read")))
+  (check-true (tool? (lookup-tool reg "planning-write")))
   ;; Check tools have proper schemas
   (define pr (lookup-tool reg "planning-read"))
   (check-true (hash? (tool-schema pr)))
