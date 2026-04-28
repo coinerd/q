@@ -19,8 +19,7 @@
 (require racket/contract
          "api.rkt"
          "../util/protocol-types.rkt"
-         "../util/ids.rkt"
-         "../util/protocol-types.rkt")
+         "../util/ids.rkt")
 
 (provide (contract-out [inject-system-message! (-> event-bus? string? string? any/c)]
                        [inject-user-message! (-> event-bus? string? string? any/c)]
