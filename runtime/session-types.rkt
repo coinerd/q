@@ -6,7 +6,8 @@
 ;; Shared types module so extracted sub-modules can access the session
 ;; struct without creating circular dependencies.
 
-(provide (struct-out agent-session))
+(provide (struct-out agent-session)
+         session-log-path)
 
 ;; ============================================================
 ;; agent-session struct
@@ -35,3 +36,10 @@
          [force-shutdown? #:mutable]
          [prompt-running? #:mutable]) ; boolean — concurrent prompt execution guard
   #:transparent)
+
+;; ============================================================
+;; Shared helper: session log path
+;; ============================================================
+
+(define (session-log-path dir)
+  (build-path dir "session.jsonl"))

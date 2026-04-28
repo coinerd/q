@@ -71,6 +71,4 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
-
-(define (session-log-path dir)
-  (build-path dir "session.jsonl"))
+;; session-log-path imported from session-types.rkt (REV-05 DRY)
