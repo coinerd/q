@@ -15,7 +15,15 @@
 (require racket/contract
          racket/match
          racket/set
-         "session-state.rkt")
+         (only-in "session-state.rkt"
+                  current-gsd-state
+                  set-gsd-state!
+                  current-gsd-history
+                  set-gsd-history!
+                  gsd-state-snapshot
+                  gsd-state-update!
+                  gsd-state-sem
+                  gsd-history-snapshot))
 
 ;; States
 (provide gsm-state?
@@ -122,8 +130,8 @@
           (if (and (eq? current 'executing) (not (eq? target 'executing)))
               (hash-set state 'wave-executor #f)
               state))
-        (current-gsd-state (hash-set state* 'mode target))
-        (current-gsd-history (cons (list current target (current-seconds)) (current-gsd-history)))
+        (set-gsd-state! (hash-set state* 'mode target))
+        (set-gsd-history! (cons (list current target (current-seconds)) (current-gsd-history)))
         (ok-result current target)]
        [else
         (err-result
@@ -136,17 +144,17 @@
    gsd-state-sem
    (lambda ()
      (define old (hash-ref (current-gsd-state) 'mode))
-     (current-gsd-state (hash-set* (current-gsd-state) 'mode 'idle 'wave-executor #f))
-     (current-gsd-history (cons (list old 'idle (current-seconds)) (current-gsd-history)))
+     (set-gsd-state! (hash-set* (current-gsd-state) 'mode 'idle 'wave-executor #f))
+     (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
   (call-with-semaphore
    gsd-state-sem
    (lambda ()
-     (current-gsd-state
+     (set-gsd-state!
       (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set)))
-     (current-gsd-history '())
+     (set-gsd-history! '())
      (void))))
 
 (define (gsm-valid-next-states)

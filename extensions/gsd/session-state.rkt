@@ -1,104 +1,128 @@
 #lang racket/base
 
-;; extensions/gsd/session-state.rkt — Per-session GSD state parameters (QUAL-02)
+;; extensions/gsd/session-state.rkt — Per-session GSD state (QUAL-02)
 ;;
-;; Provides Racket parameters for GSD session state, enabling per-session
-;; isolation via parameterize. Replaces global mutable boxes from
-;; gsd-planning-state.rkt and state-machine.rkt.
+;; Provides shared mutable state for GSD session via boxes.
+;; v0.22.2 REV-01: Reverted from make-parameter to box storage because
+;; hook handlers run in child threads (hooks.rkt:108) where parameter
+;; mutations are invisible to the parent thread.
 ;;
-;; Thread safety: Parameters are thread-local by default. The state hash
-;; parameter uses a semaphore for atomic multi-field updates (mode + wave
-;; state must transition together).
+;; Thread safety: The semaphore gsd-state-sem serializes atomic updates.
+;; Boxes are shared across threads — mutations visible to all threads.
 
 (require racket/set)
 
 ;; ============================================================
-;; Per-session state parameters
+;; Shared mutable state (boxes, not parameters)
 ;; ============================================================
 
 ;; Core GSD state hash: mode, wave-executor, total-waves, current-wave, completed-waves
-;; This replaces the global gsm-state-box in state-machine.rkt.
-(define current-gsd-state
-  (make-parameter
-   (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set))))
+(define gsd-state-box
+  (box (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set))))
 
-;; Convenience accessor: current GSD mode symbol
-(define (current-gsd-mode)
-  (hash-ref (current-gsd-state) 'mode))
+;; Plan data
+(define gsd-plan-data-box (box #f))
 
-;; Convenience accessor: current wave number
-(define (current-wave-number)
-  (hash-ref (current-gsd-state) 'current-wave))
+;; Planning directory
+(define gsd-pinned-dir-box (box #f))
 
-;; Convenience accessor: current plan data (from planning state)
-(define current-plan-data (make-parameter #f))
+;; Edit limit
+(define gsd-edit-limit-box (box 500))
 
-;; Planning directory (replaces pinned-dir-box)
-(define current-pinned-dir (make-parameter #f))
+;; Event bus
+(define gsd-event-bus-box (box #f))
 
-;; Edit limit (replaces edit-limit-box)
-(define current-edit-limit (make-parameter 500))
-
-;; Event bus (replaces gsd-event-bus-box)
-(define current-gsd-event-bus (make-parameter #f))
-
-;; State machine history (replaces gsm-history-box)
-(define current-gsd-history (make-parameter '()))
+;; State machine history
+(define gsd-history-box (box '()))
 
 ;; Semaphore for atomic state transitions
 (define gsd-state-sem (make-semaphore 1))
 
 ;; ============================================================
+;; Parameter-compatible accessors (readers)
+;; ============================================================
+
+(define (current-gsd-state)
+  (unbox gsd-state-box))
+
+(define (set-gsd-state! v)
+  (set-box! gsd-state-box v))
+
+(define (current-gsd-mode)
+  (hash-ref (unbox gsd-state-box) 'mode))
+
+(define (current-wave-number)
+  (hash-ref (unbox gsd-state-box) 'current-wave))
+
+(define (current-plan-data)
+  (unbox gsd-plan-data-box))
+
+(define (set-plan-data! v)
+  (set-box! gsd-plan-data-box v))
+
+(define (current-pinned-dir)
+  (unbox gsd-pinned-dir-box))
+
+(define (set-pinned-dir! v)
+  (set-box! gsd-pinned-dir-box v))
+
+(define (current-edit-limit)
+  (unbox gsd-edit-limit-box))
+
+(define (set-edit-limit! v)
+  (set-box! gsd-edit-limit-box v))
+
+(define (current-gsd-event-bus)
+  (unbox gsd-event-bus-box))
+
+(define (set-gsd-event-bus! v)
+  (set-box! gsd-event-bus-box v))
+
+(define (current-gsd-history)
+  (unbox gsd-history-box))
+
+(define (set-gsd-history! v)
+  (set-box! gsd-history-box v))
+
+;; ============================================================
 ;; Atomic state operations
 ;; ============================================================
 
-;; Read current state atomically
 (define (gsd-state-snapshot)
-  (call-with-semaphore gsd-state-sem (lambda () (current-gsd-state))))
+  (call-with-semaphore gsd-state-sem (lambda () (unbox gsd-state-box))))
 
-;; Update state atomically (thunk receives current state, returns new state)
 (define (gsd-state-update! update-thunk)
   (call-with-semaphore gsd-state-sem
-                       (lambda () (current-gsd-state (update-thunk (current-gsd-state))))))
+                       (lambda () (set-box! gsd-state-box (update-thunk (unbox gsd-state-box))))))
 
-;; Read history atomically
 (define (gsd-history-snapshot)
-  (call-with-semaphore gsd-state-sem (lambda () (reverse (current-gsd-history)))))
+  (call-with-semaphore gsd-state-sem (lambda () (reverse (unbox gsd-history-box)))))
 
-;; Update history atomically
 (define (gsd-history-update! update-thunk)
   (call-with-semaphore gsd-state-sem
-                       (lambda () (current-gsd-history (update-thunk (current-gsd-history))))))
-
-;; Reset all session state to defaults
-(define (reset-session-state!)
-  (call-with-semaphore
-   gsd-state-sem
-   (lambda ()
-     (current-gsd-state
-      (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set)))
-     (current-gsd-history '())))
-  (current-pinned-dir #f)
-  (current-edit-limit 500)
-  (current-gsd-event-bus #f)
-  (current-plan-data #f))
+                       (lambda () (set-box! gsd-history-box (update-thunk (unbox gsd-history-box))))))
 
 ;; ============================================================
 ;; Provide
 ;; ============================================================
 
 (provide current-gsd-state
+         set-gsd-state!
          current-gsd-mode
          current-wave-number
          current-plan-data
+         set-plan-data!
          current-pinned-dir
+         set-pinned-dir!
          current-edit-limit
+         set-edit-limit!
          current-gsd-event-bus
+         set-gsd-event-bus!
          current-gsd-history
+         set-gsd-history!
          ;; Atomic operations
          gsd-state-sem
          gsd-state-snapshot
          gsd-state-update!
          gsd-history-snapshot
-         gsd-history-update!
-         reset-session-state!)
+         gsd-history-update!)
