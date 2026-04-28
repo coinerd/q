@@ -119,6 +119,9 @@
                   8089))
   (check-exn exn:fail? (lambda () (oauth-exchange-code cfg "some-auth-code"))))
 
+(test-case "oauth-available? returns #f (stub)"
+  (check-false (oauth-available?)))
+
 (test-case "oauth-refresh-token raises error (stub)"
   (define cfg
     (oauth-config "https://example.com/auth"
