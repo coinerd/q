@@ -19,7 +19,8 @@
          all-waves-complete?
          archive-path-for-plan
          move-to-archive!
-         reset-gsd-after-archive!)
+         reset-gsd-after-archive!
+         cleanup-empty-subdirs!)
 
 ;; ============================================================
 ;; Validation
@@ -86,6 +87,9 @@
     (define dst-waves (build-path archive-dir "waves"))
     (rename-file-or-directory waves-dir dst-waves))
 
+  ;; Clean up empty subdirs after archive (#2160)
+  (cleanup-empty-subdirs! planning-dir)
+
   archive-dir)
 
 ;; ============================================================
@@ -149,3 +153,14 @@
      (if m
          (string-trim (cadr m))
          "archived-plan")]))
+
+;; Remove empty subdirectories under .planning/ after archive (#2160).
+;; Does NOT delete the archive/ subdir itself.
+(define (cleanup-empty-subdirs! planning-dir)
+  (when (directory-exists? planning-dir)
+    (for ([sub (directory-list planning-dir)])
+      (define sub-path (build-path planning-dir sub))
+      (when (and (directory-exists? sub-path) (not (string=? (path->string sub) "archive")))
+        (with-handlers ([exn:fail? (lambda (e) (void))])
+          (when (null? (directory-list sub-path))
+            (delete-directory sub-path)))))))
