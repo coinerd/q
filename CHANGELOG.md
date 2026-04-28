@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.22.4 — 2026-04-28
+
+### Architecture Modularity & Racket Idiom Remediation
+- **MOD-01**: Extracted `runtime/turn-orchestrator.rkt` (250 lines) from `runtime/iteration.rkt` (801→601 lines), eliminated upward imports
+- **MOD-03**: Created `interfaces/sdk-public.rkt` with curated SDK exports + `contract-out` on 20+ public functions
+- **MOD-04**: Declarative tool registry: `tools/registry-table.rkt` with 14-tool spec table + `register-tools-from-specs!`
+- **MOD-05**: Architecture fitness tests in `tests/test-arch-fitness.rkt` (module coupling, size, API surface checks)
+- **RKT-02**: Replaced symbol-dispatch provider with `racket/generic` (`define-generics gen:provider`)
+- **RKT-03**: Explicit struct payloads for event types (`util/event-payloads.rkt`)
+- **RKT-04**: Contract enforcement at SDK boundary via `sdk-public.rkt`
+- **RKT-05**: Schema macro: `tools/schema-macro.rkt` with `define-tool-schema` + `tool-schema` + `build-properties-hash`
+- **FIX-01**: Fixed SDK GSD live test — save/restore `gsd-event-bus` and `pinned-planning-dir` around `reset-all-gsd-state!`
+- Simplified `tools/registry-defaults.rkt` from 374→15 lines (delegates to registry-table)
+- Added 37 new tests across 4 test files
+
 ## v0.22.3 — 2026-04-28
 
 ### CI Pipeline Hardening
