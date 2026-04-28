@@ -100,6 +100,7 @@
    "- Skip failed waves and document the reason\n"
    "- After all waves, report which ones failed\n\n"
    "Edit rules (non-negotiable):\n"
+   "- For removing 3+ consecutive lines, prefer delete-lines (specify start/end line numbers)\n"
    "- Keep each edit ≤20 lines — split large changes into sequential edits\n"
    "- Keep oldText ≤500 characters — include just enough surrounding context for uniqueness\n"
    "- Verify oldText is unique in the file before editing\n"

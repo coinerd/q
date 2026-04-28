@@ -56,7 +56,7 @@
                                #f)])
     (define dir (ensure-backup-dir))
     (define basename (file-name-from-path path-str))
-    (define timestamp (format "~a" (inexact->exact (current-inexact-milliseconds))))
+    (define timestamp (number->string (abs (current-milliseconds))))
     (define backup-name (format "~a_~a" timestamp basename))
     (define backup-path (build-path dir backup-name))
     (display-to-file content backup-path #:exists 'replace)
