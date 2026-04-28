@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.21.9 — 2026-04-28
+
+### GSD Plan Archival + Execution Polish
+- `/done` command archives completed plans to `.planning/archive/<slug>/`
+- PLAN.md status markers update automatically on wave completion (`[Inbox]→[DONE]`)
+- Empty subdirectories cleaned up after archive
+- `ensure-state-md!` auto-creates STATE.md during `/plan` initialization
+- TUI shows `✅ Plan archived` notification
+- Iteration label shows `[executing...]` during execution mode vs `[exploring...]`
+- Execution prompt includes edit chunking rules (≤20 lines, ≤500 chars oldText)
+
 ## v0.21.8 — 2026-04-28
 
 ### Security
