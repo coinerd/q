@@ -1,12 +1,13 @@
 #lang racket/base
 
-;; extensions/gsd-planning-state.rkt — Thin shim over new gsd/ modules
+;; extensions/gsd-planning-state.rkt — Thin shim over gsd/ modules
 ;;
 ;; v0.21.6: steering.rkt import removed (dead code).
-;; Only wave tracking
-;; and mode delegation remain.
+;; v0.22.1 QUAL-03: Migrated from global mutable boxes to per-session
+;; parameters via session-state.rkt.
 
 (require "gsd/state-machine.rkt"
+         "gsd/session-state.rkt"
          "gsd/wave-docs.rkt")
 
 (provide gsd-mode
@@ -31,16 +32,6 @@
          ;; Event bus
          gsd-event-bus
          set-gsd-event-bus!)
-
-;; ============================================================
-;; State boxes (semaphore-protected)
-;; ============================================================
-
-(define state-sem (make-semaphore 1))
-
-(define pinned-dir-box (box #f))
-(define edit-limit-box (box 500))
-(define gsd-event-bus-box (box #f))
 
 ;; ============================================================
 ;; Mode delegation to state machine
@@ -76,20 +67,20 @@
     [else (gsm-transition! v)]))
 
 ;; ============================================================
-;; Accessors (semaphore-protected)
+;; Accessors — now backed by session parameters
 ;; ============================================================
 
 (define (pinned-planning-dir)
-  (call-with-semaphore state-sem (lambda () (unbox pinned-dir-box))))
+  (current-pinned-dir))
 
 (define (set-pinned-planning-dir! v)
-  (call-with-semaphore state-sem (lambda () (set-box! pinned-dir-box v))))
+  (current-pinned-dir v))
 
 (define (current-max-old-text-len)
-  (call-with-semaphore state-sem (lambda () (unbox edit-limit-box))))
+  (current-edit-limit))
 
 (define (set-current-max-old-text-len! v)
-  (call-with-semaphore state-sem (lambda () (set-box! edit-limit-box v))))
+  (current-edit-limit v))
 
 ;; ============================================================
 ;; Wave tracking (delegated to state machine — F4 consolidation)
@@ -118,41 +109,38 @@
   (gsm-next-pending-wave))
 
 ;; ============================================================
-;; Event bus
+;; Event bus — now backed by session parameter
 ;; ============================================================
 
 (define (gsd-event-bus)
-  (call-with-semaphore state-sem (lambda () (unbox gsd-event-bus-box))))
+  (current-gsd-event-bus))
 
 (define (set-gsd-event-bus! v)
-  (call-with-semaphore state-sem (lambda () (set-box! gsd-event-bus-box v))))
+  (current-gsd-event-bus v))
 
 ;; ============================================================
-;; Observability + reset
+;; Observability + reset — now backed by session parameters
 ;; ============================================================
 
 (define (gsd-snapshot)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (hasheq 'mode
-                                 (gsm-current)
-                                 'pinned-dir
-                                 (unbox pinned-dir-box)
-                                 'edit-limit
-                                 (unbox edit-limit-box)
-                                 'total-waves
-                                 (gsm-total-waves)
-                                 'current-wave
-                                 (gsm-current-wave)
-                                 'completed-waves
-                                 (gsm-completed-waves)
-                                 'wave-executor
-                                 (and (gsm-wave-executor) #t)))))
+  (hasheq 'mode
+          (gsm-current)
+          'pinned-dir
+          (current-pinned-dir)
+          'edit-limit
+          (current-edit-limit)
+          'total-waves
+          (gsm-total-waves)
+          'current-wave
+          (gsm-current-wave)
+          'completed-waves
+          (gsm-completed-waves)
+          'wave-executor
+          (and (gsm-wave-executor) #t)))
 
 (define (reset-all-gsd-state!)
-  (call-with-semaphore state-sem
-                       (lambda ()
-                         (reset-gsm!)
-                         (set-box! pinned-dir-box #f)
-                         (set-box! edit-limit-box 500)
-                         (set-box! gsd-event-bus-box #f))))
+  (reset-gsm!)
+  (current-pinned-dir #f)
+  (current-edit-limit 500)
+  (current-gsd-event-bus #f)
+  (current-plan-data #f))

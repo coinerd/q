@@ -3,17 +3,19 @@
 ;; extensions/gsd/state-machine.rkt — GSD State Machine
 ;;
 ;; Wave 0 of v0.21.0: Central state machine with explicit transitions and guards.
-;; Replaces scattered mode checks across 4 hook handlers.
+;; v0.22.1 QUAL-03: Migrated from global mutable boxes to per-session parameters
+;; via session-state.rkt.
 ;;
 ;; States: idle → exploring → plan-written → executing → verifying → idle
 ;;                 ↑              ↓
 ;;                 └──────────────┘ (re-plan on failure)
 ;;
-;; All state is semaphore-protected for thread safety.
+;; Thread safety: Uses gsd-state-sem from session-state.rkt for atomic updates.
 
 (require racket/contract
          racket/match
-         racket/set)
+         racket/set
+         "session-state.rkt")
 
 ;; States
 (provide gsm-state?
@@ -97,42 +99,31 @@
   (err-result-reason r))
 
 ;; ============================================================
-;; State storage (semaphore-protected)
-;; ============================================================
-
-(define gsm-sem (make-semaphore 1))
-;; State is a hash: 'mode, 'wave-executor, 'total-waves, 'current-wave, 'completed-waves
-(define gsm-state-box
-  (box (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set))))
-(define gsm-history-box (box '()))
-
-;; ============================================================
-;; Core API
+;; Core API — now backed by session-state parameters
 ;; ============================================================
 
 (define (gsm-current)
-  (call-with-semaphore gsm-sem (lambda () (hash-ref (unbox gsm-state-box) 'mode))))
+  (hash-ref (gsd-state-snapshot) 'mode))
 
 (define (gsm-history)
-  (call-with-semaphore gsm-sem (lambda () (reverse (unbox gsm-history-box)))))
+  (gsd-history-snapshot))
 
 (define (gsm-transition! target)
   (call-with-semaphore
-   gsm-sem
+   gsd-state-sem
    (lambda ()
-     (define current (hash-ref (unbox gsm-state-box) 'mode))
+     (define state (current-gsd-state))
+     (define current (hash-ref state 'mode))
      (cond
        [(not (gsm-state? target)) (err-result (format "invalid state: ~a" target) current target)]
        [(valid-transition? current target)
         ;; Clear executor when leaving executing mode
-        (define state (unbox gsm-state-box))
         (define state*
           (if (and (eq? current 'executing) (not (eq? target 'executing)))
               (hash-set state 'wave-executor #f)
               state))
-        (set-box! gsm-state-box (hash-set state* 'mode target))
-        (set-box! gsm-history-box
-                  (cons (list current target (current-seconds)) (unbox gsm-history-box)))
+        (current-gsd-state (hash-set state* 'mode target))
+        (current-gsd-history (cons (list current target (current-seconds)) (current-gsd-history)))
         (ok-result current target)]
        [else
         (err-result
@@ -142,21 +133,20 @@
 
 (define (gsm-reset!)
   (call-with-semaphore
-   gsm-sem
+   gsd-state-sem
    (lambda ()
-     (define old (hash-ref (unbox gsm-state-box) 'mode))
-     (set-box! gsm-state-box (hash-set* (unbox gsm-state-box) 'mode 'idle 'wave-executor #f))
-     (set-box! gsm-history-box (cons (list old 'idle (current-seconds)) (unbox gsm-history-box)))
+     (define old (hash-ref (current-gsd-state) 'mode))
+     (current-gsd-state (hash-set* (current-gsd-state) 'mode 'idle 'wave-executor #f))
+     (current-gsd-history (cons (list old 'idle (current-seconds)) (current-gsd-history)))
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
   (call-with-semaphore
-   gsm-sem
+   gsd-state-sem
    (lambda ()
-     (set-box!
-      gsm-state-box
+     (current-gsd-state
       (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set)))
-     (set-box! gsm-history-box '())
+     (current-gsd-history '())
      (void))))
 
 (define (gsm-valid-next-states)
@@ -164,7 +154,7 @@
   (valid-targets current))
 
 (define (gsm-snapshot)
-  (call-with-semaphore gsm-sem (lambda () (unbox gsm-state-box))))
+  (gsd-state-snapshot))
 
 ;; ============================================================
 ;; Tool access
@@ -192,54 +182,42 @@
     (cdr t)))
 
 ;; ============================================================
-;; Wave state accessors (F4: consolidated from gsd-planning-state)
+;; Wave state accessors — now backed by session-state parameters
 ;; ============================================================
 
 (define (gsm-wave-executor)
-  (call-with-semaphore gsm-sem (lambda () (hash-ref (unbox gsm-state-box) 'wave-executor))))
+  (hash-ref (gsd-state-snapshot) 'wave-executor))
 
 (define (gsm-set-wave-executor! exec)
-  (call-with-semaphore
-   gsm-sem
-   (lambda () (set-box! gsm-state-box (hash-set (unbox gsm-state-box) 'wave-executor exec)))))
+  (gsd-state-update! (lambda (state) (hash-set state 'wave-executor exec))))
 
 (define (gsm-total-waves)
-  (call-with-semaphore gsm-sem (lambda () (hash-ref (unbox gsm-state-box) 'total-waves))))
+  (hash-ref (gsd-state-snapshot) 'total-waves))
 
 (define (gsm-set-total-waves! n)
-  (call-with-semaphore gsm-sem
-                       (lambda ()
-                         (set-box! gsm-state-box (hash-set (unbox gsm-state-box) 'total-waves n)))))
+  (gsd-state-update! (lambda (state) (hash-set state 'total-waves n))))
 
 (define (gsm-current-wave)
-  (call-with-semaphore gsm-sem (lambda () (hash-ref (unbox gsm-state-box) 'current-wave))))
+  (hash-ref (gsd-state-snapshot) 'current-wave))
 
 (define (gsm-set-current-wave! n)
-  (call-with-semaphore gsm-sem
-                       (lambda ()
-                         (set-box! gsm-state-box (hash-set (unbox gsm-state-box) 'current-wave n)))))
+  (gsd-state-update! (lambda (state) (hash-set state 'current-wave n))))
 
 (define (gsm-completed-waves)
-  (call-with-semaphore gsm-sem (lambda () (hash-ref (unbox gsm-state-box) 'completed-waves))))
+  (hash-ref (gsd-state-snapshot) 'completed-waves))
 
 (define (gsm-mark-wave-complete! idx)
-  (call-with-semaphore gsm-sem
-                       (lambda ()
-                         (define state (unbox gsm-state-box))
-                         (define completed (hash-ref state 'completed-waves))
-                         (set-box! gsm-state-box
-                                   (hash-set state 'completed-waves (set-add completed idx))))))
+  (gsd-state-update! (lambda (state)
+                       (define completed (hash-ref state 'completed-waves))
+                       (hash-set state 'completed-waves (set-add completed idx)))))
 
 (define (gsm-wave-complete? idx)
-  (call-with-semaphore gsm-sem
-                       (lambda ()
-                         (set-member? (hash-ref (unbox gsm-state-box) 'completed-waves) idx))))
+  (set-member? (hash-ref (gsd-state-snapshot) 'completed-waves) idx))
 
 (define (gsm-next-pending-wave)
-  (call-with-semaphore gsm-sem
-                       (lambda ()
-                         (define tw (hash-ref (unbox gsm-state-box) 'total-waves))
-                         (define cw (hash-ref (unbox gsm-state-box) 'completed-waves))
-                         (for/first ([i (in-range tw)]
-                                     #:when (not (set-member? cw i)))
-                           i))))
+  (define state (gsd-state-snapshot))
+  (define tw (hash-ref state 'total-waves))
+  (define cw (hash-ref state 'completed-waves))
+  (for/first ([i (in-range tw)]
+              #:when (not (set-member? cw i)))
+    i))
