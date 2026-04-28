@@ -1,4 +1,4 @@
-<!-- verified-against: 0.22.1 --># Why q?
+<!-- verified-against: 0.22.2 --># Why q?
 
 A candid look at who q is for, what it prioritizes, and where it's intentionally narrow.
 
@@ -49,7 +49,7 @@ Be realistic about where things stand:
 |-----------|--------|
 | Install script (`curl \| bash`) | ✅ Available |
 | Racket package catalog | Metadata ready (catalog submission pending) |
-| GitHub Release tarballs | ✅ Available (v0.22.1+) || Homebrew tap | Future |
+| GitHub Release tarballs | ✅ Available (v0.22.2+) || Homebrew tap | Future |
 | Standalone binary | Future |
 
 ## When to choose q
