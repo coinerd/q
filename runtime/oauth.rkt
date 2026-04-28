@@ -17,6 +17,8 @@
 (provide (struct-out oauth-config)
          ;; OAuth token struct
          (struct-out oauth-token)
+         ;; Feature availability predicate
+         oauth-available?
          ;; Predicates / validation
          oauth-token-expired?
          valid-oauth-config?
@@ -59,6 +61,15 @@
                       token-type ; usually "Bearer"
                       scope)
   #:transparent)
+
+;; ═══════════════════════════════════════════════════════════════════
+;; Feature availability
+;; ═══════════════════════════════════════════════════════════════════
+
+;; Returns #f — OAuth token exchange/refresh are stubs pending HTTP client.
+;; Callers should check this before offering OAuth login flows.
+(define (oauth-available?)
+  #f)
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Validation

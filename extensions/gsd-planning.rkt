@@ -582,6 +582,12 @@
 ;; ============================================================
 
 ;; v0.21.3: Only mode-based blocking. No budgets.
+;; Note (v0.21.8, #2148): Mode is set BEFORE the LLM prompt is submitted
+;; (see /plan handler: set-gsd-mode! precedes hook-amend with submit key).
+;; Therefore by the time the first tool call arrives, the mode is already
+;; 'planning' (mapped from 'exploring'). No race condition exists.
+;; planning-write is allowed in 'exploring' and 'plan-written' states;
+;; it is only blocked during 'executing' and 'verifying'.
 (define (gsd-tool-guard payload)
   (define mode (gsd-mode))
   (define tool-name (hash-ref payload 'tool-name #f))
