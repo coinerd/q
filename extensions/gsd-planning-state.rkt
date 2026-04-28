@@ -7,7 +7,15 @@
 ;; parameters via session-state.rkt.
 
 (require "gsd/state-machine.rkt"
-         "gsd/session-state.rkt"
+         (only-in "gsd/session-state.rkt"
+                  current-pinned-dir
+                  set-pinned-dir!
+                  current-edit-limit
+                  set-edit-limit!
+                  [current-gsd-event-bus box-current-gsd-event-bus]
+                  [set-gsd-event-bus! box-set-gsd-event-bus!]
+                  current-plan-data
+                  set-plan-data!)
          "gsd/wave-docs.rkt")
 
 (provide gsd-mode
@@ -74,13 +82,13 @@
   (current-pinned-dir))
 
 (define (set-pinned-planning-dir! v)
-  (current-pinned-dir v))
+  (set-pinned-dir! v))
 
 (define (current-max-old-text-len)
   (current-edit-limit))
 
 (define (set-current-max-old-text-len! v)
-  (current-edit-limit v))
+  (set-edit-limit! v))
 
 ;; ============================================================
 ;; Wave tracking (delegated to state machine — F4 consolidation)
@@ -113,10 +121,10 @@
 ;; ============================================================
 
 (define (gsd-event-bus)
-  (current-gsd-event-bus))
+  (box-current-gsd-event-bus))
 
 (define (set-gsd-event-bus! v)
-  (current-gsd-event-bus v))
+  (box-set-gsd-event-bus! v))
 
 ;; ============================================================
 ;; Observability + reset — now backed by session parameters
@@ -140,7 +148,7 @@
 
 (define (reset-all-gsd-state!)
   (reset-gsm!)
-  (current-pinned-dir #f)
-  (current-edit-limit 500)
-  (current-gsd-event-bus #f)
-  (current-plan-data #f))
+  (set-pinned-dir! #f)
+  (set-edit-limit! 500)
+  (box-set-gsd-event-bus! #f)
+  (set-plan-data! #f))
