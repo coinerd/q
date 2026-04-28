@@ -9,13 +9,55 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded runs on the same branch/PR
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  workflow-lint:
+  # ────────────────────────────────────────────────────────────
+  # Gate 1: Lint (< 30s) — fast feedback on every PR
+  # ────────────────────────────────────────────────────────────
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-racket
 
-      - name: Validate workflow YAML
+      - name: Format lint
+        run: racket scripts/lint-format.rkt
+
+      - name: Version sync check
+        run: racket scripts/sync-version.rkt --all
+
+      - name: Version cross-check
+        run: racket scripts/lint-version.rkt
+
+      - name: Protocol consistency
+        run: racket scripts/check-protocols.rkt
+
+      - name: Import conflicts
+        run: racket scripts/check-imports.rkt
+
+      - name: Dependency completeness
+        run: racket scripts/check-deps.rkt
+
+      - name: Metrics sync
+        run: racket scripts/metrics.rkt --sync-all && racket scripts/metrics.rkt --lint
+
+      - name: Prose metrics
+        run: racket scripts/metrics.rkt --lint-prose
+
+      - name: README status block
+        run: racket scripts/sync-readme-status.rkt --check
+
+      - name: Test portability
+        run: racket scripts/lint-tests.rkt
+
+      - name: CI readiness
+        run: racket scripts/lint-ci-readiness.rkt
+
+      - name: Workflow YAML validation
         run: |
           pip install pyyaml
           python3 -c "
@@ -33,7 +75,52 @@ jobs:
           print('All workflows and actions valid YAML')
           "
 
+  # ────────────────────────────────────────────────────────────
+  # Gate 2: Test matrix — depends on lint passing
+  # ────────────────────────────────────────────────────────────
+  test:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            racket-version: '8.12'
+          - os: ubuntu-latest
+            racket-version: '8.10'
+          - os: macos-latest
+            racket-version: '8.12'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ matrix.racket-version }}
+
+      - name: Run tests
+        run: racket scripts/run-tests.rkt 2>&1 | tee test-output.log
+
+      - name: Test failure summary
+        if: failure()
+        run: |
+          echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output-${{ matrix.os }}-${{ matrix.racket-version }}
+          path: test-output.log
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # Gate 3: Release dry-run — depends on lint passing
+  # ────────────────────────────────────────────────────────────
   release-dry-run:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -61,125 +148,18 @@ jobs:
           racket scripts/gen-release-notes.rkt "${VERSION}" > /tmp/notes.md
           echo "Release notes generated ($(wc -l < /tmp/notes.md) lines)"
 
-  version-consistency:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Racket
-        uses: ./.github/actions/setup-racket
-
-      - name: Version sync check (dry-run)
-        run: racket scripts/sync-version.rkt
-
-      - name: Version lint (cross-check all surfaces)
-        run: racket scripts/lint-version.rkt
-
-      - name: Verify CLI --version matches canonical
-        run: |
-          CANONICAL=$(racket -e '(require "util/version.rkt") (display q-version)')
-          CLI_OUTPUT=$(racket main.rkt --version | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
-          echo "Canonical: $CANONICAL"
-          echo "CLI:       $CLI_OUTPUT"
-          [ "$CANONICAL" = "$CLI_OUTPUT" ]
-
-      - name: Verify info.rkt version matches canonical
-        run: |
-          CANONICAL=$(racket -e '(require "util/version.rkt") (display q-version)')
-          INFO=$(grep -oP '(?<=\(define version ")[^"]+' info.rkt)
-          echo "Canonical: $CANONICAL"
-          echo "info.rkt:  $INFO"
-          [ "$CANONICAL" = "$INFO" ]
-
-  test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        racket-version: ['8.10', '8.12']
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Racket
-        uses: ./.github/actions/setup-racket
-        with:
-          racket-version: ${{ matrix.racket-version }}
-
-      - name: Clean bytecode cache
-        run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
-
-      - name: Lint tests for portability
-        run: racket scripts/lint-tests.rkt
-
-      - name: Lint version consistency
-        run: racket scripts/lint-version.rkt
-
-      - name: Format lint
-        run: racket scripts/lint-format.rkt
-
-      - name: Sync and lint metrics
-        run: racket scripts/metrics.rkt --sync-all && racket scripts/metrics.rkt --lint
-
-      - name: Lint prose metrics consistency
-        run: racket scripts/metrics.rkt --lint-prose
-
-      - name: Lint README status block version
-        run: racket scripts/sync-readme-status.rkt --check
-
-      - name: Protocol consistency
-        run: racket scripts/check-protocols.rkt
-
-      - name: Import conflicts
-        run: racket scripts/check-imports.rkt
-
-      - name: Dependency completeness
-        run: racket scripts/check-deps.rkt
-
-      - name: CI readiness
-        run: racket scripts/lint-ci-readiness.rkt
-
-      - name: Verify project structure
-        run: |
-          pwd
-          test -f info.rkt && echo "info.rkt found at repo root"
-          test -f main.rkt && echo "main.rkt found at repo root"
-
-      # TUI tests are skipped on Racket 8.10 due to charcanvas lib incompatibility
-      - name: Run tests
-        run: racket scripts/run-tests.rkt 2>&1 | tee test-output.log
-
-      - name: Test failure summary
-        if: failure()
-        run: |
-          echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload test log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-output-log
-          path: test-output.log
-          retention-days: 7
-
-      - name: Coverage report
-        if: runner.os == 'Linux'
-        run: |
-          raco pkg install --auto --batch cover-coveralls 2>/dev/null || true
-          raco cover tests/ 2>/dev/null || echo "Coverage step completed (optional)"
-
+  # ────────────────────────────────────────────────────────────
+  # Gate 4: Smoke — depends on test matrix passing
+  # ────────────────────────────────────────────────────────────
   smoke:
+    needs: test
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: Setup Racket
-        uses: ./.github/actions/setup-racket
+      - uses: ./.github/actions/setup-racket
 
       - name: Version smoke check
         run: |
