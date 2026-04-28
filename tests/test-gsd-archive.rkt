@@ -223,3 +223,47 @@
      (check-true (string-contains? plan-text "[DONE] W0:"))
      (check-true (string-contains? plan-text "[Inbox] W1:")))
    (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: cleanup-empty-subdirs! (#2160)
+;; ============================================================
+
+(test-case "cleanup-empty-subdirs!: removes empty dirs"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  ;; Create an empty subdir
+                  (define empty-dir (build-path tmp ".planning" "waves"))
+                  (make-directory empty-dir)
+                  (check-true (directory-exists? empty-dir))
+                  ;; Cleanup
+                  (cleanup-empty-subdirs! (build-path tmp ".planning"))
+                  ;; Should be removed
+                  (check-false (directory-exists? empty-dir)))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "cleanup-empty-subdirs!: preserves non-empty dirs"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  ;; Create a subdir with a file
+                  (define nonempty-dir (build-path tmp ".planning" "waves"))
+                  (make-directory nonempty-dir)
+                  (call-with-output-file (build-path nonempty-dir "W0.md")
+                                         (lambda (out) (display "test" out)))
+                  (cleanup-empty-subdirs! (build-path tmp ".planning"))
+                  ;; Should still exist
+                  (check-true (directory-exists? nonempty-dir)))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "cleanup-empty-subdirs!: preserves archive dir"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  ;; Create empty archive subdir
+                  (define archive-dir (build-path tmp ".planning" "archive"))
+                  (make-directory archive-dir)
+                  (cleanup-empty-subdirs! (build-path tmp ".planning"))
+                  ;; archive should still exist even though empty
+                  (check-true (directory-exists? archive-dir)))
+                (lambda () (cleanup-tmp tmp))))

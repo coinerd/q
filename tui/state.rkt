@@ -561,6 +561,13 @@
                                (event-time evt)
                                (hash)))]
 
+    ;; v0.21.9 #2161: GSD plan archived notification
+    [("gsd.plan.archived")
+     (define path (hash-ref payload 'path "?"))
+     (append-entry
+      state
+      (make-entry 'system (format "\u2705 Plan archived to ~a" path) (event-time evt) (hash)))]
+
     ;; v0.14.1: mid-turn token budget warning
     [("context.mid-turn-over-budget")
      (define estimated (hash-ref payload 'estimated-tokens "?"))
