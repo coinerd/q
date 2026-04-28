@@ -99,6 +99,12 @@
    "- Failed waves do NOT block subsequent waves\n"
    "- Skip failed waves and document the reason\n"
    "- After all waves, report which ones failed\n\n"
+   "Edit rules (non-negotiable):\n"
+   "- Keep each edit ≤20 lines — split large changes into sequential edits\n"
+   "- Keep oldText ≤500 characters — include just enough surrounding context for uniqueness\n"
+   "- Verify oldText is unique in the file before editing\n"
+   "- For Racket files, prefer racket_edit over raw edit for structural changes\n"
+   "- After each edit, run format + syntax check before proceeding\n\n"
    "Wave overview:\n"
    (format-wave-list waves)))
 

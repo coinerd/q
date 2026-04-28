@@ -10,7 +10,8 @@
          json
          "../util/protocol-types.rkt"
          "../util/cost-tracker.rkt"
-         "../util/content-helpers.rkt")
+         "../util/content-helpers.rkt"
+         (only-in "../extensions/gsd/state-machine.rkt" gsm-current))
 
 ;; Structs
 (provide (struct-out transcript-entry)
@@ -537,10 +538,11 @@
     [("iteration.soft-warning")
      (define iter (hash-ref payload 'iteration "?"))
      (define remaining (hash-ref payload 'remaining "?"))
+     (define label (if (eq? (gsm-current) 'executing) "executing" "exploring"))
      (append-entry
       state
       (make-entry 'system
-                  (format "[exploring... iteration ~a, ~a remaining before hard stop]" iter remaining)
+                  (format "[~a... iteration ~a, ~a remaining before hard stop]" label iter remaining)
                   (event-time evt)
                   (hash)))]
 
@@ -548,10 +550,11 @@
     [("exploration.progress")
      (define count (hash-ref payload 'consecutive-tools "?"))
      (define tool-names (hash-ref payload 'tool-names '()))
+     (define label (if (eq? (gsm-current) 'executing) "executing" "exploring"))
      (append-entry state
                    (make-entry 'system
-                               (format "[exploring... ~a tool calls: ~a]"
-                                       count
+                               (format "[~a... ~a tool calls: ~a]"
+                                       label
                                        (string-join (map (lambda (s)
                                                            (if (string? s)
                                                                s

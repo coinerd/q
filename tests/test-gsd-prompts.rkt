@@ -82,6 +82,14 @@
   (define p (executing-prompt plan exec))
   (check-true (string-contains? p "/replan") "mentions replan"))
 
+(test-case "executing-prompt includes edit rules (#2165)"
+  (define plan (gsd-plan (list (gsd-wave 0 "Fix" 'pending "" '("a.rkt") '() "test" '())) "" '() '()))
+  (define exec (make-wave-executor plan))
+  (define p (executing-prompt plan exec))
+  (check-true (string-contains? p "Edit rules") "mentions edit rules")
+  (check-true (string-contains? p "\u226420") "mentions 20-line limit")
+  (check-true (string-contains? p "\u2264500") "mentions 500-char limit"))
+
 ;; ============================================================
 ;; Wave failure prompt
 ;; ============================================================

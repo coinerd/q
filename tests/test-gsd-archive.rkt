@@ -267,3 +267,30 @@
                   ;; archive should still exist even though empty
                   (check-true (directory-exists? archive-dir)))
                 (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: ensure-state-md! auto-creates STATE.md (#2164)
+;; ============================================================
+
+(test-case "ensure-state-md! creates STATE.md when missing"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define state-path (build-path tmp ".planning" "STATE.md"))
+                  (check-false (file-exists? state-path))
+                  (ensure-state-md! tmp)
+                  (check-true (file-exists? state-path))
+                  (define content (file->string state-path))
+                  (check-true (string-contains? content "# Project State")))
+                (lambda () (cleanup-tmp tmp))))
+
+(test-case "ensure-state-md! does not overwrite existing STATE.md"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (define state-path (build-path tmp ".planning" "STATE.md"))
+                  (call-with-output-file state-path (lambda (out) (display "existing content" out)))
+                  (ensure-state-md! tmp)
+                  (define content (file->string state-path))
+                  (check-equal? content "existing content"))
+                (lambda () (cleanup-tmp tmp))))
