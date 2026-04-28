@@ -317,9 +317,9 @@
     (handler ctx)
     ;; Commands should be registered
     (define cmd (ext-lookup-command ctx "/plan"))
-    (check-not-false cmd)
-    (check-not-false (ext-lookup-command ctx "/state"))
-    (check-not-false (ext-lookup-command ctx "/handoff"))))
+    (check-pred values cmd)
+    (check-pred values (ext-lookup-command ctx "/state"))
+    (check-pred values (ext-lookup-command ctx "/handoff"))))
 
 (test-case "registered planning-read tool is callable"
   (with-temp-dir (lambda (dir)

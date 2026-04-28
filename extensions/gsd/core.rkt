@@ -28,7 +28,6 @@
          (only-in "../gsd-planning-state.rkt" mark-wave-complete! pinned-planning-dir))
 
 (provide gsd-command-dispatch
-         gsd-tool-guard
          gsd-write-guard
          gsd-show-status
          ;; Individual command handlers for direct wiring
@@ -286,20 +285,11 @@
       (hasheq 'success #f 'mode (gsm-current) 'message (hash-ref result 'error "Archive failed"))))
 
 ;; ============================================================
-;; Tool guard (tool-call-pre)
-;; ============================================================
-
-(define (gsd-tool-guard tool-name tool-args)
-  (if (gsm-tool-allowed? tool-name)
-      #t
-      (hasheq 'blocked
-              #t
-              'tool
-              tool-name
-              'mode
-              (gsm-current)
-              'reason
-              (format "Tool '~a' is not allowed in ~a mode" tool-name (gsm-current)))))
+;; AUDIT-04: gsd-tool-guard removed from core.rkt.
+;; The canonical implementation lives in gsd-planning.rkt as a
+;; tool-call-pre hook handler with the correct (payload) signature.
+;; The core.rkt version had a stale (tool-name tool-args) signature
+;; and was not imported by any module.
 
 ;; ============================================================
 ;; Write guard (hardened — DD-6)
