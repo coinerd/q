@@ -37,10 +37,40 @@
   ;; home-str already has trailing /, so it matches home-prefix exactly.
   (check-equal? (sanitize-error-message (string-append home-str)) "~/"))
 
-(test-case "message with no home dir path passes through unchanged"
-  (check-equal? (sanitize-error-message "/tmp/some/other/path error") "/tmp/some/other/path error"))
+(test-case "/tmp/ paths are now redacted (SEC-09)"
+  (check-equal? (sanitize-error-message "/tmp/some/other/path error") "[REDACTED] error"))
 
 (test-case "double-slash in path is handled"
   ;; If the message contains home-dir//something, the home-prefix is
   ;; replaced with ~/ , leaving the extra slashes intact.
   (check-equal? (sanitize-error-message (format "~a//double" home-str)) "~///double"))
+
+;; ── SEC-09: API keys, /tmp/ paths, emails ─────────────────────────
+
+(test-case "API key sk-... is redacted"
+  (check-equal? (sanitize-error-message "key=sk-abc123 failed") "key=[REDACTED] failed"))
+
+(test-case "API key ghp_... is redacted"
+  (check-equal? (sanitize-error-message "token ghp_xyz789 is invalid") "token [REDACTED] is invalid"))
+
+(test-case "API key xoxb-... is redacted"
+  (check-equal? (sanitize-error-message "using xoxb-1234-5678 for slack")
+                "using [REDACTED] for slack"))
+
+(test-case "API key key-... is redacted"
+  (check-equal? (sanitize-error-message "auth key-abc failed") "auth [REDACTED] failed"))
+
+(test-case "email address is redacted"
+  (check-equal? (sanitize-error-message "sent to user@example.com") "sent to [REDACTED]"))
+
+(test-case "/tmp/ path is redacted"
+  (check-equal? (sanitize-error-message "/tmp/secret-dir/file.txt not found") "[REDACTED] not found"))
+
+(test-case "string without sensitive patterns passes through unchanged"
+  (check-equal? (sanitize-error-message "just a normal error message") "just a normal error message"))
+
+(test-case "multiple sensitive patterns are all redacted"
+  (check-equal? (sanitize-error-message
+                 (format "key=sk-abc email=user@example.com tmp=/tmp/secret/dir home=~astuff"
+                         home-str))
+                "key=[REDACTED] email=[REDACTED] tmp=[REDACTED] home=~/stuff"))

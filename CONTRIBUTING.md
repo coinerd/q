@@ -17,8 +17,20 @@ raco pkg install --auto
 
 ### Running Tests
 ```bash
-raco test tests/
+racket scripts/run-tests.rkt              # full suite, parallel
+racket scripts/run-tests.rkt --suite fast # skip slow tests
+racket scripts/run-tests.rkt --suite smoke # quick smoke (~40s)
 ```
+
+## Reporting Bugs
+
+Open a [GitHub Issue](https://github.com/coinerd/q/issues) and include:
+
+- q version (`racket main.rkt --version`)
+- Racket version (`racket --version`)
+- Steps to reproduce
+- Expected vs actual behavior
+- Any relevant log output or error traces
 
 ## Development Workflow
 
@@ -49,9 +61,9 @@ CI runs 6 lint checks that must all pass:
 ### Development Steps
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b my-feature`
+2. Create a feature branch (see [Branch Naming](#branch-naming))
 3. Make changes with tests
-4. Ensure all tests pass: `raco test tests/`
+4. Ensure all tests pass: `racket scripts/run-tests.rkt`
 5. Ensure all lints pass: run each script in `scripts/`
 6. Submit a pull request
 
@@ -62,8 +74,9 @@ See [docs/style-guide.md](docs/style-guide.md) for detailed conventions.
 Key points:
 - `#lang racket/base` for library modules, `#lang racket` for entry points
 - Hyphenated names, `?` for predicates, `!` for mutators
-- 2-space indentation, soft limit 100 chars, hard limit 150 chars per line (see style-guide.md)
+- 2-space indentation, soft limit 100 chars, hard limit 150 chars per line
 - `contract-out` at module boundaries only
+- Format with `raco fmt` before committing
 
 ## Testing Expectations
 
@@ -76,16 +89,25 @@ Key points:
 
 ## Pull Request Process
 
-1. Ensure tests pass
+1. Ensure tests pass (`racket scripts/run-tests.rkt`)
 2. Update documentation if needed
 3. Add CHANGELOG.md entry under `[Unreleased]`
 4. Keep PRs focused — one concern per PR
 5. Be responsive to review feedback
 
-## Reporting Issues
+## Branch Naming
 
-Use GitHub Issues. Please include:
-- q version (`raco q --version` or `racket main.rkt --version`)
-- Racket version (`racket --version`)
-- Steps to reproduce
-- Expected vs actual behavior
+Use descriptive branch names with a type prefix:
+
+| Pattern | Example | Use for |
+|---------|---------|---------|
+| `feat/<description>` | `feat/extension-widgets` | New features |
+| `fix/<description>` | `fix/context-compaction-race` | Bug fixes |
+| `docs/<description>` | `docs/api-stability-guide` | Documentation |
+| `refactor/<description>` | `refactor/extract-session-lifecycle` | Code restructuring |
+| `test/<description>` | `test/sandbox-coverage` | Test improvements |
+| `chore/<description>` | `chore/update-deps` | Maintenance |
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the same license as the project.

@@ -2,8 +2,10 @@
 
 ;; extensions/compact-context.rkt — Compact Context Extension
 ;;
-;; Wave B2: Registers compact-context tool that reads planning state
-;; and triggers compaction with context preservation.
+;; Registers a compact-context tool that reduces context window usage for long
+;; conversations. Reads .planning/ artifacts (PLAN.md, STATE.md, HANDOFF.json, etc.)
+;; and injects them into the compaction context so the agent resumes with full
+;; project state awareness.
 
 (require racket/contract
          racket/string
@@ -25,12 +27,14 @@
 ;; Planning state reader
 ;; ============================================================
 
-;; Read a planning artifact if it exists, returns #f otherwise
+;; Read a planning artifact file if it exists; returns #f otherwise.
 (define (read-artifact-if-exists base-dir name)
   (define p (build-path base-dir name))
   (and (file-exists? p) (call-with-input-file p port->string)))
 
-;; Gather planning summary from .planning/ directory
+;; Gather a text summary of all planning artifacts from the .planning/ directory.
+;; Returns a formatted string combining PLAN.md, STATE.md, SUMMARY.md,
+;; VALIDATION.md, and HANDOFF.json contents.
 (define (gather-planning-summary [project-dir (current-directory)])
   (define planning-dir (build-path project-dir ".planning"))
   (if (directory-exists? planning-dir)
@@ -54,6 +58,9 @@
 ;; Tool handler
 ;; ============================================================
 
+;; Handle a compact-context tool invocation.
+;; Gathers planning state, builds a compaction context, and returns a
+;; compaction-trigger result for the agent loop to process.
 (define (handle-compact-context args [exec-ctx #f])
   (define project-dir (hash-ref args 'project_dir (path->string (current-directory))))
   (define reason (hash-ref args 'reason "Manual compaction request"))
@@ -104,6 +111,7 @@
 ;; Extension definition
 ;; ============================================================
 
+;; Register the compact-context tool with the extension context.
 (define (register-compact-tools ctx _payload)
   (ext-register-tool!
    ctx

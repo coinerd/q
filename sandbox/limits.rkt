@@ -50,6 +50,9 @@
   (unbox process-count-box))
 
 ;; W5.4 (S4-13): Max concurrent processes — enforced at track time
+;; Process count scope: This limit is global across all sessions. In the current
+;; architecture, only one agent session runs per process. If multi-session support
+;; is added, this must become per-session.
 (define current-max-processes (make-parameter 10))
 
 (define (track-process!)
@@ -72,9 +75,7 @@
 ;; T09: Reset process count for test isolation.
 ;; Only use in test teardown.
 (define (reset-process-count!)
-  (call-with-semaphore process-count-sem
-                       (lambda ()
-                         (set-box! process-count-box 0))))
+  (call-with-semaphore process-count-sem (lambda () (set-box! process-count-box 0))))
 
 ;; --------------------------------------------------
 ;; exec-limits struct

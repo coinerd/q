@@ -82,6 +82,8 @@ q "hello"        # single-shot prompt
 
 > **From source tree** (without `raco pkg install`): prefix all commands with `racket main.rkt`.
 > For example: `racket main.rkt --tui`, `racket main.rkt "hello"`.
+>
+> **Note:** Running from the source tree (`racket -P q/`) vs an installed package (`raco pkg install`) may differ in module resolution paths. The source tree approach is recommended for development.
 
 ## Upgrading
 
