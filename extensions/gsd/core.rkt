@@ -285,13 +285,6 @@
       (hasheq 'success #f 'mode (gsm-current) 'message (hash-ref result 'error "Archive failed"))))
 
 ;; ============================================================
-;; AUDIT-04: gsd-tool-guard removed from core.rkt.
-;; The canonical implementation lives in gsd-planning.rkt as a
-;; tool-call-pre hook handler with the correct (payload) signature.
-;; The core.rkt version had a stale (tool-name tool-args) signature
-;; and was not imported by any module.
-
-;; ============================================================
 ;; Write guard (hardened — DD-6)
 ;; ============================================================
 

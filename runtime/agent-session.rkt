@@ -127,9 +127,7 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
-
-(define (session-log-path dir)
-  (build-path dir "session.jsonl"))
+;; session-log-path imported from session-types.rkt (REV-05 DRY)
 
 ;; #771: Ensure session directory exists and flush pending entries.
 ;; ensure-persisted! : agent-session? -> void?

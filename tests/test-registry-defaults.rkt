@@ -8,7 +8,7 @@
 ;; register-default-tools! — registers all tools
 ;; ============================================================
 
-(test-case "register-default-tools! registers all 13 built-in tools"
+(test-case "register-default-tools! registers all 14 built-in tools"
   (define reg (make-tool-registry))
   (register-default-tools! reg)
   (define names (sort (tool-names reg) string<?))
@@ -21,6 +21,7 @@
                         "find"
                         "ls"
                         "date"
+                        "delete-lines"
                         "firecrawl"
                         "spawn-subagent"
                         "spawn-subagents"
