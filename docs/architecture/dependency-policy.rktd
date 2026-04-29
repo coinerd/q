@@ -43,7 +43,7 @@
  ;; Module size configuration
  (module-size
   (max-lines . 900)
-  (known-large . ("tui/state.rkt" "extensions/racket-tooling.rkt")))
+  (known-large . ("agent/event-types.rkt" "agent/loop.rkt")))
 
  ;; Complexity budgets (informational in v0.22.8, enforced in v0.23.0)
  (complexity-budgets
