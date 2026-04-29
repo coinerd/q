@@ -26,6 +26,8 @@
                        [provider-send (-> provider? model-request? any/c)]
                        [provider-stream (-> provider? model-request? any/c)]
                        [provider-capabilities (-> provider? hash?)]
+                       [provider-count-tokens
+                        (-> provider? any/c (or/c #f exact-nonnegative-integer?))]
                        [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
                        [make-mock-provider
                         (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
