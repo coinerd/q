@@ -548,7 +548,7 @@
   (when hook-dispatcher
     (define post-payload
       (hasheq 'model-name
-              (object-name provider)
+              (provider-name provider)
               'response-content
               accumulated-text
               'usage
@@ -752,7 +752,7 @@
     (and hook-dispatcher
          (hook-dispatcher 'model-request-pre
                           (hasheq 'model-name
-                                  (object-name provider)
+                                  (provider-name provider)
                                   'message-count
                                   (length raw-messages)
                                   'messages
@@ -795,7 +795,7 @@
                     'model
                     (hash-ref (model-request-settings req)
                               'model
-                              (lambda () (format "~a" (object-name provider))))
+                              (lambda () (format "~a" (provider-name provider))))
                     'max_tokens
                     (hash-ref (model-request-settings req) 'max-tokens #f)
                     'settings
@@ -811,7 +811,7 @@
                                      'turn-id
                                      turn-id
                                      'model-name
-                                     (object-name provider)
+                                     (provider-name provider)
                                      'message-count
                                      (length raw-messages)))))
 
