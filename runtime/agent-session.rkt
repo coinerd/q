@@ -345,6 +345,11 @@
   ;; Subscribe to fork/compact events from TUI/CLI
   (wire-session-event-handlers! sess fork-session)
 
+  ;; DI-03 (v0.22.8): Set DI parameters for resumed sessions too
+  (current-compact-proc compact-history)
+  (current-estimate-tokens estimate-context-tokens)
+  (current-inject-topic injection-event-topic)
+
   sess)
 
 ;; ============================================================

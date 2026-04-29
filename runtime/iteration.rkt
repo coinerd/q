@@ -99,20 +99,32 @@
          ;; DI parameters for testability (DI-01, v0.22.7)
          current-compact-proc
          current-estimate-tokens
-         current-inject-topic)
+         current-inject-topic
+         ;; DI resolve functions (LOW-05, v0.22.8)
+         resolve-compact-proc
+         resolve-estimate-tokens
+         resolve-inject-topic)
 
 ;; ============================================================
-;; DI parameters (DI-01, v0.22.7)
+;; DI parameters (DI-01, v0.22.7; DI-04, v0.22.8)
 ;;
 ;; These parameters decouple iteration.rkt from concrete imports.
 ;; Callers (agent-session.rkt) set them at session init time.
 ;; Tests can override them with mocks.
+;;
+;; THREAD-LOCAL WARNING: These parameters are thread-local. They are
+;; set by make-agent-session and resume-agent-session in the calling
+;; thread. If run-iteration-loop is called from a different thread,
+;; the parameters will be #f and fall through to lazy-require defaults
+;; (for procedures) or direct imports (for values). This is safe for
+;; TUI/CLI where iteration runs in the session thread. For SDK use
+;; across threads, callers must set parameters before dispatching.
 ;; ============================================================
 
-(require racket/lazy-require)
+(require racket/lazy-require
+         (only-in "../extensions/message-inject.rkt" injection-event-topic))
 (lazy-require ["../runtime/compactor.rkt" (compact-history)]
-              ["../llm/token-budget.rkt" (estimate-context-tokens)]
-              ["../extensions/message-inject.rkt" (injection-event-topic)])
+              ["../llm/token-budget.rkt" (estimate-context-tokens)])
 
 (define current-compact-proc (make-parameter #f))
 (define current-estimate-tokens (make-parameter #f))
