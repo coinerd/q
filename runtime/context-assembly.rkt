@@ -31,10 +31,7 @@
                   system-message?)
          (only-in "../runtime/compactor.rkt" llm-summarize)
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "../util/hook-types.rkt"
-                  hook-result-action
-                  hook-result-payload
-                  hook-result?))
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?))
 
 ;; Config
 (provide context-assembly-config
@@ -175,17 +172,22 @@
   (if (null? raw-messages)
       (context-result '() 0 0 0 0 #f '() #f)
       (let ()
+        ;; Per-assembly token memoization: estimate each message at most once
+        (define token-memo (make-hash))
+        (define (memoized-estimate msg)
+          (hash-ref! token-memo (message-id msg) (lambda () (estimate-message-tokens msg))))
+
         (define max-tokens (context-assembly-config-recent-tokens config))
         ;; Phase 1: Identify pinned items (system + first user + compaction summaries)
         (define-values (pinned removable) (partition-messages raw-messages))
-        (define pinned-tokens (for/sum ([m (in-list pinned)]) (estimate-message-tokens m)))
+        (define pinned-tokens (for/sum ([m (in-list pinned)]) (memoized-estimate m)))
 
         ;; Phase 3: Fit recent messages within remaining budget
         (define remaining-budget (- max-tokens pinned-tokens))
         (define-values (recent excluded)
           (if (<= remaining-budget 0)
               (values '() removable)
-              (fit-recent removable remaining-budget)))
+              (fit-recent removable remaining-budget memoized-estimate)))
 
         ;; Phase 2: Generate summary for excluded entries
         (define summary-obj (generate-context-summary excluded provider model-name #:cache cache))
@@ -206,7 +208,8 @@
         (define catalog
           (generate-catalog excluded
                             #:max-entries max-entries
-                            #:max-tokens (context-assembly-config-max-catalog-tokens config)))
+                            #:max-tokens (context-assembly-config-max-catalog-tokens config)
+                            #:estimate-text estimate-text-tokens))
 
         ;; Phase 5: Reassemble in original order
         (define pinned-ids
@@ -241,7 +244,7 @@
 
         ;; Ensure first user message is in result (pin guarantee)
         (define result-with-pin (ensure-first-user-pinned result-with-summary raw-messages))
-        (define total-tokens (for/sum ([m (in-list result-with-pin)]) (estimate-message-tokens m)))
+        (define total-tokens (for/sum ([m (in-list result-with-pin)]) (memoized-estimate m)))
         (define over-budget? (> total-tokens max-tokens))
 
         (context-result result-with-pin
@@ -279,7 +282,8 @@
 ;; Phase 3: Fit recent messages
 ;; ============================================================
 
-(define (fit-recent messages budget)
+;; Internal: fit-recent with memoized token estimator
+(define (fit-recent messages budget [estimate-fn estimate-message-tokens])
   (let loop ([remaining (reverse messages)]
              [kept '()]
              [excluded '()]
@@ -288,7 +292,7 @@
       [(null? remaining) (values (reverse kept) (reverse excluded))]
       [else
        (define m (car remaining))
-       (define tokens (estimate-message-tokens m))
+       (define tokens (estimate-fn m))
        (cond
          [(> (+ used tokens) budget) (loop (cdr remaining) kept (cons m excluded) used)]
          [else (loop (cdr remaining) (cons m kept) excluded (+ used tokens))])])))
@@ -297,20 +301,24 @@
 ;; Phase 4: Catalog generation
 ;; ============================================================
 
-(define (generate-catalog entries #:max-entries [max-entries 40] #:max-tokens [max-tokens 2000])
+(define (generate-catalog entries
+                          #:max-entries [max-entries 40]
+                          #:max-tokens [max-tokens 2000]
+                          #:estimate-text [estimate-text-fn estimate-text-tokens])
   (define collapsed (collapse-consecutive-tools entries))
   (let loop ([remaining collapsed]
              [acc '()]
-             [used-tokens 0])
+             [used-tokens 0]
+             [count 0])
     (cond
       [(null? remaining) (reverse acc)]
-      [(>= (length acc) max-entries) (reverse acc)]
+      [(>= count max-entries) (reverse acc)]
       [else
        (define entry (car remaining))
-       (define tokens (estimate-text-tokens (catalog-entry-summary entry)))
+       (define tokens (estimate-text-fn (catalog-entry-summary entry)))
        (if (> (+ used-tokens tokens) max-tokens)
            (reverse acc)
-           (loop (cdr remaining) (cons entry acc) (+ used-tokens tokens)))])))
+           (loop (cdr remaining) (cons entry acc) (+ used-tokens tokens) (add1 count)))])))
 
 (define (collapse-consecutive-tools entries)
   (define-values (result current-group)
