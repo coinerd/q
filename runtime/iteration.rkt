@@ -56,7 +56,6 @@
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/compactor.rkt"
-                  compact-history
                   compaction-result-removed-count
                   compaction-result-kept-messages)
          ;; tool-coordinator re-exports these:
@@ -70,10 +69,8 @@
          ;; R2-6: Import hook-result accessors
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
          (only-in "../runtime/auto-retry.rkt" context-overflow-error?)
-         ;; FEAT-61: message injection support
-         (only-in "../extensions/message-inject.rkt" injection-event-topic)
          ;; v0.14.1: mid-turn token budget check
-         (only-in "../llm/token-budget.rkt" estimate-context-tokens)
+         ;; estimate-context-tokens imported via DI parameter (see below)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          ;; v0.22.4 (MOD-01): provider turn + context assembly + extension registration
@@ -98,7 +95,38 @@
          ;; v0.14.1: mid-turn token budget check (for testing)
          check-mid-turn-budget!
          ;; v0.20.5 W3: pre-registration on session open (now from turn-orchestrator)
-         register-session-extensions!)
+         register-session-extensions!
+         ;; DI parameters for testability (DI-01, v0.22.7)
+         current-compact-proc
+         current-estimate-tokens
+         current-inject-topic)
+
+;; ============================================================
+;; DI parameters (DI-01, v0.22.7)
+;;
+;; These parameters decouple iteration.rkt from concrete imports.
+;; Callers (agent-session.rkt) set them at session init time.
+;; Tests can override them with mocks.
+;; ============================================================
+
+(require racket/lazy-require)
+(lazy-require ["../runtime/compactor.rkt" (compact-history)]
+              ["../llm/token-budget.rkt" (estimate-context-tokens)]
+              ["../extensions/message-inject.rkt" (injection-event-topic)])
+
+(define current-compact-proc (make-parameter #f))
+(define current-estimate-tokens (make-parameter #f))
+(define current-inject-topic (make-parameter #f))
+
+;; Resolve DI parameter to concrete impl if not explicitly set.
+;; This allows tests to call run-iteration-loop directly without
+;; going through make-agent-session.
+(define (resolve-compact-proc)
+  (or (current-compact-proc) compact-history))
+(define (resolve-estimate-tokens)
+  (or (current-estimate-tokens) estimate-context-tokens))
+(define (resolve-inject-topic)
+  (or (current-inject-topic) injection-event-topic))
 
 ;; ============================================================
 ;; Shared helpers (QUAL-01: re-exported from runtime-helpers.rkt)
@@ -110,7 +138,7 @@
                                 bus
                                 session-id
                                 config
-                                #:estimate-tokens [estimate-tokens estimate-context-tokens])
+                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
   (define max-tokens (hash-ref config 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   ;; Extract text from message? structs for token estimation
@@ -166,7 +194,7 @@
                                      ctx
                                      bus
                                      session-id
-                                     #:compact-proc [compact-proc compact-history])
+                                     #:compact-proc [compact-proc (resolve-compact-proc)])
   (with-handlers ([context-overflow-error?
                    (lambda (e)
                      (emit-session-event! bus
@@ -208,7 +236,7 @@
 
 ;; Create an injected-message collector: subscribes to message.injected events
 ;; on the bus and accumulates them in a box.
-(define (make-injected-collector! bus #:inject-topic [inject-topic injection-event-topic])
+(define (make-injected-collector! bus #:inject-topic [inject-topic (resolve-inject-topic)])
   (define collected (box '()))
   (subscribe! bus
               (lambda (evt)
@@ -311,9 +339,9 @@
                             #:shutdown-check [shutdown-check #f]
                             #:force-shutdown-check [force-shutdown-check #f]
                             ;; MOD-02 (v0.22.6 W4): DI keyword args for testability
-                            #:compact-proc [compact-proc compact-history]
-                            #:estimate-tokens [estimate-tokens estimate-context-tokens]
-                            #:inject-topic [inject-topic injection-event-topic])
+                            #:compact-proc [compact-proc (resolve-compact-proc)]
+                            #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
+                            #:inject-topic [inject-topic (resolve-inject-topic)])
   ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
   ;; v0.14.4 Wave 1: Default hard limit = max(max-iterations * 1.6, 80) for slow models
   (define max-iterations-hard

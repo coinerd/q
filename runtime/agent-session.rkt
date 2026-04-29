@@ -41,6 +41,7 @@
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
+         (only-in "../extensions/message-inject.rkt" injection-event-topic)
          "../runtime/compactor.rkt"
          (only-in "../extensions/api.rkt" extension-name list-extensions)
          (only-in "../util/event-payloads.rkt"
@@ -55,10 +56,16 @@
                   (build-session-context context-builder:build-session-context))
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
-         (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
+         (only-in "iteration.rkt"
+                  run-iteration-loop
+                  emit-session-event!
+                  maybe-dispatch-hooks
+                  current-compact-proc
+                  current-estimate-tokens
+                  current-inject-topic)
          "session-types.rkt"
          (only-in "session-events.rkt" wire-session-event-handlers!)
-         (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
+         (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD estimate-context-tokens)
          (only-in "session-compaction.rkt" maybe-compact-context)
          (only-in "session-controls.rkt"
                   set-model!
@@ -248,6 +255,12 @@
                                  (if ext-reg
                                      (map extension-name (list-extensions ext-reg))
                                      '()))))
+
+  ;; DI-01 (v0.22.7): Set DI parameters for concrete implementations
+  ;; so iteration.rkt can use them without direct imports
+  (current-compact-proc compact-history)
+  (current-estimate-tokens estimate-context-tokens)
+  (current-inject-topic injection-event-topic)
 
   sess)
 
