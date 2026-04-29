@@ -15,7 +15,7 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-manager.rkt")
+         "../runtime/context-assembly.rkt")
 
 ;; Helper: extract text from a message
 (define (msg-text m)
@@ -93,57 +93,64 @@
       (define msgs (build-chain "System" "Hello" 0 "x" "Recent" "Reply"))
       (with-session msgs
                     (lambda (idx)
-                      (define cfg (make-context-manager-config #:recent-tokens 10000))
-                      (define-values (result catalog) (assemble-context idx cfg))
-                      (check-false (for/or ([m (in-list result)])
-                                     (eq? (message-kind m) 'compaction-summary)))
-                      (check-equal? (length result) 4) ; sys + u1 + u2 + a2
-                      (check-equal? (length catalog) 0)
+                      (define cfg (make-context-assembly-config #:recent-tokens 10000))
+                      (define cr (build-assembled-context idx cfg))
+                      (check-false (for/or ([m (in-list (context-result-messages cr))])
+                                     (eq? (message-kind m) 'context-assembly-summary)))
+                      (check-equal? (length (context-result-messages cr)) 4) ; sys + u1 + u2 + a2
+                      (check-equal? (length (context-result-catalog cr)) 0)
                       (void))))
 
     ;; Large session: summary generated for excluded entries
     (test-case "large session generates summary for excluded entries"
       (define msgs (build-chain "System" "Start" 20 "old" "Recent user" "Recent reply"))
-      (with-session
-       msgs
-       (lambda (idx)
-         (define cfg (make-context-manager-config #:recent-tokens 50))
-         (define-values (result catalog) (assemble-context idx cfg))
-         (check-true (>= (length result) 3) (format "Expected >= 3 messages, got ~a" (length result)))
-         (define summary-msgs (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) result))
-         (check-true (>= (length summary-msgs) 1)
-                     (format "Expected >= 1 summary, got ~a" (length summary-msgs)))
-         (void))))
+      (with-session msgs
+                    (lambda (idx)
+                      (define cfg (make-context-assembly-config #:recent-tokens 50))
+                      (define cr (build-assembled-context idx cfg))
+                      (check-true (>= (length (context-result-messages cr)) 3)
+                                  (format "Expected >= 3 messages, got ~a"
+                                          (length (context-result-messages cr))))
+                      (define summary-msgs
+                        (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
+                                (context-result-messages cr)))
+                      (check-true (>= (length summary-msgs) 1)
+                                  (format "Expected >= 1 summary, got ~a" (length summary-msgs)))
+                      (void))))
 
     ;; Cache is used when provided
     (test-case "assemble-context uses provided cache"
       (define msgs (build-chain "System" "First" 10 "old" "Recent" "Reply"))
-      (with-session
-       msgs
-       (lambda (idx)
-         (define cfg (make-context-manager-config #:recent-tokens 50))
-         (define cache (make-summary-cache))
-         (define-values (result1 catalog1) (assemble-context idx cfg #:cache cache))
-         (define-values (result2 catalog2) (assemble-context idx cfg #:cache cache))
-         (define summary1 (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) result1))
-         (define summary2 (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) result2))
-         (when (and (pair? summary1) (pair? summary2))
-           (check-equal? (msg-text (car summary1)) (msg-text (car summary2))))
-         (void))))
+      (with-session msgs
+                    (lambda (idx)
+                      (define cfg (make-context-assembly-config #:recent-tokens 50))
+                      (define cache (make-summary-cache))
+                      (define cr1 (build-assembled-context idx cfg #:cache cache))
+                      (define cr2 (build-assembled-context idx cfg #:cache cache))
+                      (define summary1
+                        (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
+                                (context-result-messages cr1)))
+                      (define summary2
+                        (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
+                                (context-result-messages cr2)))
+                      (when (and (pair? summary1) (pair? summary2))
+                        (check-equal? (msg-text (car summary1)) (msg-text (car summary2))))
+                      (void))))
 
     ;; Summary message has correct structure
     (test-case "summary message has compaction-summary kind and user role"
       (define msgs (build-chain "System" "Start" 10 "old" "Recent" "Reply"))
       (with-session msgs
                     (lambda (idx)
-                      (define cfg (make-context-manager-config #:recent-tokens 50))
-                      (define-values (result catalog) (assemble-context idx cfg))
+                      (define cfg (make-context-assembly-config #:recent-tokens 50))
+                      (define cr (build-assembled-context idx cfg))
                       (define summary-msgs
-                        (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) result))
+                        (filter (lambda (m) (eq? (message-kind m) 'context-assembly-summary))
+                                (context-result-messages cr)))
                       (when (pair? summary-msgs)
                         (define sm (car summary-msgs))
                         (check-eq? (message-role sm) 'user)
-                        (check-eq? (message-kind sm) 'compaction-summary))
+                        (check-eq? (message-kind sm) 'context-assembly-summary))
                       (void))))))
 
 (run-tests integration-tests)

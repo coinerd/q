@@ -19,7 +19,7 @@
                   message-content)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-manager.rkt")
+         "../runtime/context-assembly.rkt")
 
 (define summary-tests
   (test-suite "context-summary"
@@ -153,11 +153,11 @@
                             (hasheq))))
       (append-entries! sp msgs)
       (define idx (build-index! sp ip))
-      (define cfg (make-context-manager-config #:recent-tokens 10000))
-      (define-values (result catalog) (assemble-context idx cfg))
+      (define cfg (make-context-assembly-config #:recent-tokens 10000))
+      (define cr (build-assembled-context idx cfg))
       ;; Small session fits entirely — no summary needed
-      (check-equal? (length result) 3)
-      (check-equal? (length catalog) 0)
+      (check-equal? (length (context-result-messages cr)) 3)
+      (check-equal? (length (context-result-catalog cr)) 0)
       (delete-directory/files dir #:must-exist? #f))))
 
 (run-tests summary-tests)
