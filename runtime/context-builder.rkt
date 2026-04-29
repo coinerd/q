@@ -16,7 +16,11 @@
          "../util/protocol-types.rkt"
          "../runtime/session-index.rkt"
          "../llm/token-budget.rkt"
-         "../skills/context-files.rkt")
+         "../skills/context-files.rkt"
+         (only-in "../runtime/context-policy.rkt"
+                  estimate-message-tokens
+                  ensure-first-user-pinned
+                  fit-messages-pair-preserving))
 
 (provide build-session-context
          build-session-context/tokens
@@ -133,14 +137,6 @@
 
 ;; Estimate token count for a single message struct.
 ;; Extracts text from all text-parts in the message content.
-(define (estimate-message-tokens msg)
-  (define text-parts
-    (for/list ([part (in-list (message-content msg))]
-               #:when (text-part? part))
-      (text-part-text part)))
-  (estimate-text-tokens (string-join text-parts " ")))
-
-;; Build session context with token budget enforcement.
 ;; If the assembled messages exceed max-tokens, truncates older messages
 ;; while preserving system instructions and compaction summaries.
 ;; Returns (values messages total-tokens)

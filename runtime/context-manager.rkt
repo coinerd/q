@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: evolving
 
 ;; q/runtime/context-manager.rkt — Context assembly from session log
 ;;
@@ -18,7 +19,12 @@
          "../util/protocol-types.rkt"
          "../runtime/session-index.rkt"
          "../runtime/context-builder.rkt"
-         "../llm/token-budget.rkt")
+         "../llm/token-budget.rkt"
+         (only-in "../runtime/context-policy.rkt"
+                  estimate-message-tokens
+                  ensure-first-user-pinned
+                  user-message?
+                  system-message?))
 
 (provide context-manager-config
          context-manager-config?
@@ -37,7 +43,6 @@
          catalog-entry-role
          catalog-entry-summary
          ;; Token estimation (re-exported for tests)
-         estimate-cm-message-tokens
          ;; Summary (Wave 2A #1395)
          context-summary
          context-summary?
@@ -101,13 +106,6 @@
 ;; Token estimation
 ;; ============================================================
 
-(define (estimate-cm-message-tokens msg)
-  (define text-parts
-    (for/list ([part (in-list (message-content msg))]
-               #:when (text-part? part))
-      (text-part-text part)))
-  (estimate-text-tokens (string-join text-parts " ")))
-
 ;; ============================================================
 ;; Core: assemble-context
 ;; ============================================================
@@ -128,7 +126,7 @@
      (define max-tokens (context-manager-config-recent-tokens config))
      ;; Phase 1: Identify pinned items (system prompt + first user message)
      (define-values (pinned removable) (partition-messages raw-messages))
-     (define pinned-tokens (for/sum ([m (in-list pinned)]) (estimate-cm-message-tokens m)))
+     (define pinned-tokens (for/sum ([m (in-list pinned)]) (estimate-message-tokens m)))
 
      ;; Phase 3: Fit recent messages within remaining budget
      (define remaining-budget (- max-tokens pinned-tokens))
@@ -227,7 +225,7 @@
       [(null? remaining) (values (reverse kept) (reverse excluded))]
       [else
        (define m (car remaining))
-       (define tokens (estimate-cm-message-tokens m))
+       (define tokens (estimate-message-tokens m))
        (cond
          [(> (+ used tokens) budget) (loop (cdr remaining) kept (cons m excluded) used)]
          [else (loop (cdr remaining) (cons m kept) excluded (+ used tokens))])])))
@@ -400,28 +398,3 @@
   (if (<= (string-length s) max-len)
       s
       (string-append (substring s 0 (- max-len 3)) "...")))
-
-(define (ensure-first-user-pinned result original)
-  (define first-user
-    (for/first ([m (in-list original)]
-                #:when (eq? (message-role m) 'user))
-      m))
-  (cond
-    [(not first-user) result]
-    [(member first-user result) result]
-    [else
-     (define target-id (message-id first-user))
-     (define after-id
-       (for/first ([m (in-list (dropf original (lambda (m) (not (equal? (message-id m) target-id)))))]
-                   #:when (member m result))
-         (message-id m)))
-     (cond
-       [after-id
-        (let loop ([acc '()]
-                   [rem result])
-          (cond
-            [(null? rem) (reverse (cons first-user acc))]
-            [(equal? (message-id (car rem)) after-id)
-             (loop (cons (car rem) (cons first-user acc)) (cdr rem))]
-            [else (loop (cons (car rem) acc) (cdr rem))]))]
-       [else (cons first-user result)])]))
