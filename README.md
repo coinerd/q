@@ -272,8 +272,8 @@ q/
 |--------|-------|
 | Test files | 436 |
 | Source modules | 312 |
-| Source lines | 57265 |
-| Test lines | 86509 |
+| Source lines | 57260 |
+| Test lines | 86510 |
 | Test assertions | 13253 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -333,7 +333,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.22.5** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
+**v0.22.6** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
 
 **v0.22.5** — GSD Plan Archival + Execution Polish. `/done` command, PLAN.md status auto-update, STATE.md auto-creation, TUI archive notification, iteration label fix, edit chunking guidance. 10 issues across 4 waves.
 

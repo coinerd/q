@@ -53,6 +53,7 @@
                   event-ev
                   make-event
                   content-part->jsexpr)
+         (only-in "../util/event-payloads.rkt" payload->hash)
          "../agent/event-bus.rkt"
          "../llm/model.rkt"
          "../llm/provider.rkt"
@@ -442,7 +443,7 @@
                  "should return 'error termination reason")
 
    ;; Verify metadata contains error info
-   (define meta (loop-result-metadata result))
+   (define meta (payload->hash (loop-result-metadata result)))
    (check-not-false (hash-has-key? meta 'error) "metadata should contain error key")
    (check-equal? (hash-ref meta 'errorType)
                  'provider-error
