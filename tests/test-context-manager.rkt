@@ -10,7 +10,8 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-manager.rkt")
+         "../runtime/context-manager.rkt"
+         (only-in "../runtime/context-policy.rkt" estimate-message-tokens))
 
 ;; Helpers
 (define (make-temp-dir)
@@ -148,7 +149,7 @@
       (define idx (build-index! sp ip))
       (define cfg (make-context-manager-config #:recent-tokens 500))
       (define-values (messages catalog) (assemble-context idx cfg))
-      (define total-tokens (for/sum ([m (in-list messages)]) (estimate-cm-message-tokens m)))
+      (define total-tokens (for/sum ([m (in-list messages)]) (estimate-message-tokens m)))
       (check-true (<= total-tokens 800)
                   (format "total tokens ~a within budget+overhead" total-tokens))
       (delete-directory/files dir #:must-exist? #f))
