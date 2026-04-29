@@ -28,9 +28,17 @@
 (define VERSION-PAT #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"")
 
 ;; Extract q-version from util/version.rkt content.
+;; Handles both `#lang racket` and `#lang typed/racket` formats.
+;; Typed Racket may split `(define q-version : String "X.Y.Z")` across lines.
 (define (parse-q-version content)
-  (define m (regexp-match #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
-  (and m (cadr m)))
+  ;; Find the version string after `(define q-version` — handles multi-line Typed Racket format
+  (define start (regexp-match-positions #rx"\\(define q-version" content))
+  (cond
+    [(not start) #f]
+    [else
+     (define after (substring content (cdar start)))
+     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+)" after))
+     (and m (cadr m))]))
 
 ;; Extract version from info.rkt content.
 (define (parse-info-version content)

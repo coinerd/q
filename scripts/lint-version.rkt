@@ -28,8 +28,14 @@
 
 ;; Parse `(define q-version "X.Y.Z")` from util/version.rkt content.
 (define (parse-q-version content)
-  (define m (regexp-match #rx"\\(define q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
-  (and m (cadr m)))
+  ;; Handles both #lang racket and #lang typed/racket (multi-line) formats.
+  (define start (regexp-match-positions #rx"\\(define q-version" content))
+  (cond
+    [(not start) #f]
+    [else
+     (define after (substring content (cdar start)))
+     (define m (regexp-match #rx"([0-9]+\\.[0-9]+\\.[0-9]+)" after))
+     (and m (cadr m))]))
 
 ;; Parse `(define version "X.Y.Z")` from info.rkt content.
 (define (parse-info-version content)
