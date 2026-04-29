@@ -141,9 +141,8 @@
   (check >= (length evts) 1)
   (define payload (event-payload (car evts)))
   (check-equal? (hash-ref payload 'max_tokens #f) 16384)
-  ;; v0.15.1: model field now uses (format "~a" (object-name provider))
-  ;; which produces a string, not a symbol, for safe JSON serialization
-  (check-equal? (hash-ref payload 'model #f) "provider"))
+  ;; v0.22.5: model field uses (provider-name provider) as fallback
+  (check-equal? (hash-ref payload 'model #f) "test-model"))
 
 (test-case "model.request.start without provider-settings has #f max_tokens"
   (define bus (make-event-bus))
