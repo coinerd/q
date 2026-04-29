@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd/state-machine.rkt — GSD State Machine
+;; STABILITY: evolving
 ;;
 ;; Wave 0 of v0.21.0: Central state machine with explicit transitions and guards.
 ;; v0.22.1 QUAL-03: Migrated from global mutable boxes to per-session parameters

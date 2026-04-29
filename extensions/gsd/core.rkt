@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd/core.rkt — Core GSD extension module
+;; STABILITY: evolving
 ;;
 ;; Wave 1a of v0.21.0: Main extension with command handlers,
 ;; tool guard, and write guard. Uses state-machine for mode

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/tool-coordinator.rkt — tool call extraction, scheduling, and result assembly
+;; STABILITY: internal
 ;;
 ;; Extracted from runtime/iteration.rkt (A-02, v0.16.1 Wave 4) for
 ;; single-responsibility separation. Handles the tool-call lifecycle

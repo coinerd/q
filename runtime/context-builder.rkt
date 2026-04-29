@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; q/runtime/context-builder.rkt — Context assembly from session tree
+;; STABILITY: internal
 ;;
 ;; Walks the session tree from active leaf to root, handling
 ;; compaction summaries, branch summaries, and settings entries.

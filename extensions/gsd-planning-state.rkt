@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd-planning-state.rkt — Thin shim over gsd/ modules
+;; STABILITY: evolving
 ;;
 ;; v0.21.6: steering.rkt import removed (dead code).
 ;; v0.22.1 QUAL-03: Migrated from global mutable boxes to per-session

@@ -1,6 +1,7 @@
 #lang typed/racket
 
 ;; util/event-payloads.rkt — Explicit struct types for event payloads
+;; STABILITY: stable
 ;;
 ;; Replaces ad-hoc hasheq payloads on critical event paths with typed
 ;; structs. Existing hasheq payloads continue to work — these are

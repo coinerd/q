@@ -1,6 +1,6 @@
 # Q Event Taxonomy Reference
 
-Complete reference for all event types in Q 0.22.7.
+Complete reference for all event types in Q 0.22.8.
 ## Base Types
 
 ### `event` (protocol-level)
@@ -313,7 +313,7 @@ Key hook points where extensions can intercept:
 
 For the complete list, see `util/hook-types.rkt`.
 
-## Contract-Validated Events (v0.22.7)
+## Contract-Validated Events (v0.22.8)
 
 The following high-value events have payload contracts enforced at emission
 time in `runtime/iteration.rkt`. These events are consumed by extensions and

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/provider-factory.rkt — Build LLM providers from config + settings
+;; STABILITY: internal
 ;;
 ;; Extracted from main.rkt. Contains build-provider, local-provider?,
 ;; and build-mock-provider.

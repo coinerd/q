@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/agent-session.rkt — session lifecycle orchestration
+;; STABILITY: evolving
 ;;
 ;; Central runtime layer that ties together session store, core loop,
 ;; provider, tool registry, and event bus into a coherent agent session.

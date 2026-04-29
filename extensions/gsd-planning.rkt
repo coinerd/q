@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd-planning.rkt — GSD Planning Extension
+;; STABILITY: evolving
 ;;
 ;; Integrated v0.21.0: Wires all extensions/gsd/ modules into the
 ;; extension hook system. Each hook handler delegates to the new

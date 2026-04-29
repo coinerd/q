@@ -1,6 +1,7 @@
 #lang racket
 
 ;; interfaces/sdk-public.rkt — Stable public SDK API
+;; STABILITY: stable
 ;;
 ;; Curated subset of q's public API for SDK consumers.
 ;; Internal modules may export more symbols, but only these

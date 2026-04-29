@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/session-controls.rkt — session control functions
+;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05c).
 ;; Model switching, thinking level, and shutdown controls.

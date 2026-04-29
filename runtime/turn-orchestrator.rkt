@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/turn-orchestrator.rkt — single-turn provider dispatch and tool execution
+;; STABILITY: internal
 ;;
 ;; Extracted from iteration.rkt for single-responsibility separation.
 ;; Handles: context assembly → provider turn → tool execution.

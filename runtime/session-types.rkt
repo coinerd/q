@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/session-types.rkt — agent-session struct definition
+;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05).
 ;; Shared types module so extracted sub-modules can access the session

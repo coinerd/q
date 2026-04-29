@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; agent/event-bus.rkt — publish/subscribe event bus
+;; STABILITY: stable
 ;;
 ;; Provides a simple, synchronous event bus with:
 ;;   - ordered subscriber notification

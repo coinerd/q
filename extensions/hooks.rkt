@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/hooks.rkt — hook dispatch and result normalization
+;; STABILITY: stable
 ;;
 ;; Provides:
 ;;   - hook-result struct with action ('pass | 'amend | 'block) and payload
