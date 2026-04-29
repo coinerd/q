@@ -11,7 +11,7 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-manager.rkt"
+         "../runtime/context-assembly.rkt"
          "../llm/token-budget.rkt")
 
 ;; ── Helpers ──────────────────────────────────────────────────
@@ -100,11 +100,11 @@
                     (lambda (idx)
                       ;; Use very small budget → lots of excluded entries
                       (define cfg
-                        (make-context-manager-config #:recent-tokens 30
-                                                     #:max-catalog-entries 50
-                                                     #:max-catalog-tokens 100))
-                      (define-values (_result catalog) (assemble-context idx cfg))
-                      catalog)))
+                        (make-context-assembly-config #:recent-tokens 30
+                                                      #:max-catalog-entries 50
+                                                      #:max-catalog-tokens 100))
+                      (define _cr (build-assembled-context idx cfg))
+                      (context-result-catalog _cr))))
       ;; Total catalog tokens should be under cap
       (define catalog-tokens
         (for/sum ([e (in-list catalog)]) (estimate-text-tokens (catalog-entry-summary e))))
@@ -117,14 +117,16 @@
       (with-index msgs
                   (lambda (idx)
                     ;; Tiny budget: only 10 tokens — way less than pinned messages
-                    (define cfg (make-context-manager-config #:recent-tokens 10))
-                    (define-values (result catalog) (assemble-context idx cfg))
+                    (define cfg (make-context-assembly-config #:recent-tokens 10))
+                    (define cr (build-assembled-context idx cfg))
                     ;; System prompt must be present
                     (define sys-msgs
-                      (filter (lambda (m) (eq? (message-kind m) 'system-instruction)) result))
+                      (filter (lambda (m) (eq? (message-kind m) 'system-instruction))
+                              (context-result-messages cr)))
                     (check-equal? (length sys-msgs) 1 "System prompt must survive")
                     ;; First user message must be present
-                    (define user-msgs (filter (lambda (m) (eq? (message-role m) 'user)) result))
+                    (define user-msgs
+                      (filter (lambda (m) (eq? (message-role m) 'user)) (context-result-messages cr)))
                     (check-true (>= (length user-msgs) 1) "First user message must survive")
                     (void))))
 
@@ -178,11 +180,12 @@
       (define msgs (append (list sys u1) tool-msgs (list u2 a2)))
       (with-index msgs
                   (lambda (idx)
-                    (define cfg (make-context-manager-config #:recent-tokens 30))
-                    (define-values (result catalog) (assemble-context idx cfg))
+                    (define cfg (make-context-assembly-config #:recent-tokens 30))
+                    (define cr (build-assembled-context idx cfg))
                     ;; Consecutive tool results should be collapsed to fewer catalog entries
                     (define tool-entries
-                      (filter (lambda (e) (equal? (catalog-entry-role e) "tool")) catalog))
+                      (filter (lambda (e) (equal? (catalog-entry-role e) "tool"))
+                              (context-result-catalog cr)))
                     (check-true (< (length tool-entries) (length tool-msgs))
                                 (format "Expected collapsed tool entries, got ~a for ~a tools"
                                         (length tool-entries)
@@ -197,18 +200,18 @@
       ;; Write empty session
       (call-with-output-file sp (lambda (p) (void)) #:exists 'replace)
       (define idx (build-index! sp ip))
-      (define cfg (make-context-manager-config))
-      (define-values (result catalog) (assemble-context idx cfg))
-      (check-equal? result '())
-      (check-equal? catalog '())
+      (define cfg (make-context-assembly-config))
+      (define cr (build-assembled-context idx cfg))
+      (check-equal? (context-result-messages cr) '())
+      (check-equal? (context-result-catalog cr) '())
       (delete-directory/files dir #:must-exist? #f))
 
     ;; ── Config defaults are reasonable ───────────────────────
     (test-case "config defaults are production-ready"
-      (define cfg (make-context-manager-config))
-      (check-equal? (context-manager-config-recent-tokens cfg) 30000)
-      (check-equal? (context-manager-config-max-catalog-entries cfg) 40)
-      (check-equal? (context-manager-config-max-catalog-tokens cfg) 2000)
-      (check-equal? (context-manager-config-summary-window cfg) 4000))))
+      (define cfg (make-context-assembly-config))
+      (check-equal? (context-assembly-config-recent-tokens cfg) 30000)
+      (check-equal? (context-assembly-config-max-catalog-entries cfg) 40)
+      (check-equal? (context-assembly-config-max-catalog-tokens cfg) 2000)
+      (check-equal? (context-assembly-config-summary-window cfg) 4000))))
 
 (run-tests polish-tests)
