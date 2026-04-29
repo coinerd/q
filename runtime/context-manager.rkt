@@ -24,7 +24,9 @@
                   estimate-message-tokens
                   ensure-first-user-pinned
                   user-message?
-                  system-message?))
+                  system-message?)
+         (only-in "../runtime/compactor.rkt" llm-summarize)
+         (only-in "../llm/provider.rkt" provider?))
 
 (provide context-manager-config
          context-manager-config?
@@ -343,8 +345,8 @@
 ;; Generate context summary (Wave 2A #1395)
 ;; ============================================================
 
-;; Summarize excluded entries. When provider+model are given, uses LLM.
-;; Otherwise returns a simple concatenation summary.
+;; Summarize excluded entries. When provider+model are given, uses LLM
+;; via compactor's llm-summarize. Otherwise returns a simple concatenation.
 ;; Checks cache first; only generates if cache miss.
 ;; Returns context-summary? or #f.
 (define (generate-context-summary entries provider model-name #:cache [cache #f])
@@ -358,12 +360,13 @@
      (cond
        [cached (context-summary from-id to-id cached (length entries))]
        [else
-        ;; Generate summary
+        ;; Generate summary — use LLM when provider available
         (define summary-text
           (cond
-            ;; LLM summarization would go here — requires provider-send
-            ;; For now, use concatenation fallback
-            [(and provider model-name) (simple-summary-text entries)]
+            [(and provider model-name (provider? provider))
+             ;; Real LLM summarization via compactor
+             (llm-summarize entries provider model-name)]
+            ;; Fallback: simple concatenation
             [else (simple-summary-text entries)]))
         ;; Store in cache
         (when cache

@@ -25,7 +25,6 @@
 (provide build-session-context
          build-session-context/tokens
          truncate-messages-to-budget
-         estimate-message-tokens
          entry->context-message
          load-agents-context
          build-system-preamble)
