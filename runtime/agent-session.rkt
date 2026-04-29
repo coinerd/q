@@ -46,7 +46,11 @@
          (only-in "../util/event-payloads.rkt"
                   session-start-payload
                   session-end-payload
-                  session-switch-payload)
+                  session-switch-payload
+                  session-id-payload
+                  error-payload
+                  input-payload
+                  payload->hash)
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
          (only-in "../runtime/session-context.rkt" extract-path-settings)
@@ -219,7 +223,7 @@
                    #f)) ; prompt-running?
 
   ;; Emit session.started
-  (emit-session-event! (agent-session-event-bus sess) sid "session.started" (hasheq 'sessionId sid))
+  (emit-session-event! (agent-session-event-bus sess) sid "session.started" (session-id-payload sid))
 
   ;; Eagerly persist session directory and version header so resume works immediately.
   (ensure-persisted! sess)
@@ -315,7 +319,7 @@
   (emit-session-event! (agent-session-event-bus sess)
                        session-id
                        "session.resumed"
-                       (hasheq 'sessionId session-id))
+                       (session-id-payload session-id))
 
   ;; Dispatch 'session-start hook with reason 'resume
   (define resume-start-payload (session-start-payload session-id config 'resume))
@@ -568,11 +572,10 @@
                                ;; Emit runtime.error event with classified error-type
                                (define error-type (classify-error e))
                                ;; A3: Include retry metadata if retries were attempted
-                               (define base-payload
-                                 (hasheq 'error (exn-message e) 'errorType error-type))
+                               (define base-payload (error-payload (exn-message e) error-type))
                                (define payload
                                  (if (retry-exhausted? e)
-                                     (hash-set* base-payload
+                                     (hash-set* (payload->hash base-payload)
                                                 'retries-attempted
                                                 (retry-exhausted-attempts e)
                                                 'total-retry-delay-ms
@@ -656,7 +659,7 @@
      ;; #666: Dispatch 'input hook — intercept/transform user input before processing
      (define ext-reg (agent-session-extension-registry sess))
      (define-values (_processed-input input-hook-res)
-       (maybe-dispatch-hooks ext-reg 'input (hasheq 'session-id sid 'message user-message)))
+       (maybe-dispatch-hooks ext-reg 'input (input-payload sid user-message)))
      (cond
        [(and input-hook-res (eq? (hook-result-action input-hook-res) 'block))
         ;; Input blocked by extension
@@ -748,7 +751,7 @@
     (emit-session-event! (agent-session-event-bus sess)
                          (agent-session-session-id sess)
                          "session.closed"
-                         (hasheq 'sessionId (agent-session-session-id sess)))
+                         (session-id-payload (agent-session-session-id sess)))
     ;; Dispatch 'session-shutdown hook (R2-7: payload with session-id and duration)
     (define session-duration (- (now-seconds) (agent-session-start-time sess)))
     (define shutdown-payload (session-end-payload (agent-session-session-id sess) session-duration))

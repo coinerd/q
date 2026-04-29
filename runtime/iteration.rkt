@@ -12,8 +12,9 @@
 ;; This module re-exports those symbols for backward compatibility.
 ;;
 ;; ── LAYER NOTE ────────────────────────────────────────────────
-;; Since v0.22.4 (MOD-01): This module NO LONGER imports upward into
-;; tools/ or extensions/. All upward imports moved to turn-orchestrator.rkt.
+;; Since v0.22.4 (MOD-01): Upward imports limited to a single constant from
+;; extensions/message-inject.rkt. All behavioral upward imports moved to
+;; turn-orchestrator.rkt. Listed as known exception in arch-boundaries tests.
 ;; ───────────────────────────────────────────────────────────────
 
 (require racket/contract

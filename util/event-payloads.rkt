@@ -15,6 +15,9 @@
          (struct-out tool-call-event-payload)
          (struct-out gsd-mode-payload)
          (struct-out session-switch-payload)
+         (struct-out session-id-payload)
+         (struct-out error-payload)
+         (struct-out input-payload)
          payload->hash
          payload-session-id)
 
@@ -31,6 +34,24 @@
 ;; ============================================================
 
 (struct tool-call-event-payload (session-id turn-id tool-name tool-call-id) #:transparent)
+
+;; ============================================================
+;; Simple session-id payloads
+;; ============================================================
+
+(struct session-id-payload (session-id) #:transparent)
+
+;; ============================================================
+;; Error payloads
+;; ============================================================
+
+(struct error-payload (error error-type) #:transparent)
+
+;; ============================================================
+;; Input payloads
+;; ============================================================
+
+(struct input-payload (session-id message) #:transparent)
 
 ;; ============================================================
 ;; GSD mode change payloads
@@ -71,6 +92,11 @@
              (tool-call-event-payload-tool-name p)
              'tool-call-id
              (tool-call-event-payload-tool-call-id p))]
+    [(session-id-payload? p) (hasheq 'sessionId (session-id-payload-session-id p))]
+    [(error-payload? p)
+     (hasheq 'error (error-payload-error p) 'errorType (error-payload-error-type p))]
+    [(input-payload? p)
+     (hasheq 'session-id (input-payload-session-id p) 'message (input-payload-message p))]
     [(gsd-mode-payload? p)
      (hasheq 'old-mode (gsd-mode-payload-old-mode p) 'new-mode (gsd-mode-payload-new-mode p))]
     [(hash? p) p]

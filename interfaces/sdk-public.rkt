@@ -160,6 +160,13 @@
           ;; Cancellation tokens
           [make-cancellation-token (-> any/c)]
           [cancel-token! (-> any/c any)]
+          ;; In-memory session helpers (v0.22.6: moved into contract-out)
+          [in-memory-append! (-> in-memory-session-manager? string? any/c void?)]
+          [in-memory-append-entries! (-> in-memory-session-manager? string? (listof any/c) void?)]
+          [in-memory-load (-> in-memory-session-manager? string? (listof any/c))]
+          [in-memory-list-sessions (-> in-memory-session-manager? (listof string?))]
+          [in-memory-fork!
+           (->* (in-memory-session-manager? string? string?) ((or/c #f string?)) string?)]
           ;; Context usage (v0.22.5: moved into contract-out)
           [get-context-usage
            (-> exact-nonnegative-integer? exact-nonnegative-integer? context-usage?)]
@@ -218,9 +225,4 @@
 
          ;; In-memory session manager
          make-in-memory-session-manager
-         in-memory-session-manager?
-         in-memory-append!
-         in-memory-append-entries!
-         in-memory-load
-         in-memory-list-sessions
-         in-memory-fork!)
+         in-memory-session-manager?)
