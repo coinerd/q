@@ -35,6 +35,12 @@
          "../runtime/session-index.rkt"
          (only-in "../extensions/message-inject.rkt" injection-event-topic)
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
+         (only-in "../runtime/context-manager.rkt"
+                  assemble-context
+                  context-manager-config?
+                  make-context-manager-config
+                  catalog-entry
+                  catalog-entry?)
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
          (only-in "../runtime/session-context.rkt" extract-path-settings)
@@ -133,10 +139,21 @@
   (when idx
     (append-to-leaf! idx user-msg))
 
-  ;; Build context: tree walk via context-builder when index available
+  ;; Build context: use context-manager when provider available, else context-builder
   (define context-messages
     (if idx
-        (context-builder:build-session-context idx)
+        (cond
+          [(agent-session-provider sess)
+           ;; Use context-manager for production pipeline with LLM summarization
+           (define cfg (make-context-manager-config #:recent-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD))
+           (define-values (msgs _catalog)
+             (assemble-context idx
+                               cfg
+                               #:provider (agent-session-provider sess)
+                               #:model-name (agent-session-model-name sess)))
+           msgs]
+          ;; Fallback: context-builder tree walk (no LLM summarization)
+          [else (context-builder:build-session-context idx)])
         ;; Fallback: no index — use linear history (backward compat)
         (let ([existing (if (file-exists? log-path)
                             (load-session-log log-path)
