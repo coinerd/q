@@ -56,9 +56,9 @@
 ;; Convenience constructors
 ;; ============================================================
 
-(: make-gsd-task : String (Listof String) String String String -> gsd-task)
-(define (make-gsd-task name files action verify [done ""])
-  (gsd-task name files action verify done 'pending))
+(: make-gsd-task : String (Listof String) String String String * -> gsd-task)
+(define (make-gsd-task name files action verify . rest)
+  (gsd-task name files action verify (if (null? rest) "" (car rest)) 'pending))
 
 (: make-gsd-wave
    :

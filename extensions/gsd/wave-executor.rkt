@@ -182,8 +182,8 @@
                                       (extract-files-from-content wave-content)
                                       '()
                                       (extract-verify-from-content wave-content)
-                                      ""))])
-              (gsd-plan waves '() '() '()))))))
+                                      '()))])
+              (gsd-plan waves #f '() '()))))))
 
 (define (extract-plan-title text)
   (define lines (string-split text "\n"))
