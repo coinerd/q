@@ -15,6 +15,7 @@
          (only-in "../interfaces/sdk.rkt" make-runtime open-session)
          "../runtime/settings.rkt"
          "../runtime/provider-factory.rkt"
+         (only-in "../llm/provider.rkt" provider-name)
          racket/file
          racket/port)
 
@@ -275,7 +276,7 @@
   (define settings (load-settings))
   (printf "  Settings: OK\n")
   (define provider (build-provider (hasheq) settings))
-  (printf "  Provider: ~a\n" (object-name provider))
+  (printf "  Provider: ~a\n" (provider-name provider))
   (define sdk-dir (make-temporary-file "sdk-sess-~a" (quote directory)))
   (define rt
     (make-runtime #:provider provider
