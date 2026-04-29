@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.22.7 — 2026-04-29
+
+### Regression Fixes + DI Completion + SDK Surface + TR Hardening
+- **REG-01**: Fixed tool result construction in racket-tooling-handlers.rkt (plain hasheq → proper tool-result structs)
+- **REG-02**: Fixed test-context-overflow retry mock to handle compaction recovery re-raise
+- **REG-03**: Fixed loop-result-metadata event-payload handling (payload→hash conversion)
+- **DOC-01**: Synced README.md metrics and version references across all docs
+- **DI-01**: Replaced 3 concrete imports in iteration.rkt with lazy-require + parameter-based DI (current-compact-proc, current-estimate-tokens, current-inject-topic)
+- **DI-02**: agent-session.rkt sets DI parameters at session init, no compile-time dependency on extensions/ or llm/
+- **FMT-01**: Updated lint-format.rkt to accept #lang typed/racket and #lang info (3 false warnings eliminated)
+- **ARCH-02**: Added TR boundary contract enforcement tests + documentation comments
+- **ARCH-01**: Verified SDK surface module (sdk.rkt + sdk-public.rkt), added arch-fitness coverage
+- 2 Typed Racket contract tests added (9/9 TR pilot tests pass)
+- 2 arch-fitness tests added (8/8 pass)
+- 188+ tests pass, 0 regressions
+
 ## v0.22.6 — 2026-04-29
 
 ### Regression Fixes + Module Splits + DI + Typed Racket Pilot
