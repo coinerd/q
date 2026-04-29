@@ -55,7 +55,7 @@
          (only-in "../extensions/context.rkt" make-extension-ctx)
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
-         (only-in "../runtime/compactor.rkt"
+         (only-in "../runtime/context-assembly.rkt"
                   build-tiered-context-with-hooks
                   tiered-context->message-list)
          (only-in "../runtime/tool-coordinator.rkt"
