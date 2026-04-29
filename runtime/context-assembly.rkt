@@ -203,10 +203,17 @@
                                  config
                                  #:cache [cache #f]
                                  #:provider [provider #f]
-                                 #:model-name [model-name #f])
+                                 #:model-name [model-name #f]
+                                 #:trace-callback [trace #f])
+  (define (emit-trace phase data)
+    (when trace
+      (trace phase data)))
   (define raw-messages (build-session-context idx))
+  (emit-trace 'start (hash 'raw-count (length raw-messages)))
   (if (null? raw-messages)
-      (context-result '() 0 0 0 0 #f '() #f)
+      (begin
+        (emit-trace 'empty (hash))
+        (context-result '() 0 0 0 0 #f '() #f))
       (let ()
         ;; Per-assembly token memoization: estimate each message at most once
         (define token-memo (make-hash))
@@ -217,6 +224,13 @@
         ;; Phase 1: Identify pinned items (system + first user + compaction summaries)
         (define-values (pinned removable) (partition-messages raw-messages))
         (define pinned-tokens (for/sum ([m (in-list pinned)]) (memoized-estimate m)))
+        (emit-trace 'phase1-pinned
+                    (hash 'pinned-count
+                          (length pinned)
+                          'removable-count
+                          (length removable)
+                          'pinned-tokens
+                          pinned-tokens))
 
         ;; Phase 3: Fit recent messages within remaining budget
         (define remaining-budget (- max-tokens pinned-tokens))
@@ -224,9 +238,22 @@
           (if (<= remaining-budget 0)
               (values '() removable)
               (fit-recent removable remaining-budget memoized-estimate)))
+        (emit-trace 'phase3-fitted
+                    (hash 'recent-count
+                          (length recent)
+                          'excluded-count
+                          (length excluded)
+                          'remaining-budget
+                          remaining-budget))
 
         ;; Phase 2: Generate summary for excluded entries
         (define summary-obj (generate-context-summary excluded provider model-name #:cache cache))
+        (emit-trace 'phase2-summary
+                    (hash 'has-summary?
+                          (and summary-obj #t)
+                          'entry-count
+                          (and summary-obj (context-summary-entry-count summary-obj))))
+
         (define summary-msg
           (and summary-obj
                (make-message (format "summary-~a-~a"
@@ -246,6 +273,7 @@
                             #:max-entries max-entries
                             #:max-tokens (context-assembly-config-max-catalog-tokens config)
                             #:estimate-text estimate-text-tokens))
+        (emit-trace 'phase4-catalog (hash 'catalog-count (length catalog)))
 
         ;; Phase 5: Reassemble in original order
         (define pinned-ids
@@ -282,6 +310,16 @@
         (define result-with-pin (ensure-first-user-pinned result-with-summary raw-messages))
         (define total-tokens (for/sum ([m (in-list result-with-pin)]) (memoized-estimate m)))
         (define over-budget? (> total-tokens max-tokens))
+
+        (emit-trace 'done
+                    (hash 'total-tokens
+                          total-tokens
+                          'message-count
+                          (length result-with-pin)
+                          'over-budget?
+                          over-budget?
+                          'memo-hits
+                          (hash-count token-memo)))
 
         (context-result result-with-pin
                         total-tokens
