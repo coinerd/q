@@ -19,11 +19,8 @@
 ;; Success/error result helpers (from tool-api)
 ;; ============================================================
 
-(define (make-success-result items)
-  (hasheq 'success #t 'items items))
-
-(define (make-error-result msg)
-  (hasheq 'success #f 'error msg))
+;; make-success-result and make-error-result are imported from tool-api.rkt
+;; (which re-exports from tools/tool.rkt). They return tool-result structs.
 
 ;; ============================================================
 ;; Handler: racket-check
