@@ -9,7 +9,8 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-builder.rkt")
+         "../runtime/context-builder.rkt"
+         (only-in "../runtime/context-policy.rkt" estimate-message-tokens))
 
 ;; Helpers
 (define (make-temp-dir)

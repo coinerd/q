@@ -19,19 +19,18 @@
          racket/list
          "../util/protocol-types.rkt"
          "../llm/token-budget.rkt"
-         "context-builder.rkt")
+         "context-policy.rkt")
 
-(provide
- (struct-out token-compaction-config)
- ;; Token-based window split
- build-token-summary-window
- ;; Backward token walk
- backward-token-walk
- ;; Token estimation for message lists
- estimate-messages-tokens
- ;; Configuration helpers
- default-token-compaction-config
- make-token-compaction-config)
+(provide (struct-out token-compaction-config)
+         ;; Token-based window split
+         build-token-summary-window
+         ;; Backward token walk
+         backward-token-walk
+         ;; Token estimation for message lists
+         estimate-messages-tokens
+         ;; Configuration helpers
+         default-token-compaction-config
+         make-token-compaction-config)
 
 ;; ============================================================
 ;; #687: Token compaction configuration
@@ -41,10 +40,7 @@
 ;; keep-recent-tokens : how many tokens of recent messages to keep verbatim
 ;; reserve-tokens     : tokens reserved for system prompt + response headroom
 ;; max-context-tokens : total context window size (default: 100k)
-(struct token-compaction-config (keep-recent-tokens
-                                 reserve-tokens
-                                 max-context-tokens)
-  #:transparent)
+(struct token-compaction-config (keep-recent-tokens reserve-tokens max-context-tokens) #:transparent)
 
 ;; Default: keep 30k tokens of recent messages, reserve 10k for system/response
 (define (default-token-compaction-config)
@@ -61,11 +57,10 @@
 ;; ============================================================
 
 ;; Estimate total tokens for a list of messages.
-;; Uses estimate-message-tokens from context-builder which handles
+;; Uses estimate-message-tokens from context-policy which handles
 ;; text-part extraction and heuristic token estimation.
 (define (estimate-messages-tokens messages)
-  (for/sum ([m (in-list messages)])
-    (estimate-message-tokens m)))
+  (for/sum ([m (in-list messages)]) (estimate-message-tokens m)))
 
 ;; ============================================================
 ;; #686: Backward token walk for compaction boundary
@@ -84,17 +79,15 @@
   (let loop ([i (sub1 n)]
              [used-tokens 0])
     (cond
-      [(< i 0)
-       ;; All messages fit within budget
-       (values messages '())]
+      ;; All messages fit within budget
+      [(< i 0) (values messages '())]
       [else
        (define msg (list-ref messages i))
        (define msg-tokens (estimate-message-tokens msg))
        (define new-total (+ used-tokens msg-tokens))
        (cond
          ;; Still within budget — include this message and continue walking
-         [(<= new-total keep-recent-tokens)
-          (loop (sub1 i) new-total)]
+         [(<= new-total keep-recent-tokens) (loop (sub1 i) new-total)]
          ;; Budget exceeded — messages[0..i] are overflow, messages[i+1..n-1] are kept
          [else
           (define overflow (take messages (add1 i)))
@@ -124,8 +117,7 @@
   ;; If total messages fit within effective budget, nothing to summarize
   (define total-tokens (estimate-messages-tokens messages))
   (cond
-    [(<= total-tokens effective-budget)
-     (values '() messages)]
+    [(<= total-tokens effective-budget) (values '() messages)]
     [else
      ;; Use backward token walk to find the split point
      (define-values (kept overflow) (backward-token-walk messages keep-recent))
