@@ -19,6 +19,15 @@
 
 (require racket/contract
          racket/list
+         (only-in "../util/event-contracts.rkt"
+                  budget-payload/c
+                  compact-result-payload/c
+                  error-detail-payload/c
+                  injection-count-payload/c
+                  iteration-payload/c
+                  iteration-decision-payload/c
+                  reason-payload/c
+                  turn-cancelled-payload/c)
          racket/set
          racket/path
          json
@@ -141,6 +150,18 @@
   (or (current-inject-topic) injection-event-topic))
 
 ;; ============================================================
+;; Event payload contract assertions (T2, v0.22.8 W3)
+;;
+;; Lightweight inline validation for high-value events consumed
+;; by extensions and TUI. Only applied to top-7 events.
+;; ============================================================
+
+(define (assert-payload topic-name payload ctrct)
+  (unless (ctrct payload)
+    (raise-argument-error topic-name "valid event payload" payload))
+  payload)
+
+;; ============================================================
 ;; Shared helpers (QUAL-01: re-exported from runtime-helpers.rkt)
 ;; ============================================================
 
@@ -171,7 +192,10 @@
      bus
      session-id
      "context.mid-turn-over-budget"
-     (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
+     (assert-payload
+      "context.mid-turn-over-budget"
+      (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)
+      budget-payload/c)))
   estimated)
 
 ;; ============================================================
@@ -215,16 +239,19 @@
                                           (hasheq 'error (exn-message e)))
                      ;; Compact the context properly
                      (define compact-result (compact-proc ctx))
-                     (emit-session-event! bus
-                                          session-id
-                                          "context.overflow.compacted"
-                                          (hasheq 'original-size
-                                                  (length ctx)
-                                                  'removed-count
-                                                  (compaction-result-removed-count compact-result)
-                                                  'kept-count
-                                                  (length (compaction-result-kept-messages
-                                                           compact-result))))
+                     (emit-session-event!
+                      bus
+                      session-id
+                      "context.overflow.compacted"
+                      (assert-payload
+                       "context.overflow.compacted"
+                       (hasheq 'original-size
+                               (length ctx)
+                               'removed-count
+                               (compaction-result-removed-count compact-result)
+                               'kept-count
+                               (length (compaction-result-kept-messages compact-result)))
+                       compact-result-payload/c))
                      (thunk))]
                   [exn:fail? (lambda (e)
                                ;; Re-raise non-overflow errors
@@ -372,7 +399,9 @@
     (emit-session-event! bus
                          session-id
                          "agent.blocked"
-                         (hasheq 'reason "extension-block" 'hook 'before-agent-start)))
+                         (assert-payload "agent.blocked"
+                                         (hasheq 'reason "extension-block" 'hook 'before-agent-start)
+                                         reason-payload/c)))
   (if (and start-hook-res (eq? (hook-result-action start-hook-res) 'block))
       (make-loop-result '() 'completed (hasheq 'reason "extension-block"))
       (let loop ([ctx context]
@@ -410,244 +439,258 @@
                       (emit-session-event! bus
                                            session-id
                                            "message.injected.drain"
-                                           (hasheq 'count (length injected)))
-                      (append ctx-with-steering injected))))
-              ctx-with-steering))
+                                           (assert-payload "message.injected.drain"
+                                                           (hasheq 'count (length injected))
+                                                           injection-count-payload/c)))
+                    (append ctx-with-steering injected))))
+          ctx-with-steering))
 
-        (cond
-          ;; #1158: Forced shutdown (double Ctrl+C) — immediate abort
-          [(and force-shutdown-check (force-shutdown-check))
-           (emit-session-event! bus
-                                session-id
-                                "turn.cancelled"
-                                (hasheq 'reason "force-shutdown" 'iteration iteration))
-           (make-loop-result (append ctx-with-injected '())
-                             'cancelled
-                             (hasheq 'reason "force-shutdown" 'iteration iteration))]
+      (cond
+        ;; #1158: Forced shutdown (double Ctrl+C) — immediate abort
+        [(and force-shutdown-check (force-shutdown-check))
+         (emit-session-event! bus
+                              session-id
+                              "turn.cancelled"
+                              (assert-payload "turn.cancelled"
+                                              (hasheq 'reason "force-shutdown" 'iteration iteration)
+                                              turn-cancelled-payload/c))
+         (make-loop-result (append ctx-with-injected '())
+                           'cancelled
+                           (hasheq 'reason "force-shutdown" 'iteration iteration))]
 
-          [(and token (cancellation-token-cancelled? token))
-           (emit-session-event! bus
-                                session-id
-                                "turn.cancelled"
-                                (hasheq 'reason "cancellation-token" 'iteration iteration))
-           (make-loop-result (append ctx-with-injected '())
-                             'cancelled
-                             (hasheq 'reason "cancellation-token" 'iteration iteration))]
+        [(and token (cancellation-token-cancelled? token))
+         (emit-session-event!
+          bus
+          session-id
+          "turn.cancelled"
+          (assert-payload "turn.cancelled"
+                          (hasheq 'reason "cancellation-token" 'iteration iteration)
+                          turn-cancelled-payload/c))
+         (make-loop-result (append ctx-with-injected '())
+                           'cancelled
+                           (hasheq 'reason "cancellation-token" 'iteration iteration))]
 
-          ;; #1158: Graceful shutdown — finish after current iteration
-          [(and shutdown-check (shutdown-check))
-           (emit-session-event! bus
-                                session-id
-                                "turn.cancelled"
-                                (hasheq 'reason "graceful-shutdown" 'iteration iteration))
-           (make-loop-result (append ctx-with-injected '())
-                             'completed
-                             (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
+        ;; #1158: Graceful shutdown — finish after current iteration
+        [(and shutdown-check (shutdown-check))
+         (emit-session-event!
+          bus
+          session-id
+          "turn.cancelled"
+          (assert-payload "turn.cancelled"
+                          (hasheq 'reason "graceful-shutdown" 'iteration iteration)
+                          turn-cancelled-payload/c))
+         (make-loop-result (append ctx-with-injected '())
+                           'completed
+                           (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
 
-          [else
-           (define turn-id (generate-id))
+        [else
+         (define turn-id (generate-id))
 
-           ;; Dispatch 'turn-start hook — extensions can amend context or block
-           (define-values (ctx-to-use turn-blocked?)
-             (let-values ([(amended-ctx hook-res)
-                           (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-injected)])
-               (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-                   (values ctx-with-injected #t)
-                   (values amended-ctx #f))))
+         ;; Dispatch 'turn-start hook — extensions can amend context or block
+         (define-values (ctx-to-use turn-blocked?)
+           (let-values ([(amended-ctx hook-res)
+                         (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-injected)])
+             (if (and hook-res (eq? (hook-result-action hook-res) 'block))
+                 (values ctx-with-injected #t)
+                 (values amended-ctx #f))))
 
-           (cond
-             ;; ── Turn blocked by extension ──
-             [turn-blocked?
-              (emit-session-event! bus session-id "turn.blocked" (hasheq 'reason "extension-block"))
-              (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
+         (cond
+           ;; ── Turn blocked by extension ──
+           [turn-blocked?
+            (emit-session-event! bus session-id "turn.blocked" (hasheq 'reason "extension-block"))
+            (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
 
-             [else
-              ;; Build assembled context (tiered + hooks) — from turn-orchestrator.rkt
-              (define ctx-final
-                (build-assembled-context ctx-to-use config ext-reg bus session-id iteration))
+           [else
+            ;; Build assembled context (tiered + hooks) — from turn-orchestrator.rkt
+            (define ctx-final
+              (build-assembled-context ctx-to-use config ext-reg bus session-id iteration))
 
-              ;; Run provider turn — from turn-orchestrator.rkt
-              (define result
-                (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config))
+            ;; Run provider turn — from turn-orchestrator.rkt
+            (define result
+              (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config))
 
-              (define termination (loop-result-termination-reason result))
-              (define new-msgs (loop-result-messages result))
+            (define termination (loop-result-termination-reason result))
+            (define new-msgs (loop-result-messages result))
 
-              ;; v0.15.0 Wave 1: emit iteration.decision for trace logging
-              (emit-session-event! bus
-                                   session-id
-                                   "iteration.decision"
-                                   (hasheq 'iteration
-                                           (add1 iteration)
-                                           'termination
-                                           termination
-                                           'consecutive_tools
-                                           consecutive-tool-count
-                                           'max_iterations
-                                           max-iterations
-                                           'max_iterations_hard
-                                           max-iterations-hard))
+            ;; v0.15.0 Wave 1: emit iteration.decision for trace logging
+            (emit-session-event! bus
+                                 session-id
+                                 "iteration.decision"
+                                 (assert-payload "iteration.decision"
+                                                 (hasheq 'iteration
+                                                         (add1 iteration)
+                                                         'termination
+                                                         termination
+                                                         'consecutive_tools
+                                                         consecutive-tool-count
+                                                         'max_iterations
+                                                         max-iterations
+                                                         'max_iterations_hard
+                                                         max-iterations-hard)
+                                                 iteration-decision-payload/c))
 
-              (cond
-                ;; ── Completed: append and return ──
-                [(eq? termination 'completed)
-                 (append-entries! log-path new-msgs)
-                 ;; Dispatch 'turn-end hook
-                 (let-values ([(amended-result after-hook-res)
-                               (maybe-dispatch-hooks ext-reg 'turn-end result)])
-                   (let ([effective-result (if (and after-hook-res
-                                                    (eq? (hook-result-action after-hook-res) 'amend))
-                                               amended-result
-                                               result)])
-                     ;; #662: Drain follow-up queue — if follow-ups exist,
-                     ;; inject as user messages and continue the loop.
-                     ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
-                     (define followup-continued?
-                       (and steering-queue
-                            (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
-                                                 (let ([one (dequeue-followup! steering-queue)])
-                                                   (if one
-                                                       (list one)
-                                                       '()))
-                                                 (dequeue-all-followups! steering-queue))])
-                              (if (null? followups)
-                                  #f
-                                  (let ([followup-msgs (for/list ([fu (in-list followups)])
-                                                         (make-message (generate-id)
-                                                                       #f
-                                                                       'user
-                                                                       'text
-                                                                       (list (make-text-part fu))
-                                                                       (now-seconds)
-                                                                       (hasheq 'source "followup")))])
-                                    (emit-session-event! bus
-                                                         session-id
-                                                         "followup.injected"
-                                                         (hasheq 'count
-                                                                 (length followups)
-                                                                 'mode
-                                                                 (symbol->string follow-up-mode)))
-                                    (append-entries! log-path followup-msgs)
-                                    (loop (append ctx-with-injected new-msgs followup-msgs)
-                                          (add1 iteration)
-                                          0
-                                          (set)
-                                          intent-retry-count
-                                          0
-                                          '()
-                                          explore-count
-                                          implement-count
-                                          0))))))
-                     (define base-result (if followup-continued? effective-result effective-result))
-                     ;; v0.21.3: Intent/stall detection removed.
-                     ;; The prompt is self-correcting by design - no runtime nudging.
-                     base-result))]
-                ;; ── Hard iteration limit reached: append and stop ──
-                [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
-                 (append-entries! log-path new-msgs)
-                 (emit-session-event! bus
-                                      session-id
-                                      "runtime.error"
-                                      (hasheq 'error
-                                              "max-iterations-exceeded"
-                                              'iteration
-                                              iteration
-                                              'maxIterations
-                                              max-iterations-hard))
-                 (make-loop-result new-msgs
-                                   'max-iterations-exceeded
-                                   (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
+            (cond
+              ;; ── Completed: append and return ──
+              [(eq? termination 'completed)
+               (append-entries! log-path new-msgs)
+               ;; Dispatch 'turn-end hook
+               (let-values ([(amended-result after-hook-res)
+                             (maybe-dispatch-hooks ext-reg 'turn-end result)])
+                 (let ([effective-result (if (and after-hook-res
+                                                  (eq? (hook-result-action after-hook-res) 'amend))
+                                             amended-result
+                                             result)])
+                   ;; #662: Drain follow-up queue — if follow-ups exist,
+                   ;; inject as user messages and continue the loop.
+                   ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
+                   (define followup-continued?
+                     (and steering-queue
+                          (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
+                                               (let ([one (dequeue-followup! steering-queue)])
+                                                 (if one
+                                                     (list one)
+                                                     '()))
+                                               (dequeue-all-followups! steering-queue))])
+                            (if (null? followups)
+                                #f
+                                (let ([followup-msgs (for/list ([fu (in-list followups)])
+                                                       (make-message (generate-id)
+                                                                     #f
+                                                                     'user
+                                                                     'text
+                                                                     (list (make-text-part fu))
+                                                                     (now-seconds)
+                                                                     (hasheq 'source "followup")))])
+                                  (emit-session-event! bus
+                                                       session-id
+                                                       "followup.injected"
+                                                       (hasheq 'count
+                                                               (length followups)
+                                                               'mode
+                                                               (symbol->string follow-up-mode)))
+                                  (append-entries! log-path followup-msgs)
+                                  (loop (append ctx-with-injected new-msgs followup-msgs)
+                                        (add1 iteration)
+                                        0
+                                        (set)
+                                        intent-retry-count
+                                        0
+                                        '()
+                                        explore-count
+                                        implement-count
+                                        0))))))
+                   (define base-result (if followup-continued? effective-result effective-result))
+                   ;; v0.21.3: Intent/stall detection removed.
+                   ;; The prompt is self-correcting by design - no runtime nudging.
+                   base-result))]
+              ;; ── Hard iteration limit reached: append and stop ──
+              [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
+               (append-entries! log-path new-msgs)
+               (emit-session-event! bus
+                                    session-id
+                                    "runtime.error"
+                                    (assert-payload "runtime.error"
+                                                    (hasheq 'error
+                                                            "max-iterations-exceeded"
+                                                            'iteration
+                                                            iteration
+                                                            'maxIterations
+                                                            max-iterations-hard)
+                                                    error-detail-payload/c))
+               (make-loop-result new-msgs
+                                 'max-iterations-exceeded
+                                 (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
 
-                ;; ── Soft iteration limit: warn but continue ──
-                [(and (eq? termination 'tool-calls-pending)
-                      (>= (add1 iteration) max-iterations)
-                      (< (add1 iteration) max-iterations-hard))
-                 (append-entries! log-path new-msgs)
-                 (emit-session-event! bus
-                                      session-id
-                                      "iteration.soft-warning"
-                                      (hasheq 'iteration
-                                              (add1 iteration)
-                                              'soft-limit
-                                              max-iterations
-                                              'hard-limit
-                                              max-iterations-hard
-                                              'remaining
-                                              (- max-iterations-hard (add1 iteration))))
-                 (define updated-ctx
-                   (handle-tool-calls-pending new-msgs
-                                              ctx-with-injected
-                                              ext-reg
-                                              reg
-                                              bus
-                                              session-id
-                                              log-path
-                                              token
-                                              config))
-                 ;; v0.14.1: mid-turn token budget check
-                 (check-mid-turn-budget! updated-ctx bus session-id config)
-                 (loop updated-ctx
-                       (add1 iteration)
-                       (add1 consecutive-tool-count)
-                       seen-paths
-                       intent-retry-count
-                       consecutive-error-count
-                       recent-tool-names
-                       explore-count
-                       implement-count
-                       stall-retry-count)]
+              ;; ── Soft iteration limit: warn but continue ──
+              [(and (eq? termination 'tool-calls-pending)
+                    (>= (add1 iteration) max-iterations)
+                    (< (add1 iteration) max-iterations-hard))
+               (append-entries! log-path new-msgs)
+               (emit-session-event! bus
+                                    session-id
+                                    "iteration.soft-warning"
+                                    (hasheq 'iteration
+                                            (add1 iteration)
+                                            'soft-limit
+                                            max-iterations
+                                            'hard-limit
+                                            max-iterations-hard
+                                            'remaining
+                                            (- max-iterations-hard (add1 iteration))))
+               (define updated-ctx
+                 (handle-tool-calls-pending new-msgs
+                                            ctx-with-injected
+                                            ext-reg
+                                            reg
+                                            bus
+                                            session-id
+                                            log-path
+                                            token
+                                            config))
+               ;; v0.14.1: mid-turn token budget check
+               (check-mid-turn-budget! updated-ctx bus session-id config)
+               (loop updated-ctx
+                     (add1 iteration)
+                     (add1 consecutive-tool-count)
+                     seen-paths
+                     intent-retry-count
+                     consecutive-error-count
+                     recent-tool-names
+                     explore-count
+                     implement-count
+                     stall-retry-count)]
 
-                ;; ── Tool calls pending: execute tools and re-run ──
-                [(eq? termination 'tool-calls-pending)
-                 (append-entries! log-path new-msgs)
-                 (define updated-ctx
-                   (handle-tool-calls-pending new-msgs
-                                              ctx-with-injected
-                                              ext-reg
-                                              reg
-                                              bus
-                                              session-id
-                                              log-path
-                                              token
-                                              config))
-                 ;; v0.21.3: Exploration steering removed. Compute counters without steering.
-                 (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
-                 (define-values (new-seen-paths should-increment?)
-                   (update-seen-paths current-tool-calls seen-paths))
-                 (define effective-tool-count
-                   (if should-increment?
-                       (add1 consecutive-tool-count)
-                       consecutive-tool-count))
-                 (define new-explore-count
-                   (+ explore-count
-                      (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
-                               (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
-                 (define new-implement-count
-                   (+ implement-count
-                      (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
-                               (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
-                 (define new-error-count
-                   (+ consecutive-error-count
-                      (for/sum
-                       ([tr (filter tool-result-part? (apply append (map message-content new-msgs)))])
-                       (if (tool-result-part-is-error? tr) 1 0))))
-                 (define new-recent-tools
-                   (take-at-most (append recent-tool-names
-                                         (map tool-call-name
-                                              (extract-tool-calls-from-messages new-msgs)))
-                                 20))
-                 (loop updated-ctx
-                       (add1 iteration)
-                       effective-tool-count
-                       new-seen-paths
-                       intent-retry-count
-                       new-error-count
-                       new-recent-tools
-                       new-explore-count
-                       new-implement-count
-                       stall-retry-count)]
+              ;; ── Tool calls pending: execute tools and re-run ──
+              [(eq? termination 'tool-calls-pending)
+               (append-entries! log-path new-msgs)
+               (define updated-ctx
+                 (handle-tool-calls-pending new-msgs
+                                            ctx-with-injected
+                                            ext-reg
+                                            reg
+                                            bus
+                                            session-id
+                                            log-path
+                                            token
+                                            config))
+               ;; v0.21.3: Exploration steering removed. Compute counters without steering.
+               (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
+               (define-values (new-seen-paths should-increment?)
+                 (update-seen-paths current-tool-calls seen-paths))
+               (define effective-tool-count
+                 (if should-increment?
+                     (add1 consecutive-tool-count)
+                     consecutive-tool-count))
+               (define new-explore-count
+                 (+ explore-count
+                    (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
+                             (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
+               (define new-implement-count
+                 (+ implement-count
+                    (for/sum ([tc (extract-tool-calls-from-messages new-msgs)])
+                             (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
+               (define new-error-count
+                 (+ consecutive-error-count
+                    (for/sum
+                     ([tr (filter tool-result-part? (apply append (map message-content new-msgs)))])
+                     (if (tool-result-part-is-error? tr) 1 0))))
+               (define new-recent-tools
+                 (take-at-most (append recent-tool-names
+                                       (map tool-call-name
+                                            (extract-tool-calls-from-messages new-msgs)))
+                               20))
+               (loop updated-ctx
+                     (add1 iteration)
+                     effective-tool-count
+                     new-seen-paths
+                     intent-retry-count
+                     new-error-count
+                     new-recent-tools
+                     new-explore-count
+                     new-implement-count
+                     stall-retry-count)]
 
-                ;; ── Unknown termination: append and return ──
-                [else
-                 (append-entries! log-path new-msgs)
-                 result])])]))))
+              ;; ── Unknown termination: append and return ──
+              [else
+               (append-entries! log-path new-msgs)
+               result])])])))
