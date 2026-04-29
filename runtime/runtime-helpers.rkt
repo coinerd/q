@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/runtime-helpers.rkt — shared runtime helper functions
+;; STABILITY: internal
 ;;
 ;; QUAL-01 (v0.22.0): Extracted from iteration.rkt and tool-coordinator.rkt
 ;; to eliminate duplication. Both files had identical copies of

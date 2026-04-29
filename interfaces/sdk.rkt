@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; interfaces/sdk.rkt — embeddable library surface
+;; STABILITY: stable
 ;;
 ;; Thin, stable wrapper around runtime/session orchestration.
 ;; Every SDK function delegates to an existing runtime module.

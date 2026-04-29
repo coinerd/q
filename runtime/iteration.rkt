@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/iteration.rkt — agent iteration loop
+;; STABILITY: evolving
 ;;
 ;; Handles the multi-turn tool-call iteration loop: run agent turn → check
 ;; for tool calls → execute tools → feed results back → repeat.

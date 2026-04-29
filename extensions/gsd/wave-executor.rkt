@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd/wave-executor.rkt — Wave execution engine with error recovery
+;; STABILITY: evolving
 ;;
 ;; Wave 2b of v0.21.0: Tracks wave status through execution lifecycle.
 ;; DD-5: Wave-level error recovery — failed waves skip, don't abort.

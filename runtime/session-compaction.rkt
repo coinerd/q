@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/session-compaction.rkt — session-aware context compaction
+;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05).
 ;; Token budget checking and compaction triggering.

@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/session-events.rkt — session event bus wiring
+;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05b).
 ;; Handles fork.requested and compact.requested events from TUI/CLI.

@@ -1,4 +1,6 @@
 #lang racket/base
+;; tools/tool.rkt — Tool contract, registry, and execution infrastructure
+;; STABILITY: stable
 
 (require racket/contract
          racket/hash

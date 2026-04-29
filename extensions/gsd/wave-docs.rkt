@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd/wave-docs.rkt — Wave document I/O and PLAN.md index management
+;; STABILITY: evolving
 ;;
 ;; v0.21.1 W0: Per-wave document files in .planning/waves/.
 ;; PLAN.md index with status markers ([Inbox], [DONE], [DEFERRED], [FAILED]).

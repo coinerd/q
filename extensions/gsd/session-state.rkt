@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; extensions/gsd/session-state.rkt — Per-session GSD state (QUAL-02)
+;; STABILITY: evolving
 ;;
 ;; Provides shared mutable state for GSD session via boxes.
 ;; v0.22.2 REV-01: Reverted from make-parameter to box storage because

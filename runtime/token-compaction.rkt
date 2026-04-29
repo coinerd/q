@@ -1,6 +1,7 @@
 #lang racket/base
 
 ;; runtime/token-compaction.rkt — Token-based compaction window split (#686-#689)
+;; STABILITY: internal
 ;;
 ;; Provides token-aware compaction window calculation that replaces
 ;; fixed-count window splitting with token-budget-based splitting.
