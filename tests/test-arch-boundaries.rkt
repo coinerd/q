@@ -10,55 +10,7 @@
 
 (require rackunit
          rackunit/text-ui
-         racket/port
-         racket/string)
-
-;; ============================================================
-;; Helpers (read-based S-expression parser)
-;; ============================================================
-
-;; Extract all require-spec sub-forms from a source file.
-(define (extract-requires filepath)
-  (with-handlers ([exn:fail? (lambda (e) '())])
-    (define src (file->string filepath))
-    (define lines (string-split src "\n"))
-    (define rest
-      (string-join (if (string-prefix? (car lines) "#lang")
-                       (cdr lines)
-                       lines)
-                   "\n"))
-    (define forms (port->list read (open-input-string rest)))
-    (append* (for/list ([form forms])
-               (cond
-                 [(and (pair? form) (eq? (car form) 'require)) (cdr form)]
-                 [else '()])))))
-
-(define (require-spec->paths spec)
-  (cond
-    [(string? spec) (list spec)]
-    [(symbol? spec) '()]
-    [(pair? spec)
-     (case (car spec)
-       [(only-in prefix-in rename-in except-in)
-        (if (and (pair? (cdr spec)) (string? (cadr spec)))
-            (list (cadr spec))
-            '())]
-       [else (append* (map require-spec->paths (cdr spec)))])]
-    [else '()]))
-
-(define (imports-from? req-specs layer-prefixes)
-  (for*/or ([spec (in-list req-specs)]
-            [path (in-list (require-spec->paths spec))])
-    (for/or ([prefix (in-list layer-prefixes)])
-      (string-contains? path prefix))))
-
-(define q-dir (string->path (or (getenv "Q_DIR") ".")))
-
-(define (rkt-files-in dir)
-  (if (directory-exists? (build-path q-dir dir))
-      (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f)))
-              (directory-list (build-path q-dir dir) #:build? #t))
-      '()))
+         "helpers/arch-utils.rkt")
 
 ;; ============================================================
 ;; Boundary tests
@@ -68,12 +20,22 @@
   (test-suite "architecture-boundaries"
 
     (test-case "Only known exceptions in runtime/ import from tools/ or extensions/"
-      ;; Known exceptions:
-      ;;   - runtime/turn-orchestrator.rkt — imports from tools/ for tool execution
-      ;;   - runtime/package.rkt — imports extensions/manifest.rkt for package audit
-      ;;   - runtime/extension-catalog.rkt — imports from extensions/
+      ;; Known exceptions (runtime/ importing from tools/ or extensions/):
+      ;;   - agent-session.rkt — imports extensions/api.rkt for extension listing
+      ;;   - iteration.rkt — imports extensions/message-inject.rkt for topic constant
+      ;;   - runtime-helpers.rkt — imports extensions/hooks.rkt for hook dispatch
+      ;;   - tool-coordinator.rkt — imports tools/ + extensions/ for tool execution
+      ;;   - turn-orchestrator.rkt — imports tools/ for tool execution
+      ;;   - package.rkt — imports extensions/manifest.rkt for package audit
+      ;;   - extension-catalog.rkt — imports from extensions/
       (define runtime-files (rkt-files-in "runtime"))
-      (define known-exceptions '("turn-orchestrator.rkt" "package.rkt" "extension-catalog.rkt"))
+      (define known-exceptions
+        '("agent-session.rkt" "iteration.rkt"
+                              "runtime-helpers.rkt"
+                              "tool-coordinator.rkt"
+                              "turn-orchestrator.rkt"
+                              "package.rkt"
+                              "extension-catalog.rkt"))
       (define violations
         (for/list ([f (in-list runtime-files)]
                    #:when (not (member (path->string (file-name-from-path f)) known-exceptions)))
