@@ -3,6 +3,7 @@ compiled/
 *.zo
 *.dep
 *.rktd
+!docs/architecture/*.rktd
 
 # Coverage reports
 coverage/
