@@ -106,7 +106,11 @@
 
 ;; v0.14.1: Check if context exceeds mid-turn token budget.
 ;; Returns estimated token count. Emits event if over budget.
-(define (check-mid-turn-budget! ctx bus session-id config)
+(define (check-mid-turn-budget! ctx
+                                bus
+                                session-id
+                                config
+                                #:estimate-tokens [estimate-tokens estimate-context-tokens])
   (define max-tokens (hash-ref config 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   ;; Extract text from message? structs for token estimation
@@ -121,8 +125,7 @@
                            #:when (text-part? part))
                   (text-part-text part)))]
         [else ""])))
-  (define estimated
-    (for/sum ([t (in-list texts)]) (estimate-context-tokens (list (hasheq 'content t)))))
+  (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
   (when (> estimated budget-threshold)
     (emit-session-event!
      bus
@@ -159,7 +162,11 @@
 ;; Uses compact-history for proper summarization and build-retry-messages
 ;; to re-inject the original user prompt after compaction.
 ;; Returns the result of the retry, or re-raises if not an overflow error.
-(define (call-with-overflow-recovery thunk ctx bus session-id)
+(define (call-with-overflow-recovery thunk
+                                     ctx
+                                     bus
+                                     session-id
+                                     #:compact-proc [compact-proc compact-history])
   (with-handlers ([context-overflow-error?
                    (lambda (e)
                      (emit-session-event! bus
@@ -167,7 +174,7 @@
                                           "context.overflow.detected"
                                           (hasheq 'error (exn-message e)))
                      ;; Compact the context properly
-                     (define compact-result (compact-history ctx))
+                     (define compact-result (compact-proc ctx))
                      (emit-session-event! bus
                                           session-id
                                           "context.overflow.compacted"
@@ -201,11 +208,11 @@
 
 ;; Create an injected-message collector: subscribes to message.injected events
 ;; on the bus and accumulates them in a box.
-(define (make-injected-collector! bus)
+(define (make-injected-collector! bus #:inject-topic [inject-topic injection-event-topic])
   (define collected (box '()))
   (subscribe! bus
               (lambda (evt)
-                (when (equal? (event-ev evt) injection-event-topic)
+                (when (equal? (event-ev evt) inject-topic)
                   (define payload (event-payload evt))
                   (define msg (hash-ref payload 'message #f))
                   (when msg
@@ -214,7 +221,7 @@
                       (define old (unbox collected))
                       (unless (box-cas! collected old (append old (list msg)))
                         (loop))))))
-              #:filter (lambda (evt) (equal? (event-ev evt) injection-event-topic)))
+              #:filter (lambda (evt) (equal? (event-ev evt) inject-topic)))
   collected)
 
 ;; ============================================================
@@ -302,7 +309,11 @@
                             #:injected-box [injected-box #f]
                             ;; #1158: shutdown check thunks (avoid circular dep on agent-session)
                             #:shutdown-check [shutdown-check #f]
-                            #:force-shutdown-check [force-shutdown-check #f])
+                            #:force-shutdown-check [force-shutdown-check #f]
+                            ;; MOD-02 (v0.22.6 W4): DI keyword args for testability
+                            #:compact-proc [compact-proc compact-history]
+                            #:estimate-tokens [estimate-tokens estimate-context-tokens]
+                            #:inject-topic [inject-topic injection-event-topic])
   ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
   ;; v0.14.4 Wave 1: Default hard limit = max(max-iterations * 1.6, 80) for slow models
   (define max-iterations-hard
