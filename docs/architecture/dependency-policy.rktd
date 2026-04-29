@@ -11,7 +11,7 @@
  ;; Layer definitions with max boundary exceptions
  (layers
   (runtime
-   (max-exceptions . 7)
+   (max-exceptions . 8)
    (forbidden-from . (llm tools extensions))
    (rationale . "Runtime should not import upward into tools/extensions except via turn-orchestrator.rkt"))
   (tui
@@ -32,6 +32,7 @@
  (known-exceptions
   (runtime . ((agent-session.rkt . "extension registry + DI parameter setup")
               (iteration.rkt . "injection-event-topic value import (cannot lazy-require)")
+              (session-lifecycle.rkt . "injection-event-topic import (extracted from agent-session/iteration)")
               (runtime-helpers.rkt . "hook dispatch for session events")
               (tool-coordinator.rkt . "tool execution orchestration")
               (turn-orchestrator.rkt . "context assembly + provider turn (sole boundary module)")

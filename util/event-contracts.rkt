@@ -1,4 +1,5 @@
 #lang racket/base
+;; STABILITY: stable
 
 ;; util/event-contracts.rkt — Reusable contracts for structured event payloads
 ;;
@@ -47,7 +48,9 @@
 (define compact-result-payload/c
   (and/c hash?
          (hash/c symbol? any/c #:immutable #t)
-         (lambda (h) (and (hash-has-key? h 'original-size) (hash-has-key? h 'new-size)))))
+         (lambda (h)
+           (and (hash-has-key? h 'original-size)
+                (or (hash-has-key? h 'new-size) (hash-has-key? h 'kept-count))))))
 
 ;; Error detail: (hasheq 'error String ...)
 (define error-detail-payload/c
