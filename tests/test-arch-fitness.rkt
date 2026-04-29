@@ -141,6 +141,21 @@
       (define actual-violations (filter identity violations))
       (check-equal? actual-violations
                     '()
-                    (format "llm/ importing from higher layers: ~a" actual-violations)))))
+                    (format "llm/ importing from higher layers: ~a" actual-violations)))
+
+    ;; ── Test 7: SDK surface exists and is documented (ARCH-01) ──
+    (test-case "sdk-public.rkt provides a stable SDK surface"
+      (define sdk-provides (count-provides (build-path q-dir "interfaces" "sdk-public.rkt")))
+      (check-true (> sdk-provides 0)
+                  (format "sdk-public.rkt should export symbols (found ~a)" sdk-provides)))
+
+    ;; ── Test 8: SDK surface has no internal layer imports (ARCH-01) ──
+    (test-case "sdk.rkt does not import from tui/ or interfaces/"
+      (define sdk-path (build-path q-dir "interfaces" "sdk.rkt"))
+      (define reqs (extract-requires sdk-path))
+      (check-false (imports-from? reqs '("../tui/" "../../tui/"))
+                   "sdk.rkt should not import from tui/")
+      (check-false (imports-from? reqs '("cli.rkt" "json-mode.rkt" "rpc-mode.rkt"))
+                   "sdk.rkt should not import interface mode modules"))))
 
 (run-tests fitness-tests)
