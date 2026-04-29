@@ -28,7 +28,7 @@ jobs:
         run: racket scripts/lint-format.rkt
 
       - name: Version sync check
-        run: racket scripts/sync-version.rkt --all
+        run: racket scripts/sync-version.rkt --check --all
 
       - name: Version cross-check
         run: racket scripts/lint-version.rkt
