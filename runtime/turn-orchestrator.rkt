@@ -166,7 +166,16 @@
 
 ;; Run the provider turn: dispatch before-provider-request hook, then run agent turn.
 ;; Returns the loop-result from run-agent-turn.
-(define (run-provider-turn ctx-final prov bus reg ext-reg session-id turn-id token config)
+(define (run-provider-turn ctx-final
+                           prov
+                           bus
+                           reg
+                           ext-reg
+                           session-id
+                           turn-id
+                           token
+                           config
+                           #:tool-list-proc [tool-list-proc #f])
   ;; Dispatch 'before-provider-request hook (informational)
   (define-values (_bpr-payload _bpr-res)
     (maybe-dispatch-hooks ext-reg
@@ -181,9 +190,10 @@
   ;; Idempotent — extensions track their own state.
   (define ext-tools (and ext-reg (register-session-extensions! reg ext-reg bus session-id)))
   (define tools
-    (if (and base-tools (pair? ext-tools))
-        (merge-tool-lists base-tools ext-tools)
-        base-tools))
+    (cond
+      [tool-list-proc (tool-list-proc base-tools ext-tools)]
+      [(and base-tools (pair? ext-tools)) (merge-tool-lists base-tools ext-tools)]
+      [else base-tools]))
 
   ;; v0.14.4 Wave 2 FIX: Extract ONLY provider-specific settings from config.
   ;; The full config is a mutable hash with event-bus, extension-registry, etc.
