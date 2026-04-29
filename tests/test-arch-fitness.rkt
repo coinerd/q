@@ -28,9 +28,8 @@
     (test-case "No module exceeds 900 lines"
       (define max-lines 900)
       ;; Known-large modules tracked for future splitting (v0.23.0 target):
-      ;;   extensions/racket-tooling.rkt (~922 lines)
-      ;; tui/state.rkt was split in v0.22.6 W2 — no longer known-large.
-      (define known-large '(("extensions/racket-tooling.rkt" . 950)))
+      ;;   (none currently — all known-large resolved in v0.22.6)
+      (define known-large '())
       (define dirs-to-check '("runtime" "agent" "llm" "tools" "tui" "interfaces"))
       (define all-files
         (append* (for/list ([d (in-list dirs-to-check)])
