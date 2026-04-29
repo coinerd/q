@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.22.5 — 2026-04-29
+
+### Audit Remediation (v0.22.4 Post-Merge Fixes)
+- **FIT-01**: Replaced line-based `extract-requires` with read-based S-expression parser in arch test files
+- **FIT-02**: Module size threshold 900 lines with known-large tracking (tui/state.rkt, extensions/racket-tooling.rkt)
+- **FIT-03**: Updated stale known-exceptions list for runtime layer boundary tests
+- **FIT-04**: Extracted shared arch test helpers into `tests/helpers/arch-utils.rkt` (eliminated ~80 lines duplication)
+- **GEN-01**: Fixed trace regression — `provider-name` instead of `object-name` in agent/loop.rkt
+- **GEN-02**: Adopted event payload structs in runtime/agent-session.rkt (4 hasheq→struct replacements)
+- **GEN-03**: Added `provider-count-tokens` to `contract-out` in llm/provider.rkt
+- **SDK-01**: Moved all SDK callables into `contract-out` in sdk-public.rkt (get-context-usage, enriched aliases, etc.)
+- **SDK-02**: Added 8 negative contract-rejection tests to test-contracts.rkt
+- **VER-01**: Version sync verified
+
 ## v0.22.4 — 2026-04-28
 
 ### Architecture Modularity & Racket Idiom Remediation
