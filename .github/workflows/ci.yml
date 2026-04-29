@@ -57,6 +57,9 @@ jobs:
       - name: CI readiness
         run: racket scripts/lint-ci-readiness.rkt
 
+      - name: Architecture fitness gate
+        run: racket scripts/arch-report.rkt --ci
+
       - name: Workflow YAML validation
         run: |
           pip install pyyaml

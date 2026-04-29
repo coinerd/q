@@ -236,7 +236,9 @@
                      (emit-session-event! bus
                                           session-id
                                           "context.overflow.detected"
-                                          (hasheq 'error (exn-message e)))
+                                          (assert-payload "context.overflow.detected"
+                                                          (hasheq 'error (exn-message e))
+                                                          error-detail-payload/c))
                      ;; Compact the context properly
                      (define compact-result (compact-proc ctx))
                      (emit-session-event!
@@ -498,7 +500,11 @@
            (cond
              ;; ── Turn blocked by extension ──
              [turn-blocked?
-              (emit-session-event! bus session-id "turn.blocked" (hasheq 'reason "extension-block"))
+              (emit-session-event!
+               bus
+               session-id
+               "turn.blocked"
+               (assert-payload "turn.blocked" (hasheq 'reason "extension-block") reason-payload/c))
               (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
 
              [else
