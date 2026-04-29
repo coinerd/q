@@ -83,7 +83,9 @@
        (unless (or (string=? lang canonical-lang)
                    ;; These are acceptable alternatives
                    (string=? lang "racket")
-                   (string-prefix? lang "at-exp "))
+                   (string-prefix? lang "at-exp ")
+                   (string-prefix? lang "typed/racket")
+                   (string=? lang "info"))
          (add-warning! (format "WARNING: ~a:~a: non-standard #lang ~a (expected #lang ~a)"
                                filepath
                                lineno
