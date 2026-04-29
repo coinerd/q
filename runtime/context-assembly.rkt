@@ -93,10 +93,14 @@
          context-summary-prompt
          generate-context-summary
          ;; Summary cache
+         ;; Summary cache
          summary-cache
          make-summary-cache
          summary-cache-lookup
-         summary-cache-store!)
+         summary-cache-store!
+         summary-cache-count
+         summary-cache-max-entries
+         DEFAULT-CACHE-MAX-ENTRIES)
 
 ;; ============================================================
 ;; Configuration
@@ -143,19 +147,51 @@
 (struct context-summary (from-id to-id text entry-count) #:transparent)
 
 ;; ============================================================
-;; Summary cache
+;; Summary cache — LRU eviction when capacity exceeded
 ;; ============================================================
 
-(struct summary-cache ([table #:mutable]) #:transparent)
+;; Default maximum cache entries before LRU eviction
+(define DEFAULT-CACHE-MAX-ENTRIES 50)
 
-(define (make-summary-cache)
-  (summary-cache (hash)))
+(struct summary-cache
+        ([table #:mutable] ; hash: key=(from-id . to-id) → value=text
+         [order #:mutable] ; list of keys in LRU order (newest first)
+         [max-entries #:mutable]) ; capacity limit
+  #:transparent)
+
+(define (make-summary-cache #:max-entries [max DEFAULT-CACHE-MAX-ENTRIES])
+  (summary-cache (hash) '() max))
 
 (define (summary-cache-lookup cache from-id to-id)
-  (hash-ref (summary-cache-table cache) (cons from-id to-id) #f))
+  (define key (cons from-id to-id))
+  (define result (hash-ref (summary-cache-table cache) key #f))
+  ;; Promote to front of LRU on hit
+  (when result
+    (set-summary-cache-order! cache (cons key (remove key (summary-cache-order cache) equal?))))
+  result)
 
 (define (summary-cache-store! cache from-id to-id text)
-  (set-summary-cache-table! cache (hash-set (summary-cache-table cache) (cons from-id to-id) text)))
+  (define key (cons from-id to-id))
+  (define current-table (summary-cache-table cache))
+  (define current-order (summary-cache-order cache))
+  ;; If key already exists, just update and promote
+  (cond
+    [(hash-has-key? current-table key)
+     (set-summary-cache-table! cache (hash-set current-table key text))
+     (set-summary-cache-order! cache (cons key (remove key current-order equal?)))]
+    [else
+     ;; Evict oldest if at capacity
+     (when (>= (hash-count current-table) (summary-cache-max-entries cache))
+       (define oldest-key (last current-order))
+       (set-summary-cache-table! cache (hash-remove current-table oldest-key))
+       (set-summary-cache-order! cache (remove oldest-key current-order equal?)))
+     ;; Insert new entry at front
+     (set-summary-cache-table! cache (hash-set (summary-cache-table cache) key text))
+     (set-summary-cache-order! cache (cons key (summary-cache-order cache)))]))
+
+;; Query cache size (for testing)
+(define (summary-cache-count cache)
+  (hash-count (summary-cache-table cache)))
 
 ;; ============================================================
 ;; Core: build-assembled-context
