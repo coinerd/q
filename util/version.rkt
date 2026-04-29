@@ -1,4 +1,5 @@
 #lang typed/racket
+;; STABILITY: stable
 
 ;; util/version.rkt — single source of truth for q version
 ;;
@@ -9,4 +10,4 @@
 (provide q-version)
 
 (: q-version String)
-(define q-version "0.22.8")
+(define q-version "0.22.9")

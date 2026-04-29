@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.22.9 — 2026-04-28
+
+### Module Decomposition + Completion
+
+**W0** — Assert-payload wrappers (11 sites), stability annotations (314 modules),
+.gitignore fix, ADR-0013, dependency-policy update.
+
+**W1** — agent-session.rkt decomposition: extracted session-lifecycle.rkt (327 LOC),
+converted agent-session.rkt to façade (401 LOC). Fixed iteration.rkt paren regression.
+Fixed compact-result-payload/c contract.
+
+**W2** — session-store.rkt decomposition: extracted session-store-integrity.rkt (321 LOC)
+and session-store-tree.rkt (129 LOC), converted session-store.rkt to façade (342 LOC).
+
+**W3** — sdk.rkt decomposition: extracted sdk-core.rkt (439 LOC) and
+sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
+
+**W4** — arch-report.rkt script (CI gate), version bump 0.22.8 → 0.22.9.
+
+
 ## v0.22.8 — 2026-04-29
 
 ### Architecture Enforcement + DI Fix + Event Schema Hardening
