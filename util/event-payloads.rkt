@@ -1,4 +1,4 @@
-#lang racket/base
+#lang typed/racket
 
 ;; util/event-payloads.rkt — Explicit struct types for event payloads
 ;;
@@ -6,9 +6,7 @@
 ;; structs. Existing hasheq payloads continue to work — these are
 ;; optional wrappers that provide type safety and better error messages.
 ;;
-;; Usage:
-;;   (emit-event bus "session.start" (session-start-payload sid config 'new))
-;;   (emit-event bus "tool.call" (tool-call-event-payload sid turn-id tool-name call-id))
+;; Migrated to Typed Racket in v0.22.6 W5 (RKT-01 pilot).
 
 (provide (struct-out session-start-payload)
          (struct-out session-end-payload)
@@ -25,45 +23,48 @@
 ;; Session lifecycle payloads
 ;; ============================================================
 
-(struct session-start-payload (session-id config reason) #:transparent)
-(struct session-end-payload (session-id duration) #:transparent)
-(struct session-switch-payload (session-id operation) #:transparent)
+(struct session-start-payload ([session-id : String] [config : Any] [reason : Symbol]) #:transparent)
+(struct session-end-payload ([session-id : String] [duration : Any]) #:transparent)
+(struct session-switch-payload ([session-id : String] [operation : Symbol]) #:transparent)
 
 ;; ============================================================
 ;; Tool call payloads
 ;; ============================================================
 
-(struct tool-call-event-payload (session-id turn-id tool-name tool-call-id) #:transparent)
+(struct tool-call-event-payload
+        ([session-id : String] [turn-id : String] [tool-name : String] [tool-call-id : String])
+  #:transparent)
 
 ;; ============================================================
 ;; Simple session-id payloads
 ;; ============================================================
 
-(struct session-id-payload (session-id) #:transparent)
+(struct session-id-payload ([session-id : String]) #:transparent)
 
 ;; ============================================================
 ;; Error payloads
 ;; ============================================================
 
-(struct error-payload (error error-type) #:transparent)
+(struct error-payload ([error : Any] [error-type : Any]) #:transparent)
 
 ;; ============================================================
 ;; Input payloads
 ;; ============================================================
 
-(struct input-payload (session-id message) #:transparent)
+(struct input-payload ([session-id : String] [message : Any]) #:transparent)
 
 ;; ============================================================
 ;; GSD mode change payloads
 ;; ============================================================
 
-(struct gsd-mode-payload (old-mode new-mode) #:transparent)
+(struct gsd-mode-payload ([old-mode : Symbol] [new-mode : Symbol]) #:transparent)
 
 ;; ============================================================
 ;; Generic helpers
 ;; ============================================================
 
 ;; Convert any known payload struct to a hasheq (for serialization/legacy consumers).
+(: payload->hash (-> Any (HashTable Symbol Any)))
 (define (payload->hash p)
   (cond
     [(session-start-payload? p)
@@ -99,15 +100,18 @@
      (hasheq 'session-id (input-payload-session-id p) 'message (input-payload-message p))]
     [(gsd-mode-payload? p)
      (hasheq 'old-mode (gsd-mode-payload-old-mode p) 'new-mode (gsd-mode-payload-new-mode p))]
-    [(hash? p) p]
+    [(hash? p) (cast p (HashTable Symbol Any))]
     [else (hasheq 'payload p)]))
 
 ;; Extract session-id from any payload that has one.
+(: payload-session-id (-> Any (Option String)))
 (define (payload-session-id p)
   (cond
     [(session-start-payload? p) (session-start-payload-session-id p)]
     [(session-end-payload? p) (session-end-payload-session-id p)]
     [(session-switch-payload? p) (session-switch-payload-session-id p)]
     [(tool-call-event-payload? p) (tool-call-event-payload-session-id p)]
-    [(hash? p) (hash-ref p 'session-id #f)]
+    [(session-id-payload? p) (session-id-payload-session-id p)]
+    [(input-payload? p) (input-payload-session-id p)]
+    [(hash? p) (cast (hash-ref (cast p (HashTable Symbol Any)) 'session-id #f) (Option String))]
     [else #f]))
