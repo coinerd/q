@@ -11,4 +11,4 @@
 (define q-version
   :
   String
-  "0.22.5")
+  "0.22.6")
