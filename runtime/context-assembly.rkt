@@ -1,0 +1,548 @@
+#lang racket/base
+;; STABILITY: evolving
+
+;; q/runtime/context-assembly.rkt — Unified context assembly pipeline
+;;
+;; Single module for all context assembly logic. Replaces context-manager.rkt
+;; and consolidates tiered-context from compactor.rkt.
+;;
+;; Pipeline:
+;;   1. Tree walk from session index (via context-builder)
+;;   2. Pin system prompt + first user + compaction summaries
+;;   3. Fit recent messages within budget (pair-preserving)
+;;   4. Summarize excluded entries (LLM or fallback)
+;;   5. Generate catalog of excluded entries
+;;   6. Reassemble + inject summary
+;;   7. Return context-result with diagnostics
+;;
+;; v0.23.1 W0: Created from context-manager.rkt + compactor tiered-context
+
+(require racket/list
+         racket/string
+         "../util/protocol-types.rkt"
+         "../runtime/session-index.rkt"
+         (only-in "../runtime/context-builder.rkt"
+                  (build-session-context context-builder:build-session-context))
+         "../llm/token-budget.rkt"
+         (only-in "../runtime/context-policy.rkt"
+                  estimate-message-tokens
+                  ensure-first-user-pinned
+                  user-message?
+                  system-message?)
+         (only-in "../runtime/compactor.rkt" llm-summarize)
+         (only-in "../llm/provider.rkt" provider?)
+         (only-in "../util/hook-types.rkt"
+                  hook-result-action
+                  hook-result-payload
+                  hook-result?))
+
+;; Config
+(provide context-assembly-config
+         context-assembly-config?
+         context-assembly-config-recent-tokens
+         context-assembly-config-max-catalog-entries
+         context-assembly-config-max-catalog-tokens
+         context-assembly-config-summary-window
+         make-context-assembly-config
+         ;; Backward compat aliases
+         (rename-out
+          [context-assembly-config context-manager-config]
+          [context-assembly-config? context-manager-config?]
+          [context-assembly-config-recent-tokens context-manager-config-recent-tokens]
+          [context-assembly-config-max-catalog-entries context-manager-config-max-catalog-entries]
+          [context-assembly-config-max-catalog-tokens context-manager-config-max-catalog-tokens]
+          [context-assembly-config-summary-window context-manager-config-summary-window]
+          [make-context-assembly-config make-context-manager-config])
+         ;; Core API
+         build-assembled-context
+         build-session-context
+         ;; Result struct
+         context-result
+         context-result?
+         context-result-messages
+         context-result-total-tokens
+         context-result-pinned-count
+         context-result-recent-count
+         context-result-excluded-count
+         context-result-over-budget?
+         context-result-catalog
+         context-result-summary
+         ;; Tiered context (from compactor)
+         tiered-context
+         tiered-context?
+         tiered-context-tier-a
+         tiered-context-tier-b
+         tiered-context-tier-c
+         build-tiered-context
+         tiered-context->message-list
+         build-tiered-context-with-hooks
+         context-assembly-payload
+         payload->tiered-context
+         tiered-context->payload
+         ;; Catalog
+         catalog-entry
+         catalog-entry?
+         catalog-entry-id
+         catalog-entry-role
+         catalog-entry-summary
+         generate-catalog
+         ;; Summary
+         context-summary
+         context-summary?
+         context-summary-from-id
+         context-summary-to-id
+         context-summary-text
+         context-summary-entry-count
+         context-summary-prompt
+         generate-context-summary
+         ;; Summary cache
+         summary-cache
+         make-summary-cache
+         summary-cache-lookup
+         summary-cache-store!)
+
+;; ============================================================
+;; Configuration
+;; ============================================================
+
+(struct context-assembly-config
+        (recent-tokens ; tokens for the recent window (default 30000)
+         max-catalog-entries ; max catalog entries (default 40)
+         max-catalog-tokens ; max catalog token budget (default 2000)
+         summary-window) ; tokens for summary window (default 4000)
+  #:transparent)
+
+(define (make-context-assembly-config #:recent-tokens [recent 30000]
+                                      #:max-catalog-entries [max-entries 40]
+                                      #:max-catalog-tokens [max-tokens 2000]
+                                      #:summary-window [summary 4000])
+  (context-assembly-config recent max-entries max-tokens summary))
+
+;; ============================================================
+;; Result struct — full diagnostics for observability
+;; ============================================================
+
+(struct context-result
+        (messages ; (listof message?) — assembled context for LLM
+         total-tokens ; integer — estimated total tokens in result
+         pinned-count ; integer — number of pinned messages
+         recent-count ; integer — number of recent (non-pinned) messages
+         excluded-count ; integer — number of messages excluded from context
+         over-budget? ; boolean — did messages exceed the token budget?
+         catalog ; (listof catalog-entry?) — summaries of excluded
+         summary) ; (or/c context-summary? #f) — generated summary
+  #:transparent)
+
+;; ============================================================
+;; Catalog entry struct
+;; ============================================================
+
+(struct catalog-entry (id role summary) #:transparent)
+
+;; ============================================================
+;; Summary struct
+;; ============================================================
+
+(struct context-summary (from-id to-id text entry-count) #:transparent)
+
+;; ============================================================
+;; Summary cache
+;; ============================================================
+
+(struct summary-cache ([table #:mutable]) #:transparent)
+
+(define (make-summary-cache)
+  (summary-cache (hash)))
+
+(define (summary-cache-lookup cache from-id to-id)
+  (hash-ref (summary-cache-table cache) (cons from-id to-id) #f))
+
+(define (summary-cache-store! cache from-id to-id text)
+  (set-summary-cache-table! cache (hash-set (summary-cache-table cache) (cons from-id to-id) text)))
+
+;; ============================================================
+;; Core: build-assembled-context
+;; ============================================================
+
+;; Build the assembled context from a session index.
+;; Returns a context-result struct with full diagnostics.
+(define (build-assembled-context idx
+                                 config
+                                 #:cache [cache #f]
+                                 #:provider [provider #f]
+                                 #:model-name [model-name #f])
+  (define raw-messages (build-session-context idx))
+  (if (null? raw-messages)
+      (context-result '() 0 0 0 0 #f '() #f)
+      (let ()
+        (define max-tokens (context-assembly-config-recent-tokens config))
+        ;; Phase 1: Identify pinned items (system + first user + compaction summaries)
+        (define-values (pinned removable) (partition-messages raw-messages))
+        (define pinned-tokens (for/sum ([m (in-list pinned)]) (estimate-message-tokens m)))
+
+        ;; Phase 3: Fit recent messages within remaining budget
+        (define remaining-budget (- max-tokens pinned-tokens))
+        (define-values (recent excluded)
+          (if (<= remaining-budget 0)
+              (values '() removable)
+              (fit-recent removable remaining-budget)))
+
+        ;; Phase 2: Generate summary for excluded entries
+        (define summary-obj (generate-context-summary excluded provider model-name #:cache cache))
+        (define summary-msg
+          (and summary-obj
+               (make-message (format "summary-~a-~a"
+                                     (context-summary-from-id summary-obj)
+                                     (context-summary-to-id summary-obj))
+                             #f
+                             'user
+                             'context-assembly-summary
+                             (list (make-text-part (context-summary-text summary-obj)))
+                             (current-seconds)
+                             (hasheq))))
+
+        ;; Phase 4: Generate catalog for excluded entries
+        (define max-entries (context-assembly-config-max-catalog-entries config))
+        (define catalog
+          (generate-catalog excluded
+                            #:max-entries max-entries
+                            #:max-tokens (context-assembly-config-max-catalog-tokens config)))
+
+        ;; Phase 5: Reassemble in original order
+        (define pinned-ids
+          (for/hash ([m (in-list pinned)])
+            (values (message-id m) #t)))
+        (define recent-ids
+          (for/hash ([m (in-list recent)])
+            (values (message-id m) #t)))
+        (define result-messages
+          (for/list ([m (in-list raw-messages)]
+                     #:when (or (hash-has-key? pinned-ids (message-id m))
+                                (hash-has-key? recent-ids (message-id m))))
+            m))
+
+        ;; Inject summary message after pinned, before recent
+        (define result-with-summary
+          (if (not summary-msg)
+              result-messages
+              (let ()
+                (define pinned-last-pos
+                  (for/last ([m (in-list result-messages)]
+                             [i (in-naturals)]
+                             #:when (hash-has-key? pinned-ids (message-id m)))
+                    i))
+                (define insert-pos
+                  (if pinned-last-pos
+                      (add1 pinned-last-pos)
+                      0))
+                (define-values (before after)
+                  (split-at result-messages (min insert-pos (length result-messages))))
+                (append before (list summary-msg) after))))
+
+        ;; Ensure first user message is in result (pin guarantee)
+        (define result-with-pin (ensure-first-user-pinned result-with-summary raw-messages))
+        (define total-tokens (for/sum ([m (in-list result-with-pin)]) (estimate-message-tokens m)))
+        (define over-budget? (> total-tokens max-tokens))
+
+        (context-result result-with-pin
+                        total-tokens
+                        (length pinned)
+                        (length recent)
+                        (length excluded)
+                        over-budget?
+                        catalog
+                        summary-obj))))
+
+;; Backward-compatible entry point: returns just messages list
+(define (build-session-context idx)
+  (context-builder:build-session-context idx)) ; from context-builder (tree walk)
+
+;; ============================================================
+;; Phase 1: Pin system prompt + first user + compaction summaries
+;; ============================================================
+
+(define (partition-messages messages)
+  (define first-user
+    (for/first ([m (in-list messages)]
+                #:when (eq? (message-role m) 'user))
+      m))
+  (define-values (protected removable)
+    (partition (lambda (m)
+                 (or (eq? (message-kind m) 'system-instruction)
+                     (eq? (message-kind m) 'compaction-summary)
+                     (eq? (message-kind m) 'context-assembly-summary)
+                     (and first-user (eq? m first-user))))
+               messages))
+  (values protected removable))
+
+;; ============================================================
+;; Phase 3: Fit recent messages
+;; ============================================================
+
+(define (fit-recent messages budget)
+  (let loop ([remaining (reverse messages)]
+             [kept '()]
+             [excluded '()]
+             [used 0])
+    (cond
+      [(null? remaining) (values (reverse kept) (reverse excluded))]
+      [else
+       (define m (car remaining))
+       (define tokens (estimate-message-tokens m))
+       (cond
+         [(> (+ used tokens) budget) (loop (cdr remaining) kept (cons m excluded) used)]
+         [else (loop (cdr remaining) (cons m kept) excluded (+ used tokens))])])))
+
+;; ============================================================
+;; Phase 4: Catalog generation
+;; ============================================================
+
+(define (generate-catalog entries #:max-entries [max-entries 40] #:max-tokens [max-tokens 2000])
+  (define collapsed (collapse-consecutive-tools entries))
+  (let loop ([remaining collapsed]
+             [acc '()]
+             [used-tokens 0])
+    (cond
+      [(null? remaining) (reverse acc)]
+      [(>= (length acc) max-entries) (reverse acc)]
+      [else
+       (define entry (car remaining))
+       (define tokens (estimate-text-tokens (catalog-entry-summary entry)))
+       (if (> (+ used-tokens tokens) max-tokens)
+           (reverse acc)
+           (loop (cdr remaining) (cons entry acc) (+ used-tokens tokens)))])))
+
+(define (collapse-consecutive-tools entries)
+  (define-values (result current-group)
+    (for/fold ([acc '()]
+               [group '()])
+              ([m (in-list entries)])
+      (cond
+        [(eq? (message-role m) 'tool) (values acc (cons m group))]
+        [(null? group) (values (cons (message->catalog-entry m) acc) '())]
+        [else
+         (values (cons (message->catalog-entry m)
+                       (cons (tool-group->catalog-entry (reverse group)) acc))
+                 '())])))
+  (reverse (if (null? current-group)
+               result
+               (cons (tool-group->catalog-entry (reverse current-group)) result))))
+
+(define (message->catalog-entry m)
+  (catalog-entry (message-id m)
+                 (symbol->string (message-role m))
+                 (truncate-string (extract-message-text m) 80)))
+
+(define (tool-group->catalog-entry tool-msgs)
+  (define ids (string-join (map message-id tool-msgs) ","))
+  (define texts (map extract-message-text tool-msgs))
+  (catalog-entry
+   ids
+   "tool"
+   (format "[~a tool calls: ~a]" (length tool-msgs) (truncate-string (string-join texts "; ") 50))))
+
+;; ============================================================
+;; Summary prompt template
+;; ============================================================
+
+(define (context-summary-prompt messages #:previous-summary [prev-summary #f])
+  (define formatted (format-messages-for-summary messages))
+  (cond
+    [prev-summary
+     (string-append "You are updating an existing session summary with new information. "
+                    "Merge the new messages into the existing summary.\n\n"
+                    "EXISTING SUMMARY:\n"
+                    prev-summary
+                    "\n\nNEW MESSAGES SINCE LAST SUMMARY:\n"
+                    formatted
+                    "\n\nProduce an UPDATED summary with these EXACT sections:\n"
+                    "## Goal\n"
+                    "## Progress\n### Done\n### In Progress\n### Blocked\n"
+                    "## Key Decisions\n"
+                    "## Next Steps\n"
+                    "## Critical Context\n\n"
+                    "RULES:\n"
+                    "- Maximum ~500 words\n"
+                    "- Preserve all information from existing summary that is still relevant\n"
+                    "- Add new information from new messages\n"
+                    "- Update Progress sections (move items between Done/In Progress/Blocked)\n"
+                    "- Keep the Goal to ONE line\n")]
+    [else
+     (string-append
+      "You are summarizing a coding assistant session. "
+      "Produce a structured summary with these EXACT sections:\n\n"
+      "## Goal\n<one-line description of what the user is trying to accomplish>\n\n"
+      "## Progress\n### Done\n- [x] <completed items>\n\n"
+      "### In Progress\n- <current work if any>\n\n"
+      "### Blocked\n- <blockers if any>\n\n"
+      "## Key Decisions\n- <important decisions made during the session>\n\n"
+      "## Next Steps\n1. <next actions>\n\n"
+      "## Critical Context\n- <must-preserve information: file paths, variable names, API details, error states>\n\n"
+      "RULES:\n"
+      "- Maximum ~500 words\n"
+      "- Preserve specific file paths, function names, variable names exactly\n"
+      "- Include any error messages or states being debugged\n"
+      "- Keep the Goal to ONE line\n\n"
+      "SESSION MESSAGES:\n"
+      formatted)]))
+
+(define (format-messages-for-summary messages)
+  (string-join (for/list ([m (in-list messages)])
+                 (define role (symbol->string (message-role m)))
+                 (define text (extract-message-text m))
+                 (format "[~a] (~a):\n  ~a" (message-id m) role (truncate-string text 500)))
+               "\n\n"))
+
+;; ============================================================
+;; Generate context summary
+;; ============================================================
+
+(define (generate-context-summary entries provider model-name #:cache [cache #f])
+  (cond
+    [(null? entries) #f]
+    [else
+     (define from-id (message-id (first entries)))
+     (define to-id (message-id (last entries)))
+     (define cached (and cache (summary-cache-lookup cache from-id to-id)))
+     (cond
+       [cached (context-summary from-id to-id cached (length entries))]
+       [else
+        (define summary-text
+          (cond
+            [(and provider model-name (provider? provider))
+             (llm-summarize entries provider model-name)]
+            [else (simple-summary-text entries)]))
+        (when cache
+          (summary-cache-store! cache from-id to-id summary-text))
+        (context-summary from-id to-id summary-text (length entries))])]))
+
+(define (simple-summary-text entries)
+  (string-append "## Progress\n### Done\n"
+                 (string-join (for/list ([m (in-list entries)]
+                                         [i (in-naturals)]
+                                         #:break (>= i 20))
+                                (format "- [~a] ~a: ~a"
+                                        (message-id m)
+                                        (symbol->string (message-role m))
+                                        (truncate-string (extract-message-text m) 100)))
+                              "\n")))
+
+;; ============================================================
+;; Tiered Context Assembly (from compactor.rkt)
+;; ============================================================
+
+;; Default tier boundaries
+(define DEFAULT-TIER-B-COUNT 20)
+(define DEFAULT-TIER-C-COUNT 4)
+
+;; R2-6: Context Assembly Hook Payload
+(struct context-assembly-payload (tier-a-messages tier-b-messages tier-c-messages max-tokens metadata)
+  #:transparent)
+
+(struct tiered-context (tier-a tier-b tier-c) #:transparent)
+
+(define (payload->tiered-context payload)
+  (tiered-context (context-assembly-payload-tier-a-messages payload)
+                  (context-assembly-payload-tier-b-messages payload)
+                  (context-assembly-payload-tier-c-messages payload)))
+
+(define (tiered-context->payload tc max-tokens [metadata (hasheq)])
+  (context-assembly-payload (tiered-context-tier-a tc)
+                            (tiered-context-tier-b tc)
+                            (tiered-context-tier-c tc)
+                            max-tokens
+                            metadata))
+
+(define (build-tiered-context messages
+                              #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
+                              #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT])
+  (define-values (compaction-summaries regular-msgs)
+    (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
+
+  (define-values (sys-protected regular)
+    (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular-msgs))
+
+  (define first-user-idx
+    (for/first ([m (in-list regular)]
+                [i (in-naturals)]
+                #:when (eq? (message-role m) 'user))
+      i))
+  (define-values (pinned-user unpinned)
+    (if first-user-idx
+        (values (list (list-ref regular first-user-idx))
+                (append (take regular first-user-idx) (drop regular (add1 first-user-idx))))
+        (values '() regular)))
+
+  (define total (length unpinned))
+  (define tier-c-size (min tier-c-count total))
+  (define tier-c
+    (if (> tier-c-size 0)
+        (take-right unpinned tier-c-size)
+        '()))
+
+  (define remaining-after-c
+    (if (> tier-c-size 0)
+        (drop-right unpinned tier-c-size)
+        unpinned))
+
+  (define remaining-count (length remaining-after-c))
+  (define tier-b-size (min tier-b-count remaining-count))
+  (define tier-b
+    (if (> tier-b-size 0)
+        (take-right remaining-after-c tier-b-size)
+        '()))
+
+  (tiered-context (append sys-protected pinned-user compaction-summaries) tier-b tier-c))
+
+(define (build-tiered-context-with-hooks messages
+                                         #:hook-dispatcher [hook-dispatcher #f]
+                                         #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
+                                         #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
+                                         #:max-tokens [max-tokens 8192])
+  (define base-context
+    (build-tiered-context messages #:tier-b-count tier-b-count #:tier-c-count tier-c-count))
+
+  (define payload
+    (tiered-context->payload base-context
+                             max-tokens
+                             (hasheq 'tier-b-count
+                                     tier-b-count
+                                     'tier-c-count
+                                     tier-c-count
+                                     'total-messages
+                                     (length messages))))
+
+  (if hook-dispatcher
+      (let ([result (hook-dispatcher 'context-assembly payload)])
+        (case (hook-result-action result)
+          [(block)
+           (define reason (hook-result-payload result))
+           (raise (exn:fail (format "Context assembly blocked by hook: ~a"
+                                    (if reason reason "no reason given"))
+                            (current-continuation-marks)))]
+          [(amend)
+           (define amended-payload (hook-result-payload result))
+           (values (payload->tiered-context amended-payload) result)]
+          [(pass) (values base-context result)]
+          [else (values base-context result)]))
+      (values base-context #f)))
+
+(define (tiered-context->message-list tc)
+  (append (tiered-context-tier-a tc) (tiered-context-tier-b tc) (tiered-context-tier-c tc)))
+
+;; ============================================================
+;; Helpers
+;; ============================================================
+
+(define (extract-message-text msg)
+  (define parts (message-content msg))
+  (define texts
+    (for/list ([part (in-list parts)]
+               #:when (text-part? part))
+      (text-part-text part)))
+  (string-join texts " "))
+
+(define (truncate-string s max-len)
+  (if (<= (string-length s) max-len)
+      s
+      (string-append (substring s 0 (- max-len 3)) "...")))
