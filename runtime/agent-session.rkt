@@ -43,6 +43,10 @@
          "../runtime/session-index.rkt"
          "../runtime/compactor.rkt"
          (only-in "../extensions/api.rkt" extension-name list-extensions)
+         (only-in "../util/event-payloads.rkt"
+                  session-start-payload
+                  session-end-payload
+                  session-switch-payload)
          (only-in "../runtime/context-builder.rkt"
                   (build-session-context context-builder:build-session-context))
          (only-in "../runtime/session-context.rkt" extract-path-settings)
@@ -221,11 +225,10 @@
   (ensure-persisted! sess)
 
   ;; Dispatch 'session-start hook (R2-7: payload with session-id, config, and reason)
-  (define session-start-payload (hasheq 'session-id sid 'config config 'reason 'new))
-  (define-values (_session-start-payload _session-start-res)
+  (define-values (_start-payload _session-start-res)
     (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
                           'session-start
-                          session-start-payload))
+                          (session-start-payload sid config 'new)))
 
   ;; Subscribe to fork.requested and compact.requested events from TUI/CLI
   (wire-session-event-handlers! sess fork-session)
@@ -277,7 +280,7 @@
         #f))
 
   ;; Dispatch 'session-before-switch hook — extensions can block session resume
-  (define switch-payload (hasheq 'session-id session-id 'operation 'resume))
+  (define switch-payload (session-switch-payload session-id 'resume))
   (define-values (_amended-switch switch-res)
     (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
                           'session-before-switch
@@ -315,7 +318,7 @@
                        (hasheq 'sessionId session-id))
 
   ;; Dispatch 'session-start hook with reason 'resume
-  (define resume-start-payload (hasheq 'session-id session-id 'config config 'reason 'resume))
+  (define resume-start-payload (session-start-payload session-id config 'resume))
   (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start resume-start-payload)
 
   ;; Subscribe to fork/compact events from TUI/CLI
@@ -748,8 +751,7 @@
                          (hasheq 'sessionId (agent-session-session-id sess)))
     ;; Dispatch 'session-shutdown hook (R2-7: payload with session-id and duration)
     (define session-duration (- (now-seconds) (agent-session-start-time sess)))
-    (define shutdown-payload
-      (hasheq 'session-id (agent-session-session-id sess) 'duration session-duration))
+    (define shutdown-payload (session-end-payload (agent-session-session-id sess) session-duration))
     (define-values (_shutdown-payload _shutdown-res)
       (maybe-dispatch-hooks (agent-session-extension-registry sess)
                             'session-shutdown

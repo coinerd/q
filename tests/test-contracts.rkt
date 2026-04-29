@@ -90,3 +90,31 @@
   (check-true (procedure? q:go))
   (check-true (procedure? q:gsd-status))
   (check-true (procedure? q:reset-gsd!)))
+
+;; ============================================================
+;; Negative contract-rejection tests (SDK-02)
+;; ============================================================
+
+(test-case "sdk-public: open-session rejects non-runtime"
+  (check-exn exn:fail:contract? (lambda () (open-session "not-a-runtime"))))
+
+(test-case "sdk-public: interrupt! rejects non-runtime"
+  (check-exn exn:fail:contract? (lambda () (interrupt! 42))))
+
+(test-case "sdk-public: fork-session! rejects non-runtime"
+  (check-exn exn:fail:contract? (lambda () (fork-session! 'nope))))
+
+(test-case "sdk-public: steer! rejects non-runtime"
+  (check-exn exn:fail:contract? (lambda () (steer! "not-runtime" "prompt"))))
+
+(test-case "sdk-public: dispatch-command! rejects non-runtime"
+  (check-exn exn:fail:contract? (lambda () (dispatch-command! #f "cmd" "arg"))))
+
+(test-case "sdk-public: subscribe-events! rejects non-procedure callback"
+  (check-exn exn:fail:contract? (lambda () (subscribe-events! "not-runtime" 42))))
+
+(test-case "sdk-public: session:set-thinking-level! rejects invalid level"
+  (check-exn exn:fail:contract? (lambda () (session:set-thinking-level! 'not-a-session 'invalid))))
+
+(test-case "sdk-public: get-context-usage rejects non-integer"
+  (check-exn exn:fail:contract? (lambda () (get-context-usage "not-a-number" -1))))
