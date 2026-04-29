@@ -44,6 +44,10 @@
          (only-in "../extensions/message-inject.rkt" injection-event-topic)
          "../runtime/compactor.rkt"
          (only-in "../extensions/api.rkt" extension-name list-extensions)
+         ;; TR BOUNDARY: event-payloads.rkt is #lang typed/racket. Untyped consumers
+         ;; like this module receive auto-generated contracts from TR's boundary.
+         ;; Struct accessors are contract-wrapped at the module boundary,
+         ;; providing runtime type safety for all payload constructors.
          (only-in "../util/event-payloads.rkt"
                   session-start-payload
                   session-end-payload
