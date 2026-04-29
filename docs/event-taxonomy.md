@@ -312,3 +312,86 @@ Key hook points where extensions can intercept:
 | `input` | User input received | No |
 
 For the complete list, see `util/hook-types.rkt`.
+
+## Contract-Validated Events (v0.22.7)
+
+The following high-value events have payload contracts enforced at emission
+time in `runtime/iteration.rkt`. These events are consumed by extensions and
+TUI subscribers — their payload shapes are part of the stable protocol.
+
+### `context.mid-turn-over-budget`
+**Contract:** `budget-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `estimated-tokens` | natural | Estimated token count |
+| `budget` | natural | Budget threshold |
+| `max-tokens` | natural | Model max context tokens |
+
+### `context.overflow.compacted`
+**Contract:** `compact-result-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `original-size` | natural | Messages before compaction |
+| `new-size` | natural | Messages after compaction |
+| `removed-count` | natural | Messages removed |
+| `kept-count` | natural | Messages retained |
+
+### `agent.blocked`
+**Contract:** `reason-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reason` | string | Block reason (e.g., "extension-block") |
+| `hook` | symbol | Hook point that triggered the block |
+
+### `message.injected.drain`
+**Contract:** `injection-count-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | natural | Number of injected messages |
+
+### `turn.cancelled`
+**Contract:** `turn-cancelled-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reason` | string | Cancellation reason ("force-shutdown", "cancellation-token", "graceful-shutdown") |
+| `iteration` | natural | Iteration number when cancelled |
+
+### `iteration.decision`
+**Contract:** `iteration-decision-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `iteration` | natural | Current iteration number |
+| `termination` | symbol | Termination reason |
+| `consecutive_tools` | natural | Consecutive tool calls |
+| `max_iterations` | natural | Soft iteration limit |
+| `max_iterations_hard` | natural | Hard iteration limit |
+
+### `runtime.error`
+**Contract:** `error-detail-payload/c`
+**Stability:** evolving
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `error` | string | Error message |
+| `iteration` | natural | Iteration number |
+| `maxIterations` | natural | Hard limit |
+
+## Payload Contract Module
+
+All contracts are defined in `util/event-contracts.rkt`. Contracts are applied
+via `assert-payload` in `runtime/iteration.rkt` before event emission.
+
+**Forward-compatible:** Adding new keys to payloads is safe. Removing or
+renaming keys will cause contract assertion failures at runtime.
