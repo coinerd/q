@@ -138,7 +138,7 @@
                        "agent/state.rkt"
                        "runtime/iteration.rkt"
                        "runtime/auto-retry.rkt"
-                       "runtime/context-manager.rkt"
+                       "runtime/context-assembly.rkt"
                        "runtime/trace-logger.rkt"
                        "runtime/project-tree.rkt"
                        "runtime/agent-session.rkt"
