@@ -7,6 +7,14 @@
 ;; optional wrappers that provide type safety and better error messages.
 ;;
 ;; Migrated to Typed Racket in v0.22.6 W5 (RKT-01 pilot).
+;;
+;; ── TR BOUNDARY ──────────────────────────────────────────────
+;; This is a #lang typed/racket module. Untyped consumers receive
+;; auto-generated contracts from TR's boundary system. Struct
+;; constructors enforce field types at call sites in untyped modules.
+;; New consumers should import normally — no require/typed needed.
+;; See ADR-0013 (planned) for TR migration strategy.
+;; ──────────────────────────────────────────────────────────────
 
 (provide (struct-out session-start-payload)
          (struct-out session-end-payload)

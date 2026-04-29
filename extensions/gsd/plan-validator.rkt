@@ -1,36 +1,20 @@
-#lang racket/base
+#lang typed/racket
 
 ;; extensions/gsd/plan-validator.rkt — Plan structure validation
 ;;
-;; Wave 2a of v0.21.0: Mechanical validation before /go is allowed.
-;; DD-4: Structured plan format with mechanical validation.
-;;
-;; Error rules (block /go):
-;;   - Plan has < 1 wave
-;;   - Wave missing title
-;;   - Wave has no files (F2: upgraded from warning to error)
-;;
-;; Warning rules (display but allow):
-;;   - Wave missing verify command
-;;   - Wave missing root-cause/objective
+;; Migrated to #lang typed/racket in v0.22.8 W2.
+;; Enhanced validation: files missing is an error (not warning).
 
 (require racket/format
          racket/string
          "plan-types.rkt")
 
-(provide validate-plan-strict
-         format-validation-report
-         valid-plan->go?)
-
-;; ============================================================
-;; Strict validation
-;; ============================================================
-
-;; Enhanced validation: files missing is an error (not warning).
-;; Returns validation-result with errors and warnings.
+(: validate-plan-strict : gsd-plan -> validation-result)
 (define (validate-plan-strict plan)
   (define waves (gsd-plan-waves plan))
+  (: errors : (Listof String))
   (define errors '())
+  (: warnings : (Listof String))
   (define warnings '())
   ;; Check: plan has at least 1 wave
   (when (null? waves)
@@ -39,61 +23,59 @@
   (for ([w waves])
     (define widx (gsd-wave-index w))
     (define prefix (format "Wave ~a" widx))
-    ;; Warning: missing title (plans may omit title after wave number)
     (when (string=? (gsd-wave-title w) "")
       (set! warnings (cons (format "~a: no explicit title" prefix) warnings)))
-    ;; Warning: no file references in this wave (some waves are verify-only)
     (when (null? (gsd-wave-files w))
       (set! warnings
             (cons (format "~a: no file references — wave may not produce changes" prefix) warnings)))
-    ;; Warning: no verify command
     (when (or (not (gsd-wave-verify w)) (string=? (gsd-wave-verify w) ""))
       (set! warnings (cons (format "~a: no verify command" prefix) warnings)))
-    ;; Warning: no root-cause/objective
     (when (string=? (gsd-wave-root-cause w) "")
       (set! warnings (cons (format "~a: no root-cause/objective" prefix) warnings)))
-    ;; Warning: no slug for wave doc lookup
     (when (string=? (gsd-wave-title w) "")
       (set! warnings
             (cons (format "~a: cannot derive wave doc slug (empty title)" prefix) warnings))))
-  ;; Error: ALL waves are file-less — plan has nothing to execute on
-  (when (and (not (null? waves))
-             (for/and ([w waves])
-               (null? (gsd-wave-files w))))
+  ;; Error: ALL waves are file-less
+  (when (and (pair? waves) (andmap (lambda ([w : gsd-wave]) (null? (gsd-wave-files w))) waves))
     (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
   (validation-result (reverse errors) (reverse warnings)))
 
-;; ============================================================
-;; Helpers
-;; ============================================================
-
-;; Can we proceed to /go? Only if no errors.
+(: valid-plan->go? : gsd-plan -> Boolean)
 (define (valid-plan->go? plan)
   (define result (validate-plan-strict plan))
   (validation-valid? result))
 
-;; Format validation result for display.
+(: format-validation-report : validation-result -> String)
 (define (format-validation-report result)
-  (define errors (validation-errors result))
-  (define warnings (validation-warnings result))
+  (define errs (validation-result-errors result))
+  (define warns (validation-result-warnings result))
+  (: parts : (Listof String))
   (define parts '())
-  (when (not (null? errors))
+  (when (not (null? errs))
     (set! parts
           (cons (format "❌ ERRORS (block /go):\n~a"
-                        (string-join (for/list ([e errors])
+                        (string-join (for/list :
+                                       (Listof String)
+                                       ([e : String errs])
                                        (format "  - ~a" e))
                                      "\n"))
                 parts)))
-  (when (not (null? warnings))
+  (when (not (null? warns))
     (set! parts
           (cons (format "⚠️  WARNINGS:\n~a"
-                        (string-join (for/list ([w warnings])
+                        (string-join (for/list :
+                                       (Listof String)
+                                       ([w : String warns])
                                        (format "  - ~a" w))
                                      "\n"))
                 parts)))
-  (if (null? errors)
+  (if (null? errs)
       (string-append "✅ Plan is valid.\n"
                      (if (null? parts)
                          ""
                          (string-join (reverse parts) "\n\n")))
       (string-join (reverse parts) "\n\n")))
+
+(provide validate-plan-strict
+         format-validation-report
+         valid-plan->go?)

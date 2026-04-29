@@ -9,10 +9,12 @@
 (require rackunit
          rackunit/text-ui
          "../util/version.rkt"
-         "../util/event-payloads.rkt")
+         "../util/event-payloads.rkt"
+         "../extensions/gsd/plan-types.rkt"
+         "../extensions/gsd/plan-validator.rkt")
 
 (define tr-pilot-tests
-  (test-suite "Typed Racket Pilot (RKT-01 v0.22.6)"
+  (test-suite "Typed Racket Pilot (RKT-01 v0.22.8)"
 
     ;; -------------------------------------------------------
     ;; util/version.rkt — Typed Racket
@@ -59,17 +61,57 @@
       (check-false (payload-session-id 'unknown)))
 
     (test-case "TR boundary contracts enforce string types for session-id"
-      ;; session-start-payload expects String for session-id.
-      ;; From untyped code, TR auto-generates contracts that enforce this.
       (check-exn exn:fail:contract? (lambda () (session-start-payload 123 #f 'new))))
 
     (test-case "TR boundary contracts enforce symbol types for reason"
-      ;; session-start-payload expects Symbol for reason.
       (check-exn exn:fail:contract? (lambda () (session-start-payload "s1" #f "not-a-symbol"))))
 
     (test-case "struct transparency works"
       (check-pred session-start-payload? (session-start-payload "s" #f 'new))
       (check-pred session-end-payload? (session-end-payload "s" 1))
-      (check-pred gsd-mode-payload? (gsd-mode-payload 'a 'b)))))
+      (check-pred gsd-mode-payload? (gsd-mode-payload 'a 'b)))
+
+    ;; -------------------------------------------------------
+    ;; extensions/gsd/plan-types.rkt — Typed Racket (v0.22.8)
+    ;; -------------------------------------------------------
+    (test-case "plan-types: gsd-task construction from untyped context"
+      (define t (make-gsd-task "test task" '("file1.rkt") "action" "verify" ""))
+      (check-pred gsd-task? t)
+      (check-equal? (gsd-task-name t) "test task")
+      (check-equal? (gsd-task-files t) '("file1.rkt"))
+      (check-equal? (gsd-task-status t) 'pending))
+
+    (test-case "plan-types: gsd-wave and gsd-plan construction"
+      (define w (make-gsd-wave 0 "Test Wave" "root cause" '("f.rkt") '() "verify" '("done")))
+      (check-pred gsd-wave? w)
+      (check-equal? (gsd-wave-index w) 0)
+      (check-equal? (gsd-wave-title w) "Test Wave")
+      (check-equal? (gsd-wave-status w) 'pending)
+      (define p (gsd-plan (list w) #f '() '()))
+      (check-pred gsd-plan? p)
+      (check-equal? (length (gsd-plan-waves p)) 1))
+
+    (test-case "plan-types: TR boundary contract enforcement"
+      ;; gsd-task expects String for name field.
+      ;; Passing wrong type from untyped should raise contract error.
+      (check-exn exn:fail:contract? (lambda () (gsd-task 123 '() "action" "verify" "" 'pending))))
+
+    ;; -------------------------------------------------------
+    ;; extensions/gsd/plan-validator.rkt — Typed Racket (v0.22.8)
+    ;; -------------------------------------------------------
+    (test-case "validate-plan-strict returns validation-result"
+      (define w (make-gsd-wave 0 "Wave 0" "cause" '("f.rkt") '() "verify" '("done")))
+      (define p (gsd-plan (list w) #f '() '()))
+      (define result (validate-plan-strict p))
+      (check-pred validation-result? result)
+      (check-true (validation-valid? result)))
+
+    (test-case "format-validation-report produces non-empty string"
+      (define w (make-gsd-wave 0 "Wave 0" "cause" '("f.rkt") '() "verify" '()))
+      (define p (gsd-plan (list w) #f '() '()))
+      (define result (validate-plan-strict p))
+      (define report (format-validation-report result))
+      (check-pred string? report)
+      (check-true (> (string-length report) 0)))))
 
 (run-tests tr-pilot-tests)

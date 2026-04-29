@@ -1,38 +1,76 @@
-#lang racket/base
+#lang typed/racket
 
 ;; extensions/gsd/plan-types.rkt — Structured Plan/Task/Wave types
 ;;
 ;; Wave 0 of v0.21.0: Machine-parseable plan types with validation.
-;; Plans use a structured format with required fields.
-;; The extension validates plan structure before allowing /go.
+;; Migrated to #lang typed/racket in v0.22.8 W2 (TR expansion).
+;;
+;; ── TR BOUNDARY ──────────────────────────────────────────────
+;; This is a #lang typed/racket module. Untyped consumers receive
+;; auto-generated contracts from TR's boundary system. Struct
+;; constructors enforce field types at call sites in untyped modules.
+;; New consumers should import normally — no require/typed needed.
+;; ──────────────────────────────────────────────────────────────
 
-(require racket/match
-         racket/string
-         racket/list)
+(require racket/string
+         racket/list
+         racket/format)
 
 ;; ============================================================
-;; Core structs (immutable)
+;; Type definitions
 ;; ============================================================
 
-(struct gsd-task (name files action verify done status) #:transparent)
+(define-type WaveStatus (U 'pending 'in-progress 'completed 'failed 'skipped))
 
-(struct gsd-wave (index title status root-cause files tasks verify done-criteria) #:transparent)
+;; ============================================================
+;; Core structs (immutable, typed)
+;; ============================================================
 
-(struct gsd-plan (waves context-bundle constraints must-haves) #:transparent)
+(struct gsd-task
+        ([name : String] [files : (Listof String)]
+                         [action : String]
+                         [verify : String]
+                         [done : String]
+                         [status : WaveStatus])
+  #:transparent)
 
-(struct validation-result (errors warnings) #:transparent)
+(struct gsd-wave
+        ([index : Natural] [title : String]
+                           [status : WaveStatus]
+                           [root-cause : String]
+                           [files : (Listof String)]
+                           [tasks : (Listof gsd-task)]
+                           [verify : String]
+                           [done-criteria : (Listof String)])
+  #:transparent)
 
-;; Aliases for cleaner API
-(define validation-errors validation-result-errors)
-(define validation-warnings validation-result-warnings)
+(struct gsd-plan
+        ([waves : (Listof gsd-wave)] [context-bundle : (U String #f)]
+                                     [constraints : (Listof String)]
+                                     [must-haves : (Listof String)])
+  #:transparent)
+
+(struct validation-result ([errors : (Listof String)] [warnings : (Listof String)]) #:transparent)
 
 ;; ============================================================
 ;; Convenience constructors
 ;; ============================================================
 
+(: make-gsd-task : String (Listof String) String String String -> gsd-task)
 (define (make-gsd-task name files action verify [done ""])
   (gsd-task name files action verify done 'pending))
 
+(: make-gsd-wave
+   :
+   Natural
+   String
+   String
+   (Listof String)
+   (Listof gsd-task)
+   String
+   (Listof String)
+   ->
+   gsd-wave)
 (define (make-gsd-wave index title root-cause files tasks verify done-criteria)
   (gsd-wave index title 'pending root-cause files tasks verify done-criteria))
 
@@ -40,9 +78,11 @@
 ;; Status setters (return new struct — immutable)
 ;; ============================================================
 
+(: gsd-task-set-status : gsd-task WaveStatus -> gsd-task)
 (define (gsd-task-set-status t status)
   (struct-copy gsd-task t [status status]))
 
+(: gsd-wave-set-status : gsd-wave WaveStatus -> gsd-wave)
 (define (gsd-wave-set-status w status)
   (struct-copy gsd-wave w [status status]))
 
@@ -50,141 +90,24 @@
 ;; Validation helpers
 ;; ============================================================
 
+(: validation-valid? : validation-result -> Boolean)
 (define (validation-valid? vr)
-  (null? (validation-errors vr)))
+  (null? (validation-result-errors vr)))
 
-;; ============================================================
-;; Parsing: markdown → (listof gsd-wave)
-;; ============================================================
-
-;; Parse PLAN.md content into structured waves.
-;; Looks for "## Wave N: Title" headers and extracts fields from
-;; bullet points within each wave section.
-(define (parse-waves-from-markdown md-text)
-  (define lines (string-split md-text "\n"))
-  ;; Find wave header line indices
-  (define wave-starts
-    (for/list ([line lines]
-               [idx (in-naturals)]
-               #:when (regexp-match #rx"^## +[Ww]ave +[0-9]+" line))
-      idx))
-  (define wave-end-idxs
-    (if (< (length wave-starts) 2)
-        (list (sub1 (length lines)))
-        (append (map sub1 (cdr wave-starts)) (list (sub1 (length lines))))))
-  ;; Parse each wave section
-  (for/list ([start wave-starts]
-             [end wave-end-idxs])
-    (parse-wave-section (take (drop lines start) (add1 (- end start))))))
-
-;; Clean file path: strip surrounding backticks and whitespace.
-;; Handles: `path` → path, ```path``` → path, path → path
-(define (clean-file-path s)
-  (define trimmed (string-trim s))
-  (cond
-    [(>= (string-length trimmed) 6)
-     ;; Check for triple backticks: ```path```
-     (define triple-back (string-prefix? trimmed "```"))
-     (define triple-end (string-suffix? trimmed "```"))
-     (if (and triple-back triple-end)
-         (string-trim (substring trimmed 3 (- (string-length trimmed) 3)))
-         ;; Check for single backticks: `path`
-         (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
-             (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
-             trimmed))]
-    [(>= (string-length trimmed) 2)
-     (if (and (string-prefix? trimmed "`") (string-suffix? trimmed "`"))
-         (string-trim (substring trimmed 1 (- (string-length trimmed) 1)))
-         trimmed)]
-    [else trimmed]))
-
-;; Parse structured fields from wave document content.
-;; Handles both bullet-style and heading-style formats.
-;; Single source of truth for field extraction (F3 consolidation).
-(define (parse-wave-content content)
-  (define lines (string-split content "\n"))
-  (define n (length lines))
-  (define root-cause "")
-  (define files '())
-  (define verify-cmd "")
-  (define done-criteria '())
-  (define in-files-section #f) ; track ## Files heading section
-  (for ([line lines]
-        [i (in-naturals)])
-    (define trimmed (string-trim line))
-    ;; Update section tracking BEFORE cond dispatch
-    (when (regexp-match? #rx"^## " trimmed)
-      (set! in-files-section (string-prefix? trimmed "## Files")))
-    (cond
-      ;; Heading-style: ## Verify — collect non-empty, non-backtick lines after heading
-      [(string-prefix? trimmed "## Verify")
-       (define after
-         (for/list ([j (in-range (add1 i) (min n (+ i 5)))]
-                    #:when (and (> (string-length (string-trim (list-ref lines j))) 0)
-                                (not (string-contains? (list-ref lines j) "```"))))
-           (string-trim (list-ref lines j))))
-       (when (and (string=? verify-cmd "") (not (null? after)))
-         (set! verify-cmd (string-join after "; ")))]
-      ;; Bullet-style Root cause
-      [(regexp-match #rx"^- +[Rr]oot *[Cc]ause *: *(.+)$" line)
-       =>
-       (lambda (m) (set! root-cause (string-trim (cadr m))))]
-      ;; Bullet-style Files (plural, comma-separated)
-      [(regexp-match #rx"^- +[Ff]iles *: *(.+)$" line)
-       =>
-       (lambda (m)
-         (define paths (string-split (string-trim (cadr m)) ","))
-         (set! files (append files (map (lambda (p) (clean-file-path (string-trim p))) paths))))]
-      ;; Bullet-style File (singular)
-      [(regexp-match #rx"^- +[Ff]ile *: *(.+)$" line)
-       =>
-       (lambda (m) (set! files (append files (list (clean-file-path (string-trim (cadr m)))))))]
-      ;; Bare bullets inside ## Files section
-      [(and in-files-section (regexp-match #rx"^- +(.+)$" line))
-       =>
-       (lambda (m) (set! files (append files (list (clean-file-path (string-trim (cadr m)))))))]
-      ;; Bullet-style Verify
-      [(regexp-match #rx"^- +[Vv]erify *: *(.+)$" line)
-       =>
-       (lambda (m) (set! verify-cmd (string-trim (cadr m))))]
-      ;; Bullet-style Done
-      [(regexp-match #rx"^- +[Dd]one *: *(.+)$" line)
-       =>
-       (lambda (m) (set! done-criteria (append done-criteria (list (string-trim (cadr m))))))]))
-  (hasheq 'root-cause root-cause 'files files 'verify verify-cmd 'done done-criteria))
-
-;; Parse a single wave section (list of lines, first is header).
-;; Uses unified parse-wave-content for field extraction.
-(define (parse-wave-section lines)
-  (define header (car lines))
-  (define body-lines (cdr lines))
-  (define header-match (regexp-match #rx"^## +[Ww]ave +([0-9]+) *: *(.+)$" header))
-  (define idx
-    (if header-match
-        (string->number (cadr header-match))
-        0))
-  (define title
-    (if header-match
-        (string-trim (caddr header-match))
-        ""))
-  ;; Use unified parser
-  (define fields (parse-wave-content (string-join body-lines "\n")))
-  (gsd-wave idx
-            title
-            'pending
-            (hash-ref fields 'root-cause "")
-            (hash-ref fields 'files '())
-            '()
-            (hash-ref fields 'verify "")
-            (hash-ref fields 'done '())))
+;; Aliases for cleaner API
+(define validation-errors validation-result-errors)
+(define validation-warnings validation-result-warnings)
 
 ;; ============================================================
 ;; Validation
 ;; ============================================================
 
+(: validate-plan : gsd-plan -> validation-result)
 (define (validate-plan plan)
   (define waves (gsd-plan-waves plan))
+  (: errors : (Listof String))
   (define errors '())
+  (: warnings : (Listof String))
   (define warnings '())
   ;; Check: plan has at least 1 wave
   (when (null? waves)
@@ -199,10 +122,8 @@
       (set! warnings (cons (format "~a: no file references" prefix) warnings)))
     (when (string=? (gsd-wave-verify w) "")
       (set! warnings (cons (format "~a: no verify command" prefix) warnings))))
-  ;; Error: ALL waves are file-less — plan has nothing to execute on
-  (when (and (not (null? waves))
-             (for/and ([w waves])
-               (null? (gsd-wave-files w))))
+  ;; Error: ALL waves are file-less
+  (when (and (pair? waves) (andmap (lambda ([w : gsd-wave]) (null? (gsd-wave-files w))) waves))
     (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
   (validation-result (reverse errors) (reverse warnings)))
 
@@ -210,32 +131,32 @@
 ;; Plan utilities
 ;; ============================================================
 
+(: plan-wave-ref : gsd-plan Natural -> (U gsd-wave #f))
 (define (plan-wave-ref plan idx)
-  (for/first ([w (gsd-plan-waves plan)]
-              #:when (= (gsd-wave-index w) idx))
-    w))
+  (findf (lambda ([w : gsd-wave]) (= (gsd-wave-index w) idx)) (gsd-plan-waves plan)))
 
+(: plan-pending-waves : gsd-plan -> (Listof gsd-wave))
 (define (plan-pending-waves plan)
-  (filter (lambda (w) (eq? (gsd-wave-status w) 'pending)) (gsd-plan-waves plan)))
+  (filter (lambda ([w : gsd-wave]) (eq? (gsd-wave-status w) 'pending)) (gsd-plan-waves plan)))
 
+(: plan-next-pending-wave : gsd-plan -> (U gsd-wave #f))
 (define (plan-next-pending-wave plan)
-  (for/first ([w (gsd-plan-waves plan)]
-              #:when (eq? (gsd-wave-status w) 'pending))
-    w))
+  (findf (lambda ([w : gsd-wave]) (eq? (gsd-wave-status w) 'pending)) (gsd-plan-waves plan)))
 
 ;; ============================================================
 ;; Status conversion helpers
 ;; ============================================================
 
+(: wave-status->string : WaveStatus -> String)
 (define (wave-status->string sym)
   (cond
     [(eq? sym 'pending) "Inbox"]
     [(eq? sym 'in-progress) "In-Progress"]
     [(eq? sym 'completed) "DONE"]
     [(eq? sym 'failed) "FAILED"]
-    [(eq? sym 'skipped) "DEFERRED"]
-    [else (symbol->string sym)]))
+    [(eq? sym 'skipped) "DEFERRED"]))
 
+(: string->wave-status : String -> WaveStatus)
 (define (string->wave-status str)
   (cond
     [(string=? str "Inbox") 'pending]
@@ -245,73 +166,103 @@
     [(string=? str "DEFERRED") 'skipped]
     [else 'pending]))
 
+(: gsd-wave-slug : gsd-wave -> String)
 (define (gsd-wave-slug w)
   (define title (gsd-wave-title w))
-  (if (and (string? title) (> (string-length title) 0))
-      (let* ([s (string-trim title)]
-             [chars (for/list ([c (in-string s)])
-                      (cond
-                        [(char-alphabetic? c) (char-downcase c)]
-                        [(char-numeric? c) c]
-                        [(char=? c #\-) #\-]
-                        [(char=? c #\space) #\-]
-                        [else #f]))]
-             [result (list->string (filter values chars))])
-        (if (> (string-length result) 40)
-            (string-trim (substring result 0 40) "-" #:right? #t)
-            (if (string=? result "") "wave" result)))
+  (if (> (string-length title) 0)
+      (let* ([s
+              :
+              String
+              (string-trim title)]
+             [result
+              :
+              String
+              (slugify-chars s)])
+        (cond
+          [(> (string-length result) 40) (string-trim (substring result 0 40) "-" #:right? #t)]
+          [(string=? result "") "wave"]
+          [else result]))
       "wave"))
 
+(: slugify-chars : String -> String)
+(define (slugify-chars s)
+  (define cs
+    :
+    (Listof Char)
+    (string->list s))
+  (define mapped
+    :
+    (Listof (Option Char))
+    (for/list :
+      (Listof (Option Char))
+      ([c : Char cs])
+      (cond
+        [(char-alphabetic? c) (char-downcase c)]
+        [(char-numeric? c) c]
+        [(char=? c #\-) #\-]
+        [(char=? c #\space) #\-]
+        [else #f])))
+  (list->string (filter char? mapped)))
+
 ;; ============================================================
-;; Provide (after all definitions)
+;; Parsing re-exports from untyped parser module
 ;; ============================================================
 
-;; Struct types + accessors
-(provide gsd-task
-         gsd-task?
-         gsd-task-name
-         gsd-task-files
-         gsd-task-action
-         gsd-task-verify
-         gsd-task-done
-         gsd-task-status
-         gsd-task-set-status
+(require/typed "plan-types-parser.rkt"
+               [parse-waves-from-markdown-raw (String -> (Listof (HashTable Symbol Any)))]
+               [parse-wave-content (String -> (HashTable Symbol Any))]
+               [clean-file-path (String -> String)])
 
-         gsd-wave
-         gsd-wave?
-         gsd-wave-index
-         gsd-wave-title
-         gsd-wave-status
-         gsd-wave-root-cause
-         gsd-wave-files
-         gsd-wave-tasks
-         gsd-wave-verify
-         gsd-wave-done-criteria
-         gsd-wave-set-status
+(: raw-ref : (HashTable Symbol Any) Symbol Any -> Any)
+(define (raw-ref h k default)
+  (if (hash-has-key? h k)
+      (hash-ref h k)
+      default))
 
-         gsd-plan
-         gsd-plan?
-         gsd-plan-waves
-         gsd-plan-context-bundle
-         gsd-plan-constraints
-         gsd-plan-must-haves
+;; Wrap raw parsed data into gsd-wave structs
+(: parse-waves-from-markdown : String -> (Listof gsd-wave))
+(define (parse-waves-from-markdown md-text)
+  (for/list :
+    (Listof gsd-wave)
+    ([raw : (HashTable Symbol Any) (parse-waves-from-markdown-raw md-text)])
+    (gsd-wave (cast (raw-ref raw 'index 0) Natural)
+              (cast (raw-ref raw 'title "") String)
+              'pending
+              (cast (raw-ref raw 'root-cause "") String)
+              (cast (raw-ref raw 'files '()) (Listof String))
+              '()
+              (cast (raw-ref raw 'verify "") String)
+              (cast (raw-ref raw 'done '()) (Listof String)))))
+
+;; ============================================================
+;; Provide
+;; ============================================================
+
+(provide (struct-out gsd-task)
+         (struct-out gsd-wave)
+         (struct-out gsd-plan)
+         (struct-out validation-result)
 
          ;; Constructors with defaults
          make-gsd-task
          make-gsd-wave
 
-         ;; Parsing
+         ;; Status setters
+         gsd-task-set-status
+         gsd-wave-set-status
+
+         ;; Validation
+         validation-valid?
+         validate-plan
+
+         ;; Aliases
+         validation-errors
+         validation-warnings
+
+         ;; Parsing (re-exported from parser module)
          parse-waves-from-markdown
          parse-wave-content
          clean-file-path
-
-         ;; Validation
-         validation-result
-         validation-result?
-         validation-errors
-         validation-warnings
-         validation-valid?
-         validate-plan
 
          ;; Plan utilities
          plan-wave-ref
@@ -321,4 +272,7 @@
          ;; Status conversion helpers
          wave-status->string
          string->wave-status
-         gsd-wave-slug)
+         gsd-wave-slug
+
+         ;; Type alias
+         WaveStatus)
