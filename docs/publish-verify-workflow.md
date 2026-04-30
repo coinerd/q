@@ -1,6 +1,6 @@
 # Publish & Verify Workflow
 
-<!-- verified-against: 0.22.2 -->
+<!-- verified-against: 0.23.2 -->
 This document describes the workflow for publishing a q extension package
 and verifying it works correctly.
 
@@ -91,7 +91,7 @@ jobs:
 To test your extension against multiple q versions:
 
 ```bash
-for VERSION in 0.22.2 0.22.2 0.22.2; do  raco pkg install q@$VERSION
+for VERSION in 0.23.2 0.23.2 0.23.2; do  raco pkg install q@$VERSION
   raco test tests/
 done
 ```

@@ -9,25 +9,27 @@
 ;;
 ;; Issue #2402: W0 — Extract context-policy.rkt
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/string
          racket/set
          "../util/protocol-types.rkt"
          "../llm/token-budget.rkt")
 
 ;; Token estimation
-(provide estimate-message-tokens
+(provide (contract-out [estimate-message-tokens (-> message? exact-nonnegative-integer?)]
+                       [ensure-first-user-pinned
+                        (-> (listof message?) (listof message?) (listof message?))]
+                       [build-pair-index (-> (listof message?) (values hash? hash?))]
+                       [requires-pair-inclusion? (-> (or/c string? #f) hash? hash? boolean?)]
+                       [fit-messages-pair-preserving
+                        (->* [(listof message?) exact-nonnegative-integer?]
+                             [(or/c #f procedure?)]
+                             (listof message?))]
+                       [system-message? (-> message? boolean?)]
+                       [user-message? (-> message? boolean?)])
          ;; Re-export from token-budget
-         estimate-text-tokens
-         ;; Pinning
-         ensure-first-user-pinned
-         ;; Pair-preserving budget fitting
-         build-pair-index
-         requires-pair-inclusion?
-         fit-messages-pair-preserving
-         ;; Predicates
-         system-message?
-         user-message?)
+         estimate-text-tokens)
 
 ;; ============================================================
 ;; Token estimation

@@ -17,6 +17,24 @@
          racket/file
          "../util/protocol-types.rkt"
          "../runtime/compactor.rkt"
+         (only-in "../runtime/context-assembly.rkt"
+                  build-tiered-context
+                  tiered-context
+                  tiered-context?
+                  tiered-context-tier-a
+                  tiered-context-tier-b
+                  tiered-context-tier-c
+                  tiered-context->message-list
+                  build-tiered-context-with-hooks
+                  context-assembly-payload
+                  context-assembly-payload?
+                  context-assembly-payload-tier-a-messages
+                  context-assembly-payload-tier-b-messages
+                  context-assembly-payload-tier-c-messages
+                  context-assembly-payload-max-tokens
+                  context-assembly-payload-metadata
+                  payload->tiered-context
+                  tiered-context->payload)
          "../runtime/session-store.rkt"
          "../runtime/token-compaction.rkt"
          ;; R2-6: Import hooks for context-assembly testing

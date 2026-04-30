@@ -69,7 +69,8 @@
          (only-in "../runtime/compactor.rkt"
                   compaction-strategy
                   compaction-result->message-list
-                  compact-history
+                  compact-history)
+         (only-in "../runtime/context-assembly.rkt"
                   build-tiered-context
                   tiered-context
                   tiered-context?

@@ -18,7 +18,8 @@
 ;; v0.23.1 W0: Created from context-manager.rkt + compactor tiered-context
 ;; v0.23.3 W0: Merged tree-walk from context-builder.rkt, deleted context-builder
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/list
          racket/string
          racket/set
@@ -53,16 +54,23 @@
           [context-assembly-config-max-catalog-tokens context-manager-config-max-catalog-tokens]
           [context-assembly-config-summary-window context-manager-config-summary-window]
           [make-context-assembly-config make-context-manager-config])
-         ;; Core API
-         build-assembled-context
-         build-session-context
-         ;; Token-aware context assembly
-         build-session-context/tokens
-         truncate-messages-to-budget
-         entry->context-message
-         ;; AGENTS.md context discovery
-         load-agents-context
-         build-system-preamble
+         ;; Core API with contracts
+         (contract-out [build-assembled-context
+                        (->* [session-index? context-assembly-config?]
+                             [#:provider (or/c #f provider?)
+                              #:model-name (or/c #f string?)
+                              #:cache (or/c #f summary-cache?)
+                              #:trace-callback (or/c #f procedure?)]
+                             context-result?)]
+                       [build-session-context (-> session-index? (listof message?))]
+                       [build-session-context/tokens
+                        (->* [session-index? #:max-tokens exact-nonnegative-integer?]
+                             (values (listof message?) exact-nonnegative-integer?))]
+                       [truncate-messages-to-budget
+                        (-> (listof message?) exact-nonnegative-integer? (listof message?))]
+                       [entry->context-message (-> message? (or/c message? #f))]
+                       [load-agents-context (-> path-string? string?)]
+                       [build-system-preamble (-> path-string? string?)])
          ;; Result struct
          context-result
          context-result?
@@ -83,7 +91,7 @@
          build-tiered-context
          tiered-context->message-list
          build-tiered-context-with-hooks
-         context-assembly-payload
+         (struct-out context-assembly-payload)
          payload->tiered-context
          tiered-context->payload
          ;; Catalog
@@ -102,7 +110,6 @@
          context-summary-entry-count
          context-summary-prompt
          generate-context-summary
-         ;; Summary cache
          ;; Summary cache
          summary-cache
          make-summary-cache
@@ -568,7 +575,11 @@
             [else (simple-summary-text entries)]))
         (when cache
           (summary-cache-store! cache from-id to-id summary-text))
-        (context-summary from-id to-id summary-text (length entries))])]))
+        (define actual-count
+          (if (and provider model-name (provider? provider))
+              (length entries)
+              (simple-summary-count entries)))
+        (context-summary from-id to-id summary-text actual-count)])]))
 
 (define (simple-summary-text entries)
   (string-append "## Progress\n### Done\n"
@@ -580,6 +591,10 @@
                                         (symbol->string (message-role m))
                                         (truncate-string (extract-message-text m) 100)))
                               "\n")))
+
+;; Count of entries actually represented in simple-summary-text
+(define (simple-summary-count entries)
+  (min (length entries) 20))
 
 ;; ============================================================
 ;; Tiered Context Assembly (from compactor.rkt)

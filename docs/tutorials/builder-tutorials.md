@@ -518,7 +518,7 @@ Every extension must have a manifest in its root directory:
   "author": "your-team",
   "entry": "audit.rkt",
   "files": ["audit.rkt"],
-  "compat": ">=0.22.2",  "homepage": "https://github.com/your-team/q-extensions",
+  "compat": ">=0.23.2",  "homepage": "https://github.com/your-team/q-extensions",
   "license": "MIT"
 }
 ```
@@ -535,7 +535,7 @@ Every extension must have a manifest in its root directory:
 | `author` | Yes | Author or team name |
 | `entry` | No | Main Racket file (defaults to `main.rkt`) |
 | `files` | No | List of included files |
-| `compat` | No | q version compatibility (e.g. `">=0.22.2"`) || `homepage` | No | Project URL |
+| `compat` | No | q version compatibility (e.g. `">=0.23.2"`) || `homepage` | No | Project URL |
 | `license` | No | License identifier |
 
 ### Directory Structure
