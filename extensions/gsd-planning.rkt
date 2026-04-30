@@ -120,12 +120,7 @@
 ;; Event emission: delegates to events.rkt via session bus bridge
 ;; See register-gsd-tools for bus wiring.
 (define (emit-gsd-event! event-sym payload)
-  ;; Try events.rkt telemetry bus first
-  (events:emit-gsd-event! event-sym payload)
-  ;; Also publish directly to session event bus for backward compat
-  (define bus (gsd-event-bus))
-  (when bus
-    (publish! bus (make-event event-sym (current-seconds) #f #f payload))))
+  (events:emit-gsd-event! event-sym payload))
 
 ;; ============================================================
 ;; Constants

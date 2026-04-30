@@ -825,16 +825,15 @@
 
 (test-case "W1: emit-gsd-event! publishes when bus is set"
   (with-gsd-cleanup (lambda ()
-                      (define bus (make-event-bus))
-                      (set-gsd-event-bus! bus)
-                      (define received (box '()))
-                      (subscribe! bus (lambda (evt) (set-box! received (cons evt (unbox received)))))
+                      (define-values (collector query) (events:make-event-collector))
+                      (events:set-gsd-event-bus! collector)
                       ;; emit-gsd-event! is defined in gsd-planning.rkt
                       (emit-gsd-event! 'gsd.mode.changed (hasheq 'key 'value))
-                      (check-equal? (length (unbox received)) 1 "should receive one event")
-                      (define evt (car (unbox received)))
-                      (check-equal? (event-event evt) 'gsd.mode.changed)
-                      (check-equal? (hash-ref (event-payload evt) 'key) 'value))))
+                      (define events (events:collector-events query))
+                      (check-equal? (length events) 1 "should receive one event")
+                      (define evt (car events))
+                      (check-equal? (hash-ref evt 'event) 'gsd.mode.changed)
+                      (check-equal? (hash-ref (hash-ref evt 'data) 'key) 'value))))
 
 (test-case "W1: emit-gsd-event! is no-op when bus is #f"
   (with-gsd-cleanup (lambda ()
