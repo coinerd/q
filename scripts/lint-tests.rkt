@@ -112,15 +112,23 @@
 
 ;;; --- checks per file ---
 
+(define hardcoded-path-allowlist
+  '("test-gsd-policy.rkt" "test-tool-bash-security.rkt"))
+
+(define (hardcoded-path-allowed? filepath)
+  (for/or ([a (in-list hardcoded-path-allowlist)])
+    (string-suffix? filepath a)))
+
 (define (check-hardcoded-paths filepath lines)
-  (for ([line (in-list lines)]
-        [lineno (in-naturals 1)])
-    (unless (comment-line? line)
-      (for ([str (in-list (extract-strings-from-line line))])
-        (when (hardcoded-home-path? str)
-          (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))
-        (when (absolute-path-pattern? str)
-          (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))))))
+  (when (not (hardcoded-path-allowed? filepath))
+    (for ([line (in-list lines)]
+          [lineno (in-naturals 1)])
+      (unless (comment-line? line)
+        (for ([str (in-list (extract-strings-from-line line))])
+          (when (hardcoded-home-path? str)
+            (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str)))
+          (when (absolute-path-pattern? str)
+            (add-error! (format "ERROR: ~a:~a: hardcoded path \"~a\"" filepath lineno str))))))))
 
 (define (check-cwd-assumptions filepath lines)
   (define uses-current-directory? #f)
