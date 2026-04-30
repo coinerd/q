@@ -136,3 +136,29 @@
   (check-true (policy-allowed? d))
   (check-false (policy-blocked? d))
   (check-false (policy-reason d)))
+
+(test-case "write-file policy: blocks writing to planning dir during execution"
+  (define d (gsd-decide-action
+             (hasheq 'mode 'executing
+                     'target-path "/project/.planning/PLAN.md"
+                     'pinned-dir "/project/.planning")
+             'write-file))
+  (check-true (policy-blocked? d))
+  (check-not-false (policy-reason d)))
+
+(test-case "write-file policy: allows writing outside planning dir during execution"
+  (define d (gsd-decide-action
+             (hasheq 'mode 'executing
+                     'target-path "/project/src/foo.rkt"
+                     'pinned-dir "/project/.planning")
+             'write-file))
+  (check-true (policy-allowed? d)))
+
+(test-case "write-file policy: allows writing in non-executing mode"
+  (for ([mode '(idle exploring plan-written verifying)])
+    (define d (gsd-decide-action
+               (hasheq 'mode mode
+                       'target-path "/project/.planning/PLAN.md"
+                       'pinned-dir "/project/.planning")
+               'write-file))
+    (check-true (policy-allowed? d) (format "write should be allowed in ~a" mode))))
