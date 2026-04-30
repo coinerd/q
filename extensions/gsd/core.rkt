@@ -31,6 +31,7 @@
          (only-in "wave-docs.rkt" mark-wave-status!)
          (only-in "session-state.rkt" set-gsd-state! gsd-state-sem)
          (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
+         (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "../gsd-planning-state.rkt" pinned-planning-dir))
 
 (provide gsd-command-dispatch
@@ -137,16 +138,24 @@
     (if (string? command)
         (string->symbol command)
         command))
-  (case cmd
-    [(plan) (cmd-plan args)]
-    [(go) (cmd-go args)]
-    [(replan) (cmd-replan)]
-    [(skip) (cmd-skip args)]
-    [(reset) (cmd-reset)]
-    [(done) (gsd-ok #:mode 'idle #:message "Use /done from the planning context.")]
-    [(wave-done) (cmd-wave-done #f args)]
-    [(gsd) (gsd-show-status)]
-    [else #f]))
+  (emit-gsd-event! 'gsd.command.received (hasheq 'command cmd 'args args))
+  (define corr-id (gensym 'gsd-cmd))
+  (parameterize ([current-gsd-correlation-id corr-id])
+    (define result
+      (case cmd
+        [(plan) (cmd-plan args)]
+        [(go) (cmd-go args)]
+        [(replan) (cmd-replan)]
+        [(skip) (cmd-skip args)]
+        [(reset) (cmd-reset)]
+        [(done) (gsd-ok #:mode 'idle #:message "Use /done from the planning context.")]
+        [(wave-done) (cmd-wave-done #f args)]
+        [(gsd) (gsd-show-status)]
+        [else #f]))
+    (when result
+      (emit-gsd-event! 'gsd.command.completed
+                       (hasheq 'command cmd 'success (gsd-command-result-success result))))
+    result))
 
 ;; /plan <text> → exploring
 ;; v0.21.5: Multi-step transition — go via idle if needed.
