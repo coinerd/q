@@ -134,4 +134,45 @@
    (check-false (string-contains? (subprocess-result-stdout result) "should-be-stripped")
                 "secret env var should not appear in subprocess env")))
 
+;; ── RA-2 (v0.24.7): Configurable secret scrubbing ──
+(test-case "RA-2: extra denylist scrubs additional patterns"
+  (define env (make-environment-variables))
+  (environment-variables-set! env #"MY_CUSTOM_SECRET" #"val123")
+  (environment-variables-set! env #"PATH" #"/usr/bin")
+  (parameterize ([current-secret-scrub-denylist (list #rx"(?i:CUSTOM)")])
+    (define clean (sanitize-env env))
+    (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")
+    (check-false (environment-variables-ref clean #"MY_CUSTOM_SECRET")
+                 "extra denylist should scrub CUSTOM vars")))
+
+(test-case "RA-2: allowlist preserves vars that would be scrubbed"
+  (define env (make-environment-variables))
+  (environment-variables-set! env #"MY_TOKEN_COUNT" #"42")
+  (environment-variables-set! env #"SECRET_KEY" #"abc")
+  (parameterize ([current-secret-scrub-allowlist (list #rx"(?i:TOKEN_COUNT)")])
+    (define clean (sanitize-env env))
+    ;; TOKEN_COUNT is allowed despite matching TOKEN pattern
+    (check-equal? (environment-variables-ref clean #"MY_TOKEN_COUNT") #"42")
+    ;; SECRET_KEY still scrubbed (not in allowlist)
+    (check-false (environment-variables-ref clean #"SECRET_KEY"))))
+
+(test-case "RA-2: allowlist takes priority over extra denylist"
+  (define env (make-environment-variables))
+  (environment-variables-set! env #"CUSTOM_AUTH_FLAG" #"yes")
+  (parameterize ([current-secret-scrub-denylist (list #rx"(?i:CUSTOM)")]
+                 [current-secret-scrub-allowlist (list #rx"(?i:AUTH_FLAG)")])
+    (define clean (sanitize-env env))
+    ;; AUTH_FLAG is allowed despite matching CUSTOM denylist
+    (check-equal? (environment-variables-ref clean #"CUSTOM_AUTH_FLAG") #"yes")))
+
+(test-case "RA-2: empty denylist and allowlist uses defaults"
+  (define env (make-environment-variables))
+  (environment-variables-set! env #"API_KEY" #"secret")
+  (environment-variables-set! env #"PATH" #"/usr/bin")
+  (parameterize ([current-secret-scrub-denylist '()]
+                 [current-secret-scrub-allowlist '()])
+    (define clean (sanitize-env env))
+    (check-false (environment-variables-ref clean #"API_KEY"))
+    (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")))
+
 (run-tests subprocess-tests)
