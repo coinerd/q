@@ -1,7 +1,7 @@
-<!-- verified-against: 0.24.4 -->
+<!-- verified-against: 0.24.9 -->
 # API Stability Tiers
 
-<!-- verified-against: 0.24.4 -->
+<!-- verified-against: 0.24.9 -->
 This document defines the stability tiers for q's public interfaces. Each module
 is assigned a tier that determines the backwards-compatibility guarantees and
 breaking-change policy.
@@ -26,12 +26,12 @@ These modules form the public API contract. Breaking changes require:
 
 | Module | Interface | Since |
 |--------|-----------|-------|
-| `util/version.rkt` | `q-version` | v0.24.4 |
-| `interfaces/sdk.rkt` | `make-runtime`, `runtime-config` | v0.24.4 |
-| `wiring/rpc-methods.rkt` | `make-core-rpc-handlers` | v0.24.4 |
-| `extensions/api.rkt` | `make-extension`, `extension?` | v0.24.4 |
-| `util/protocol-types.rkt` | Core message/event types (formerly `agent/types.rkt`) | v0.24.4 |
-| `tools/tool.rkt` | `make-tool`, `tool-registry?` | v0.24.4 |
+| `util/version.rkt` | `q-version` | v0.24.9 |
+| `interfaces/sdk.rkt` | `make-runtime`, `runtime-config` | v0.24.9 |
+| `wiring/rpc-methods.rkt` | `make-core-rpc-handlers` | v0.24.9 |
+| `extensions/api.rkt` | `make-extension`, `extension?` | v0.24.9 |
+| `util/protocol-types.rkt` | Core message/event types (formerly `agent/types.rkt`) | v0.24.9 |
+| `tools/tool.rkt` | `make-tool`, `tool-registry?` | v0.24.9 |
 ### Evolving
 
 These modules are functional but may receive backwards-compatible additions or

@@ -1,6 +1,6 @@
 # Package Registry Specification
 
-<!-- verified-against: 0.24.4 -->
+<!-- verified-against: 0.24.9 -->
 This document specifies the q extension package registry format and conventions.
 
 ## Package Manifest
@@ -25,7 +25,7 @@ containing structured metadata. The manifest is validated by
 |-------|------|---------|-------------|
 | `homepage` | `string?` | `""` | Project URL |
 | `license` | `string?` | `"MIT"` | SPDX license identifier |
-| `min-q-version` | `string?` | `"0.24.4"` | Minimum q version required || `max-q-version` | `string?` | `"999.999.999"` | Maximum compatible q version |
+| `min-q-version` | `string?` | `"0.24.9"` | Minimum q version required || `max-q-version` | `string?` | `"999.999.999"` | Maximum compatible q version |
 | `dependencies` | `(listof string?)` | `'()` | Names of other q packages required |
 | `stability` | `(or/c 'stable 'evolving 'experimental 'internal)` | `'experimental'` | Package stability tier |
 | `hooks` | `(listof symbol?)` | `'()` | Hook types this extension uses |
@@ -57,7 +57,7 @@ A centralized registry (planned for v1.1) will provide:
 {
   "name": "my-extension",
   "version": "1.0.0",
-  "q-compat": ">=0.24.4 <1.0.0",  "archive": "https://registry.q-lang.org/packages/my-extension-1.0.0.tar.gz",
+  "q-compat": ">=0.24.9 <1.0.0",  "archive": "https://registry.q-lang.org/packages/my-extension-1.0.0.tar.gz",
   "checksum": "sha256:abcdef...",
   "signature": "ed25519:..."
 }

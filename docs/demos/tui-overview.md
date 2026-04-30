@@ -6,7 +6,7 @@ The terminal UI provides a rich interactive interface for q with scrolling outpu
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ q v0.24.4 │ gpt-5.4 │ session: a7f3c2e1          [● active] │├─────────────────────────────────────────────────────────────┤
+│ q v0.24.9 │ gpt-5.4 │ session: a7f3c2e1          [● active] │├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  You: Explain the architecture of this project              │
 │                                                             │
@@ -69,7 +69,7 @@ The terminal UI provides a rich interactive interface for q with scrolling outpu
 The top bar shows:
 
 ```
-q v0.24.4 │ gpt-5.4 │ session: a7f3c2e1 │ [● active]```
+q v0.24.9 │ gpt-5.4 │ session: a7f3c2e1 │ [● active]```
 
 - **Version** — current q version
 - **Model** — active LLM model
