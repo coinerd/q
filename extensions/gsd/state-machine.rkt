@@ -17,6 +17,7 @@
          racket/match
          racket/set
          "runtime-state-types.rkt"
+         (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
          (only-in "session-state.rkt"
                   current-gsd-state
                   set-gsd-state!
@@ -86,12 +87,6 @@
                        (executing . idle)
                        (verifying . idle)
                        (verifying . executing)))
-
-;; Tool permissions per state.
-;; States not listed allow all tools.
-(define BLOCKED-TOOLS
-  '((plan-written . ("edit" "write" "bash")) (executing . ("planning-write"))
-                                             (verifying . ("edit" "write" "bash" "planning-write"))))
 
 ;; ============================================================
 ;; Transition result types
@@ -176,10 +171,7 @@
 
 (define (gsm-tool-allowed? tool-name)
   (define current (gsm-current))
-  (define blocked (assq current BLOCKED-TOOLS))
-  (if blocked
-      (not (member tool-name (cdr blocked)))
-      #t))
+  (policy-allowed? (gsd-decide-action (hasheq 'mode current 'tool tool-name) 'tool-call)))
 
 ;; ============================================================
 ;; Internal helpers
