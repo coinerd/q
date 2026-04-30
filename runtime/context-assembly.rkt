@@ -33,6 +33,7 @@
                   user-message?
                   system-message?)
          (only-in "../runtime/compactor.rkt" llm-summarize)
+         (only-in "context-pinning.rkt" partition-messages)
          (only-in "../runtime/compaction-prompts.rkt" format-messages-for-summary)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
@@ -437,23 +438,7 @@
 (define (transform-summary-to-user entry)
   (struct-copy message entry [role 'user]))
 
-;; ============================================================
-;; Phase 1: Pin system prompt + first user + compaction summaries
-;; ============================================================
-
-(define (partition-messages messages)
-  (define first-user
-    (for/first ([m (in-list messages)]
-                #:when (eq? (message-role m) 'user))
-      m))
-  (define-values (protected removable)
-    (partition (lambda (m)
-                 (or (eq? (message-kind m) 'system-instruction)
-                     (eq? (message-kind m) 'compaction-summary)
-                     (eq? (message-kind m) 'context-assembly-summary)
-                     (and first-user (eq? m first-user))))
-               messages))
-  (values protected removable))
+;; partition-messages extracted to context-pinning.rkt
 
 ;; ============================================================
 ;; Phase 3: Fit recent messages
