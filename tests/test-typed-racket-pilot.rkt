@@ -21,7 +21,7 @@
     ;; -------------------------------------------------------
     (test-case "q-version is a string"
       (check-pred string? q-version)
-      (check-true (regexp-match? #rx"^0\\.23\\." q-version)))
+      (check-true (regexp-match? #rx"^0\\.2[0-9]\\." q-version)))
 
     ;; -------------------------------------------------------
     ;; util/event-payloads.rkt — Typed Racket

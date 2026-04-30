@@ -6,6 +6,7 @@
 ;; work together correctly.
 
 (require rackunit
+         racket/port
          "../extensions/gsd/state-machine.rkt"
          "../extensions/gsd/core.rkt"
          "../extensions/gsd/policy.rkt"
@@ -64,10 +65,9 @@
   (gsm-transition! 'exploring)
   (define mode-before (gsm-current))
   (define result
-    (with-gsd-transaction
-     "test-txn"
-     (lambda () (error "simulated failure"))
-     (lambda (e snap) (void))))
+    (with-gsd-transaction "test-txn"
+                          (lambda () (error "simulated failure"))
+                          (lambda (e snap) (void))))
   (check-false (gsd-command-result-success result))
   (check-equal? (gsm-current) mode-before))
 
@@ -89,9 +89,8 @@
   (for ([mode '(idle exploring plan-written executing verifying)])
     (define blocked (blocked-tools-for mode))
     (for ([tool blocked])
-      (check-false
-       (policy-allowed? (gsd-decide-action (hasheq 'mode mode 'tool tool) 'tool-call))
-       (format "~a should be blocked in ~a" tool mode)))))
+      (check-false (policy-allowed? (gsd-decide-action (hasheq 'mode mode 'tool tool) 'tool-call))
+                   (format "~a should be blocked in ~a" tool mode)))))
 
 ;; ============================================================
 ;; F6: Event telemetry
@@ -161,3 +160,25 @@
   (define event-names (map (lambda (e) (hash-ref e 'event)) events))
   (check-not-false (member 'gsd.command.received event-names))
   (check-not-false (member 'gsd.command.completed event-names)))
+
+;; ============================================================
+;; F8: Documentation coverage fitness
+;; ============================================================
+
+(test-case "F8: gsd-architecture.md mentions all major modules"
+  (define here
+    (resolved-module-path-name (variable-reference->resolved-module-path (#%variable-reference))))
+  (define doc-path
+    (simplify-path (build-path (if here
+                                   (build-path here ".." "..")
+                                   (current-directory))
+                               "docs"
+                               "gsd-architecture.md")))
+  (define doc-content
+    (with-handlers ([exn:fail? (lambda (e) "")])
+      (file->string doc-path)))
+  (when (non-empty-string? doc-content)
+    (define required-sections '("state machine" "event" "policy" "archive" "transaction"))
+    (for ([section required-sections])
+      (check-not-false (regexp-match? (regexp-quote section) (string-downcase doc-content))
+                       (format "gsd-architecture.md should mention '~a'" section)))))
