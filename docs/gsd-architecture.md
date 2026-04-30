@@ -7,10 +7,17 @@ Internal architecture documentation for the GSD (Get Shit Done) extension rewrit
 ```
 extensions/gsd/
 ├── state-machine.rkt     # Central state machine with explicit transitions
-├── plan-types.rkt        # gsd-plan, gsd-wave, gsd-task structs + parsing
-├── plan-validator.rkt    # Mechanical validation before /go
+├── runtime-state-types.rkt # Canonical gsd-runtime-state struct
+├── command-types.rkt     # gsd-command-result (gsd-ok/gsd-err) structs
+├── policy.rkt            # Unified policy engine (gsd-decide-action)
+├── events.rkt            # Event telemetry (stable event names + correlation IDs)
+├── plan-types.rkt        # gsd-plan, gsd-wave, gsd-task, normalized-plan IR + parsing
+├── plan-types-parser.rkt # Markdown parsing for plan types
+├── plan-validator.rkt    # Mechanical validation (raw + normalized)
 ├── wave-executor.rkt     # Wave lifecycle tracking + error recovery
-├── core.rkt              # Command dispatch, tool guard, write guard
+├── wave-docs.rkt         # Wave document generation
+├── archive.rkt           # Plan archival (gsd-command-result returns)
+├── core.rkt              # Command dispatch, tool guard, write guard, transactions
 ├── context-bundle.rkt    # Role-specific context assembly
 ├── steering.rkt          # Mode-aware stall detection
 ├── prompts.rkt           # Prompt templates for all GSD phases
@@ -18,7 +25,7 @@ extensions/gsd/
 
 extensions/
 ├── gsd-planning.rkt          # Legacy extension (unchanged API)
-└── gsd-planning-state.rkt    # Thin shim → delegates to gsd/ modules
+└── gsd-planning-state.rkt    # DEPRECATED shim → pure delegation to gsd/ modules
 ```
 
 ## State Machine
@@ -92,7 +99,7 @@ Key design decision (DD-5): **Failed waves don't block subsequent waves.** The e
 
 **Module:** `extensions/gsd/core.rkt`
 
-During `executing` mode, the write guard blocks modifications to `.planning/PLAN.md`. Uses path normalization to prevent `..` traversal attacks (DD-6).
+Returns `policy-decision` (not hasheq). During `executing` mode, blocks modifications to `.planning/PLAN.md` and `.planning/` tree. Uses path normalization via `simple-form-path` to prevent `..` traversal attacks (DD-6). Routes through `gsd-decide-action` in policy.rkt.
 
 ## Bash Detection
 
@@ -100,16 +107,47 @@ During `executing` mode, the write guard blocks modifications to `.planning/PLAN
 
 Detects bash commands that read file contents (sed, cat, head, tail, awk, python open, etc.), bypassing the read tool's tracking. Safe commands (git, ls, find, raco, make) are excluded.
 
-## Migration Layer
+## Event Telemetry
+
+**Module:** `extensions/gsd/events.rkt`
+
+Stable event taxonomy following `gsd.<category>.<action>` convention:
+- `gsd.command.received`, `gsd.command.completed` — command lifecycle
+- `gsd.mode.changed` — state transitions
+- `gsd.plan.parsed`, `gsd.plan.normalized`, `gsd.plan.validated` — pipeline stages
+- `gsd.plan.archived`, `gsd.archive.failed` — archival
+- `gsd.transaction.rollback` — transaction failures
+
+Events carry correlation IDs via `current-gsd-correlation-id` parameter.
+`emit-gsd-event!` publishes to both the GSD event bus and the session event bus.
+
+## Transaction Wrappers
+
+**Module:** `extensions/gsd/core.rkt` (`with-gsd-transaction`)
+
+Snapshot-rollback semantics for multi-step commands:
+- Captures `gsm-snapshot` before execution
+- On exception, rolls back to snapshot state
+- Used by `cmd-wave-done` and `cmd-done` (archive)
+
+## Archive
+
+**Module:** `extensions/gsd/archive.rkt`
+
+`archive-completed-plan!` validates wave completion, moves plan files to
+archive directory, and resets GSD state. Returns `gsd-command-result`
+(`gsd-ok` with archive-path/files-archived data, or `gsd-err` with reason).
+
+## Migration Layer (DEPRECATED)
 
 **Module:** `extensions/gsd-planning-state.rkt`
 
-Thin shim that preserves the old public API while delegating to the new modules:
+Pure delegation shim that preserves the old public API while delegating to the new modules:
 
 | Old API | New Module |
 |---------|------------|
-| `(gsd-mode)` → `#f / 'planning / 'plan-written / 'executing` | `(gsm-current)` → `'idle / 'exploring / 'plan-written / 'executing` |
-| `(set-gsd-mode! v)` | `(gsm-transition! target)` with multi-step for legacy paths |
-| `(reset-all-gsd-state!)` | `(gsm-reset!)` + clear legacy boxes |
+| `(gsd-mode)` | `(gsm-current)` |
+| `(set-gsd-mode! v)` | `(gsm-transition! target)` |
+| `(reset-all-gsd-state!)` | `(gsm-reset!)` |
 
-Budget, read-count, and wave-tracking functions remain in the shim for backward compatibility. These will be removed in a future version.
+Scheduled for removal in a future version.
