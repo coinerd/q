@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.23.3 — 2026-04-30
+
+### Audit Remediation
+
+**Architecture:**
+- Merged context-builder.rkt into context-assembly.rkt — single unified context module (ADR-0012)
+- Removed tiered-context duplication from compactor.rkt — canonical implementations only in context-assembly
+- Added `contract-out` on context-assembly.rkt and context-policy.rkt public APIs
+- Fixed summary fallback count mismatch — simple-summary-text truncates to 20 entries
+
+**Changes:**
+- `runtime/context-assembly.rkt`: Tree-walk merge, `contract-out`, `simple-summary-count`, `(struct-out context-assembly-payload)`
+- `runtime/context-policy.rkt`: `contract-out` on all public APIs
+- `runtime/compactor.rkt`: Removed tiered-context structs, build-tiered-context, payload helpers
+- `runtime/context-builder.rkt`: DELETED (merged into context-assembly)
+- Updated 11 test files with import changes
+
+**Tests:** All 149 context+TR tests pass
+
 ## v0.23.2 — 2026-04-29
 
 ### Context Performance + Observability

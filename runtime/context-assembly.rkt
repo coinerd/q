@@ -45,7 +45,8 @@
          context-assembly-config-max-catalog-tokens
          context-assembly-config-summary-window
          make-context-assembly-config
-         ;; Backward compat aliases
+         ;; Backward compat aliases — DEPRECATED, use context-assembly-config-* instead
+         ;; TODO: Remove in v0.25.0
          (rename-out
           [context-assembly-config context-manager-config]
           [context-assembly-config? context-manager-config?]

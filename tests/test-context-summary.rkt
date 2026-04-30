@@ -19,7 +19,9 @@
                   message-content)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-assembly.rkt")
+         "../runtime/context-assembly.rkt"
+         (only-in "../llm/provider.rkt" make-mock-provider provider?)
+         (only-in "../llm/model.rkt" make-model-response))
 
 (define summary-tests
   (test-suite "context-summary"
@@ -158,6 +160,38 @@
       ;; Small session fits entirely — no summary needed
       (check-equal? (length (context-result-messages cr)) 3)
       (check-equal? (length (context-result-catalog cr)) 0)
-      (delete-directory/files dir #:must-exist? #f))))
+      (delete-directory/files dir #:must-exist? #f))
+
+    ;; Mock LLM summarization test
+    (test-case "generate-context-summary uses LLM provider when available"
+      (define entries
+        (list (make-message "m1"
+                            #f
+                            'user
+                            'message
+                            (list (make-text-part "Hello from test"))
+                            (current-seconds)
+                            (hasheq))
+              (make-message "m2"
+                            "m1"
+                            'assistant
+                            'message
+                            (list (make-text-part "Response from test"))
+                            (current-seconds)
+                            (hasheq))))
+      ;; Create mock provider that returns a predictable summary
+      (define mock-llm-text "Mock LLM summary of conversation")
+      (define mock-provider
+        (make-mock-provider (make-model-response (list (hasheq 'type "text" 'text mock-llm-text))
+                                                 (hasheq 'prompt_tokens 10 'completion_tokens 10)
+                                                 "mock-model"
+                                                 'stop)))
+      (define result (generate-context-summary entries mock-provider "mock-model"))
+      (check-true (context-summary? result))
+      (check-equal? (context-summary-text result) mock-llm-text)
+      (check-equal? (context-summary-from-id result) "m1")
+      (check-equal? (context-summary-to-id result) "m2")
+      ;; Entry count should be all entries when using LLM
+      (check-equal? (context-summary-entry-count result) 2))))
 
 (run-tests summary-tests)
