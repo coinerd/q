@@ -24,6 +24,7 @@
          wave-status-attempt-count
          wave-status-timestamp
          make-wave-executor
+         make-wave-executor-from-validated
          load-plan-from-index
          wave-start!
          wave-complete!
@@ -64,6 +65,27 @@
     (for/list ([w waves])
       (wave-status (gsd-wave-index w) 'pending #f 0 (current-seconds))))
   (wave-executor plan (box initial-statuses)))
+
+;; v0.24.2: Constructor from validated normalized plan.
+(define (make-wave-executor-from-validated vp)
+  (define norm-plan (gsd-validated-plan-plan vp))
+  (define norm-waves (gsd-normalized-plan-waves norm-plan))
+  (define initial-statuses
+    (for/list ([w norm-waves])
+      (wave-status (gsd-normalized-wave-index w) 'pending #f 0 (current-seconds))))
+  ;; Reconstruct a gsd-plan for backward compatibility with wave-executor struct
+  (define compat-waves
+    (for/list ([w norm-waves])
+      (gsd-wave (gsd-normalized-wave-index w)
+                (gsd-normalized-wave-title w)
+                'pending
+                ""
+                (gsd-normalized-wave-files w)
+                '()
+                (gsd-normalized-wave-verify-command w)
+                (gsd-normalized-wave-done-criteria w))))
+  (define compat-plan (gsd-plan compat-waves #f '() '()))
+  (wave-executor compat-plan (box initial-statuses)))
 
 ;; ============================================================
 ;; Status transitions
