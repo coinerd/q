@@ -351,3 +351,50 @@
   (check-eq? (gsm-wave-executor) 'test-exec)
   (gsm-transition! 'idle)
   (check-false (gsm-wave-executor)))
+
+;; ============================================================
+;; W3: State invariants (gsd-invariants-hold?)
+;; ============================================================
+
+(test-case "invariants hold on initial state"
+  (reset-gsm!)
+  (define-values (ok? msg) (gsd-invariants-hold?))
+  (check-true ok? msg))
+
+(test-case "invariants hold after transitions"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (let-values ([(ok? _) (gsd-invariants-hold?)])
+    (check-true ok?))
+  (gsm-transition! 'plan-written)
+  (let-values ([(ok? _) (gsd-invariants-hold?)])
+    (check-true ok?))
+  (gsm-transition! 'executing)
+  (let-values ([(ok? _) (gsd-invariants-hold?)])
+    (check-true ok?)))
+
+(test-case "invariants hold with wave state"
+  (reset-gsm!)
+  (gsm-set-total-waves! 3)
+  (gsm-mark-wave-complete! 0)
+  (gsm-mark-wave-complete! 1)
+  (let-values ([(ok? _) (gsd-invariants-hold?)])
+    (check-true ok?)))
+
+(test-case "invariant detects current-wave > total-waves"
+  (reset-gsm!)
+  (gsm-set-total-waves! 2)
+  (gsm-set-current-wave! 5)
+  (define-values (ok? msg) (gsd-invariants-hold?))
+  (check-false ok?)
+  (check-not-false (regexp-match? #rx"current-wave" (or msg ""))))
+
+(test-case "snapshot returns gsd-runtime-state struct"
+  (reset-gsm!)
+  (define snap (gsm-snapshot))
+  (check-true (gsd-runtime-state? snap))
+  ;; Cross-representation: struct fields match accessor results
+  (check-eq? (gsd-runtime-state-mode snap) (gsm-current))
+  (check-equal? (gsd-runtime-state-total-waves snap) (gsm-total-waves))
+  (check-equal? (gsd-runtime-state-current-wave snap) (gsm-current-wave))
+  (check-equal? (gsd-runtime-state-completed-waves snap) (gsm-completed-waves)))
