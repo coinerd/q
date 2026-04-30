@@ -28,7 +28,6 @@
                        [user-message? (-> message? boolean?)])
          ;; Internal helpers (not contracted — used by context-assembly only)
          build-pair-index
-         requires-pair-inclusion?
          ;; Re-export from token-budget
          estimate-text-tokens)
 
