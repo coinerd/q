@@ -46,4 +46,4 @@ when matching an existing untyped Racket signature.
 
 - `util/event-payloads.rkt`: All constructors use required fields (no optional args needed)
 - `extensions/gsd/plan-types.rkt`: `make-gsd-task` uses keyword args for optional fields
-- `util/version.rkt`: Simple `(define q-version "0.22.9")` — no constructors affected
+- `util/version.rkt`: Simple `(define q-version "0.23.2")` — no constructors affected
