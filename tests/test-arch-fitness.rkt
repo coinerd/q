@@ -224,6 +224,13 @@
                   (assoc 'known-exceptions policy)
                   "Policy must have 'known-exceptions section"))))
 
+;; ── RA-3: Module decomposition line-count fitness ──
+(test-case "RA-3: context-assembly.rkt under 600 lines after decomposition"
+  (define ca-path (build-path q-dir "runtime" "context-assembly.rkt"))
+  (when (file-exists? ca-path)
+    (define lines (length (string-split (file->string ca-path) "\n")))
+    (check-true (< lines 600) (format "context-assembly.rkt has ~a lines (expected < 600)" lines))))
+
 ;; ── Helper for fan-in check ─────────────────────────────────
 
 ;; Count the number of require imports in a file
