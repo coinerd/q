@@ -26,8 +26,10 @@
          "context-bundle.rkt"
          "archive.rkt"
          "command-types.rkt"
-         ;; v0.21.10: wave-done needs mark-wave-complete! which also updates PLAN.md
-         (only-in "../gsd-planning-state.rkt" mark-wave-complete! pinned-planning-dir))
+         ;; Direct imports (no longer via shim — W2 purification)
+         (only-in "state-machine.rkt" gsm-mark-wave-complete!)
+         (only-in "wave-docs.rkt" mark-wave-status!)
+         (only-in "../gsd-planning-state.rkt" pinned-planning-dir))
 
 (provide gsd-command-dispatch
          gsd-write-guard
@@ -196,8 +198,13 @@
        [(not idx) (gsd-err #:mode (gsm-current) #:message (format "Invalid wave number: ~a" idx-str))]
        [(< idx 0) (gsd-err #:mode (gsm-current) #:message "Wave number must be non-negative")]
        [else
-        ;; Mark wave complete in state machine + PLAN.md
-        (mark-wave-complete! idx)
+        ;; Mark wave complete in state machine
+        (gsm-mark-wave-complete! idx)
+        ;; Update PLAN.md status marker
+        (let ([base-dir (or base-dir (pinned-planning-dir))])
+          (when base-dir
+            (with-handlers ([exn:fail? (lambda (e) (void))])
+              (mark-wave-status! base-dir idx "DONE"))))
         ;; Update STATE.md with wave completion
         (when base-dir
           (with-handlers ([exn:fail? (lambda (e)

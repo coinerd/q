@@ -3,9 +3,13 @@
 ;; extensions/gsd-planning-state.rkt — Thin shim over gsd/ modules
 ;; STABILITY: evolving
 ;;
+;; DEPRECATED: Use extensions/gsd/* directly. This shim will be removed in v0.25.0.
+;; All functions are pure delegations except reset-all-gsd-state! (coordinator reset).
+;;
 ;; v0.21.6: steering.rkt import removed (dead code).
 ;; v0.22.1 QUAL-03: Migrated from global mutable boxes to per-session
 ;; parameters via session-state.rkt.
+;; v0.24.0 W2: Purified — no side effects beyond delegation.
 
 (require "gsd/state-machine.rkt"
          (only-in "gsd/session-state.rkt"
@@ -16,8 +20,7 @@
                   [current-gsd-event-bus box-current-gsd-event-bus]
                   [set-gsd-event-bus! box-set-gsd-event-bus!]
                   current-plan-data
-                  set-plan-data!)
-         "gsd/wave-docs.rkt")
+                  set-plan-data!))
 
 (provide gsd-mode
          gsd-mode?
@@ -102,12 +105,7 @@
 (define (set-total-waves! n)
   (gsm-set-total-waves! n))
 (define (mark-wave-complete! idx)
-  (gsm-mark-wave-complete! idx)
-  ;; Also update PLAN.md status marker (#2157)
-  (define base-dir (pinned-planning-dir))
-  (when base-dir
-    (with-handlers ([exn:fail? (lambda (e) (void))])
-      (mark-wave-status! base-dir idx "DONE"))))
+  (gsm-mark-wave-complete! idx))
 (define (wave-complete? idx)
   (gsm-wave-complete? idx))
 (define (current-wave-index)
