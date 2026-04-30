@@ -76,16 +76,6 @@
          context-assembly-config-max-catalog-tokens
          context-assembly-config-summary-window
          make-context-assembly-config
-         ;; Backward compat aliases — DEPRECATED, use context-assembly-config-* instead
-         ;; TODO(#v0.25.0): Remove in v0.25.0 — tracked for next breaking version
-         (rename-out
-          [context-assembly-config context-manager-config]
-          [context-assembly-config? context-manager-config?]
-          [context-assembly-config-recent-tokens context-manager-config-recent-tokens]
-          [context-assembly-config-max-catalog-entries context-manager-config-max-catalog-entries]
-          [context-assembly-config-max-catalog-tokens context-manager-config-max-catalog-tokens]
-          [context-assembly-config-summary-window context-manager-config-summary-window]
-          [make-context-assembly-config make-context-manager-config])
          ;; Core API with contracts
          (contract-out [build-assembled-context
                         (->* [session-index? context-assembly-config?]

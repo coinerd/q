@@ -40,11 +40,6 @@
 (test-case "exports: make-context-assembly-config is procedure"
   (check-true (procedure? make-context-assembly-config)))
 
-(test-case "exports: backward-compat make-context-manager-config"
-  (check-true (procedure? make-context-manager-config))
-  (define cfg (make-context-manager-config))
-  (check-true (context-assembly-config? cfg)))
-
 (test-case "config rejects negative recent-tokens"
   (check-exn exn:fail? (lambda () (make-context-assembly-config #:recent-tokens -1))))
 
