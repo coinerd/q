@@ -59,6 +59,9 @@ jobs:
       - name: Test portability
         run: racket scripts/lint-tests.rkt
 
+      - name: Deprecation deadline check
+        run: racket scripts/lint-deprecation-deadlines.rkt --ci
+
       - name: CI readiness
         run: racket scripts/lint-ci-readiness.rkt
 
