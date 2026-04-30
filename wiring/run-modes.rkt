@@ -165,6 +165,12 @@
   (define model-reg (make-model-registry-from-config (q-settings-merged settings)))
   (hash-set! base-config 'model-registry model-reg)
   (hash-set! base-config 'settings settings)
+  ;; v0.24.7: Merge max-iterations from config.json settings.
+  ;; Precedence: CLI --max-turns > config.json max-iterations > default 10.
+  ;; Only override when CLI used the default (10) and config.json has a value.
+  (let ([settings-max-iter (setting-ref settings 'max-iterations #f)])
+    (when (and settings-max-iter (= (cli-config-max-turns cfg) 10))
+      (hash-set! base-config 'max-iterations settings-max-iter)))
   (define effective-model-name (or model-name (default-model model-reg)))
   (hash-set! base-config 'model-name effective-model-name)
   (hash-set! base-config 'system-instructions final-system-instrs)
