@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.24.5 — 2026-04-29
+
+### Audit Remediation
+
+**Bug Fixes & Test Repair**
+- Fixed `test-gsd-archive.rkt` to use `gsd-command-result` struct accessors instead of `hash-ref`
+- Eliminated dual event publishing in `gsd-planning.rkt` — removed redundant `publish!` call to session bus
+
+**Transaction Safety**
+- Wrapped `/go` (`handle-go-command`) state mutations in snapshot/restore transaction with rollback on error
+- Deprecated `cmd-go` (bare state transition) — TUI uses normalized pipeline instead
+
+**Architecture Cleanup**
+- Simplified `gsd-snapshot` in shim to delegate directly to `gsm-snapshot` (returns struct, not hasheq)
+- Added doc coverage fitness test (F8) verifying architecture doc mentions all major modules
+- Fixed stale TR version regex in `test-typed-racket-pilot.rkt` to match v0.24.x+
+
 ## v0.24.4 — 2026-04-29
 
 ### Production Integration Wiring
