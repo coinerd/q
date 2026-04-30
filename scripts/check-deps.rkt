@@ -32,7 +32,19 @@
 
 ;; Packages bundled with "base" — no explicit dep needed
 (define base-packages
-  (set "racket" "rackunit" "ffi" "net" "raco" "setup" "compiler" "syntax" "json" "file" "pkg" "info"))
+  (set "racket"
+       "rackunit"
+       "ffi"
+       "net"
+       "raco"
+       "setup"
+       "compiler"
+       "syntax"
+       "json"
+       "file"
+       "pkg"
+       "info"
+       "require"))
 
 ;; Internal q module prefixes — not external packages
 (define internal-prefixes
