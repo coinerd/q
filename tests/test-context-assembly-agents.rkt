@@ -1,6 +1,6 @@
 #lang racket
 
-;; tests/test-context-builder-agents.rkt — Tests for AGENTS.md context wiring (G2.3)
+;; tests/test-context-assembly-agents.rkt — Tests for AGENTS.md context wiring (G2.3)
 ;;
 ;; Tests:
 ;; 1. load-agents-context returns empty string when no AGENTS.md

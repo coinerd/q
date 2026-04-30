@@ -1,6 +1,6 @@
 #lang racket
 
-;; tests/test-context-builder.rkt — Tests for runtime/context-builder.rkt (#498)
+;; tests/test-context-assembly-tree.rkt — Tests for context assembly tree-walk (merged from context-builder.rkt)
 
 (require rackunit
          rackunit/text-ui
