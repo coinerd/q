@@ -112,3 +112,33 @@
                 (lambda ()
                   (current-safe-mode-config orig-config)
                   (current-block-destructive orig-block))))
+
+;; ── RA-1a: Allowlist execution policy (v0.24.7) ──
+
+(require (only-in "../tools/builtins/bash.rkt"
+                  current-execution-policy
+                  current-allowed-commands
+                  execution-policy-allows?))
+
+(test-case "RA-1a: allowlist blocks disallowed command"
+  (parameterize ([current-execution-policy 'allowlist]
+                 [current-allowed-commands '("git" "ls" "grep")])
+    (check-false (execution-policy-allows? "rm -rf /tmp"))))
+
+(test-case "RA-1a: allowlist allows listed command"
+  (parameterize ([current-execution-policy 'allowlist]
+                 [current-allowed-commands '("git" "ls" "grep")])
+    (check-not-false (execution-policy-allows? "git status"))))
+
+(test-case "RA-1a: allowlist allows simple ls"
+  (parameterize ([current-execution-policy 'allowlist]
+                 [current-allowed-commands '("git" "ls" "grep")])
+    (check-not-false (execution-policy-allows? "ls -la /tmp"))))
+
+(test-case "RA-1a: warn policy allows everything"
+  (parameterize ([current-execution-policy 'warn])
+    (check-true (execution-policy-allows? "rm -rf /tmp"))))
+
+(test-case "RA-1a: block policy allows everything (destructive check handles blocking)"
+  (parameterize ([current-execution-policy 'block])
+    (check-true (execution-policy-allows? "rm -rf /tmp"))))
