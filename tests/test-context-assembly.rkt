@@ -45,6 +45,21 @@
   (define cfg (make-context-manager-config))
   (check-true (context-assembly-config? cfg)))
 
+(test-case "config rejects negative recent-tokens"
+  (check-exn exn:fail? (lambda () (make-context-assembly-config #:recent-tokens -1))))
+
+(test-case "config rejects zero recent-tokens"
+  (check-exn exn:fail? (lambda () (make-context-assembly-config #:recent-tokens 0))))
+
+(test-case "config rejects string max-catalog-entries"
+  (check-exn exn:fail? (lambda () (make-context-assembly-config #:max-catalog-entries "forty"))))
+
+(test-case "config rejects negative summary-window"
+  (check-exn exn:fail? (lambda () (make-context-assembly-config #:summary-window -100))))
+
+(test-case "config accepts valid defaults"
+  (check-not-exn (lambda () (make-context-assembly-config))))
+
 ;; ============================================================
 ;; context-result: with session index
 ;; ============================================================
