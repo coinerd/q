@@ -29,7 +29,8 @@
                   gsd-failed?)
          "../tools/tool.rkt"
          "../agent/event-bus.rkt"
-         "../util/event.rkt")
+         "../util/event.rkt"
+         (prefix-in events: "../extensions/gsd/events.rkt"))
 
 ;; ============================================================
 ;; Helpers
@@ -625,6 +626,36 @@
           (define result (handler (hasheq 'command "/go" 'input "/go 2")))
           (define submit-text (hash-ref (hook-result-payload result) 'new-session))
           (check-true (string-contains? submit-text "wave 2"))))))))
+
+(test-case "/go emits normalized pipeline events via events.rkt bus"
+  (with-gsd-cleanup
+   (lambda ()
+     (with-temp-dir
+      (lambda (dir)
+        (parameterize ([current-directory dir])
+          (set-pinned-planning-dir! dir)
+          (make-directory* (build-path dir ".planning"))
+          (call-with-output-file
+           (build-path dir ".planning" "PLAN.md")
+           (lambda (out)
+             (display "# Plan\n## Wave 0: Fix\n- File: foo.rkt\n## Wave 1: Polish\n- File: bar.rkt"
+                      out))
+           #:exists 'truncate)
+          ;; Set up events.rkt event collector
+          (define-values (collector get-events) (events:make-event-collector))
+          (events:set-gsd-event-bus! collector)
+          (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
+          (define result (handler (hasheq 'command "/go" 'input "/go")))
+          (check-equal? (hook-result-action result) 'amend)
+          ;; Check that pipeline events were emitted
+          (define evts (events:collector-events get-events))
+          (define event-names (map (lambda (e) (hash-ref e 'event #f)) evts))
+          (check-not-false (member 'gsd.plan.parsed event-names) "should emit gsd.plan.parsed")
+          (check-not-false (member 'gsd.plan.normalized event-names)
+                           "should emit gsd.plan.normalized")
+          (check-not-false (member 'gsd.plan.validated event-names) "should emit gsd.plan.validated")
+          (check-not-false (member 'gsd.mode.changed event-names) "should emit gsd.mode.changed")
+          (delete-directory/files dir)))))))
 
 (test-case "/implement alias works"
   (with-gsd-cleanup
