@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.23.5 — 2026-04-29
+
+### Performance Fix & Code Hygiene
+
+**CRITICAL — O(n²) → O(n) fix:**
+- Built id→msg hash in `fit-messages-pair-preserving`, replaced 4× `for/first` linear scans with O(1) `hash-ref` lookups
+- Function complexity reduced from O(n²) to O(n) for pair resolution
+
+**Dedup — format-messages-for-summary:**
+- Moved canonical implementation to `compaction-prompts.rkt`
+- Deleted local copies from `compactor.rkt` and `context-assembly.rkt` (2 → 1)
+
+**Dead export cleanup:**
+- Removed `requires-pair-inclusion?` from provide in `context-policy.rkt`
+- Removed 2 dedicated tests (no production callers)
+
+**Docstrings added to 5 functions:**
+- `generate-catalog`, `collapse-consecutive-tools`, `generate-context-summary`
+- `build-tiered-context-with-hooks`, `truncate-messages-to-budget`
+
+**Other:**
+- Updated test suite names: `context-builder` → `context-assembly-tree`, `context-builder-agents` → `context-assembly-agents`
+- Added config guard comment for zero max-catalog values
+
+**Tests:** 101 context+compactor tests, 67 assembly+policy tests pass
+
 ## v0.23.4 — 2026-04-29
 
 ### Combined Audit Remediation & Hardening

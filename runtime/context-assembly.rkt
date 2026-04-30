@@ -124,6 +124,7 @@
 ;; Configuration
 ;; ============================================================
 
+;; Note: 0 is valid for max-catalog-* (disables catalog)
 (struct context-assembly-config
         (recent-tokens ; tokens for the recent window (default 30000)
          max-catalog-entries ; max catalog entries (default 40)
