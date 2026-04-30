@@ -10,7 +10,8 @@
          "../extensions/gsd/core.rkt"
          "../extensions/gsd/state-machine.rkt"
          (only-in "../extensions/gsd-planning.rkt" gsd-tool-guard)
-         (only-in "../util/hook-types.rkt" hook-result-action))
+         (only-in "../util/hook-types.rkt" hook-result-action)
+         (only-in "../extensions/gsd/policy.rkt" policy-decision? policy-allowed? policy-blocked?))
 
 ;; ============================================================
 ;; Command dispatch: /plan
@@ -217,24 +218,24 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-write-guard ".planning/PLAN.md" ".planning"))
-  (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked #f) #t))
+  (check-true (policy-decision? r))
+  (check-true (policy-blocked? r)))
 
 (test-case "write guard: allows non-PLAN.md during executing"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (check-true (gsd-write-guard "src/fix.rkt" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard "src/fix.rkt" ".planning"))))
 
 (test-case "write guard: allows PLAN.md during idle"
   (reset-gsm!)
-  (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard ".planning/PLAN.md" ".planning"))))
 
 (test-case "write guard: allows PLAN.md during exploring"
   (reset-gsm!)
   (gsm-transition! 'exploring)
-  (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard ".planning/PLAN.md" ".planning"))))
 
 ;; ============================================================
 ;; Status display
@@ -256,8 +257,8 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-write-guard "src/../.planning/PLAN.md" ".planning"))
-  (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked #f) #t))
+  (check-true (policy-decision? r))
+  (check-true (policy-blocked? r)))
 
 (test-case "write guard: blocks multiple .. traversal"
   (reset-gsm!)
@@ -265,8 +266,8 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-write-guard "a/b/../../.planning/PLAN.md" ".planning"))
-  (check-true (hash? r))
-  (check-equal? (hash-ref r 'blocked #f) #t))
+  (check-true (policy-decision? r))
+  (check-true (policy-blocked? r)))
 
 (test-case "write guard: blocks other .planning files during executing"
   (reset-gsm!)
@@ -274,14 +275,14 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-write-guard ".planning/STATE.md" ".planning"))
-  (check-true (hash-ref r 'blocked #f)))
+  (check-true (policy-blocked? r)))
 
 (test-case "write guard: allows files outside .planning"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (check-true (gsd-write-guard "src/fix.rkt" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard "src/fix.rkt" ".planning"))))
 
 ;; ============================================================
 ;; W4: Hardened path guard tests (F6)
@@ -293,23 +294,23 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-write-guard ".planning/waves/W0-slug.md" ".planning"))
-  (check-true (hash-ref r 'blocked #f)))
+  (check-true (policy-blocked? r)))
 
 (test-case "W4: write guard allows q/foo.rkt during executing"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
-  (check-true (gsd-write-guard "q/foo.rkt" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard "q/foo.rkt" ".planning"))))
 
 (test-case "W4: write guard allows during exploring mode"
   (reset-gsm!)
   (gsm-transition! 'exploring)
-  (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard ".planning/PLAN.md" ".planning"))))
 
 (test-case "W4: write guard allows during idle mode"
   (reset-gsm!)
-  (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
+  (check-true (policy-allowed? (gsd-write-guard ".planning/PLAN.md" ".planning"))))
 
 ;; ============================================================
 ;; v0.24.1: Transaction wrapper tests
@@ -333,3 +334,44 @@
   (define result (gsd-command-dispatch 'wave-done "-1"))
   (check-false (gsd-command-result-success result))
   (check-not-false (string-contains? (gsd-command-result-message result) "non-negative")))
+
+;; ============================================================
+;; W2: Archive result migration + transaction tests
+;; ============================================================
+
+(test-case "cmd-done returns gsd-command-result on missing plan"
+  (reset-gsm!)
+  (define result (cmd-done "/nonexistent/path"))
+  (check-false (gsd-command-result-success result))
+  (check-not-false (string-contains? (gsd-command-result-message result) "No PLAN.md")))
+
+(test-case "cmd-done returns gsd-command-result on incomplete waves"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  ;; Create a temp dir with an incomplete plan
+  (define tmp-dir (make-temporary-file "gsd-archive-test-~a" 'directory))
+  (define planning-dir (build-path tmp-dir ".planning"))
+  (make-directory* planning-dir)
+  (call-with-output-file
+   (build-path planning-dir "PLAN.md")
+   (lambda (out)
+     (display "# Plan: Test\n## Wave 0: Fix\n- File: foo.rkt\n<!-- status: [Inbox] -->\n" out))
+   #:exists 'truncate)
+  (define result (cmd-done tmp-dir))
+  (check-false (gsd-command-result-success result))
+  (check-not-false (string-contains? (gsd-command-result-message result) "Not all waves"))
+  (delete-directory/files tmp-dir))
+
+(test-case "write guard returns policy-decision type"
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (gsm-transition! 'executing)
+  (define blocked (gsd-write-guard ".planning/PLAN.md" ".planning"))
+  (check-true (policy-decision? blocked))
+  (check-true (policy-blocked? blocked))
+  (define allowed (gsd-write-guard "src/foo.rkt" ".planning"))
+  (check-true (policy-decision? allowed))
+  (check-true (policy-allowed? allowed)))

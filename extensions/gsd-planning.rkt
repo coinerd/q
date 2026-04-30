@@ -51,7 +51,9 @@
                   gsd-result?
                   gsd-success?
                   gsd-failed?
-                  gsd-command-result-mode)
+                  gsd-command-result-mode
+                  with-gsd-transaction)
+         (only-in "gsd/policy.rkt" policy-decision policy-blocked? policy-reason)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
@@ -351,10 +353,10 @@
      (define guard-result
        (if guard-arg
            (gsd-write-guard guard-arg (pinned-planning-dir))
-           #t))
+           (policy-decision #t #f '())))
      (cond
-       [(hash? guard-result)
-        (make-error-result (format "Blocked: ~a" (hash-ref guard-result 'reason "write blocked")))]
+       [(policy-blocked? guard-result)
+        (make-error-result (format "Blocked: ~a" (policy-reason guard-result)))]
        [else
         (define parsed-content
           (if (json-artifact? name)

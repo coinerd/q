@@ -84,18 +84,13 @@
         (path->string planning-dir)
         planning-dir))
   ;; Route through policy engine (v0.24.4)
-  (define decision
-    (gsd-decide-action (hasheq 'mode
-                               mode
-                               'target-path
-                               (if (string? target-path) target-path "")
-                               'pinned-dir
-                               (or planning-dir-str ""))
-                       'write-file))
-  (if (policy-allowed? decision)
-      #t
-      ;; Keep hasheq return for backward compat (consumer checks hash?)
-      (hasheq 'blocked #t 'tool "write" 'mode mode 'reason (policy-reason decision))))
+  (gsd-decide-action (hasheq 'mode
+                             mode
+                             'target-path
+                             (if (string? target-path) target-path "")
+                             'pinned-dir
+                             (or planning-dir-str ""))
+                     'write-file))
 
 ;; ============================================================
 ;; Transaction wrapper (F3 fix: failure atomicity)
@@ -282,17 +277,10 @@
 ;; /done → archive completed plan
 ;; force? skips the wave completion check.
 (define (cmd-done base-dir [force? #f])
-  (define result (archive-completed-plan! base-dir force?))
-  (if (hash-ref result 'success #f)
-      (gsd-ok #:mode 'idle
-              #:message (format "\u2705 Plan archived to ~a (~a files)"
-                                (hash-ref result 'archive-path "?")
-                                (hash-ref result 'files-archived 0))
-              #:data (hasheq 'archive-path
-                             (hash-ref result 'archive-path "")
-                             'files-archived
-                             (hash-ref result 'files-archived 0)))
-      (gsd-err #:mode (gsm-current) #:message (hash-ref result 'error "Archive failed"))))
+  (with-gsd-transaction 'archive
+                        (lambda () (archive-completed-plan! base-dir force?))
+                        (lambda (e snapshot)
+                          (emit-gsd-event! 'gsd.archive.failed (hasheq 'error (exn-message e))))))
 
 ;; ============================================================
 ;; Write guard (hardened — DD-6)
