@@ -25,6 +25,7 @@
                   compaction-result?)
          (only-in "../extensions/hooks.rkt" dispatch-hooks hook-result? hook-result-payload)
          (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot reset-all-gsd-state!)
+         (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state-mode)
          (prefix-in store: "../runtime/session-store.rkt")
          "../agent/event-bus.rkt"
          "../util/cancellation.rkt"
@@ -179,7 +180,7 @@
 
 (define (gsd-status)
   (define snap (gsd-snapshot))
-  (define mode (hash-ref snap 'mode #f))
+  (define mode (and snap (gsd-runtime-state-mode snap)))
   (if (or (not mode) (eq? mode 'idle)) 'no-active-session snap))
 
 ;; ============================================================

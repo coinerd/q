@@ -48,6 +48,7 @@
                   gsd-command-result-success
                   gsd-command-result-message
                   gsd-command-result-data
+                  gsd-command-result?
                   gsd-result?
                   gsd-success?
                   gsd-failed?
@@ -564,63 +565,64 @@
                                               report
                                               "\n\nFix the plan before using /go.")))]
           [else
-           ;; v0.24.5: Wrap mutations in snapshot/restore transaction
-           (define go-snapshot (gsm-snapshot))
-           (with-handlers
-               ([exn:fail?
-                 (lambda (e)
-                   ;; Rollback all state mutations
-                   (call-with-semaphore gsd-state-sem (lambda () (set-gsd-state! go-snapshot)))
-                   (emit-gsd-event! 'gsd.mode.changed
-                                    (hasheq 'reason "transaction-rollback" 'error (exn-message e)))
-                   (hook-amend (hasheq 'text
-                                       (format "Failed to start execution: ~a" (exn-message e)))))])
-             (set-gsd-mode! 'executing)
-             (emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
-             (set-current-max-old-text-len! 1200)
-             ;; v0.21.3: No more budget resets
-             (define wave-indices
-               (for/list ([w (gsd-plan-waves plan)])
-                 (gsd-wave-index w)))
-             (when (not (null? wave-indices))
-               (set-total-waves! (add1 (apply max wave-indices))))
-             (set-current-wave-index! 0)
-             ;; Step 3: Create executor from validated plan
-             (define executor (make-wave-executor-from-validated validation))
-             (gsm-set-wave-executor! executor)
-             (define state-content (read-planning-artifact base-dir "STATE"))
-             (define state-note
-               (if state-content
-                   (format "\nCurrent state:\n~a\n" state-content)
-                   ""))
-             (define wave-arg
-               (let* ([trimmed (string-trim input-text)]
-                      [parts (string-split trimmed)])
-                 (if (>= (length parts) 2)
-                     (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
-                       (if (and (> (string-length maybe-num) 0)
-                                (regexp-match? #rx"^[0-9]+$" maybe-num))
-                           (format "\nStart with wave ~a." maybe-num)
-                           ""))
-                     "")))
-             ;; Build plan text from wave docs or inline content
-             (define plan-text-for-prompt
-               (if plan-from-index
-                   (string-append plan-content "\n\n" (wave-docs-summary plan-from-index))
-                   plan-content))
-             (define exec-prompt (executing-prompt plan executor))
-             (define augmented-text
-               (string-append planning-implement-prompt
-                              exec-prompt
-                              "\nPlan:\n"
-                              plan-text-for-prompt
-                              "\n"
-                              state-note
-                              wave-arg))
-             (hook-amend (hasheq 'new-session
-                                 augmented-text
-                                 'text
-                                 (format "Implementing plan~a..." wave-arg))))])])]))
+           ;; v0.24.6: Use with-gsd-transaction for snapshot/restore
+           (define-values (executor wave-indices)
+             (with-gsd-transaction
+              "go"
+              (lambda ()
+                (set-gsd-mode! 'executing)
+                (emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
+                (set-current-max-old-text-len! 1200)
+                (define wis
+                  (for/list ([w (gsd-plan-waves plan)])
+                    (gsd-wave-index w)))
+                (when (not (null? wis))
+                  (set-total-waves! (add1 (apply max wis))))
+                (set-current-wave-index! 0)
+                (define exec (make-wave-executor-from-validated validation))
+                (gsm-set-wave-executor! exec)
+                (values exec wis))
+              (lambda (e snap)
+                (emit-gsd-event! 'gsd.mode.changed
+                                 (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
+           ;; Transaction returns gsd-err on failure, or the thunk values on success
+           (cond
+             [(gsd-command-result? executor)
+              ;; Transaction failed — executor is actually gsd-err result
+              (hook-amend (hasheq 'text (gsd-command-result-message executor)))]
+             [else
+              (define state-content (read-planning-artifact base-dir "STATE"))
+              (define state-note
+                (if state-content
+                    (format "\nCurrent state:\n~a\n" state-content)
+                    ""))
+              (define wave-arg
+                (let* ([trimmed (string-trim input-text)]
+                       [parts (string-split trimmed)])
+                  (if (>= (length parts) 2)
+                      (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
+                        (if (and (> (string-length maybe-num) 0)
+                                 (regexp-match? #rx"^[0-9]+$" maybe-num))
+                            (format "\nStart with wave ~a." maybe-num)
+                            ""))
+                      "")))
+              (define plan-text-for-prompt
+                (if plan-from-index
+                    (string-append plan-content "\n\n" (wave-docs-summary plan-from-index))
+                    plan-content))
+              (define exec-prompt (executing-prompt plan executor))
+              (define augmented-text
+                (string-append planning-implement-prompt
+                               exec-prompt
+                               "\nPlan:\n"
+                               plan-text-for-prompt
+                               "\n"
+                               state-note
+                               wave-arg))
+              (hook-amend (hasheq 'new-session
+                                  augmented-text
+                                  'text
+                                  (format "Implementing plan~a..." wave-arg)))])])])]))
 
 ;; Handler for /gsd status
 (define (handle-gsd-status)
