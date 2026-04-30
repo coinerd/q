@@ -10,6 +10,7 @@
 ;;   racket scripts/audit-project.rkt              # full report
 ;;   racket scripts/audit-project.rkt --ci         # CI mode: exit 1 on critical
 ;;   racket scripts/audit-project.rkt --stdout     # print to stdout
+;;   racket scripts/audit-project.rkt --json      # JSON output
 
 (require racket/port
          racket/string
@@ -17,7 +18,8 @@
          racket/file
          racket/match
          racket/date
-         racket/path)
+         racket/path
+         json)
 
 ;; ── Configuration ──
 
@@ -216,14 +218,72 @@
 
   (values report critical-count all-findings))
 
+;; ── JSON output ──
+
+(define (read-version-string)
+  (define p (build-path Q-DIR "util" "version.rkt"))
+  (define content (file->string p))
+  (define m (regexp-match #rx"q-version \"" content))
+  (if m
+      (let* ([full (regexp-match-positions #rx"q-version \"([^\"]+)\"" content)]
+             [start (caadr full)]
+             [end (cdadr full)])
+        (substring content start end))
+      "unknown"))
+
+(define (generate-json-report report-text critical-count findings inv)
+  (define risky (filter (lambda (f) (equal? (finding-category f) "risky-api")) findings))
+  (define oversized (filter (lambda (f) (equal? (finding-category f) "oversized")) findings))
+  (define todos (filter (lambda (f) (equal? (finding-category f) "todo-marker")) findings))
+  (define (finding->jsexpr f)
+    (hasheq 'severity
+            (symbol->string (finding-severity f))
+            'category
+            (finding-category f)
+            'file
+            (path->string (find-relative-path Q-DIR (finding-file f)))
+            'line
+            (finding-line f)
+            'message
+            (finding-message f)))
+  (jsexpr->string (hasheq 'timestamp
+                          (parameterize ([date-display-format 'iso-8601])
+                            (date->string (current-date) #t))
+                          'version
+                          (read-version-string)
+                          'modules
+                          (hasheq 'total
+                                  (hash-ref inv 'total-modules)
+                                  'lines
+                                  (hash-ref inv 'total-lines)
+                                  'by-layer
+                                  (for/hash ([(k v) (in-hash (hash-ref inv 'by-layer))])
+                                    (values (if (string? k)
+                                                (string->symbol k)
+                                                k)
+                                            v)))
+                          'large_files
+                          (map finding->jsexpr oversized)
+                          'risky_apis
+                          (map finding->jsexpr risky)
+                          'todos
+                          (map finding->jsexpr todos)
+                          'critical_count
+                          critical-count)))
+
 ;; ── Main ──
 
 (define ci-mode? (member "--ci" (vector->list (current-command-line-arguments))))
 (define stdout-mode? (member "--stdout" (vector->list (current-command-line-arguments))))
+(define json-mode? (member "--json" (vector->list (current-command-line-arguments))))
 
 (define-values (report critical-count findings) (generate-report))
 
 (cond
+  [json-mode?
+   ;; Re-scan inventory for JSON output
+   (define inv (scan-module-inventory))
+   (displayln (generate-json-report report critical-count findings inv))]
   [stdout-mode? (displayln report)]
   [else
    (make-directory* AUDITS-DIR)
