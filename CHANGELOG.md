@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.24.3 — 2026-04-29
+
+### Documentation & Fitness Gates
+
+- **F8: Documentation reconciliation** — Updated ADR-0011 to comprehensively document
+  all v0.24.x architectural changes (state unification, command contracts, policy engine,
+  transaction wrappers, normalized plan IR, event telemetry).
+- **Cross-module fitness gates** — 13 tests validating all v0.24.x improvements work
+  together: state invariants, command result structs, transaction rollback, policy routing,
+  event telemetry, normalized plan IR, and full lifecycle integration.
+- Exported `with-gsd-transaction` from core.rkt for testing reuse.
+
 ## v0.24.2 — 2026-04-29
 
 ### Pipeline Refactor & Observability
