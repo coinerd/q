@@ -40,6 +40,7 @@
          gsd-show-status
          ;; Individual command handlers for direct wiring
          cmd-replan
+         cmd-go
          cmd-skip
          cmd-reset
          cmd-done
@@ -164,6 +165,9 @@
 
 ;; /go [wave] → executing
 (define (cmd-go args)
+  ;; DEPRECATED (v0.24.5): Use handle-go-command in gsd-planning.rkt for the
+  ;; full normalized pipeline (parse → normalize → validate → execute).
+  ;; This function only does a bare state transition with no plan validation.
   (define wave-arg
     (if (string? args)
         (string-trim args)
