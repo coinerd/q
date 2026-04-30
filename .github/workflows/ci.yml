@@ -52,6 +52,10 @@ jobs:
       - name: README status block
         run: racket scripts/sync-readme-status.rkt --check
 
+      - name: Project audit
+        run: racket scripts/audit-project.rkt --ci
+        continue-on-error: true
+
       - name: Test portability
         run: racket scripts/lint-tests.rkt
 
