@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.24.1 — 2026-04-29
+
+### Policy Engine & Transaction Wrappers
+
+- **F4: Unified Policy Engine** — New `extensions/gsd/policy.rkt` with `gsd-decide-action`
+  centralizing all guard decisions. `state-machine.rkt` `BLOCKED-TOOLS` table removed;
+  `gsm-tool-allowed?` now delegates to policy module.
+- **F3: Transaction Wrappers** — New `with-gsd-transaction` in `core.rkt` provides
+  snapshot+rollback semantics for multi-step commands. `cmd-wave-done` now uses
+  transaction wrapper for failure atomicity.
+- 3 new transaction tests (39 core total), 18 new policy tests.
+
 ## v0.24.0 — 2026-04-29
 
 ### GSD Extension Architecture Remediation

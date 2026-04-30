@@ -310,3 +310,26 @@
 (test-case "W4: write guard allows during idle mode"
   (reset-gsm!)
   (check-true (gsd-write-guard ".planning/PLAN.md" ".planning")))
+
+;; ============================================================
+;; v0.24.1: Transaction wrapper tests
+;; ============================================================
+
+(test-case "transaction: successful wave-done updates state"
+  (reset-gsm!)
+  (gsm-set-total-waves! 3)
+  (define result (gsd-command-dispatch 'wave-done "0"))
+  (check-true (gsd-command-result-success result))
+  (check-true (gsm-wave-complete? 0)))
+
+(test-case "transaction: invalid wave number returns error"
+  (reset-gsm!)
+  (define result (gsd-command-dispatch 'wave-done "abc"))
+  (check-false (gsd-command-result-success result))
+  (check-not-false (string-contains? (gsd-command-result-message result) "Invalid")))
+
+(test-case "transaction: negative wave number returns error"
+  (reset-gsm!)
+  (define result (gsd-command-dispatch 'wave-done "-1"))
+  (check-false (gsd-command-result-success result))
+  (check-not-false (string-contains? (gsd-command-result-message result) "non-negative")))

@@ -29,6 +29,8 @@
          ;; Direct imports (no longer via shim — W2 purification)
          (only-in "state-machine.rkt" gsm-mark-wave-complete!)
          (only-in "wave-docs.rkt" mark-wave-status!)
+         (only-in "session-state.rkt" set-gsd-state! gsd-state-sem)
+         (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
          (only-in "../gsd-planning-state.rkt" pinned-planning-dir))
 
 (provide gsd-command-dispatch
@@ -103,6 +105,28 @@
                  'reason
                  (format "Cannot write to ~a during execution (use /replan to modify)" target-path))
          #t)]))
+
+;; ============================================================
+;; Transaction wrapper (F3 fix: failure atomicity)
+;; ============================================================
+
+;; Execute a multi-step command with rollback on failure.
+;; Captures snapshot before execution, restores on error.
+(define (with-gsd-transaction label thunk on-rollback)
+  (define snapshot (gsm-snapshot))
+  (with-handlers ([exn:fail? (lambda (e)
+                               ;; Rollback to snapshot
+                               (gsd-state-restore! snapshot)
+                               (on-rollback e snapshot)
+                               (gsd-err #:mode (gsd-runtime-state-mode snapshot)
+                                        #:message (format "~a failed (rolled back): ~a"
+                                                          label
+                                                          (exn-message e))))])
+    (thunk)))
+
+;; Restore state machine from a snapshot
+(define (gsd-state-restore! snapshot)
+  (call-with-semaphore gsd-state-sem (lambda () (set-gsd-state! snapshot))))
 
 ;; ============================================================
 ;; Command dispatch
@@ -198,22 +222,28 @@
        [(not idx) (gsd-err #:mode (gsm-current) #:message (format "Invalid wave number: ~a" idx-str))]
        [(< idx 0) (gsd-err #:mode (gsm-current) #:message "Wave number must be non-negative")]
        [else
-        ;; Mark wave complete in state machine
-        (gsm-mark-wave-complete! idx)
-        ;; Update PLAN.md status marker
-        (let ([base-dir (or base-dir (pinned-planning-dir))])
-          (when base-dir
-            (with-handlers ([exn:fail? (lambda (e) (void))])
-              (mark-wave-status! base-dir idx "DONE"))))
-        ;; Update STATE.md with wave completion
-        (when base-dir
-          (with-handlers ([exn:fail? (lambda (e)
-                                       (log-warning (format "cmd-wave-done/state-update: ~a"
-                                                            (exn-message e))))])
-            (update-state-with-wave! base-dir idx)))
-        (gsd-ok #:mode (gsm-current)
-                #:message (format "Wave ~a marked complete. PLAN.md and STATE.md updated." idx)
-                #:data (hasheq 'wave idx))])]))
+        (with-gsd-transaction
+         (format "wave-done ~a" idx)
+         (lambda ()
+           ;; Mark wave complete in state machine
+           (gsm-mark-wave-complete! idx)
+           ;; Update PLAN.md status marker
+           (let ([dir (or base-dir (pinned-planning-dir))])
+             (when dir
+               (with-handlers ([exn:fail? (lambda (e) (void))])
+                 (mark-wave-status! dir idx "DONE"))))
+           ;; Update STATE.md with wave completion
+           (let ([dir (or base-dir (pinned-planning-dir))])
+             (when dir
+               (with-handlers ([exn:fail? (lambda (e)
+                                            (log-warning (format "cmd-wave-done/state-update: ~a"
+                                                                 (exn-message e))))])
+                 (update-state-with-wave! dir idx))))
+           (gsd-ok #:mode (gsm-current)
+                   #:message (format "Wave ~a marked complete. PLAN.md and STATE.md updated." idx)
+                   #:data (hasheq 'wave idx)))
+         (lambda (e snapshot)
+           (log-warning (format "wave-done ~a rolled back: ~a" idx (exn-message e)))))])]))
 
 ;; Helper: update STATE.md with wave completion note
 (define (update-state-with-wave! base-dir wave-idx)
