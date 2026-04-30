@@ -20,7 +20,13 @@
          "../extensions/ext-commands.rkt"
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"
-         (only-in "../extensions/gsd/core.rkt" cmd-wave-done)
+         (only-in "../extensions/gsd/core.rkt"
+                  cmd-wave-done
+                  gsd-command-result-success
+                  gsd-command-result-message
+                  gsd-command-result-data
+                  gsd-success?
+                  gsd-failed?)
          "../tools/tool.rkt"
          "../agent/event-bus.rkt"
          "../util/event.rkt")
@@ -896,9 +902,10 @@
      (set-total-waves! 2)
      ;; Call cmd-wave-done
      (define result (cmd-wave-done tmp-dir "0"))
-     (check-true (hash-ref result 'success))
-     (check-equal? (hash-ref result 'wave) 0)
-     (check-true (string-contains? (hash-ref result 'message) "Wave 0"))
+     (check-true (gsd-command-result-success result))
+     (define data (gsd-command-result-data result))
+     (check-equal? (and (hash? data) (hash-ref data 'wave #f)) 0)
+     (check-true (string-contains? (gsd-command-result-message result) "Wave 0"))
      ;; Verify PLAN.md updated
      (define plan-content (file->string (build-path planning-dir "PLAN.md")))
      (check-true (string-contains? plan-content "[DONE] W0:"))
@@ -912,20 +919,21 @@
 (test-case "wave-done: without index returns usage"
   (with-gsd-cleanup (lambda ()
                       (define result (cmd-wave-done #f ""))
-                      (check-false (hash-ref result 'success))
-                      (check-true (string-contains? (hash-ref result 'message) "Usage")))))
+                      (check-false (gsd-command-result-success result))
+                      (check-true (string-contains? (gsd-command-result-message result) "Usage")))))
 
 (test-case "wave-done: non-numeric index returns error"
   (with-gsd-cleanup (lambda ()
                       (define result (cmd-wave-done #f "abc"))
-                      (check-false (hash-ref result 'success))
-                      (check-true (string-contains? (hash-ref result 'message) "Invalid")))))
+                      (check-false (gsd-command-result-success result))
+                      (check-true (string-contains? (gsd-command-result-message result) "Invalid")))))
 
 (test-case "wave-done: negative index returns error"
   (with-gsd-cleanup (lambda ()
                       (define result (cmd-wave-done #f "-1"))
-                      (check-false (hash-ref result 'success))
-                      (check-true (string-contains? (hash-ref result 'message) "non-negative")))))
+                      (check-false (gsd-command-result-success result))
+                      (check-true (string-contains? (gsd-command-result-message result)
+                                                    "non-negative")))))
 
 (test-case "wave-done: multiple waves can be marked"
   (with-gsd-cleanup (lambda ()
@@ -945,10 +953,10 @@
                       (set-total-waves! 2)
                       ;; Mark W0
                       (define r0 (cmd-wave-done tmp-dir "0"))
-                      (check-true (hash-ref r0 'success))
+                      (check-true (gsd-command-result-success r0))
                       ;; Mark W1
                       (define r1 (cmd-wave-done tmp-dir "1"))
-                      (check-true (hash-ref r1 'success))
+                      (check-true (gsd-command-result-success r1))
                       ;; Both marked in PLAN.md
                       (define plan-content (file->string (build-path planning-dir "PLAN.md")))
                       (check-true (string-contains? plan-content "[DONE] W0:"))

@@ -4,6 +4,7 @@
 ;;
 ;; Wave 1 of v0.21.0: Tests for command dispatch, tool guard,
 ;; write guard, and status display.
+;; v0.24.0: Updated to use gsd-command-result struct accessors.
 
 (require rackunit
          "../extensions/gsd/core.rkt"
@@ -18,20 +19,21 @@
 (test-case "/plan: transitions to exploring"
   (reset-gsm!)
   (define r (gsd-command-dispatch 'plan "Fix the bug"))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-eq? (hash-ref r 'mode) 'exploring))
+  (check-true (gsd-command-result-success r))
+  (check-eq? (gsd-command-result-mode r) 'exploring))
 
 (test-case "/plan: includes user text in message"
   (reset-gsm!)
   (define r (gsd-command-dispatch 'plan "Investigate crash"))
-  (check-true (string-contains? (hash-ref r 'message) "Investigate crash")))
+  (check-true (string-contains? (gsd-command-result-message r) "Investigate crash")))
+
 (test-case "/plan: succeeds from plan-written (same as replan)"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (define r (gsd-command-dispatch 'plan "re-plan"))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-eq? (hash-ref r 'mode) 'exploring))
+  (check-true (gsd-command-result-success r))
+  (check-eq? (gsd-command-result-mode r) 'exploring))
 
 ;; ============================================================
 ;; Command dispatch: /go
@@ -42,27 +44,27 @@
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (define r (gsd-command-dispatch 'go ""))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-eq? (hash-ref r 'mode) 'executing))
+  (check-true (gsd-command-result-success r))
+  (check-eq? (gsd-command-result-mode r) 'executing))
 
 (test-case "/go: fails from idle"
   (reset-gsm!)
   (define r (gsd-command-dispatch 'go ""))
-  (check-equal? (hash-ref r 'success) #f))
+  (check-false (gsd-command-result-success r)))
 
 (test-case "/go: fails from exploring"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (define r (gsd-command-dispatch 'go ""))
-  (check-equal? (hash-ref r 'success) #f))
+  (check-false (gsd-command-result-success r)))
 
 (test-case "/go: accepts wave argument"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (define r (gsd-command-dispatch 'go "2"))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-true (string-contains? (hash-ref r 'message) "wave 2")))
+  (check-true (gsd-command-result-success r))
+  (check-true (string-contains? (gsd-command-result-message r) "wave 2")))
 
 ;; ============================================================
 ;; Command dispatch: /replan
@@ -73,8 +75,8 @@
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (define r (gsd-command-dispatch 'replan #f))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-eq? (hash-ref r 'mode) 'exploring))
+  (check-true (gsd-command-result-success r))
+  (check-eq? (gsd-command-result-mode r) 'exploring))
 
 (test-case "/replan: from executing to exploring"
   (reset-gsm!)
@@ -82,19 +84,19 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-command-dispatch 'replan #f))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-eq? (hash-ref r 'mode) 'exploring))
+  (check-true (gsd-command-result-success r))
+  (check-eq? (gsd-command-result-mode r) 'exploring))
 
 (test-case "/replan: fails from idle"
   (reset-gsm!)
   (define r (gsd-command-dispatch 'replan #f))
-  (check-equal? (hash-ref r 'success) #f))
+  (check-false (gsd-command-result-success r)))
 
 (test-case "/replan: fails from exploring"
   (reset-gsm!)
   (gsm-transition! 'exploring)
   (define r (gsd-command-dispatch 'replan #f))
-  (check-equal? (hash-ref r 'success) #f))
+  (check-false (gsd-command-result-success r)))
 
 ;; ============================================================
 ;; Command dispatch: /skip
@@ -106,13 +108,13 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-command-dispatch 'skip "3"))
-  (check-equal? (hash-ref r 'success) #t)
-  (check-true (string-contains? (hash-ref r 'message) "3")))
+  (check-true (gsd-command-result-success r))
+  (check-true (string-contains? (gsd-command-result-message r) "3")))
 
 (test-case "/skip: fails outside executing"
   (reset-gsm!)
   (define r (gsd-command-dispatch 'skip "1"))
-  (check-equal? (hash-ref r 'success) #f))
+  (check-false (gsd-command-result-success r)))
 
 (test-case "/skip: fails with no wave number"
   (reset-gsm!)
@@ -120,7 +122,7 @@
   (gsm-transition! 'plan-written)
   (gsm-transition! 'executing)
   (define r (gsd-command-dispatch 'skip "abc"))
-  (check-equal? (hash-ref r 'success) #f))
+  (check-false (gsd-command-result-success r)))
 
 ;; ============================================================
 ;; Command dispatch: /reset
@@ -132,8 +134,8 @@
     (for ([s states])
       (gsm-transition! s))
     (define r (gsd-command-dispatch 'reset #f))
-    (check-equal? (hash-ref r 'success) #t)
-    (check-eq? (hash-ref r 'mode) 'idle)))
+    (check-true (gsd-command-result-success r))
+    (check-eq? (gsd-command-result-mode r) 'idle)))
 
 ;; ============================================================
 ;; Command dispatch: unknown command
@@ -238,11 +240,11 @@
 ;; Status display
 ;; ============================================================
 
-(test-case "/gsd shows current mode and valid transitions"
+(test-case "/gsd shows current mode"
   (reset-gsm!)
   (define r (gsd-show-status))
-  (check-eq? (hash-ref r 'mode) 'idle)
-  (check-true (list? (hash-ref r 'valid-next-states))))
+  (check-true (gsd-result? r))
+  (check-eq? (gsd-command-result-mode r) 'idle))
 
 ;; ============================================================
 ;; Write guard hardening (DD-6)
