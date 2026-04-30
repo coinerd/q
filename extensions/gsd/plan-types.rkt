@@ -53,12 +53,44 @@
 (struct validation-result ([errors : (Listof String)] [warnings : (Listof String)]) #:transparent)
 
 ;; ============================================================
+;; Normalized Plan IR (v0.24.2 — F7)
+;; ============================================================
+;; Immutable IR produced by parsing + normalization.
+;; This is what the validator checks and executor consumes.
+
+(define-type NormWaveStatus (U 'pending 'in-progress 'done 'skipped))
+
+(struct gsd-normalized-wave
+        ([index : Natural] [title : String]
+                           [tasks : (Listof String)]
+                           [verify-command : String]
+                           [done-criteria : (Listof String)]
+                           [files : (Listof String)]
+                           [status : NormWaveStatus])
+  #:transparent)
+
+(struct gsd-normalized-plan
+        ([waves : (Listof gsd-normalized-wave)] [context-bundle : (U String #f)]
+                                                [metadata : (HashTable Symbol Any)]
+                                                [source-path : (U String #f)])
+  #:transparent)
+
+(struct gsd-validated-plan ([plan : gsd-normalized-plan]) #:transparent)
+
+;; ============================================================
 ;; Convenience constructors
 ;; ============================================================
 
 (: make-gsd-task : String (Listof String) String String String * -> gsd-task)
 (define (make-gsd-task name files action verify . rest)
-  (gsd-task name files action verify (if (null? rest) "" (car rest)) 'pending))
+  (gsd-task name
+            files
+            action
+            verify
+            (if (null? rest)
+                ""
+                (car rest))
+            'pending))
 
 (: make-gsd-wave
    :
@@ -205,6 +237,77 @@
   (list->string (filter char? mapped)))
 
 ;; ============================================================
+;; ============================================================
+;; Normalization (v0.24.2 — F7)
+;; ============================================================
+
+(: normalize-plan : gsd-plan -> (U gsd-normalized-plan String))
+(define (normalize-plan plan)
+  ;; Validate structural integrity then produce normalized IR.
+  ;; Returns gsd-normalized-plan on success, error string on failure.
+  (define waves (gsd-plan-waves plan))
+  ;; Check: sequential indices
+  (define indices
+    (for/list :
+      (Listof Natural)
+      ([w : gsd-wave waves])
+      (gsd-wave-index w)))
+  (define expected-indices (build-list (length waves) (lambda ([i : Natural]) i)))
+  (cond
+    [(not (equal? indices expected-indices))
+     (format "Wave indices not sequential 0..~a: ~a" (sub1 (length waves)) indices)]
+    [(not (null? waves))
+     ;; Check: no duplicate titles
+     (define titles
+       (for/list :
+         (Listof String)
+         ([w : gsd-wave waves])
+         (gsd-wave-title w)))
+     (define unique-titles (remove-duplicates titles))
+     (if (< (length unique-titles) (length titles))
+         "Duplicate wave titles detected"
+         ;; Check: all tasks have non-empty verify strings (warning, not error)
+         (let* ([norm-waves
+                 :
+                 (Listof gsd-normalized-wave)
+                 (for/list :
+                   (Listof gsd-normalized-wave)
+                   ([w : gsd-wave waves])
+                   (gsd-normalized-wave (gsd-wave-index w)
+                                        (gsd-wave-title w)
+                                        (for/list :
+                                          (Listof String)
+                                          ([t : gsd-task (gsd-wave-tasks w)])
+                                          (gsd-task-name t))
+                                        (gsd-wave-verify w)
+                                        (gsd-wave-done-criteria w)
+                                        (gsd-wave-files w)
+                                        (wave-status->norm-status (gsd-wave-status w))))]
+                [norm-plan (gsd-normalized-plan norm-waves
+                                                (gsd-plan-context-bundle plan)
+                                                (hasheq 'constraints
+                                                        (gsd-plan-constraints plan)
+                                                        'must-haves
+                                                        (gsd-plan-must-haves plan))
+                                                #f)])
+           norm-plan))]
+    [else (gsd-normalized-plan '() #f (hasheq) #f)]))
+
+(: wave-status->norm-status : WaveStatus -> NormWaveStatus)
+(define (wave-status->norm-status ws)
+  (cond
+    [(eq? ws 'pending) 'pending]
+    [(eq? ws 'in-progress) 'in-progress]
+    [(eq? ws 'completed) 'done]
+    [(eq? ws 'skipped) 'skipped]
+    [(eq? ws 'failed) 'pending] ; failed → pending for re-execution
+    [else 'pending]))
+
+(: validated-plan->normalized : gsd-validated-plan -> gsd-normalized-plan)
+(define (validated-plan->normalized vp)
+  (gsd-validated-plan-plan vp))
+
+;; ============================================================
 ;; Parsing re-exports from untyped parser module
 ;; ============================================================
 
@@ -273,6 +376,14 @@
          wave-status->string
          string->wave-status
          gsd-wave-slug
+
+         ;; Normalized Plan IR (v0.24.2)
+         (struct-out gsd-normalized-wave)
+         (struct-out gsd-normalized-plan)
+         (struct-out gsd-validated-plan)
+         normalize-plan
+         validated-plan->normalized
+         NormWaveStatus
 
          ;; Type alias
          WaveStatus)
