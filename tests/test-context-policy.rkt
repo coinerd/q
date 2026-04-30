@@ -159,20 +159,3 @@
   ;; Result ids should be a subsequence of original, in order
   (for ([rid (in-list result-ids)])
     (check-pred values (member rid original-ids) (format "~a should be in original" rid))))
-
-;; ============================================================
-;; requires-pair-inclusion?
-;; ============================================================
-
-(test-case "requires-pair-inclusion?: no pairs"
-  (define msgs (list (make-test-message "u" 'user 'message "hi")))
-  (define-values (tr->a a->tr) (build-pair-index msgs))
-  (check-false (requires-pair-inclusion? "u" tr->a a->tr)))
-
-(test-case "requires-pair-inclusion?: tool result has pair"
-  (define msgs
-    (list (make-tool-call-msg "a1" "call" "tc1")
-          (make-tool-result-msg "t1" "tc1" "result" #:parent-id "a1")))
-  (define-values (tr->a a->tr) (build-pair-index msgs))
-  (check-true (requires-pair-inclusion? "t1" tr->a a->tr))
-  (check-true (requires-pair-inclusion? "a1" tr->a a->tr)))

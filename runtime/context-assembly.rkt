@@ -461,7 +461,8 @@
 ;; ============================================================
 ;; Phase 4: Catalog generation
 ;; ============================================================
-
+;; generate-catalog: Build a summary catalog from older entries.
+;; Returns a list of (text . entry) pairs fitting within token budget.
 (define (generate-catalog entries
                           #:max-entries [max-entries 40]
                           #:max-tokens [max-tokens 2000]
@@ -481,6 +482,8 @@
            (reverse acc)
            (loop (cdr remaining) (cons entry acc) (+ used-tokens tokens) (add1 count)))])))
 
+;; collapse-consecutive-tools: Merge adjacent tool-call/tool-result sequences
+;; into a single summary entry to reduce context size.
 (define (collapse-consecutive-tools entries)
   (define-values (result current-group)
     (for/fold ([acc '()]
@@ -559,6 +562,8 @@
 ;; Generate context summary
 ;; ============================================================
 
+;; generate-context-summary: Produce a text summary of entries using LLM or fallback.
+;; Returns a context-summary struct or #f if no entries.
 (define (generate-context-summary entries provider model-name #:cache [cache #f])
   (cond
     [(null? entries) #f]
@@ -664,6 +669,8 @@
 
   (tiered-context (append sys-protected pinned-user compaction-summaries) tier-b tier-c))
 
+;; build-tiered-context-with-hooks: Assemble a tiered context (catalog + summary + recent)
+;; and dispatch extension hooks at each stage. Returns a tiered-context struct.
 (define (build-tiered-context-with-hooks messages
                                          #:hook-dispatcher [hook-dispatcher #f]
                                          #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
@@ -717,6 +724,8 @@
         (define new-total (for/sum ([m (in-list truncated)]) (estimate-message-tokens m)))
         (values truncated new-total)])]))
 
+;; truncate-messages-to-budget: Trim messages from the front to fit within token budget.
+;; Returns truncated message list with first-user pinning preserved.
 (define (truncate-messages-to-budget messages max-tokens)
   (cond
     [(null? messages) '()]
