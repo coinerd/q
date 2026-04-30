@@ -32,7 +32,12 @@
          (system/exit-code "racket scripts/check-deps.rkt")))
      (check-not-equal? exit-code 0 "Should fail when dep is missing"))
    (lambda ()
-     (call-with-output-file info-path (lambda (o) (display original o)) #:exists 'truncate))))
+     ;; Restore original content
+     (call-with-output-file info-path (lambda (o) (display original o)) #:exists 'truncate)
+     ;; Safety net: if restore somehow failed, restore from git
+     (unless (string-contains? (file->string info-path) "\"quickcheck\"")
+       (parameterize ([current-directory q-dir])
+         (system "git checkout -- info.rkt"))))))
 
 (test-case "check-deps-verbose-mode"
   (define cmd (format "cd ~a && racket scripts/check-deps.rkt -v" q-dir))
