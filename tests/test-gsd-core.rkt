@@ -375,3 +375,12 @@
   (define allowed (gsd-write-guard "src/foo.rkt" ".planning"))
   (check-true (policy-decision? allowed))
   (check-true (policy-allowed? allowed)))
+
+(test-case "cmd-go is deprecated — bare state transition only"
+  ;; cmd-go only does a bare state transition; TUI /go uses normalized pipeline
+  (reset-gsm!)
+  (gsm-transition! 'exploring)
+  (gsm-transition! 'plan-written)
+  (define result (cmd-go ""))
+  (check-true (gsd-command-result-success result))
+  (check-not-false (string-contains? (gsd-command-result-message result) "Execution started")))
