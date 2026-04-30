@@ -44,7 +44,7 @@
  ;; Module size configuration
  (module-size
   (max-lines . 900)
-  (known-large . ("agent/event-types.rkt" "agent/loop.rkt")))
+  (known-large . ()))
 
  ;; Complexity budgets (informational in v0.22.8, enforced in v0.23.0)
  (complexity-budgets
