@@ -12,7 +12,7 @@
          rackunit/text-ui
          racket/file
          racket/path
-         "../runtime/context-builder.rkt")
+         "../runtime/context-assembly.rkt")
 
 ;; Helpers
 

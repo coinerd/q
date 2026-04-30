@@ -9,7 +9,7 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         "../runtime/context-builder.rkt"
+         "../runtime/context-assembly.rkt"
          (only-in "../runtime/context-policy.rkt" estimate-message-tokens))
 
 ;; Helpers

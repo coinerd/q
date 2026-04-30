@@ -14,8 +14,17 @@
 (require rackunit
          rackunit/text-ui
          racket/file
-         "../runtime/compactor.rkt"
-         "../runtime/context-builder.rkt"
+         (only-in "../runtime/compactor.rkt"
+                  compact-and-persist!
+                  compact-history
+                  compaction-result
+                  compaction-result-kept-messages
+                  compaction-result-removed-count
+                  compaction-result-summary-message
+                  compaction-result->message-list
+                  build-summary-window
+                  default-strategy)
+         "../runtime/context-assembly.rkt"
          "../runtime/session-index.rkt"
          "../runtime/session-store.rkt"
          "../runtime/token-compaction.rkt"

@@ -121,8 +121,9 @@
 
 ;; Fit as many messages as possible from the recent end within a token budget,
 ;; preserving tool-call/tool-result pairing.
-;; Returns messages in their original order.
-(define (fit-messages-pair-preserving messages budget)
+;; Returns two values: (values kept-messages excluded-messages).
+;; Optional estimate-fn overrides the token estimation function.
+(define (fit-messages-pair-preserving messages budget [estimate-fn estimate-message-tokens])
   (define-values (tr->assistant assistant->trs) (build-pair-index messages))
   (let loop ([remaining (reverse messages)]
              [acc '()]
@@ -137,7 +138,7 @@
          ;; Already included (as pair dependency)
          [(set-member? acc-ids mid) (loop (cdr remaining) acc acc-ids used)]
          [else
-          (define tokens (estimate-message-tokens m))
+          (define tokens (estimate-fn m))
           ;; Calculate pair tokens
           (define pair-tokens 0)
           ;; Tool result → include parent assistant
@@ -149,7 +150,7 @@
                             #:when (equal? (message-id mm) required-assistant))
                   mm))
               (when ass-msg
-                (set! pair-tokens (+ pair-tokens (estimate-message-tokens ass-msg))))))
+                (set! pair-tokens (+ pair-tokens (estimate-fn ass-msg))))))
           ;; Assistant with tool_calls → include child tool results
           (define child-trs (hash-ref assistant->trs mid #f))
           (when child-trs
@@ -160,7 +161,7 @@
                               #:when (equal? (message-id mm) tr-id))
                     mm))
                 (when tr-msg
-                  (set! pair-tokens (+ pair-tokens (estimate-message-tokens tr-msg)))))))
+                  (set! pair-tokens (+ pair-tokens (estimate-fn tr-msg)))))))
           (define total-needed (+ used tokens pair-tokens))
           (cond
             [(> total-needed budget) (reverse acc)]
@@ -178,7 +179,7 @@
                      (if ass-msg
                          (values (cons ass-msg new-acc)
                                  (set-add new-ids required-assistant)
-                                 (+ new-used (estimate-message-tokens ass-msg)))
+                                 (+ new-used (estimate-fn ass-msg)))
                          (values new-acc new-ids new-used)))
                    (values new-acc new-ids new-used)))
              ;; Include child tool results if needed
@@ -196,7 +197,7 @@
                            (if tr-msg
                                (values (cons tr-msg fa)
                                        (set-add fi tr-id)
-                                       (+ fu (estimate-message-tokens tr-msg)))
+                                       (+ fu (estimate-fn tr-msg)))
                                (values fa fi fu)))))
                    (values final-acc final-ids final-used)))
              (loop (cdr remaining) final-acc2 final-ids2 final-used2)])])])))

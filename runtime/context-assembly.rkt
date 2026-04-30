@@ -7,7 +7,7 @@
 ;; and consolidates tiered-context from compactor.rkt.
 ;;
 ;; Pipeline:
-;;   1. Tree walk from session index (via context-builder)
+;;   1. Tree walk from session index
 ;;   2. Pin system prompt + first user + compaction summaries
 ;;   3. Fit recent messages within budget (pair-preserving)
 ;;   4. Summarize excluded entries (LLM or fallback)
@@ -16,22 +16,25 @@
 ;;   7. Return context-result with diagnostics
 ;;
 ;; v0.23.1 W0: Created from context-manager.rkt + compactor tiered-context
+;; v0.23.3 W0: Merged tree-walk from context-builder.rkt, deleted context-builder
 
-(require racket/list
+(require racket/file
+         racket/list
          racket/string
+         racket/set
          "../util/protocol-types.rkt"
          "../runtime/session-index.rkt"
-         (only-in "../runtime/context-builder.rkt"
-                  (build-session-context context-builder:build-session-context))
          "../llm/token-budget.rkt"
          (only-in "../runtime/context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned
+                  fit-messages-pair-preserving
                   user-message?
                   system-message?)
          (only-in "../runtime/compactor.rkt" llm-summarize)
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?))
+         (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
+         "../skills/context-files.rkt")
 
 ;; Config
 (provide context-assembly-config
@@ -53,6 +56,13 @@
          ;; Core API
          build-assembled-context
          build-session-context
+         ;; Token-aware context assembly
+         build-session-context/tokens
+         truncate-messages-to-budget
+         entry->context-message
+         ;; AGENTS.md context discovery
+         load-agents-context
+         build-system-preamble
          ;; Result struct
          context-result
          context-result?
@@ -232,12 +242,20 @@
                           'pinned-tokens
                           pinned-tokens))
 
-        ;; Phase 3: Fit recent messages within remaining budget
+        ;; Phase 3: Fit recent messages within remaining budget (pair-preserving)
         (define remaining-budget (- max-tokens pinned-tokens))
         (define-values (recent excluded)
           (if (<= remaining-budget 0)
               (values '() removable)
-              (fit-recent removable remaining-budget memoized-estimate)))
+              (let ()
+                (define kept
+                  (fit-messages-pair-preserving removable remaining-budget memoized-estimate))
+                (define kept-ids
+                  (for/hash ([m (in-list kept)])
+                    (values (message-id m) #t)))
+                (define exc
+                  (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
+                (values kept exc))))
         (emit-trace 'phase3-fitted
                     (hash 'recent-count
                           (length recent)
@@ -331,8 +349,62 @@
                         summary-obj))))
 
 ;; Backward-compatible entry point: returns just messages list
+;; v0.23.3: Merged tree-walk from context-builder.rkt
 (define (build-session-context idx)
-  (context-builder:build-session-context idx)) ; from context-builder (tree walk)
+  ;; Build a provider-ready message list from the session index.
+  ;; Algorithm:
+  ;;   1. Get active leaf from index
+  ;;   2. Walk leaf→root collecting path entries
+  ;;   3. Find latest compaction-summary on path
+  ;;   4. If compaction found → include summary + messages after compaction point
+  ;;   5. If no compaction → include all path messages
+  ;;   6. Filter out settings/label/bookmark entries
+  ;;   7. Transform summaries to user-role messages
+  ;;   8. Return provider-ready message list (reversed to root→leaf order)
+  (define leaf (active-leaf idx))
+  (cond
+    [(not leaf) '()]
+    [else
+     (define path (get-branch idx (message-id leaf)))
+     (cond
+       [(not path) '()]
+       ;; path is root→leaf order from get-branch
+       [else (assemble-context path)])]))
+
+(define (assemble-context path)
+  ;; Process a root→leaf path into context messages.
+  (define-values (pre-compaction post-compaction) (split-at-compaction path))
+  (define relevant-entries (if post-compaction post-compaction path))
+  (filter-map entry->context-message relevant-entries))
+
+(define (split-at-compaction path)
+  ;; Split path at the last compaction summary.
+  (define compaction-idx
+    (for/last ([entry (in-list path)]
+               [i (in-naturals)]
+               #:when (compaction-summary-entry? entry))
+      i))
+  (cond
+    [(not compaction-idx) (values path #f)]
+    [else
+     (define-values (pre post) (split-at path compaction-idx))
+     (values pre post)]))
+
+(define (entry->context-message entry)
+  ;; Convert a session entry to a context message for LLM consumption.
+  (define kind (message-kind entry))
+  (cond
+    [(memq kind '(message)) entry]
+    [(eq? kind 'compaction-summary) (transform-summary-to-user entry)]
+    [(eq? kind 'branch-summary) (transform-summary-to-user entry)]
+    [(memq kind '(session-info model-change thinking-level-change)) #f]
+    [(memq kind '(tool-result bash-execution)) entry]
+    [(eq? kind 'system-instruction) entry]
+    [(eq? kind 'custom-message) entry]
+    [else entry]))
+
+(define (transform-summary-to-user entry)
+  (struct-copy message entry [role 'user]))
 
 ;; ============================================================
 ;; Phase 1: Pin system prompt + first user + compaction summaries
@@ -613,6 +685,126 @@
   (append (tiered-context-tier-a tc) (tiered-context-tier-b tc) (tiered-context-tier-c tc)))
 
 ;; ============================================================
+;; Token-aware context assembly (from context-builder.rkt)
+;; ============================================================
+
+(define (build-session-context/tokens idx #:max-tokens max-tokens)
+  (define messages (build-session-context idx))
+  (cond
+    [(null? messages) (values '() 0)]
+    [else
+     (define total (for/sum ([m (in-list messages)]) (estimate-message-tokens m)))
+     (cond
+       [(<= total max-tokens) (values messages total)]
+       [else
+        (define truncated (truncate-messages-to-budget messages max-tokens))
+        (define new-total (for/sum ([m (in-list truncated)]) (estimate-message-tokens m)))
+        (values truncated new-total)])]))
+
+(define (truncate-messages-to-budget messages max-tokens)
+  (cond
+    [(null? messages) '()]
+    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens m)) max-tokens) messages]
+    [else
+     (define-values (protected removable)
+       (partition (lambda (m) (memq (message-kind m) '(system-instruction compaction-summary)))
+                  messages))
+     (define first-user-msg
+       (for/first ([m (in-list messages)]
+                   #:when (eq? (message-role m) 'user))
+         m))
+     (define protected-tokens (for/sum ([m (in-list protected)]) (estimate-message-tokens m)))
+     (define pinned-tokens
+       (if (and first-user-msg (not (member first-user-msg protected)))
+           (estimate-message-tokens first-user-msg)
+           0))
+     (define remaining-budget (- max-tokens protected-tokens pinned-tokens))
+     (cond
+       [(<= remaining-budget 0) (pin-first-user-internal protected first-user-msg messages)]
+       [else
+        (define kept-removable (fit-messages-from-recent removable remaining-budget))
+        (define kept-ids
+          (for/set ([m (in-list kept-removable)])
+            (message-id m)))
+        (pin-first-user-internal (for/list ([m (in-list messages)]
+                                            #:when (or (memq (message-kind m)
+                                                             '(system-instruction compaction-summary))
+                                                       (set-member? kept-ids (message-id m))))
+                                   m)
+                                 first-user-msg
+                                 messages)])]))
+
+;; Ensure first user message is in the result list.
+(define (pin-first-user-internal lst first-user-msg original-messages)
+  (cond
+    [(not first-user-msg) lst]
+    [(member first-user-msg lst) lst]
+    [else
+     (define target-id (message-id first-user-msg))
+     (define after-id
+       (for/first ([m (in-list (dropf original-messages
+                                      (lambda (m) (not (equal? (message-id m) target-id)))))]
+                   #:when (member m lst))
+         (message-id m)))
+     (if after-id
+         (let loop ([result '()]
+                    [remaining lst])
+           (cond
+             [(null? remaining) (reverse (cons first-user-msg result))]
+             [(equal? (message-id (car remaining)) after-id)
+              (loop (cons (car remaining) (cons first-user-msg result)) (cdr remaining))]
+             [else (loop (cons (car remaining) result) (cdr remaining))]))
+         (cons first-user-msg lst))]))
+
+;; Fit messages from recent end within budget (pair-preserving).
+(define (fit-messages-from-recent messages budget)
+  (fit-messages-pair-preserving messages budget))
+
+;; ============================================================
+;; AGENTS.md context discovery (from context-builder.rkt)
+;; ============================================================
+
+(define (load-agents-context working-directory)
+  (define paths (discover-agents-files working-directory))
+  (cond
+    [(null? paths) ""]
+    [else
+     (define contexts
+       (for/list ([p (in-list paths)]
+                  #:when (file-exists? p))
+         (define content (file->string p))
+         (parse-agent-file content)))
+     (cond
+       [(null? contexts) ""]
+       [else (agent-context-instructions (merge-agent-contexts contexts))])]))
+
+(define (build-system-preamble working-directory)
+  (define paths (discover-agents-files working-directory))
+  (cond
+    [(null? paths) ""]
+    [else
+     (define contexts
+       (for/list ([p (in-list paths)]
+                  #:when (file-exists? p))
+         (define content (file->string p))
+         (parse-agent-file content)))
+     (cond
+       [(null? contexts) ""]
+       [else
+        (define merged (merge-agent-contexts contexts))
+        (define name (agent-context-name merged))
+        (define desc (agent-context-description merged))
+        (define inst (agent-context-instructions merged))
+        (define parts
+          (filter (λ (s) (not (string=? s "")))
+                  (list (if (string=? name "Unnamed Agent")
+                            ""
+                            (format "# ~a" name))
+                        desc
+                        inst)))
+        (string-join parts "\n\n")])]))
+
+;; ============================================================
 ;; Helpers
 ;; ============================================================
 
@@ -628,3 +820,14 @@
   (if (<= (string-length s) max-len)
       s
       (string-append (substring s 0 (- max-len 3)) "...")))
+
+(define (filter-map f lst)
+  (let loop ([lst lst]
+             [acc '()])
+    (cond
+      [(null? lst) (reverse acc)]
+      [else
+       (let ([r (f (car lst))])
+         (if r
+             (loop (cdr lst) (cons r acc))
+             (loop (cdr lst) acc)))])))
