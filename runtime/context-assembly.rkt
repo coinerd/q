@@ -34,6 +34,7 @@
                   system-message?)
          (only-in "../runtime/compactor.rkt" llm-summarize)
          (only-in "context-pinning.rkt" partition-messages)
+         (only-in "context-fit.rkt" truncate-messages-to-budget fit-messages-from-recent)
          (only-in "../runtime/compaction-prompts.rkt" format-messages-for-summary)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
@@ -710,43 +711,7 @@
         (define new-total (for/sum ([m (in-list truncated)]) (estimate-message-tokens m)))
         (values truncated new-total)])]))
 
-;; truncate-messages-to-budget: Trim messages from the front to fit within token budget.
-;; Returns truncated message list with first-user pinning preserved.
-(define (truncate-messages-to-budget messages max-tokens)
-  (cond
-    [(null? messages) '()]
-    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens m)) max-tokens) messages]
-    [else
-     (define-values (protected removable)
-       (partition (lambda (m) (memq (message-kind m) '(system-instruction compaction-summary)))
-                  messages))
-     (define first-user-msg
-       (for/first ([m (in-list messages)]
-                   #:when (eq? (message-role m) 'user))
-         m))
-     (define protected-tokens (for/sum ([m (in-list protected)]) (estimate-message-tokens m)))
-     (define pinned-tokens
-       (if (and first-user-msg (not (member first-user-msg protected)))
-           (estimate-message-tokens first-user-msg)
-           0))
-     (define remaining-budget (- max-tokens protected-tokens pinned-tokens))
-     (cond
-       [(<= remaining-budget 0) (ensure-first-user-pinned protected messages)]
-       [else
-        (define kept-removable (fit-messages-from-recent removable remaining-budget))
-        (define kept-ids
-          (for/set ([m (in-list kept-removable)])
-            (message-id m)))
-        (ensure-first-user-pinned
-         (for/list ([m (in-list messages)]
-                    #:when (or (memq (message-kind m) '(system-instruction compaction-summary))
-                               (set-member? kept-ids (message-id m))))
-           m)
-         messages)])]))
-
-;; Fit messages from recent end within budget (pair-preserving).
-(define (fit-messages-from-recent messages budget)
-  (fit-messages-pair-preserving messages budget))
+;; truncate-messages-to-budget, fit-messages-from-recent extracted to context-fit.rkt
 
 ;; ============================================================
 ;; AGENTS.md context discovery (from context-builder.rkt)
