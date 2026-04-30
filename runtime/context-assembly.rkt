@@ -77,7 +77,7 @@
          context-assembly-config-summary-window
          make-context-assembly-config
          ;; Backward compat aliases — DEPRECATED, use context-assembly-config-* instead
-         ;; TODO: Remove in v0.25.0
+         ;; TODO(#v0.25.0): Remove in v0.25.0 — tracked for next breaking version
          (rename-out
           [context-assembly-config context-manager-config]
           [context-assembly-config? context-manager-config?]
