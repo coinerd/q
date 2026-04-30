@@ -30,7 +30,9 @@
     [(or (string=? arg "-v") (string=? arg "--verbose")) (set! verbose? #t)]
     [(not (string=? arg "")) (printf "Unknown flag: ~a~n" arg)]))
 
-;; Packages bundled with "base" — no explicit dep needed
+;; Packages bundled with "base" — no explicit dep needed.
+;; Last verified: 2026-04-29 (Racket 8.12).
+;; Update when: upgrading Racket version or adding new bundled packages.
 (define base-packages
   (set "racket"
        "rackunit"

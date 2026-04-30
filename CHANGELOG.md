@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.23.6 — 2026-04-29
+
+### CI Resilience & Push Safety Net
+
+**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.23.5
+incident requiring 4 CI runs and ~2 hours of debugging.
+
+- **ci_preflight parity**: Added `check-deps.rkt` to `ci_preflight()` in
+  `gh_helpers.py` so dependency errors are caught before push.
+- **workflow_dispatch**: Added manual re-run trigger to `.github/workflows/ci.yml`
+  so CI can be re-triggered without a new commit.
+- **Safe test-check-deps**: Added git-restore safety net to
+  `test-check-deps.rkt` cleanup to prevent info.rkt corruption on
+  timeout/interrupt.
+- **Post-rebase guard**: Added `_post_rebase_fix()` to `wave_finish()` that
+  re-syncs version refs and metrics after git operations.
+- **Maintenance comment**: Added version-awareness comment to
+  `check-deps.rkt` base-packages set.
+
 ## v0.23.5 — 2026-04-29
 
 ### Performance Fix & Code Hygiene
