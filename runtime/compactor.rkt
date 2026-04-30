@@ -25,7 +25,12 @@
          "../util/protocol-types.rkt"
          "../util/message-helpers.rkt"
          "../runtime/session-store.rkt"
-         "../runtime/compaction-prompts.rkt"
+         (only-in "../runtime/compaction-prompts.rkt"
+                  summary-prompt
+                  iterative-update-prompt
+                  format-messages-for-summary
+                  MAX-TOOL-RESULT-CHARS
+                  MAX-SUMMARY-WORDS)
          (only-in "../llm/model.rkt" make-model-request model-response-content model-response?)
          (only-in "../llm/provider.rkt" provider-send provider?)
          (only-in "../util/hook-types.rkt"
@@ -59,8 +64,7 @@
          make-llm-summarize-fn
          extract-file-tracker
          find-previous-file-tracker
-         merge-file-trackers
-         format-messages-for-summary)
+         merge-file-trackers)
 
 ;; ============================================================
 ;; Structs
@@ -103,24 +107,6 @@
 ;; ============================================================
 ;; LLM-powered summarization (v0.8.9)
 ;; ============================================================
-
-;; Format a list of messages into a text representation for the LLM.
-;; Truncates long tool results to keep the prompt within bounds.
-(define (format-messages-for-summary messages)
-  (string-join (for/list ([m (in-list messages)])
-                 (define role (message-role m))
-                 (define content (message-content m))
-                 (define text
-                   (string-join (for/list ([part (in-list content)]
-                                           #:when (text-part? part))
-                                  (define t (text-part-text part))
-                                  (if (> (string-length t) MAX-TOOL-RESULT-CHARS)
-                                      (string-append (substring t 0 MAX-TOOL-RESULT-CHARS)
-                                                     "\n... [truncated]")
-                                      t))
-                                " "))
-                 (format "[~a] ~a" role text))
-               "\n"))
 
 ;; Walk messages to find file paths from tool calls.
 ;; Returns a hash: 'readFiles -> list of paths,

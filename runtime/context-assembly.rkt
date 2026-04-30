@@ -33,6 +33,7 @@
                   user-message?
                   system-message?)
          (only-in "../runtime/compactor.rkt" llm-summarize)
+         (only-in "../runtime/compaction-prompts.rkt" format-messages-for-summary)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
          "../skills/context-files.rkt")
@@ -553,13 +554,6 @@
       "- Keep the Goal to ONE line\n\n"
       "SESSION MESSAGES:\n"
       formatted)]))
-
-(define (format-messages-for-summary messages)
-  (string-join (for/list ([m (in-list messages)])
-                 (define role (symbol->string (message-role m)))
-                 (define text (extract-message-text m))
-                 (format "[~a] (~a):\n  ~a" (message-id m) role (truncate-string text 500)))
-               "\n\n"))
 
 ;; ============================================================
 ;; Generate context summary

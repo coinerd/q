@@ -5,15 +5,41 @@
 ;; Provides structured summary prompt and iterative update prompt
 ;; for the compaction system.
 
-(require racket/string)
+(require racket/string
+         (only-in "../util/protocol-types.rkt"
+                  message?
+                  message-role
+                  message-id
+                  message-content
+                  text-part?
+                  text-part-text))
 
 (provide summary-prompt
          iterative-update-prompt
+         format-messages-for-summary
          MAX-TOOL-RESULT-CHARS
          MAX-SUMMARY-WORDS)
 
 (define MAX-TOOL-RESULT-CHARS 2000)
 (define MAX-SUMMARY-WORDS 500)
+
+;; Format a list of messages into text for LLM summarization.
+;; Truncates long content to keep prompts bounded.
+(define (format-messages-for-summary messages)
+  (string-join (for/list ([m (in-list messages)])
+                 (define role (message-role m))
+                 (define content (message-content m))
+                 (define text
+                   (string-join (for/list ([part (in-list content)]
+                                           #:when (text-part? part))
+                                  (define t (text-part-text part))
+                                  (if (> (string-length t) MAX-TOOL-RESULT-CHARS)
+                                      (string-append (substring t 0 MAX-TOOL-RESULT-CHARS)
+                                                     "\n... [truncated]")
+                                      t))
+                                " "))
+                 (format "[~a] ~a" role text))
+               "\n"))
 
 ;; Helper: format file tracker section for inclusion in prompts
 ;; Uses explicit XML tags for machine-readable file tracking.
@@ -21,17 +47,20 @@
   (if (and file-tracker (> (hash-count file-tracker) 0))
       (let ([reads (hash-ref file-tracker 'readFiles '())]
             [writes (hash-ref file-tracker 'modifiedFiles '())])
-        (string-append
-         "\n<file-tracker>\n"
-         (if (pair? reads)
-             (format "<read-files>\n~a\n</read-files>\n"
-                     (string-join (for/list ([p (in-list reads)]) (format "  ~a" p)) "\n"))
-             "")
-         (if (pair? writes)
-             (format "<modified-files>\n~a\n</modified-files>\n"
-                     (string-join (for/list ([p (in-list writes)]) (format "  ~a" p)) "\n"))
-             "")
-         "</file-tracker>"))
+        (string-append "\n<file-tracker>\n"
+                       (if (pair? reads)
+                           (format "<read-files>\n~a\n</read-files>\n"
+                                   (string-join (for/list ([p (in-list reads)])
+                                                  (format "  ~a" p))
+                                                "\n"))
+                           "")
+                       (if (pair? writes)
+                           (format "<modified-files>\n~a\n</modified-files>\n"
+                                   (string-join (for/list ([p (in-list writes)])
+                                                  (format "  ~a" p))
+                                                "\n"))
+                           "")
+                       "</file-tracker>"))
       ""))
 
 ;; Prompt for initial summarization of messages

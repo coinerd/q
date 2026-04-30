@@ -128,6 +128,10 @@
 ;; Optional estimate-fn overrides the token estimation function.
 (define (fit-messages-pair-preserving messages budget [estimate-fn estimate-message-tokens])
   (define-values (tr->assistant assistant->trs) (build-pair-index messages))
+  ;; O(1) lookup index — replaces O(n) for/first scans
+  (define id->msg
+    (for/hash ([m (in-list messages)])
+      (values (message-id m) m)))
   (let loop ([remaining (reverse messages)]
              [acc '()]
              [acc-ids (set)]
@@ -148,10 +152,7 @@
           (define required-assistant (hash-ref tr->assistant mid #f))
           (when required-assistant
             (unless (set-member? acc-ids required-assistant)
-              (define ass-msg
-                (for/first ([mm (in-list messages)]
-                            #:when (equal? (message-id mm) required-assistant))
-                  mm))
+              (define ass-msg (hash-ref id->msg required-assistant #f))
               (when ass-msg
                 (set! pair-tokens (+ pair-tokens (estimate-fn ass-msg))))))
           ;; Assistant with tool_calls → include child tool results
@@ -159,10 +160,7 @@
           (when child-trs
             (for ([tr-id (in-list child-trs)])
               (unless (set-member? acc-ids tr-id)
-                (define tr-msg
-                  (for/first ([mm (in-list messages)]
-                              #:when (equal? (message-id mm) tr-id))
-                    mm))
+                (define tr-msg (hash-ref id->msg tr-id #f))
                 (when tr-msg
                   (set! pair-tokens (+ pair-tokens (estimate-fn tr-msg)))))))
           (define total-needed (+ used tokens pair-tokens))
@@ -176,9 +174,7 @@
              ;; Include parent assistant if needed
              (define-values (final-acc final-ids final-used)
                (if (and required-assistant (not (set-member? new-ids required-assistant)))
-                   (let ([ass-msg (for/first ([mm (in-list messages)]
-                                              #:when (equal? (message-id mm) required-assistant))
-                                    mm)])
+                   (let ([ass-msg (hash-ref id->msg required-assistant #f)])
                      (if ass-msg
                          (values (cons ass-msg new-acc)
                                  (set-add new-ids required-assistant)
@@ -194,9 +190,7 @@
                              ([tr-id (in-list child-trs)])
                      (if (set-member? fi tr-id)
                          (values fa fi fu)
-                         (let ([tr-msg (for/first ([mm (in-list messages)]
-                                                   #:when (equal? (message-id mm) tr-id))
-                                         mm)])
+                         (let ([tr-msg (hash-ref id->msg tr-id #f)])
                            (if tr-msg
                                (values (cons tr-msg fa)
                                        (set-add fi tr-id)
