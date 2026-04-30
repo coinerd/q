@@ -45,10 +45,65 @@
          current-block-destructive
          current-extra-destructive-patterns
          destructive-command?
-         destructive-patterns)
+         destructive-patterns
+         current-execution-policy
+         current-allowed-commands
+         execution-policy-allows?)
 
 ;; Default timeout in seconds (used when no settings available)
 (define DEFAULT-TIMEOUT-SECONDS 120)
+
+;; ── Execution policy (RA-1a, v0.24.7) ──
+;; Controls which commands are allowed to execute.
+;; 'warn      — current behavior: warn on destructive, allow all
+;; 'block     — block destructive commands (same as safe-mode)
+;; 'allowlist — only commands in current-allowed-commands execute
+(define current-execution-policy (make-parameter 'warn))
+
+;; When execution-policy is 'allowlist, only these base commands execute.
+;; Configurable via config.json "execution-policy".allowed list.
+(define current-allowed-commands
+  (make-parameter '("git" "ls"
+                          "cat"
+                          "grep"
+                          "find"
+                          "raco"
+                          "racket"
+                          "echo"
+                          "mkdir"
+                          "cp"
+                          "mv"
+                          "diff"
+                          "head"
+                          "tail"
+                          "wc"
+                          "sort"
+                          "awk"
+                          "sed"
+                          "make")))
+
+;; Extract base command (first word) from a shell command string.
+(define (extract-base-command command)
+  (define trimmed (string-trim command))
+  (define space-idx
+    (for/first ([c (in-string trimmed)]
+                [i (in-naturals)]
+                #:when (char=? c #\space))
+      i))
+  (if space-idx
+      (substring trimmed 0 space-idx)
+      trimmed))
+
+;; Check if command is allowed under current execution policy.
+;; Returns #t if allowed, #f if blocked.
+(define (execution-policy-allows? command)
+  (define policy (current-execution-policy))
+  (case policy
+    [(warn block) #t] ; warn/block handled by destructive checks
+    [(allowlist)
+     (define base (extract-base-command command))
+     (member base (current-allowed-commands))]
+    [else #t])) ; unknown policy defaults to allow
 
 ;; Destructive command patterns (SEC-03, #449)
 ;; Each pattern uses anchors (^|[&;|\n]) or word boundaries to avoid
@@ -167,8 +222,10 @@
          (cond
            [(eq? v 'safe-mode-default) (safe-mode?)]
            [else v])))
-     ;; Destructive command handling (SEC-01 / SEC-03)
+     ;; Execution policy gate (RA-1a, v0.24.7)
      (cond
+       [(not (execution-policy-allows? command))
+        (make-error-result (format "Blocked by execution policy (allowlist mode): ~a" command))]
        ;; Block takes priority
        [(and block-destructive? (destructive-command? command))
         (make-error-result (format "Blocked destructive command: ~a" command))]
