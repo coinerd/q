@@ -28,7 +28,7 @@
   (make-directory (build-path dir ".git")))
 
 (define context-builder-agents-tests
-  (test-suite "context-builder-agents (G2.3)"
+  (test-suite "context-assembly-agents"
 
     ;; -------------------------------------------------------
     ;; load-agents-context: no AGENTS.md → empty string
