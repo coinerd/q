@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.24.2 — 2026-04-29
+
+### Pipeline Refactor & Observability
+
+- **F7: Normalized Plan IR** — New `gsd-normalized-plan`/`gsd-normalized-wave` structs
+  in `plan-types.rkt` provide immutable IR between validation and execution.
+  `normalize-plan` validates structure (sequential indices, no duplicate titles).
+  `validate-normalized-plan` produces `gsd-validated-plan` for semantic checks.
+  `make-wave-executor-from-validated` constructs executor from validated plan.
+- **F6: Event Telemetry** — New `extensions/gsd/events.rkt` with stable event names
+  (`gsd.<category>.<action>`) and correlation IDs. Command dispatch and state
+  transitions emit events. Event collector for testing.
+- 8 new event telemetry tests, backward-compatible.
+
 ## v0.24.1 — 2026-04-29
 
 ### Policy Engine & Transaction Wrappers

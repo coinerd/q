@@ -18,6 +18,7 @@
          racket/set
          "runtime-state-types.rkt"
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
+         (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "session-state.rkt"
                   current-gsd-state
                   set-gsd-state!
@@ -124,6 +125,7 @@
    (lambda ()
      (define state (current-gsd-state))
      (define current (gsd-runtime-state-mode state))
+     (emit-gsd-event! 'gsd.transition.attempted (hasheq 'from current 'to target))
      (cond
        [(not (gsm-state? target)) (err-result (format "invalid state: ~a" target) current target)]
        [(valid-transition? current target)
@@ -134,8 +136,12 @@
               state))
         (set-gsd-state! (struct-copy gsd-runtime-state state* [mode target]))
         (set-gsd-history! (cons (list current target (current-seconds)) (current-gsd-history)))
+        (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to target))
         (ok-result current target)]
        [else
+        (emit-gsd-event!
+         'gsd.transition.failed
+         (hasheq 'from current 'to target 'reason (format "invalid: ~a → ~a" current target)))
         (err-result
          (format "invalid transition: ~a → ~a (valid: ~a)" current target (valid-targets current))
          current
