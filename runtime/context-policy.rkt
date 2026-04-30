@@ -20,14 +20,15 @@
 (provide (contract-out [estimate-message-tokens (-> message? exact-nonnegative-integer?)]
                        [ensure-first-user-pinned
                         (-> (listof message?) (listof message?) (listof message?))]
-                       [build-pair-index (-> (listof message?) (values hash? hash?))]
-                       [requires-pair-inclusion? (-> (or/c string? #f) hash? hash? boolean?)]
                        [fit-messages-pair-preserving
                         (->* [(listof message?) exact-nonnegative-integer?]
                              [(or/c #f procedure?)]
                              (listof message?))]
                        [system-message? (-> message? boolean?)]
                        [user-message? (-> message? boolean?)])
+         ;; Internal helpers (not contracted — used by context-assembly only)
+         build-pair-index
+         requires-pair-inclusion?
          ;; Re-export from token-budget
          estimate-text-tokens)
 
