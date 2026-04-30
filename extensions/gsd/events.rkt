@@ -37,7 +37,8 @@
                          gsd.plan.parsed
                          gsd.plan.normalized
                          gsd.plan.validated
-                         gsd.plan.archived))
+                         gsd.plan.archived
+                         gsd.archive.failed))
 
 ;; ============================================================
 ;; Correlation ID parameter

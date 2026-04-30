@@ -13,7 +13,8 @@
          racket/format
          "plan-types.rkt"
          "wave-docs.rkt"
-         "state-machine.rkt")
+         "state-machine.rkt"
+         "command-types.rkt")
 
 (provide archive-completed-plan!
          all-waves-complete?
@@ -107,15 +108,15 @@
 
 ;; Archive a completed plan.
 ;; Steps: validate → create archive dir → move files → reset state.
-;; When force? is #f and waves are incomplete, returns a warning with incomplete count.
+;; Returns gsd-command-result (gsd-ok on success, gsd-err on failure).
+;; When force? is #f and waves are incomplete, returns gsd-err with incomplete count.
 ;; When force? is #t, archives regardless of wave completion status.
-;; Returns (hasheq 'success #t 'archive-path ...) on success.
-;; Returns (hasheq 'success #f 'error ...) on failure.
 (define (archive-completed-plan! base-dir [force? #f])
   (define planning-dir (build-path base-dir ".planning"))
   (define plan-path (build-path planning-dir "PLAN.md"))
+  (define current-mode (gsm-current))
   (cond
-    [(not (file-exists? plan-path)) (hasheq 'success #f 'error "No PLAN.md found")]
+    [(not (file-exists? plan-path)) (gsd-err #:mode current-mode #:message "No PLAN.md found")]
     [(and (not force?) (not (all-waves-complete? base-dir)))
      (define text (call-with-input-file plan-path port->string))
      (define entries (parse-plan-index text))
@@ -123,10 +124,9 @@
        (for/list ([e entries]
                   #:when (not (member (wave-index-entry-status e) '("DONE" "DEFERRED"))))
          (wave-index-entry-status e)))
-     (hasheq
-      'success
-      #f
-      'error
+     (gsd-err
+      #:mode current-mode
+      #:message
       (format
        "Not all waves are complete (~a/~a have status: ~a). Use /done --force to archive anyway."
        (length incomplete)
@@ -138,10 +138,10 @@
      (update-all-wave-statuses! base-dir)
      (define title (extract-plan-title plan-text))
      (define archive-dir (archive-path-for-plan base-dir title))
-     (define moved-files '())
-     (with-handlers ([exn:fail:filesystem?
-                      (lambda (e)
-                        (hasheq 'success #f 'error (format "Filesystem error: ~a" (exn-message e))))])
+     (with-handlers ([exn:fail:filesystem? (lambda (e)
+                                             (gsd-err #:mode current-mode
+                                                      #:message (format "Filesystem error: ~a"
+                                                                        (exn-message e))))])
        (move-to-archive! base-dir archive-dir)
        (reset-gsd-after-archive!)
        ;; Count archived files
@@ -149,12 +149,10 @@
          (if (directory-exists? archive-dir)
              (length (directory-list archive-dir))
              0))
-       (hasheq 'success
-               #t
-               'archive-path
-               (path->string archive-dir)
-               'files-archived
-               archived-count))]))
+       (gsd-ok #:mode 'idle
+               #:message (format "Plan archived to ~a" (path->string archive-dir))
+               #:data
+               (hasheq 'archive-path (path->string archive-dir) 'files-archived archived-count)))]))
 
 ;; ============================================================
 ;; Helpers
