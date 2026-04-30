@@ -25,6 +25,7 @@
          "plan-types.rkt"
          "context-bundle.rkt"
          "archive.rkt"
+         "command-types.rkt"
          ;; v0.21.10: wave-done needs mark-wave-complete! which also updates PLAN.md
          (only-in "../gsd-planning-state.rkt" mark-wave-complete! pinned-planning-dir))
 
@@ -38,7 +39,9 @@
          cmd-done
          cmd-wave-done
          ;; Command names for registration
-         gsd-commands)
+         gsd-commands
+         ;; Re-export command result types
+         (all-from-out "command-types.rkt"))
 
 ;; ============================================================
 ;; Command registry
@@ -114,7 +117,7 @@
     [(replan) (cmd-replan)]
     [(skip) (cmd-skip args)]
     [(reset) (cmd-reset)]
-    [(done) (hasheq 'success #t 'mode 'idle 'message "Use /done from the planning context.")]
+    [(done) (gsd-ok #:mode 'idle #:message "Use /done from the planning context.")]
     [(wave-done) (cmd-wave-done #f args)]
     [(gsd) (gsd-show-status)]
     [else #f]))
@@ -132,20 +135,12 @@
     (gsm-transition! 'idle))
   (define result (gsm-transition! 'exploring))
   (if (ok? result)
-      (hasheq 'success
-              #t
-              'mode
-              'exploring
-              'message
-              (if (non-empty? user-text)
-                  (format "Planning: ~a" user-text)
-                  "Planning phase started. Explore freely."))
-      (hasheq 'success
-              #f
-              'mode
-              (gsm-current)
-              'message
-              (format "Cannot enter planning: ~a" (err-reason result)))))
+      (gsd-ok #:mode 'exploring
+              #:message (if (non-empty? user-text)
+                            (format "Planning: ~a" user-text)
+                            "Planning phase started. Explore freely."))
+      (gsd-err #:mode (gsm-current)
+               #:message (format "Cannot enter planning: ~a" (err-reason result)))))
 
 ;; /go [wave] → executing
 (define (cmd-go args)
@@ -155,20 +150,12 @@
         ""))
   (define result (gsm-transition! 'executing))
   (if (ok? result)
-      (hasheq 'success
-              #t
-              'mode
-              'executing
-              'message
-              (if (non-empty? wave-arg)
-                  (format "Executing from wave ~a" wave-arg)
-                  "Execution started. Follow the plan."))
-      (hasheq 'success
-              #f
-              'mode
-              (gsm-current)
-              'message
-              (format "Cannot start execution: ~a" (err-reason result)))))
+      (gsd-ok #:mode 'executing
+              #:message (if (non-empty? wave-arg)
+                            (format "Executing from wave ~a" wave-arg)
+                            "Execution started. Follow the plan."))
+      (gsd-err #:mode (gsm-current)
+               #:message (format "Cannot start execution: ~a" (err-reason result)))))
 
 ;; /replan → exploring from plan-written or executing
 (define (cmd-replan)
@@ -179,32 +166,21 @@
      (gsm-transition! 'idle)
      (define result (gsm-transition! 'exploring))
      (if (ok? result)
-         (hasheq 'success #t 'mode 'exploring 'message "Re-planning. Modify the plan freely.")
-         (hasheq 'success
-                 #f
-                 'mode
-                 (gsm-current)
-                 'message
-                 (format "Cannot re-plan: ~a" (err-reason result))))]
-    [else
-     (hasheq 'success #f 'mode current 'message (format "Cannot re-plan from ~a state" current))]))
+         (gsd-ok #:mode 'exploring #:message "Re-planning. Modify the plan freely.")
+         (gsd-err #:mode (gsm-current) #:message (format "Cannot re-plan: ~a" (err-reason result))))]
+    [else (gsd-err #:mode current #:message (format "Cannot re-plan from ~a state" current))]))
 
 ;; /skip <wave> → mark wave as skipped
 (define (cmd-skip args)
   (define current (gsm-current))
   (if (not (eq? current 'executing))
-      (hasheq 'success #f 'mode current 'message "/skip only works during execution")
+      (gsd-err #:mode current #:message "/skip only works during execution")
       (let ([wave-num (if (string? args)
                           (string->number (string-trim args))
                           #f)])
         (if wave-num
-            (hasheq 'success
-                    #t
-                    'mode
-                    'executing
-                    'message
-                    (format "Wave ~a marked as skipped" wave-num))
-            (hasheq 'success #f 'mode 'executing 'message "Usage: /skip <wave-number>")))))
+            (gsd-ok #:mode 'executing #:message (format "Wave ~a marked as skipped" wave-num))
+            (gsd-err #:mode 'executing #:message "Usage: /skip <wave-number>")))))
 
 ;; /wave-done <N> → mark wave complete, update PLAN.md + STATE.md
 (define (cmd-wave-done base-dir args)
@@ -213,12 +189,12 @@
         (string-trim args)
         ""))
   (cond
-    [(string=? idx-str "") (hasheq 'success #f 'message "Usage: /wave-done <wave-number>")]
+    [(string=? idx-str "") (gsd-err #:mode (gsm-current) #:message "Usage: /wave-done <wave-number>")]
     [else
      (define idx (string->number idx-str))
      (cond
-       [(not idx) (hasheq 'success #f 'message (format "Invalid wave number: ~a" idx-str))]
-       [(< idx 0) (hasheq 'success #f 'message "Wave number must be non-negative")]
+       [(not idx) (gsd-err #:mode (gsm-current) #:message (format "Invalid wave number: ~a" idx-str))]
+       [(< idx 0) (gsd-err #:mode (gsm-current) #:message "Wave number must be non-negative")]
        [else
         ;; Mark wave complete in state machine + PLAN.md
         (mark-wave-complete! idx)
@@ -228,12 +204,9 @@
                                        (log-warning (format "cmd-wave-done/state-update: ~a"
                                                             (exn-message e))))])
             (update-state-with-wave! base-dir idx)))
-        (hasheq 'success
-                #t
-                'wave
-                idx
-                'message
-                (format "Wave ~a marked complete. PLAN.md and STATE.md updated." idx))])]))
+        (gsd-ok #:mode (gsm-current)
+                #:message (format "Wave ~a marked complete. PLAN.md and STATE.md updated." idx)
+                #:data (hasheq 'wave idx))])]))
 
 ;; Helper: update STATE.md with wave completion note
 (define (update-state-with-wave! base-dir wave-idx)
@@ -268,22 +241,22 @@
 ;; /reset → idle
 (define (cmd-reset)
   (define result (gsm-reset!))
-  (hasheq 'success #t 'mode 'idle 'message "GSD reset to idle."))
+  (gsd-ok #:mode 'idle #:message "GSD reset to idle."))
 
 ;; /done → archive completed plan
 ;; force? skips the wave completion check.
 (define (cmd-done base-dir [force? #f])
   (define result (archive-completed-plan! base-dir force?))
   (if (hash-ref result 'success #f)
-      (hasheq 'success
-              #t
-              'mode
-              'idle
-              'message
-              (format "\u2705 Plan archived to ~a (~a files)"
-                      (hash-ref result 'archive-path "?")
-                      (hash-ref result 'files-archived 0)))
-      (hasheq 'success #f 'mode (gsm-current) 'message (hash-ref result 'error "Archive failed"))))
+      (gsd-ok #:mode 'idle
+              #:message (format "\u2705 Plan archived to ~a (~a files)"
+                                (hash-ref result 'archive-path "?")
+                                (hash-ref result 'files-archived 0))
+              #:data (hasheq 'archive-path
+                             (hash-ref result 'archive-path "")
+                             'files-archived
+                             (hash-ref result 'files-archived 0)))
+      (gsd-err #:mode (gsm-current) #:message (hash-ref result 'error "Archive failed"))))
 
 ;; ============================================================
 ;; Write guard (hardened — DD-6)
@@ -296,12 +269,7 @@
 (define (gsd-show-status)
   (define mode (gsm-current))
   (define valid-next (gsm-valid-next-states))
-  (hasheq
-   'mode
-   mode
-   'valid-next-states
-   valid-next
-   'history-length
-   (length (gsm-history))
-   'message
-   (format "GSD Status: ~a | Next: ~a" mode (string-join (map symbol->string valid-next) ", "))))
+  (gsd-ok #:mode mode
+          #:message
+          (format "GSD Status: ~a | Next: ~a" mode (string-join (map symbol->string valid-next) ", "))
+          #:data (hasheq 'valid-next-states valid-next 'history-length (length (gsm-history)))))

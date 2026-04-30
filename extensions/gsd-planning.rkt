@@ -44,7 +44,14 @@
                   cmd-skip
                   cmd-reset
                   cmd-done
-                  cmd-wave-done)
+                  cmd-wave-done
+                  gsd-command-result-success
+                  gsd-command-result-message
+                  gsd-command-result-data
+                  gsd-result?
+                  gsd-success?
+                  gsd-failed?
+                  gsd-command-result-mode)
 
          "gsd/plan-types.rkt"
          "gsd/plan-validator.rkt"
@@ -434,38 +441,44 @@
     [(equal? cmd "/replan")
      (define result (cmd-replan))
      (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'exploring))
-     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+     (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(equal? cmd "/skip")
      (define args-text (extract-cmd-args input-text))
      (define result (cmd-skip args-text))
      ;; Mark wave as DEFERRED on disk + executor if skip succeeded
-     (when (and (hash-ref result 'success #f) base-dir)
+     (when (and (gsd-success? result) base-dir)
        (define idx (and (string->number (string-trim args-text))))
        (when idx
          (mark-wave-status! base-dir idx "DEFERRED")
          (define exec (gsm-wave-executor))
          (when exec
            (wave-skip! exec idx))))
-     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+     (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(equal? cmd "/reset")
      (define result (cmd-reset))
      (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'idle))
-     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+     (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(member cmd '("/wave-done" "/wd"))
      (define wd-args (extract-cmd-args input-text))
      (define result (cmd-wave-done base-dir wd-args))
-     (when (hash-ref result 'success #f)
-       (define wave-idx (hash-ref result 'wave #f))
+     (when (gsd-success? result)
+       (define data (gsd-command-result-data result))
+       (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
          (emit-gsd-event! "gsd.wave.completed" (hasheq 'wave wave-idx))))
-     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+     (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(equal? cmd "/done")
      (define done-args (extract-cmd-args input-text))
      (define force? (and done-args (string-contains? done-args "--force")))
      (define result (cmd-done base-dir force?))
-     (when (hash-ref result 'success #f)
-       (emit-gsd-event! "gsd.plan.archived" (hasheq 'path (hash-ref result 'archive-path ""))))
-     (hook-amend (hasheq 'text (hash-ref result 'message "")))]
+     (when (gsd-success? result)
+       (define data (gsd-command-result-data result))
+       (emit-gsd-event! "gsd.plan.archived"
+                        (hasheq 'path
+                                (if (hash? data)
+                                    (hash-ref data 'archive-path "")
+                                    ""))))
+     (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [else (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; Helper: Build wave docs summary for plan prompt
