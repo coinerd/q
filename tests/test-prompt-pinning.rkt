@@ -5,7 +5,7 @@
 
 (require rackunit
          "../util/protocol-types.rkt"
-         "../runtime/context-builder.rkt")
+         "../runtime/context-assembly.rkt")
 
 ;; Helper: create a simple message
 (define (make-test-msg role kind text [id (format "msg-~a" (random 100000))])
@@ -23,39 +23,39 @@
   ;; Truncate to a tiny budget that will drop most messages
   (define result (truncate-messages-to-budget msgs 50))
   ;; First user message must be in result
-  (define first-user (for/first ([m (in-list msgs)]
-                                  #:when (eq? (message-role m) 'user))
-                       m))
-  (check-not-false (member first-user result)
-                   "first user message must survive truncation"))
+  (define first-user
+    (for/first ([m (in-list msgs)]
+                #:when (eq? (message-role m) 'user))
+      m))
+  (check-not-false (member first-user result) "first user message must survive truncation"))
 
 ;; ── Test 2: First user message present when no truncation needed ──
 (test-case "first user message present when no truncation needed"
-  (define msgs (list (make-test-msg 'user 'message "hello")
-                     (make-test-msg 'assistant 'message "hi")))
+  (define msgs (list (make-test-msg 'user 'message "hello") (make-test-msg 'assistant 'message "hi")))
   (define result (truncate-messages-to-budget msgs 10000))
   (check-equal? result msgs "no truncation when within budget"))
 
 ;; ── Test 3: System messages still protected ──
 (test-case "system messages and compaction summaries still protected"
-  (define msgs (list (make-test-msg 'system 'system-instruction "system prompt")
-                     (make-test-msg 'system 'compaction-summary "summary")
-                     (make-test-msg 'user 'message "task")
-                     (make-test-msg 'assistant 'message "response")))
+  (define msgs
+    (list (make-test-msg 'system 'system-instruction "system prompt")
+          (make-test-msg 'system 'compaction-summary "summary")
+          (make-test-msg 'user 'message "task")
+          (make-test-msg 'assistant 'message "response")))
   (define result (truncate-messages-to-budget msgs 50))
   ;; System and compaction-summary should be present
   (check-true (for/or ([m (in-list result)]
-                        #:when (eq? (message-kind m) 'system-instruction))
+                       #:when (eq? (message-kind m) 'system-instruction))
                 #t)
               "system-instruction preserved")
   (check-true (for/or ([m (in-list result)]
-                        #:when (eq? (message-kind m) 'compaction-summary))
+                       #:when (eq? (message-kind m) 'compaction-summary))
                 #t)
               "compaction-summary preserved"))
 
 ;; ── Test 4: Pinning is identity when first user already present ──
 (test-case "pinning is identity when first user already present"
-  (define msgs (list (make-test-msg 'user 'message "first")
-                     (make-test-msg 'assistant 'message "response")))
+  (define msgs
+    (list (make-test-msg 'user 'message "first") (make-test-msg 'assistant 'message "response")))
   (define result (truncate-messages-to-budget msgs 10000))
   (check-equal? (length result) 2))

@@ -43,9 +43,8 @@
                   context-result-catalog
                   context-result?
                   catalog-entry
-                  catalog-entry?)
-         (only-in "../runtime/context-builder.rkt"
-                  (build-session-context context-builder:build-session-context))
+                  catalog-entry?
+                  build-session-context)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "iteration.rkt"
@@ -89,10 +88,10 @@
 
 ;; build-session-context — context preparation:
 ;;   converts user-message, appends to log, builds/updates index,
-;;   walks tree via context-builder, injects system instructions.
+;;   walks tree via context-assembly, injects system instructions.
 ;;   Returns the context message list.
 ;;
-;;   Wave 1 (#520): Uses session-index + context-builder tree walk
+;;   Wave 1 (#520): Uses session-index + context-assembly tree walk
 ;;   instead of linear load-session-log.
 (define (build-session-context sess user-message ensure-persisted!-fn buffer-or-append!-fn)
   (define log-path (session-log-path (agent-session-session-dir sess)))
@@ -142,7 +141,7 @@
   (when idx
     (append-to-leaf! idx user-msg))
 
-  ;; Build context: use context-assembly when provider available, else context-builder
+  ;; Build context: use context-assembly when provider available, else tree walk
   (define context-messages
     (if idx
         (cond
@@ -155,8 +154,8 @@
                                       #:provider (agent-session-provider sess)
                                       #:model-name (agent-session-model-name sess)))
            (context-result-messages result)]
-          ;; Fallback: context-builder tree walk (no LLM summarization)
-          [else (context-builder:build-session-context idx)])
+          ;; Fallback: context-assembly tree walk (no LLM summarization)
+          [else (build-session-context idx)])
         ;; Fallback: no index — use linear history (backward compat)
         (let ([existing (if (file-exists? log-path)
                             (load-session-log log-path)

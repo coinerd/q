@@ -62,7 +62,7 @@
          merge-file-trackers
          format-messages-for-summary
          ;; Tiered Context Assembly (WP-37) — DEPRECATED (#648)
-         ;; Use build-session-context/tokens from context-builder.rkt instead.
+         ;; Use build-session-context/tokens from context-assembly.rkt instead.
          (struct-out tiered-context)
          build-tiered-context
          tiered-context->message-list
@@ -469,7 +469,7 @@
 
 ;; ============================================================
 ;; Tiered Context Assembly (WP-37)
-;; DEPRECATED (#648): Use build-session-context/tokens from context-builder.rkt
+;; DEPRECATED (#648): Use build-session-context/tokens from context-assembly.rkt
 ;; instead. build-tiered-context remains for backward compatibility but will
 ;; be removed in a future version.
 

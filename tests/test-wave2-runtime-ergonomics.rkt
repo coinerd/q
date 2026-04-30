@@ -14,7 +14,7 @@
          "../runtime/settings.rkt"
          "../runtime/model-registry.rkt"
          "../runtime/session-store.rkt"
-         "../runtime/context-builder.rkt")
+         "../runtime/context-assembly.rkt")
 
 ;; ============================================================
 ;; Helpers
@@ -48,44 +48,37 @@
      (check-not-eq? (current-output-port) real-out)
      ;; call-with-raw-output should restore the real port
      (call-with-raw-output
-      (lambda ()
-        (check-eq? (current-output-port) real-out "raw output should use real port"))))))
+      (lambda () (check-eq? (current-output-port) real-out "raw output should use real port"))))))
 
 (test-case "#1181: stray writes are silently discarded"
   (define captured "")
-  (call-with-output-guard
-   (lambda ()
-     ;; These writes go to the null sink
-     (display "garbage" (current-output-port))
-     (display "more garbage" (current-output-port))
-     ;; Nothing should have been written
-     (void))
-   #:redirect-to (open-output-string))
+  (call-with-output-guard (lambda ()
+                            ;; These writes go to the null sink
+                            (display "garbage" (current-output-port))
+                            (display "more garbage" (current-output-port))
+                            ;; Nothing should have been written
+                            (void))
+                          #:redirect-to (open-output-string))
   ;; No error means the null sink handled the writes
   (check-true #t))
 
 (test-case "#1181: guard can redirect to stderr"
   ;; This just verifies the #:redirect-to option works
   (define buf (open-output-string))
-  (call-with-output-guard
-   (lambda ()
-     (display "redirected" (current-output-port)))
-   #:redirect-to buf)
+  (call-with-output-guard (lambda () (display "redirected" (current-output-port))) #:redirect-to buf)
   (check-equal? (get-output-string buf) "redirected"))
 
 (test-case "#1181: call-with-raw-output outside guard is passthrough"
   (define result
-    (call-with-raw-output
-     (lambda ()
-       (current-output-port)
-       "ok")))
+    (call-with-raw-output (lambda ()
+                            (current-output-port)
+                            "ok")))
   (check-equal? result "ok"))
 
 (test-case "#1181: output guard does not affect error port"
-  (call-with-output-guard
-   (lambda ()
-     ;; Error port should still work
-     (check-true (output-port? (current-error-port))))))
+  (call-with-output-guard (lambda ()
+                            ;; Error port should still work
+                            (check-true (output-port? (current-error-port))))))
 
 ;; ============================================================
 ;; #1182: Model Config Hot Reload
@@ -94,11 +87,10 @@
 (test-case "#1182: reload-config! refreshes model registry"
   ;; Create a settings with one provider with models list
   (define config1
-    (hasheq 'providers
-            (hasheq 'test-provider
-                    (hasheq 'type 'openai
-                            'models (list (hasheq 'id "model-a"
-                                                   'api-key "test-key"))))))
+    (hasheq
+     'providers
+     (hasheq 'test-provider
+             (hasheq 'type 'openai 'models (list (hasheq 'id "model-a" 'api-key "test-key"))))))
   (define reg1 (make-model-registry-from-config config1))
   (define models1 (map model-entry-name (available-models reg1)))
   (check-not-false (member "model-a" models1))
@@ -107,11 +99,11 @@
   (define config2
     (hasheq 'providers
             (hasheq 'test-provider
-                    (hasheq 'type 'openai
-                            'models (list (hasheq 'id "model-b"
-                                                   'api-key "test-key")
-                                          (hasheq 'id "model-c"
-                                                   'api-key "test-key"))))))
+                    (hasheq 'type
+                            'openai
+                            'models
+                            (list (hasheq 'id "model-b" 'api-key "test-key")
+                                  (hasheq 'id "model-c" 'api-key "test-key"))))))
   (define reg2 (make-model-registry-from-config config2))
   (define models2 (map model-entry-name (available-models reg2)))
   (check-false (member "model-a" models2) "old model should be gone")

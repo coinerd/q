@@ -8,7 +8,7 @@
          racket/list
          racket/string
          "../util/protocol-types.rkt"
-         "../runtime/context-builder.rkt"
+         "../runtime/context-assembly.rkt"
          "../llm/token-budget.rkt")
 
 (define (make-text-msg role text [kind 'message])
