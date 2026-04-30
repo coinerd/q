@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.24.0 — 2026-04-29
+
+### GSD Extension Architecture Remediation
+
+- **F1: Canonical Runtime State Aggregate** — Replaced hasheq-based state with
+  `gsd-runtime-state` struct. All state operations use `struct-copy` instead of
+  `hash-set`, struct accessors instead of `hash-ref`. New `runtime-state-types.rkt`
+  breaks the cycle between `session-state.rkt` and `state-machine.rkt`.
+- **F2: Command Result Structs** — All GSD command handlers now return
+  `gsd-command-result` structs (via `gsd-ok`/`gsd-err` constructors) instead of
+  ad-hoc hasheq. New `command-types.rkt` module.
+- **F3: Shim Purification** — Removed behavioral logic from `gsd-planning-state.rkt`
+  shim. PLAN.md side effects moved to `core.rkt`. Shim is now pure delegation
+  (deprecated, removal planned for v0.25.0).
+- **F4: State Invariants** — Added `gsd-invariants-hold?` to validate runtime
+  state structural invariants at any point.
+
 ## v0.23.6 — 2026-04-29
 
 ### CI Resilience & Push Safety Net

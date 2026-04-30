@@ -63,7 +63,9 @@
          gsm-completed-waves
          gsm-mark-wave-complete!
          gsm-wave-complete?
-         gsm-next-pending-wave)
+         gsm-next-pending-wave
+         ;; Invariants
+         gsd-invariants-hold?)
 
 ;; ============================================================
 ;; States and transitions
@@ -235,3 +237,30 @@
   (for/first ([i (in-range tw)]
               #:when (not (set-member? cw i)))
     i))
+
+;; ============================================================
+;; State invariants (F3 fix: runtime invariant checks)
+;; ============================================================
+
+;; Returns (values ok? error-message-or-#f)
+;; Checks structural invariants that should hold at all times.
+(define (gsd-invariants-hold?)
+  (define state (gsd-state-snapshot))
+  (define mode (gsd-runtime-state-mode state))
+  (define tw (gsd-runtime-state-total-waves state))
+  (define cw (gsd-runtime-state-current-wave state))
+  (define completed (gsd-runtime-state-completed-waves state))
+  (define exec (gsd-runtime-state-wave-executor state))
+  (cond
+    [(not (gsm-state? mode)) (values #f (format "invalid mode: ~a" mode))]
+    [(not (exact-nonnegative-integer? tw)) (values #f (format "total-waves not non-neg-int: ~a" tw))]
+    [(not (exact-nonnegative-integer? cw)) (values #f (format "current-wave not non-neg-int: ~a" cw))]
+    [(> cw tw) (values #f (format "current-wave (~a) > total-waves (~a)" cw tw))]
+    [(not (set? completed)) (values #f (format "completed-waves not a set: ~a" completed))]
+    [(not (for/and ([idx (in-set completed)])
+            (and (exact-nonnegative-integer? idx) (< idx tw))))
+     (values #f (format "completed-waves contains invalid indices: ~a" completed))]
+    ;; If in executing/verifying, wave-executor should be set when waves exist
+    [(and (memq mode '(executing verifying)) (> tw 0) (not exec))
+     (values #f (format "in ~a with ~a waves but no wave-executor" mode tw))]
+    [else (values #t #f)]))
