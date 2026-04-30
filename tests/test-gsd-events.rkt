@@ -98,6 +98,8 @@
                                        gsd.transition.attempted
                                        gsd.transition.succeeded
                                        gsd.transition.failed
+                                       gsd.mode.changed
                                        gsd.wave.started
-                                       gsd.wave.completed)])
+                                       gsd.wave.completed
+                                       gsd.plan.archived)])
       (check-not-false (member name gsd-event-names) (format "~a not in gsd-event-names" name)))))

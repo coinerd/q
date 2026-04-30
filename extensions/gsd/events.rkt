@@ -27,6 +27,7 @@
                          gsd.transition.attempted
                          gsd.transition.succeeded
                          gsd.transition.failed
+                         gsd.mode.changed
                          gsd.wave.started
                          gsd.wave.completed
                          gsd.wave.failed
@@ -35,7 +36,8 @@
                          gsd.guard.allowed
                          gsd.plan.parsed
                          gsd.plan.normalized
-                         gsd.plan.validated))
+                         gsd.plan.validated
+                         gsd.plan.archived))
 
 ;; ============================================================
 ;; Correlation ID parameter

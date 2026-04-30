@@ -799,16 +799,16 @@
                       (define received (box '()))
                       (subscribe! bus (lambda (evt) (set-box! received (cons evt (unbox received)))))
                       ;; emit-gsd-event! is defined in gsd-planning.rkt
-                      (emit-gsd-event! "gsd.test.event" (hasheq 'key 'value))
+                      (emit-gsd-event! 'gsd.mode.changed (hasheq 'key 'value))
                       (check-equal? (length (unbox received)) 1 "should receive one event")
                       (define evt (car (unbox received)))
-                      (check-equal? (event-event evt) "gsd.test.event")
+                      (check-equal? (event-event evt) 'gsd.mode.changed)
                       (check-equal? (hash-ref (event-payload evt) 'key) 'value))))
 
 (test-case "W1: emit-gsd-event! is no-op when bus is #f"
   (with-gsd-cleanup (lambda ()
                       ;; Should not raise an error
-                      (emit-gsd-event! "gsd.test.noop" (hasheq 'key 'value))
+                      (emit-gsd-event! 'gsd.mode.changed (hasheq 'key 'value))
                       (check-false (gsd-event-bus) "bus should still be #f"))))
 
 ;; ============================================================

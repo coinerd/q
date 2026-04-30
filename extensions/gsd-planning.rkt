@@ -59,7 +59,11 @@
          "gsd/prompts.rkt"
          "gsd/context-bundle.rkt"
          "gsd/wave-docs.rkt"
-         (only-in "gsd/archive.rkt" ensure-state-md!))
+         (only-in "gsd/archive.rkt" ensure-state-md!)
+         (only-in "gsd/events.rkt"
+                  [gsd-event-bus-box events:event-bus-box]
+                  [set-gsd-event-bus! events:set-event-bus!]
+                  [emit-gsd-event! events:emit-gsd-event!]))
 
 (provide the-extension
          gsd-planning-extension
@@ -111,10 +115,15 @@
 ;; Event emission helper
 ;; ============================================================
 
-(define (emit-gsd-event! type payload)
+;; Event emission: delegates to events.rkt via session bus bridge
+;; See register-gsd-tools for bus wiring.
+(define (emit-gsd-event! event-sym payload)
+  ;; Try events.rkt telemetry bus first
+  (events:emit-gsd-event! event-sym payload)
+  ;; Also publish directly to session event bus for backward compat
   (define bus (gsd-event-bus))
   (when bus
-    (publish! bus (make-event type (current-seconds) #f #f payload))))
+    (publish! bus (make-event event-sym (current-seconds) #f #f payload))))
 
 ;; ============================================================
 ;; Constants
@@ -362,7 +371,7 @@
                (begin
                  (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
                    (set-gsd-mode! 'plan-written)
-                   (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'plan-written)))
+                   (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'plan-written)))
                  (make-success-result (list (hasheq 'type
                                                     "text"
                                                     'text
@@ -379,7 +388,14 @@
     (define cwd (ctx-cwd ctx))
     (when cwd
       (set-pinned-planning-dir! (resolve-project-root cwd))))
-  (set-gsd-event-bus! (ctx-event-bus ctx))
+  ;; Wire events.rkt bus into session event bus
+  (define session-bus (ctx-event-bus ctx))
+  (set-gsd-event-bus! session-bus) ; backward compat shim
+  (events:set-event-bus!
+   (lambda (event-name wrapped-event)
+     ;; Bridge: forward events.rkt events to the session event bus
+     (when session-bus
+       (publish! session-bus (make-event event-name (current-seconds) #f #f wrapped-event)))))
   (ext-register-tool!
    ctx
    "planning-read"
@@ -440,7 +456,7 @@
     [(equal? cmd "/gsd") (handle-gsd-status)]
     [(equal? cmd "/replan")
      (define result (cmd-replan))
-     (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'exploring))
+     (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'exploring))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(equal? cmd "/skip")
      (define args-text (extract-cmd-args input-text))
@@ -456,7 +472,7 @@
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(equal? cmd "/reset")
      (define result (cmd-reset))
-     (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'idle))
+     (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'idle))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(member cmd '("/wave-done" "/wd"))
      (define wd-args (extract-cmd-args input-text))
@@ -465,7 +481,7 @@
        (define data (gsd-command-result-data result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
-         (emit-gsd-event! "gsd.wave.completed" (hasheq 'wave wave-idx))))
+         (emit-gsd-event! (quote gsd.wave.completed) (hasheq 'wave wave-idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [(equal? cmd "/done")
      (define done-args (extract-cmd-args input-text))
@@ -473,7 +489,7 @@
      (define result (cmd-done base-dir force?))
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
-       (emit-gsd-event! "gsd.plan.archived"
+       (emit-gsd-event! (quote gsd.plan.archived)
                         (hasheq 'path
                                 (if (hash? data)
                                     (hash-ref data 'archive-path "")
@@ -522,7 +538,7 @@
                                            "\n\nFix the plan before using /go.")))]
        [else
         (set-gsd-mode! 'executing)
-        (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'executing))
+        (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'executing))
         (set-current-max-old-text-len! 1200)
         ;; v0.21.3: No more budget resets
         (define wave-indices
@@ -606,7 +622,7 @@
         (when saved-dir
           (set-pinned-planning-dir! saved-dir))
         (set-gsd-mode! 'planning)
-        (emit-gsd-event! "gsd.mode.changed" (hasheq 'mode 'planning))
+        (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'planning))
         (set-current-max-old-text-len! 500)
         ;; Auto-create STATE.md if missing (#2164)
         (ensure-state-md! base-dir)

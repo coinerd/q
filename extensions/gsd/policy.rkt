@@ -87,9 +87,16 @@
 ;; Internal helpers
 ;; ============================================================
 
+;; Path normalization for security (prevents .. traversal)
+(require racket/path)
+
 (define (in-planning-dir? target pinned)
   (and (string? target)
        (non-empty-string? target)
        (string? pinned)
        (non-empty-string? pinned)
-       (string-prefix? target pinned)))
+       (let ([ct (with-handlers ([exn:fail? (λ (_) target)])
+                   (path->string (simple-form-path (string->path target))))]
+             [cp (with-handlers ([exn:fail? (λ (_) pinned)])
+                   (path->string (simple-form-path (string->path pinned))))])
+         (or (string=? ct cp) (string-prefix? ct (string-append cp "/"))))))

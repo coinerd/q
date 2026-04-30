@@ -32,6 +32,7 @@
          (only-in "session-state.rkt" set-gsd-state! gsd-state-sem)
          (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
+         (only-in "policy.rkt" gsd-decide-action policy-allowed? policy-blocked? policy-reason)
          (only-in "../gsd-planning-state.rkt" pinned-planning-dir))
 
 (provide gsd-command-dispatch
@@ -82,32 +83,19 @@
     (if (path? planning-dir)
         (path->string planning-dir)
         planning-dir))
-  (cond
-    [(not (eq? mode 'executing)) #t]
-    [(not (string? target-path)) #t]
-    [(not planning-dir-str) #t]
-    [else
-     ;; Resolve both paths to canonical form
-     (define canonical-target
-       (with-handlers ([exn:fail? (λ (_) target-path)])
-         (path->string (simple-form-path (string->path target-path)))))
-     (define canonical-planning
-       (with-handlers ([exn:fail? (λ (_) planning-dir-str)])
-         (path->string (simple-form-path (string->path planning-dir-str)))))
-     ;; Check if target is inside .planning/ directory
-     (define in-planning-dir?
-       (or (string=? canonical-target canonical-planning)
-           (string-prefix? canonical-target (string-append canonical-planning "/"))))
-     (if in-planning-dir?
-         (hasheq 'blocked
-                 #t
-                 'tool
-                 "write"
-                 'mode
-                 'executing
-                 'reason
-                 (format "Cannot write to ~a during execution (use /replan to modify)" target-path))
-         #t)]))
+  ;; Route through policy engine (v0.24.4)
+  (define decision
+    (gsd-decide-action (hasheq 'mode
+                               mode
+                               'target-path
+                               (if (string? target-path) target-path "")
+                               'pinned-dir
+                               (or planning-dir-str ""))
+                       'write-file))
+  (if (policy-allowed? decision)
+      #t
+      ;; Keep hasheq return for backward compat (consumer checks hash?)
+      (hasheq 'blocked #t 'tool "write" 'mode mode 'reason (policy-reason decision))))
 
 ;; ============================================================
 ;; Transaction wrapper (F3 fix: failure atomicity)
