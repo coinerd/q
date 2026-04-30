@@ -436,21 +436,6 @@
 ;; Phase 3: Fit recent messages
 ;; ============================================================
 
-;; Internal: fit-recent with memoized token estimator
-(define (fit-recent messages budget [estimate-fn estimate-message-tokens])
-  (let loop ([remaining (reverse messages)]
-             [kept '()]
-             [excluded '()]
-             [used 0])
-    (cond
-      [(null? remaining) (values (reverse kept) (reverse excluded))]
-      [else
-       (define m (car remaining))
-       (define tokens (estimate-fn m))
-       (cond
-         [(> (+ used tokens) budget) (loop (cdr remaining) kept (cons m excluded) used)]
-         [else (loop (cdr remaining) (cons m kept) excluded (+ used tokens))])])))
-
 ;; ============================================================
 ;; Phase 4: Catalog generation
 ;; ============================================================
@@ -736,41 +721,18 @@
            0))
      (define remaining-budget (- max-tokens protected-tokens pinned-tokens))
      (cond
-       [(<= remaining-budget 0) (pin-first-user-internal protected first-user-msg messages)]
+       [(<= remaining-budget 0) (ensure-first-user-pinned protected messages)]
        [else
         (define kept-removable (fit-messages-from-recent removable remaining-budget))
         (define kept-ids
           (for/set ([m (in-list kept-removable)])
             (message-id m)))
-        (pin-first-user-internal (for/list ([m (in-list messages)]
-                                            #:when (or (memq (message-kind m)
-                                                             '(system-instruction compaction-summary))
-                                                       (set-member? kept-ids (message-id m))))
-                                   m)
-                                 first-user-msg
-                                 messages)])]))
-
-;; Ensure first user message is in the result list.
-(define (pin-first-user-internal lst first-user-msg original-messages)
-  (cond
-    [(not first-user-msg) lst]
-    [(member first-user-msg lst) lst]
-    [else
-     (define target-id (message-id first-user-msg))
-     (define after-id
-       (for/first ([m (in-list (dropf original-messages
-                                      (lambda (m) (not (equal? (message-id m) target-id)))))]
-                   #:when (member m lst))
-         (message-id m)))
-     (if after-id
-         (let loop ([result '()]
-                    [remaining lst])
-           (cond
-             [(null? remaining) (reverse (cons first-user-msg result))]
-             [(equal? (message-id (car remaining)) after-id)
-              (loop (cons (car remaining) (cons first-user-msg result)) (cdr remaining))]
-             [else (loop (cons (car remaining) result) (cdr remaining))]))
-         (cons first-user-msg lst))]))
+        (ensure-first-user-pinned
+         (for/list ([m (in-list messages)]
+                    #:when (or (memq (message-kind m) '(system-instruction compaction-summary))
+                               (set-member? kept-ids (message-id m))))
+           m)
+         messages)])]))
 
 ;; Fit messages from recent end within budget (pair-preserving).
 (define (fit-messages-from-recent messages budget)
@@ -836,14 +798,3 @@
   (if (<= (string-length s) max-len)
       s
       (string-append (substring s 0 (- max-len 3)) "...")))
-
-(define (filter-map f lst)
-  (let loop ([lst lst]
-             [acc '()])
-    (cond
-      [(null? lst) (reverse acc)]
-      [else
-       (let ([r (f (car lst))])
-         (if r
-             (loop (cdr lst) (cons r acc))
-             (loop (cdr lst) acc)))])))
