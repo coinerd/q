@@ -20,7 +20,9 @@
          default-timeout-seconds
          default-max-output-bytes
          sanitize-env
-         secret-env-var?)
+         secret-env-var?
+         current-secret-scrub-denylist
+         current-secret-scrub-allowlist)
 
 ;; --------------------------------------------------
 ;; Result struct
@@ -125,20 +127,49 @@
         #rx"(?i:GH_PAT)"
         #rx"(?i:_PAT$)"))
 
+;; ── RA-2 (v0.24.7): Configurable secret scrubbing ──
+;; Extra denylist: additional regex patterns to scrub (extends secret-patterns).
+(define current-secret-scrub-denylist (make-parameter '()))
+
+;; Allowlist: env vars matching these patterns are kept even if they match deny.
+(define current-secret-scrub-allowlist (make-parameter '()))
+
 (define (secret-env-var? name)
   (define name-str
     (if (bytes? name)
         (bytes->string/utf-8 name)
         name))
-  (for/or ([pat (in-list secret-patterns)])
-    (regexp-match? pat name-str)))
+  ;; Check allowlist first — if matched, never scrub
+  (define allowed?
+    (for/or ([pat (in-list (current-secret-scrub-allowlist))])
+      (regexp-match? pat name-str)))
+  (cond
+    [allowed? #f]
+    [else
+     ;; Check default patterns + extra denylist
+     (define all-patterns (append secret-patterns (current-secret-scrub-denylist)))
+     (for/or ([pat (in-list all-patterns)])
+       (regexp-match? pat name-str))]))
 
 (define (sanitize-env [env (current-environment-variables)])
   (define clean (make-environment-variables))
+  (define scrubbed-names '())
   (for ([name (in-list (environment-variables-names env))])
-    (unless (secret-env-var? name)
-      (define val (environment-variables-ref env name))
-      (environment-variables-set! clean name val)))
+    (cond
+      [(secret-env-var? name)
+       (define name-str
+         (if (bytes? name)
+             (bytes->string/utf-8 name)
+             name))
+       (set! scrubbed-names (cons name-str scrubbed-names))]
+      [else
+       (define val (environment-variables-ref env name))
+       (environment-variables-set! clean name val)]))
+  ;; RA-2: Emit audit log when vars are scrubbed
+  (unless (null? scrubbed-names)
+    (log-subprocess-info "sanitize-env: scrubbed ~a env vars: ~a"
+                         (length scrubbed-names)
+                         (string-join (sort scrubbed-names string<?) ", ")))
   clean)
 
 ;; --------------------------------------------------
