@@ -46,7 +46,9 @@
          ;; Command names for registration
          gsd-commands
          ;; Re-export command result types
-         (all-from-out "command-types.rkt"))
+         (all-from-out "command-types.rkt")
+         ;; Transaction wrapper (v0.24.1)
+         with-gsd-transaction)
 
 ;; ============================================================
 ;; Command registry
