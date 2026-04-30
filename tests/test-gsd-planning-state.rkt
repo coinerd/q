@@ -7,7 +7,8 @@
 ;; pinned-dir cross-thread visibility, edit-limit, budget, read-counts.
 
 (require rackunit
-         "../extensions/gsd-planning-state.rkt")
+         "../extensions/gsd-planning-state.rkt"
+         (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state-current-wave))
 
 ;; ============================================================
 ;; gsd-mode tests
@@ -154,7 +155,7 @@
   (reset-all-gsd-state!)
   (set-current-wave-index! 3)
   (define snap (gsd-snapshot))
-  (check-equal? (hash-ref snap 'current-wave) 3))
+  (check-equal? (gsd-runtime-state-current-wave snap) 3))
 
 ;; ============================================================
 ;; Plan tool budget tests (v0.20.4 W0)

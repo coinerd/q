@@ -130,20 +130,7 @@
 ;; ============================================================
 
 (define (gsd-snapshot)
-  (hasheq 'mode
-          (gsm-current)
-          'pinned-dir
-          (current-pinned-dir)
-          'edit-limit
-          (current-edit-limit)
-          'total-waves
-          (gsm-total-waves)
-          'current-wave
-          (gsm-current-wave)
-          'completed-waves
-          (gsm-completed-waves)
-          'wave-executor
-          (and (gsm-wave-executor) #t)))
+  (gsm-snapshot))
 
 (define (reset-all-gsd-state!)
   (reset-gsm!)
