@@ -48,7 +48,8 @@
          destructive-patterns
          current-execution-policy
          current-allowed-commands
-         execution-policy-allows?)
+         execution-policy-allows?
+         high-risk-command?)
 
 ;; Default timeout in seconds (used when no settings available)
 (define DEFAULT-TIMEOUT-SECONDS 120)
@@ -173,6 +174,25 @@
   (for/or ([pattern (in-list patterns)])
     (regexp-match? pattern lower)))
 
+;; ── High-risk patterns (RA-1b, v0.24.7) ──
+;; Subset of destructive-patterns that are especially dangerous.
+;; When in warn-only mode, these get a stronger notice in tool output.
+(define high-risk-patterns
+  (list #rx"^rm[ ]+-rf[ ]+" ;; rm -rf
+        #rx"^rm[ ]+-fr[ ]+" ;; rm -fr
+        #rx"^rm[ ]+.*-[a-zA-Z]*r.*-[a-zA-Z]*f" ;; rm with -r and -f
+        #rx"^mkfs[.]" ;; mkfs.*
+        #rx"^dd[ ]+.*of=/dev/" ;; dd of=/dev/
+        #rx"^format[ ]+[A-Za-z]:" ;; Windows format
+        #rx">[ ]*/etc/passwd" ;; passwd overwrite
+        #rx">[ ]*/etc/shadow")) ;; shadow overwrite
+
+;; Check if a command matches any high-risk pattern.
+(define (high-risk-command? command)
+  (define lower (string-downcase command))
+  (for/or ([pattern (in-list high-risk-patterns)])
+    (regexp-match? pattern lower)))
+
 ;; Optional settings parameter for destructive command warning.
 ;; When #t (default), emit a warning to stderr before executing.
 ;; Can be set to #f to suppress warnings.
@@ -271,16 +291,23 @@
                                       (if (string=? stderr-out "")
                                           ""
                                           (string-append "\n" stderr-out)))))
+        ;; RA-1b (v0.24.7): Inject high-risk notice into tool output
+        (define high-risk-notice
+          (if (and (not block-destructive?) (high-risk-command? command))
+              (string-append "\n[SECURITY NOTICE] This command matched a high-risk "
+                             "destructive pattern. Proceed with extreme caution.\n")
+              ""))
         ;; When output is empty, provide diagnostic feedback to the LLM
         ;; so it understands the command produced nothing and can change strategy
         (define combined
           (if (string=? raw-combined "")
-              (string-append "(Command produced no output. "
+              (string-append high-risk-notice
+                             "(Command produced no output. "
                              "The command may have completed without producing any output, "
                              "or the output was empty. Consider checking: "
                              "the command syntax, file paths, available tools, "
                              "or try a different approach.)")
-              (truncate-output raw-combined)))
+              (string-append high-risk-notice (truncate-output raw-combined))))
         (make-success-result (list (hasheq 'type "text" 'text combined))
                              (hasheq 'exit-code
                                      (subprocess-result-exit-code result)
