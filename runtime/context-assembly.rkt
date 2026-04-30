@@ -129,6 +129,21 @@
          max-catalog-entries ; max catalog entries (default 40)
          max-catalog-tokens ; max catalog token budget (default 2000)
          summary-window) ; tokens for summary window (default 4000)
+  #:guard
+  (lambda (recent max-entries max-tokens summary _name)
+    (unless (and (exact-nonnegative-integer? recent) (> recent 0))
+      (error 'context-assembly-config "recent-tokens must be a positive integer, got: ~a" recent))
+    (unless (exact-nonnegative-integer? max-entries)
+      (error 'context-assembly-config
+             "max-catalog-entries must be a non-negative integer, got: ~a"
+             max-entries))
+    (unless (exact-nonnegative-integer? max-tokens)
+      (error 'context-assembly-config
+             "max-catalog-tokens must be a non-negative integer, got: ~a"
+             max-tokens))
+    (unless (and (exact-nonnegative-integer? summary) (> summary 0))
+      (error 'context-assembly-config "summary-window must be a positive integer, got: ~a" summary))
+    (values recent max-entries max-tokens summary))
   #:transparent)
 
 (define (make-context-assembly-config #:recent-tokens [recent 30000]
@@ -242,11 +257,13 @@
         ;; Phase 1: Identify pinned items (system + first user + compaction summaries)
         (define-values (pinned removable) (partition-messages raw-messages))
         (define pinned-tokens (for/sum ([m (in-list pinned)]) (memoized-estimate m)))
+        (define pinned-count (length pinned))
+        (define removable-count (length removable))
         (emit-trace 'phase1-pinned
                     (hash 'pinned-count
-                          (length pinned)
+                          pinned-count
                           'removable-count
-                          (length removable)
+                          removable-count
                           'pinned-tokens
                           pinned-tokens))
 
@@ -264,11 +281,13 @@
                 (define exc
                   (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
                 (values kept exc))))
+        (define recent-count (length recent))
+        (define excluded-count (length excluded))
         (emit-trace 'phase3-fitted
                     (hash 'recent-count
-                          (length recent)
+                          recent-count
                           'excluded-count
-                          (length excluded)
+                          excluded-count
                           'remaining-budget
                           remaining-budget))
 
@@ -299,7 +318,8 @@
                             #:max-entries max-entries
                             #:max-tokens (context-assembly-config-max-catalog-tokens config)
                             #:estimate-text estimate-text-tokens))
-        (emit-trace 'phase4-catalog (hash 'catalog-count (length catalog)))
+        (define catalog-count (length catalog))
+        (emit-trace 'phase4-catalog (hash 'catalog-count catalog-count))
 
         ;; Phase 5: Reassemble in original order
         (define pinned-ids
@@ -337,11 +357,12 @@
         (define total-tokens (for/sum ([m (in-list result-with-pin)]) (memoized-estimate m)))
         (define over-budget? (> total-tokens max-tokens))
 
+        (define result-count (length result-with-pin))
         (emit-trace 'done
                     (hash 'total-tokens
                           total-tokens
                           'message-count
-                          (length result-with-pin)
+                          result-count
                           'over-budget?
                           over-budget?
                           'memo-hits
@@ -349,9 +370,9 @@
 
         (context-result result-with-pin
                         total-tokens
-                        (length pinned)
-                        (length recent)
-                        (length excluded)
+                        pinned-count
+                        recent-count
+                        excluded-count
                         over-budget?
                         catalog
                         summary-obj))))
