@@ -10,7 +10,11 @@
          "../extensions/gsd/archive.rkt"
          "../extensions/gsd/state-machine.rkt"
          "../extensions/gsd/wave-docs.rkt"
-         "../extensions/gsd/plan-types.rkt")
+         "../extensions/gsd/plan-types.rkt"
+         (only-in "../extensions/gsd/command-types.rkt"
+                  gsd-command-result-success
+                  gsd-command-result-message
+                  gsd-command-result-data))
 
 ;; ============================================================
 ;; Helpers
@@ -128,12 +132,13 @@
      (write-wave! tmp 1 "implement" "DONE" "## Root Cause\nNeed impl.\n## Action\nImplement.")
 
      (define result (archive-completed-plan! tmp))
-     (check-true (hash-ref result 'success))
-     (check-true (string-contains? (hash-ref result 'archive-path) "archive"))
+     (check-true (gsd-command-result-success result))
+     (check-true (string-contains? (hash-ref (gsd-command-result-data result) 'archive-path)
+                                   "archive"))
      ;; PLAN.md should no longer exist in .planning/
      (check-false (file-exists? (build-path tmp ".planning" "PLAN.md")))
      ;; Archive dir should exist with files
-     (define archive-dir (string->path (hash-ref result 'archive-path)))
+     (define archive-dir (string->path (hash-ref (gsd-command-result-data result) 'archive-path)))
      (check-true (directory-exists? archive-dir))
      (check-true (file-exists? (build-path archive-dir "PLAN.md"))))
    (lambda () (cleanup-tmp tmp))))
@@ -144,8 +149,8 @@
                 (lambda ()
                   (write-plan-incomplete! tmp)
                   (define result (archive-completed-plan! tmp))
-                  (check-false (hash-ref result 'success))
-                  (check-true (string-contains? (hash-ref result 'error) "Not all waves")))
+                  (check-false (gsd-command-result-success result))
+                  (check-true (string-contains? (gsd-command-result-message result) "Not all waves")))
                 (lambda () (cleanup-tmp tmp))))
 
 (test-case "archive-completed-plan!: fails when no PLAN.md"
@@ -153,8 +158,8 @@
   (dynamic-wind void
                 (lambda ()
                   (define result (archive-completed-plan! tmp))
-                  (check-false (hash-ref result 'success))
-                  (check-true (string-contains? (hash-ref result 'error) "No PLAN.md")))
+                  (check-false (gsd-command-result-success result))
+                  (check-true (string-contains? (gsd-command-result-message result) "No PLAN.md")))
                 (lambda () (cleanup-tmp tmp))))
 
 ;; ============================================================
