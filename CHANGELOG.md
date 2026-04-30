@@ -1,6 +1,17 @@
 # Changelog
 
-## v0.25.0 — 2026-04-30
+## v0.25.1 — 2026-04-30
+
+### Audit CI Discoverability + Enhanced Scanners
+
+**Audit improvements:**
+- Add `--json` output mode to `scripts/audit-project.rkt` for machine-parseable CI integration
+- Add struct density scanner — flags modules with >15 struct definitions
+- Expand risky API patterns: `system*`, `eval-syntax`, `open-input-file`, `call-with-input-file`
+- Lower module size threshold from 900 to 800 lines
+
+
+## v0.25.1 — 2026-04-30
 
 ### Module Decomposition & Breaking Change Cleanup (F1–F6)
 
@@ -18,7 +29,7 @@
 - Remove `known-large` exceptions from dependency policy (all modules now under size targets)
 
 
-## v0.25.0 — 2026-04-30
+## v0.25.1 — 2026-04-30
 
 ### Audit Automation & Deprecation Cleanup (RA-4 + RA-5)
 
@@ -36,26 +47,26 @@
 - #2727 — W1: Deprecation TODO tracking
 - #2728 — W2: Version bump + CI wiring
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Module Decomposition — context-assembly.rkt (RA-3)
 
 - **RA-3a**: Extract `context-pinning.rkt` (partition-messages, pinning helpers)
 - **RA-3b**: Extract `context-fit.rkt` (truncate-messages-to-budget, fit-messages-from-recent)
 - **RA-3c**: Extract `context-summary.rkt` (catalog, summary cache, context-summary-prompt, etc.)
-- **VER**: Architecture fitness test for line count (<600); version bump to 0.25.0
+- **VER**: Architecture fitness test for line count (<600); version bump to 0.25.1
 - context-assembly.rkt: 825 → 587 lines
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Security Hardening
 
 - **RA-1a**: Allowlist execution policy for non-interactive/CI (`current-execution-policy`: warn/block/allowlist)
 - **RA-1b**: High-risk destructive pattern confirmation notices (`[SECURITY NOTICE]` prefix in tool output)
 - **RA-2**: Configurable secret scrubbing with extra denylist + allowlist for environment variables
-- **VER**: Version bump to 0.25.0, security docs updated
+- **VER**: Version bump to 0.25.1, security docs updated
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### SDK Regression Fix + Audit Sweep
 
@@ -66,9 +77,9 @@
 - Refactored `handle-go-command` to use `with-gsd-transaction` helper instead of inline snapshot/restore pattern (DRY-01)
 
 **Housekeeping**
-- Synced version references from 0.25.0 to 0.25.0 (VER-01)
+- Synced version references from 0.25.1 to 0.25.1 (VER-01)
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Audit Remediation
 
@@ -85,7 +96,7 @@
 - Added doc coverage fitness test (F8) verifying architecture doc mentions all major modules
 - Fixed stale TR version regex in `test-typed-racket-pilot.rkt` to match v0.24.x+
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Production Integration Wiring
 
@@ -105,7 +116,7 @@
   `gsd.archive.failed`, and pipeline events to stable taxonomy.
 - 3 new tests (archive result types, write guard policy-decision). 221 GSD tests pass.
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Documentation & Fitness Gates
 
@@ -117,7 +128,7 @@
   event telemetry, normalized plan IR, and full lifecycle integration.
 - Exported `with-gsd-transaction` from core.rkt for testing reuse.
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Pipeline Refactor & Observability
 
@@ -131,7 +142,7 @@
   transitions emit events. Event collector for testing.
 - 8 new event telemetry tests, backward-compatible.
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Policy Engine & Transaction Wrappers
 
@@ -143,7 +154,7 @@
   transaction wrapper for failure atomicity.
 - 3 new transaction tests (39 core total), 18 new policy tests.
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### GSD Extension Architecture Remediation
 
@@ -156,15 +167,15 @@
   ad-hoc hasheq. New `command-types.rkt` module.
 - **F3: Shim Purification** — Removed behavioral logic from `gsd-planning-state.rkt`
   shim. PLAN.md side effects moved to `core.rkt`. Shim is now pure delegation
-  (deprecated, removal planned for v0.25.0).
+  (deprecated, removal planned for v0.25.1).
 - **F4: State Invariants** — Added `gsd-invariants-hold?` to validate runtime
   state structural invariants at any point.
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### CI Resilience & Push Safety Net
 
-**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.25.0
+**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.25.1
 incident requiring 4 CI runs and ~2 hours of debugging.
 
 - **ci_preflight parity**: Added `check-deps.rkt` to `ci_preflight()` in
@@ -179,7 +190,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 - **Maintenance comment**: Added version-awareness comment to
   `check-deps.rkt` base-packages set.
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Performance Fix & Code Hygiene
 
@@ -205,7 +216,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** 101 context+compactor tests, 67 assembly+policy tests pass
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Combined Audit Remediation & Hardening
 
@@ -229,7 +240,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** All context + lifecycle tests pass
 
-## v0.25.0 — 2026-04-30
+## v0.25.1 — 2026-04-30
 
 ### Audit Remediation
 
@@ -248,7 +259,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** All 149 context+TR tests pass
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Context Performance + Observability
 
@@ -266,7 +277,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** 20 new tests, all 50 context tests pass
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Unified Context Assembly
 
@@ -287,7 +298,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** 16 new context-assembly tests, 92 context tests pass, all 6500+ tests pass
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Context Policy + LLM Summarization
 
@@ -307,7 +318,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 **Tests:** 16 new context-policy tests, 8 new summarization tests, all 6500+ tests pass
 
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Module Decomposition + Completion
 
@@ -324,10 +335,10 @@ and session-store-tree.rkt (129 LOC), converted session-store.rkt to façade (34
 **W3** — sdk.rkt decomposition: extracted sdk-core.rkt (439 LOC) and
 sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 
-**W4** — arch-report.rkt script (CI gate), version bump 0.25.0 → 0.25.0.
+**W4** — arch-report.rkt script (CI gate), version bump 0.25.1 → 0.25.1.
 
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Architecture Enforcement + DI Fix + Event Schema Hardening
 
@@ -357,9 +368,9 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 **W4 — Hook Golden Tests + Stability Tiers + Version Bump**
 - 20 hook golden payload shape tests (regression canaries)
 - Stability tier annotations (stable/evolving/internal) on 25+ modules
-- Version bump 0.25.0 → 0.25.0
+- Version bump 0.25.1 → 0.25.1
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Regression Fixes + DI Completion + SDK Surface + TR Hardening
 - **REG-01**: Fixed tool result construction in racket-tooling-handlers.rkt (plain hasheq → proper tool-result structs)
@@ -375,7 +386,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - 2 arch-fitness tests added (8/8 pass)
 - 188+ tests pass, 0 regressions
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
 ### Regression Fixes + Module Splits + DI + Typed Racket Pilot
 - **PAY-01**: Fixed test-hooks-complete.rkt regression from struct payload adoption
@@ -391,9 +402,9 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **BUILDER**: Updated version sync/lint scripts to handle Typed Racket multi-line format
 - 109+ tests added across 6 waves, 0 regressions
 
-## v0.25.0 — 2026-04-29
+## v0.25.1 — 2026-04-29
 
-### Audit Remediation (v0.25.0 Post-Merge Fixes)
+### Audit Remediation (v0.25.1 Post-Merge Fixes)
 - **FIT-01**: Replaced line-based `extract-requires` with read-based S-expression parser in arch test files
 - **FIT-02**: Module size threshold 900 lines with known-large tracking (tui/state.rkt, extensions/racket-tooling.rkt)
 - **FIT-03**: Updated stale known-exceptions list for runtime layer boundary tests
@@ -405,7 +416,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **SDK-02**: Added 8 negative contract-rejection tests to test-contracts.rkt
 - **VER-01**: Version sync verified
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Architecture Modularity & Racket Idiom Remediation
 - **MOD-01**: Extracted `runtime/turn-orchestrator.rkt` (250 lines) from `runtime/iteration.rkt` (801→601 lines), eliminated upward imports
@@ -420,7 +431,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - Simplified `tools/registry-defaults.rkt` from 374→15 lines (delegates to registry-table)
 - Added 37 new tests across 4 test files
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### CI Pipeline Hardening
 - **CI-01**: Fixed `wave_finish()` docs-sync bug — `git diff --name-only` ran without `cwd=Q_DIR`, so auto-fixed docs were never committed
@@ -430,7 +441,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **CI-05**: Added concurrency group to cancel superseded CI runs
 - **CI-06**: Removed redundant lint checks from test matrix cells
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Review Remediation
 - **REV-01**: Reverted GSD session-state from Racket parameters to boxes — hook handlers run in child threads where parameter mutations are invisible to parent
@@ -441,7 +452,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **REV-06c**: Fixed test-self-hosting-deep version check (added 0.22.x)
 - **REV-11**: Removed stale AUDIT-04 comment from core.rkt
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Audit Remediation + Deferred Refactors
 - **AUDIT-01**: Fixed backtick detection regex (unanchored → paired anchored)
@@ -449,7 +460,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **AUDIT-03**: Strengthened delete-lines out-of-range validation with boundary checks
 - **AUDIT-04**: Removed dead `gsd-tool-guard` from core.rkt (canonical in gsd-planning.rkt)
 - **AUDIT-09**: Deduplicated imports in events.rkt and message-inject.rkt
-- **AUDIT-10**: Verified shell-quote direct import fix (already done in v0.25.0)
+- **AUDIT-10**: Verified shell-quote direct import fix (already done in v0.25.1)
 - **AUDIT-11**: Replaced 3 `check-not-false` with `check-pred values` in GSD planning tests
 - **AUDIT-12**: Added session-lifecycle edge-case tests (empty history, partial writes)
 - **AUDIT-13**: Added delete-lines security boundary tests
@@ -458,7 +469,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **ARCH-05**: Split agent-session.rkt (1016→769 lines) into session-types/events/controls/compaction modules
 - **ARCH-06**: Split tui/commands.rkt (936→311 lines) into commands/{context,branch,session,model,extension} modules
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Architecture Remediation
 - **SEC-09**: Extended error sanitizer with API key, /tmp/ path, and email pattern redaction
@@ -477,7 +488,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **ARCH-04**: Added extensions/api.rkt event bus re-exports for extensions
 - **ARCH-05**: Extracted runtime/session-context.rkt for path settings
 - **QUAL-01–04**: Code quality improvements (shell quoting, shadowing, type narrowing)
-- **DOC-02**: Updated releasing.md verified-against to v0.25.0
+- **DOC-02**: Updated releasing.md verified-against to v0.25.1
 - **DOC-03**: Sorted CHANGELOG entries monotonically
 - **DOC-06**: Added ADR-0011 (GSD state machine) and ADR-0012 (context manager)
 - **DOC-08**: Added docstrings to ext-package-manager.rkt and compact-context.rkt
@@ -490,7 +501,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **MAT-09**: Updated releasing.md smoke test section
 
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Execution Architecture Improvements
 - **delete-lines tool**: Line-range deletion tool (avoids chunked edit for removals of 3+ consecutive lines)
@@ -499,7 +510,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **Backup timestamp fix**: Eliminated rational numbers in backup filenames (`inexact->exact` → `current-milliseconds`)
 - **Execution prompt**: Updated to mention `/wave-done N` for wave completion
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### GSD Plan Archival + Execution Polish
 - `/done` command archives completed plans to `.planning/archive/<slug>/`
@@ -510,7 +521,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - Iteration label shows `[executing...]` during execution mode vs `[exploring...]`
 - Execution prompt includes edit chunking rules (≤20 lines, ≤500 chars oldText)
 
-## v0.25.0 — 2026-04-28
+## v0.25.1 — 2026-04-28
 
 ### Security
 - `safe-manifest-file-path?` predicate rejects `..`, absolute paths, Windows drive letters
@@ -524,7 +535,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - Planning prompt: max 3 reads, must write wave docs after reading
 - Documented planning-write mode-set timing (no race found)
 
-## v0.25.0 — 2026-04-27
+## v0.25.1 — 2026-04-27
 
 ### Fixed
 - Planning prompt now shows exact `- File:` syntax with concrete template
@@ -533,7 +544,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - Validation relaxed: individual waves can be file-less (plan-level check remains)
 - Planning prompt consolidated into `prompts.rkt` (single source of truth)
 
-## v0.25.0 — 2026-04-26
+## v0.25.1 — 2026-04-26
 
 ### GSD Extension Rewrite (5 waves)
 
@@ -580,7 +591,7 @@ with structured plan types, validation, and error recovery.
 - 11 integration tests, all 207 legacy tests pass unchanged
 
 
-## v0.25.0 — 2026-04-26
+## v0.25.1 — 2026-04-26
 
 ### GSD Planning Architecture Remediation (6 waves)
 
@@ -614,11 +625,11 @@ with structured plan types, validation, and error recovery.
 - These would have caught the C2 parameter→box and C3 invisible warning bugs
 
 **Wave 5 — Version Bump**
-- Bump 0.25.0 → 0.25.0
+- Bump 0.25.1 → 0.25.1
 
 **Total**: 176 GSD tests across 7 files. 0 failures.
 
-## v0.25.0 — 2026-04-26
+## v0.25.1 — 2026-04-26
 
 ### GSD Planning Hardening (5 waves)
 
@@ -643,7 +654,7 @@ with structured plan types, validation, and error recovery.
 - Warning at ≤5 remaining, block at <−3 overage
 - Tracks read/grep/find/ls/glob calls
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Feature Gap Closure — pi→q Parity (4 waves, 16 features)
 
@@ -673,7 +684,7 @@ with structured plan types, validation, and error recovery.
 
 **Test baseline**: 382 files, 5966 tests all pass.
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### /plan Exploration Cap + Context Usage Visibility (4 waves)
 
@@ -692,9 +703,9 @@ with structured plan types, validation, and error recovery.
 - Prevents LLM from merging old+new plan content
 
 **W3 — Version Bump**
-- Version 0.25.0 → 0.25.0
+- Version 0.25.1 → 0.25.1
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Budget Counter & Steering Resilience (4 commits)
 
@@ -708,7 +719,7 @@ with structured plan types, validation, and error recovery.
   `old-text` snippets, line numbers for precise implementation
 - **Fixed**: `make-text-part` arity mismatch in intent-without-action steering
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Edit Tool Hardening — Corruption Prevention (4 waves)
 
@@ -730,9 +741,9 @@ with structured plan types, validation, and error recovery.
 - 3 new iteration tests: spiral event structure, multi-tool paths, seen-path dedup
 
 **W3 — Version Bump**
-- Version 0.25.0 → 0.25.0
+- Version 0.25.1 → 0.25.1
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Edit Tool Hardening — Hallucination Prevention (4 waves)
 
@@ -751,9 +762,9 @@ with structured plan types, validation, and error recovery.
 - 2 new registry tests: prompt-guidelines set, description contains "verbatim"
 
 **W3 — Version Bump**
-- Version 0.25.0 → 0.25.0
+- Version 0.25.1 → 0.25.1
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Extension Tool Fix & Steering Improvement (3 bugs, 3 waves)
 
@@ -772,7 +783,7 @@ with structured plan types, validation, and error recovery.
 - Updated planning-system-prompt: removed exploration encouragement, added 5-call exploration limit
 - Added `test-extension-tool-dispatch.rkt`: 5 integration tests verifying scheduler dispatch
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### CI Workflow Hardening (6 root causes, 5 waves)
 
@@ -795,7 +806,7 @@ with structured plan types, validation, and error recovery.
 
 **CI Status**: All workflows green (CI ✅, Release ✅, Benchmark ✅)
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Project Review Remediation (55 findings across 6 axes)
 
@@ -828,9 +839,9 @@ with structured plan types, validation, and error recovery.
 
 **W5 — Documentation Refresh**
 - **Fixed**: README metrics updated to current values
-- **Updated**: All verified-against markers to v0.25.0
+- **Updated**: All verified-against markers to v0.25.1
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### CI Tooling & Test Guard Improvements
 
@@ -842,7 +853,7 @@ with structured plan types, validation, and error recovery.
 - **Added**: Version + metrics lint in pre-commit hook (#1752)
 - **Fixed**: Pipeline test fixture fixes, metrics sync, CI lint failures
 
-## v0.25.0 — 2026-04-25
+## v0.25.1 — 2026-04-25
 
 ### Self-Hosting Workflow Gaps
 
@@ -861,7 +872,7 @@ with structured plan types, validation, and error recovery.
 - **Added**: Spawn-subagent tool dispatch tests (`test-spawn-subagent-tool-dispatch.rkt`).
 - **Added**: Extension tool registration tests (`test-extension-tool-registration.rkt`).
 
-## v0.25.0 — 2026-04-24
+## v0.25.1 — 2026-04-24
 
 ### Tool Error Feedback & Agent Loop Improvements
 
@@ -882,7 +893,7 @@ with structured plan types, validation, and error recovery.
   Excludes `session-recall` and `skill-router` from benchmark tool set.
   Directory fixture copy fixed to copy contents into existing tmp-dir.
 
-## v0.25.0 — 2026-04-24
+## v0.25.1 — 2026-04-24
 
 ### Benchmark Suite Hardening
 
@@ -901,7 +912,7 @@ with structured plan types, validation, and error recovery.
   from OpenAI format (`type: "tool_use"`) to q format (`phase: "tool.call.started"`)
 - **65 benchmark tests passing** across 6 test files
 
-## v0.25.0 — 2026-04-24
+## v0.25.1 — 2026-04-24
 
 ### Systematic Live Benchmark Suite
 
@@ -927,7 +938,7 @@ with structured plan types, validation, and error recovery.
 - **Benchmark README** (`scripts/benchmark/README.md`): Usage guide and scoring docs
 - **32 new tests**: 14 task, 21 scorer, 11 report, 5 baseline, 8 comparison
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Release & Polish
 
@@ -943,10 +954,10 @@ with structured plan types, validation, and error recovery.
 - `docs/self-hosting.md`: GSD planning, dogfood infrastructure, extension loading
 - `docs/workflow-testing.md`: test structure, mock provider patterns, conventions
 
-**Wave 3 — Version bump 0.25.0 → 0.25.0** (PR #1663)
+**Wave 3 — Version bump 0.25.1 → 0.25.1** (PR #1663)
 - Version bump and CHANGELOG update
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Sandbox & Safety
 
@@ -964,10 +975,10 @@ with structured plan types, validation, and error recovery.
 - Multi-task comparison
 - 6 tests
 
-**Wave 3 — Version bump 0.25.0 → 0.25.0** (PR #1660)
+**Wave 3 — Version bump 0.25.1 → 0.25.1** (PR #1660)
 - Version bump and CHANGELOG update
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Context-Aware Exploration Steering
 
@@ -986,11 +997,11 @@ with structured plan types, validation, and error recovery.
 - New accessors in `runtime/settings.rkt`: `steering-gentle-threshold`, `steering-strong-threshold`, `steering-hard-cap`, `steering-same-file-dedup?`
 - 10 config tests added to `tests/test-steering.rkt`
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### GSD Planning Workflow + Review Cleanup
 
-Milestone #92 — Post-v0.25.0 review follow-ups and planning prompt augmentation.
+Milestone #92 — Post-v0.25.1 review follow-ups and planning prompt augmentation.
 
 **Wave 1 — Review cleanup + test coverage (#1596)**
 - Removed all `/tmp/q-cmd-dispatch.log` diagnostic tracing from 4 files.
@@ -1008,14 +1019,14 @@ Milestone #92 — Post-v0.25.0 review follow-ups and planning prompt augmentatio
 - Added test verifying augmented submit text contains `[gsd-planning]` preamble.
 
 **Wave 4 — Fix pre-existing test failures (#1605)**
-- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.25.0.
+- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.25.1.
 - Added `.planning/` and `.pi/` to `lint-version.rkt` skip list (historical version refs).
 - Synced README metrics (source line counts).
 - Fixed `test-tui-enter.rkt`: updated expected command return format
   from `(command quit)` to `(command quit "/quit")`.
 - All 3 previously-failing tests now pass: 348/348 files, 5629/5629 tests.
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Extension Commands & Activation Fix
 
@@ -1044,12 +1055,12 @@ and gsd-planning execute-command handler for end-to-end `/activate` → command 
   newly activated extension into the running session registry.
 - 4 new tests for execute-command handler.
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Review Remediation
 
 Milestone #90 — Security hardening, extension system integrity, and broken
-registration fixes from v0.25.0 review.
+registration fixes from v0.25.1 review.
 
 **Wave 1 — Fix broken extension registrations (#1573)**
 - `remote-collab/remote-collab.rkt`: Fixed `ext-register-tool!` from 2-arg
@@ -1089,7 +1100,7 @@ registration fixes from v0.25.0 review.
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Extension Discovery & Activation
 
@@ -1115,11 +1126,11 @@ registration fixes from v0.25.0 review.
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Audit Remediation
 
-Security and robustness fixes from comprehensive audit of v0.25.0–v0.25.0
+Security and robustness fixes from comprehensive audit of v0.25.1–v0.25.1
 (remote pi implementation). 25 findings addressed: 5 CRITICAL, 7 MAJOR, 13 MINOR.
 
 **CRITICAL fixes:**
@@ -1147,7 +1158,7 @@ Security and robustness fixes from comprehensive audit of v0.25.0–v0.25.0
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Phase E: Polish
 
@@ -1165,7 +1176,7 @@ Security and robustness fixes from comprehensive audit of v0.25.0–v0.25.0
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Phase D: GSD Skills
 
@@ -1182,7 +1193,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Phase C: Remote Collaboration Extension
 
@@ -1202,7 +1213,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Phase B: Self-Editing & Extension Infrastructure
 
@@ -1227,7 +1238,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ---
 
-## v0.25.0 — 2026-04-23
+## v0.25.1 — 2026-04-23
 
 ### Phase A: Foundation Extensions
 
@@ -1249,9 +1260,9 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ---
 
-## v0.25.0 — 2026-04-22
+## v0.25.1 — 2026-04-22
 
-### Critical Fixes (from PROJECT_REVIEW_v0.25.0)
+### Critical Fixes (from PROJECT_REVIEW_v0.25.1)
 
 - **SEC-07**: Fix `subprocess-result` arity bug — error handler had `#f` nested inside
   `inexact->exact` call instead of being the 6th field (`truncated?`). Any subprocess
@@ -1268,14 +1279,14 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ### Housekeeping
 
-- Bump version references across all docs to 0.25.0
+- Bump version references across all docs to 0.25.1
 
-## v0.25.0 — 2026-04-22
+## v0.25.1 — 2026-04-22
 
 ### Architecture Hardening & Documentation Refresh
 
 Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
-`.planning/REVIEW-v0.25.0.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
+`.planning/REVIEW-v0.25.1.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
 
 #### Wave 0 — Housekeeping (#1475, #1477, #1488)
 - Version drift sync, STATE.md + SUMMARY.md reconciliation
@@ -1331,7 +1342,7 @@ Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
 - 10/10 CI local checks
 - 3 new ADRs (0008-safe-mode, 0009-credential-redaction, 0010-streaming-port-lifecycle)
 
-## v0.25.0 — 2026-04-21
+## v0.25.1 — 2026-04-21
 
 ### Bug Fixes
 - **P1**: Detect silent stream EOF — emit synthetic `model.stream.completed` with
@@ -1345,7 +1356,7 @@ Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
 - **P0**: Tiered context builder preserves system-instruction and first user message
 - **P1**: Index rebuild infers missing parentIds from log order (fixes context amnesia)
 
-## v0.25.0 — 2026-04-21
+## v0.25.1 — 2026-04-21
 
 ### Trace Logger Hardening
 - **[P0]** Fix malformed JSONL: added `sanitize-for-json` to recursively convert
@@ -1378,7 +1389,7 @@ Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
   (write/edit/replace/create tools)
 - Hard cap emits `exploration.hard-cap` event for observability
 
-## v0.25.0 — 2026-04-21
+## v0.25.1 — 2026-04-21
 
 ### Request-Cycle Trace Logger Module
 
@@ -1409,7 +1420,7 @@ Flush-on-write for crash safety.
 - `wiring/run-modes.rkt`: Wire trace logger into startup (#1454)
 - `interfaces/sessions.rkt`: `q sessions trace` command (#1455)
 
-## v0.25.0 — 2026-04-21
+## v0.25.1 — 2026-04-21
 
 ### Config Validation + Iteration Budget + Provider Settings Wiring
 
@@ -1435,7 +1446,7 @@ the API request body. Settings are now threaded through `run-provider-turn` →
 - `loop.rkt`: `#:provider-settings` param in `run-agent-turn` (#1446)
 - `iteration.rkt`: Config threaded to `run-provider-turn` (#1446)
 
-## v0.25.0 — 2026-04-21
+## v0.25.1 — 2026-04-21
 
 ### Second-Prompt Crash + SSE Timeout + Streaming Text Fix
 
@@ -1456,7 +1467,7 @@ transcript as a partial assistant entry before clearing.
 - `tui/state.rkt`: Partial streaming text preservation (#1440)
 - 10 new/updated tests across 3 test files
 
-## v0.25.0 — 2026-04-20
+## v0.25.1 — 2026-04-20
 
 ### Retry Robustness & TUI Crash Fix
 
@@ -1484,7 +1495,7 @@ per-model timeout overrides. Config schema:
 `{ timeouts: { models: { "glm-5.1": { "request": 900 } } } }`.
 10 new tests in `test-model-timeouts.rkt`.
 
-## v0.25.0 — 2026-04-20
+## v0.25.1 — 2026-04-20
 
 ### Exploration & Generation Robustness
 
@@ -1505,7 +1516,7 @@ per-model timeout overrides. Config schema:
 ### Post-Review Fixes (Waves 10–13)
 
 - **Wave 10**: Removed dead code in `classify-error` (R1) — no-op `when` block. Fixed `rate-limit-error?` pattern — replaced `"too many"` with `"too many requests"` to prevent context-overflow misclassification (R2)
-- **Wave 11**: Fixed README v0.25.0 status block — replaced v0.13.x description with accurate v0.25.0 features (D1). Synced metrics (D2)
+- **Wave 11**: Fixed README v0.25.1 status block — replaced v0.13.x description with accurate v0.25.1 features (D1). Synced metrics (D2)
 - **Wave 12**: Added 12 TUI event handler tests covering `iteration.soft-warning`, `exploration.progress`, `context.mid-turn-over-budget`, and `auto-retry.start` with `errorType` (TC1)
 - **Wave 13**: Added `session-rebind` to `hook-action-schemas` (H1). Wrapped `dynamic-require` with descriptive error messages in `session-switch.rkt` (SW1). Added argument validation in `resource-discovery.rkt` (RD1)
 
@@ -1513,7 +1524,7 @@ per-model timeout overrides. Config schema:
 - 315 test files, 5365 tests, 0 failures
 - Remaining runtime exceptions: `iteration.rkt` (documented ARCH-01), `package.rkt` (manifest audit)
 
-## v0.25.0 — 2026-04-20
+## v0.25.1 — 2026-04-20
 
 ### Context Manager Architecture
 
@@ -1549,19 +1560,19 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 
 ---
 
-## v0.25.0 — 2026-04-20
+## v0.25.1 — 2026-04-20
 
 ### Bug Fixes
 - **Removed context reduction from retry path**: `#:context-reducer` parameter removed from `with-auto-retry`. Retries now always use the same context — no trimming, no reduction. Eliminates P0 class of 400 errors from malformed reduced context after retry trimming. (#1388, PR #1389)
 
 ---
 
-## v0.25.0 — 2026-04-20
+## v0.25.1 — 2026-04-20
 
 ### Performance
 - **TUI transcript O(n²) → O(1)**: Transcript append now uses `cons` instead of `append`, eliminating quadratic slowdown on long sessions. Added `transcript-entries` accessor that reverses on read for backward-compatible oldest-first ordering. (#1386, PR #1387)
 
-### Bug Fixes (from v0.25.0)
+### Bug Fixes (from v0.25.1)
 - **Settings contract**: Fixed `make-settings` field contracts that rejected valid values. (#1376)
 - **Context reducer pair-awareness**: Context reduction now correctly handles paired tool-start/tool-end entries. (#1377)
 - **`/retry` + iteration limit**: `/retry` command now correctly updates `last-prompt-box`. Max iterations raised from 10 to 20. (#1378, PR #1383)
@@ -1577,7 +1588,7 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 
 ---
 
-## v0.25.0 — 2026-04-20
+## v0.25.1 — 2026-04-20
 
 ### Features
 - **Session tree navigation**: Navigate between parent/child sessions
@@ -1594,7 +1605,7 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 
 ---
 
-## v0.25.0 — 2026-04-19
+## v0.25.1 — 2026-04-19
 
 ### Features
 - Extension power user API
