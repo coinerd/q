@@ -1,6 +1,6 @@
 # ADR-0012: Context Assembly Architecture
 
-Date: 2024-11 (v0.24.5)
+Date: 2024-11 (v0.24.6)
 ## Status
 Accepted
 

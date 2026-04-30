@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.24.6 — 2026-04-29
+
+### SDK Regression Fix + Audit Sweep
+
+**Bug Fix**
+- Fixed `q:gsd-status` crash in `sdk-compat.rkt` — replaced `hash-ref` on `gsd-runtime-state` struct with `gsd-runtime-state-mode` accessor (REG-01)
+
+**Refactor**
+- Refactored `handle-go-command` to use `with-gsd-transaction` helper instead of inline snapshot/restore pattern (DRY-01)
+
+**Housekeeping**
+- Synced version references from 0.24.4 to 0.24.5 (VER-01)
+
 ## v0.24.5 — 2026-04-29
 
 ### Audit Remediation
