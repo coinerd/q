@@ -30,7 +30,7 @@
                        (build-path try "q")))))
 
 (define AUDITS-DIR (build-path Q-DIR "docs" "audits"))
-(define SIZE-THRESHOLD 900)
+(define SIZE-THRESHOLD 800)
 
 ;; ── Helpers ──
 
@@ -94,7 +94,12 @@
         (list #rx"\\(system\\b" "raw system call — prefer subprocess sandbox")
         (list #rx"\\(process\\b" "raw process call — verify resource limits")
         (list #rx"\\(set!\\b" "mutation — prefer functional style")
-        (list #rx"\\(with-handlers.*#f" "handler returning #f may swallow errors")))
+        (list #rx"\\(with-handlers.*#f" "handler returning #f may swallow errors")
+        (list #rx"\\(system\\*\\b" "system* — verify process spawning is in sandbox/")
+        (list #rx"\\(eval-syntax\\b" "eval-syntax — consider compile-time alternatives")
+        (list #rx"\\(open-input-file\\b" "open-input-file — ensure file access is in tools/ layer")
+        (list #rx"\\(call-with-input-file\\b"
+              "call-with-input-file — ensure file access is in tools/ layer")))
 
 (define (scan-risky-api)
   (define rkt-files
@@ -154,6 +159,25 @@
                          (format "~a lines (threshold: ~a)" line-count SIZE-THRESHOLD))
                 #f))))
 
+;; Scanner 5: High struct density
+(define STRUCT-THRESHOLD 15)
+
+(define (scan-struct-density)
+  (define rkt-files
+    (find-rkt-files #:skip-dirs '("compiled" ".git" "node_modules" "tests" "scripts")))
+  (filter
+   identity
+   (for/list ([f (in-list rkt-files)])
+     (define content (file->string f))
+     (define struct-count (length (regexp-match* #rx"[(]struct " content)))
+     (if (> struct-count STRUCT-THRESHOLD)
+         (finding 'warning
+                  "high-struct-density"
+                  f
+                  struct-count
+                  (format "~a struct definitions (threshold: ~a)" struct-count STRUCT-THRESHOLD))
+         #f))))
+
 ;; ── Report generation ──
 
 (define (generate-report)
@@ -161,7 +185,8 @@
   (define risky (scan-risky-api))
   (define todos (scan-todos))
   (define oversized (scan-oversized))
-  (define all-findings (append risky todos oversized))
+  (define struct-dens (scan-struct-density))
+  (define all-findings (append risky todos oversized struct-dens))
 
   (define ts
     (parameterize ([date-display-format 'iso-8601])
@@ -204,6 +229,11 @@
                           (string-append "### TODO/FIXME Markers\n\n"
                                          (string-join (map finding->md todos) "\n")
                                          "\n\n")
+                          "")
+                      (if (pair? struct-dens)
+                          (string-append "### High Struct Density\n\n"
+                                         (string-join (map finding->md struct-dens) "\n")
+                                         "\n\n")
                           ""))]))
 
   (define report
@@ -235,6 +265,8 @@
   (define risky (filter (lambda (f) (equal? (finding-category f) "risky-api")) findings))
   (define oversized (filter (lambda (f) (equal? (finding-category f) "oversized")) findings))
   (define todos (filter (lambda (f) (equal? (finding-category f) "todo-marker")) findings))
+  (define struct-dens
+    (filter (lambda (f) (equal? (finding-category f) "high-struct-density")) findings))
   (define (finding->jsexpr f)
     (hasheq 'severity
             (symbol->string (finding-severity f))
@@ -268,6 +300,8 @@
                           (map finding->jsexpr risky)
                           'todos
                           (map finding->jsexpr todos)
+                          'high_struct_density
+                          (map finding->jsexpr struct-dens)
                           'critical_count
                           critical-count)))
 
