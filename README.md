@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.23.5-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.23.6-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.23.5
+racket main.rkt --version  # q version 0.23.6
 raco test tests/           # run the full test suite
 ```
 
@@ -272,8 +272,8 @@ q/
 |--------|-------|
 | Test files | 442 |
 | Source modules | 320 |
-| Source lines | 57642 |
-| Test lines | 87607 |
+| Source lines | 57644 |
+| Test lines | 87612 |
 | Test assertions | 13432 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -333,7 +333,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.23.5** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
+**v0.23.6** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
 
 **v0.23.2** — GSD Plan Archival + Execution Polish. `/done` command, PLAN.md status auto-update, STATE.md auto-creation, TUI archive notification, iteration label fix, edit chunking guidance. 10 issues across 4 waves.
 
