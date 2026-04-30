@@ -11,15 +11,15 @@
 ;; Thread safety: The semaphore gsd-state-sem serializes atomic updates.
 ;; Boxes are shared across threads — mutations visible to all threads.
 
-(require racket/set)
+(require racket/set
+         "runtime-state-types.rkt")
 
 ;; ============================================================
 ;; Shared mutable state (boxes, not parameters)
 ;; ============================================================
 
-;; Core GSD state hash: mode, wave-executor, total-waves, current-wave, completed-waves
-(define gsd-state-box
-  (box (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set))))
+;; Core GSD state: gsd-runtime-state struct (F1 fix)
+(define gsd-state-box (box (make-initial-gsd-state)))
 
 ;; Plan data
 (define gsd-plan-data-box (box #f))
@@ -50,10 +50,10 @@
   (set-box! gsd-state-box v))
 
 (define (current-gsd-mode)
-  (hash-ref (unbox gsd-state-box) 'mode))
+  (gsd-runtime-state-mode (unbox gsd-state-box)))
 
 (define (current-wave-number)
-  (hash-ref (unbox gsd-state-box) 'current-wave))
+  (gsd-runtime-state-current-wave (unbox gsd-state-box)))
 
 (define (current-plan-data)
   (unbox gsd-plan-data-box))

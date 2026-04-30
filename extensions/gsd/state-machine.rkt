@@ -16,6 +16,7 @@
 (require racket/contract
          racket/match
          racket/set
+         "runtime-state-types.rkt"
          (only-in "session-state.rkt"
                   current-gsd-state
                   set-gsd-state!
@@ -29,6 +30,9 @@
 ;; States
 (provide gsm-state?
          GSD-STATES
+         ;; Runtime state struct
+         (struct-out gsd-runtime-state)
+         make-initial-gsd-state
          ;; Current state query
          gsm-current
          ;; Transition
@@ -112,7 +116,7 @@
 ;; ============================================================
 
 (define (gsm-current)
-  (hash-ref (gsd-state-snapshot) 'mode))
+  (gsd-runtime-state-mode (gsd-state-snapshot)))
 
 (define (gsm-history)
   (gsd-history-snapshot))
@@ -122,16 +126,16 @@
    gsd-state-sem
    (lambda ()
      (define state (current-gsd-state))
-     (define current (hash-ref state 'mode))
+     (define current (gsd-runtime-state-mode state))
      (cond
        [(not (gsm-state? target)) (err-result (format "invalid state: ~a" target) current target)]
        [(valid-transition? current target)
         ;; Clear executor when leaving executing mode
         (define state*
           (if (and (eq? current 'executing) (not (eq? target 'executing)))
-              (hash-set state 'wave-executor #f)
+              (struct-copy gsd-runtime-state state [wave-executor #f])
               state))
-        (set-gsd-state! (hash-set state* 'mode target))
+        (set-gsd-state! (struct-copy gsd-runtime-state state* [mode target]))
         (set-gsd-history! (cons (list current target (current-seconds)) (current-gsd-history)))
         (ok-result current target)]
        [else
@@ -144,19 +148,18 @@
   (call-with-semaphore
    gsd-state-sem
    (lambda ()
-     (define old (hash-ref (current-gsd-state) 'mode))
-     (set-gsd-state! (hash-set* (current-gsd-state) 'mode 'idle 'wave-executor #f))
+     (define old (gsd-runtime-state-mode (current-gsd-state)))
+     (set-gsd-state!
+      (struct-copy gsd-runtime-state (current-gsd-state) [mode 'idle] [wave-executor #f]))
      (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
-  (call-with-semaphore
-   gsd-state-sem
-   (lambda ()
-     (set-gsd-state!
-      (hasheq 'mode 'idle 'wave-executor #f 'total-waves 0 'current-wave 0 'completed-waves (set)))
-     (set-gsd-history! '())
-     (void))))
+  (call-with-semaphore gsd-state-sem
+                       (lambda ()
+                         (set-gsd-state! (make-initial-gsd-state))
+                         (set-gsd-history! '())
+                         (void))))
 
 (define (gsm-valid-next-states)
   (define current (gsm-current))
@@ -195,38 +198,40 @@
 ;; ============================================================
 
 (define (gsm-wave-executor)
-  (hash-ref (gsd-state-snapshot) 'wave-executor))
+  (gsd-runtime-state-wave-executor (gsd-state-snapshot)))
 
 (define (gsm-set-wave-executor! exec)
-  (gsd-state-update! (lambda (state) (hash-set state 'wave-executor exec))))
+  (gsd-state-update! (lambda (state) (struct-copy gsd-runtime-state state [wave-executor exec]))))
 
 (define (gsm-total-waves)
-  (hash-ref (gsd-state-snapshot) 'total-waves))
+  (gsd-runtime-state-total-waves (gsd-state-snapshot)))
 
 (define (gsm-set-total-waves! n)
-  (gsd-state-update! (lambda (state) (hash-set state 'total-waves n))))
+  (gsd-state-update! (lambda (state) (struct-copy gsd-runtime-state state [total-waves n]))))
 
 (define (gsm-current-wave)
-  (hash-ref (gsd-state-snapshot) 'current-wave))
+  (gsd-runtime-state-current-wave (gsd-state-snapshot)))
 
 (define (gsm-set-current-wave! n)
-  (gsd-state-update! (lambda (state) (hash-set state 'current-wave n))))
+  (gsd-state-update! (lambda (state) (struct-copy gsd-runtime-state state [current-wave n]))))
 
 (define (gsm-completed-waves)
-  (hash-ref (gsd-state-snapshot) 'completed-waves))
+  (gsd-runtime-state-completed-waves (gsd-state-snapshot)))
 
 (define (gsm-mark-wave-complete! idx)
   (gsd-state-update! (lambda (state)
-                       (define completed (hash-ref state 'completed-waves))
-                       (hash-set state 'completed-waves (set-add completed idx)))))
+                       (struct-copy gsd-runtime-state
+                                    state
+                                    [completed-waves
+                                     (set-add (gsd-runtime-state-completed-waves state) idx)]))))
 
 (define (gsm-wave-complete? idx)
-  (set-member? (hash-ref (gsd-state-snapshot) 'completed-waves) idx))
+  (set-member? (gsd-runtime-state-completed-waves (gsd-state-snapshot)) idx))
 
 (define (gsm-next-pending-wave)
   (define state (gsd-state-snapshot))
-  (define tw (hash-ref state 'total-waves))
-  (define cw (hash-ref state 'completed-waves))
+  (define tw (gsd-runtime-state-total-waves state))
+  (define cw (gsd-runtime-state-completed-waves state))
   (for/first ([i (in-range tw)]
               #:when (not (set-member? cw i)))
     i))

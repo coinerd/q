@@ -236,7 +236,8 @@
   (gsm-transition! 'exploring)
   (gsm-transition! 'plan-written)
   (define snap (gsm-snapshot))
-  (check-eq? (hash-ref snap 'mode) 'plan-written))
+  (check-true (gsd-runtime-state? snap))
+  (check-eq? (gsd-runtime-state-mode snap) 'plan-written))
 
 ;; ============================================================
 ;; State predicates
