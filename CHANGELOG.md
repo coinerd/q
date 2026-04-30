@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.23.4 — 2026-04-29
+
+### Combined Audit Remediation & Hardening
+
+**Dead Code Removal:**
+- Deleted unused `fit-recent` function from context-assembly.rkt
+- Deleted custom `filter-map` — uses racket/list built-in instead
+- Replaced `pin-first-user-internal` with canonical `ensure-first-user-pinned`
+- Moved `build-pair-index`/`requires-pair-inclusion?` from contract-out to plain provide
+- context-assembly.rkt: 849 → 800 lines
+
+**Config Validation:**
+- Added `#:guard` to `context-assembly-config` struct with clear error messages
+- 5 new config validation tests (negative/zero/string values rejected)
+- Cached `(length ...)` results in locals for trace paths (6 calls optimized)
+
+**Test Cleanup:**
+- Renamed test-context-builder.rkt → test-context-assembly-tree.rkt
+- Renamed test-context-builder-agents.rkt → test-context-assembly-agents.rkt
+- Updated TR pilot suite label to v0.23.x
+- Added session-lifecycle integration test
+
+**Tests:** All context + lifecycle tests pass
+
 ## v0.23.3 — 2026-04-30
 
 ### Audit Remediation
