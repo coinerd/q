@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.26.0 — 2026-04-29
+
+### Working Set Memory for Context Assembly
+
+- **W0**: Create `runtime/working-set.rkt` — LRU working set data structure
+  with token budget enforcement, caller-provided accessors (no protocol
+  type dependencies), and lifecycle rules (read → add/refresh, edit/write
+  → remove, bash → no-op, reset → clear).
+- **W1**: Integrate working set into `runtime/iteration.rkt`. Thread `ws`
+  through the `let loop`, call `working-set-update!` after tool execution,
+  and pass `#:working-set` to `build-assembled-context`.
+- **W2**: Integrate working set into context assembly. Add Phase 1.5
+  resolution in `context-assembly.rkt`, protect ws entries in pinned
+  partition via `partition-messages/working-set`, and inject ws messages
+  into Tier A via `#:working-set-messages`.
+- **W3**: Wire working set into session lifecycle. `run-prompt-internal`
+  creates `ws` and attaches to session config; `build-session-context`
+  resets ws on new user messages; `dispatch-iteration` passes ws to
+  `run-iteration-loop`.
+- **W4**: Observability + read-spiral detection. Emit `working-set.update`
+  event after each tool execution with entry/token counts. Emit
+  `working-set.read-spiral-detected` when a file already in the working set
+  is re-read. Add `working-set-entries` and `working-set-tokens` to
+  `context.assembled` event payload.
+
 ## v0.25.3 — 2026-04-29
 
 ### Audit Tooling Quality & Test Coverage

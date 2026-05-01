@@ -91,7 +91,9 @@
       (string-contains? s "/examples/README.md")
       (string-contains? s "/docs/tutorials/")
       (string-contains? s "/docs/ecosystem/")
-      (string-contains? s "/docs/demos/")))
+      (string-contains? s "/docs/demos/")
+      (string-contains? s "/docs/adr/")
+      (string-contains? s "/docs/security.md")))
 
 (define (historical-line? line)
   (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line)))
