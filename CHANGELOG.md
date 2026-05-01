@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.25.3 — 2026-04-29
+
+### Audit Tooling Quality & Test Coverage
+
+- **F5 (HIGH)**: Fix `scan-todos` in audit-project.rkt scanning `scripts/`
+  directory, producing 7 false-positive findings on itself.
+- **F6 (HIGH)**: Add `safe-file->string` helper with
+  `exn:fail:filesystem?` handling. All 4 scanners now gracefully
+  handle race conditions and permission errors.
+- **F14 (MEDIUM)**: Eliminate double inventory scan in `--json` mode.
+  `generate-report` now returns inventory as 4th value.
+- **F15 (MEDIUM)**: Add `--help`/`-h` flag with usage message. Warn on
+  unknown flags.
+- **F16 (LOW)**: Simplify `read-version-string` to single regex with
+  capture group and error handling.
+- **F7 (HIGH)**: Expand `test-audit-script.rkt` from 4 to 12 tests.
+- **F10 (MEDIUM)**: Create `test-lint-deprecation.rkt` with 5 tests.
+- **F13 (MEDIUM)**: Add 2 edge-case pinning tests to
+  `test-context-policy.rkt`.
+- **F17 (HIGH)**: Fix with-handlers false positive — tighten regex to
+  exclude legitimate `(lambda (e) #f)` pattern. Reduces 73 noise
+  findings to 0.
+- **F8 (MEDIUM)**: Create `docs/tooling.md` documenting audit scripts,
+  linters, and developer tools.
+- **F9 (MEDIUM)**: Add 6 RA-5 decomposition fitness tests for key modules
+  (loop.rkt, gsd/core.rkt, context-policy.rkt, tool.rkt, event-types.rkt).
+
 ## v0.25.2 — 2026-04-30
 
 ### Critical & Security Remediation

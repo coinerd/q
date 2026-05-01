@@ -231,6 +231,37 @@
     (define lines (length (string-split (file->string ca-path) "\n")))
     (check-true (< lines 600) (format "context-assembly.rkt has ~a lines (expected < 600)" lines))))
 
+;; ── RA-5: Decomposition fitness — key modules under line budget ──
+(test-case "RA-5: agent/loop.rkt under 300 lines after decomposition"
+  (define p (build-path q-dir "agent" "loop.rkt"))
+  (when (file-exists? p)
+    (define lines (length (string-split (file->string p) "\n")))
+    (check-true (< lines 300) (format "agent/loop.rkt has ~a lines (expected < 300)" lines))))
+
+(test-case "RA-5: extensions/gsd/core.rkt under 400 lines"
+  (define p (build-path q-dir "extensions" "gsd" "core.rkt"))
+  (when (file-exists? p)
+    (define lines (length (string-split (file->string p) "\n")))
+    (check-true (< lines 400)
+                (format "extensions/gsd/core.rkt has ~a lines (expected < 400)" lines))))
+
+(test-case "RA-5: runtime/context-policy.rkt under 250 lines"
+  (define p (build-path q-dir "runtime" "context-policy.rkt"))
+  (when (file-exists? p)
+    (define lines (length (string-split (file->string p) "\n")))
+    (check-true (< lines 250)
+                (format "runtime/context-policy.rkt has ~a lines (expected < 250)" lines))))
+
+(test-case "RA-5: tools/tool.rkt under 550 lines"
+  (define p (build-path q-dir "tools" "tool.rkt"))
+  (when (file-exists? p)
+    (define lines (length (string-split (file->string p) "\n")))
+    (check-true (< lines 550) (format "tools/tool.rkt has ~a lines (expected < 550)" lines))))
+
+(test-case "RA-5: agent/event-types.rkt exists as extracted module"
+  (define p (build-path q-dir "agent" "event-types.rkt"))
+  (check-true (file-exists? p) "agent/event-types.rkt must exist after extraction"))
+
 ;; ── Helper for fan-in check ─────────────────────────────────
 
 ;; Count the number of require imports in a file
