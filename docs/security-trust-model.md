@@ -1,4 +1,4 @@
-<!-- verified-against: 0.25.1 --># Security & Trust Model
+<!-- verified-against: 0.25.2 --># Security & Trust Model
 
 This document provides an honest, per-area assessment of what q enforces
 today and what is planned. It is the authoritative reference for security
@@ -233,6 +233,59 @@ arguments in the preflight phase.
 Tools do **not** write session logs directly. All logging goes through
 the session store's `append-entry!` function. Tools return structured
 results (`tool-result`) consumed by the agent loop.
+
+---
+
+## 4a. Execution Policy Modes
+
+q supports three execution policy modes for controlling which bash commands
+the agent can run. This is configurable via `config.json`.
+
+### Modes
+
+| Mode | Behavior |
+|------|----------|
+| `'warn` (default) | Destructive commands produce a warning but execute. High-risk patterns (e.g., `rm -rf /`, `mkfs`, `dd of=/dev/`) produce an extra notice in tool output. |
+| `'block` | Destructive commands are blocked entirely. Equivalent to safe-mode restriction on destructive operations. |
+| `'allowlist` | Only explicitly allowed commands execute. Designed for CI/CD environments where the agent should only run a known set of commands. |
+
+### Configuration
+
+```json
+{
+  "execution-policy": "allowlist",
+  "execution-policy.allowed": ["git", "ls", "grep", "raco"],
+  "secret-scrub.extra-denylist": ["MY_CUSTOM_.*"],
+  "secret-scrub.allowlist": ["SAFE_VAR"]
+}
+```
+
+## 4b. Configurable Secret Scrubbing
+
+Before executing any subprocess, q sanitizes the environment to prevent
+credential leakage into child processes.
+
+### Default patterns
+
+Environment variables matching these case-insensitive patterns are scrubbed:
+
+- `API.?KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `PRIVATE`
+- `AUTH` (narrowed in v0.25.2 to match only `AUTH`, `AUTH_*`, `*_AUTH_*`)
+- `GH_PAT`, and any var ending in `_PAT`
+
+### Implicit allowlist
+
+These well-known non-secret environment variables are always preserved,
+even if they partially match a secret pattern:
+
+- `XAUTHORITY`, `GPG_AUTH_INFO`, `AUTHOR`, `GPG_TTY`, `SSH_AUTH_SOCK`
+
+### Custom denylist and allowlist
+
+- `secret-scrub.extra-denylist`: additional regex patterns to scrub
+- `secret-scrub.allowlist`: patterns to exclude from scrubbing
+
+Both are configurable in `config.json`.
 
 ---
 
