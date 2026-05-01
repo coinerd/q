@@ -12,17 +12,15 @@
 (define status-tests
   (test-suite "Render Status Line"
 
-    (test-case "render-status-bar returns list of styled-lines"
+    (test-case "render-status-bar returns a styled-line"
       (define state (initial-ui-state))
       (define result (render-status-bar state 80))
-      (check-true (list? result))
-      (check-true (andmap styled-line? result)))
+      (check-pred styled-line? result))
 
-    (test-case "render-input-line returns list of styled-lines"
+    (test-case "render-input-line returns a styled-line"
       (define inp (initial-input-state))
       (define result (render-input-line inp 80))
-      (check-true (list? result))
-      (check-true (andmap styled-line? result)))))
+      (check-pred styled-line? result))))
 
 (module+ main
   (run-tests status-tests))
