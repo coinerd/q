@@ -3,6 +3,7 @@
 ;; tests/test-audit-script.rkt — Tests for scripts/audit-project.rkt (RA-4)
 
 (require rackunit
+         "../util/version.rkt"
          rackunit/text-ui
          racket/string
          racket/file
@@ -92,7 +93,7 @@
       (define m (regexp-match #rx"version.*?([0-9]+\\.[0-9]+\\.[0-9]+)" output))
       (check-not-false m)
       (when m
-        (check-true (string=? (cadr m) "0.25.3"))))
+        (check-true (string=? (cadr m) (q-version)))))
 
     (test-case "ci mode exits 0 when no critical findings"
       (define-values (out err exit-code) (run-audit-args "--ci"))

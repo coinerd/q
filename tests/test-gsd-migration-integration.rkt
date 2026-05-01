@@ -9,6 +9,7 @@
          racket/hash
          (only-in "../tools/tool.rkt" tool-result-is-error?)
          "../extensions/gsd-planning.rkt"
+         (only-in "../extensions/gsd/policy.rkt" policy-decision? policy-blocked?)
          "../extensions/gsd/state-machine.rkt"
          "../extensions/gsd/plan-types.rkt"
          (only-in "../extensions/gsd/wave-executor.rkt"
@@ -118,86 +119,84 @@
 
                       ;; Write guard should block PLAN.md
                       (define result (gsd-write-guard ".planning/PLAN.md" ".planning"))
-                      (check-true (hash? result))
-                      (check-equal? (hash-ref result 'blocked) #t)
+                      (check-true (policy-decision? result))
+                      (check-true (policy-blocked? result))
 
                       ;; But other files should be fine
-                      (check-true (gsd-write-guard "src/fix.rkt" ".planning")))))
+                      (check-not-false (gsd-write-guard "src/fix.rkt" ".planning"))))
 
-(test-case "write guard blocks .. traversal to PLAN.md"
-  (with-clean-state (lambda (dir)
-                      (gsm-transition! 'exploring)
-                      (gsm-transition! 'plan-written)
-                      (gsm-transition! 'executing)
+  (test-case "write guard blocks .. traversal to PLAN.md"
+    (with-clean-state (lambda (dir)
+                        (gsm-transition! 'exploring)
+                        (gsm-transition! 'plan-written)
+                        (gsm-transition! 'executing)
 
-                      (define result (gsd-write-guard "src/../.planning/PLAN.md" ".planning"))
-                      (check-true (hash? result))
-                      (check-equal? (hash-ref result 'blocked) #t))))
+                        (define result (gsd-write-guard "src/../.planning/PLAN.md" ".planning"))
+                        (check-true (policy-decision? result))
+                        (check-true (policy-blocked? result))))
 
-;; ============================================================
-;; State machine transitions across all paths
-;; ============================================================
+    ;; ============================================================
+    ;; State machine transitions across all paths
+    ;; ============================================================
 
-(test-case "state machine transition validation — all valid paths"
-  (reset-gsm!)
-  (check-eq? (gsm-current) 'idle)
+    (test-case "state machine transition validation — all valid paths"
+      (reset-gsm!)
+      (check-eq? (gsm-current) 'idle)
 
-  ;; idle → exploring
-  (check-true (ok? (gsm-transition! 'exploring)))
-  (check-eq? (gsm-current) 'exploring)
+      ;; idle → exploring
+      (check-true (ok? (gsm-transition! 'exploring)))
+      (check-eq? (gsm-current) 'exploring)
 
-  ;; exploring → plan-written
-  (check-true (ok? (gsm-transition! 'plan-written)))
-  (check-eq? (gsm-current) 'plan-written)
+      ;; exploring → plan-written
+      (check-true (ok? (gsm-transition! 'plan-written)))
+      (check-eq? (gsm-current) 'plan-written)
 
-  ;; plan-written → executing
-  (check-true (ok? (gsm-transition! 'executing)))
-  (check-eq? (gsm-current) 'executing)
+      ;; plan-written → executing
+      (check-true (ok? (gsm-transition! 'executing)))
+      (check-eq? (gsm-current) 'executing)
 
-  ;; executing → verifying
-  (check-true (ok? (gsm-transition! 'verifying)))
-  (check-eq? (gsm-current) 'verifying)
+      ;; executing → verifying
+      (check-true (ok? (gsm-transition! 'verifying)))
+      (check-eq? (gsm-current) 'verifying)
 
-  ;; verifying → idle
-  (check-true (ok? (gsm-transition! 'idle)))
-  (check-eq? (gsm-current) 'idle))
+      ;; verifying → idle
+      (check-true (ok? (gsm-transition! 'idle)))
+      (check-eq? (gsm-current) 'idle))
 
-(test-case "state machine rejects invalid transitions"
-  (reset-gsm!)
-  ;; idle → executing (invalid — must go through exploring → plan-written)
-  (check-false (ok? (gsm-transition! 'executing)))
-  (check-eq? (gsm-current) 'idle))
+    (test-case "state machine rejects invalid transitions"
+      (reset-gsm!)
+      ;; idle → executing (invalid — must go through exploring → plan-written)
+      (check-false (ok? (gsm-transition! 'executing)))
+      (check-eq? (gsm-current) 'idle))
 
-;; ============================================================
-;; Plan validation integration
-;; ============================================================
+    ;; ============================================================
+    ;; Plan validation integration
+    ;; ============================================================
 
-(test-case "plan validation rejects empty plan"
-  (define plan (gsd-plan '() "" '() '()))
-  (check-false (valid-plan->go? plan)))
+    (test-case "plan validation rejects empty plan"
+      (define plan (gsd-plan '() "" '() '()))
+      (check-false (valid-plan->go? plan)))
 
-(test-case "plan validation accepts well-formed plan"
-  (define plan
-    (gsd-plan (list (gsd-wave 0 "Fix" 'pending "root cause" '("a.rkt") '() "raco test a" '()))
-              ""
-              '()
-              '()))
-  (check-true (valid-plan->go? plan)))
+    (test-case "plan validation accepts well-formed plan"
+      (define plan
+        (gsd-plan (list (gsd-wave 0 "Fix" 'pending "root cause" '("a.rkt") '() "raco test a" '()))
+                  ""
+                  '()
+                  '()))
+      (check-true (valid-plan->go? plan)))
 
-;; ============================================================
-;; Old API backward compatibility
-;; ============================================================
+    ;; ============================================================
+    ;; Old API backward compatibility
+    ;; ============================================================
 
-(test-case "legacy API: gsd-mode/set-gsd-mode! round-trip"
-  (reset-all-gsd-state!)
-  (check-equal? (gsd-mode) #f)
-  (set-gsd-mode! 'planning)
-  (check-eq? (gsd-mode) 'planning)
-  (set-gsd-mode! 'plan-written)
-  (check-eq? (gsd-mode) 'plan-written)
-  (set-gsd-mode! 'executing)
-  (check-eq? (gsd-mode) 'executing)
-  (set-gsd-mode! #f)
-  (check-equal? (gsd-mode) #f))
-
-
+    (test-case "legacy API: gsd-mode/set-gsd-mode! round-trip"
+      (reset-all-gsd-state!)
+      (check-equal? (gsd-mode) #f)
+      (set-gsd-mode! 'planning)
+      (check-eq? (gsd-mode) 'planning)
+      (set-gsd-mode! 'plan-written)
+      (check-eq? (gsd-mode) 'plan-written)
+      (set-gsd-mode! 'executing)
+      (check-eq? (gsd-mode) 'executing)
+      (set-gsd-mode! #f)
+      (check-equal? (gsd-mode) #f))))

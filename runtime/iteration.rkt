@@ -88,7 +88,8 @@
                   run-provider-turn
                   build-assembled-context
                   register-session-extensions!)
-         "working-set.rkt")
+         "working-set.rkt"
+         (only-in "context-policy.rkt" estimate-message-tokens))
 
 (provide run-iteration-loop
          ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
@@ -680,16 +681,7 @@
                    (for/list ([tc (in-list current-tool-calls)])
                      (hasheq 'name (tool-call-name tc)
                              'arguments (tool-call-arguments tc))))
-                 (define (estimate-msg-tokens m)
-                   (define c (message-content m))
-                   (define t (cond [(string? c) c]
-                                   [(list? c)
-                                    (apply string-append
-                                           (for/list ([p (in-list c)]
-                                                      #:when (text-part? p))
-                                             (text-part-text p)))]
-                                   [else ""]))
-                   (string-length t))
+                 ;; Use estimate-message-tokens from context-policy.rkt
                  ;; v0.26.0: Detect read spirals (re-reading a file already in working set)
                  (define read-spiral-paths
                    (for/list ([tc (in-list current-tool-calls)]
@@ -705,7 +697,7 @@
                                         "working-set.read-spiral-detected"
                                         (hasheq 'paths valid-spiral-paths
                                                 'count (length valid-spiral-paths))))
-                 (working-set-update! ws current-tool-calls-hashes tool-result-msgs message-id estimate-msg-tokens)
+                 (working-set-update! ws current-tool-calls-hashes tool-result-msgs message-id estimate-message-tokens)
                  ;; v0.26.0: Emit working-set.update after each change
                  (emit-session-event! bus
                                       session-id
