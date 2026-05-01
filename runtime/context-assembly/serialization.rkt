@@ -35,7 +35,8 @@
          build-session-context/tokens
          entry->context-message
          load-agents-context
-         build-system-preamble)
+         build-system-preamble
+         truncate-messages-to-budget)
 
 ;; Default tier boundaries
 (define DEFAULT-TIER-B-COUNT 20)

@@ -26,7 +26,8 @@
                   working-set-resolve-messages)
          "budgeting.rkt")
 
-(provide build-assembled-context)
+(provide build-assembled-context
+         build-session-context)
 
 (define (build-assembled-context idx
                                  config
