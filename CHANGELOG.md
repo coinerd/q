@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.27.3 — 2026-05-01
+
+### Audit Remediation (v0.27.2 findings)
+
+- **W0**: TUI Core Rendering Fixes. Fix highlight-line-range arity error
+  (define→define-values for for/fold), wrap-styled-line actual segment
+  splitting, render-transcript scroll direction (newest at bottom),
+  styled-line->ansi double reset, find-break-pos CJK-safe + word-breaking,
+  md-format-assistant auto-wrapping with header exclusion.
+- **W1**: Context Trace + Overflow Patterns. Add 'done trace event with
+  memo-hit tracking in context-assembly selection, replace local
+  overflow-message? with canonical context-overflow-error? in retry-policy.
+
 ## v0.27.2 — 2026-05-01
 
 ### Test Regression Remediation
