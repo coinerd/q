@@ -71,7 +71,8 @@
             "gsd"
             "event-structs"
             "render"
-            "keybindings"))
+            "keybindings"
+            "iteration"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))

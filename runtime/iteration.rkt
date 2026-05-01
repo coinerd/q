@@ -25,6 +25,10 @@
          json
          (only-in racket/string string-trim string-join string-contains?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
+         "iteration/loop-state.rkt"
+         "iteration/retry-policy.rkt"
+         "iteration/tool-turn-bridge.rkt"
+         "iteration/transition-logic.rkt"
          (only-in "../util/protocol-types.rkt"
                   message?
                   message-id
@@ -133,24 +137,7 @@
 ;; across threads, callers must set parameters before dispatching.
 ;; ============================================================
 
-(require racket/lazy-require
-         (only-in "../extensions/message-inject.rkt" injection-event-topic))
-(lazy-require ["../runtime/compactor.rkt" (compact-history)]
-              ["../llm/token-budget.rkt" (estimate-context-tokens)])
-
-(define current-compact-proc (make-parameter #f))
-(define current-estimate-tokens (make-parameter #f))
-(define current-inject-topic (make-parameter #f))
-
-;; Resolve DI parameter to concrete impl if not explicitly set.
-;; This allows tests to call run-iteration-loop directly without
-;; going through make-agent-session.
-(define (resolve-compact-proc)
-  (or (current-compact-proc) compact-history))
-(define (resolve-estimate-tokens)
-  (or (current-estimate-tokens) estimate-context-tokens))
-(define (resolve-inject-topic)
-  (or (current-inject-topic) injection-event-topic))
+;; DI parameters imported from iteration/loop-state.rkt
 
 ;; ============================================================
 ;; Event payload contract assertions (v0.22.9 W0 T1)
@@ -213,88 +200,21 @@
 ;; Queue helpers
 ;; ============================================================
 
-;; Dequeue all steering messages from queue (returns list, empty if none)
-(define (dequeue-all-steering! q)
-  (let loop ([acc '()])
-    (define msg (dequeue-steering! q))
-    (if msg
-        (loop (append acc (list msg)))
-        acc)))
+;; dequeue-all-steering! moved to iteration/tool-turn-bridge.rkt
 
 ;; ============================================================
 ;; FEAT-66: Context overflow recovery
 ;; ============================================================
 
-;; Handle context overflow by compacting the context and retrying once.
-;; Uses compact-history for proper summarization and build-retry-messages
-;; to re-inject the original user prompt after compaction.
-;; Returns the result of the retry, or re-raises if not an overflow error.
-(define (call-with-overflow-recovery thunk
-                                     ctx
-                                     bus
-                                     session-id
-                                     #:compact-proc [compact-proc (resolve-compact-proc)])
-  (with-handlers ([context-overflow-error?
-                   (lambda (e)
-                     (emit-session-event! bus
-                                          session-id
-                                          "context.overflow.detected"
-                                          (assert-payload "context.overflow.detected"
-                                                          (hasheq 'error (exn-message e))
-                                                          error-detail-payload/c))
-                     ;; Compact the context properly
-                     (define compact-result (compact-proc ctx))
-                     (emit-session-event!
-                      bus
-                      session-id
-                      "context.overflow.compacted"
-                      (assert-payload
-                       "context.overflow.compacted"
-                       (hasheq 'original-size
-                               (length ctx)
-                               'removed-count
-                               (compaction-result-removed-count compact-result)
-                               'kept-count
-                               (length (compaction-result-kept-messages compact-result)))
-                       compact-result-payload/c))
-                     (thunk))]
-                  [exn:fail? (lambda (e)
-                               ;; Re-raise non-overflow errors
-                               (raise e))])
-    (thunk)))
+;; call-with-overflow-recovery moved to iteration/retry-policy.rkt
 
 ;; ============================================================
 ;; FEAT-61: Message injection drain
 ;; ============================================================
 
-;; Drain all pending injected messages from the event bus.
-;; Subscribes to "message.injected" events on first call (per bus+box pair).
-;; Returns a list of message? structs ready for context inclusion.
-(define (drain-injected-messages! bus injected-box session-id)
-  (define msgs (unbox injected-box))
-  (if (null? msgs)
-      '()
-      (begin
-        (set-box! injected-box '())
-        (filter message? msgs))))
+;; drain-injected-messages! moved to iteration/tool-turn-bridge.rkt
 
-;; Create an injected-message collector: subscribes to message.injected events
-;; on the bus and accumulates them in a box.
-(define (make-injected-collector! bus #:inject-topic [inject-topic (resolve-inject-topic)])
-  (define collected (box '()))
-  (subscribe! bus
-              (lambda (evt)
-                (when (equal? (event-ev evt) inject-topic)
-                  (define payload (event-payload evt))
-                  (define msg (hash-ref payload 'message #f))
-                  (when msg
-                    ;; Thread-safe append using box swap
-                    (let loop ()
-                      (define old (unbox collected))
-                      (unless (box-cas! collected old (append old (list msg)))
-                        (loop))))))
-              #:filter (lambda (evt) (equal? (event-ev evt) inject-topic)))
-  collected)
+;; make-injected-collector! moved to iteration/tool-turn-bridge.rkt
 
 ;; ============================================================
 ;; v0.15.2 (BUG-INTENT-WITH-ACTION): Intent-without-action detection
@@ -303,19 +223,7 @@
 ;; v0.21.3: Intent detection removed. The prompt is self-correcting by design.
 ;; detect-intent-pattern, INTENT-ACTION-RX, detect-stall?, MAX-STALL-RETRIES all removed.
 
-;; extract-last-assistant-text : (listof message?) -> (or/c string? #f)
-;; Extracts the text content from the last assistant message in the context.
-(define (extract-last-assistant-text ctx)
-  (for/first ([msg (in-list (reverse ctx))]
-              #:when (eq? (message-role msg) 'assistant))
-    (define content (message-content msg))
-    (define texts
-      (for/list ([part (in-list content)]
-                 #:when (text-part? part))
-        (text-part-text part)))
-    (if (null? texts)
-        #f
-        (string-join texts " "))))
+;; extract-last-assistant-text moved to iteration/tool-turn-bridge.rkt
 
 ;; ============================================================
 ;; Iteration loop
@@ -323,45 +231,13 @@
 ;; v0.18.0: Context-aware exploration steering helpers
 ;; ============================================================
 
-;; Extract the target file path from a tool call's arguments.
-;; Returns #f if no path found. Only reliable for read/write/edit tools.
-(define (extract-tool-target-path tc)
-  (define args (tool-call-arguments tc))
-  (cond
-    [(hash? args) (or (hash-ref args 'path #f) (hash-ref args 'file #f))]
-    [else #f]))
+;; extract-tool-target-path moved to iteration/tool-turn-bridge.rkt
 
 ;; Compute the new seen-paths set and whether to increment the counter.
 ;; Returns (values new-seen-paths should-increment?)
-;; v0.19.10: Keep at most n elements from the front of a list.
-(define (take-at-most lst n)
-  (if (<= (length lst) n)
-      lst
-      (take lst n)))
+;; take-at-most moved to iteration/tool-turn-bridge.rkt
 
-(define (update-seen-paths tool-calls seen-paths)
-  ;; FIX: Use read-tools blacklist instead of write-tools whitelist.
-  ;; Extension tools (planning-write, bash, gh-*) are not in the old whitelist,
-  ;; so the counter never resets when the agent uses them. With a blacklist,
-  ;; any tool that isn't a read/explore tool resets the counter.
-  (define read-tools '("read" "find" "grep" "ls" "planning-read"))
-  (define has-non-read?
-    (for/or ([tc (in-list tool-calls)])
-      (not (member (tool-call-name tc) read-tools))))
-  (cond
-    [has-non-read? (values (set) #f)] ;; Reset on any non-read tool
-    [else
-     ;; Collect paths from read tools
-     (define new-paths
-       (for/set ([tc (in-list tool-calls)]
-                 #:when (member (tool-call-name tc) read-tools))
-         (define p (extract-tool-target-path tc))
-         (or p 'no-path)))
-     ;; Any path we haven't seen before?
-     (define has-new-path?
-       (for/or ([p (in-set new-paths)])
-         (not (set-member? seen-paths p))))
-     (values (set-union seen-paths new-paths) has-new-path?)]))
+;; update-seen-paths moved to iteration/tool-turn-bridge.rkt)
 
 ;; ============================================================
 

@@ -1,0 +1,160 @@
+#lang racket/base
+
+;; runtime/iteration/tool-turn-bridge.rkt — tool call dispatch coordination
+;;
+;; Helpers for working-set update, seen-paths tracking, exploration counting,
+;; and tool-turn bridging.
+
+(require racket/set
+         racket/list
+         (only-in racket/string string-join)
+         (only-in "../../util/protocol-types.rkt"
+                  message-role
+                  message?
+                  message-id
+                  message-content
+                  text-part?
+                  text-part-text
+                  tool-call-name
+                  tool-call-arguments
+                  tool-result-part?
+                  tool-result-part-is-error?
+                  event-ev
+                  event-payload)
+         "../../agent/event-bus.rkt"
+         (only-in "../../agent/queue.rkt"
+                  dequeue-steering!
+                  dequeue-followup!
+                  dequeue-all-followups!)
+         "../working-set.rkt"
+         (only-in "../context-policy.rkt" estimate-message-tokens))
+
+(provide extract-tool-target-path
+         take-at-most
+         update-seen-paths
+         update-working-set-after-tools!
+         count-tool-errors
+         compute-tool-counters
+         detect-read-spiral
+         extract-last-assistant-text
+         dequeue-all-steering!
+         drain-injected-messages!
+         make-injected-collector!)
+
+;; Extract the target file path from a tool call's arguments.
+(define (extract-tool-target-path tc)
+  (define args (tool-call-arguments tc))
+  (cond
+    [(hash? args) (or (hash-ref args 'path #f) (hash-ref args 'file #f))]
+    [else #f]))
+
+;; Keep at most n elements from the front of a list.
+(define (take-at-most lst n)
+  (if (<= (length lst) n)
+      lst
+      (take lst n)))
+
+;; Compute new seen-paths set and whether to increment the consecutive counter.
+(define (update-seen-paths tool-calls seen-paths)
+  (define read-tools '("read" "find" "grep" "ls" "planning-read"))
+  (define has-non-read?
+    (for/or ([tc (in-list tool-calls)])
+      (not (member (tool-call-name tc) read-tools))))
+  (cond
+    [has-non-read? (values (set) #f)]
+    [else
+     (define new-paths
+       (for/set ([tc (in-list tool-calls)]
+                 #:when (member (tool-call-name tc) read-tools))
+         (define p (extract-tool-target-path tc))
+         (or p 'no-path)))
+     (define has-new-path?
+       (for/or ([p (in-set new-paths)])
+         (not (set-member? seen-paths p))))
+     (values (set-union seen-paths new-paths) has-new-path?)]))
+
+;; Update working set after tool execution.
+;; Returns the updated working set.
+(define (update-working-set-after-tools! ws tool-calls tool-result-msgs)
+  (define tool-calls-hashes
+    (for/list ([tc (in-list tool-calls)])
+      (hasheq 'name (tool-call-name tc)
+              'arguments (tool-call-arguments tc))))
+  (working-set-update! ws tool-calls-hashes tool-result-msgs message-id estimate-message-tokens)
+  ws)
+
+;; Count errors in tool result messages.
+(define (count-tool-errors messages)
+  (for/sum
+   ([tr (filter tool-result-part?
+                (apply append (map message-content messages)))])
+   (if (tool-result-part-is-error? tr) 1 0)))
+
+;; Compute exploration and implementation counters from tool calls.
+(define (compute-tool-counters tool-calls explore-count implement-count)
+  (define new-explore
+    (+ explore-count
+       (for/sum ([tc (in-list tool-calls)])
+         (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
+  (define new-implement
+    (+ implement-count
+       (for/sum ([tc (in-list tool-calls)])
+         (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
+  (values new-explore new-implement))
+
+;; Extract the last assistant text from context.
+(define (extract-last-assistant-text ctx)
+  (for/first ([msg (in-list (reverse ctx))]
+              #:when (eq? (message-role msg) 'assistant))
+    (define content (message-content msg))
+    (define texts
+      (for/list ([part (in-list content)]
+                 #:when (text-part? part))
+        (text-part-text part)))
+    (if (null? texts)
+        #f
+        (string-join texts " "))))
+
+;; Dequeue all steering messages from queue.
+(define (dequeue-all-steering! q)
+  (let loop ([acc '()])
+    (define msg (dequeue-steering! q))
+    (if msg
+        (loop (append acc (list msg)))
+        acc)))
+
+;; Drain all pending injected messages from the event bus.
+(define (drain-injected-messages! bus injected-box session-id)
+  (define msgs (unbox injected-box))
+  (if (null? msgs)
+      '()
+      (begin
+        (set-box! injected-box '())
+        (filter message? msgs))))
+
+;; Create an injected-message collector: subscribes to message.injected events.
+(define (make-injected-collector! bus #:inject-topic [inject-topic #f])
+  (define collected (box '()))
+  (subscribe! bus
+              (lambda (evt)
+                (when (equal? (event-ev evt) inject-topic)
+                  (define payload (event-payload evt))
+                  (define msg (hash-ref payload 'message #f))
+                  (when msg
+                    (let loop ()
+                      (define old (unbox collected))
+                      (unless (box-cas! collected old (append old (list msg)))
+                        (loop))))))
+              #:filter (lambda (evt) (equal? (event-ev evt) inject-topic)))
+  collected)
+
+;; Detect read spiral — re-reading files already in working set.
+(define (detect-read-spiral tool-calls ws)
+  (define read-spiral-paths
+    (for/list ([tc (in-list tool-calls)]
+               #:when (equal? (tool-call-name tc) "read"))
+      (define path (extract-tool-target-path tc))
+      (and path
+           (member path (map ws-entry-path (working-set-entries ws)))
+           path)))
+  (filter string? read-spiral-paths))
