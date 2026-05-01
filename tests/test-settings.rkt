@@ -555,3 +555,24 @@
   (define settings (q-settings global project merged))
   (check-equal? (sandbox-timeout settings) 30) ; project wins
   (check-equal? (sandbox-memory-limit settings) 256)) ; global inherited
+
+(test-case "security-config-from-settings extracts execution policy"
+  (define settings (q-settings (hash) (hash) (hash 'execution-policy "allowlist"
+                                                    'execution-policy.allowed '("git" "ls"))))
+  (define config (security-config-from-settings settings))
+  (check-equal? (hash-ref config 'execution-policy-mode) "allowlist")
+  (check-equal? (hash-ref config 'execution-policy-allowed) '("git" "ls")))
+
+(test-case "security-config-from-settings defaults to empty"
+  (define settings (q-settings (hash) (hash) (hash)))
+  (define config (security-config-from-settings settings))
+  (check-false (hash-ref config 'execution-policy-mode #f))
+  (check-equal? (hash-ref config 'execution-policy-allowed) '()))
+
+(test-case "security-config-from-settings extracts secret-scrub config"
+  (define settings (q-settings (hash) (hash)
+                               (hash 'secret-scrub.extra-denylist '("CUSTOM_.*")
+                                     'secret-scrub.allowlist '("SAFE_VAR"))))
+  (define config (security-config-from-settings settings))
+  (check-equal? (hash-ref config 'secret-scrub-extra-denylist) '("CUSTOM_.*"))
+  (check-equal? (hash-ref config 'secret-scrub-allowlist) '("SAFE_VAR")))

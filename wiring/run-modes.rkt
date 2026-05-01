@@ -38,6 +38,10 @@
          (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
          (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
+         (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
+         (only-in "../sandbox/subprocess.rkt"
+                  current-secret-scrub-denylist
+                  current-secret-scrub-allowlist)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
          (only-in "../util/protocol-types.rkt"
                   event-ev
@@ -198,6 +202,31 @@
     (define trace-log (make-trace-logger bus session-dir #:enabled? #t))
     (hash-set! base-config 'trace-logger trace-log)
     (start-trace-logger! trace-log))
+
+  ;; v0.25.2 (F3): Wire security config from config.json
+  (define sec-config (security-config-from-settings settings))
+  (define policy-mode (hash-ref sec-config 'execution-policy-mode #f))
+  (when policy-mode
+    (current-execution-policy (if (string? policy-mode)
+                                  (string->symbol policy-mode)
+                                  policy-mode)))
+  (define allowed-cmds (hash-ref sec-config 'execution-policy-allowed '()))
+  (when (and (pair? allowed-cmds) (eq? (current-execution-policy) 'allowlist))
+    (current-allowed-commands allowed-cmds))
+  (define extra-denylist (hash-ref sec-config 'secret-scrub-extra-denylist '()))
+  (when (pair? extra-denylist)
+    (current-secret-scrub-denylist (map (lambda (s)
+                                          (if (regexp? s)
+                                              s
+                                              (regexp s)))
+                                        extra-denylist)))
+  (define scrub-allowlist (hash-ref sec-config 'secret-scrub-allowlist '()))
+  (when (pair? scrub-allowlist)
+    (current-secret-scrub-allowlist (map (lambda (s)
+                                           (if (regexp? s)
+                                               s
+                                               (regexp s)))
+                                         scrub-allowlist)))
 
   base-config)
 
