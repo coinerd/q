@@ -93,7 +93,7 @@
       (define m (regexp-match #rx"version.*?([0-9]+\\.[0-9]+\\.[0-9]+)" output))
       (check-not-false m)
       (when m
-        (check-true (string=? (cadr m) (q-version)))))
+        (check-true (string=? (cadr m) q-version))))
 
     (test-case "ci mode exits 0 when no critical findings"
       (define-values (out err exit-code) (run-audit-args "--ci"))

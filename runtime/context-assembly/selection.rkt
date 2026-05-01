@@ -21,9 +21,7 @@
                   ensure-first-user-pinned
                   fit-messages-pair-preserving)
          (only-in "../context-pinning.rkt" partition-messages/working-set)
-         (only-in "../working-set.rkt"
-                  working-set?
-                  working-set-resolve-messages)
+         (only-in "../working-set.rkt" working-set? working-set-resolve-messages)
          "budgeting.rkt")
 
 (provide build-assembled-context
@@ -40,7 +38,8 @@
                                  #:generate-catalog-proc [generate-catalog-proc #f]
                                  #:estimate-text-proc [estimate-text-proc #f])
   (define (emit-trace phase data)
-    (when trace (trace phase data)))
+    (when trace
+      (trace phase data)))
   (define raw-messages (build-session-context idx))
   (emit-trace 'start (hash 'raw-count (length raw-messages)))
   (if (null? raw-messages)
@@ -54,42 +53,57 @@
 
         (define max-tokens (context-assembly-config-recent-tokens config))
         (define ws-messages
-          (if ws (working-set-resolve-messages ws raw-messages message-id) '()))
-        (define ws-message-ids (if ws (map message-id ws-messages) '()))
+          (if ws
+              (working-set-resolve-messages ws raw-messages message-id)
+              '()))
+        (define ws-message-ids
+          (if ws
+              (map message-id ws-messages)
+              '()))
         (define-values (pinned removable)
           (partition-messages/working-set raw-messages ws-message-ids))
         (define pinned-tokens (for/sum ([m (in-list pinned)]) (memoized-estimate m)))
         (define pinned-count (length pinned))
         (define removable-count (length removable))
         (emit-trace 'phase1-pinned
-                    (hash 'pinned-count pinned-count
-                          'removable-count removable-count
-                          'pinned-tokens pinned-tokens))
+                    (hash 'pinned-count
+                          pinned-count
+                          'removable-count
+                          removable-count
+                          'pinned-tokens
+                          pinned-tokens))
 
         (define remaining-budget (- max-tokens pinned-tokens))
         (define-values (recent excluded)
           (if (<= remaining-budget 0)
               (values '() removable)
               (let ()
-                (define kept (fit-messages-pair-preserving removable remaining-budget memoized-estimate))
-                (define kept-ids (for/hash ([m (in-list kept)]) (values (message-id m) #t)))
-                (define exc (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
+                (define kept
+                  (fit-messages-pair-preserving removable remaining-budget memoized-estimate))
+                (define kept-ids
+                  (for/hash ([m (in-list kept)])
+                    (values (message-id m) #t)))
+                (define exc
+                  (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
                 (values kept exc))))
         (define recent-count (length recent))
         (define excluded-count (length excluded))
         (emit-trace 'phase3-fitted
-                    (hash 'recent-count recent-count
-                          'excluded-count excluded-count
-                          'remaining-budget remaining-budget))
+                    (hash 'recent-count
+                          recent-count
+                          'excluded-count
+                          excluded-count
+                          'remaining-budget
+                          remaining-budget))
 
         ;; Phase 2: Generate summary for excluded entries
         (define summary-obj
-          (and generate-summary-proc
-               (generate-summary-proc excluded provider model-name cache)))
+          (and generate-summary-proc (generate-summary-proc excluded provider model-name cache)))
         (emit-trace 'phase2-summary
-                    (hash 'has-summary? (and summary-obj #t)
-                          'entry-count (and summary-obj
-                                            ((hash-ref summary-obj 'entry-count (lambda () 0))))))
+                    (hash 'has-summary?
+                          (and summary-obj #t)
+                          'entry-count
+                          (and summary-obj ((hash-ref summary-obj 'entry-count (lambda () 0))))))
 
         (define summary-msg #f) ;; Summary msg construction delegated to caller
         ;; Phase 4: Generate catalog
@@ -100,9 +114,16 @@
                                      (context-assembly-config-max-catalog-tokens config))
               '()))
 
+        (emit-trace 'phase4-catalog
+                    (hash 'catalog-entries (length catalog) 'has-catalog? (not (null? catalog))))
+
         ;; Phase 5: Reassemble in original order
-        (define pinned-ids (for/hash ([m (in-list pinned)]) (values (message-id m) #t)))
-        (define recent-ids (for/hash ([m (in-list recent)]) (values (message-id m) #t)))
+        (define pinned-ids
+          (for/hash ([m (in-list pinned)])
+            (values (message-id m) #t)))
+        (define recent-ids
+          (for/hash ([m (in-list recent)])
+            (values (message-id m) #t)))
         (define result-messages
           (for/list ([m (in-list raw-messages)]
                      #:when (or (hash-has-key? pinned-ids (message-id m))
@@ -146,8 +167,9 @@
       i))
   (cond
     [(not compaction-idx) (values path #f)]
-    [else (define-values (pre post) (split-at path compaction-idx))
-          (values pre post)]))
+    [else
+     (define-values (pre post) (split-at path compaction-idx))
+     (values pre post)]))
 
 (define (entry->context-message entry)
   (define kind (message-kind entry))
