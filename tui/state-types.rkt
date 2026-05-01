@@ -2,7 +2,8 @@
 
 ;; tui/state-types.rkt — UI state structs, constructors, entry/cache helpers
 ;;
-;; Pure data types for the TUI state machine. No event processing logic.
+;; TUI state types, render cache management, and entry helpers.
+;; Contains both data definitions and cache/entry utility logic.
 ;; Split from state.rkt (v0.22.6 W2) to keep each module under 400 lines.
 
 (require racket/string

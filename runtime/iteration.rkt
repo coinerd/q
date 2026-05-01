@@ -155,38 +155,7 @@
 ;; Shared helpers (QUAL-01: re-exported from runtime-helpers.rkt)
 ;; ============================================================
 
-;; v0.14.1: Check if context exceeds mid-turn token budget.
-;; Returns estimated token count. Emits event if over budget.
-(define (check-mid-turn-budget! ctx
-                                bus
-                                session-id
-                                config
-                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
-  (define max-tokens (hash-ref config 'max-context-tokens 128000))
-  (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
-  ;; Extract text from message? structs for token estimation
-  (define texts
-    (for/list ([msg (in-list ctx)])
-      (define content (message-content msg))
-      (cond
-        [(string? content) content]
-        [(list? content)
-         (apply string-append
-                (for/list ([part (in-list content)]
-                           #:when (text-part? part))
-                  (text-part-text part)))]
-        [else ""])))
-  (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
-  (when (> estimated budget-threshold)
-    (emit-session-event!
-     bus
-     session-id
-     "context.mid-turn-over-budget"
-     (assert-payload
-      "context.mid-turn-over-budget"
-      (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)
-      budget-payload/c)))
-  estimated)
+;; check-mid-turn-budget!: delegated to iteration/retry-policy.rkt
 
 ;; ============================================================
 ;; Iteration-loop helpers (private)

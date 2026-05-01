@@ -22,7 +22,8 @@
                   budget-payload/c
                   compact-result-payload/c
                   error-detail-payload/c)
-         (only-in "../runtime-helpers.rkt" emit-session-event!))
+         (only-in "../runtime-helpers.rkt" emit-session-event!)
+         (only-in "loop-state.rkt" resolve-estimate-tokens))
 
 (provide check-mid-turn-budget!
          call-with-overflow-recovery)
@@ -33,7 +34,7 @@
                                 bus
                                 session-id
                                 config
-                                #:estimate-tokens estimate-tokens)
+                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
   (define max-tokens (hash-ref config 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (define texts
