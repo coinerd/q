@@ -29,7 +29,8 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          (prefix-in commands: "../tui/commands.rkt")
-         "../tui/keymap.rkt")
+         "../tui/keymap.rkt"
+         "keybindings/binding-resolver.rkt")
 
 ;; ── tui-ctx struct ──
 (provide (struct-out tui-ctx)
@@ -218,49 +219,9 @@
 
 ;; Handle a single key event.
 ;; Returns: 'continue | 'quit | (list 'submit string) | (list 'command symbol)
-;; Cached merged keymap (default + user overrides)
-(define cached-keymap #f)
+(define get-active-keymap get-active-keymap) ;; from binding-resolver
 
-;; Parameter for custom keybindings file path (#1117)
-(define current-keybindings-path (make-parameter #f))
-
-(define (get-active-keymap)
-  ;; Return the merged keymap (default + user overrides).
-  ;; Loads and caches on first call. Uses current-keybindings-path
-  ;; if set, otherwise defaults to ~/.q/keybindings.json.
-  (cond
-    [cached-keymap cached-keymap]
-    [else
-     (define base
-       (if (current-keybindings-path)
-           (load-keybindings (current-keybindings-path))
-           (default-keymap)))
-     ;; If using default-keymap, also merge user keybindings from default location
-     (when (not (current-keybindings-path))
-       (define user (load-user-keymap))
-       (when user
-         (keymap-merge base user)))
-     (set! cached-keymap base)
-     base]))
-
-;; Convert a raw keycode (char/symbol) from the terminal to a key-spec
-;; for keymap lookup. Handles modifier-prefixed symbols like 'ctrl-z.
-(define (keycode->key-spec-from-msg keycode)
-  (cond
-    [(char? keycode) (key-spec keycode #f #f #f)]
-    [(symbol? keycode)
-     (define s (symbol->string keycode))
-     (cond
-       ;; ctrl-X pattern
-       [(and (> (string-length s) 5) (string-prefix? s "ctrl-"))
-        (define rest (substring s 5))
-        (key-spec (string->symbol rest) #t #f #f)]
-       ;; shift-X pattern
-       [(and (> (string-length s) 6) (string-prefix? s "shift-"))
-        (define rest (substring s 6))
-        (key-spec (string->symbol rest) #f #t #f)]
-       [else (key-spec keycode #f #f #f)])]
-    [else #f]))
+(define keycode->key-spec-from-msg keycode->key-spec-from-msg) ;; from binding-resolver
 
 ;; Dispatch a keymap action to the appropriate handler.
 ;; Returns 'handled if handled (maps to 'continue in handle-key),
@@ -335,10 +296,7 @@
      'handled]
     [else #f]))
 
-(define (reload-keymap!)
-  ;; Force reload of keymap (e.g., after user edits keybindings.json)
-  (set! cached-keymap #f)
-  (void))
+(define reload-keymap! reload-keymap!) ;; from binding-resolver
 
 (define (handle-key ctx keycode)
   (define inp (unbox (tui-ctx-input-state-box ctx)))

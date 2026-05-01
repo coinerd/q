@@ -69,7 +69,9 @@
             "helpers"
             "examples"
             "gsd"
-            "event-structs"))
+            "event-structs"
+            "render"
+            "keybindings"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))
