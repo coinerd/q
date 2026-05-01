@@ -75,7 +75,9 @@
             "iteration"
             "session-index"
             "context-assembly"
-            "gsd-planning"))
+            "gsd-planning"
+            "github/handlers"
+            "racket-tooling"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))
