@@ -21,16 +21,18 @@
   (define busy (ui-state-busy? state))
   (define status-text
     (cond
-      [busy (format "  ⋯ ~a | ~a" session-name model-name)]
-      [else (format "  ✓ ~a | ~a" session-name model-name)]))
-  (define style (if busy (theme->style 'status-busy) (theme->style 'status-idle)))
-  (list (styled-line (list (styled-segment status-text style)))))
+      [busy (format " * ~a | ~a~a" session-name model-name
+                    (if (ui-state-streaming-text state) "" " [thinking...]"))]
+      [(string=? model-name "") (format "   ~a [No API key]" session-name)]
+      [else (format "   ~a | ~a" session-name model-name)]))
+  (define style (if busy (theme->style 'status-busy '(inverse)) (theme->style 'status-idle)))
+  (styled-line (list (styled-segment status-text style))))
 
 ;; Render the input line with prompt.
 (define (render-input-line input-st width)
   (define text (input-current-text input-st))
   (define-values (visible offset cursor-col) (input-visible-window input-st width))
-  (define prompt ">> ")
-  (list (styled-line
-         (list (styled-segment prompt (theme->style 'prompt '(bold)))
-               (styled-segment visible (theme->style 'input))))))
+  (define prompt "q> ")
+  (styled-line
+   (list (styled-segment prompt (theme->style 'prompt '(bold cyan)))
+         (styled-segment visible (theme->style 'input)))))

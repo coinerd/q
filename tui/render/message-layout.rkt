@@ -12,6 +12,7 @@
          "../char-width.rkt"
          "../theme.rkt"
          "../../util/markdown.rkt"
+         (only-in "../../util/markdown.rkt" md-token-content md-token-type)
          "../../extensions/custom-renderer-registry.rkt")
 
 (provide (struct-out styled-line)
@@ -62,16 +63,16 @@
   (case kind
     [(user)
      (list (styled-line
-            (list (styled-segment (format ">> ~a" raw-text)
-                                  (theme->style 'user '(bold))))))]
+            (list (styled-segment "> " '(bold cyan))
+                  (styled-segment raw-text '(bold)))))]
     [(assistant)
      (md-format-assistant raw-text width)]
     [(system)
      (list (styled-line
-            (list (styled-segment (format "  [~a]" raw-text)
-                                  (theme->style 'system '(dim))))))]
+            (list (styled-segment (format "[SYS] ~a" raw-text)
+                                  '(bright-black)))))]
     [(tool tool-result)
-     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool #f))
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name #f))
      (define renderer (and tool-name (lookup-custom-renderer-for-tool tool-name)))
      (define text
        (cond
@@ -79,18 +80,33 @@
          [tool-name (format "  [~a] ~a" tool-name raw-text)]
          [else (format "  [tool] ~a" raw-text)]))
      (list (styled-line (list (styled-segment text (theme->style 'tool)))))]
+    [(tool-start)
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
+     (define sanitized (string-replace raw-text "\n" " "))
+     (list (styled-line
+            (list (styled-segment (format "[TOOL] ~a: ~a" tool-name sanitized) '(cyan)))))]
+    [(tool-end)
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
+     (define sanitized (string-replace raw-text "\n" " "))
+     (list (styled-line
+            (list (styled-segment (format "[OK] ~a: ~a" tool-name sanitized) '(green)))))]
+    [(tool-fail)
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
+     (define sanitized (string-replace raw-text "\n" " "))
+     (list (styled-line
+            (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
     [(error)
      (list (styled-line
-            (list (styled-segment (format "  ✗ ~a" raw-text)
-                                  (theme->style 'error '(bold))))))]
+            (list (styled-segment (format "[ERR] ~a" raw-text)
+                                  '(bold red)))))]
     [else
      (list (styled-line
             (list (styled-segment raw-text '()))))]))
 
 ;; Convert a markdown token to a styled segment.
 (define (md-token->segment tok)
-  (define text (car tok))
-  (define type (cadr tok))
+  (define text (md-token-content tok))
+  (define type (md-token-type tok))
   (define style
     (case type
       [(heading) (theme->style 'accent '(bold))]
@@ -142,6 +158,14 @@
         [(magenta) "35"]
         [(cyan) "36"]
         [(white) "37"]
+        [(bright-black) "90"]
+        [(bright-red) "91"]
+        [(bright-green) "92"]
+        [(bright-yellow) "93"]
+        [(bright-blue) "94"]
+        [(bright-magenta) "95"]
+        [(bright-cyan) "96"]
+        [(bright-white) "97"]
         [else #f])))
   (define filtered (filter values codes))
   (if (null? filtered)
@@ -191,7 +215,7 @@
   (define lines (string-split text "\n"))
   (apply append (map (lambda (l) (wrap-single-line l max-width)) lines)))
 
-;; Wrap a single line.
+;; Wrap a single line to max-width columns.
 (define (wrap-single-line line max-width)
   (if (<= (string-visible-width line) max-width)
       (list line)
@@ -199,16 +223,16 @@
         (cond
           [(>= pos (string-length line)) (reverse acc)]
           [else
-           (define break (find-break-pos line (+ pos max-width)))
+           (define break (find-break-pos line pos max-width))
            (define chunk (substring line pos break))
            (if (>= break (string-length line))
                (reverse (cons chunk acc))
                (loop break (cons chunk acc)))]))))
 
-;; Find break position within max-width.
-(define (find-break-pos text max-width)
+;; Find break position starting from `pos` within `max-width` columns.
+(define (find-break-pos text start-pos max-width)
   (define len (string-length text))
-  (let loop ([i (min max-width len)] [col 0])
+  (let loop ([i start-pos] [col 0])
     (cond
       [(>= i len) len]
       [(>= col max-width) i]

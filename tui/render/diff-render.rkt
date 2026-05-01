@@ -50,12 +50,36 @@
 (define (highlight-line-range sl col-start col-end)
   (define segs (styled-line-segments sl))
   (define new-segs
-    (for/fold ([acc '()])
+    (for/fold ([acc '()]
+               [col 0])
               ([seg (in-list segs)])
       (define text (styled-segment-text seg))
       (define style (styled-segment-style seg))
-      (define inverted (cons (styled-segment text (style-invert style)) '()))
-      (append acc inverted)))
+      (define seg-len (string-length text))
+      (define seg-start col)
+      (define seg-end (+ col seg-len))
+      (define inv-style (style-invert style))
+      (cond
+        ;; Segment fully outside range
+        [(or (and col-end (>= seg-start col-end))
+             (and col-start (> seg-end col-start) #f))
+         (values (append acc (list seg)) (+ col seg-len))]
+        ;; Segment fully inside range
+        [(and (>= seg-start (or col-start 0))
+              (or (not col-end) (<= seg-end col-end)))
+         (values (append acc (list (styled-segment text inv-style))) (+ col seg-len))]
+        ;; Partial overlap
+        [else
+         (define s (max 0 (- (or col-start 0) seg-start)))
+         (define e (min seg-len (if col-end (- col-end seg-start) seg-len)))
+         (define before (if (> s 0) (substring text 0 s) ""))
+         (define mid (substring text s (max s e)))
+         (define after (if (< e seg-len) (substring text e) ""))
+         (define parts
+           (append (if (string=? before "") '() (list (styled-segment before style)))
+                   (list (styled-segment mid inv-style))
+                   (if (string=? after "") '() (list (styled-segment after style)))))
+         (values (append acc parts) (+ col seg-len))])))
   (styled-line new-segs))
 
 ;; Render the transcript.
@@ -65,26 +89,36 @@
   (define streaming-text (ui-state-streaming-text state))
   (define all-entries
     (if streaming-text
-        (append entries (list (transcript-entry 'assistant streaming-text (current-inexact-milliseconds) (hash))))
+        (append entries (list (transcript-entry 'assistant streaming-text (current-inexact-milliseconds) (hash) #f)))
         entries))
   (define styled-lines
     (apply append (map (lambda (e) (format-entry e width)) all-entries)))
   ;; Apply scroll offset
   (define start (min scroll (max 0 (- (length styled-lines) transcript-height))))
   (define visible (take (drop styled-lines start) (min transcript-height (max 0 (- (length styled-lines) start)))))
-  visible)
+  (values visible state))
 
 ;; Render a branch list.
 (define (render-branch-list branches [width 200])
-  (for/list ([b (in-list branches)])
-    (styled-line (list (styled-segment (format "  ~a" b) '())))))
+  (define header (styled-line (list (styled-segment (format "Branches (~a)" (length branches)) '(bold)))))
+  (define lines
+    (for/list ([b (in-list branches)])
+      (styled-line (list (styled-segment (format "  ~a ~a" (if (hash? b) (hash-ref b 'active #f) #f) b) '())))))
+  (cons header lines))
 
 ;; Render leaf nodes.
 (define (render-leaf-nodes branches [width 200])
-  (for/list ([b (in-list branches)])
-    (styled-line (list (styled-segment (format "  ○ ~a" b) '())))))
+  (define header (styled-line (list (styled-segment (format "Leaf nodes (~a)" (length branches)) '(bold)))))
+  (define lines
+    (for/list ([b (in-list branches)])
+      (styled-line (list (styled-segment (format "  ○ ~a" b) '())))))
+  (cons header lines))
 
 ;; Render children list.
 (define (render-children-list parent-id children [width 200])
-  (for/list ([c (in-list children)])
-    (styled-line (list (styled-segment (format "  ├─ ~a" c) '())))))
+  (define header (styled-line (list (styled-segment (format "Children of ~a (~a)" parent-id (length children)) '(bold)))))
+  (if (null? children)
+      (list header (styled-line (list (styled-segment "  (no children)" '(dim)))))
+      (cons header
+            (for/list ([c (in-list children)])
+              (styled-line (list (styled-segment (format "  ├─ ~a" c) '())))))))
