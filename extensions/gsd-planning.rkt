@@ -639,20 +639,7 @@
 ;; 'planning' (mapped from 'exploring'). No race condition exists.
 ;; planning-write is allowed in 'exploring' and 'plan-written' states;
 ;; it is only blocked during 'executing' and 'verifying'.
-(define (gsd-tool-guard payload)
-  (define mode (gsd-mode))
-  (define tool-name (hash-ref payload 'tool-name #f))
-  (define allowed (gsm-tool-allowed? tool-name))
-  (cond
-    ;; Block planning-write during executing (want specific message)
-    [(and (eq? mode 'executing) (equal? tool-name "planning-write"))
-     (hook-block "Cannot update plan during /go. Focus on executing the existing plan.")]
-    ;; State machine says tool is blocked in plan-written mode
-    [(and (not allowed) (eq? mode 'plan-written))
-     (hook-block "Plan written to PLAN.md. Use /go to start implementing.")]
-    ;; State machine says tool is blocked
-    [(not allowed) (hook-block (format "Tool '~a' blocked in ~a mode." tool-name mode))]
-    [else (hook-pass payload)]))
+;; gsd-tool-guard: delegated to gsd-planning/execution-policy.rkt
 
 (define (gsd-session-cleanup payload)
   (log-debug "gsd-planning: session shutdown, resetting state")
