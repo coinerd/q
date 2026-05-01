@@ -33,9 +33,9 @@
 
 ;; A styled segment (part of a line)
 (struct styled-segment
-        (text   ; string
-         style  ; (listof symbol) — 'bold 'italic 'inverse 'underline 'dim
-                ;   'red 'green 'yellow 'blue 'cyan 'magenta 'white
+        (text ; string
+         style ; (listof symbol) — 'bold 'italic 'inverse 'underline 'dim
+         ;   'red 'green 'yellow 'blue 'cyan 'magenta 'white
          )
   #:transparent)
 
@@ -62,63 +62,86 @@
 
   (case kind
     [(user)
-     (list (styled-line
-            (list (styled-segment "> " '(bold cyan))
-                  (styled-segment raw-text '(bold)))))]
-    [(assistant)
-     (md-format-assistant raw-text width)]
+     (list (styled-line (list (styled-segment "> " '(bold cyan)) (styled-segment raw-text '(bold)))))]
+    [(assistant) (md-format-assistant raw-text width)]
     [(system)
-     (list (styled-line
-            (list (styled-segment (format "[SYS] ~a" raw-text)
-                                  '(bright-black)))))]
+     (list (styled-line (list (styled-segment (format "[SYS] ~a" raw-text) '(bright-black)))))]
     [(tool tool-result)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name #f))
-     (define renderer (and tool-name (lookup-custom-renderer-for-tool tool-name)))
+     (define renderer (and tool-name (lookup-custom-renderer-for-tool tool-name 'call)))
      (define text
        (cond
-         [renderer (renderer entry width)]
+         [renderer (renderer (hash-ref (transcript-entry-meta entry) 'args entry))]
          [tool-name (format "  [~a] ~a" tool-name raw-text)]
          [else (format "  [tool] ~a" raw-text)]))
      (list (styled-line (list (styled-segment text (theme->style 'tool)))))]
     [(tool-start)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
-     (define sanitized (string-replace raw-text "\n" " "))
-     (list (styled-line
-            (list (styled-segment (format "[TOOL] ~a: ~a" tool-name sanitized) '(cyan)))))]
+     (define renderer (lookup-custom-renderer-for-tool tool-name 'call))
+     (if renderer
+         (renderer (hash-ref (transcript-entry-meta entry) 'args entry))
+         (let ([sanitized (string-replace raw-text "\n" " ")])
+           (list (styled-line (list (styled-segment (format "[TOOL] ~a: ~a" tool-name sanitized)
+                                                    '(cyan)))))))]
     [(tool-end)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
-     (define sanitized (string-replace raw-text "\n" " "))
-     (list (styled-line
-            (list (styled-segment (format "[OK] ~a: ~a" tool-name sanitized) '(green)))))]
+     (define renderer (lookup-custom-renderer-for-tool tool-name 'result))
+     (if renderer
+         (renderer raw-text)
+         (let ([sanitized (string-replace raw-text "\n" " ")])
+           (list (styled-line (list (styled-segment (format "[OK] ~a: ~a" tool-name sanitized)
+                                                    '(green)))))))]
     [(tool-fail)
      (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
      (define sanitized (string-replace raw-text "\n" " "))
-     (list (styled-line
-            (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
-    [(error)
-     (list (styled-line
-            (list (styled-segment (format "[ERR] ~a" raw-text)
-                                  '(bold red)))))]
-    [else
-     (list (styled-line
-            (list (styled-segment raw-text '()))))]))
+     (list (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
+    [(error) (list (styled-line (list (styled-segment (format "[ERR] ~a" raw-text) '(bold red)))))]
+    [else (list (styled-line (list (styled-segment raw-text '()))))]))
 
-;; Convert a markdown token to a styled segment.
-(define (md-token->segment tok)
-  (define text (md-token-content tok))
+;; Convert a markdown token to a list of styled segments.
+(define (md-token->segments tok)
   (define type (md-token-type tok))
-  (define style
-    (case type
-      [(heading) (theme->style 'accent '(bold))]
-      [(bold) '(bold)]
-      [(italic) '(italic)]
-      [(code) (theme->style 'code)]
-      [(code-block) (theme->style 'code-block '(dim))]
-      [(link) (theme->style 'link '(underline))]
-      [(list-item) '()]
-      [(blockquote) '(dim)]
-      [else '()]))
-  (styled-segment text style))
+  (define content (md-token-content tok))
+  (cond
+    [(eq? type 'text) (list (styled-segment content '()))]
+    [(eq? type 'bold) (list (styled-segment content '(bold)))]
+    [(eq? type 'italic) (list (styled-segment content '(italic)))]
+    [(eq? type 'code) (list (styled-segment content (theme->style 'md-code)))]
+    [(eq? type 'header)
+     (define hstyle (theme->style 'md-heading '(bold)))
+     (list (styled-segment (cdr content) hstyle))]
+    [(eq? type 'code-block)
+     (define lang (car content))
+     (define code-text (cdr content))
+     (define code-lines (string-split code-text "\n"))
+     (append (if (and lang (not (string=? lang "")))
+                 (list (styled-segment (format "  ~a" lang) '(dim)))
+                 '())
+             (for/list ([cl (in-list code-lines)])
+               (styled-segment (format "  ~a" cl) (theme->style 'md-code '(dim)))))]
+    [(eq? type 'link) (list (styled-segment (cdr content) (theme->style 'md-link '(underline))))]
+    [(eq? type 'hr) (list (styled-segment (make-string 40 #\-) '(dim)))]
+    [(eq? type 'unordered-list)
+     (define prefix (format "~a- " (make-string (* (car content) 2) #\space)))
+     (cons (styled-segment prefix '()) (apply append (map md-token->segments (cdr content))))]
+    [(eq? type 'ordered-list)
+     (define indent (car content))
+     (define num (cadr content))
+     (define prefix (format "~a~a. " (make-string (* indent 2) #\space) num))
+     (cons (styled-segment prefix '()) (apply append (map md-token->segments (cddr content))))]
+    [(eq? type 'blockquote)
+     (define prefix (format "~a> " (make-string (car content) #\space)))
+     (cons (styled-segment prefix '(dim)) (apply append (map md-token->segments (cdr content))))]
+    [(eq? type 'newline) (list (styled-segment "\n" '()))]
+    [else (list (styled-segment (format "~a" content) '()))]))
+
+;; Backward compat wrapper
+(define (md-token->segment tok)
+  (define segs (md-token->segments tok))
+  (if (= (length segs) 1)
+      (car segs)
+      (styled-segment (string-join (map styled-segment-text segs) "")
+                      (styled-segment-style (car segs)))))
 
 ;; Styled line to plain text.
 (define (styled-line->text sl)
@@ -129,16 +152,15 @@
   (define segs (styled-line-segments sl))
   (if (null? segs)
       ""
-      (string-append
-       (string-join (map (lambda (seg)
-                           (define txt (styled-segment-text seg))
-                           (define sty (styled-segment-style seg))
-                           (if (null? sty)
-                               txt
-                               (string-append (styles->sgr sty) txt "\x1b[0m")))
-                         segs)
-                    "")
-       "\x1b[0m")))
+      (string-append (string-join (map (lambda (seg)
+                                         (define txt (styled-segment-text seg))
+                                         (define sty (styled-segment-style seg))
+                                         (if (null? sty)
+                                             txt
+                                             (string-append (styles->sgr sty) txt "\x1b[0m")))
+                                       segs)
+                                  "")
+                     "\x1b[0m")))
 
 ;; Convert style list to SGR escape sequence.
 (define (styles->sgr styles)
@@ -195,20 +217,52 @@
            (define seg-width (string-visible-width seg-text))
            (define new-col (+ col seg-width))
            (cond
-             [(> new-col width)
-              ;; Break needed — for now, just add segment anyway
-              (loop (cdr segs) new-col (cons seg acc-segs) lines)]
-             [else
-              (loop (cdr segs) new-col (cons seg acc-segs) lines)])]))))
+             ;; Break needed — for now, just add segment anyway
+             [(> new-col width) (loop (cdr segs) new-col (cons seg acc-segs) lines)]
+             [else (loop (cdr segs) new-col (cons seg acc-segs) lines)])]))))
 
 ;; Format assistant text with markdown rendering.
+;; Preserves per-token styles instead of flattening.
 (define (md-format-assistant text width)
-  (define tokens (parse-markdown text))
-  (define segments (map md-token->segment tokens))
-  (define plain (string-join (map styled-segment-text segments) ""))
-  (define wrapped-lines (wrap-text plain width))
-  (for/list ([line (in-list wrapped-lines)])
-    (styled-line (list (styled-segment line (theme->style 'assistant))))))
+  (if (or (not text) (string=? text ""))
+      (quote ())
+      (let* ([tokens (parse-markdown text)]
+             [all-segments (apply append (map md-token->segments tokens))]
+             [line-groups (split-segments-on-newline all-segments)])
+        (for/list ([group (in-list line-groups)])
+          (define non-empty (filter (lambda (s) (not (string=? (styled-segment-text s) ""))) group))
+          (if (null? non-empty)
+              (styled-line (list (styled-segment "" (quote ()))))
+              (styled-line non-empty))))))
+
+;; Split segments on newline markers.
+(define (split-segments-on-newline segs)
+  (let loop ([remaining segs]
+             [current (quote ())]
+             [groups (quote ())])
+    (cond
+      [(null? remaining)
+       (define final (reverse current))
+       (reverse (if (null? final)
+                    groups
+                    (cons final groups)))]
+      [else
+       (define seg (car remaining))
+       (define txt (styled-segment-text seg))
+       (cond
+         [(string=? txt "\n") (loop (cdr remaining) (quote ()) (cons (reverse current) groups))]
+         [(string-contains? txt "\n")
+          (define parts (string-split txt "\n"))
+          (define style (styled-segment-style seg))
+          (define sub-segs
+            (apply append
+                   (for/list ([p (in-list parts)]
+                              [i (in-naturals)])
+                     (if (= i (sub1 (length parts)))
+                         (list (styled-segment p style))
+                         (list (styled-segment p style) (styled-segment "\n" (quote ())))))))
+          (loop (append sub-segs (cdr remaining)) current groups)]
+         [else (loop (cdr remaining) (cons seg current) groups)])])))
 
 ;; Wrap text to max-width columns.
 (define (wrap-text text max-width)
@@ -219,7 +273,8 @@
 (define (wrap-single-line line max-width)
   (if (<= (string-visible-width line) max-width)
       (list line)
-      (let loop ([pos 0] [acc '()])
+      (let loop ([pos 0]
+                 [acc '()])
         (cond
           [(>= pos (string-length line)) (reverse acc)]
           [else
@@ -232,7 +287,8 @@
 ;; Find break position starting from `pos` within `max-width` columns.
 (define (find-break-pos text start-pos max-width)
   (define len (string-length text))
-  (let loop ([i start-pos] [col 0])
+  (let loop ([i start-pos]
+             [col 0])
     (cond
       [(>= i len) len]
       [(>= col max-width) i]
