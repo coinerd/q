@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.27.0 — 2026-04-29
+
+### Deep Module Refactoring + v0.26.0 Remediation
+
+- **W0**: v0.26.0 remediation quick fixes. Fix pre-commit version drift,
+  bash sandbox quote handling, delete-lines off-by-one, edit unique-match
+  enforcement, write no-clobber guard, tool registry cleanup, shell-quote
+  hardening, and contract fixes.
+- **W1**: Protocol Types + Event Structs Package. Create `util/protocol-types.rkt`
+  for canonical event types and `agent/event-structs/` with 6 domain-specific
+  modules (base, message, provider, session, tool, turn events).
+- **W2**: TUI Input Pipeline Decomposition. Create `tui/input/` with 4 modules
+  (completion-ops, editing-ops, history-ops, state-types). Refactor `tui/input.rkt`
+  to 103 LOC façade.
+- **W3**: TUI Keybindings + Render Decomposition. Create `tui/keybindings/`
+  (binding-resolver, default-map, mode-map) and `tui/render/` (diff-render,
+  message-layout, status-line). Extract pure keymap resolution and rendering.
+- **W4**: Runtime Iteration Decomposition. Create `runtime/iteration/` with 4
+  modules (loop-state, retry-policy, tool-turn-bridge, transition-logic).
+  Extract iteration loop support functions.
+- **W5**: Session-Index + Context-Assembly Decomposition. Create
+  `runtime/session-index/` (schema, query, mutations) and
+  `runtime/context-assembly/` (budgeting, selection, serialization).
+- **W6**: GSD Planning Extension Decomposition. Create `extensions/gsd-planning/`
+  (command-normalization, execution-policy, plan-diff). Extract pure logic
+  from GSD planning.
+- **W7**: GitHub + Racket Tooling Extension Decomposition. Create
+  `extensions/github/handlers/` (issue-ops, pr-ops, milestone-ops) and
+  `extensions/racket-tooling/` (analysis, formatting, rewrite). Extract
+  handler logic from large extension modules.
+- **W8**: CI Budget Enforcement + Final Verification. Update dependency
+  policy with deep module conventions and budgets. Verify all hotspot
+  files meet targets. 3,529 LOC extracted into 33 sub-modules across
+  9 directories. 60+ new tests added.
+
+
 ## v0.26.0 — 2026-04-29
 
 ### Working Set Memory for Context Assembly
