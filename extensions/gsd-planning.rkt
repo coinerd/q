@@ -35,6 +35,9 @@
          "../util/event.rkt"
          "api.rkt"
          "gsd-planning-state.rkt"
+         "gsd-planning/command-normalization.rkt"
+         "gsd-planning/execution-policy.rkt"
+         "gsd-planning/plan-diff.rkt"
          ;; v0.21.0 new modules
          "gsd/state-machine.rkt"
          (only-in "gsd/core.rkt"
@@ -103,17 +106,7 @@
          set-gsd-event-bus!
          emit-gsd-event!)
 
-;; ============================================================
-;; Argument extraction helper
-;; ============================================================
-
-(define (extract-cmd-args input-text)
-  (define trimmed (string-trim input-text))
-  (define parts
-    (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/) (string-split trimmed)))
-  (if (and (pair? parts) (> (length parts) 1))
-      (string-trim (string-join (cdr parts) " "))
-      ""))
+;; extract-cmd-args, parse-wave-headers, valid-artifact-name? delegated to command-normalization.rkt
 
 ;; ============================================================
 ;; Event emission helper
@@ -128,19 +121,7 @@
 ;; Constants
 ;; ============================================================
 
-(define planning-dir-name ".planning")
-
-(define artifact-extensions
-  '(("PLAN" . ".md") ("STATE" . ".md")
-                     ("HANDOFF" . ".json")
-                     ("VALIDATION" . ".md")
-                     ("BUG_REPORT" . ".md")
-                     ("BUG_PLAN" . ".md")
-                     ("BUG_STATE" . ".md")
-                     ("BUG_VALIDATION" . ".md")
-                     ("SUMMARY" . ".md")
-                     ("REVIEW" . ".md")
-                     ("ANALYSIS" . ".md")))
+;; planning-dir-name, artifact-extensions, json-artifact? delegated to command-normalization.rkt
 
 ;; ============================================================
 ;; Path helpers
@@ -169,26 +150,7 @@
      (build-path base-dir planning-dir-name name)]
     [else #f]))
 
-(define (valid-artifact-name? name)
-  (and
-   (string? name)
-   (not (string-contains? name ".."))
-   (not (string-contains? name "\x00"))
-   (cond
-     ;; Allow waves/ prefix for wave documents
-     [(string-prefix? name "waves/")
-      (define rest (substring name 6))
-      (and (not (string=? rest "")) (string-suffix? rest ".md") (not (string-contains? rest "/")))]
-     [else
-      (and (not (string-contains? name "/"))
-           (or (assoc name artifact-extensions)
-               (string-suffix? name ".md")
-               (string-suffix? name ".json")))])
-   #t))
-
-(define (json-artifact? name)
-  (or (string-suffix? name ".json")
-      (let ([ext (assoc name artifact-extensions)]) (and ext (string=? (cdr ext) ".json")))))
+;; valid-artifact-name?, json-artifact? delegated to command-normalization.rkt
 
 ;; ============================================================
 ;; File I/O
@@ -233,13 +195,7 @@
 ;; Wave header parsing
 ;; ============================================================
 
-(define (parse-wave-headers plan-text)
-  (define matches (regexp-match* #rx"## [Ww]ave +([0-9]+)" plan-text))
-  (for/list ([m (in-list matches)])
-    (define num-match (regexp-match #rx"([0-9]+)$" m))
-    (if num-match
-        (string->number (cadr num-match))
-        0)))
+;; parse-wave-headers delegated to command-normalization.rkt
 
 ;; ============================================================
 ;; Prompts
@@ -496,23 +452,7 @@
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
     [else (handle-artifact-command cmd input-text base-dir payload)]))
 
-;; Helper: Build wave docs summary for plan prompt
-(define (wave-docs-summary plan)
-  (define waves (gsd-plan-waves plan))
-  (string-join (for/list ([w waves])
-                 (define idx (gsd-wave-index w))
-                 (define title (gsd-wave-title w))
-                 (define slug (gsd-wave-slug w))
-                 (define status (wave-status->string (gsd-wave-status w)))
-                 (format "## W~a: ~a (~a)\n~a"
-                         idx
-                         title
-                         status
-                         (if (and (string? (gsd-wave-root-cause w))
-                                  (> (string-length (gsd-wave-root-cause w)) 0))
-                             (gsd-wave-root-cause w)
-                             "(no details)")))
-               "\n\n"))
+;; wave-docs-summary delegated to plan-diff.rkt
 
 ;; Handler for /go command
 (define (handle-go-command base-dir input-text)
