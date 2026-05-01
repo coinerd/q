@@ -228,9 +228,7 @@
 
 ;; Handle a single key event.
 ;; Returns: 'continue | 'quit | (list 'submit string) | (list 'command symbol)
-(define get-active-keymap get-active-keymap) ;; from binding-resolver
-
-(define keycode->key-spec-from-msg keycode->key-spec-from-msg) ;; from binding-resolver
+;; get-active-keymap and keycode->key-spec-from-msg imported from binding-resolver
 
 ;; Dispatch a keymap action to the appropriate handler.
 ;; Returns 'handled if handled (maps to 'continue in handle-key),
@@ -305,7 +303,7 @@
      'handled]
     [else #f]))
 
-(define reload-keymap! reload-keymap!) ;; from binding-resolver
+;; reload-keymap! imported from binding-resolver
 
 (define (handle-key ctx keycode)
   (define inp (unbox (tui-ctx-input-state-box ctx)))
