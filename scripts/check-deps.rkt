@@ -74,7 +74,8 @@
             "keybindings"
             "iteration"
             "session-index"
-            "context-assembly"))
+            "context-assembly"
+            "gsd-planning"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))
