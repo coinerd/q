@@ -175,4 +175,26 @@
     (check-false (environment-variables-ref clean #"API_KEY"))
     (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")))
 
+
+(test-case "AUTH regex: non-secret vars not scrubbed"
+  (check-false (secret-env-var? "AUTHOR"))
+  (check-false (secret-env-var? "XAUTHORITY"))
+  (check-false (secret-env-var? "GPG_AUTH_INFO"))
+  (check-false (secret-env-var? "GPG_TTY"))
+  (check-false (secret-env-var? "SSH_AUTH_SOCK")))
+
+(test-case "AUTH regex: actual secrets still matched"
+  (check-true (secret-env-var? "AUTH"))
+  (check-true (secret-env-var? "MY_AUTH_TOKEN"))
+  (check-true (secret-env-var? "AWS_AUTH_USER"))
+  (check-true (secret-env-var? "AUTH_PASSWORD")))
+
+(test-case "implicit allowlist takes precedence over patterns"
+  (define env (make-environment-variables))
+  (environment-variables-set! env #"XAUTHORITY" #"/home/user/.Xauthority")
+  (environment-variables-set! env #"GPG_AUTH_INFO" #"/run/user/1000/gpg")
+  (define clean (sanitize-env env))
+  (check-equal? (environment-variables-ref clean #"XAUTHORITY") #"/home/user/.Xauthority")
+  (check-equal? (environment-variables-ref clean #"GPG_AUTH_INFO") #"/run/user/1000/gpg"))
+
 (run-tests subprocess-tests)

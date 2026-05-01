@@ -123,9 +123,13 @@
         #rx"(?i:TOKEN)"
         #rx"(?i:PASSWORD)"
         #rx"(?i:CREDENTIAL)"
-        #rx"(?i:AUTH)"
+        #rx"(?i:^AUTH$|^AUTH_|_AUTH_)"
         #rx"(?i:GH_PAT)"
         #rx"(?i:_PAT$)"))
+
+;; Built-in implicit allowlist: well-known non-secret env vars that should
+;; never be scrubbed even if they partially match a secret pattern.
+(define SECRET-IMPLICIT-ALLOWLIST '("XAUTHORITY" "GPG_AUTH_INFO" "AUTHOR" "GPG_TTY" "SSH_AUTH_SOCK"))
 
 ;; ── RA-2 (v0.24.7): Configurable secret scrubbing ──
 ;; Extra denylist: additional regex patterns to scrub (extends secret-patterns).
@@ -139,17 +143,21 @@
     (if (bytes? name)
         (bytes->string/utf-8 name)
         name))
-  ;; Check allowlist first — if matched, never scrub
-  (define allowed?
-    (for/or ([pat (in-list (current-secret-scrub-allowlist))])
-      (regexp-match? pat name-str)))
+  ;; Check implicit allowlist first — well-known non-secret vars
   (cond
-    [allowed? #f]
+    [(member name-str SECRET-IMPLICIT-ALLOWLIST) #f]
     [else
-     ;; Check default patterns + extra denylist
-     (define all-patterns (append secret-patterns (current-secret-scrub-denylist)))
-     (for/or ([pat (in-list all-patterns)])
-       (regexp-match? pat name-str))]))
+     ;; Check user allowlist — if matched, never scrub
+     (define allowed?
+       (for/or ([pat (in-list (current-secret-scrub-allowlist))])
+         (regexp-match? pat name-str)))
+     (cond
+       [allowed? #f]
+       [else
+        ;; Check default patterns + extra denylist
+        (define all-patterns (append secret-patterns (current-secret-scrub-denylist)))
+        (for/or ([pat (in-list all-patterns)])
+          (regexp-match? pat name-str))])]))
 
 (define (sanitize-env [env (current-environment-variables)])
   (define clean (make-environment-variables))

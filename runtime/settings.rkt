@@ -83,7 +83,8 @@
          steering-gentle-threshold
          steering-strong-threshold
          steering-hard-cap
-         steering-same-file-dedup?)
+         steering-same-file-dedup?
+         security-config-from-settings)
 
 ;; ============================================================
 ;; Struct
@@ -288,6 +289,21 @@
 ;; Defaults to #f (no warning).
 (define (warn-on-destructive? settings)
   (setting-ref settings 'warn-on-destructive #f))
+
+;; ============================================================
+;; Security config loader (v0.25.2 — F3)
+;; ============================================================
+
+(define (security-config-from-settings settings)
+  (define merged (q-settings-merged settings))
+  (hasheq 'execution-policy-mode
+          (hash-ref merged 'execution-policy (hash-ref merged 'execution-policy.mode #f))
+          'execution-policy-allowed
+          (hash-ref merged 'execution-policy.allowed '())
+          'secret-scrub-extra-denylist
+          (hash-ref merged 'secret-scrub.extra-denylist '())
+          'secret-scrub-allowlist
+          (hash-ref merged 'secret-scrub.allowlist '())))
 
 ;; ============================================================
 ;; Sandbox settings — re-exported from util/sandbox-config.rkt

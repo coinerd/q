@@ -62,7 +62,7 @@
 (define current-execution-policy (make-parameter 'warn))
 
 ;; When execution-policy is 'allowlist, only these base commands execute.
-;; Configurable via config.json "execution-policy".allowed list.
+;; Configurable via config.json "execution-policy" key (wired in run-modes.rkt).
 (define current-allowed-commands
   (make-parameter '("git" "ls"
                           "cat"
