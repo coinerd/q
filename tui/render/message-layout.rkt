@@ -148,19 +148,33 @@
   (string-join (map styled-segment-text (styled-line-segments sl)) ""))
 
 ;; Styled line to ANSI string.
+;; Algorithm: emit reset between different-styled segments, final reset only if any styled.
 (define (styled-line->ansi sl)
   (define segs (styled-line-segments sl))
-  (if (null? segs)
-      ""
-      (string-append (string-join (map (lambda (seg)
-                                         (define txt (styled-segment-text seg))
-                                         (define sty (styled-segment-style seg))
-                                         (if (null? sty)
-                                             txt
-                                             (string-append (styles->sgr sty) txt "\x1b[0m")))
-                                       segs)
-                                  "")
-                     "\x1b[0m")))
+  (cond
+    [(null? segs) ""]
+    [else
+     (define any-styled?
+       (for/or ([s (in-list segs)])
+         (not (null? (styled-segment-style s)))))
+     (define parts
+       (for/list ([seg (in-list segs)]
+                  [i (in-naturals)])
+         (define txt (styled-segment-text seg))
+         (define sty (styled-segment-style seg))
+         (cond
+           [(not (null? sty))
+            ;; Styled segment: reset previous if not first, then SGR + text
+            (define reset (if (> i 0) "\x1b[0m" ""))
+            (string-append reset (styles->sgr sty) txt)]
+           [else
+            ;; Plain segment: reset if previous was styled
+            (define prev-styled?
+              (and (> i 0) (not (null? (styled-segment-style (list-ref segs (sub1 i)))))))
+            (if prev-styled?
+                (string-append "\x1b[0m" txt)
+                txt)])))
+     (string-append (string-join parts "") (if any-styled? "\x1b[0m" ""))]))
 
 ;; Convert style list to SGR escape sequence.
 (define (styles->sgr styles)
@@ -200,7 +214,7 @@
   (define w (string-visible-width text))
   (if (<= w width)
       (list sl)
-      ;; Simple wrapping: break on width boundaries
+      ;; Segment-level wrapping: emit accumulated line when next segment would exceed
       (let loop ([segs (styled-line-segments sl)]
                  [col 0]
                  [acc-segs '()]
@@ -208,32 +222,64 @@
         (cond
           [(null? segs)
            (define last-line (styled-line (reverse acc-segs)))
-           (if (null? lines)
-               (list last-line)
-               (reverse (cons last-line lines)))]
+           (define last-text (styled-line->text last-line))
+           (cond
+             [(string=? last-text "")
+              (if (null? lines)
+                  (quote ())
+                  (reverse lines))]
+             [(null? lines) (list last-line)]
+             [else (reverse (cons last-line lines))])]
           [else
            (define seg (car segs))
            (define seg-text (styled-segment-text seg))
            (define seg-width (string-visible-width seg-text))
            (define new-col (+ col seg-width))
            (cond
-             ;; Break needed — for now, just add segment anyway
-             [(> new-col width) (loop (cdr segs) new-col (cons seg acc-segs) lines)]
+             [(> new-col width)
+              (cond
+                [(null? acc-segs)
+                 ;; Single segment wider than width: split into width-sized sub-segments
+                 (define sub-lines (wrap-single-line seg-text width))
+                 (define seg-style (styled-segment-style seg))
+                 (define sub-segs
+                   (for/list ([l (in-list sub-lines)])
+                     (styled-line (list (styled-segment l seg-style)))))
+                 (define remaining-lines (loop (cdr segs) 0 '() lines))
+                 (append sub-segs remaining-lines)]
+                [else
+                 ;; Emit current line, put overflowing segment on new line
+                 (define current-line (styled-line (reverse acc-segs)))
+                 (loop (cons seg (cdr segs)) 0 '() (cons current-line lines))])]
              [else (loop (cdr segs) new-col (cons seg acc-segs) lines)])]))))
 
 ;; Format assistant text with markdown rendering.
 ;; Preserves per-token styles instead of flattening.
 (define (md-format-assistant text width)
-  (if (or (not text) (string=? text ""))
+  (if (or (not text) (string=? (string-trim text) ""))
       (quote ())
       (let* ([tokens (parse-markdown text)]
              [all-segments (apply append (map md-token->segments tokens))]
              [line-groups (split-segments-on-newline all-segments)])
-        (for/list ([group (in-list line-groups)])
-          (define non-empty (filter (lambda (s) (not (string=? (styled-segment-text s) ""))) group))
-          (if (null? non-empty)
-              (styled-line (list (styled-segment "" (quote ()))))
-              (styled-line non-empty))))))
+        (apply
+         append
+         (for/list ([group (in-list line-groups)])
+           (define non-empty (filter (lambda (s) (not (string=? (styled-segment-text s) ""))) group))
+           (cond
+             [(null? non-empty) (list (styled-line (list (styled-segment "" (quote ())))))]
+             [else
+              (define line (styled-line non-empty))
+              ;; Wrap if line exceeds width
+              ;; Skip wrapping for headers (detected by single segment with heading style)
+              (define line-text (styled-line->text line))
+              (define exceeds? (> (string-visible-width line-text) width))
+              (define is-header?
+                (and (= (length non-empty) 1)
+                     (let ([sty (styled-segment-style (car non-empty))])
+                       (and (member 'bold sty) (> (length sty) 1))))) ;; heading has bold + color
+              (if (and exceeds? (not is-header?))
+                  (wrap-styled-line line width)
+                  (list line))]))))))
 
 ;; Split segments on newline markers.
 (define (split-segments-on-newline segs)
@@ -285,11 +331,25 @@
                (loop break (cons chunk acc)))]))))
 
 ;; Find break position starting from `pos` within `max-width` columns.
+;; Checks if adding next char would exceed budget before including it (CJK-safe).
+;; Prefers breaking at whitespace when possible (word-breaking).
 (define (find-break-pos text start-pos max-width)
   (define len (string-length text))
   (let loop ([i start-pos]
-             [col 0])
+             [col 0]
+             [last-space-pos #f]
+             [last-space-col #f])
     (cond
       [(>= i len) len]
-      [(>= col max-width) i]
-      [else (loop (add1 i) (+ col (char-width (string-ref text i))))])))
+      [else
+       (define c (string-ref text i))
+       (define w (char-width c))
+       (define next-col (+ col w))
+       (cond
+         [(> next-col max-width)
+          ;; Would exceed: prefer last space break point, else hard break here
+          (if last-space-pos
+              (add1 last-space-pos) ;; break after the space
+              i)]
+         [(char-whitespace? c) (loop (add1 i) next-col i col)]
+         [else (loop (add1 i) next-col last-space-pos last-space-col)])])))

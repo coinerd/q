@@ -45,7 +45,7 @@
 ;; Highlight a column range within a styled line.
 (define (highlight-line-range sl col-start col-end)
   (define segs (styled-line-segments sl))
-  (define new-segs
+  (define-values (new-segs _final-col)
     (for/fold ([acc '()]
                [col 0])
               ([seg (in-list segs)])
@@ -56,8 +56,8 @@
       (define seg-end (+ col seg-len))
       (define inv-style (style-invert style))
       (cond
-        ;; Segment fully outside range
-        [(or (and col-end (>= seg-start col-end)) (and col-start (> seg-end col-start) #f))
+        ;; Segment fully outside range (after range end OR before range start)
+        [(or (and col-end (>= seg-start col-end)) (and col-start (>= col-start seg-end)))
          (values (append acc (list seg)) (+ col seg-len))]
         ;; Segment fully inside range
         [(and (>= seg-start (or col-start 0)) (or (not col-end) (<= seg-end col-end)))
@@ -95,17 +95,20 @@
   (define entries (ui-state-transcript state))
   (define scroll (ui-state-scroll-offset state))
   (define streaming-text (ui-state-streaming-text state))
+  (define chronological-entries (reverse entries))
   (define all-entries
     (if streaming-text
         (append
-         entries
+         chronological-entries
          (list (transcript-entry 'assistant streaming-text (current-inexact-milliseconds) (hash) #f)))
-        entries))
+        chronological-entries))
   (define styled-lines (apply append (map (lambda (e) (format-entry e width)) all-entries)))
-  ;; Apply scroll offset
-  (define start (min scroll (max 0 (- (length styled-lines) transcript-height))))
+  ;; Apply scroll offset — scroll=0 means show bottom (newest), positive = scrolled up
+  (define total-lines (length styled-lines))
+  (define max-start (max 0 (- total-lines transcript-height)))
+  (define start (max 0 (- max-start scroll)))
   (define visible
-    (take (drop styled-lines start) (min transcript-height (max 0 (- (length styled-lines) start)))))
+    (take (drop styled-lines start) (min transcript-height (max 0 (- total-lines start)))))
   (values visible state))
 
 ;; Render a branch list.
