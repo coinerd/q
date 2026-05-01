@@ -675,6 +675,11 @@
                  ;; v0.26.0: Update working set after tool execution
                  (define tool-result-msgs
                    (filter (lambda (m) (eq? (message-role m) 'tool)) updated-ctx))
+                 ;; Convert tool-call structs to hashes for working-set-update!
+                 (define current-tool-calls-hashes
+                   (for/list ([tc (in-list current-tool-calls)])
+                     (hasheq 'name (tool-call-name tc)
+                             'arguments (tool-call-arguments tc))))
                  (define (estimate-msg-tokens m)
                    (define c (message-content m))
                    (define t (cond [(string? c) c]
@@ -685,7 +690,29 @@
                                              (text-part-text p)))]
                                    [else ""]))
                    (string-length t))
-                 (working-set-update! ws current-tool-calls tool-result-msgs message-id estimate-msg-tokens)
+                 ;; v0.26.0: Detect read spirals (re-reading a file already in working set)
+                 (define read-spiral-paths
+                   (for/list ([tc (in-list current-tool-calls)]
+                              #:when (equal? (tool-call-name tc) "read"))
+                     (define path (extract-tool-target-path tc))
+                     (and path
+                          (member path (map ws-entry-path (working-set-entries ws)))
+                          path)))
+                 (define valid-spiral-paths (filter string? read-spiral-paths))
+                 (when (> (length valid-spiral-paths) 0)
+                   (emit-session-event! bus
+                                        session-id
+                                        "working-set.read-spiral-detected"
+                                        (hasheq 'paths valid-spiral-paths
+                                                'count (length valid-spiral-paths))))
+                 (working-set-update! ws current-tool-calls-hashes tool-result-msgs message-id estimate-msg-tokens)
+                 ;; v0.26.0: Emit working-set.update after each change
+                 (emit-session-event! bus
+                                      session-id
+                                      "working-set.update"
+                                      (hasheq 'entry-count (working-set-entry-count ws)
+                                              'token-count (working-set-token-count ws)
+                                              'paths (map ws-entry-path (working-set-entries ws))))
                  (define-values (new-seen-paths should-increment?)
                    (update-seen-paths current-tool-calls seen-paths))
                  (define effective-tool-count

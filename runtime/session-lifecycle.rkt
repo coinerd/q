@@ -237,6 +237,7 @@
                                ;; Defense-in-depth: ensure turn.completed is emitted
                                (emit-session-event! bus sid "turn.completed" (hasheq 'reason "error"))
                                (make-loop-result context-with-system 'error payload))])
+    (define ws (hash-ref cfg 'working-set #f))
     (run-iteration-loop context-with-system
                         prov
                         bus
@@ -247,6 +248,7 @@
                         max-iterations
                         #:cancellation-token cancellation-tok
                         #:config cfg
+                        #:working-set ws
                         #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
                         #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess)))))
 

@@ -148,7 +148,11 @@
                                'assembled-messages
                                (length ctx-assembled)
                                'tokenCount
-                               ctx-token-count))
+                               ctx-token-count
+                               'working-set-entries
+                               (if ws (working-set-entry-count ws) 0)
+                               'working-set-tokens
+                               (if ws (working-set-token-count ws) 0)))
 
   ;; Dispatch 'context hook — extensions can amend final context
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
