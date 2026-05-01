@@ -72,7 +72,9 @@
             "event-structs"
             "render"
             "keybindings"
-            "iteration"))
+            "iteration"
+            "session-index"
+            "context-assembly"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))
