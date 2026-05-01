@@ -22,12 +22,10 @@
                   event-ev
                   event-payload)
          "../../agent/event-bus.rkt"
-         (only-in "../../agent/queue.rkt"
-                  dequeue-steering!
-                  dequeue-followup!
-                  dequeue-all-followups!)
+         (only-in "../../agent/queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
          "../working-set.rkt"
-         (only-in "../context-policy.rkt" estimate-message-tokens))
+         (only-in "../context-policy.rkt" estimate-message-tokens)
+         (only-in "../../extensions/message-inject.rkt" injection-event-topic))
 
 (provide extract-tool-target-path
          take-at-most
@@ -78,28 +76,24 @@
 (define (update-working-set-after-tools! ws tool-calls tool-result-msgs)
   (define tool-calls-hashes
     (for/list ([tc (in-list tool-calls)])
-      (hasheq 'name (tool-call-name tc)
-              'arguments (tool-call-arguments tc))))
+      (hasheq 'name (tool-call-name tc) 'arguments (tool-call-arguments tc))))
   (working-set-update! ws tool-calls-hashes tool-result-msgs message-id estimate-message-tokens)
   ws)
 
 ;; Count errors in tool result messages.
 (define (count-tool-errors messages)
-  (for/sum
-   ([tr (filter tool-result-part?
-                (apply append (map message-content messages)))])
-   (if (tool-result-part-is-error? tr) 1 0)))
+  (for/sum ([tr (filter tool-result-part? (apply append (map message-content messages)))])
+           (if (tool-result-part-is-error? tr) 1 0)))
 
 ;; Compute exploration and implementation counters from tool calls.
 (define (compute-tool-counters tool-calls explore-count implement-count)
   (define new-explore
     (+ explore-count
        (for/sum ([tc (in-list tool-calls)])
-         (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
+                (if (member (tool-call-name tc) '("read" "grep" "find" "ls")) 1 0))))
   (define new-implement
     (+ implement-count
-       (for/sum ([tc (in-list tool-calls)])
-         (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
+       (for/sum ([tc (in-list tool-calls)]) (if (member (tool-call-name tc) '("edit" "write")) 1 0))))
   (values new-explore new-implement))
 
 ;; Extract the last assistant text from context.
@@ -133,7 +127,7 @@
         (filter message? msgs))))
 
 ;; Create an injected-message collector: subscribes to message.injected events.
-(define (make-injected-collector! bus #:inject-topic [inject-topic #f])
+(define (make-injected-collector! bus #:inject-topic [inject-topic injection-event-topic])
   (define collected (box '()))
   (subscribe! bus
               (lambda (evt)
@@ -154,7 +148,5 @@
     (for/list ([tc (in-list tool-calls)]
                #:when (equal? (tool-call-name tc) "read"))
       (define path (extract-tool-target-path tc))
-      (and path
-           (member path (map ws-entry-path (working-set-entries ws)))
-           path)))
+      (and path (member path (map ws-entry-path (working-set-entries ws))) path)))
   (filter string? read-spiral-paths))
