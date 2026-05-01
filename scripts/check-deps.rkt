@@ -68,7 +68,8 @@
             "collab"
             "helpers"
             "examples"
-            "gsd"))
+            "gsd"
+            "event-structs"))
 
 ;; Dynamically required with fallbacks — not hard deps
 (define dynamic-packages (set "readline" "tui"))
