@@ -130,6 +130,6 @@ is the primary self-hosting extension:
 (load-extension! ext-reg "path/to/extension.rkt" #:event-bus bus)
 ```
 
-## Version 0.24.9
+## Version 0.25.1
 
-This documentation reflects q 0.24.9.
+This documentation reflects q 0.25.1.
