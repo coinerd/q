@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.27.1-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.27.2-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.27.1
+racket main.rkt --version  # q version 0.27.2
 raco test tests/           # run the full test suite
 ```
 
@@ -272,7 +272,7 @@ q/
 |--------|-------|
 | Test files | 474 |
 | Source modules | 373 |
-| Source lines | 59177 |
+| Source lines | 59307 |
 | Test lines | 90718 |
 | Test assertions | 13978 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -334,7 +334,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.27.0** — Audit Tooling Quality & Test Coverage. Audit script fixes (safe reads, skip-lists, help flag, no double scan), test expansion (+19 tests), with-handlers noise fix, tooling docs, decomposition fitness tests. 3 issues across 3 waves.
+**v0.27.2** — Audit Tooling Quality & Test Coverage. Audit script fixes (safe reads, skip-lists, help flag, no double scan), test expansion (+19 tests), with-handlers noise fix, tooling docs, decomposition fitness tests. 3 issues across 3 waves.
 
 **v0.27.0** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.27.2 — 2026-05-01
+
+### Test Regression Remediation
+
+- **W0**: TUI Status Bar Completion. Fix status-line inverse style for idle
+  state, ensure "q" prefix renders in all modes, custom-renderer registry
+  dispatch for tool-start/tool-end events.
+- **W1**: Markdown + Branch + Custom Renderers. Rewrite md-token->segments
+  using cond (not case) for all token types, branch-info accessors for TUI
+  branch list, custom renderer dispatch with call/result signatures.
+- **W2**: Runtime Integration Plumbing. call-with-overflow-recovery catches
+  plain exn:fail with overflow messages, make-injected-collector! defaults
+  topic, phase4-catalog trace emission, audit script version check fix.
+
+
 ## v0.27.0 — 2026-04-29
 
 ### Deep Module Refactoring + v0.26.0 Remediation
