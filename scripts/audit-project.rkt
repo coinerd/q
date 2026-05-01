@@ -99,7 +99,8 @@
         (list #rx"\\(system\\b" "raw system call — prefer subprocess sandbox")
         (list #rx"\\(process\\b" "raw process call — verify resource limits")
         (list #rx"\\(set!\\b" "mutation — prefer functional style")
-        (list #rx"\\(with-handlers.*#f" "handler returning #f may swallow errors")
+        (list #rx"\\(with-handlers\\s+\\(\\[.*\\]\\s+#f"
+              "handler returning #f without lambda — may swallow errors")
         (list #rx"\\(system\\*\\b" "system* — verify process spawning is in sandbox/")
         (list #rx"\\(eval-syntax\\b" "eval-syntax — consider compile-time alternatives")
         (list #rx"\\(open-input-file\\b" "open-input-file — ensure file access is in tools/ layer")

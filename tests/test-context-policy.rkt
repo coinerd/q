@@ -99,6 +99,20 @@
   (define result (ensure-first-user-pinned msgs msgs))
   (check-equal? (length result) 2))
 
+(test-case "ensure-first-user-pinned: single user message"
+  (define msgs (list (make-test-message "u1" 'user 'message "hello")))
+  (define result (ensure-first-user-pinned msgs msgs))
+  (check-equal? (length result) 1)
+  (check-equal? (message-id (car result)) "u1"))
+
+(test-case "ensure-first-user-pinned: result is empty list"
+  (define original
+    (list (make-test-message "u1" 'user 'message "hello")
+          (make-test-message "a1" 'assistant 'message "hi")))
+  (define result (ensure-first-user-pinned '() original))
+  (check-equal? (length result) 1)
+  (check-equal? (message-id (car result)) "u1"))
+
 ;; ============================================================
 ;; build-pair-index
 ;; ============================================================
