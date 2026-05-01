@@ -5,7 +5,8 @@
 ;; load this file instead of hardcoding exception lists.
 ;;
 ;; Schema: ((section . data) ...)
-;; Sections: layers, known-exceptions, module-size, complexity-budgets
+;; Sections: layers, known-exceptions, module-size, complexity-budgets,
+;;           deep-module-conventions
 
 (
  ;; Layer definitions with max boundary exceptions
@@ -51,4 +52,53 @@
   (max-lines-per-module . 900)
   (max-function-length . 80)
   (max-require-fan-in . 20))
-)
+
+ ;; Deep module conventions (v0.27.0)
+ ;; Documents the sub-module directories created by the Deep Module Refactoring.
+ ;; Each convention specifies the parent module, sub-directory, and budget.
+ (deep-module-conventions
+  (tui/input
+   (parent . "tui/input.rkt")
+   (sub-modules . (completion-ops editing-ops history-ops state-types))
+   (budget . 300)
+   (convention . "Stateless operation functions. Parent re-exports."))
+  (tui/keybindings
+   (parent . "tui/tui-keybindings.rkt")
+   (sub-modules . (binding-resolver default-map mode-map))
+   (budget . 150)
+   (convention . "Keymap resolution and default maps."))
+  (runtime/iteration
+   (parent . "runtime/iteration.rkt")
+   (sub-modules . (loop-state retry-policy tool-turn-bridge transition-logic))
+   (budget . 350)
+   (convention . "Iteration loop decomposition. Recursive core stays in parent."))
+  (runtime/session-index
+   (parent . "runtime/session-index.rkt")
+   (sub-modules . (schema query mutations))
+   (budget . 400)
+   (convention . "Session tree operations. Parent kept for consumer compatibility."))
+  (runtime/context-assembly
+   (parent . "runtime/context-assembly.rkt")
+   (sub-modules . (budgeting selection serialization))
+   (budget . 250)
+   (convention . "Context budget, message selection, serialization."))
+  (extensions/gsd-planning
+   (parent . "extensions/gsd-planning.rkt")
+   (sub-modules . (command-normalization execution-policy plan-diff))
+   (budget . 130)
+   (convention . "Pure logic extracted from GSD planning."))
+  (extensions/github/handlers
+   (parent . "extensions/github/tool-handlers.rkt")
+   (sub-modules . (issue-ops pr-ops milestone-ops))
+   (budget . 425)
+   (convention . "GitHub tool handler decomposition."))
+  (extensions/racket-tooling
+   (parent . "extensions/racket-tooling-handlers.rkt")
+   (sub-modules . (analysis formatting rewrite))
+   (budget . 420)
+   (convention . "Racket tooling: check, edit, codemod handlers."))
+  (agent/event-structs
+   (parent . "agent/event-structs.rkt")
+   (sub-modules . (base message-events provider-events session-events tool-events turn-events))
+   (budget . 500)
+   (convention . "Event struct definitions by domain."))))
