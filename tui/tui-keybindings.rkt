@@ -30,7 +30,9 @@
          "../agent/event-bus.rkt"
          (prefix-in commands: "../tui/commands.rkt")
          "../tui/keymap.rkt"
-         "keybindings/binding-resolver.rkt")
+         "keybindings/binding-resolver.rkt"
+         "keybindings/default-map.rkt"
+         "keybindings/mode-map.rkt")
 
 ;; ── tui-ctx struct ──
 (provide (struct-out tui-ctx)
@@ -65,6 +67,13 @@
          ;; ── Keybindings config (#1117) ──
          reload-keymap!
          current-keybindings-path
+         ;; ── Re-exports from keybindings/default-map.rkt ──
+         default-keymap
+         load-user-keymap
+         load-keybindings
+         ;; ── Re-exports from keybindings/mode-map.rkt ──
+         make-mode-keymap
+         mode-overlay->keymap
          ;; ── Inline bash expansion (G3.3) ──
          input-expand-last-prompt)
 
