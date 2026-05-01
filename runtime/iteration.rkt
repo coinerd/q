@@ -27,6 +27,7 @@
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
+                  message-id
                   message-role
                   message-content
                   make-message
@@ -86,7 +87,8 @@
          (only-in "turn-orchestrator.rkt"
                   run-provider-turn
                   build-assembled-context
-                  register-session-extensions!))
+                  register-session-extensions!)
+         "working-set.rkt")
 
 (provide run-iteration-loop
          ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
@@ -382,11 +384,15 @@
                             ;; MOD-02 (v0.22.6 W4): DI keyword args for testability
                             #:compact-proc [compact-proc (resolve-compact-proc)]
                             #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
-                            #:inject-topic [inject-topic (resolve-inject-topic)])
+                            #:inject-topic [inject-topic (resolve-inject-topic)]
+                            ;; v0.26.0: working set memory
+                            #:working-set [initial-ws #f])
   ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
   ;; v0.14.4 Wave 1: Default hard limit = max(max-iterations * 1.6, 80) for slow models
   (define max-iterations-hard
     (hash-ref config 'max-iterations-hard (max (inexact->exact (floor (* max-iterations 1.6))) 80)))
+  ;; v0.26.0: Initialize working set
+  (define ws (or initial-ws (make-working-set)))
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
   (define agent-start-payload
     (hasheq 'session-id
@@ -411,6 +417,7 @@
                  [iteration 0]
                  [consecutive-tool-count 0]
                  [seen-paths (set)] ;; v0.18.0: same-file dedup tracking
+                 [ws ws] ;; v0.26.0: working set memory
                  [intent-retry-count 0]
                  [consecutive-error-count 0] ;; v0.19.10: spiral breaker
                  [recent-tool-names '()] ;; v0.19.10: bash-only streak detection
@@ -509,8 +516,9 @@
 
              [else
               ;; Build assembled context (tiered + hooks) — from turn-orchestrator.rkt
+              (define config-with-ws (hash-set config 'working-set ws))
               (define ctx-final
-                (build-assembled-context ctx-to-use config ext-reg bus session-id iteration))
+                (build-assembled-context ctx-to-use config-with-ws ext-reg bus session-id iteration))
 
               ;; Run provider turn — from turn-orchestrator.rkt
               (define result
@@ -580,6 +588,7 @@
                                           (add1 iteration)
                                           0
                                           (set)
+                                          ws
                                           intent-retry-count
                                           0
                                           '()
@@ -640,6 +649,7 @@
                        (add1 iteration)
                        (add1 consecutive-tool-count)
                        seen-paths
+                       ws
                        intent-retry-count
                        consecutive-error-count
                        recent-tool-names
@@ -662,6 +672,20 @@
                                               config))
                  ;; v0.21.3: Exploration steering removed. Compute counters without steering.
                  (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
+                 ;; v0.26.0: Update working set after tool execution
+                 (define tool-result-msgs
+                   (filter (lambda (m) (eq? (message-role m) 'tool)) updated-ctx))
+                 (define (estimate-msg-tokens m)
+                   (define c (message-content m))
+                   (define t (cond [(string? c) c]
+                                   [(list? c)
+                                    (apply string-append
+                                           (for/list ([p (in-list c)]
+                                                      #:when (text-part? p))
+                                             (text-part-text p)))]
+                                   [else ""]))
+                   (string-length t))
+                 (working-set-update! ws current-tool-calls tool-result-msgs message-id estimate-msg-tokens)
                  (define-values (new-seen-paths should-increment?)
                    (update-seen-paths current-tool-calls seen-paths))
                  (define effective-tool-count
@@ -690,6 +714,7 @@
                        (add1 iteration)
                        effective-tool-count
                        new-seen-paths
+                       ws
                        intent-retry-count
                        new-error-count
                        new-recent-tools
