@@ -25,7 +25,7 @@
          system-instructions ; (listof string)
          [index #:mutable] ; session-index? or #f
          queue ; queue?
-         config ; hash (runtime settings)
+         [config #:mutable] ; hash (runtime settings)
          [active? #:mutable] ; boolean
          [start-time #:mutable] ; integer (seconds since epoch)
          [compacting? #:mutable] ; boolean — guard against recursive compaction

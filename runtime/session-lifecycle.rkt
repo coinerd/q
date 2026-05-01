@@ -45,6 +45,7 @@
                   catalog-entry
                   catalog-entry?
                   build-session-context)
+         (only-in "../runtime/working-set.rkt" make-working-set working-set-reset!)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "iteration.rkt"
@@ -134,6 +135,11 @@
                         (hasheq)))
         user-message))
 
+  ;; v0.26.0: Reset working set on new user message
+  (define ws (hash-ref (agent-session-config sess) 'working-set #f))
+  (when ws
+    (working-set-reset! ws))
+
   ;; #771: Buffer user message (deferred persistence) — flushed on first assistant response
   (buffer-or-append!-fn sess user-msg)
 
@@ -152,7 +158,8 @@
              (build-assembled-context idx
                                       cfg
                                       #:provider (agent-session-provider sess)
-                                      #:model-name (agent-session-model-name sess)))
+                                      #:model-name (agent-session-model-name sess)
+                                      #:working-set ws))
            (context-result-messages result)]
           ;; Fallback: context-assembly tree walk (no LLM summarization)
           [else (build-session-context idx)])
@@ -258,6 +265,14 @@
   (define log-path (session-log-path (agent-session-session-dir sess)))
   (define idx-path (session-index-path (agent-session-session-dir sess)))
   (define sid (agent-session-session-id sess))
+
+  ;; v0.26.0: Create working set for this prompt and attach to session config
+  (define ws (make-working-set))
+  (define base-cfg (agent-session-config sess))
+  (cond
+    [(and (hash? base-cfg) (not (immutable? base-cfg))) (hash-set! base-cfg 'working-set ws)]
+    [(hash? base-cfg) (set-agent-session-config! sess (hash-set base-cfg 'working-set ws))]
+    [else (set-agent-session-config! sess (hasheq 'working-set ws))])
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system

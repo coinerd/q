@@ -86,6 +86,7 @@
          set-agent-session-pending-entries!
          agent-session-prompt-running?
          set-agent-session-prompt-running?!
+         set-agent-session-config!
          ensure-persisted!
          buffer-or-append!
          make-agent-session
