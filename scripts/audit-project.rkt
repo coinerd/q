@@ -36,6 +36,11 @@
 
 (define SKIP-DIRS '("compiled" ".git" "node_modules"))
 
+;; Safe file reading — returns #f on permission/race errors instead of crashing
+(define (safe-file->string path)
+  (with-handlers ([exn:fail:filesystem? (lambda (e) #f)])
+    (file->string path)))
+
 (define (in-skip-dir? p skip-list)
   (define rel (path->string (find-relative-path Q-DIR p)))
   (for/or ([d (in-list skip-list)])
@@ -106,16 +111,19 @@
     (find-rkt-files #:skip-dirs '("compiled" ".git" "node_modules" "tests" "scripts")))
   (apply append
          (for/list ([f (in-list rkt-files)])
-           (define lines (string-split (file->string f) "\n"))
-           (apply append
-                  (for/list ([line-text (in-list lines)]
-                             [line-num (in-naturals 1)]
-                             #:when #t
-                             [pattern (in-list RISKY-PATTERNS)])
-                    (match-define (list rx msg) pattern)
-                    (if (regexp-match? rx line-text)
-                        (list (finding 'warning "risky-api" f line-num msg))
-                        '()))))))
+           (define content (safe-file->string f))
+           (if (not content)
+               '()
+               (let ([lines (string-split content "\n")])
+                 (apply append
+                        (for/list ([line-text (in-list lines)]
+                                   [line-num (in-naturals 1)]
+                                   #:when #t
+                                   [pattern (in-list RISKY-PATTERNS)])
+                          (match-define (list rx msg) pattern)
+                          (if (regexp-match? rx line-text)
+                              (list (finding 'warning "risky-api" f line-num msg))
+                              '()))))))))
 
 ;; Scanner 3: TODO/deprecation check
 (define TODO-PATTERNS
@@ -127,22 +135,27 @@
         (list #rx";;.*XXX" "XXX marker — needs review")))
 
 (define (scan-todos)
-  (define rkt-files (find-rkt-files))
-  (apply
-   append
-   (for/list ([f (in-list rkt-files)])
-     (define lines (string-split (file->string f) "\n"))
-     (apply
-      append
-      (for/list ([line-text (in-list lines)]
-                 [line-num (in-naturals 1)]
-                 #:when #t
-                 [pattern (in-list TODO-PATTERNS)])
-        (match-define (list rx msg) pattern)
-        (if (regexp-match? rx line-text)
-            (list
-             (finding 'info "todo-marker" f line-num (format "~a: ~a" msg (string-trim line-text))))
-            '()))))))
+  (define rkt-files
+    (find-rkt-files #:skip-dirs '("compiled" ".git" "node_modules" "tests" "scripts")))
+  (apply append
+         (for/list ([f (in-list rkt-files)])
+           (define content (safe-file->string f))
+           (if (not content)
+               '()
+               (let ([lines (string-split content "\n")])
+                 (apply append
+                        (for/list ([line-text (in-list lines)]
+                                   [line-num (in-naturals 1)]
+                                   #:when #t
+                                   [pattern (in-list TODO-PATTERNS)])
+                          (match-define (list rx msg) pattern)
+                          (if (regexp-match? rx line-text)
+                              (list (finding 'info
+                                             "todo-marker"
+                                             f
+                                             line-num
+                                             (format "~a: ~a" msg (string-trim line-text))))
+                              '()))))))))
 
 ;; Scanner 4: Oversized modules
 (define (scan-oversized)
@@ -150,14 +163,17 @@
     (find-rkt-files #:skip-dirs '("compiled" ".git" "node_modules" "tests" "scripts" "benchmark")))
   (filter identity
           (for/list ([f (in-list rkt-files)])
-            (define line-count (length (string-split (file->string f) "\n")))
-            (if (> line-count SIZE-THRESHOLD)
-                (finding 'warning
-                         "oversized"
-                         f
-                         line-count
-                         (format "~a lines (threshold: ~a)" line-count SIZE-THRESHOLD))
-                #f))))
+            (define raw (safe-file->string f))
+            (if (not raw)
+                #f
+                (let ([line-count (length (string-split raw "\n"))])
+                  (if (> line-count SIZE-THRESHOLD)
+                      (finding 'warning
+                               "oversized"
+                               f
+                               line-count
+                               (format "~a lines (threshold: ~a)" line-count SIZE-THRESHOLD))
+                      #f))))))
 
 ;; Scanner 5: High struct density
 (define STRUCT-THRESHOLD 15)
@@ -165,18 +181,20 @@
 (define (scan-struct-density)
   (define rkt-files
     (find-rkt-files #:skip-dirs '("compiled" ".git" "node_modules" "tests" "scripts")))
-  (filter
-   identity
-   (for/list ([f (in-list rkt-files)])
-     (define content (file->string f))
-     (define struct-count (length (regexp-match* #rx"[(]struct " content)))
-     (if (> struct-count STRUCT-THRESHOLD)
-         (finding 'warning
-                  "high-struct-density"
-                  f
-                  struct-count
-                  (format "~a struct definitions (threshold: ~a)" struct-count STRUCT-THRESHOLD))
-         #f))))
+  (filter identity
+          (for/list ([f (in-list rkt-files)])
+            (define content (safe-file->string f))
+            (if (not content)
+                #f
+                (let ([struct-count (length (regexp-match* #rx"[(]struct " content))])
+                  (if (> struct-count STRUCT-THRESHOLD)
+                      (finding
+                       'warning
+                       "high-struct-density"
+                       f
+                       struct-count
+                       (format "~a struct definitions (threshold: ~a)" struct-count STRUCT-THRESHOLD))
+                      #f))))))
 
 ;; ── Report generation ──
 
@@ -246,20 +264,17 @@
                            warning-count
                            info-count)))
 
-  (values report critical-count all-findings))
+  (values report critical-count all-findings inv))
 
 ;; ── JSON output ──
 
 (define (read-version-string)
-  (define p (build-path Q-DIR "util" "version.rkt"))
-  (define content (file->string p))
-  (define m (regexp-match #rx"q-version \"" content))
-  (if m
-      (let* ([full (regexp-match-positions #rx"q-version \"([^\"]+)\"" content)]
-             [start (caadr full)]
-             [end (cdadr full)])
-        (substring content start end))
-      "unknown"))
+  (with-handlers ([exn:fail? (lambda (e) "unknown")])
+    (define content (file->string (build-path Q-DIR "util" "version.rkt")))
+    (define m (regexp-match #rx"q-version \"([0-9]+\\.[0-9]+\\.[0-9]+)\"" content))
+    (if m
+        (cadr m)
+        "unknown")))
 
 (define (generate-json-report report-text critical-count findings inv)
   (define risky (filter (lambda (f) (equal? (finding-category f) "risky-api")) findings))
@@ -307,17 +322,34 @@
 
 ;; ── Main ──
 
-(define ci-mode? (member "--ci" (vector->list (current-command-line-arguments))))
-(define stdout-mode? (member "--stdout" (vector->list (current-command-line-arguments))))
-(define json-mode? (member "--json" (vector->list (current-command-line-arguments))))
+(define args (vector->list (current-command-line-arguments)))
 
-(define-values (report critical-count findings) (generate-report))
+;; --help handling
+(when (or (member "--help" args) (member "-h" args))
+  (displayln "Usage: racket scripts/audit-project.rkt [--stdout|--ci|--json]")
+  (displayln "")
+  (displayln "Scanners: module inventory, risky API, oversized modules, struct density, TODOs")
+  (displayln "")
+  (displayln "  --stdout  Print markdown report to stdout")
+  (displayln "  --ci      Exit non-zero on critical findings (advisory CI gate)")
+  (displayln "  --json    Print JSON report to stdout")
+  (exit 0))
+
+;; Warn on unknown flags
+(for ([arg (in-list args)]
+      #:when (and (string-prefix? arg "-")
+                  (not (member arg '("--stdout" "--ci" "--json" "--help" "-h")))))
+  (eprintf "Warning: unknown flag ~a\n" arg))
+
+(define ci-mode? (member "--ci" args))
+(define stdout-mode? (member "--stdout" args))
+(define json-mode? (member "--json" args))
+
+(define-values (report critical-count findings inv) (generate-report))
 
 (cond
-  [json-mode?
-   ;; Re-scan inventory for JSON output
-   (define inv (scan-module-inventory))
-   (displayln (generate-json-report report critical-count findings inv))]
+  ;; Use inventory from generate-report (no double scan)
+  [json-mode? (displayln (generate-json-report report critical-count findings inv))]
   [stdout-mode? (displayln report)]
   [else
    (make-directory* AUDITS-DIR)
