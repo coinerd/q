@@ -48,8 +48,17 @@
         (context-result '() 0 0 0 0 #f '() #f))
       (let ()
         (define token-memo (make-hash))
+        (define memo-hit-box (box 0))
         (define (memoized-estimate msg)
-          (hash-ref! token-memo (message-id msg) (lambda () (estimate-message-tokens msg))))
+          (define id (message-id msg))
+          (cond
+            [(hash-has-key? token-memo id)
+             (set-box! memo-hit-box (add1 (unbox memo-hit-box)))
+             (hash-ref token-memo id)]
+            [else
+             (define est (estimate-message-tokens msg))
+             (hash-set! token-memo id est)
+             est]))
 
         (define max-tokens (context-assembly-config-recent-tokens config))
         (define ws-messages
@@ -134,6 +143,21 @@
         (define total-tokens (for/sum ([m (in-list result-with-pin)]) (memoized-estimate m)))
         (define over-budget? (> total-tokens max-tokens))
 
+        (emit-trace 'done
+                    (hash 'total-tokens
+                          total-tokens
+                          'over-budget?
+                          over-budget?
+                          'result-count
+                          (length result-with-pin)
+                          'pinned-count
+                          pinned-count
+                          'recent-count
+                          recent-count
+                          'excluded-count
+                          excluded-count
+                          'memo-hits
+                          (unbox memo-hit-box)))
         (context-result result-with-pin
                         total-tokens
                         pinned-count
