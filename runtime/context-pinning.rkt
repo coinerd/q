@@ -8,24 +8,32 @@
 ;; partitions them from removable messages.
 
 (require racket/list
-         (only-in "../util/protocol-types.rkt" message-role message-kind))
+         racket/set
+         (only-in "../util/protocol-types.rkt" message-role message-kind message-id))
 
-(provide partition-messages)
+(provide partition-messages
+         partition-messages/working-set)
 
 ;; ============================================================
 ;; Phase 1: Pin system prompt + first user + compaction summaries
 ;; ============================================================
 
 (define (partition-messages messages)
+  (partition-messages/working-set messages '()))
+
+;; Variant that also protects working-set message ids
+(define (partition-messages/working-set messages ws-message-ids)
   (define first-user
     (for/first ([m (in-list messages)]
                 #:when (eq? (message-role m) 'user))
       m))
+  (define ws-id-set (list->set ws-message-ids))
   (define-values (protected removable)
     (partition (lambda (m)
                  (or (eq? (message-kind m) 'system-instruction)
                      (eq? (message-kind m) 'compaction-summary)
                      (eq? (message-kind m) 'context-assembly-summary)
-                     (and first-user (eq? m first-user))))
+                     (and first-user (eq? m first-user))
+                     (set-member? ws-id-set (message-id m))))
                messages))
   (values protected removable))

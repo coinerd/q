@@ -32,7 +32,12 @@
                   fit-messages-pair-preserving
                   user-message?
                   system-message?)
-         (only-in "context-pinning.rkt" partition-messages)
+         (only-in "context-pinning.rkt" partition-messages partition-messages/working-set)
+         (only-in "working-set.rkt"
+                  working-set?
+                  working-set-resolve-messages
+                  working-set-entry-count
+                  working-set-token-count)
          (only-in "context-fit.rkt" truncate-messages-to-budget fit-messages-from-recent)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
@@ -82,7 +87,8 @@
                              [#:provider (or/c #f provider?)
                               #:model-name (or/c #f string?)
                               #:cache (or/c #f summary-cache?)
-                              #:trace-callback (or/c #f procedure?)]
+                              #:trace-callback (or/c #f procedure?)
+                              #:working-set (or/c #f working-set?)]
                              context-result?)]
                        [build-session-context (-> session-index? (listof message?))]
                        [build-session-context/tokens
@@ -200,7 +206,8 @@
                                  #:cache [cache #f]
                                  #:provider [provider #f]
                                  #:model-name [model-name #f]
-                                 #:trace-callback [trace #f])
+                                 #:trace-callback [trace #f]
+                                 #:working-set [ws #f])
   (define (emit-trace phase data)
     (when trace
       (trace phase data)))
@@ -217,8 +224,18 @@
           (hash-ref! token-memo (message-id msg) (lambda () (estimate-message-tokens msg))))
 
         (define max-tokens (context-assembly-config-recent-tokens config))
-        ;; Phase 1: Identify pinned items (system + first user + compaction summaries)
-        (define-values (pinned removable) (partition-messages raw-messages))
+        ;; Phase 1.5: Resolve working set messages
+        (define ws-messages
+          (if ws
+              (working-set-resolve-messages ws raw-messages message-id)
+              '()))
+        (define ws-message-ids
+          (if ws
+              (map message-id ws-messages)
+              '()))
+        ;; Phase 1: Identify pinned items (system + first user + compaction summaries + ws)
+        (define-values (pinned removable)
+          (partition-messages/working-set raw-messages ws-message-ids))
         (define pinned-tokens (for/sum ([m (in-list pinned)]) (memoized-estimate m)))
         (define pinned-count (length pinned))
         (define removable-count (length removable))
@@ -432,7 +449,8 @@
 
 (define (build-tiered-context messages
                               #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
-                              #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT])
+                              #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
+                              #:working-set-messages [ws-messages '()])
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
 
@@ -469,7 +487,7 @@
         (take-right remaining-after-c tier-b-size)
         '()))
 
-  (tiered-context (append sys-protected pinned-user compaction-summaries) tier-b tier-c))
+  (tiered-context (append sys-protected pinned-user compaction-summaries ws-messages) tier-b tier-c))
 
 ;; build-tiered-context-with-hooks: Assemble a tiered context (catalog + summary + recent)
 ;; and dispatch extension hooks at each stage. Returns a tiered-context struct.
@@ -477,9 +495,13 @@
                                          #:hook-dispatcher [hook-dispatcher #f]
                                          #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
                                          #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
-                                         #:max-tokens [max-tokens 8192])
+                                         #:max-tokens [max-tokens 8192]
+                                         #:working-set-messages [ws-messages '()])
   (define base-context
-    (build-tiered-context messages #:tier-b-count tier-b-count #:tier-c-count tier-c-count))
+    (build-tiered-context messages
+                          #:tier-b-count tier-b-count
+                          #:tier-c-count tier-c-count
+                          #:working-set-messages ws-messages))
 
   (define payload
     (tiered-context->payload base-context
