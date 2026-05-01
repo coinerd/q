@@ -25,6 +25,7 @@
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
+                  message-id
                   message-role
                   message-content
                   make-message
@@ -57,7 +58,13 @@
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/context-assembly.rkt"
                   build-tiered-context-with-hooks
-                  tiered-context->message-list)
+                  tiered-context->message-list
+                  build-tiered-context)
+         (only-in "../runtime/working-set.rkt"
+                  working-set?
+                  working-set-resolve-messages
+                  working-set-entry-count
+                  working-set-token-count)
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
@@ -87,6 +94,14 @@
   (define tier-b-count (hash-ref config 'tier-b-count 20))
   (define tier-c-count (hash-ref config 'tier-c-count 4))
   (define max-tokens (hash-ref config 'max-tokens 8192))
+  ;; v0.26.0: Extract working set from config
+  (define ws (hash-ref config 'working-set #f))
+  (define ws-messages
+    (if ws
+        (working-set-resolve-messages ws ctx-to-use message-id)
+        '()))
+  (define ws-message-ids
+    (map message-id ws-messages))
 
   ;; R2-6: Create hook dispatcher function for context assembly
   (define ctx-assembly-hook-dispatcher
@@ -101,7 +116,8 @@
                                      #:hook-dispatcher ctx-assembly-hook-dispatcher
                                      #:tier-b-count tier-b-count
                                      #:tier-c-count tier-c-count
-                                     #:max-tokens max-tokens))
+                                     #:max-tokens max-tokens
+                                     #:working-set-messages ws-messages))
 
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
@@ -109,6 +125,16 @@
     (raise (exn:fail "Context assembly blocked by extension" (current-continuation-marks))))
 
   (define ctx-assembled (tiered-context->message-list tc))
+
+  ;; v0.26.0: Emit working-set.injected event
+  (when ws
+    (emit-session-event! bus
+                         session-id
+                         "working-set.injected"
+                         (hasheq 'entries
+                                 (working-set-entry-count ws)
+                                 'tokens
+                                 (working-set-token-count ws))))
 
   ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
   (define ctx-token-count (estimate-context-tokens ctx-assembled))
