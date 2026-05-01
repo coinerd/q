@@ -1,0 +1,149 @@
+#lang racket/base
+
+;; runtime/working-set.rkt — Working Set Memory for Context Assembly
+;; STABILITY: testing
+;;
+;; Tracks recently-read file contents that the agent still needs for
+;; subsequent edits. Prevents read spirals by pinning read results in
+;; the assembled context.
+;;
+;; Lifecycle rules:
+;;   read  → add/refresh entry for path
+;;   edit  → remove entry for path (content consumed)
+;;   write → remove entry for path (file overwritten)
+;;   bash  → no change (transient output)
+;;   reset → clear all entries (new user message)
+
+(require racket/list)
+
+;; ────────────────────────────────────────────────────────────
+;; Data structures
+;; ────────────────────────────────────────────────────────────
+
+;; A working set entry tracks a file read that's still "active"
+(struct ws-entry (path message-id token-estimate timestamp) #:transparent)
+
+;; Working set state (mutable)
+(struct working-set ([entries #:mutable] [max-entries #:mutable] [max-tokens #:mutable])
+  #:transparent)
+
+;; ────────────────────────────────────────────────────────────
+;; Constructor
+;; ────────────────────────────────────────────────────────────
+
+(define (make-working-set #:max-entries [max-entries 30] #:max-tokens [max-tokens 15000])
+  (working-set '() max-entries max-tokens))
+
+;; ────────────────────────────────────────────────────────────
+;; Queries (use struct accessors directly for entries)
+;; ────────────────────────────────────────────────────────────
+
+(define (working-set-entry-count ws)
+  (length (working-set-entries ws)))
+
+(define (working-set-token-count ws)
+  (for/sum ([e (in-list (working-set-entries ws))]) (ws-entry-token-estimate e)))
+
+;; ────────────────────────────────────────────────────────────
+;; Mutations
+;; ────────────────────────────────────────────────────────────
+
+(define (working-set-reset! ws)
+  (set-working-set-entries! ws '()))
+
+;; Add or refresh an entry. If path already exists, update it (move to front).
+;; After adding, enforce max-entries and max-tokens via LRU eviction.
+(define (working-set-add! ws path message-id token-estimate)
+  (define now (current-seconds))
+  (define new-entry (ws-entry path message-id token-estimate now))
+  (define existing (working-set-entries ws))
+  ;; Remove any existing entry for the same path
+  (define without-path (filter (lambda (e) (not (equal? (ws-entry-path e) path))) existing))
+  ;; Add new entry at front (most recent)
+  (set-working-set-entries! ws (cons new-entry without-path))
+  ;; Enforce constraints
+  (working-set-enforce-budget! ws))
+
+;; Remove entry for a path (edit/write consumed the content)
+(define (working-set-remove! ws path)
+  (define existing (working-set-entries ws))
+  (define filtered (filter (lambda (e) (not (equal? (ws-entry-path e) path))) existing))
+  (set-working-set-entries! ws filtered))
+
+;; Enforce max-entries and max-tokens by evicting least-recently used entries.
+;; Entries are ordered newest-first, so we evict from the tail (oldest).
+(define (working-set-enforce-budget! ws)
+  (define max-e (working-set-max-entries ws))
+  (define max-t (working-set-max-tokens ws))
+  (let loop ([entries (working-set-entries ws)])
+    (define count (length entries))
+    (define tokens (for/sum ([e (in-list entries)]) (ws-entry-token-estimate e)))
+    (cond
+      ;; Evict oldest (last in list)
+      [(or (> count max-e) (> tokens max-t)) (loop (drop-right entries 1))]
+      [else (set-working-set-entries! ws entries)])))
+
+;; ────────────────────────────────────────────────────────────
+;; Tool call processing
+;; ────────────────────────────────────────────────────────────
+
+;; Process a batch of tool calls and their result messages.
+;; Each tool-call is a hash with 'name and 'arguments keys.
+;; Each result-msg is a message struct (or any value with extractable id).
+;; msg-id-fn: function to extract message-id from a result-msg
+;; token-fn: function to estimate tokens from a result-msg
+;; Returns ws (for convenience)
+(define (working-set-update! ws tool-calls result-msgs msg-id-fn token-fn)
+  (for ([tc (in-list tool-calls)]
+        [rm (in-list result-msgs)])
+    (define name
+      (if (hash? tc)
+          (hash-ref tc 'name "")
+          ""))
+    (define args
+      (if (hash? tc)
+          (hash-ref tc 'arguments (hasheq))
+          (hasheq)))
+    (define path
+      (if (hash? args)
+          (hash-ref args 'path "")
+          ""))
+    (cond
+      [(equal? name "read") (working-set-add! ws path (msg-id-fn rm) (token-fn rm))]
+      [(or (equal? name "edit") (equal? name "write"))
+       (when (and (string? path) (positive? (string-length path)))
+         (working-set-remove! ws path))]
+      ;; bash and other tools: no change
+      [else (void)]))
+  ws)
+
+;; ────────────────────────────────────────────────────────────
+;; Message resolution
+;; ────────────────────────────────────────────────────────────
+
+;; Find the message structs corresponding to working set entries.
+;; msg-id-fn: function to extract id from a message struct
+;; Returns messages in the same order as ws entries (newest first).
+;; Missing messages are silently skipped.
+(define (working-set-resolve-messages ws messages msg-id-fn)
+  (define msg-by-id
+    (for/hash ([m (in-list messages)])
+      (values (msg-id-fn m) m)))
+  (for/list ([e (in-list (working-set-entries ws))]
+             #:when (hash-has-key? msg-by-id (ws-entry-message-id e)))
+    (hash-ref msg-by-id (ws-entry-message-id e))))
+
+(provide working-set?
+         make-working-set
+         working-set-entries
+         working-set-entry-count
+         working-set-token-count
+         working-set-reset!
+         working-set-update!
+         working-set-resolve-messages
+         ws-entry
+         ws-entry?
+         ws-entry-path
+         ws-entry-message-id
+         ws-entry-token-estimate
+         ws-entry-timestamp)
