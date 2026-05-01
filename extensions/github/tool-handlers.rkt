@@ -3,6 +3,9 @@
 ;; extensions/github/tool-handlers.rkt — GitHub tool handlers and registration
 ;;
 ;; Extracted from github-integration.rkt for modularity.
+;; Future decomposition candidate: at 652 lines, this module could be
+;; further split if handler count grows. Current size is within acceptable
+;; bounds (< 700) per architecture fitness tests.
 ;; Provides the 6 tool handlers, registration functions, and the
 ;; milestone-create-from-spec helper.
 
@@ -289,12 +292,14 @@
                                    "-X"
                                    "POST"
                                    "-f"
-                                   (format "title=~a" t)
+                                   "title"
+                                   t
                                    "-f"
-                                   (format "description=~a" d))
+                                   "description"
+                                   d)
                              (if (string=? due "")
                                  '()
-                                 (list "-f" (format "due_on=~a" due))))))
+                                 (list "-f" "due_on" due)))))
             (hasheq 'title
                     t
                     'success
@@ -324,18 +329,14 @@
              (define desc (hash-ref args 'description ""))
              (define due (hash-ref args 'due_on ""))
              (apply gh-success-json
-                    (append (list "api"
-                                  "repos/{owner}/{repo}/milestones"
-                                  "-X"
-                                  "POST"
-                                  "-f"
-                                  (format "title=~a" title))
-                            (if (string=? desc "")
-                                '()
-                                (list "-f" (format "description=~a" desc)))
-                            (if (string=? due "")
-                                '()
-                                (list "-f" (format "due_on=~a" due)))))])]
+                    (append
+                     (list "api" "repos/{owner}/{repo}/milestones" "-X" "POST" "-f" "title" title)
+                     (if (string=? desc "")
+                         '()
+                         (list "-f" "description" desc))
+                     (if (string=? due "")
+                         '()
+                         (list "-f" "due_on" due))))])]
          ;; close
          [(string=? action "close")
           (define num (hash-ref args 'number #f))

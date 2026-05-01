@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.25.2 — 2026-04-30
+
+### Critical & Security Remediation
+
+- **F2 (HIGH)**: Fix AUTH regex over-matching that stripped `XAUTHORITY`,
+  `AUTHOR`, `GPG_AUTH_INFO`, `GPG_TTY`, `SSH_AUTH_SOCK` from subprocess
+  environments. Added implicit allowlist for well-known non-secret vars.
+- **F3 (HIGH)**: Wire security parameters (`execution-policy`,
+  `secret-scrub` config) from `config.json` at startup via
+  `run-modes.rkt`. New `security-config-from-settings` function in
+  `runtime/settings.rkt`.
+- **F4 (MEDIUM)**: Update `security-trust-model.md` with execution policy
+  modes, configurable secret scrubbing, and implicit allowlist docs.
+- **F11 (MEDIUM)**: Fix `gh` CLI format string injection in
+  `tool-handlers.rkt` — switch from `-f key=value` to separate `-f key value`
+  args to prevent `=`/newline injection.
+- **F18 (LOW)**: Document `tool-handlers.rkt` as future decomposition
+  candidate.
+- Fix CHANGELOG version header corruption (v0.24.4+ entries restored).
+- Add `security.md`, `docs/adr/` to version-lint skip lists.
+
 ## v0.25.1 — 2026-04-30
 
 ### Audit CI Discoverability + Enhanced Scanners
