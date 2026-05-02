@@ -34,3 +34,20 @@
 ;; with-logged-error actually logs (smoke test — just ensure no crash)
 (test-case "with-logged-error logs without crashing"
   (check-false (with-logged-error "test logging" (error "something went wrong"))))
+
+;; with-telemetry returns body value on success
+(test-case "with-telemetry returns body value on success"
+  (check-equal? (with-telemetry "test-op" (+ 1 2)) 3))
+
+;; with-telemetry returns complex value
+(test-case "with-telemetry returns complex value"
+  (define result (with-telemetry "hash-op" (hasheq 'a 1 'b 2)))
+  (check-equal? (hash-ref result 'a) 1))
+
+;; with-telemetry propagates errors (does not catch)
+(test-case "with-telemetry propagates errors"
+  (check-exn exn:fail? (lambda () (with-telemetry "failing-op" (error "boom")))))
+
+;; with-telemetry works with let binding inside
+(test-case "with-telemetry with let body"
+  (check-equal? (with-telemetry "let-op" (let ([x 10]) (+ x 5))) 15))
