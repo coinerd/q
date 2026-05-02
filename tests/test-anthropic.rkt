@@ -487,48 +487,54 @@
 ;; ============================================================
 
 (test-case "HTTP 200 passes without error"
-  (check-not-exn (λ () (anthropic-check-http-status! #"HTTP/1.1 200 OK" #"{}"))))
+  (check-not-exn
+   (λ () ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb)) #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "HTTP 401 raises authentication error"
   (check-exn #rx"authentication failed [(]401[)]"
              (λ ()
-               (anthropic-check-http-status!
+               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
                 #"HTTP/1.1 401 Unauthorized"
                 #"{\"error\":{\"type\":\"authentication_error\",\"message\":\"Invalid API key\"}}"))))
 
 (test-case "HTTP 403 raises forbidden error"
   (check-exn #rx"forbidden [(]403[)]"
              (λ ()
-               (anthropic-check-http-status!
+               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
                 #"HTTP/1.1 403 Forbidden"
                 #"{\"error\":{\"type\":\"permission_error\",\"message\":\"Access denied\"}}"))))
 
 (test-case "HTTP 429 raises rate limit error"
   (check-exn #rx"rate limited [(]429[)]"
              (λ ()
-               (anthropic-check-http-status!
+               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
                 #"HTTP/1.1 429 Too Many Requests"
                 #"{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Rate limited\"}}"))))
 
 (test-case "HTTP 500 raises server error"
   (check-exn #rx"server error [(]500[)]"
              (λ ()
-               (anthropic-check-http-status!
+               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
                 #"HTTP/1.1 500 Internal Server Error"
                 #"{\"error\":{\"type\":\"api_error\",\"message\":\"Internal error\"}}"))))
 
 (test-case "HTTP 502 raises server error"
   (check-exn #rx"server error [(]502[)]"
-             (λ () (anthropic-check-http-status! #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
+             (λ ()
+               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+                #"HTTP/1.1 502 Bad Gateway"
+                #"Bad Gateway"))))
 
 (test-case "HTTP 400 raises generic error"
   (check-exn #rx"error [(]400[)]"
              (λ ()
-               (anthropic-check-http-status! #"HTTP/1.1 400 Bad Request"
-                                             #"{\"error\":{\"type\":\"invalid_request_error\"}}"))))
+               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+                #"HTTP/1.1 400 Bad Request"
+                #"{\"error\":{\"type\":\"invalid_request_error\"}}"))))
 
 (test-case "String status-line also works"
-  (check-not-exn (λ () (anthropic-check-http-status! "HTTP/1.1 200 OK" "{}"))))
+  (check-not-exn
+   (λ () ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb)) "HTTP/1.1 200 OK" "{}"))))
 
 ;; ============================================================
 ;; 27. SSE Streaming format with parse-sse-lines integration
@@ -909,7 +915,7 @@
 (test-case "HTTP 429 includes retry/wait guidance"
   (define exn
     (with-handlers ([exn:fail? identity])
-      (anthropic-check-http-status!
+      ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
        #"HTTP/1.1 429 Too Many Requests"
        #"{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Rate limited\"}}")))
   (check-pred exn? exn)
@@ -921,7 +927,7 @@
 (test-case "HTTP 429 with retry_after_ms includes seconds hint"
   (define exn
     (with-handlers ([exn:fail? identity])
-      (anthropic-check-http-status!
+      ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
        #"HTTP/1.1 429 Too Many Requests"
        #"{\"error\":{\"type\":\"rate_limit_error\",\"retry_after_ms\":30000,\"message\":\"Slow down\"}}")))
   (check-pred exn? exn)
