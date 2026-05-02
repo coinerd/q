@@ -8,19 +8,51 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install Racket (Linux via apt)
-      if: runner.os == 'Linux'
+    - name: Cache Racket installation
+      id: cache-racket
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/racket-install
+        key: racket-${{ inputs.racket-version }}-${{ runner.os }}
+
+    - name: Install Racket (Linux)
+      if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq racket
-        racket --version
+        VER="${{ inputs.racket-version }}"
+        FILE="racket-${VER}-x86_64-linux-cs.sh"
+        URLS=(
+          "https://www.cs.utah.edu/plt/installers/${VER}/${FILE}"
+          "https://mirror.racket-lang.org/installers/${VER}/${FILE}"
+          "https://download.racket-lang.org/installers/${VER}/${FILE}"
+        )
+        for url in "${URLS[@]}"; do
+          echo "Trying ${url}..."
+          if curl -fSL --connect-timeout 30 --max-time 300 -o /tmp/racket.sh "${url}"; then
+            echo "Download OK"
+            break
+          fi
+          echo "Failed, trying next..."
+        done
+        [ -s /tmp/racket.sh ] || { echo "ERROR: All download sources failed"; exit 1; }
+        sh /tmp/racket.sh --in-place --dest $HOME/racket-install
+        ls -la $HOME/racket-install/bin/raco || { echo "Install failed"; exit 1; }
 
-    - name: Install Racket (macOS via DeLaGuardo)
-      if: runner.os == 'macOS'
+    - name: Install Racket (macOS)
+      if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
       uses: Bogdanp/setup-racket@v1.15
       with:
         racket-version: ${{ inputs.racket-version }}
+        dest: $HOME/racket-install
+
+    - name: Add Racket to PATH
+      shell: bash
+      run: echo "$HOME/racket-install/bin" >> $GITHUB_PATH
+
+    - name: Verify Racket Installation
+      shell: bash
+      run: racket --version
 
     - name: Clean stale compiled bytecode
       shell: bash
