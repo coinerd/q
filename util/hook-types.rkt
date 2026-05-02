@@ -8,6 +8,14 @@
 ;; Each hook-point has documented expected actions and payload constraints.
 ;; Invalid results are caught early and logged as warnings.
 
+;; v0.28.8: Hook schema version
+;; Increment when hook-action-schemas structure changes.
+(define HOOK-SCHEMA-VERSION 1)
+
+;; Return current schema version.
+(define (hook-schema-version)
+  HOOK-SCHEMA-VERSION)
+
 ;; Hook result struct and action constructors
 (provide (struct-out hook-result)
          hook-pass
@@ -21,7 +29,10 @@
          ;; #1149: expose schemas for testing
          hook-action-schemas
          ;; #1210: hook name validation
-         valid-hook-name?)
+         valid-hook-name?
+         ;; v0.28.8: hook schema versioning
+         HOOK-SCHEMA-VERSION
+         hook-schema-version)
 
 (struct hook-result (action payload) #:transparent)
 
@@ -176,19 +187,24 @@
 ;; validate-hook-result : symbol? hook-result? -> boolean?
 ;; Checks whether a hook-result's action is valid for the given hook-point.
 ;; Returns #t if valid, #f if invalid. Logs a warning on invalid.
-(define (validate-hook-result hook-point result)
+(define (validate-hook-result hook-point result [expected-version HOOK-SCHEMA-VERSION])
   (define valid-actions (valid-hook-actions-for hook-point))
   (define action (hook-result-action result))
-  (if (member action valid-actions)
-      #t
-      (begin
-        (log-warning
-         (format "Hook validation: ~a returned invalid action '~a' for hook '~a. Valid: ~a"
-                 result
-                 action
-                 hook-point
-                 valid-actions))
-        #f)))
+  (cond
+    [(not (= expected-version HOOK-SCHEMA-VERSION))
+     (log-warning (format "Hook validation: schema version mismatch ~a vs ~a for hook '~a"
+                          expected-version
+                          HOOK-SCHEMA-VERSION
+                          hook-point))
+     #f]
+    [(member action valid-actions) #t]
+    [else
+     (log-warning (format "Hook validation: ~a returned invalid action '~a' for hook '~a. Valid: ~a"
+                          result
+                          action
+                          hook-point
+                          valid-actions))
+     #f]))
 
 ;; ============================================================
 ;; Hook point names (#1148)
