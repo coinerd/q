@@ -1,0 +1,67 @@
+#lang racket/base
+
+;; util/event-codec.rkt — Bidirectional event payload codec
+;;
+;; Provides encode (payload→hash) and decode (hash→payload) for all known
+;; event payload structs. Consolidates serialization logic in one place.
+;;
+;; STABILITY: stable
+
+(require "event-payloads.rkt")
+(provide payload->hash
+         hash->payload
+         payload-type-tag)
+
+;; Forward to event-payloads.rkt (already exported there, re-exported here
+;; for codec consolidation).
+
+;; Determine the type tag of a payload (for codec dispatch).
+(define (payload-type-tag p)
+  (cond
+    [(session-start-payload? p) 'session-start]
+    [(session-end-payload? p) 'session-end]
+    [(session-switch-payload? p) 'session-switch]
+    [(tool-call-event-payload? p) 'tool-call]
+    [(session-id-payload? p) 'session-id]
+    [(error-payload? p) 'error]
+    [(input-payload? p) 'input]
+    [(gsd-mode-payload? p) 'gsd-mode]
+    [(hash? p) 'raw-hash]
+    [else 'unknown]))
+
+;; Decode a hash back into the appropriate payload struct.
+;; Returns the hash as-is if no struct type matches (passthrough).
+(define (hash->payload h)
+  (cond
+    [(not (hash? h)) h]
+    ;; Error payloads
+    [(and (hash-has-key? h 'error) (hash-has-key? h 'errorType))
+     (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
+    ;; Input payloads
+    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'message))
+     (input-payload (hash-ref h 'session-id) (hash-ref h 'message))]
+    ;; Session start
+    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'config) (hash-has-key? h 'reason))
+     (session-start-payload (hash-ref h 'session-id) (hash-ref h 'config) (hash-ref h 'reason))]
+    ;; Session end
+    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'duration))
+     (session-end-payload (hash-ref h 'session-id) (hash-ref h 'duration))]
+    ;; Session switch
+    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'operation))
+     (session-switch-payload (hash-ref h 'session-id) (hash-ref h 'operation))]
+    ;; Tool call
+    [(and (hash-has-key? h 'session-id)
+          (hash-has-key? h 'turn-id)
+          (hash-has-key? h 'tool-name)
+          (hash-has-key? h 'tool-call-id))
+     (tool-call-event-payload (hash-ref h 'session-id)
+                              (hash-ref h 'turn-id)
+                              (hash-ref h 'tool-name)
+                              (hash-ref h 'tool-call-id))]
+    ;; GSD mode
+    [(and (hash-has-key? h 'old-mode) (hash-has-key? h 'new-mode))
+     (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
+    ;; Session-id only
+    [(hash-has-key? h 'sessionId) (session-id-payload (hash-ref h 'sessionId))]
+    ;; Passthrough
+    [else h]))
