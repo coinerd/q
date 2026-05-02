@@ -7,6 +7,7 @@
 (require racket/list
          racket/string
          racket/file
+         racket/match
          (only-in "../../util/protocol-types.rkt"
                   message
                   message-id
@@ -86,11 +87,20 @@
         (values '() regular)))
   (define total (length unpinned))
   (define tier-c-size (min tier-c-count total))
-  (define tier-c (if (> tier-c-size 0) (take-right unpinned tier-c-size) '()))
-  (define remaining-after-c (if (> tier-c-size 0) (drop-right unpinned tier-c-size) unpinned))
+  (define tier-c
+    (if (> tier-c-size 0)
+        (take-right unpinned tier-c-size)
+        '()))
+  (define remaining-after-c
+    (if (> tier-c-size 0)
+        (drop-right unpinned tier-c-size)
+        unpinned))
   (define remaining-count (length remaining-after-c))
   (define tier-b-size (min tier-b-count remaining-count))
-  (define tier-b (if (> tier-b-size 0) (take-right remaining-after-c tier-b-size) '()))
+  (define tier-b
+    (if (> tier-b-size 0)
+        (take-right remaining-after-c tier-b-size)
+        '()))
   (tiered-context (append sys-protected pinned-user compaction-summaries ws-messages) tier-b tier-c))
 
 (define (build-tiered-context-with-hooks messages
@@ -105,10 +115,14 @@
                           #:tier-c-count tier-c-count
                           #:working-set-messages ws-messages))
   (define payload
-    (tiered-context->payload base-context max-tokens
-                             (hasheq 'tier-b-count tier-b-count
-                                     'tier-c-count tier-c-count
-                                     'total-messages (length messages))))
+    (tiered-context->payload base-context
+                             max-tokens
+                             (hasheq 'tier-b-count
+                                     tier-b-count
+                                     'tier-c-count
+                                     tier-c-count
+                                     'total-messages
+                                     (length messages))))
   (if hook-dispatcher
       (let ([result (hook-dispatcher 'context-assembly payload)])
         (case (hook-result-action result)
@@ -130,9 +144,9 @@
 ;; Token-aware context assembly
 (define (build-session-context/tokens idx #:max-tokens max-tokens)
   (define messages (build-session-context-from-idx idx))
-  (cond
-    [(null? messages) (values '() 0)]
-    [else
+  (match messages
+    ['() (values '() 0)]
+    [_
      (define total (for/sum ([m (in-list messages)]) (estimate-message-tokens m)))
      (cond
        [(<= total max-tokens) (values messages total)]
@@ -143,19 +157,17 @@
 
 ;; Import session index for tree walk
 (require (only-in "../session-index.rkt" active-leaf get-branch))
-(require (only-in "../../util/protocol-types.rkt"
-                  compaction-summary-entry?
-                  message-parent-id))
+(require (only-in "../../util/protocol-types.rkt" compaction-summary-entry? message-parent-id))
 
 (define (build-session-context-from-idx idx)
   (define leaf (active-leaf idx))
-  (cond
-    [(not leaf) '()]
-    [else
+  (match leaf
+    [#f '()]
+    [_
      (define path (get-branch idx (message-id leaf)))
-     (cond
-       [(not path) '()]
-       [else (assemble-context path)])]))
+     (match path
+       [#f '()]
+       [_ (assemble-context path)])]))
 
 (define (assemble-context path)
   (define-values (pre post) (split-at-compaction path))
@@ -168,56 +180,61 @@
                [i (in-naturals)]
                #:when (compaction-summary-entry? entry))
       i))
-  (cond
-    [(not idx) (values path #f)]
-    [else (define-values (pre post) (split-at path idx)) (values pre post)]))
+  (match idx
+    [#f (values path #f)]
+    [_
+     (define-values (pre post) (split-at path idx))
+     (values pre post)]))
 
 (define (entry->context-message entry)
   (define kind (message-kind entry))
-  (cond
-    [(memq kind '(message)) entry]
-    [(eq? kind 'compaction-summary)
-     (struct-copy message entry [role 'user])]
-    [(eq? kind 'branch-summary)
-     (struct-copy message entry [role 'user])]
-    [(memq kind '(session-info model-change thinking-level-change)) #f]
-    [(memq kind '(tool-result bash-execution)) entry]
-    [(eq? kind 'system-instruction) entry]
-    [(eq? kind 'custom-message) entry]
-    [else entry]))
+  (match kind
+    [(or 'message) entry]
+    ['compaction-summary (struct-copy message entry [role 'user])]
+    ['branch-summary (struct-copy message entry [role 'user])]
+    [(or 'session-info 'model-change 'thinking-level-change) #f]
+    [(or 'tool-result 'bash-execution) entry]
+    ['system-instruction entry]
+    ['custom-message entry]
+    [_ entry]))
 
 ;; AGENTS.md context discovery
 (define (load-agents-context working-directory)
   (define paths (discover-agents-files working-directory))
-  (cond
-    [(null? paths) ""]
-    [else
+  (match paths
+    ['() ""]
+    [_
      (define contexts
-       (for/list ([p (in-list paths)] #:when (file-exists? p))
+       (for/list ([p (in-list paths)]
+                  #:when (file-exists? p))
          (define content (file->string p))
          (parse-agent-file content)))
-     (cond
-       [(null? contexts) ""]
-       [else (agent-context-instructions (merge-agent-contexts contexts))])]))
+     (match contexts
+       ['() ""]
+       [_ (agent-context-instructions (merge-agent-contexts contexts))])]))
 
 (define (build-system-preamble working-directory)
   (define paths (discover-agents-files working-directory))
-  (cond
-    [(null? paths) ""]
-    [else
+  (match paths
+    ['() ""]
+    [_
      (define contexts
-       (for/list ([p (in-list paths)] #:when (file-exists? p))
+       (for/list ([p (in-list paths)]
+                  #:when (file-exists? p))
          (define content (file->string p))
          (parse-agent-file content)))
-     (cond
-       [(null? contexts) ""]
-       [else
+     (match contexts
+       ['() ""]
+       [_
         (define merged (merge-agent-contexts contexts))
         (define name (agent-context-name merged))
         (define desc (agent-context-description merged))
         (define inst (agent-context-instructions merged))
         (define parts
           (filter (lambda (s) (not (string=? s "")))
-                  (list (if (string=? name "Unnamed Agent") "" (format "# ~a" name))
-                        desc inst)))
+                  (list (if (string=? name "Unnamed Agent")
+                            ""
+                            (format "# ~a" name))
+                        desc
+                        inst)))
         (string-join parts "\n\n")])]))

@@ -11,6 +11,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
+         racket/match
          racket/string
          (only-in "model-defaults.rkt" GEMINI-DEFAULT-MODEL GEMINI-DEFAULT-BASE-URL)
          racket/port
@@ -91,11 +92,11 @@
       (define content (hash-ref msg 'content ""))
       ;; Map roles
       (define gemini-role
-        (cond
-          [(equal? role "assistant") "model"]
-          [(equal? role "system") "user"]
-          [(equal? role "tool") "user"]
-          [else role]))
+        (match role
+          ["assistant" "model"]
+          ["system" "user"]
+          ["tool" "user"]
+          [_ role]))
       ;; Build parts based on content type and role
       (define parts
         (cond
@@ -116,13 +117,13 @@
           [(and (equal? role "assistant") (list? content))
            (for/list ([block (in-list content)])
              (define btype (hash-ref block 'type "text"))
-             (cond
-               [(equal? btype "text") (hasheq 'text (hash-ref block 'text ""))]
-               [(equal? btype "tool-call")
+             (match btype
+               ["text" (hasheq 'text (hash-ref block 'text ""))]
+               ["tool-call"
                 (hasheq
                  'functionCall
                  (hasheq 'name (hash-ref block 'name "") 'args (hash-ref block 'arguments (hasheq))))]
-               [else block]))]
+               [_ block]))]
           ;; Simple string content: text part
           [(string? content) (list (hasheq 'text content))]
           ;; Fallback
@@ -234,10 +235,10 @@
   (define filtered-reason
     (and candidate
          (let ([fr (hash-ref candidate 'finishReason "")])
-           (cond
-             [(equal? fr "SAFETY") "Content filtered for safety"]
-             [(equal? fr "RECITATION") "Content filtered for recitation"]
-             [else #f]))))
+           (match fr
+             ["SAFETY" "Content filtered for safety"]
+             ["RECITATION" "Content filtered for recitation"]
+             [_ #f]))))
   (define final-content
     (if (and filtered-reason (null? content))
         (list (hasheq 'type "text" 'text (format "[SYS] ⚠ ~a" filtered-reason)))

@@ -6,7 +6,8 @@
 ;; Provides summary cache (LRU), catalog entry generation, context summary
 ;; prompting/generation, and related helpers. Extracted from context-assembly.rkt.
 
-(require racket/string
+(require racket/match
+         racket/string
          racket/list
          "../util/protocol-types.rkt"
          "../llm/token-budget.rkt"
@@ -217,15 +218,14 @@
 ;; generate-context-summary: Produce a text summary of entries using LLM or fallback.
 ;; Returns a context-summary struct or #f if no entries.
 (define (generate-context-summary entries provider model-name #:cache [cache #f])
-  (cond
-    [(null? entries) #f]
-    [else
+  (match entries
+    ['() #f]
+    [_
      (define from-id (message-id (first entries)))
      (define to-id (message-id (last entries)))
      (define cached (and cache (summary-cache-lookup cache from-id to-id)))
-     (cond
-       [cached (context-summary from-id to-id cached (length entries))]
-       [else
+     (match cached
+       [#f
         (define summary-text
           (cond
             [(and provider model-name (provider? provider))
@@ -237,7 +237,8 @@
           (if (and provider model-name (provider? provider))
               (length entries)
               (simple-summary-count entries)))
-        (context-summary from-id to-id summary-text actual-count)])]))
+        (context-summary from-id to-id summary-text actual-count)]
+       [_ (context-summary from-id to-id cached (length entries))])]))
 
 (define (simple-summary-text entries)
   (string-append "## Progress\n### Done\n"
