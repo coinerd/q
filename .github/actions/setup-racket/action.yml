@@ -4,67 +4,14 @@ inputs:
   racket-version:
     description: 'Racket version to install'
     required: false
-    default: '8.12'
+    default: '8.10'
 runs:
   using: 'composite'
   steps:
-    - name: Cache Racket installation
-      id: cache-racket
-      uses: actions/cache@v5
+    - name: Install Racket
+      uses: DeLaGuardo/setup-racket@v1
       with:
-        path: |
-          ~/racket-install
-        key: racket-${{ inputs.racket-version }}-${{ runner.os }}
-
-    - name: Install Racket (Linux)
-      if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        BASE_URL="https://download.racket-lang.org/installers/${{ inputs.racket-version }}"
-        FILE="racket-${{ inputs.racket-version }}-x86_64-linux-cs.sh"
-        echo "Downloading Racket ${{ inputs.racket-version }}..."
-        # Try with retries and timeout to handle mirror instability
-        for attempt in 1 2 3; do
-          echo "  Attempt $attempt..."
-          if curl -L --connect-timeout 30 --max-time 300 -o /tmp/racket.sh "$BASE_URL/$FILE"; then
-            echo "  Download succeeded ($(stat -c%s /tmp/racket.sh) bytes)"
-            break
-          fi
-          echo "  Download failed, waiting 10s..."
-          sleep 10
-        done
-        if [ ! -s /tmp/racket.sh ]; then
-          echo "ERROR: Failed to download Racket after 3 attempts"
-          exit 1
-        fi
-        sh /tmp/racket.sh --in-place --dest $HOME/racket-install
-        ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
-
-    - name: Install Racket (macOS)
-      if: runner.os == 'macOS' && steps.cache-racket.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        curl -L https://download.racket-lang.org/installers/${{ inputs.racket-version }}/racket-${{ inputs.racket-version }}-aarch64-macosx-cs.dmg -o /tmp/racket.dmg
-        hdiutil attach -nobrowse /tmp/racket.dmg
-        MOUNT=$(ls -d /Volumes/Racket* | head -1)
-        echo "Mounted at: $MOUNT"
-        RACKET_DIR="$MOUNT/Racket v${{ inputs.racket-version }}"
-        if [ ! -d "$RACKET_DIR/bin" ]; then
-          echo "ERROR: $RACKET_DIR/bin not found"
-          ls -la "$MOUNT"
-          exit 1
-        fi
-        echo "Installing from: $RACKET_DIR"
-        cp -R "$RACKET_DIR" $HOME/racket-install
-        hdiutil detach "$MOUNT"
-
-    - name: Add Racket to PATH
-      shell: bash
-      run: echo "$HOME/racket-install/bin" >> $GITHUB_PATH
-
-    - name: Verify Racket Installation
-      shell: bash
-      run: racket --version
+        racket-version: ${{ inputs.racket-version }}
 
     - name: Clean stale compiled bytecode
       shell: bash
