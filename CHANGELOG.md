@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.27.4 — 2026-05-02
+
+### Audit Remediation + CI Release (v0.27.3 findings)
+
+- **W0**: README version history restoration (43 entries de-corrupted from d9432b2),
+  streaming text test fix (correct style expectation `'()` not `'(bright-black)`),
+  selection boundary test fix (off-by-one col-end 6→7 for 7-col line).
+  TUI render tests: 88/88 (was 86/88).
+- **W1**: styled-line->ansi O(n²)→O(n) performance fix
+  (list-ref replaced with for/fold loop accumulator). No behavior change.
+
 ## v0.27.3 — 2026-05-01
 
 ### Audit Remediation (v0.27.2 findings)
