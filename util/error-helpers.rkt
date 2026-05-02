@@ -9,7 +9,8 @@
 (require racket/logging)
 (provide with-safe-fallback
          with-logged-error
-         with-telemetry)
+         with-telemetry
+)
 
 ;; with-safe-fallback — Execute body, returning DEFAULT on any exn:fail.
 ;;
