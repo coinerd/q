@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.28.8 — 2026-05-04
+
+### Extension Hardening & Hook Schema Versioning
+
+- **W0**: Add `HOOK-SCHEMA-VERSION` (1) and version-aware `validate-hook-result`
+  in `util/hook-types.rkt`. Schema version mismatch detection. 5 tests.
+- **W1**: Hook violation reporting — log extension name, invalid action, hook-point,
+  and schema version on validation failure. Downgrade to `pass`. 2 tests.
+- **W2**: Migrate GitHub handler `exn:fail?` catches to `with-error-result` macro
+  in 4 handler files (issue-ops, pr-ops, milestone-ops, tool-handlers).
+- **W3**: Version bump + release.
+
+
 ## v0.28.7 — 2026-05-04
 
 ### Event Algebra & Boundary Contracts
