@@ -17,6 +17,7 @@
 ;; Exit 0 if all in sync, 1 if drift detected (or --write applied fixes).
 
 (require racket/file
+         racket/list
          racket/port
          racket/string
          racket/path)
@@ -26,6 +27,10 @@
 ;; ---------------------------------------------------------------------------
 
 (define VERSION-PAT #rx"\"([0-9]+\\.[0-9]+\\.[0-9]+)\"")
+
+;; Guard comment that protects the Status section from accidental replacement.
+(define STATUS-GUARD
+  "<!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->")
 
 ;; Extract q-version from util/version.rkt content.
 ;; Handles both `#lang racket` and `#lang typed/racket` formats.
@@ -59,6 +64,11 @@
 ;; ---------------------------------------------------------------------------
 
 (define (sync-readme readme-content version)
+  ;; Warn if guard comment is missing
+  (unless (string-contains? readme-content STATUS-GUARD)
+    (displayln "  WARNING: README.md Status section missing guard comment!")
+    (displayln
+     "  Add: <!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->"))
   (define step1
     (regexp-replace #rx"badge/version-[0-9]+\\.[0-9]+\\.[0-9]+-blue"
                     readme-content
@@ -153,10 +163,31 @@
 ;; Main
 ;; ---------------------------------------------------------------------------
 
+;; Validate that README Status section has sufficient unique version entries.
+;; Returns #t if valid, #f otherwise.
+(define (validate-status-section readme-content)
+  (define lines (string-split readme-content "\n"))
+  (define status-versions
+    (for/list ([line (in-list lines)]
+               #:when (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line)))
+      (define m (regexp-match #rx"\\*\\*v([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)\\*\\*" line))
+      (and m (cadr m))))
+  (define unique-versions (remove-duplicates (filter (lambda (x) x) status-versions)))
+  (define n (length unique-versions))
+  (printf "README Status section: ~a unique version entries~n" n)
+  (cond
+    [(< n 10)
+     (printf "VALIDATION FAILED: Expected ≥10 unique versions, found ~a~n" n)
+     #f]
+    [else
+     (printf "VALIDATION PASSED: ~a unique versions (≥10 required)~n" n)
+     #t]))
+
 (define (main)
   (define args (vector->list (current-command-line-arguments)))
   (define write-mode? (member "--write" args))
   (define all-mode? (member "--all" args))
+  (define validate-mode? (member "--validate" args))
 
   ;; --- Read canonical version from util/version.rkt ---
   (define util-path (build-path (current-directory) "util" "version.rkt"))
@@ -171,6 +202,23 @@
   (printf "Canonical version: ~a (from util/version.rkt)~n" version)
 
   (define changes 0)
+
+  ;; --- Validate mode ---
+  (when validate-mode?
+    (define readme-path (build-path (current-directory) "README.md"))
+    (cond
+      [(not (file-exists? readme-path))
+       (displayln "ERROR: README.md not found")
+       (exit 1)]
+      [else
+       (define readme-content (file->string readme-path))
+       (define guard-ok? (string-contains? readme-content STATUS-GUARD))
+       (unless guard-ok?
+         (displayln "WARNING: Status section guard comment missing"))
+       (define versions-ok? (validate-status-section readme-content))
+       (if (and guard-ok? versions-ok?)
+           (exit 0)
+           (exit 1))]))
 
   ;; --- Sync info.rkt ---
   (define info-path (build-path (current-directory) "info.rkt"))
