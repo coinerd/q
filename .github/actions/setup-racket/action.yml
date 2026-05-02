@@ -18,7 +18,7 @@ runs:
 
     - name: Install Racket (macOS via DeLaGuardo)
       if: runner.os == 'macOS'
-      uses: DeLaGuardo/setup-racket@v1
+      uses: Bogdanp/setup-racket@v1
       with:
         racket-version: ${{ inputs.racket-version }}
 
