@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.28.9 — 2026-05-04
+## v0.28.10 — 2026-05-04
 
 ### Typed Racket Expansion
 
