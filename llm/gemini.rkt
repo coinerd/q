@@ -33,8 +33,6 @@
          gemini-parse-single-event
          ;; Internal helpers for testing
          gemini-translate-tool
-         gemini-translate-stop-reason
-         gemini-check-http-status!
          gemini-gen-tool-id
          gemini-reset-tool-id-counter!)
 
@@ -200,7 +198,7 @@
         "STOP"))
 
   ;; Translate stop reason
-  (define stop-reason (gemini-translate-stop-reason finish-reason))
+  (define stop-reason (translate-stop-reason 'gemini finish-reason))
 
   ;; Translate usage
   (define prompt-tokens (hash-ref usage-raw 'promptTokenCount 0))
@@ -387,7 +385,8 @@
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
-                              #:status-checker gemini-check-http-status!))
+                              #:status-checker
+                              (lambda (sl rb) (check-provider-status! "Gemini" sl rb))))
 
 ;; ============================================================
 ;; Provider constructor

@@ -26,8 +26,7 @@
 (provide (contract-out [make-openai-compatible-provider (-> hash? provider?)])
          ;; Request/response helpers (exported for testing)
          openai-build-request-body
-         openai-parse-response
-         check-http-status!)
+         openai-parse-response)
 
 ;; ============================================================
 ;; Request body construction
@@ -76,10 +75,7 @@
         #f))
   (define finish-reason
     (if choice
-        (let ([fr (hash-ref choice 'finish_reason "stop")])
-          (cond
-            [(string? fr) (string->symbol (string-replace fr "_" "-"))]
-            [else 'stop]))
+        (translate-stop-reason #f (hash-ref choice 'finish_reason "stop"))
         'stop))
 
   ;; Build content list from response
@@ -130,7 +126,8 @@
                               headers
                               (jsexpr->bytes body)
                               #:timeout timeout-secs
-                              #:status-checker check-http-status!))
+                              #:status-checker
+                              (lambda (sl rb) (check-provider-status! "OpenAI" sl rb))))
 
 ;; ============================================================
 ;; HTTP status check helper
@@ -157,43 +154,6 @@
      (define msg (hash-ref jsexpr 'message))
      (if (string? msg) msg #f)]
     [else #f]))
-
-(define (check-http-status! status-line response-body)
-  ;; status-line from http-sendrecv is a byte string — convert first
-  (define status-str
-    (if (bytes? status-line)
-        (bytes->string/utf-8 status-line)
-        status-line))
-  (define response-bytes
-    (if (bytes? response-body)
-        response-body
-        (string->bytes/utf-8 response-body)))
-  ;; Extract numeric status code from "HTTP/1.1 200 OK" or similar
-  (define status-code (extract-status-code status-line))
-  (cond
-    ;; Redirects — http-sendrecv does not follow them automatically
-    [(and (>= status-code 300) (< status-code 400))
-     (raise-http-error!
-      (format
-       "API request redirected (~a: ~a). The server returned a redirect — check your base-url in config.json."
-       status-code
-       status-str))]
-    ;; Client/server errors
-    [(= status-code 429)
-     (define error-text-429
-       (with-handlers ([exn:fail? (λ (_)
-                                    (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
-         (define jsexpr (bytes->jsexpr response-bytes))
-         (or (extract-error-message jsexpr) (format "~a" jsexpr))))
-     (raise-http-error! (format "API rate limited (429). Please wait and try again.\n~a"
-                                error-text-429))]
-    [(http-error? status-code)
-     (define error-text
-       (with-handlers ([exn:fail? (λ (_)
-                                    (format "<binary body ~a bytes>" (bytes-length response-bytes)))])
-         (define jsexpr (bytes->jsexpr response-bytes))
-         (or (extract-error-message jsexpr) (format "~a" jsexpr))))
-     (raise-http-error! (format "API request failed (~a): ~a" status-code error-text))]))
 
 ;; ============================================================
 ;; Provider constructor
@@ -285,7 +245,7 @@
       ;; Error/redirect — read full body, then raise
       (define err-body (read-response-body/timeout response-port))
       (close-input-port response-port)
-      (check-http-status! status-line err-body))
+      (check-provider-status! "OpenAI" status-line err-body))
     ;; Status OK — return an incremental generator that reads SSE lines
     ;; from the response port, yielding stream-chunk values as they arrive.
     ;; v0.15.1 Wave 2: Increased stream timeout scaling from /4 to /2.

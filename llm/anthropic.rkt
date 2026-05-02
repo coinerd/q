@@ -31,9 +31,7 @@
          anthropic-parse-stream-chunks
          anthropic-parse-single-event
          ;; Internal helpers for testing
-         anthropic-translate-tool
-         anthropic-translate-stop-reason
-         anthropic-check-http-status!)
+         anthropic-translate-tool)
 
 ;; ============================================================
 ;; Constants
@@ -148,7 +146,7 @@
   (define content-blocks (hash-ref raw 'content '()))
 
   ;; Translate stop reason
-  (define stop-reason (anthropic-translate-stop-reason stop-reason-raw))
+  (define stop-reason (translate-stop-reason 'anthropic stop-reason-raw))
 
   ;; Translate usage: input_tokens → prompt_tokens, output_tokens → completion_tokens
   (define usage
@@ -302,12 +300,13 @@
       [(= status-code 429)
        (define retry-hint
          (with-logged-catch ""
-           (lambda ()
-             (define err-json (string->jsexpr error-body))
-             (define retry-ms (hash-ref (hash-ref err-json 'error (hash)) 'retry_after_ms #f))
-             (if retry-ms
-                 (format " Retry after ~a seconds." (quotient retry-ms 1000))
-                 " Please wait and try again."))))
+                            (lambda ()
+                              (define err-json (string->jsexpr error-body))
+                              (define retry-ms
+                                (hash-ref (hash-ref err-json 'error (hash)) 'retry_after_ms #f))
+                              (if retry-ms
+                                  (format " Retry after ~a seconds." (quotient retry-ms 1000))
+                                  " Please wait and try again."))))
        (raise-http-error! (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body)
                           status-code)]
       [(>= status-code 500)
@@ -330,7 +329,8 @@
   (make-provider-http-request url-str
                               headers
                               (jsexpr->bytes body)
-                              #:status-checker anthropic-check-http-status!))
+                              #:status-checker
+                              (lambda (sl rb) (check-provider-status! "Anthropic" sl rb))))
 
 ;; ============================================================
 ;; Provider constructor
