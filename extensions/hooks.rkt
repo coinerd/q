@@ -128,8 +128,14 @@
         (let ([valid? (validate-hook-result hook-point raw-result)])
           (if valid?
               raw-result
-              ;; M1: Invalid action — downgrade to 'pass instead of propagating
-              (hook-pass payload)))
+              ;; E2: Invalid action — log violation with extension-error metadata
+              (begin
+                (log-warning "Hook violation: ~a returned invalid action '~a' for ~a (schema v~a)"
+                             ext-name
+                             (hook-result-action raw-result)
+                             hook-point
+                             (hook-schema-version))
+                (hook-pass payload))))
         (begin
           (log-warning "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
                        ext-name
