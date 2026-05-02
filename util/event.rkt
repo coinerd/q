@@ -22,14 +22,15 @@
 ;; Event envelope struct
 ;; ============================================================
 
-(struct event ([version : Integer]
-               [ev : Any]
-               [time : Integer]
-               [session-id : String]
-               [turn-id : (Option String)]
-               [payload : Any]) #:transparent)
+(struct event
+        ([version : Integer] [ev : Any]
+                             [time : Real]
+                             [session-id : (Option String)]
+                             [turn-id : (Option String)]
+                             [payload : Any])
+  #:transparent)
 
-(: make-event (->* (Any Integer String (Option String) Any) (Integer) event))
+(: make-event (->* (Any Real (Option String) (Option String) Any) (Integer) event))
 (define (make-event ev time session-id turn-id payload [version 1])
   (event version ev time session-id turn-id payload))
 
@@ -60,7 +61,10 @@
 ;; Deserialize jsexpr (hash) to event.
 (: jsexpr->event : (-> (HashTable Symbol Any) event))
 (define (jsexpr->event h)
-  (define ver : Integer (cast (hash-ref h 'version (lambda () 1)) Integer))
+  (define ver
+    :
+    Integer
+    (cast (hash-ref h 'version (lambda () 1)) Integer))
   (when (> ver CURRENT-EVENT-VERSION)
     (log-warning "jsexpr->event: event version ~a exceeds current ~a (event: ~a)"
                  ver
@@ -68,7 +72,7 @@
                  (cast (hash-ref h (quote event) (lambda () "<unknown>")) String)))
   (event ver
          (hash-ref h (quote event))
-         (cast (hash-ref h (quote time)) Integer)
-         (cast (hash-ref h (quote sessionId)) String)
+         (cast (hash-ref h (quote time)) Real)
+         (cast (hash-ref h (quote sessionId)) (Option String))
          (cast (hash-ref h (quote turnId) (lambda () #f)) (Option String))
          (hash-ref h (quote payload))))
