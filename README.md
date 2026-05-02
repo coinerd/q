@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.28.2-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.28.3-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.28.2
+racket main.rkt --version  # q version 0.28.3
 raco test tests/           # run the full test suite
 ```
 
@@ -334,7 +334,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 ## Status
 
-**v0.28.2** — Audit Remediation. TUI core rendering fixes (highlight arity, wrapping, scroll, ANSI, CJK word-breaking), context trace done event with memo-hits, overflow detection consolidation. 4 issues across 2 waves.
+**v0.28.3** — Audit Remediation. TUI core rendering fixes (highlight arity, wrapping, scroll, ANSI, CJK word-breaking), context trace done event with memo-hits, overflow detection consolidation. 4 issues across 2 waves.
 
 **v0.28.1** — Audit Tooling Quality & Test Coverage. Audit script fixes (safe reads, skip-lists, help flag, no double scan), test expansion (+19 tests), with-handlers noise fix, tooling docs, decomposition fitness tests. 3 issues across 3 waves.
 
