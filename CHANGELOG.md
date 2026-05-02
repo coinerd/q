@@ -1,6 +1,19 @@
 # Changelog
 
-## v0.28.5 — 2026-05-04
+## v0.28.6 — 2026-05-04
+
+### Error Taxonomy & Effect Policy Completion
+
+- **W0**: Add `ui-error`, `extension-error`, `policy-error` domain types to `util/errors.rkt`.
+  3 new structs inheriting from `q-error` with domain-specific fields. 5 new tests (13 total).
+- **W1**: Add `with-telemetry` effect policy wrapper to `util/error-helpers.rkt`. Times
+  operations, logs `[telemetry]` output. Instrument `compact-and-persist!` and
+  `dispatch-iteration`. 4 new tests.
+- **W2**: Audit 32 `with-handlers void` sites. Migrate 4 non-cleanup files to domain helpers
+  (`with-logged-error`, `with-safe-fallback`). LLM port-close and TUI cleanup left as-is.
+
+
+## v0.28.5 — 2026-05-03
 
 ### Cross-Cutting: Contracts, Boundaries, Polish
 
