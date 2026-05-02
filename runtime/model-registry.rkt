@@ -126,10 +126,10 @@
 ;;   - hash: (hasheq "id" "gpt-4o" "name" "...") → "gpt-4o"
 ;; Returns #f if invalid
 (define (extract-model-id m)
-  (cond
-    [(string? m) m]
-    [(hash? m) (flex-ref m "id" #f)]
-    [else #f]))
+  (match m
+    [(? string?) m]
+    [(? hash?) (flex-ref m "id" #f)]
+    [_ #f]))
 
 ;; Check if model-id is in models-list (handles both string and object styles)
 (define (model-in-list? model-id models-list)
@@ -207,9 +207,9 @@
 
 (define (resolve-model registry model-name)
   ;; If model-name is #f, resolve default
-  (cond
-    [(not model-name) (resolve-default registry)]
-    [else
+  (match model-name
+    [#f (resolve-default registry)]
+    [_
      ;; Check for provider prefix: "provider/model"
      (define parts (string-split model-name "/" #:trim? #f))
      (cond
@@ -223,16 +223,16 @@
 
 (define (resolve-default registry)
   (define dm (model-registry-default-model registry))
-  (cond
-    [(not dm) #f]
-    [else (resolve-exact registry dm)]))
+  (match dm
+    [#f #f]
+    [_ (resolve-exact registry dm)]))
 
 (define (resolve-exact registry model-name)
   ;; Look up in index — returns list of model-entries
   (define entries (hash-ref (model-registry-index registry) model-name '()))
-  (cond
-    [(null? entries) #f]
-    [else
+  (match entries
+    ['() #f]
+    [_
      ;; Take the first entry (could be ambiguous if shared across providers)
      (define entry (car entries))
      (entry->resolution entry)]))
@@ -240,9 +240,9 @@
 (define (resolve-with-provider registry provider-name model-name)
   ;; Find the specific provider's model
   (define prov-cfg (hash-ref (model-registry-providers registry) provider-name #f))
-  (cond
-    [(not prov-cfg) #f]
-    [else
+  (match prov-cfg
+    [#f #f]
+    [_
      (define models-list (flex-ref prov-cfg 'models '()))
      (if (model-in-list? model-name models-list)
          (model-resolution model-name provider-name (safe-base-url prov-cfg) prov-cfg)
@@ -260,13 +260,13 @@
 
 (define (resolve-model-by-provider registry provider-name)
   (define prov-cfg (hash-ref (model-registry-providers registry) provider-name #f))
-  (cond
-    [(not prov-cfg) #f]
-    [else
+  (match prov-cfg
+    [#f #f]
+    [_
      (define dm (flex-ref prov-cfg 'default-model #f))
-     (cond
-       [(not dm) #f]
-       [else (model-resolution dm provider-name (safe-base-url prov-cfg) prov-cfg)])]))
+     (match dm
+       [#f #f]
+       [_ (model-resolution dm provider-name (safe-base-url prov-cfg) prov-cfg)])]))
 
 ;; ============================================================
 ;; Listing

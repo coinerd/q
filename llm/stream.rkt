@@ -85,8 +85,8 @@
               (with-handlers ([exn:fail? (lambda (e) (channel-put ch (cons 'exn e)))])
                 (channel-put ch (cons 'val (thunk)))))))
   (define result (sync/timeout timeout-secs ch))
-  (cond
-    [(eq? result #f)
+  (match result
+    [#f
      (kill-thread th)
      (with-handlers ([exn:fail? (lambda (e)
                                   (log-warning (format "llm/stream: cleanup error: ~a"
@@ -94,12 +94,12 @@
        (cleanup-thunk)) ; #454: close ports
      (raise (exn:fail:network:timeout (format "HTTP request timeout (~a seconds)" timeout-secs)
                                       (current-continuation-marks)))]
-    [else
+    [_
      (define tag (car result))
      (define payload (cdr result))
-     (cond
-       [(eq? tag 'exn) (raise payload)]
-       [else payload])]))
+     (match tag
+       ['exn (raise payload)]
+       [_ payload])]))
 
 ;; Exception type for network read timeouts.
 (struct exn:fail:network:timeout exn:fail () #:transparent)
@@ -112,9 +112,9 @@
 ;; Like read-line but with a timeout. Returns #f on timeout (caller should raise).
 (define (read-line/timeout port #:timeout [timeout-secs http-read-timeout-default])
   (define result (sync/timeout timeout-secs (read-line-evt port 'any)))
-  (cond
-    [(eq? result #f) #f] ; timeout
-    [else result])) ; string or eof
+  (match result
+    [#f #f] ; timeout
+    [_ result])) ; string or eof
 
 ;; read-response-body/timeout : input-port? [#:timeout seconds] -> bytes?
 ;; Like read-response-body but with a per-chunk read timeout.

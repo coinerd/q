@@ -11,6 +11,7 @@
 
 (require racket/contract
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
+         racket/match
          racket/string
          racket/generator
          racket/port
@@ -80,9 +81,9 @@
 
   ;; Build content list from response
   (define content
-    (cond
-      [(not message) '()]
-      [else
+    (match message
+      [#f '()]
+      [_
        (define text-content (hash-ref message 'content #f))
        (define tool-calls (hash-ref message 'tool_calls #f))
        ;; Text content
@@ -262,12 +263,12 @@
     (generator ()
                (let loop ()
                  (define chunk (gen))
-                 (cond
-                   [(not chunk)
+                 (match chunk
+                   [#f
                     ;; Stream done — close port and yield final #f
                     (close-input-port response-port)
                     (yield #f)]
-                   [else
+                   [_
                     (yield chunk)
                     (loop)]))))
 

@@ -10,6 +10,7 @@
 ;; SSE parsing delegates to llm/stream.rkt.
 
 (require racket/contract
+         racket/match
          racket/string
          (only-in "model-defaults.rkt" ANTHROPIC-DEFAULT-MODEL ANTHROPIC-DEFAULT-BASE-URL)
          racket/port
@@ -82,9 +83,9 @@
                  'content
                  (for/list ([block (in-list content)])
                    (define btype (hash-ref block 'type "text"))
-                   (cond
-                     [(equal? btype "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
-                     [(equal? btype "tool-call")
+                   (match btype
+                     ["text" (hasheq 'type "text" 'text (hash-ref block 'text ""))]
+                     ["tool-call"
                       (hasheq 'type
                               "tool_use"
                               'id
@@ -93,7 +94,7 @@
                               (hash-ref block 'name "")
                               'input
                               (hash-ref block 'arguments (hasheq)))]
-                     [else block])))]
+                     [_ block])))]
         ;; Simple string content: wrap in text block
         [(string? content) (hasheq 'role role 'content (list (hasheq 'type "text" 'text content)))]
         ;; Fallback: pass through
@@ -161,9 +162,9 @@
   (define content
     (for/list ([block (in-list content-blocks)])
       (define type (hash-ref block 'type "text"))
-      (cond
-        [(equal? type "text") (hasheq 'type "text" 'text (hash-ref block 'text ""))]
-        [(equal? type "tool_use")
+      (match type
+        ["text" (hasheq 'type "text" 'text (hash-ref block 'text ""))]
+        ["tool_use"
          (hasheq 'type
                  "tool-call"
                  'id
@@ -172,7 +173,7 @@
                  (hash-ref block 'name "")
                  'arguments
                  (hash-ref block 'input (hasheq)))]
-        [else block])))
+        [_ block])))
 
   (make-model-response content usage model-name stop-reason))
 
@@ -210,16 +211,16 @@
 (define (anthropic-parse-single-event event tool-id-box tool-name-box tool-index-box)
   (define type (hash-ref event 'type #f))
   (define results '())
-  (cond
+  (match type
     ;; Text delta
-    [(equal? type "content_block_delta")
+    ["content_block_delta"
      (define delta (hash-ref event 'delta (hasheq)))
      (define delta-type (hash-ref delta 'type #f))
-     (cond
-       [(equal? delta-type "text_delta")
+     (match delta-type
+       ["text_delta"
         (define text (hash-ref delta 'text ""))
         (set! results (cons (make-stream-chunk text #f #f #f) results))]
-       [(equal? delta-type "input_json_delta")
+       ["input_json_delta"
         ;; Partial JSON for tool input — emit as tool-call delta
         (define partial-json (hash-ref delta 'partial_json ""))
         (set! results
@@ -234,10 +235,10 @@
                      #f
                      #f)
                     results))]
-       [else (void)])]
+       [_ (void)])]
 
     ;; Tool use block starts
-    [(equal? type "content_block_start")
+    ["content_block_start"
      (define content-block (hash-ref event 'content_block (hasheq)))
      (define cb-type (hash-ref content-block 'type #f))
      (define idx (hash-ref event 'index 0))
@@ -247,7 +248,7 @@
        (set-box! tool-index-box idx))]
 
     ;; Message delta: usage + stop reason → done chunk
-    [(equal? type "message_delta")
+    ["message_delta"
      (define delta (hash-ref event 'delta (hasheq)))
      (define usage-raw (hash-ref event 'usage (hasheq)))
      (define stop-reason (hash-ref delta 'stop_reason #f))
@@ -256,14 +257,14 @@
      (set! results (cons (make-stream-chunk #f #f usage #t) results))]
 
     ;; message_start: extract initial usage
-    [(equal? type "message_start")
+    ["message_start"
      (define message (hash-ref event 'message (hasheq)))
      (define usage-raw (hash-ref message 'usage (hasheq)))
      (define in-tokens (hash-ref usage-raw 'input_tokens 0))
      (when (> in-tokens 0)
        (set! results (cons (make-stream-chunk #f #f (hasheq 'prompt_tokens in-tokens) #f) results)))]
 
-    [else (void)])
+    [_ (void)])
   (reverse results))
 
 ;; ============================================================
