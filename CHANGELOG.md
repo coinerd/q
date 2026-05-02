@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.28.11 — 2026-05-05
+
+### Audit Remediation
+
+- **W0**: Fix TR type annotations — `time: Integer→Real` in `util/event.rkt`,
+  `session-id: String→(Option String)`. Restore 44 corrupted README version entries.
+- **W1**: Add `[telemetry]` logging to 4 LLM stream providers (openai, anthropic,
+  gemini, azure). Add `__type` tag to event codec for reliable round-trip decode.
+  6 new codec tests with backward-compatible heuristic fallback.
+- **W2**: Add `current-hook-violation-callback` parameter for structured violation
+  reporting. Extract `with-error-result` macro from 3 GitHub handler files to
+  shared `extensions/github/helpers.rkt`. 4 new violation callback tests.
+- **W3**: Update ADR 0014 with complete TR module list + lessons learned. Fix
+  metrics-report to exclude test/script files from source counts. Version bump.
+
 ## v0.28.10 — 2026-05-04
 
 ### Typed Racket Expansion
