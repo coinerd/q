@@ -102,6 +102,7 @@
 ;; ============================================================
 
 (define (azure-stream base-url api-key api-version req model-name)
+  (define _stream-t0 (current-inexact-milliseconds))
   (define body (openai-build-request-body req #:stream? #t))
   (define url-str
     (string-append (string-trim base-url "/") "/chat/completions?api-version=" api-version))
@@ -114,6 +115,8 @@
   (define headers (list (format "api-key: ~a" api-key) "Content-Type: application/json"))
   (define body-bytes (jsexpr->bytes body))
   (define response-port-box (box #f))
+  (log-info (format "[telemetry] azure-stream setup completed in ~a ms"
+                    (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
   (dynamic-wind
    (lambda () (void))
    (lambda ()

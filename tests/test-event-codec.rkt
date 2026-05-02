@@ -2,7 +2,24 @@
 
 (require rackunit
          "../util/event-codec.rkt"
-         "../util/event-payloads.rkt")
+         (only-in "../util/event-payloads.rkt"
+                  session-start-payload
+                  session-start-payload?
+                  error-payload
+                  error-payload?
+                  error-payload-error
+                  error-payload-error-type
+                  input-payload
+                  input-payload?
+                  input-payload-session-id
+                  input-payload-message
+                  gsd-mode-payload
+                  gsd-mode-payload?
+                  gsd-mode-payload-old-mode
+                  gsd-mode-payload-new-mode
+                  session-id-payload
+                  session-id-payload?
+                  session-id-payload-session-id))
 
 ;; payload-type-tag tests
 (test-case "payload-type-tag identifies session-start"
@@ -63,3 +80,38 @@
   (check-true (gsd-mode-payload? decoded))
   (check-equal? (gsd-mode-payload-old-mode decoded) 'inbox)
   (check-equal? (gsd-mode-payload-new-mode decoded) 'done))
+
+;; v0.28.11: Type-tagged round-trip tests
+(test-case "encode includes __type tag"
+  (define encoded (payload->hash (error-payload "fail" 'timeout)))
+  (check-equal? (hash-ref encoded '__type) 'error))
+
+(test-case "type-tagged decode for input-payload"
+  (define h (hasheq '__type 'input 'session-id "s1" 'message "hi"))
+  (define p (hash->payload h))
+  (check-true (input-payload? p))
+  (check-equal? (input-payload-session-id p) "s1"))
+
+(test-case "type-tagged decode for session-start"
+  (define h (hasheq '__type 'session-start 'session-id "s1" 'config '() 'reason 'manual))
+  (define p (hash->payload h))
+  (check-true (session-start-payload? p)))
+
+(test-case "type-tagged decode falls through for unknown __type"
+  (define h (hasheq '__type 'bogus 'data 42))
+  (check-equal? (hash->payload h) h))
+
+(test-case "legacy heuristic still works without __type"
+  (define h (hasheq 'error "oops" 'errorType 'runtime))
+  (define p (hash->payload h))
+  (check-true (error-payload? p))
+  (check-equal? (error-payload-error p) "oops"))
+
+(test-case "full round-trip with __type preserves data"
+  (define orig (input-payload "sess42" "hello world"))
+  (define encoded (payload->hash orig))
+  (check-equal? (hash-ref encoded '__type) 'input)
+  (define decoded (hash->payload encoded))
+  (check-true (input-payload? decoded))
+  (check-equal? (input-payload-session-id decoded) "sess42")
+  (check-equal? (input-payload-message decoded) "hello world"))

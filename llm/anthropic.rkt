@@ -303,6 +303,7 @@
 
   ;; W10.1 (Q-19): dynamic-wind ensures response port cleanup on timeout/exception
   (define (stream req)
+    (define _stream-t0 (current-inexact-milliseconds))
     (define merged-req (ensure-model-setting req default-model))
     (define body (anthropic-build-request-body merged-req #:stream? #t))
     (define url-str (string-append (string-trim base-url "/") "/v1/messages"))
@@ -345,6 +346,8 @@
        (define current-tool-id (box #f))
        (define current-tool-name (box #f))
        (define current-tool-index (box 0))
+       (log-info (format "[telemetry] anthropic-stream setup completed in ~a ms"
+                         (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
        (generator ()
                   (let loop ([first-read? #t])
                     (define timeout-secs

@@ -188,6 +188,7 @@
     (openai-parse-response raw))
 
   (define (stream req)
+    (define _stream-t0 (current-inexact-milliseconds))
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model #:stream? #t))
     (define url-str (string-append (string-trim base-url "/") "/chat/completions"))
@@ -260,6 +261,8 @@
     ;; Simple wrapper: yield chunks until done, then close port.
     ;; No dynamic-wind — it fires before/after on every yield which
     ;; causes the port to be closed between yields.
+    (log-info (format "[telemetry] openai-stream setup completed in ~a ms"
+                      (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
     (generator ()
                (let loop ()
                  (define chunk (gen))

@@ -368,6 +368,7 @@
 
   ;; W10.1 (Q-19): dynamic-wind ensures response port cleanup on timeout/exception
   (define (stream req)
+    (define _stream-t0 (current-inexact-milliseconds))
     (define merged-req (ensure-model-setting req default-model))
     (define body (gemini-build-request-body merged-req #:stream? #t))
     (define model-name (hash-ref (model-request-settings merged-req) 'model default-model))
@@ -416,6 +417,8 @@
        (parameterize ([gemini-tool-id-counter-param 0])
          ;; Incremental SSE parsing — generator yields chunks one at a time
          (define raw-port response-port)
+         (log-info (format "[telemetry] gemini-stream setup completed in ~a ms"
+                           (real->decimal-string (- (current-inexact-milliseconds) _stream-t0) 1)))
          (generator ()
                     (let loop ([first-read? #t])
                       (define timeout-secs
