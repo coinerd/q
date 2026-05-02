@@ -10,6 +10,7 @@
          json
          "../llm/provider.rkt"
          "../llm/openai-compatible.rkt"
+         "../llm/http-helpers.rkt"
          "../llm/stream.rkt")
 
 ;; ============================================================
@@ -18,9 +19,7 @@
 
 (define-test-suite
  error-formatting-tests
- (test-case "(lambda (sl rb) (check-provider-status! "
-   OpenAI
-   " sl rb)) extracts error.message from JSON response"
+ (test-case "check-provider-status! extracts error.message from JSON response"
    (define error-json
      (jsexpr->bytes
       (hasheq 'error
@@ -30,8 +29,7 @@
                       "The messages parameter is illegal. Please check the documentation."))))
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 400 Bad Request"
-                                                                 error-json)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 400 Bad Request" error-json)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    ;; Should contain status code
@@ -41,66 +39,51 @@
    ;; Should contain the actual error message text
    (check-true (string-contains? msg "The messages parameter is illegal")
                "Message should contain the error text"))
- (test-case "(lambda (sl rb) (check-provider-status! "
-   OpenAI
-   " sl rb)) extracts top-level message field"
+ (test-case "check-provider-status! extracts top-level message field"
    (define error-json (jsexpr->bytes (hasheq 'message "Invalid API key provided")))
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 401 Unauthorized"
-                                                                 error-json)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 401 Unauthorized" error-json)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (string-contains? msg "401") "Message should contain status code")
    (check-false (string-contains? msg "#hasheq") "Message should NOT contain #hasheq")
    (check-true (string-contains? msg "Invalid API key provided")
                "Message should contain the error text"))
- (test-case "(lambda (sl rb) (check-provider-status! "
-   OpenAI
-   " sl rb)) falls back to raw body when error.message missing"
+ (test-case "check-provider-status! falls back to raw body when error.message missing"
    (define error-json (jsexpr->bytes (hasheq 'unknown_field "some value")))
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 500 Internal Server Error"
-                                                                 error-json)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 500 Internal Server Error" error-json)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (string-contains? msg "500") "Message should contain status code")
    ;; Fallback to raw jsexpr representation (but not #hasheq since it's a hash without 'error or 'message)
    (check-true (string-contains? msg "unknown_field") "Message should contain raw JSON content"))
- (test-case "(lambda (sl rb) (check-provider-status! "
-   OpenAI
-   " sl rb)) handles binary/non-JSON response"
+ (test-case "check-provider-status! handles binary/non-JSON response"
    (define binary-data #"<html>Error page</html>")
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 502 Bad Gateway"
-                                                                 binary-data)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 502 Bad Gateway" binary-data)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (string-contains? msg "502") "Message should contain status code")
    (check-true (string-contains? msg "binary body") "Message should indicate binary body"))
- (test-case "(lambda (sl rb) (check-provider-status! "
-   OpenAI
-   " sl rb)) extracts error.code when message is missing"
+ (test-case "check-provider-status! extracts error.code when message is missing"
    (define error-json (jsexpr->bytes (hasheq 'error (hasheq 'code 1234))))
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 422 Unprocessable Entity"
-                                                                 error-json)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 422 Unprocessable Entity" error-json)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (string-contains? msg "422") "Message should contain status code")
    (check-true (string-contains? msg "1234") "Message should contain error code")
    (check-false (string-contains? msg "#hasheq") "Message should NOT contain #hasheq"))
- (test-case "(lambda (sl rb) (check-provider-status! "
-   OpenAI
-   " sl rb)) handles error as string (not hash)"
+ (test-case "check-provider-status! handles error as string (not hash)"
    (define error-json (jsexpr->bytes (hasheq 'error "Something went wrong")))
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 400 Bad Request"
-                                                                 error-json)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 400 Bad Request" error-json)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (string-contains? msg "400") "Message should contain status code")
@@ -191,8 +174,7 @@
    (define error-json (jsexpr->bytes (hasheq 'error (hasheq 'message "Rate limit exceeded"))))
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 429 Too Many Requests"
-                                                                 error-json)))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 429 Too Many Requests" error-json)))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (or (string-contains? msg "wait")
@@ -203,8 +185,7 @@
  (test-case "OpenAI HTTP 429 with rate-limited message"
    (define exn
      (with-handlers ([exn:fail? identity])
-       ((lambda (sl rb) (check-provider-status! "OpenAI" sl rb)) #"HTTP/1.1 429 Too Many Requests"
-                                                                 #"Rate limited")))
+       (check-provider-status! "OpenAI" #"HTTP/1.1 429 Too Many Requests" #"Rate limited")))
    (check-pred exn? exn)
    (define msg (exn-message exn))
    (check-true (string-contains? msg "429") "Message contains status code")
