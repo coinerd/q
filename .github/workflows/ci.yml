@@ -96,11 +96,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            racket-version: '8.12'
+            racket-version: '8.10'
           - os: ubuntu-latest
             racket-version: '8.10'
           - os: macos-latest
-            racket-version: '8.12'
+            racket-version: '8.10'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
