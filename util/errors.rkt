@@ -14,9 +14,15 @@
 (provide (struct-out q-error)
          (struct-out tool-error)
          (struct-out session-error)
+         (struct-out ui-error)
+         (struct-out extension-error)
+         (struct-out policy-error)
          raise-q-error
          raise-tool-error
          raise-session-error
+         raise-ui-error
+         raise-extension-error
+         raise-policy-error
          ;; Quality macros (Q06/Q07)
          with-cleanup
          with-logged-catch)
@@ -33,6 +39,15 @@
 ;; Session lifecycle errors
 (struct session-error q-error (session-id) #:transparent)
 
+;; TUI rendering/input errors (recoverable, don't crash session)
+(struct ui-error q-error (component) #:transparent)
+
+;; Extension lifecycle/hook violation errors
+(struct extension-error q-error (extension-name hook-point) #:transparent)
+
+;; GSD policy violation errors (blocked tools, budget exceeded)
+(struct policy-error q-error (policy-name violation) #:transparent)
+
 ;; Convenience constructors
 (define (raise-q-error message [context (hash)])
   (raise (q-error message (current-continuation-marks) context)))
@@ -43,6 +58,15 @@
 (define (raise-session-error message session-id [context (hash)])
   (raise (session-error message (current-continuation-marks) context session-id)))
 
+(define (raise-ui-error message component [context (hash)])
+  (raise (ui-error message (current-continuation-marks) context component)))
+
+(define (raise-extension-error message extension-name hook-point [context (hash)])
+  (raise (extension-error message (current-continuation-marks) context extension-name hook-point)))
+
+(define (raise-policy-error message policy-name violation [context (hash)])
+  (raise (policy-error message (current-continuation-marks) context policy-name violation)))
+
 ;; ============================================================
 ;; Quality macros (Q06/Q07)
 ;; ============================================================
@@ -50,18 +74,17 @@
 ;; with-cleanup: Ensure cleanup runs regardless of success/failure.
 ;; (with-cleanup cleanup-expr body-expr ...)
 (define-syntax-rule (with-cleanup cleanup body ...)
-  (dynamic-wind
-    (lambda () (void))
-    (lambda () body ...)
-    (lambda () cleanup)))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  body ...)
+                (lambda () cleanup)))
 
 ;; with-logged-catch: Like with-handlers but logs the exception before
 ;; returning the fallback value. Prevents silent failures.
 ;; Usage: (with-logged-catch fallback thunk)
 ;; where thunk is a (lambda () ...)
 (define (with-logged-catch fallback thunk)
-  (with-handlers ([exn:fail?
-                   (lambda (e)
-                     (log-warning "with-logged-catch: caught ~a" (exn-message e))
-                     fallback)])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning "with-logged-catch: caught ~a" (exn-message e))
+                               fallback)])
     (thunk)))

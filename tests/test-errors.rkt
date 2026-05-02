@@ -66,6 +66,48 @@
       (define e
         (with-handlers ([q-error? identity])
           (raise-q-error "t" (hasheq))))
-      (check-not-exn (lambda () (format "~a" e))))))
+      (check-not-exn (lambda () (format "~a" e))))
+
+    ;; ui-error has component
+    (test-case "ui-error has component"
+      (define e
+        (with-handlers ([ui-error? identity])
+          (raise-ui-error "render failed" "status-bar")))
+      (check-equal? (exn-message e) "render failed")
+      (check-equal? (ui-error-component e) "status-bar"))
+
+    ;; extension-error has extension-name and hook-point
+    (test-case "extension-error has extension-name and hook-point"
+      (define e
+        (with-handlers ([extension-error? identity])
+          (raise-extension-error "hook crashed" "github" "pre-tool-call")))
+      (check-equal? (exn-message e) "hook crashed")
+      (check-equal? (extension-error-extension-name e) "github")
+      (check-equal? (extension-error-hook-point e) "pre-tool-call"))
+
+    ;; policy-error has policy-name and violation
+    (test-case "policy-error has policy-name and violation"
+      (define e
+        (with-handlers ([policy-error? identity])
+          (raise-policy-error "budget exceeded" "tool-budget" "max-turns-10")))
+      (check-equal? (exn-message e) "budget exceeded")
+      (check-equal? (policy-error-policy-name e) "tool-budget")
+      (check-equal? (policy-error-violation e) "max-turns-10"))
+
+    ;; New error types are also exn:fail?
+    (test-case "new domain errors are exn:fail?"
+      (for ([raise-fn (list (lambda () (raise-ui-error "x" "comp"))
+                            (lambda () (raise-extension-error "x" "ext" "hook"))
+                            (lambda () (raise-policy-error "x" "pol" "viol")))])
+        (define e
+          (with-handlers ([exn:fail? identity])
+            (raise-fn)))
+        (check-pred exn:fail? e)))
+
+    ;; New errors are q-error subtypes
+    (test-case "new domain errors are q-error subtypes"
+      (check-exn q-error? (lambda () (raise-ui-error "x" "c")))
+      (check-exn q-error? (lambda () (raise-extension-error "x" "e" "h")))
+      (check-exn q-error? (lambda () (raise-policy-error "x" "p" "v"))))))
 
 (run-tests errors-tests 'verbose)
