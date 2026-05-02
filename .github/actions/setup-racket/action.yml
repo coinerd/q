@@ -17,7 +17,6 @@ runs:
         which racket || echo "racket not in PATH"
         which raco || echo "raco not in PATH"
         racket --version
-        raco --version
 
     - name: Install Racket (macOS)
       if: runner.os == 'macOS'
