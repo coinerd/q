@@ -11,7 +11,8 @@
 (require racket/date
          racket/port
          racket/file
-         racket/path)
+         racket/path
+         (only-in "error-helpers.rkt" with-logged-error))
 
 (provide audit-log!
          with-audit-log
@@ -37,7 +38,9 @@
   (define d (current-date))
   (define (~2 n)
     (define s (number->string n))
-    (if (< n 10) (string-append "0" s) s))
+    (if (< n 10)
+        (string-append "0" s)
+        s))
   (format "~a-~a-~aT~a:~a:~a"
           (date-year d)
           (~2 (date-month d))
@@ -54,8 +57,11 @@
 ;; Appends a single audit entry to the log file.
 ;; Format: TIMESTAMP SESSION-ID ACTION PATH
 (define (audit-log! session-id action path #:log-path [log-path (audit-log-path)])
-  (define dir (let-values ([(base _name _must-be-dir?) (split-path log-path)])
-                (if (path? base) base (current-directory))))
+  (define dir
+    (let-values ([(base _name _must-be-dir?) (split-path log-path)])
+      (if (path? base)
+          base
+          (current-directory))))
   ;; Ensure directory exists
   (unless (directory-exists? dir)
     (make-directory* dir))
@@ -63,16 +69,13 @@
   (unless (file-exists? log-path)
     (close-output-port (open-output-file log-path #:exists 'truncate)))
   ;; SEC-04: Rotate log if it exceeds max size
-  (when (and (file-exists? log-path)
-             (> (file-size log-path) (current-audit-log-max-bytes)))
-    (with-handlers ([exn:fail? void])
-      (rename-file-or-directory log-path
-                                (path-replace-suffix log-path ".1")
-                                #t)))
+  (when (and (file-exists? log-path) (> (file-size log-path) (current-audit-log-max-bytes)))
+    (with-logged-error "audit-log rotation failed"
+                       (rename-file-or-directory log-path (path-replace-suffix log-path ".1") #t)))
   (call-with-output-file log-path
-    (lambda (out)
-      (fprintf out "~a ~a ~a ~a\n" (iso8601-now) session-id action path))
-    #:exists 'append))
+                         (lambda (out)
+                           (fprintf out "~a ~a ~a ~a\n" (iso8601-now) session-id action path))
+                         #:exists 'append))
 
 ;; ============================================================
 ;; Convenience wrapper
