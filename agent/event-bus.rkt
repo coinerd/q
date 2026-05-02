@@ -73,26 +73,24 @@
   (define threshold (current-circuit-breaker-threshold))
   (if (not threshold)
       #f
-      (call-with-semaphore circuit-breaker-semaphore
-                           (lambda ()
-                             (let ([entry (hash-ref (circuit-breaker-state) sub-id #f)])
-                               (and entry
-                                    (>= (car entry) threshold)
-                                    (let ([cooldown (current-circuit-breaker-cooldown-secs)])
-                                      (if (and cooldown
-                                               (> (- (current-seconds) (cdr entry)) cooldown))
-                                          (begin
-                                            ;; Cooldown elapsed, reset
-                                            (hash-remove! (circuit-breaker-state) sub-id)
-                                            #f)
-                                          #t))))))))
+      (with-circuit-breaker-lock (lambda ()
+                                   (let ([entry (hash-ref (circuit-breaker-state) sub-id #f)])
+                                     (and entry
+                                          (>= (car entry) threshold)
+                                          (let ([cooldown (current-circuit-breaker-cooldown-secs)])
+                                            (if (and cooldown
+                                                     (> (- (current-seconds) (cdr entry)) cooldown))
+                                                (begin
+                                                  ;; Cooldown elapsed, reset
+                                                  (hash-remove! (circuit-breaker-state) sub-id)
+                                                  #f)
+                                                #t))))))))
 
 ;; Record a failure for a subscriber (thread-safe)
 (define (record-failure! sub-id)
   (define threshold (current-circuit-breaker-threshold))
   (when threshold
-    (call-with-semaphore
-     circuit-breaker-semaphore
+    (with-circuit-breaker-lock
      (lambda ()
        (define state (circuit-breaker-state))
        (define entry (hash-ref state sub-id (cons 0 0)))
@@ -105,11 +103,10 @@
 
 ;; Reset failure count on success (thread-safe)
 (define (record-success! sub-id)
-  (call-with-semaphore circuit-breaker-semaphore
-                       (lambda ()
-                         (define state (circuit-breaker-state))
-                         (when (hash-has-key? state sub-id)
-                           (hash-remove! state sub-id)))))
+  (with-circuit-breaker-lock (lambda ()
+                               (define state (circuit-breaker-state))
+                               (when (hash-has-key? state sub-id)
+                                 (hash-remove! state sub-id)))))
 
 ;; ============================================================
 ;; Internal subscription record
@@ -131,12 +128,20 @@
 (define (make-event-bus)
   (make-event-bus-internal (box '()) (make-semaphore 1) (box 0) (make-hash)))
 
+;; Thread-safe event bus lock helper (Finding A3)
+(define (with-event-bus-lock bus thunk)
+  (call-with-semaphore (event-bus-semaphore bus) thunk))
+
+;; Thread-safe circuit-breaker lock helper (Finding A5)
+(define (with-circuit-breaker-lock thunk)
+  (call-with-semaphore circuit-breaker-semaphore thunk))
+
 ;; ============================================================
 ;; subscribe! : event-bus? handler [#:filter pred] -> exact-nonnegative-integer?
 ;; ============================================================
 
 (define (subscribe! bus handler #:filter [filter #f])
-  (call-with-semaphore (event-bus-semaphore bus)
+  (with-event-bus-lock bus
                        (lambda ()
                          (define id (unbox (event-bus-next-id-box bus)))
                          (set-box! (event-bus-next-id-box bus) (add1 id))
@@ -150,7 +155,7 @@
 ;; ============================================================
 
 (define (unsubscribe! bus sub-id)
-  (call-with-semaphore (event-bus-semaphore bus)
+  (with-event-bus-lock bus
                        (lambda ()
                          (set-box! (event-bus-subscriptions-box bus)
                                    (filter (lambda (s) (not (= (subscription-id s) sub-id)))
@@ -162,8 +167,7 @@
 
 (define (publish! bus evt)
   (define subs
-    (call-with-semaphore (event-bus-semaphore bus)
-                         (lambda () (reverse (unbox (event-bus-subscriptions-box bus))))))
+    (with-event-bus-lock bus (lambda () (reverse (unbox (event-bus-subscriptions-box bus))))))
   (parameterize ([circuit-breaker-state (event-bus-breaker-state bus)])
     (define err-handler (current-event-bus-error-handler))
     (for ([s (in-list subs)])
