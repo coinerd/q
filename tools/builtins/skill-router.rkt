@@ -13,6 +13,7 @@
 ;; Scans .q/skills/ and .pi/skills/ directories from the working directory.
 ;; This is a read-only discovery tool — no modification.
 
+(require "../../util/error-helpers.rkt")
 (require racket/file
          racket/string
          racket/list
@@ -39,14 +40,15 @@
            (cond
              [(not (directory-exists? skills-dir)) '()]
              [else
-              (with-handlers ([exn:fail? (lambda (_) '())])
-                (filter values
-                        (for/list ([entry (in-list (directory-list skills-dir))]
-                                   #:when (directory-exists? (build-path skills-dir entry)))
-                          (define skill-name (path->string entry))
-                          (define skill-file (build-path skills-dir entry "SKILL.md"))
-                          (define content (try-read-file skill-file))
-                          (and content (parse-skill skill-name content)))))]))))
+              (with-safe-fallback
+               '()
+               (filter values
+                       (for/list ([entry (in-list (directory-list skills-dir))]
+                                  #:when (directory-exists? (build-path skills-dir entry)))
+                         (define skill-name (path->string entry))
+                         (define skill-file (build-path skills-dir entry "SKILL.md"))
+                         (define content (try-read-file skill-file))
+                         (and content (parse-skill skill-name content)))))]))))
 
 ;; ============================================================
 ;; Tool handler
@@ -56,7 +58,8 @@
   (define action (hash-ref args 'action "list"))
   (with-handlers ([exn:fail? (lambda (e)
                                (make-error-result (sanitize-error-message
-                                                   (format "skill-route error: ~a" (exn-message e)))))])
+                                                   (format "skill-route error: ~a"
+                                                           (exn-message e)))))])
     (cond
       ;; list: return all skills with name + description
       [(string=? action "list")

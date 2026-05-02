@@ -17,6 +17,7 @@
 ;;   drain-events!              — runtime event draining
 ;;   Re-exports: fix-sgr-bg-black, decode-mouse-x10
 
+(require "../util/error-helpers.rkt")
 (require racket/bytes
          racket/string
          "../tui/terminal.rkt"
@@ -62,10 +63,7 @@
 ;; ============================================================
 
 ;; Import tui-ubuf for output buffering (dynamically with fallback)
-(define tui-ubuf-available?
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (collection-path "tui")
-    #t))
+(define tui-ubuf-available? (with-safe-fallback #f (collection-path "tui") #t))
 
 ;; Minimum render interval in milliseconds.
 ;; Coalesces rapid state changes (e.g., streaming) into single frames.
@@ -76,24 +74,16 @@
 (define last-render-ms (box 0.0))
 
 (define make-ubuf-fn
-  (and tui-ubuf-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/ubuf 'make-ubuf))))
+  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf 'make-ubuf))))
 
 (define ubuf-clear!-fn
-  (and tui-ubuf-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/ubuf 'ubuf-clear!))))
+  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf 'ubuf-clear!))))
 
 (define ubuf-putstring!-fn
-  (and tui-ubuf-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/ubuf 'ubuf-putstring!))))
+  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf 'ubuf-putstring!))))
 
 (define display-ubuf!-fn
-  (and tui-ubuf-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/ubuf/output 'display-ubuf!))))
+  (and tui-ubuf-available? (with-safe-fallback #f (dynamic-require 'tui/ubuf/output 'display-ubuf!))))
 
 ;; Fallback stubs for when tui-ubuf is not available
 (define (stub-make-ubuf cols rows)

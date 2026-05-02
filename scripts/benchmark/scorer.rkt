@@ -11,6 +11,7 @@
 ;;
 ;; Verdicts: PASS ≥ 70, PARTIAL ≥ 40, FAIL < 40
 
+(require "../../util/error-helpers.rkt")
 (require racket/file
          racket/format
          racket/list
@@ -282,9 +283,7 @@
 ;; Reads trace JSONL and extracts tool names from q's trace format.
 ;; q trace entries have 'phase "tool.call.started" and 'data with 'name field.
 (define (extract-tool-names-from-trace trace-path)
-  (define entries
-    (with-handlers ([exn:fail? (lambda (e) '())])
-      (jsonl-read-all-valid trace-path)))
+  (define entries (with-safe-fallback '() (jsonl-read-all-valid trace-path)))
   (filter string?
           (for/list ([entry (in-list entries)]
                      #:when (hash? entry)

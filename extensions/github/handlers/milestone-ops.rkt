@@ -2,6 +2,7 @@
 
 ;; extensions/github/handlers/milestone-ops.rkt — GitHub milestone + board handlers
 
+(require "../../../util/error-helpers.rkt")
 (require "../../util/json-helpers.rkt")
 (require racket/format
          racket/string
@@ -182,9 +183,7 @@
                [(not (= ec 0))
                 (make-error-result (format "Failed to check milestone: ~a" (string-trim err)))]
                [else
-                (define issues
-                  (with-handlers ([exn:fail? (lambda (_) '())])
-                    (string->jsexpr (string-trim out))))
+                (define issues (with-safe-fallback '() (string->jsexpr (string-trim out))))
                 (if (null? issues)
                     (make-success-result
                      (list (hasheq 'type "text" 'text (format "Milestone ~a: all issues closed" mn))))

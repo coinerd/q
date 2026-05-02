@@ -14,6 +14,7 @@
 ;;   racket scripts/arch-report.rkt --ci         # CI mode: exit 1 on violations
 ;;   racket scripts/arch-report.rkt --json       # JSON output
 
+(require "../util/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list
@@ -70,24 +71,25 @@
   (path->string (find-relative-path Q-DIR abs-path)))
 
 (define (has-stability-annotation? filepath)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define src (file->string filepath))
-    (or (regexp-match? #rx";;\\s*STABILITY:" src) (regexp-match? #rx"#lang typed/racket" src))))
+  (with-safe-fallback #f
+                      (define src (file->string filepath))
+                      (or (regexp-match? #rx";;\\s*STABILITY:" src)
+                          (regexp-match? #rx"#lang typed/racket" src))))
 
 (define (extract-requires filepath)
-  (with-handlers ([exn:fail? (lambda (e) '())])
-    (define src (file->string filepath))
-    (define lines (string-split src "\n"))
-    (define rest
-      (string-join (if (string-prefix? (car lines) "#lang")
-                       (cdr lines)
-                       lines)
-                   "\n"))
-    (define forms (port->list read (open-input-string rest)))
-    (append* (for/list ([form forms])
-               (cond
-                 [(and (pair? form) (eq? (car form) 'require)) (cdr form)]
-                 [else '()])))))
+  (with-safe-fallback '()
+                      (define src (file->string filepath))
+                      (define lines (string-split src "\n"))
+                      (define rest
+                        (string-join (if (string-prefix? (car lines) "#lang")
+                                         (cdr lines)
+                                         lines)
+                                     "\n"))
+                      (define forms (port->list read (open-input-string rest)))
+                      (append* (for/list ([form forms])
+                                 (cond
+                                   [(and (pair? form) (eq? (car form) 'require)) (cdr form)]
+                                   [else '()])))))
 
 (define (require-spec->paths spec)
   (cond

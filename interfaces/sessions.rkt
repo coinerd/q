@@ -8,6 +8,7 @@
 ;; Sessions are stored as <session-dir>/<session-id>/session.jsonl
 ;; where session-dir defaults to ~/.q/sessions/.
 
+(require "../util/error-helpers.rkt")
 (require racket/match
          racket/string
          racket/format
@@ -307,8 +308,7 @@
 (define (read-trace-entries path)
   (filter-map (lambda (line)
                 (if (and (string? line) (> (string-length line) 0))
-                    (with-handlers ([exn:fail? (lambda (e) #f)])
-                      (string->jsexpr line))
+                    (with-safe-fallback #f (string->jsexpr line))
                     #f))
               (file->lines path)))
 

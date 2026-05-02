@@ -17,6 +17,7 @@
          jsonl-read-last
          jsonl-line-valid?)
 
+(require "../util/error-helpers.rkt")
 (require json
          racket/port
          racket/string
@@ -31,9 +32,7 @@
   ;; Empty/whitespace-only strings return #f.
   (and (string? line)
        (> (string-length (string-trim line)) 0)
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (define _ (read-json (open-input-string line)))
-         #t)))
+       (with-safe-fallback #f (define _ (read-json (open-input-string line))) #t)))
 
 ;; ── Append ──
 
@@ -148,8 +147,8 @@
                               ;; Parse each line, filter out failures
                               (filter values
                                       (for/list ([line (in-list tail)])
-                                        (with-handlers ([exn:fail? (lambda (e) #f)])
-                                          (read-json (open-input-string line))))))
+                                        (with-safe-fallback #f
+                                                            (read-json (open-input-string line))))))
                             #:mode 'text)))
 
 ;; ── Internal helpers ──

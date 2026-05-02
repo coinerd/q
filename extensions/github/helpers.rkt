@@ -5,6 +5,7 @@
 ;; Extracted from github-integration.rkt to reduce its size (Q01).
 ;; Provides shell quoting, input validation, gh/git execution, and repo info.
 
+(require "../../util/error-helpers.rkt")
 (require racket/format
          racket/port
          racket/string
@@ -121,8 +122,7 @@
   (define-values (ec out err) (apply gh-exec-result args))
   (if (= ec 0)
       (let* ([raw (string-trim out)]
-             [parsed (with-handlers ([exn:fail? (lambda (_) #f)])
-                       (string->jsexpr raw))])
+             [parsed (with-safe-fallback #f (string->jsexpr raw))])
         (make-success-result (list (hasheq 'type
                                            "text"
                                            'text

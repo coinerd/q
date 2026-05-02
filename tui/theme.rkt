@@ -5,6 +5,7 @@
 ;; Replaces hardcoded ANSI colors with named semantic slots.
 ;; Default dark theme matches the original hardcoded colors.
 
+(require "../util/error-helpers.rkt")
 (require racket/contract
          racket/string
          racket/port

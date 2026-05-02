@@ -8,6 +8,7 @@
 ;;   inspect-session-safe    — error-handling wrapper for corrupted/missing sessions
 ;;   format-inspection       — human-readable multi-line string for CLI output
 
+(require "../util/error-helpers.rkt")
 (require racket/match
          racket/list
          racket/string
@@ -34,8 +35,7 @@
   (define time-span
     (if (zero? n)
         #f
-        (cons (message-timestamp (first messages))
-              (message-timestamp (last messages)))))
+        (cons (message-timestamp (first messages)) (message-timestamp (last messages)))))
 
   (define duration-seconds
     (if time-span
@@ -44,10 +44,9 @@
 
   ;; Collect unique model names from meta
   (define models
-    (remove-duplicates
-     (filter values
-             (for/list ([m (in-list messages)])
-               (hash-ref (message-meta m) 'model #f)))))
+    (remove-duplicates (filter values
+                               (for/list ([m (in-list messages)])
+                                 (hash-ref (message-meta m) 'model #f)))))
 
   ;; Flatten all content parts across all messages
   (define all-parts (apply append (map message-content messages)))
@@ -55,57 +54,60 @@
   ;; Count tool calls by name
   ;; Uses `hash' (equal?-based) because tool names are strings.
   (define tool-calls
-    (for/fold ([acc (hash)])
-              ([cp (in-list all-parts)])
+    (for/fold ([acc (hash)]) ([cp (in-list all-parts)])
       (cond
-        [(tool-call-part? cp)
-         (hash-update acc (tool-call-part-name cp) add1 0)]
+        [(tool-call-part? cp) (hash-update acc (tool-call-part-name cp) add1 0)]
         [else acc])))
 
-  (define tool-call-total
-    (for/sum ([(_ v) (in-hash tool-calls)]) v))
+  (define tool-call-total (for/sum ([(_ v) (in-hash tool-calls)]) v))
 
   ;; Sum token usage from meta
   (define-values (prompt-total completion-total)
-    (for/fold ([prompt-tot 0] [completion-tot 0])
+    (for/fold ([prompt-tot 0]
+               [completion-tot 0])
               ([m (in-list messages)])
       (define usage (hash-ref (message-meta m) 'usage #f))
       (if usage
           (values (+ prompt-tot (hash-ref usage 'prompt 0))
                   (+ completion-tot (hash-ref usage 'completion 0)))
           (values prompt-tot completion-tot))))
-  (define token-usage
-    (hasheq 'prompt prompt-total 'completion completion-total))
+  (define token-usage (hasheq 'prompt prompt-total 'completion completion-total))
 
   ;; Count by role
   (define role-counts
-    (for/fold ([acc (hasheq)])
-              ([m (in-list messages)])
+    (for/fold ([acc (hasheq)]) ([m (in-list messages)])
       (hash-update acc (message-role m) add1 0)))
 
   ;; Branch count: distinct non-#f parentIds
-  (define branch-count
-    (length (remove-duplicates
-             (filter values
-                     (map message-parent-id messages)))))
+  (define branch-count (length (remove-duplicates (filter values (map message-parent-id messages)))))
 
   ;; Error count: tool-result parts with is-error? = #t
   (define error-count
     (for/sum ([cp (in-list all-parts)])
-      (if (and (tool-result-part? cp) (tool-result-part-is-error? cp))
-          1 0)))
+             (if (and (tool-result-part? cp) (tool-result-part-is-error? cp)) 1 0)))
 
-  (hasheq 'entry-count n
-          'time-span time-span
-          'duration-seconds duration-seconds
-          'models models
-          'tool-calls tool-calls
-          'tool-call-total tool-call-total
-          'token-usage token-usage
-          'role-counts role-counts
-          'branch-count branch-count
-          'error-count error-count
-          'integrity integrity))
+  (hasheq 'entry-count
+          n
+          'time-span
+          time-span
+          'duration-seconds
+          duration-seconds
+          'models
+          models
+          'tool-calls
+          tool-calls
+          'tool-call-total
+          tool-call-total
+          'token-usage
+          token-usage
+          'role-counts
+          role-counts
+          'branch-count
+          branch-count
+          'error-count
+          error-count
+          'integrity
+          integrity))
 
 ;; ── Extended stats ──
 
@@ -125,18 +127,18 @@
 
   ;; Per-tool average argument size
   (define tool-args
-    (for/fold ([acc (hasheq)])
-              ([m (in-list messages)])
-      (for/fold ([acc acc])
-                ([cp (in-list (message-content m))])
+    (for/fold ([acc (hasheq)]) ([m (in-list messages)])
+      (for/fold ([acc acc]) ([cp (in-list (message-content m))])
         (if (tool-call-part? cp)
             (let* ([name (tool-call-part-name cp)]
                    [arg (tool-call-part-arguments cp)]
-                   [arg-size (if (string? arg) (string-length arg) 0)])
-              (hash-update acc name
+                   [arg-size (if (string? arg)
+                                 (string-length arg)
+                                 0)])
+              (hash-update acc
+                           name
                            (lambda (existing)
-                             (cons (add1 (car existing))
-                                   (+ (cdr existing) arg-size)))
+                             (cons (add1 (car existing)) (+ (cdr existing) arg-size)))
                            (cons 0 0)))
             acc))))
 
@@ -148,7 +150,8 @@
                   0.0))))
 
   (hash-set (hash-set base 'messages-per-minute messages-per-minute)
-            'per-tool-avg-arg-size per-tool-avg-arg-size))
+            'per-tool-avg-arg-size
+            per-tool-avg-arg-size))
 
 ;; ── Safe wrapper ──
 
@@ -158,19 +161,15 @@
   ;; Missing file → (hasheq 'error "file not found" 'entry-count 0)
   ;; Partial failure → adds 'partial? #t
   (cond
-    [(not (file-exists? path))
-     (hasheq 'error "file not found" 'entry-count 0)]
+    [(not (file-exists? path)) (hasheq 'error "file not found" 'entry-count 0)]
     [else
-     (with-handlers ([exn:fail?
-                      (lambda (e)
-                        ;; Try to return whatever we can
-                        (with-handlers ([exn:fail? (lambda (_) (hasheq 'error (exn-message e) 'partial? #t))])
-                          (define partial-msgs
-                            (with-handlers ([exn:fail? (lambda (_) '())])
-                              (load-session-log path)))
-                          (hasheq 'entry-count (length partial-msgs)
-                                  'partial? #t
-                                  'error (exn-message e))))])
+     (with-handlers
+         ([exn:fail?
+           (lambda (e)
+             ;; Try to return whatever we can
+             (with-handlers ([exn:fail? (lambda (_) (hasheq 'error (exn-message e) 'partial? #t))])
+               (define partial-msgs (with-safe-fallback '() (load-session-log path)))
+               (hasheq 'entry-count (length partial-msgs) 'partial? #t 'error (exn-message e))))])
        (inspect-session path))]))
 
 ;; ── Formatting ──
@@ -178,43 +177,40 @@
 (define (format-inspection h)
   ;; Format an inspection result hash as a human-readable multi-line string.
   (define lines
-    (list
-     (format "Entry count:    ~a" (hash-ref h 'entry-count 0))
-     (format "Duration:       ~a seconds" (hash-ref h 'duration-seconds 0))
-     (let ([ts (hash-ref h 'time-span #f)])
-       (if ts
-           (format "Time span:      ~a → ~a" (car ts) (cdr ts))
-           "Time span:      (empty session)"))
-     (format "Models:         ~a" (string-join (map ~a (hash-ref h 'models '())) ", "))
-     (format "Tool call total: ~a" (hash-ref h 'tool-call-total 0))
-     (let ([tc (hash-ref h 'tool-calls (hasheq))])
-       (if (hash-empty? tc)
-           "Tool calls:     (none)"
-           (format "Tool calls:     ~a"
-                   (string-join
-                    (for/list ([(name count) (in-hash tc)])
-                      (format "~a: ~a" name count))
-                    ", "))))
-     (let ([tu (hash-ref h 'token-usage (hasheq))])
-       (format "Token usage:    prompt=~a completion=~a"
-               (hash-ref tu 'prompt 0)
-               (hash-ref tu 'completion 0)))
-     (let ([rc (hash-ref h 'role-counts (hasheq))])
-       (format "Role counts:    ~a"
-               (string-join
-                (for/list ([(role count) (in-hash rc)])
-                  (format "~a: ~a" role count))
-                ", ")))
-     (format "Branch count:   ~a" (hash-ref h 'branch-count 0))
-     (format "Error count:    ~a" (hash-ref h 'error-count 0))
-     (format "Integrity:      valid=~a/~a order-ok?=~a truncated?=~a"
-             (hash-ref (hash-ref h 'integrity (hasheq)) 'valid-entries 0)
-             (hash-ref (hash-ref h 'integrity (hasheq)) 'total-entries 0)
-             (hash-ref (hash-ref h 'integrity (hasheq)) 'entry-order-valid? #t)
-             (hash-ref (hash-ref h 'integrity (hasheq)) 'truncated-at-end? #f))
-     (let ([err (hash-ref h 'error #f)])
-       (if err
-           (format "Error:          ~a" err)
-           ""))))
+    (list (format "Entry count:    ~a" (hash-ref h 'entry-count 0))
+          (format "Duration:       ~a seconds" (hash-ref h 'duration-seconds 0))
+          (let ([ts (hash-ref h 'time-span #f)])
+            (if ts
+                (format "Time span:      ~a → ~a" (car ts) (cdr ts))
+                "Time span:      (empty session)"))
+          (format "Models:         ~a" (string-join (map ~a (hash-ref h 'models '())) ", "))
+          (format "Tool call total: ~a" (hash-ref h 'tool-call-total 0))
+          (let ([tc (hash-ref h 'tool-calls (hasheq))])
+            (if (hash-empty? tc)
+                "Tool calls:     (none)"
+                (format "Tool calls:     ~a"
+                        (string-join (for/list ([(name count) (in-hash tc)])
+                                       (format "~a: ~a" name count))
+                                     ", "))))
+          (let ([tu (hash-ref h 'token-usage (hasheq))])
+            (format "Token usage:    prompt=~a completion=~a"
+                    (hash-ref tu 'prompt 0)
+                    (hash-ref tu 'completion 0)))
+          (let ([rc (hash-ref h 'role-counts (hasheq))])
+            (format "Role counts:    ~a"
+                    (string-join (for/list ([(role count) (in-hash rc)])
+                                   (format "~a: ~a" role count))
+                                 ", ")))
+          (format "Branch count:   ~a" (hash-ref h 'branch-count 0))
+          (format "Error count:    ~a" (hash-ref h 'error-count 0))
+          (format "Integrity:      valid=~a/~a order-ok?=~a truncated?=~a"
+                  (hash-ref (hash-ref h 'integrity (hasheq)) 'valid-entries 0)
+                  (hash-ref (hash-ref h 'integrity (hasheq)) 'total-entries 0)
+                  (hash-ref (hash-ref h 'integrity (hasheq)) 'entry-order-valid? #t)
+                  (hash-ref (hash-ref h 'integrity (hasheq)) 'truncated-at-end? #f))
+          (let ([err (hash-ref h 'error #f)])
+            (if err
+                (format "Error:          ~a" err)
+                ""))))
 
   (string-join (filter (lambda (s) (> (string-length s) 0)) lines) "\n"))

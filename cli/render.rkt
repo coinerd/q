@@ -14,6 +14,7 @@
 ;;   MAX-TOOL-DISPLAY-LEN       — constant
 ;;   format-classified-error    — error formatting
 
+(require "../util/error-helpers.rkt")
 (require "../util/protocol-types.rkt"
          "../util/ansi.rkt"
          "../util/markdown.rkt"
@@ -164,9 +165,7 @@
      (define args
        (cond
          [(hash? args-raw) args-raw]
-         [(string? args-raw)
-          (with-handlers ([exn:fail? (lambda (_) #f)])
-            (string->jsexpr args-raw))]
+         [(string? args-raw) (with-safe-fallback #f (string->jsexpr args-raw))]
          [else #f]))
      (define detail
        (cond

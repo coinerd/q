@@ -4,6 +4,7 @@
 ;;
 ;; Mutation operations on session-index: building, persisting, branching, bookmarking.
 
+(require "../../util/error-helpers.rkt")
 (require racket/string
          racket/file
          racket/port
@@ -345,11 +346,12 @@
   (cond
     [(not (file-exists? bpath)) '()]
     [else
-     (with-handlers ([exn:fail? (lambda (e) '())])
-       (define data (call-with-input-file bpath (lambda (in) (read-json in)) #:mode 'text))
-       (if (list? data)
-           (map jsexpr->bookmark data)
-           '()))]))
+     (with-safe-fallback '()
+                         (define data
+                           (call-with-input-file bpath (lambda (in) (read-json in)) #:mode 'text))
+                         (if (list? data)
+                             (map jsexpr->bookmark data)
+                             '()))]))
 
 (define (load-index-with-bookmarks session-path index-path)
   (define idx (load-index index-path))

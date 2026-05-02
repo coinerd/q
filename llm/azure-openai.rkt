@@ -12,6 +12,7 @@
 ;;
 ;; #1195: Additional LLM Provider Adapters
 
+(require "../util/error-helpers.rkt")
 (require racket/contract
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
@@ -152,9 +153,7 @@
                 ;; W2.3: proper done chunk
                 [(string=? data "[DONE]") (yield (make-stream-chunk #f #f #f #t))]
                 [else
-                 (define js
-                   (with-handlers ([exn:fail? (lambda (e) #f)])
-                     (string->jsexpr data)))
+                 (define js (with-safe-fallback #f (string->jsexpr data)))
                  (when js
                    (define choices (hash-ref js 'choices '()))
                    (when (pair? choices)

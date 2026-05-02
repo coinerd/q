@@ -12,31 +12,31 @@
 ;;   'system — only use system clipboard tools
 ;;   'off    — disable clipboard entirely
 
+(require "../util/error-helpers.rkt")
 (require racket/port
          racket/string
          net/base64)
 
-(provide
- ;; Configuration
- current-clipboard-mode
+;; Configuration
+(provide current-clipboard-mode
 
- ;; Public API
- copy-text!
- copy-selection!
- clipboard-backend-available?
- clipboard-paste
+         ;; Public API
+         copy-text!
+         copy-selection!
+         clipboard-backend-available?
+         clipboard-paste
 
- ;; Status symbols (documented, not exported as values)
- ;; 'ok-osc52   — OSC 52 sequence emitted successfully
- ;; 'ok-system  — system clipboard tool succeeded
- ;; 'disabled   — current-clipboard-mode is 'off
- ;; 'unavailable — no backend available for the selected mode
- ;; 'failed     — backend reported failure
+         ;; Status symbols (documented, not exported as values)
+         ;; 'ok-osc52   — OSC 52 sequence emitted successfully
+         ;; 'ok-system  — system clipboard tool succeeded
+         ;; 'disabled   — current-clipboard-mode is 'off
+         ;; 'unavailable — no backend available for the selected mode
+         ;; 'failed     — backend reported failure
 
- ;; Re-exported for backward compatibility / testing
- detect-clipboard-tool
- clipboard-copy-via-tool
- osc-52-copy)
+         ;; Re-exported for backward compatibility / testing
+         detect-clipboard-tool
+         clipboard-copy-via-tool
+         osc-52-copy)
 
 ;; ============================================================
 ;; Configuration
@@ -77,19 +77,30 @@
   (define x11? (getenv "DISPLAY"))
   (cond
     ;; macOS always first
-    [(find-executable-path "pbcopy") => (lambda (p) (list p 'pbcopy))]
+    [(find-executable-path "pbcopy")
+     =>
+     (lambda (p) (list p 'pbcopy))]
     ;; Wayland session
     [(and wayland? (find-executable-path "wl-copy"))
-     => (lambda (p) (list p 'wl-copy))]
+     =>
+     (lambda (p) (list p 'wl-copy))]
     ;; X11 session
     [(and x11? (find-executable-path "xclip"))
-     => (lambda (p) (list p 'xclip))]
+     =>
+     (lambda (p) (list p 'xclip))]
     [(and x11? (find-executable-path "xsel"))
-     => (lambda (p) (list p 'xsel))]
+     =>
+     (lambda (p) (list p 'xsel))]
     ;; Fallback: try all tools regardless of env (covers unusual setups)
-    [(find-executable-path "wl-copy") => (lambda (p) (list p 'wl-copy))]
-    [(find-executable-path "xclip")   => (lambda (p) (list p 'xclip))]
-    [(find-executable-path "xsel")    => (lambda (p) (list p 'xsel))]
+    [(find-executable-path "wl-copy")
+     =>
+     (lambda (p) (list p 'wl-copy))]
+    [(find-executable-path "xclip")
+     =>
+     (lambda (p) (list p 'xclip))]
+    [(find-executable-path "xsel")
+     =>
+     (lambda (p) (list p 'xsel))]
     [else #f]))
 
 ;; Returns #t if at least one clipboard backend is available.
@@ -117,30 +128,28 @@
 ;; Copy text to clipboard via a platform tool (subprocess).
 ;; Returns #t on success, #f on failure.
 (define (clipboard-copy-via-tool tool-path tool-name text)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define args
-      (case tool-name
-        [(pbcopy) '()]
-        [(wl-copy) '()]
-        [(xclip)  '("-selection" "clipboard")]
-        [(xsel)   '("--clipboard" "--input")]
-        [else '()]))
-    (define-values (sp out in err)
-      (apply subprocess #f #f #f tool-path args))
-    (dynamic-wind
-      (lambda () (void))
-      (lambda ()
-        (display text in)
-        (close-output-port in)
-        ;; Wait up to 2 seconds for clipboard tool to finish
-        (define result (sync/timeout 2.0 sp))
-        ;; Kill zombie subprocess if timeout elapsed
-        (when (not result)
-          (subprocess-kill sp #t)))
-      (lambda ()
-        (close-input-port out)
-        (close-input-port err)))
-    (= (subprocess-status sp) 0)))
+  (with-safe-fallback #f
+                      (define args
+                        (case tool-name
+                          [(pbcopy) '()]
+                          [(wl-copy) '()]
+                          [(xclip) '("-selection" "clipboard")]
+                          [(xsel) '("--clipboard" "--input")]
+                          [else '()]))
+                      (define-values (sp out in err) (apply subprocess #f #f #f tool-path args))
+                      (dynamic-wind (lambda () (void))
+                                    (lambda ()
+                                      (display text in)
+                                      (close-output-port in)
+                                      ;; Wait up to 2 seconds for clipboard tool to finish
+                                      (define result (sync/timeout 2.0 sp))
+                                      ;; Kill zombie subprocess if timeout elapsed
+                                      (when (not result)
+                                        (subprocess-kill sp #t)))
+                                    (lambda ()
+                                      (close-input-port out)
+                                      (close-input-port err)))
+                      (= (subprocess-status sp) 0)))
 
 ;; ============================================================
 ;; Main API
@@ -203,16 +212,27 @@
   (define wayland? (getenv "WAYLAND_DISPLAY"))
   (define x11? (getenv "DISPLAY"))
   (cond
-    [(find-executable-path "pbpaste") => (lambda (p) (list p 'pbpaste))]
+    [(find-executable-path "pbpaste")
+     =>
+     (lambda (p) (list p 'pbpaste))]
     [(and wayland? (find-executable-path "wl-paste"))
-     => (lambda (p) (list p 'wl-paste))]
+     =>
+     (lambda (p) (list p 'wl-paste))]
     [(and x11? (find-executable-path "xclip"))
-     => (lambda (p) (list p 'xclip))]
+     =>
+     (lambda (p) (list p 'xclip))]
     [(and x11? (find-executable-path "xsel"))
-     => (lambda (p) (list p 'xsel))]
-    [(find-executable-path "wl-paste") => (lambda (p) (list p 'wl-paste))]
-    [(find-executable-path "xclip")   => (lambda (p) (list p 'xclip))]
-    [(find-executable-path "xsel")    => (lambda (p) (list p 'xsel))]
+     =>
+     (lambda (p) (list p 'xsel))]
+    [(find-executable-path "wl-paste")
+     =>
+     (lambda (p) (list p 'wl-paste))]
+    [(find-executable-path "xclip")
+     =>
+     (lambda (p) (list p 'xclip))]
+    [(find-executable-path "xsel")
+     =>
+     (lambda (p) (list p 'xsel))]
     [else #f]))
 
 ;; Read text from system clipboard.
@@ -221,31 +241,29 @@
   (define tool (detect-paste-tool))
   (if (not tool)
       #f
-      (with-handlers ([exn:fail? (lambda (e) #f)])
-        (define tool-path (car tool))
-        (define tool-name (cadr tool))
-        (define args
-          (case tool-name
-            [(pbcopy pbpaste) '()]
-            [(wl-copy wl-paste) '()]
-            [(xclip)  '("-selection" "clipboard" "-o")]
-            [(xsel)   '("--clipboard" "--output")]
-            [else '()]))
-        (define-values (sp out in err)
-          (apply subprocess #f #f #f tool-path args))
-        (dynamic-wind
-          (lambda () (void))
-          (lambda ()
-            (close-output-port in)
-            (define result (port->string out))
-            (close-input-port out)
-            (close-input-port err)
-            (subprocess-wait sp)
-            (if (= (subprocess-status sp) 0)
-                (string-trim result "\r\n")
-                #f))
-          (lambda ()
-            (with-handlers ([exn:fail? (lambda (e) (void))])
-              (close-input-port out))
-            (with-handlers ([exn:fail? (lambda (e) (void))])
-              (close-input-port err)))))))
+      (with-safe-fallback #f
+                          (define tool-path (car tool))
+                          (define tool-name (cadr tool))
+                          (define args
+                            (case tool-name
+                              [(pbcopy pbpaste) '()]
+                              [(wl-copy wl-paste) '()]
+                              [(xclip) '("-selection" "clipboard" "-o")]
+                              [(xsel) '("--clipboard" "--output")]
+                              [else '()]))
+                          (define-values (sp out in err) (apply subprocess #f #f #f tool-path args))
+                          (dynamic-wind (lambda () (void))
+                                        (lambda ()
+                                          (close-output-port in)
+                                          (define result (port->string out))
+                                          (close-input-port out)
+                                          (close-input-port err)
+                                          (subprocess-wait sp)
+                                          (if (= (subprocess-status sp) 0)
+                                              (string-trim result "\r\n")
+                                              #f))
+                                        (lambda ()
+                                          (with-handlers ([exn:fail? (lambda (e) (void))])
+                                            (close-input-port out))
+                                          (with-handlers ([exn:fail? (lambda (e) (void))])
+                                            (close-input-port err)))))))
