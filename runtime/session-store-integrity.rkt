@@ -12,6 +12,7 @@
 ;;   Integrity: verify-session-integrity, repair-session-log!
 
 (require racket/contract
+         racket/match
          racket/file
          racket/string
          racket/sequence
@@ -66,20 +67,20 @@
 (define GENESIS-HASH "genesis")
 
 (define (canonical-jsexpr->string v)
-  (cond
-    [(hash? v)
+  (match v
+    [(? hash?)
      (define sorted-keys (sort (hash-keys v) symbol<?))
      (define pairs
        (for/list ([k (in-list sorted-keys)])
          (format "\"~a\": ~a" k (canonical-jsexpr->string (hash-ref v k)))))
      (format "{~a}" (string-join pairs ", "))]
-    [(list? v) (format "[~a]" (string-join (map canonical-jsexpr->string v) ", "))]
-    [(string? v) (jsexpr->string v)]
-    [(number? v) (number->string v)]
-    [(boolean? v) (if v "true" "false")]
-    [(eq? v 'null) "null"]
-    [(symbol? v) (format "\"~a\"" v)]
-    [else (format "~a" v)]))
+    [(? list?) (format "[~a]" (string-join (map canonical-jsexpr->string v) ", "))]
+    [(? string?) (jsexpr->string v)]
+    [(? number?) (number->string v)]
+    [(? boolean?) (if v "true" "false")]
+    ['null "null"]
+    [(? symbol?) (format "\"~a\"" v)]
+    [_ (format "~a" v)]))
 
 (define (compute-event-hash entry prev-hash)
   (define with-prev (hash-set entry 'prev_hash prev-hash))
@@ -89,9 +90,9 @@
 
 (define (read-last-hash path)
   (define last-entries (jsonl-read-last path 1))
-  (cond
-    [(null? last-entries) GENESIS-HASH]
-    [else
+  (match last-entries
+    ['() GENESIS-HASH]
+    [_
      (define last (car last-entries))
      (if (hash? last)
          (hash-ref last 'hash GENESIS-HASH)
@@ -108,15 +109,13 @@
 ;; ── Hash chain verification (#1287) ──
 
 (define (verify-hash-chain session-log-path)
-  (cond
-    [(not (file-exists? session-log-path))
-     (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
-    [else
+  (match (file-exists? session-log-path)
+    [#f (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
+    [_
      (define entries (jsonl-read-all session-log-path))
-     (cond
-       [(null? entries)
-        (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
-       [else
+     (match entries
+       ['() (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
+       [_
         (define numbered
           (for/list ([e (in-list entries)]
                      [i (in-naturals 1)])
@@ -124,10 +123,9 @@
         (define has-any-hashes?
           (for/or ([ne (in-list numbered)])
             (and (hash? (cdr ne)) (hash-has-key? (cdr ne) 'hash))))
-        (cond
-          [(not has-any-hashes?)
-           (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
-          [else
+        (match has-any-hashes?
+          [#f (hasheq 'valid? #t 'has-hashes? #f 'chain-length 0 'broken-links 0 'broken-at '())]
+          [_
            (define-values (broken-links broken-at prev-hash)
              (for/fold ([broken 0]
                         [at '()]
@@ -155,8 +153,8 @@
 ;; ── Integrity verification ──
 
 (define (verify-session-integrity session-log-path)
-  (cond
-    [(not (file-exists? session-log-path))
+  (match (file-exists? session-log-path)
+    [#f
      (hasheq 'total-entries
              0
              'valid-entries
@@ -167,7 +165,7 @@
              #f
              'entry-order-valid?
              #t)]
-    [else
+    [_
      (define raw-bytes (file->bytes session-log-path))
      (define truncated-at-end?
        (and (> (bytes-length raw-bytes) 0)
@@ -258,9 +256,9 @@
 ;; ── Repair ──
 
 (define (repair-session-log! session-log-path)
-  (cond
-    [(not (file-exists? session-log-path)) (hasheq 'entries-kept 0 'entries-removed 0)]
-    [else
+  (match (file-exists? session-log-path)
+    [#f (hasheq 'entries-kept 0 'entries-removed 0)]
+    [_
      (define lines
        (call-with-input-file session-log-path
                              (lambda (in) (sequence->list (in-lines in)))

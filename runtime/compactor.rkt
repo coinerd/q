@@ -19,6 +19,7 @@
 ;; a NEW message list without modifying or deleting the originals.
 
 (require racket/contract
+         racket/match
          racket/string
          racket/list
          racket/set
@@ -212,10 +213,10 @@
   (define total (length messages))
   (define keep-recent (compaction-strategy-keep-recent-count strategy))
   (define window-size (compaction-strategy-summary-window-size strategy))
-  (cond
+  (match (<= total keep-recent)
     ;; All messages fit in the "recent" window — nothing to summarize
-    [(<= total keep-recent) (values '() messages)]
-    [else
+    [#t (values '() messages)]
+    [_
      (define split-point (max 0 (- total keep-recent)))
      (define all-old (take messages split-point))
      (define recent (drop messages split-point))
@@ -252,9 +253,9 @@
 
 ;; Adjust a proposed cut point backward to nearest valid position.
 (define (adjust-cutpoint messages proposed-idx)
-  (cond
-    [(valid-cutpoint? messages proposed-idx) proposed-idx]
-    [else
+  (match (valid-cutpoint? messages proposed-idx)
+    [#t proposed-idx]
+    [_
      (let loop ([i (sub1 proposed-idx)])
        (cond
          [(<= i 0) 0]
@@ -304,10 +305,10 @@
                  (values (take messages cut-idx) (drop messages cut-idx))
                  (values old recent)))
            (values old recent)))
-     (cond
+     (match adjusted-old
        ;; Nothing to summarize — return identity result
-       [(null? adjusted-old) (compaction-result #f 0 adjusted-recent)]
-       [else
+       ['() (compaction-result #f 0 adjusted-recent)]
+       [_
         ;; #767: Detect split-turn — if cut falls mid-turn, generate turn prefix
         (define turn-prefix
           (let ([split-result (find-split-turn messages (length adjusted-old))])
