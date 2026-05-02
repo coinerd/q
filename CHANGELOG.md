@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.28.4 — 2026-05-03
+
+### Runtime Core Abstraction
+
+- **W0**: Add `retry-policy` struct (A21) encapsulating retry config as first-class value.
+  New `make-default-retry-policy` and `with-retry-policy` entry point. Convert all 5 cond
+  forms in `auto-retry.rkt` to match (5→0). 8 new tests.
+- **W1**: Audit confirms tool budget wrapper (A20) already adequate — 1 call site each,
+  does not meet abstraction gate. No changes needed.
+- **W2**: Convert `compactor.rkt` cond→match (11→8) and `session-store-integrity.rkt`
+  cond→match (12→5). Type dispatch, null checks, file-exists? guards. 10 safe conversions.
+
+
 ## v0.28.3 — 2026-05-03
 
 ### TUI Rendering Abstraction
