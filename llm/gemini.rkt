@@ -244,21 +244,6 @@
         content))
 
   (make-model-response final-content usage model-version stop-reason))
-
-;; Translate Gemini finish reasons to normalized symbols.
-(define (gemini-translate-stop-reason reason)
-  (cond
-    [(string? reason)
-     (let ([r (string-trim reason)])
-       (cond
-         [(equal? r "STOP") 'stop]
-         [(equal? r "MAX_TOKENS") 'length]
-         [(equal? r "SAFETY") 'content-filtered]
-         [(equal? r "RECITATION") 'content-filtered]
-         [else (string->symbol r)]))]
-    [(symbol? reason) reason]
-    [else 'stop]))
-
 ;; ============================================================
 ;; Stream chunk parsing
 ;; ============================================================
@@ -348,33 +333,6 @@
 ;; ============================================================
 ;; HTTP status check (exported for tests)
 ;; ============================================================
-
-(define (gemini-check-http-status! status-line response-body)
-  (define status-code (extract-status-code status-line))
-  (when (http-error? status-code)
-    (define error-body
-      (if (bytes? response-body)
-          (bytes->string/utf-8 response-body)
-          response-body))
-    (cond
-      [(= status-code 400)
-       (raise-http-error! (format "Gemini API bad request (400): ~a" error-body) status-code)]
-      [(= status-code 401)
-       (raise-http-error! (format "Gemini API authentication failed (401): ~a" error-body)
-                          status-code)]
-      [(= status-code 403)
-       (raise-http-error! (format "Gemini API forbidden (403): ~a" error-body) status-code)]
-      [(= status-code 429)
-       (raise-http-error! (format "Gemini API rate limited (429). Please wait and try again.\n~a"
-                                  error-body)
-                          status-code)]
-      [(>= status-code 500)
-       (raise-http-error! (format "Gemini API server error (~a): ~a" status-code error-body)
-                          status-code)]
-      [else
-       (raise-http-error! (format "Gemini API error (~a): ~a" status-code error-body) status-code)])))
-
-;; ============================================================
 ;; HTTP request execution (non-streaming)
 ;; ============================================================
 
@@ -452,7 +410,7 @@
                0)))
        (when (>= status-code 400)
          (define resp-body (read-response-body/timeout response-port))
-         (gemini-check-http-status! status-line resp-body))
+         (check-provider-status! "Gemini" status-line resp-body))
        ;; Bind per-request counter (Issue #200)
        (parameterize ([gemini-tool-id-counter-param 0])
          ;; Incremental SSE parsing — generator yields chunks one at a time
