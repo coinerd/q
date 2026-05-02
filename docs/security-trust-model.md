@@ -1,4 +1,4 @@
-<!-- verified-against: 0.28.1 --># Security & Trust Model
+<!-- verified-against: 0.28.2 --># Security & Trust Model
 
 This document provides an honest, per-area assessment of what q enforces
 today and what is planned. It is the authoritative reference for security
@@ -270,7 +270,7 @@ credential leakage into child processes.
 Environment variables matching these case-insensitive patterns are scrubbed:
 
 - `API.?KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `PRIVATE`
-- `AUTH` (narrowed in v0.28.1 to match only `AUTH`, `AUTH_*`, `*_AUTH_*`)
+- `AUTH` (narrowed in v0.28.2 to match only `AUTH`, `AUTH_*`, `*_AUTH_*`)
 - `GH_PAT`, and any var ending in `_PAT`
 
 ### Implicit allowlist

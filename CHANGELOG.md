@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.28.2 — 2026-05-02
+
+### Tool System & GSD Abstraction Cleanup
+
+- **W0**: Convert tools/builtins/edit.rkt cond→match (12→2 cond forms).
+  Replace deeply nested validation pyramid with flattened match patterns
+  for argument validation, occurrence counting, and delta checks.
+- **W1**: Convert extensions/gsd-planning.rkt cond→match (17→0 cond forms).
+  Command dispatch, artifact dispatch, plan validation pipeline,
+  argument validation chains all converted to match patterns.
+- **W2**: Audit confirms Findings A18/A19 already addressed. Events use
+  struct envelope (util/event.rkt), tool results use constructors.
+
+## v0.28.1 — 2026-05-02
+
+### LLM Provider Protocol Unification
+
+- **W0+W1**: Shared provider helpers module. `translate-stop-reason` dispatch
+  table in llm/http-helpers.rkt. `check-provider-status!` adopted across all 4
+  providers (anthropic, gemini, openai-compatible, azure-openai). 16 new tests.
+- **W2**: Provider adoption + cleanup. Removed duplicated provider-specific
+  check/translate functions. Net reduction: 107 lines.
+- **W3**: Version bump to 0.28.1 + CI fix (apt-get for Linux, test reference
+  updates for removed provider functions) + release.
+
+## v0.28.0 — 2026-05-02
+
+### Foundation Abstractions
+
+- **W0**: JSON File I/O Helpers — `read-json-file`/`write-json-file` in
+  `util/json-helpers.rkt`, adopted across 10 files.
+- **W1**: Error Handling Macros — `with-safe-fallback`/`with-logged-error`
+  in `util/error-helpers.rkt`, 58 replacements.
+- **W2**: Semaphore Guard HOFs — `with-registry-lock`, `with-event-bus-lock`,
+  `with-gsd-lock` in source modules.
+- **W3**: Version bump to 0.28.0 + CI + release.
+
+
 ## v0.27.4 — 2026-05-02
 
 ### Audit Remediation + CI Release (v0.27.3 findings)
