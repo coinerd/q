@@ -20,6 +20,7 @@
 ;; for budget/counts/waves/event-bus state.
 
 (require racket/contract
+         racket/match
          racket/port
          racket/string
          racket/file
@@ -132,23 +133,29 @@
                       (string->path start-dir)
                       start-dir)])
     (define planning (build-path dir planning-dir-name))
-    (cond
-      [(directory-exists? planning) dir]
-      [(or (directory-exists? (build-path dir "q"))
-           (directory-exists? (build-path dir "BLUEPRINT"))
-           (directory-exists? (build-path dir ".git")))
+    (match #t
+      [_
+       #:when (directory-exists? planning)
        dir]
-      [(let ([parent (simple-form-path (build-path dir 'up))]) (equal? parent (simple-form-path dir)))
+      [_
+       #:when (or (directory-exists? (build-path dir "q"))
+                  (directory-exists? (build-path dir "BLUEPRINT"))
+                  (directory-exists? (build-path dir ".git")))
+       dir]
+      [_
+       #:when (let ([parent (simple-form-path (build-path dir 'up))])
+                (equal? parent (simple-form-path dir)))
        start-dir]
-      [else (loop (simple-form-path (build-path dir 'up)))])))
+      [_ (loop (simple-form-path (build-path dir 'up)))])))
 
 (define (planning-artifact-path base-dir name)
   (define ext (assoc name artifact-extensions))
-  (cond
-    [ext (build-path base-dir planning-dir-name (string-append name (cdr ext)))]
-    [(or (string-suffix? name ".md") (string-suffix? name ".json"))
+  (match ext
+    [(cons _ suffix) (build-path base-dir planning-dir-name (string-append name suffix))]
+    [_
+     #:when (or (string-suffix? name ".md") (string-suffix? name ".json"))
      (build-path base-dir planning-dir-name name)]
-    [else #f]))
+    [_ #f]))
 
 ;; valid-artifact-name?, json-artifact? delegated to command-normalization.rkt
 
@@ -164,15 +171,16 @@
 
 (define (read-planning-artifact base-dir name)
   (define path (planning-artifact-path base-dir name))
-  (cond
-    [(not path) #f]
-    [(not (file-exists? path)) #f]
-    [(json-artifact? name)
+  (match path
+    [#f #f]
+    [(? (lambda (p) (not (file-exists? p)))) #f]
+    [_
+     #:when (json-artifact? name)
      (with-handlers ([exn:fail? (lambda (e)
                                   (log-warning (format "gsd-planning/read: ~a" (exn-message e)))
                                   #f)])
        (call-with-input-file path (lambda (in) (read-json in))))]
-    [else (call-with-input-file path (lambda (in) (port->string in)))]))
+    [_ (call-with-input-file path (lambda (in) (port->string in)))]))
 
 (define (write-planning-artifact! base-dir name content)
   (define path (planning-artifact-path base-dir name))
@@ -273,33 +281,31 @@
 (define (handle-planning-read args [exec-ctx #f])
   (define name (hash-ref args 'artifact ""))
   (define base-dir (get-base-dir args exec-ctx))
-  (cond
-    [(string=? name "") (make-error-result "Missing required argument: artifact")]
-    [(not (valid-artifact-name? name))
+  (match name
+    ["" (make-error-result "Missing required argument: artifact")]
+    [(? (lambda (n) (not (valid-artifact-name? n))))
      (make-error-result (format "Invalid artifact name '~a'. Must be one of: ~a or end in .md/.json"
                                 name
                                 (string-join (map car artifact-extensions) ", ")))]
-    [else
+    [_
      (define content (read-planning-artifact base-dir name))
-     (cond
-       [(not content)
-        (make-error-result (format "Artifact '~a' not found in ~a/" name planning-dir-name))]
-       [(hash? content)
-        (make-success-result (list (hasheq 'type "text" 'text (jsexpr->string content))))]
-       [else (make-success-result (list (hasheq 'type "text" 'text content)))])]))
+     (match content
+       [#f (make-error-result (format "Artifact '~a' not found in ~a/" name planning-dir-name))]
+       [(? hash?) (make-success-result (list (hasheq 'type "text" 'text (jsexpr->string content))))]
+       [_ (make-success-result (list (hasheq 'type "text" 'text content)))])]))
 
 (define (handle-planning-write args [exec-ctx #f])
   (define name (hash-ref args 'artifact ""))
   (define content-str (hash-ref args 'content ""))
   (define base-dir (get-base-dir args exec-ctx))
-  (cond
-    [(string=? name "") (make-error-result "Missing required argument: artifact")]
-    [(string=? content-str "") (make-error-result "Missing required argument: content")]
-    [(not (valid-artifact-name? name))
+  (match (list name content-str)
+    [(list "" _) (make-error-result "Missing required argument: artifact")]
+    [(list _ "") (make-error-result "Missing required argument: content")]
+    [(list (? (lambda (n) (not (valid-artifact-name? n)))) _)
      (make-error-result (format "Invalid artifact name '~a'. Must be one of: ~a or end in .md/.json"
                                 name
                                 (string-join (map car artifact-extensions) ", ")))]
-    [else
+    [_
      ;; v0.21.0: Use write guard from gsd/core.rkt
      (define art-path (planning-artifact-path base-dir name))
      (define guard-arg (and art-path (path->string art-path)))
@@ -307,19 +313,18 @@
        (if guard-arg
            (gsd-write-guard guard-arg (pinned-planning-dir))
            (policy-decision #t #f '())))
-     (cond
-       [(policy-blocked? guard-result)
-        (make-error-result (format "Blocked: ~a" (policy-reason guard-result)))]
-       [else
+     (match (policy-blocked? guard-result)
+       [#t (make-error-result (format "Blocked: ~a" (policy-reason guard-result)))]
+       [_
         (define parsed-content
           (if (json-artifact? name)
               (with-handlers ([exn:fail? (lambda (e) e)])
                 (string->jsexpr content-str))
               content-str))
-        (cond
-          [(exn:fail? parsed-content)
+        (match parsed-content
+          [(? exn:fail?)
            (make-error-result (format "Invalid JSON content: ~a" (exn-message parsed-content)))]
-          [else
+          [_
            (define result-path (write-planning-artifact! base-dir name parsed-content))
            (if (not result-path)
                (make-error-result (format "Failed to write artifact '~a'" name))
@@ -406,17 +411,16 @@
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
   (define base-dir (or (pinned-planning-dir) (current-directory)))
-  (cond
-    [(member cmd '("/go" "/implement" "/i")) (handle-go-command base-dir input-text)]
-    [(equal? cmd "/gsd") (handle-gsd-status)]
-    [(equal? cmd "/replan")
+  (match cmd
+    [(? (lambda (c) (member c '("/go" "/implement" "/i")))) (handle-go-command base-dir input-text)]
+    ["/gsd" (handle-gsd-status)]
+    ["/replan"
      (define result (cmd-replan))
-     (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'exploring))
+     (emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'exploring))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(equal? cmd "/skip")
+    ["/skip"
      (define args-text (extract-cmd-args input-text))
      (define result (cmd-skip args-text))
-     ;; Mark wave as DEFERRED on disk + executor if skip succeeded
      (when (and (gsd-success? result) base-dir)
        (define idx (and (string->number (string-trim args-text))))
        (when idx
@@ -425,42 +429,41 @@
          (when exec
            (wave-skip! exec idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(equal? cmd "/reset")
+    ["/reset"
      (define result (cmd-reset))
-     (emit-gsd-event! (quote gsd.mode.changed) (hasheq 'mode 'idle))
+     (emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'idle))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(member cmd '("/wave-done" "/wd"))
+    [(? (lambda (c) (member c '("/wave-done" "/wd"))))
      (define wd-args (extract-cmd-args input-text))
      (define result (cmd-wave-done base-dir wd-args))
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
-         (emit-gsd-event! (quote gsd.wave.completed) (hasheq 'wave wave-idx))))
+         (emit-gsd-event! 'gsd.wave.completed (hasheq 'wave wave-idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(equal? cmd "/done")
+    ["/done"
      (define done-args (extract-cmd-args input-text))
      (define force? (and done-args (string-contains? done-args "--force")))
      (define result (cmd-done base-dir force?))
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
-       (emit-gsd-event! (quote gsd.plan.archived)
+       (emit-gsd-event! 'gsd.plan.archived
                         (hasheq 'path
                                 (if (hash? data)
                                     (hash-ref data 'archive-path "")
                                     ""))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [else (handle-artifact-command cmd input-text base-dir payload)]))
+    [_ (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; wave-docs-summary delegated to plan-diff.rkt
 
 ;; Handler for /go command
 (define (handle-go-command base-dir input-text)
   (define plan-content (read-planning-artifact base-dir "PLAN"))
-  (cond
-    [(not plan-content)
-     (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
-    [else
+  (match plan-content
+    [#f (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
+    [_
      ;; v0.24.4: Use normalized pipeline (parse → normalize → validate → executor)
      ;; v0.21.1: Try loading from wave doc index first, fall back to inline parse
      (define plan-from-index (load-plan-from-index base-dir))
@@ -471,14 +474,14 @@
      (emit-gsd-event! 'gsd.plan.parsed (hasheq 'wave-count (length (gsd-plan-waves plan))))
      ;; Step 1: Normalize plan to canonical IR
      (define norm-result (normalize-plan plan))
-     (cond
-       [(string? norm-result)
+     (match norm-result
+       [(? string?)
         ;; Normalization failed (structural error)
         (hook-amend (hasheq 'text
                             (string-append "Plan normalization failed:\n"
                                            norm-result
                                            "\n\nFix the plan before using /go.")))]
-       [else
+       [_
         ;; Emit gsd.plan.normalized event
         (emit-gsd-event! 'gsd.plan.normalized
                          (hasheq 'wave-count (length (gsd-normalized-plan-waves norm-result))))
@@ -497,14 +500,14 @@
                                  (if validated-plan?
                                      0
                                      (length (validation-warnings validation)))))
-        (cond
-          [(not validated-plan?)
+        (match validated-plan?
+          [#f
            (define report (format-validation-report validation))
            (hook-amend (hasheq 'text
                                (string-append "Plan validation failed:\n"
                                               report
                                               "\n\nFix the plan before using /go.")))]
-          [else
+          [_
            ;; v0.24.6: Use with-gsd-transaction for snapshot/restore
            (define-values (executor wave-indices)
              (with-gsd-transaction
@@ -526,11 +529,11 @@
                 (emit-gsd-event! 'gsd.mode.changed
                                  (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
            ;; Transaction returns gsd-err on failure, or the thunk values on success
-           (cond
-             [(gsd-command-result? executor)
+           (match executor
+             [(? gsd-command-result?)
               ;; Transaction failed — executor is actually gsd-err result
               (hook-amend (hasheq 'text (gsd-command-result-message executor)))]
-             [else
+             [_
               (define state-content (read-planning-artifact base-dir "STATE"))
               (define state-note
                 (if state-content
@@ -579,14 +582,14 @@
 ;; Handler for artifact display and /plan <text> commands
 (define (handle-artifact-command cmd input-text base-dir payload)
   (define artifact
-    (cond
-      [(member cmd '("/plan" "/p")) "PLAN"]
-      [(member cmd '("/state" "/s")) "STATE"]
-      [(member cmd '("/handoff" "/ho")) "HANDOFF"]
-      [else #f]))
-  (cond
-    [(not artifact) (hook-pass payload)]
-    [else
+    (match cmd
+      [(? (lambda (c) (member c '("/plan" "/p")))) "PLAN"]
+      [(? (lambda (c) (member c '("/state" "/s")))) "STATE"]
+      [(? (lambda (c) (member c '("/handoff" "/ho")))) "HANDOFF"]
+      [_ #f]))
+  (match artifact
+    [#f (hook-pass payload)]
+    [_
      (define args-text
        (let* ([trimmed (string-trim input-text)]
               [parts (and (> (string-length trimmed) 0)
@@ -595,9 +598,9 @@
          (and (pair? parts)
               (let ([rest (string-trim (substring input-text (string-length (car parts))))])
                 (and (> (string-length rest) 0) rest)))))
-     (cond
+     (match (and (member cmd '("/plan" "/p")) args-text)
        ;; /plan <text> → submit as planning prompt
-       [(and (member cmd '("/plan" "/p")) args-text)
+       [(? values)
         (define saved-bus (gsd-event-bus)) ;; Preserve event bus across reset
         (define saved-dir (pinned-planning-dir)) ;; Preserve pinned dir
         (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
@@ -621,10 +624,10 @@
         ;; Display artifact content
         (define content (read-planning-artifact base-dir artifact))
         (define text
-          (cond
-            [(not content) (format "No ~a found in .planning/" artifact)]
-            [(hash? content) (jsexpr->string content)]
-            [else content]))
+          (match content
+            [#f (format "No ~a found in .planning/" artifact)]
+            [(? hash?) (jsexpr->string content)]
+            [_ content]))
         (hook-amend (hasheq 'text text))])]))
 
 ;; ============================================================
