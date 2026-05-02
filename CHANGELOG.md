@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.28.9 — 2026-05-04
+
+### Typed Racket Expansion
+
+- **W0**: Migrate `util/event.rkt` to `#lang typed/racket`. Event envelope struct
+  with typed fields, `->*` for optional version arg, `cast` for hash-ref.
+  5 TR boundary tests.
+- **W1**: Migrate `util/hook-types.rkt` to `#lang typed/racket`. Hook result struct,
+  constructors, validation schemas, lambda default for hash-ref. 5 boundary tests.
+- **W2**: Add ADR 0014 documenting TR migration strategy. Document rules, migrated
+  modules, and excluded modules with rationale.
+- **W3**: Version bump + release.
+
+
 ## v0.28.8 — 2026-05-04
 
 ### Extension Hardening & Hook Schema Versioning
