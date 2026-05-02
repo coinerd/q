@@ -270,3 +270,42 @@
   (length (regexp-match* #rx"\\(require\\b" content)))
 
 (run-tests fitness-tests)
+
+;; ════════════════════════════════════════════════════════════
+;; v0.28.10 additions: TR modules, hook schema, event codec
+;; ════════════════════════════════════════════════════════════
+
+(define tr-module-files
+  (list "util/event.rkt"
+        "util/hook-types.rkt"
+        "util/event-payloads.rkt"
+        "extensions/gsd/plan-types.rkt"
+        "extensions/gsd/plan-validator.rkt"))
+
+(define v02810-suite
+  (test-suite "v0.28.10-features"
+    (test-case "RA-6: Typed Racket modules exist and use #lang typed/racket"
+      (for ([f (in-list tr-module-files)])
+        (define p (build-path q-dir f))
+        (check-true (file-exists? p) (format "TR module ~a must exist" f))
+        (when (file-exists? p)
+          (define content (file->string p))
+          (check-true (regexp-match? #rx"#lang typed/racket" content)
+                      (format "~a must use #lang typed/racket" f)))))
+    (test-case "RA-7: HOOK-SCHEMA-VERSION defined in hook-types.rkt"
+      (define p (build-path q-dir "util" "hook-types.rkt"))
+      (when (file-exists? p)
+        (define content (file->string p))
+        (check-true (regexp-match? #rx"HOOK-SCHEMA-VERSION" content)
+                    "hook-types.rkt must define HOOK-SCHEMA-VERSION")))
+    (test-case "RA-8: Event codec module exists"
+      (define p (build-path q-dir "util" "event-codec.rkt"))
+      (check-true (file-exists? p) "util/event-codec.rkt must exist")
+      (when (file-exists? p)
+        (define content (file->string p))
+        (check-true (regexp-match? #rx"hash->payload" content)
+                    "event-codec.rkt must define hash->payload")
+        (check-true (regexp-match? #rx"payload->hash" content)
+                    "event-codec.rkt must define payload->hash")))))
+
+(run-tests v02810-suite)
