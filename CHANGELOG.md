@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.28.12 — 2026-05-05
+
+### Audit Remediation + Pre-existing Test Fixes
+
+- **W0**: Restore 36 README version entries from last good commit.
+  Add guard comment to prevent future corruption. Add `--validate` flag
+  to `sync-version.rkt` (checks ≥10 unique versions).
+- **W1**: Fix `check-provider-status!` arity mismatches in 4 test files
+  (expected 3 args, called with 2 or 4). Fix `translate-stop-reason`
+  calls (expected 2 args, called with 1). All 396 test cases now pass.
+- **W2**: Add `util/version.rkt` to ADR 0014 migrated modules. Fix
+  `test-types.rkt` `#:version` keyword → positional arg. Version bump.
+
 ## v0.28.11 — 2026-05-05
 
 ### Audit Remediation

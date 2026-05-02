@@ -18,13 +18,14 @@ Migrate stable, struct-heavy utility modules to `#lang typed/racket` following t
 6. **Use lambda defaults for `hash-ref`** — 3-arg `hash-ref` doesn't type-check; use `(hash-ref h key (lambda () default))`
 7. **Use `Any` for event name fields** — callers pass both strings and symbols
 
-## Migrated modules (v0.28.9–v0.28.11)
+## Migrated modules (v0.28.9–v0.28.12)
 
 - `util/event-payloads.rkt` (v0.28.7) — event payload structs + codec serialization
 - `util/event.rkt` (v0.28.9) — event envelope struct + serialization
 - `util/hook-types.rkt` (v0.28.9) — hook result types + validation schemas
 - `extensions/gsd/plan-types.rkt` (v0.22.8) — GSD plan/task/wave types
 - `extensions/gsd/plan-validator.rkt` (v0.22.8) — plan validation
+- `util/version.rkt` (v0.28.12) — single-source version constant
 
 ## Modules NOT migrated (and why)
 
