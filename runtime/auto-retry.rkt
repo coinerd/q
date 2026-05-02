@@ -27,7 +27,11 @@
          ;; Struct for retry stats
          (struct-out retry-stats)
          ;; Struct for retry exhaustion (A3)
-         (struct-out retry-exhausted))
+         (struct-out retry-exhausted)
+         ;; Struct for retry policy (A21)
+         (struct-out retry-policy)
+         make-default-retry-policy
+         with-retry-policy)
 
 ;; ============================================================
 ;; Configuration
@@ -43,6 +47,20 @@
 ;; ============================================================
 
 (struct retry-stats (attempts final-delay-ms succeeded?) #:transparent)
+
+;; Retry policy struct — encapsulates retry configuration as a first-class value.
+;; Can be composed, tested, and passed to with-retry-policy.
+(struct retry-policy
+        (max-retries base-delay-ms rate-limit-base-delay-ms max-delay-ms per-type-budgets)
+  #:transparent)
+
+(define (make-default-retry-policy
+         #:max-retries [max-retries default-max-retries]
+         #:base-delay-ms [base-delay-ms default-base-delay-ms]
+         #:rate-limit-base-delay-ms [rl-base-delay-ms default-rate-limit-base-delay-ms]
+         #:max-delay-ms [max-delay-ms default-max-delay-ms]
+         #:per-type-budgets [per-type-budgets (hash 'timeout 2 'rate-limit 4 'provider-error 2)])
+  (retry-policy max-retries base-delay-ms rl-base-delay-ms max-delay-ms per-type-budgets))
 
 ;; Raised when retries are exhausted. Wraps the original exception with metadata
 ;; so callers (agent-session, TUI) can distinguish exhaustion from first failure.
@@ -60,9 +78,9 @@
     (for/or ([pattern (in-list PERMANENT_TOOL_PATTERNS)])
       (string-contains? (string-downcase (exn-message exn)) (string-downcase pattern))
       #f)) ; matched but return #f via cond below
-  (cond
-    [(permanent-tool-error? exn) #f]
-    [else
+  (match (permanent-tool-error? exn)
+    [#t #f]
+    [_
      (define msg (exn-message exn))
      (define retryable-patterns
        '("429" "rate"
@@ -144,42 +162,66 @@
 ;; 'max-iterations, 'provider-error
 (define (classify-error exn)
   ;; Fast path: structured provider-error carries its own category.
-  (cond
-    [(provider-error? exn)
+  (match (provider-error? exn)
+    [#t
      (define cat (provider-error-category exn))
      (if cat cat 'provider-error)]
-    [else
+    [_
      ;; Fallback: string-based classification for non-structured errors
      (define msg
        (if (exn:fail? exn)
            (exn-message exn)
            (format "~a" exn)))
      (define msg-down (string-downcase msg))
-     (cond
-       [(string-contains? msg-down "max.iterations") 'max-iterations]
-       [(string-contains? msg-down "429") 'rate-limit]
-       [(string-contains? msg-down "rate") 'rate-limit]
-       [(string-contains? msg-down "overloaded") 'rate-limit]
-       [(string-contains? msg-down "quota") 'rate-limit]
-       [(for/or ([p (in-list '("401" "403" "auth" "unauthorized" "permission"))])
-          (string-contains? msg-down p))
+     (match #t
+       [_
+        #:when (string-contains? msg-down "max.iterations")
+        'max-iterations]
+       [_
+        #:when (string-contains? msg-down "429")
+        'rate-limit]
+       [_
+        #:when (string-contains? msg-down "rate")
+        'rate-limit]
+       [_
+        #:when (string-contains? msg-down "overloaded")
+        'rate-limit]
+       [_
+        #:when (string-contains? msg-down "quota")
+        'rate-limit]
+       [_
+        #:when (for/or ([p (in-list '("401" "403" "auth" "unauthorized" "permission"))])
+                 (string-contains? msg-down p))
         'auth]
-       [(for/or ([p (in-list '("context_length" "context length"
-                                                "too many tokens"
-                                                "token limit"
-                                                "max_tokens"
-                                                "input is too long"
-                                                "exceeds the maximum"))])
-          (string-contains? msg-down p))
+       [_
+        #:when (for/or ([p (in-list '("context_length" "context length"
+                                                       "too many tokens"
+                                                       "token limit"
+                                                       "max_tokens"
+                                                       "input is too long"
+                                                       "exceeds the maximum"))])
+                 (string-contains? msg-down p))
         'context-overflow]
-       [(for/or ([p (in-list TIMEOUT_PATTERNS)])
-          (string-contains? msg-down p))
+       [_
+        #:when (for/or ([p (in-list TIMEOUT_PATTERNS)])
+                 (string-contains? msg-down p))
         'timeout]
-       [else 'provider-error])]))
+       [_ 'provider-error])]))
 
 ;; ============================================================
 ;; Retry logic
 ;; ============================================================
+
+;; Execute a thunk using a retry-policy struct.
+;; Policy-first entry point — prefer over with-auto-retry for new code.
+(define (with-retry-policy policy thunk #:on-retry [on-retry #f])
+  (with-auto-retry thunk
+                   #:max-retries (retry-policy-max-retries policy)
+                   #:base-delay-ms (retry-policy-base-delay-ms policy)
+                   #:rate-limit-base-delay-ms (retry-policy-rate-limit-base-delay-ms policy)
+                   #:max-delay-ms (retry-policy-max-delay-ms policy)
+                   #:on-retry on-retry
+                   #:per-type-budgets (retry-policy-per-type-budgets policy)))
 
 ;; Execute a thunk with automatic retry on retryable errors.
 ;; Returns the thunk result on success, or re-raises on non-retryable
@@ -207,8 +249,10 @@
             (define current-type-count (hash-ref type-attempts err-type 0))
             (define type-budget (hash-ref per-type-budgets err-type max-retries))
             ;; Can retry if: globally under max-retries AND per-type under budget
-            (cond
-              [(and (retryable-error? exn) (< attempt max-retries) (< current-type-count type-budget))
+            (match (and (retryable-error? exn)
+                        (< attempt max-retries)
+                        (< current-type-count type-budget))
+              [#t
                ;; A1: Use longer backoff for rate-limit errors
                (define rl-base (if (eq? err-type 'rate-limit) rl-base-delay-ms base-delay-ms))
                (define next-delay (min (* rl-base (expt 2 attempt)) max-delay-ms))
@@ -224,7 +268,7 @@
                      err-type
                      (hash-set type-attempts err-type (add1 current-type-count))
                      (append error-history (list err-type)))]
-              [else
+              [_
                ;; A3: Wrap in retry-exhausted if we attempted retries
                (define final-history (append error-history (list err-type)))
                (if (> attempt 0)

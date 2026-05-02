@@ -457,3 +457,51 @@
   (check-equal? (unbox attempt-count) 1 "should not retry permanent tool error")
   (check-true (exn:fail? (unbox raised-exn)) "should raise the original error")
   (check-false (retry-exhausted? (unbox raised-exn)) "should NOT be retry-exhausted"))
+
+;; ============================================================
+;; A21: retry-policy struct + with-retry-policy tests (v0.28.4)
+;; ============================================================
+
+(test-case "A21: retry-policy struct construction"
+  (define p (retry-policy 3 100 500 60000 (hash 'timeout 2)))
+  (check-equal? (retry-policy-max-retries p) 3)
+  (check-equal? (retry-policy-base-delay-ms p) 100)
+  (check-equal? (retry-policy-rate-limit-base-delay-ms p) 500)
+  (check-equal? (retry-policy-max-delay-ms p) 60000))
+
+(test-case "A21: make-default-retry-policy returns sensible defaults"
+  (define p (make-default-retry-policy))
+  (check-equal? (retry-policy-max-retries p) default-max-retries)
+  (check-equal? (retry-policy-base-delay-ms p) default-base-delay-ms)
+  (check-equal? (retry-policy-rate-limit-base-delay-ms p) default-rate-limit-base-delay-ms)
+  (check-equal? (retry-policy-max-delay-ms p) default-max-delay-ms))
+
+(test-case "A21: make-default-retry-policy with overrides"
+  (define p (make-default-retry-policy #:max-retries 5 #:base-delay-ms 200))
+  (check-equal? (retry-policy-max-retries p) 5)
+  (check-equal? (retry-policy-base-delay-ms p) 200)
+  (check-equal? (retry-policy-rate-limit-base-delay-ms p) default-rate-limit-base-delay-ms))
+
+(test-case "A21: with-retry-policy succeeds on first try"
+  (define p (make-default-retry-policy))
+  (check-equal? (with-retry-policy p (lambda () 42)) 42))
+
+(test-case "A21: with-retry-policy retries then succeeds"
+  (define p (make-default-retry-policy #:max-retries 2 #:base-delay-ms 10))
+  (define attempt (box 0))
+  (define result
+    (with-retry-policy p
+                       (lambda ()
+                         (set-box! attempt (add1 (unbox attempt)))
+                         (if (= (unbox attempt) 1)
+                             (raise (exn:fail "HTTP 503" (current-continuation-marks)))
+                             'ok))))
+  (check-equal? result 'ok)
+  (check-equal? (unbox attempt) 2))
+
+(test-case "A21: with-retry-policy exhausts retries"
+  (define p (make-default-retry-policy #:max-retries 1 #:base-delay-ms 1))
+  (define exn-result (box #f))
+  (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
+    (with-retry-policy p (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))))
+  (check-true (retry-exhausted? (unbox exn-result))))
