@@ -6,6 +6,7 @@
          racket/string
          json
          (only-in "../helpers.rkt"
+                  with-error-result
                   gh-binary
                   gh-unavailable-error
                   valid-number?
@@ -16,13 +17,6 @@
          (only-in "../../tool-api.rkt" make-error-result make-success-result))
 
 (provide handle-gh-issue)
-
-;; Local macro: execute body, returning error result on failure
-(define-syntax-rule (with-error-result ctx-msg body ...)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning (format "~a: ~a" ctx-msg (exn-message e)))
-                               (make-error-result (exn-message e)))])
-    body ...))
 
 (define (handle-gh-issue args [exec-ctx #f])
   (with-error-result
