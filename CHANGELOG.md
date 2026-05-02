@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.28.3 — 2026-05-03
+
+### TUI Rendering Abstraction
+
+- **W0**: Convert `tui/terminal-input.rkt` cond→match (23→0 cond forms).
+  UTF-8 lead byte dispatch, CSI sequence decoding, Kitty codepoint mapping,
+  SGR mouse parsing, stdin byte dispatch all converted to match patterns.
+- **W1**: Convert `tui/tui-keybindings.rkt` cond→match (7→0) and
+  `util/markdown.rkt` cond→match (16→12, 5 safe conversions).
+  Discovered `#\(` char literal incompatibility with Racket match expressions.
+- **W2**: Audit confirms TUI module provide hygiene already clean.
+  All TUI modules use explicit named provides, no `all-defined-out`.
+
+
 ## v0.28.2 — 2026-05-02
 
 ### Tool System & GSD Abstraction Cleanup
