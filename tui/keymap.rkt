@@ -5,6 +5,7 @@
 ;; Provides a data-driven keymap that replaces hardcoded key handling.
 ;; Users can override keybindings via ~/.q/keybindings.json.
 
+(require "../util/error-helpers.rkt")
 (require racket/string
          racket/port
          racket/file
@@ -240,19 +241,19 @@
 ;; Key format: C- = ctrl, M- = alt, S- = shift, then key name
 ;; Returns #f if file doesn't exist, otherwise a keymap
 (define (load-user-keymap)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define config-dir (global-config-dir))
-    (define kb-path (build-path config-dir "keybindings.json"))
-    (if (file-exists? kb-path)
-        (let ([bindings (load-keybindings-file kb-path)])
-          (if (list? bindings)
-              (let ([km (make-keymap)])
-                (for ([b (in-list bindings)])
-                  (when (and b (pair? b))
-                    (keymap-add! km (car b) (cdr b))))
-                km)
-              #f))
-        #f)))
+  (with-safe-fallback #f
+                      (define config-dir (global-config-dir))
+                      (define kb-path (build-path config-dir "keybindings.json"))
+                      (if (file-exists? kb-path)
+                          (let ([bindings (load-keybindings-file kb-path)])
+                            (if (list? bindings)
+                                (let ([km (make-keymap)])
+                                  (for ([b (in-list bindings)])
+                                    (when (and b (pair? b))
+                                      (keymap-add! km (car b) (cdr b))))
+                                  km)
+                                #f))
+                          #f)))
 
 ;; Parse a key string like "C-M-a", "C-up", "S-right"
 (define (parse-key-string s)

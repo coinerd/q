@@ -6,6 +6,7 @@
 ;;   - qpm-manifest struct with all package metadata fields
 ;;   - Validation, serialization (JSON), file I/O, comparison, and checksum
 
+(require "../util/error-helpers.rkt")
 (require racket/contract
          racket/string
          racket/list
@@ -241,40 +242,41 @@
   (or (json-get j key) (error (format "missing required key: ~a" key))))
 
 (define (jsexpr->qpm-manifest j)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (unless (hash? j)
-      (error "not a hash"))
-    (define type-val (json-get j 'type))
-    (define type-sym
-      (cond
-        [(symbol? type-val) type-val]
-        [(string? type-val) (string->symbol type-val)]
-        [else (error "bad type value")]))
-    (make-qpm-manifest #:name (json-req j 'name)
-                       #:version (json-req j 'version)
-                       #:api-version (or (json-get j 'api_version) (json-get j 'api-version) "")
-                       #:type type-sym
-                       #:description (json-req j 'description)
-                       #:author (json-req j 'author)
-                       #:compat (json-get j 'compat)
-                       #:compatibility (json-get j 'compatibility)
-                       #:files (or (json-get j 'files) '())
-                       #:checksum (json-get j 'checksum)
-                       #:entry (json-get j 'entry)
-                       #:homepage (json-get j 'homepage)
-                       #:license (json-get j 'license))))
+  (with-safe-fallback #f
+                      (unless (hash? j)
+                        (error "not a hash"))
+                      (define type-val (json-get j 'type))
+                      (define type-sym
+                        (cond
+                          [(symbol? type-val) type-val]
+                          [(string? type-val) (string->symbol type-val)]
+                          [else (error "bad type value")]))
+                      (make-qpm-manifest #:name (json-req j 'name)
+                                         #:version (json-req j 'version)
+                                         #:api-version
+                                         (or (json-get j 'api_version) (json-get j 'api-version) "")
+                                         #:type type-sym
+                                         #:description (json-req j 'description)
+                                         #:author (json-req j 'author)
+                                         #:compat (json-get j 'compat)
+                                         #:compatibility (json-get j 'compatibility)
+                                         #:files (or (json-get j 'files) '())
+                                         #:checksum (json-get j 'checksum)
+                                         #:entry (json-get j 'entry)
+                                         #:homepage (json-get j 'homepage)
+                                         #:license (json-get j 'license))))
 
 ;; ============================================================
 ;; File I/O
 ;; ============================================================
 
 (define (read-qpm-manifest path)
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (call-with-input-file path
-                          (lambda (in)
-                            (define j (read-json in))
-                            (jsexpr->qpm-manifest j))
-                          #:mode 'text)))
+  (with-safe-fallback #f
+                      (call-with-input-file path
+                                            (lambda (in)
+                                              (define j (read-json in))
+                                              (jsexpr->qpm-manifest j))
+                                            #:mode 'text)))
 
 (define (write-qpm-manifest m path)
   (define h (qpm-manifest->jsexpr m))

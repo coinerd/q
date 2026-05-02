@@ -6,6 +6,7 @@
 ;; provider (from config) or a mock provider. Captures trace and returns
 ;; structured execution results.
 
+(require "../../util/error-helpers.rkt")
 (require racket/file
          racket/format
          racket/list
@@ -256,9 +257,7 @@
 ;; trace-tool-call-count : path? -> exact-nonnegative-integer?
 ;; Count tool.call.started events in trace JSONL as iteration proxy.
 (define (trace-tool-call-count trace-path)
-  (define entries
-    (with-handlers ([exn:fail? (lambda (e) '())])
-      (jsonl-read-all-valid trace-path)))
+  (define entries (with-safe-fallback '() (jsonl-read-all-valid trace-path)))
   (for/sum ([e (in-list entries)] #:when (and (hash? e)
                                               (equal? (hash-ref e 'phase #f) "tool.call.started")))
            1))

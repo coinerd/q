@@ -21,6 +21,7 @@
 ;; The public API (provide) is identical to the original monolithic module
 ;; before the refactor into bridge + input + facade.
 
+(require "../util/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list
@@ -390,23 +391,23 @@
 ;; Returns #t if a valid response was received (terminal supports queries),
 ;; #f if no response (non-interactive or unknown terminal).
 (define (query-terminal-version)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (cond
-      [(not (terminal-port? (current-input-port))) #f]
-      [else
-       (display "\x1b[>c")
-       (flush-output)
-       (define ready (sync/timeout 0.05 (current-input-port)))
-       (if (not ready)
-           #f
-           (let ([buf (make-bytes 64)])
-             (define n (read-bytes-avail! buf (current-input-port)))
-             (cond
-               [(eof-object? n) #f]
-               [(and (integer? n) (> n 0))
-                (define resp (bytes->string/latin-1 (subbytes buf 0 n)))
-                (or (parse-xtversion-response resp) (parse-da1-response resp))]
-               [else #f])))])))
+  (with-safe-fallback #f
+                      (cond
+                        [(not (terminal-port? (current-input-port))) #f]
+                        [else
+                         (display "\x1b[>c")
+                         (flush-output)
+                         (define ready (sync/timeout 0.05 (current-input-port)))
+                         (if (not ready)
+                             #f
+                             (let ([buf (make-bytes 64)])
+                               (define n (read-bytes-avail! buf (current-input-port)))
+                               (cond
+                                 [(eof-object? n) #f]
+                                 [(and (integer? n) (> n 0))
+                                  (define resp (bytes->string/latin-1 (subbytes buf 0 n)))
+                                  (or (parse-xtversion-response resp) (parse-da1-response resp))]
+                                 [else #f])))])))
 
 ;; Check if port is a real terminal.
 (define (tty? port)

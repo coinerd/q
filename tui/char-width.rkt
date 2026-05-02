@@ -8,6 +8,7 @@
 ;;
 ;; Reference: Unicode East Asian Width property (UAX #11)
 
+(require "../util/error-helpers.rkt")
 (require racket/string)
 
 (provide char-width
@@ -194,8 +195,7 @@
 ;; Use Racket's string-grapheme-span if available (8.12+), else fallback.
 ;; dynamic-require avoids compile-time unbound identifier on Racket < 8.12
 (define grapheme-span-impl
-  (with-handlers ([exn:fail? (lambda (_) #f)])
-    (dynamic-require 'racket/string 'string-grapheme-span)))
+  (with-safe-fallback #f (dynamic-require 'racket/string 'string-grapheme-span)))
 
 (define (grapheme-span-at-impl s i)
   (if (>= i (string-length s))

@@ -8,6 +8,7 @@
 ;;
 ;; #1194: Process-Safe Settings Writes
 
+(require "../util/error-helpers.rkt")
 (require racket/contract
          racket/file
          racket/port
@@ -79,13 +80,13 @@
 
 ;; Read PID from lockfile
 (define (read-lock-pid lock-file)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (call-with-input-file lock-file
-                          (lambda (in)
-                            (define line (read-line in))
-                            (and (string? line)
-                                 (let ([n (string->number (string-trim line))])
-                                   (and (exact-positive-integer? n) n)))))))
+  (with-safe-fallback #f
+                      (call-with-input-file lock-file
+                                            (lambda (in)
+                                              (define line (read-line in))
+                                              (and (string? line)
+                                                   (let ([n (string->number (string-trim line))])
+                                                     (and (exact-positive-integer? n) n)))))))
 
 ;; Write our PID to lockfile
 (define (write-lock-pid lock-file)
@@ -104,13 +105,13 @@
       (with-handlers ([exn:fail? void])
         (delete-file lock-file))))
   ;; Try to create lock file exclusively
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (call-with-output-file lock-file
-                           (lambda (out)
-                             (display (getpid) out)
-                             (newline out))
-                           #:exists 'error) ;; Fail if file exists
-    #t))
+  (with-safe-fallback #f
+                      (call-with-output-file lock-file
+                                             (lambda (out)
+                                               (display (getpid) out)
+                                               (newline out))
+                                             #:exists 'error) ;; Fail if file exists
+                      #t))
 
 ;; Release lock by deleting the file (only if we own it)
 (define (release-lock! lock-file)

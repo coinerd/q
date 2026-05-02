@@ -1,12 +1,16 @@
 #lang racket/base
 
+(require "../../util/error-helpers.rkt")
 (require racket/file
          racket/string
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
          (only-in "../../util/glob.rkt" glob->regexp)
          (only-in "../../util/path-filters.rkt"
-                  hidden-name? vcs-dir? skip-dirs path-component-hidden?)
+                  hidden-name?
+                  vcs-dir?
+                  skip-dirs
+                  path-component-hidden?)
          (only-in "../../util/path-helpers.rkt" expand-home-path))
 
 (provide tool-find)
@@ -42,9 +46,7 @@
 
   ;; depth-first walk
   (define (walk current-dir depth)
-    (define entries
-      (with-handlers ([exn:fail? (lambda (e) '())])
-        (directory-list current-dir #:build? #f)))
+    (define entries (with-safe-fallback '() (directory-list current-dir #:build? #f)))
     (for ([entry (in-list entries)])
       (define entry-str (path->string entry))
       (define full-path (build-path current-dir entry))
@@ -73,7 +75,7 @@
   (cond
     [(not (hash-has-key? args 'path)) (make-error-result "Missing required argument: path")]
     [else
-    (define raw-path (hash-ref args 'path))
+     (define raw-path (hash-ref args 'path))
      (define path-str (expand-home-path raw-path))
      (cond
        [(not (string? path-str)) (make-error-result "Argument 'path' must be a string")]

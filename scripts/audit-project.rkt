@@ -12,6 +12,7 @@
 ;;   racket scripts/audit-project.rkt --stdout     # print to stdout
 ;;   racket scripts/audit-project.rkt --json      # JSON output
 
+(require "../util/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list

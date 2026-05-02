@@ -8,6 +8,7 @@
 ;;
 ;; Extracted from terminal.rkt for separation of concerns.
 
+(require "../util/error-helpers.rkt")
 (require racket/port
          racket/string
          racket/list
@@ -40,148 +41,105 @@
 
          ;; Mouse message adapters (#1120)
          tmousemsg-tui-term? ;; true for tui-term struct mouse msgs
-         tmousemsg-kind      ;; kind accessor (press/release/move/wheel-up/wheel-down)
-         tmousemsg-pos-x     ;; x coordinate (0-based)
-         tmousemsg-pos-y     ;; y coordinate (0-based)
-         tmousemsg-left?     ;; left button held?
-         tmousemsg-middle?   ;; middle button held?
-         tmousemsg-right?)   ;; right button held?
+         tmousemsg-kind ;; kind accessor (press/release/move/wheel-up/wheel-down)
+         tmousemsg-pos-x ;; x coordinate (0-based)
+         tmousemsg-pos-y ;; y coordinate (0-based)
+         tmousemsg-left? ;; left button held?
+         tmousemsg-middle? ;; middle button held?
+         tmousemsg-right?) ;; right button held?
 
 ;; ============================================================
 ;; Dynamic require: detect tui-term availability
 ;; ============================================================
 
-(define tui-term-available?
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (collection-path "tui")
-    #t))
+(define tui-term-available? (with-safe-fallback #f (collection-path "tui") #t))
 
 ;; ============================================================
 ;; Dynamic requires (will be #f if not available)
 ;; ============================================================
 
 (define make-tty-term-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'make-tty-term))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'make-tty-term))))
 
 (define term-alternate-screen-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'term-alternate-screen))))
+       (with-safe-fallback #f (dynamic-require 'tui/term 'term-alternate-screen))))
 
 (define term-normal-screen-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'term-normal-screen))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'term-normal-screen))))
 
 (define term-hide-cursor-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'term-hide-cursor))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'term-hide-cursor))))
 
 (define term-show-cursor-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'term-show-cursor))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'term-show-cursor))))
 
 (define term-close-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'term-close))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'term-close))))
 
 (define current-term-size-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'current-term-size))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'current-term-size))))
 
 (define read-msg-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'read-msg))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'read-msg))))
 
 (define byte-ready-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'byte-ready?))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'byte-ready?))))
 
 ;; Dynamic require for message struct predicates and accessors
 (define tkeymsg?-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tkeymsg?))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tkeymsg?))))
 
 (define tkeymsg-key-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tkeymsg-key))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tkeymsg-key))))
 
 (define tsizemsg?-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tsizemsg?))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tsizemsg?))))
 
 (define tsizemsg-cols-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tsizemsg-cols))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tsizemsg-cols))))
 
 (define tsizemsg-rows-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tsizemsg-rows))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tsizemsg-rows))))
 
 (define tcmdmsg?-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tcmdmsg?))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tcmdmsg?))))
 
 (define tcmdmsg-cmd-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tcmdmsg-cmd))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tcmdmsg-cmd))))
 
 ;; Mouse message dynamic requires (#1120)
 (define tmousemsg?-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tmousemsg?))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tmousemsg?))))
 
 (define tmousemsg-kind-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tmousemsg-kind))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tmousemsg-kind))))
 
 (define tmousemsg-pos-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tmousemsg-pos))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tmousemsg-pos))))
 
 (define tmousemsg-left-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tmousemsg-left))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tmousemsg-left))))
 
 (define tmousemsg-middle-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tmousemsg-middle))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tmousemsg-middle))))
 
 (define tmousemsg-right-fn
   (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term/messages 'tmousemsg-right))))
+       (with-safe-fallback #f (dynamic-require 'tui/term/messages 'tmousemsg-right))))
 
 ;; tpoint accessors for pos field
 (define tpoint-x-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'tpoint-x))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'tpoint-x))))
 
 (define tpoint-y-fn
-  (and tui-term-available?
-       (with-handlers ([exn:fail? (lambda (e) #f)])
-         (dynamic-require 'tui/term 'tpoint-y))))
+  (and tui-term-available? (with-safe-fallback #f (dynamic-require 'tui/term 'tpoint-y))))
 
 ;; ============================================================
 ;; Stub implementations (when tui-term not available)

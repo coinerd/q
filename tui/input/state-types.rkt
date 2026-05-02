@@ -4,6 +4,7 @@
 ;;
 ;; Pure data definitions. No logic.
 
+(require "../../util/error-helpers.rkt")
 (require racket/string
          racket/list
          "../char-width.rkt"
@@ -167,29 +168,29 @@
 
 ;; Decode a tui-term tmousemsg struct into q's internal mouse event format.
 (define (decode-mouse-tui-term msg)
-  (with-handlers ([exn:fail? (lambda (e) #f)])
-    (define kind (tmousemsg-kind msg))
-    (define x (tmousemsg-pos-x msg))
-    (define y (tmousemsg-pos-y msg))
-    (define left (tmousemsg-left? msg))
-    (case kind
-      [(wheel-up) (list 'mouse 'scroll-up x y)]
-      [(wheel-down) (list 'mouse 'scroll-down x y)]
-      [(press)
-       (define button
-         (cond
-           [(tmousemsg-left? msg) 0]
-           [(tmousemsg-middle? msg) 1]
-           [(tmousemsg-right? msg) 2]
-           [else 0]))
-       (list 'mouse 'click button x y)]
-      [(release) (list 'mouse 'release x y)]
-      [(move)
-       (if (or left (tmousemsg-right? msg) (tmousemsg-middle? msg))
-           (list 'mouse 'drag x y)
-           #f)]
-      [(leave) #f]
-      [else #f])))
+  (with-safe-fallback #f
+                      (define kind (tmousemsg-kind msg))
+                      (define x (tmousemsg-pos-x msg))
+                      (define y (tmousemsg-pos-y msg))
+                      (define left (tmousemsg-left? msg))
+                      (case kind
+                        [(wheel-up) (list 'mouse 'scroll-up x y)]
+                        [(wheel-down) (list 'mouse 'scroll-down x y)]
+                        [(press)
+                         (define button
+                           (cond
+                             [(tmousemsg-left? msg) 0]
+                             [(tmousemsg-middle? msg) 1]
+                             [(tmousemsg-right? msg) 2]
+                             [else 0]))
+                         (list 'mouse 'click button x y)]
+                        [(release) (list 'mouse 'release x y)]
+                        [(move)
+                         (if (or left (tmousemsg-right? msg) (tmousemsg-middle? msg))
+                             (list 'mouse 'drag x y)
+                             #f)]
+                        [(leave) #f]
+                        [else #f])))
 
 ;; Normalize selection so start <= end (row-major order)
 (define (normalize-selection-range anchor end)
