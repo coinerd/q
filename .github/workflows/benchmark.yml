@@ -37,7 +37,7 @@ jobs:
           racket scripts/run-benchmark.rkt --live --task-dir scripts/benchmark/tasks/ --output-dir traces/ --json --provider $Q_BENCHMARK_PROVIDER
 
       - name: Upload traces
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: benchmark-traces-${{ github.ref_name }}
