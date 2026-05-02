@@ -31,25 +31,38 @@
 
 ;; Decode a hash back into the appropriate payload struct.
 ;; Returns the hash as-is if no struct type matches (passthrough).
+;; v0.28.11: Uses __type tag for reliable decode, falls back to heuristic matching.
 (define (hash->payload h)
   (cond
     [(not (hash? h)) h]
-    ;; Error payloads
+    ;; Type-tagged decode (reliable, v0.28.11+)
+    [(hash-has-key? h '__type)
+     (case (hash-ref h '__type)
+       [(error) (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
+       [(input) (input-payload (hash-ref h 'session-id) (hash-ref h 'message))]
+       [(session-start)
+        (session-start-payload (hash-ref h 'session-id) (hash-ref h 'config) (hash-ref h 'reason))]
+       [(session-end) (session-end-payload (hash-ref h 'session-id) (hash-ref h 'duration))]
+       [(session-switch) (session-switch-payload (hash-ref h 'session-id) (hash-ref h 'operation))]
+       [(tool-call)
+        (tool-call-event-payload (hash-ref h 'session-id)
+                                 (hash-ref h 'turn-id)
+                                 (hash-ref h 'tool-name)
+                                 (hash-ref h 'tool-call-id))]
+       [(gsd-mode) (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
+       [(session-id) (session-id-payload (hash-ref h 'sessionId))]
+       [else h])]
+    ;; Legacy heuristic decode (backward compatible with pre-v0.28.11 data)
     [(and (hash-has-key? h 'error) (hash-has-key? h 'errorType))
      (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
-    ;; Input payloads
     [(and (hash-has-key? h 'session-id) (hash-has-key? h 'message))
      (input-payload (hash-ref h 'session-id) (hash-ref h 'message))]
-    ;; Session start
     [(and (hash-has-key? h 'session-id) (hash-has-key? h 'config) (hash-has-key? h 'reason))
      (session-start-payload (hash-ref h 'session-id) (hash-ref h 'config) (hash-ref h 'reason))]
-    ;; Session end
     [(and (hash-has-key? h 'session-id) (hash-has-key? h 'duration))
      (session-end-payload (hash-ref h 'session-id) (hash-ref h 'duration))]
-    ;; Session switch
     [(and (hash-has-key? h 'session-id) (hash-has-key? h 'operation))
      (session-switch-payload (hash-ref h 'session-id) (hash-ref h 'operation))]
-    ;; Tool call
     [(and (hash-has-key? h 'session-id)
           (hash-has-key? h 'turn-id)
           (hash-has-key? h 'tool-name)
@@ -58,10 +71,7 @@
                               (hash-ref h 'turn-id)
                               (hash-ref h 'tool-name)
                               (hash-ref h 'tool-call-id))]
-    ;; GSD mode
     [(and (hash-has-key? h 'old-mode) (hash-has-key? h 'new-mode))
      (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
-    ;; Session-id only
     [(hash-has-key? h 'sessionId) (session-id-payload (hash-ref h 'sessionId))]
-    ;; Passthrough
     [else h]))
