@@ -4,7 +4,8 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          "../llm/stream.rkt"
-         "../llm/gemini.rkt")
+         "../llm/gemini.rkt"
+         "../llm/http-helpers.rkt")
 
 ;; ============================================================
 ;; Test suite: llm/gemini.rkt — Google Gemini provider adapter
@@ -491,53 +492,55 @@
 ;; ============================================================
 
 (test-case "HTTP 200 passes without error"
-  (check-not-exn
-   (lambda () ((lambda (sl rb) (check-provider-status! "Gemini" sl rb)) #"HTTP/1.1 200 OK" #"{}"))))
+  (check-not-exn (lambda () (check-provider-status! "Gemini" "Gemini" #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "HTTP 400 raises bad request error"
   (check-exn #rx"bad request [(]400[)]"
              (lambda ()
-               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
-                #"HTTP/1.1 400 Bad Request"
-                #"{\"error\":{\"message\":\"Invalid\"}}"))))
+               (check-provider-status! "Gemini"
+                                       "Gemini"
+                                       #"HTTP/1.1 400 Bad Request"
+                                       #"{\"error\":{\"message\":\"Invalid\"}}"))))
 
 (test-case "HTTP 401 raises authentication error"
   (check-exn #rx"authentication failed [(]401[)]"
              (lambda ()
-               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
-                #"HTTP/1.1 401 Unauthorized"
-                #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
+               (check-provider-status! "Gemini"
+                                       "Gemini"
+                                       #"HTTP/1.1 401 Unauthorized"
+                                       #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
 
 (test-case "HTTP 403 raises forbidden error"
   (check-exn #rx"forbidden [(]403[)]"
              (lambda ()
-               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
-                #"HTTP/1.1 403 Forbidden"
-                #"{\"error\":{\"message\":\"Access denied\"}}"))))
+               (check-provider-status! "Gemini"
+                                       "Gemini"
+                                       #"HTTP/1.1 403 Forbidden"
+                                       #"{\"error\":{\"message\":\"Access denied\"}}"))))
 
 (test-case "HTTP 429 raises rate limit error"
   (check-exn #rx"rate limited [(]429[)]"
              (lambda ()
-               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
-                #"HTTP/1.1 429 Too Many Requests"
-                #"{\"error\":{\"message\":\"Rate limited\"}}"))))
+               (check-provider-status! "Gemini"
+                                       "Gemini"
+                                       #"HTTP/1.1 429 Too Many Requests"
+                                       #"{\"error\":{\"message\":\"Rate limited\"}}"))))
 
 (test-case "HTTP 500 raises server error"
   (check-exn #rx"server error [(]500[)]"
              (lambda ()
-               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
-                #"HTTP/1.1 500 Internal Server Error"
-                #"{\"error\":{\"message\":\"Internal error\"}}"))))
+               (check-provider-status! "Gemini"
+                                       "Gemini"
+                                       #"HTTP/1.1 500 Internal Server Error"
+                                       #"{\"error\":{\"message\":\"Internal error\"}}"))))
 
 (test-case "HTTP 502 raises server error"
-  (check-exn #rx"server error [(]502[)]"
-             (lambda ()
-               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb)) #"HTTP/1.1 502 Bad Gateway"
-                                                                         #"Bad Gateway"))))
+  (check-exn
+   #rx"server error [(]502[)]"
+   (lambda () (check-provider-status! "Gemini" "Gemini" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
 
 (test-case "String status-line also works"
-  (check-not-exn
-   (lambda () ((lambda (sl rb) (check-provider-status! "Gemini" sl rb)) "HTTP/1.1 200 OK" "{}"))))
+  (check-not-exn (lambda () (check-provider-status! "Gemini" "HTTP/1.1 200 OK" "{}"))))
 
 ;; ============================================================
 ;; 21. Tool translation helper
@@ -565,13 +568,13 @@
 ;; 22. Stop reason translation helper (all variants)
 ;; ============================================================
 
-(check-equal? (gemini-translate-stop-reason "STOP") 'stop)
-(check-equal? (gemini-translate-stop-reason "MAX_TOKENS") 'length)
-(check-equal? (gemini-translate-stop-reason "SAFETY") 'content-filtered)
-(check-equal? (gemini-translate-stop-reason "RECITATION") 'content-filtered)
-(check-equal? (gemini-translate-stop-reason "OTHER") 'OTHER "unknown reason → symbol")
-(check-equal? (gemini-translate-stop-reason 'already-symbol) 'already-symbol)
-(check-equal? (gemini-translate-stop-reason 123) 'stop "non-string/non-symbol → stop")
+(check-equal? (translate-stop-reason "STOP") 'stop)
+(check-equal? (translate-stop-reason "MAX_TOKENS") 'length)
+(check-equal? (translate-stop-reason "SAFETY") 'content-filtered)
+(check-equal? (translate-stop-reason "RECITATION") 'content-filtered)
+(check-equal? (translate-stop-reason "OTHER") 'OTHER "unknown reason → symbol")
+(check-equal? (translate-stop-reason 'already-symbol) 'already-symbol)
+(check-equal? (translate-stop-reason 123) 'stop "non-string/non-symbol → stop")
 
 ;; ============================================================
 ;; 23. gemini-build-request-body — streaming flag (accepted but not in body)
@@ -1010,9 +1013,10 @@
 (test-case "Gemini HTTP 429 includes wait/retry guidance"
   (define exn
     (with-handlers ([exn:fail? identity])
-      ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
-       #"HTTP/1.1 429 Too Many Requests"
-       #"{\"error\":{\"message\":\"Rate limited\"}}")))
+      (check-provider-status! "Gemini"
+                              "Gemini"
+                              #"HTTP/1.1 429 Too Many Requests"
+                              #"{\"error\":{\"message\":\"Rate limited\"}}")))
   (check-pred exn? exn)
   (define msg (exn-message exn))
   (check-true (or (string-contains? msg "wait")

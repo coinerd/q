@@ -4,7 +4,8 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          "../llm/stream.rkt"
-         "../llm/anthropic.rkt")
+         "../llm/anthropic.rkt"
+         "../llm/http-helpers.rkt")
 
 ;; ============================================================
 ;; Test suite: llm/anthropic.rkt — Anthropic provider adapter
@@ -487,54 +488,52 @@
 ;; ============================================================
 
 (test-case "HTTP 200 passes without error"
-  (check-not-exn
-   (λ () ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb)) #"HTTP/1.1 200 OK" #"{}"))))
+  (check-not-exn (λ () (check-provider-status! "Anthropic" "Anthropic" #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "HTTP 401 raises authentication error"
   (check-exn #rx"authentication failed [(]401[)]"
              (λ ()
-               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+               (check-provider-status!
                 #"HTTP/1.1 401 Unauthorized"
                 #"{\"error\":{\"type\":\"authentication_error\",\"message\":\"Invalid API key\"}}"))))
 
 (test-case "HTTP 403 raises forbidden error"
   (check-exn #rx"forbidden [(]403[)]"
              (λ ()
-               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+               (check-provider-status!
                 #"HTTP/1.1 403 Forbidden"
                 #"{\"error\":{\"type\":\"permission_error\",\"message\":\"Access denied\"}}"))))
 
 (test-case "HTTP 429 raises rate limit error"
   (check-exn #rx"rate limited [(]429[)]"
              (λ ()
-               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+               (check-provider-status!
                 #"HTTP/1.1 429 Too Many Requests"
                 #"{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Rate limited\"}}"))))
 
 (test-case "HTTP 500 raises server error"
   (check-exn #rx"server error [(]500[)]"
              (λ ()
-               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+               (check-provider-status!
                 #"HTTP/1.1 500 Internal Server Error"
                 #"{\"error\":{\"type\":\"api_error\",\"message\":\"Internal error\"}}"))))
 
 (test-case "HTTP 502 raises server error"
-  (check-exn #rx"server error [(]502[)]"
-             (λ ()
-               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
-                #"HTTP/1.1 502 Bad Gateway"
-                #"Bad Gateway"))))
+  (check-exn
+   #rx"server error [(]502[)]"
+   (λ ()
+     (check-provider-status! "Anthropic" "Anthropic" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
 
 (test-case "HTTP 400 raises generic error"
   (check-exn #rx"error [(]400[)]"
              (λ ()
-               ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
-                #"HTTP/1.1 400 Bad Request"
-                #"{\"error\":{\"type\":\"invalid_request_error\"}}"))))
+               (check-provider-status! "Anthropic"
+                                       "Anthropic"
+                                       #"HTTP/1.1 400 Bad Request"
+                                       #"{\"error\":{\"type\":\"invalid_request_error\"}}"))))
 
 (test-case "String status-line also works"
-  (check-not-exn
-   (λ () ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb)) "HTTP/1.1 200 OK" "{}"))))
+  (check-not-exn (λ () (check-provider-status! "Anthropic" "HTTP/1.1 200 OK" "{}"))))
 
 ;; ============================================================
 ;; 27. SSE Streaming format with parse-sse-lines integration
@@ -587,13 +586,13 @@
 ;; 29. Stop reason translation helper
 ;; ============================================================
 
-(check-equal? (anthropic-translate-stop-reason "end_turn") 'stop)
-(check-equal? (anthropic-translate-stop-reason "max_tokens") 'length)
-(check-equal? (anthropic-translate-stop-reason "stop_sequence") 'stop)
-(check-equal? (anthropic-translate-stop-reason "tool_use") 'tool-calls)
-(check-equal? (anthropic-translate-stop-reason "unknown_reason") 'unknown_reason)
-(check-equal? (anthropic-translate-stop-reason 'already-symbol) 'already-symbol)
-(check-equal? (anthropic-translate-stop-reason 123) 'stop)
+(check-equal? (translate-stop-reason "end_turn") 'stop)
+(check-equal? (translate-stop-reason "max_tokens") 'length)
+(check-equal? (translate-stop-reason "stop_sequence") 'stop)
+(check-equal? (translate-stop-reason "tool_use") 'tool-calls)
+(check-equal? (translate-stop-reason "unknown_reason") 'unknown_reason)
+(check-equal? (translate-stop-reason 'already-symbol) 'already-symbol)
+(check-equal? (translate-stop-reason 123) 'stop)
 
 ;; ============================================================
 ;; 31. Issue #106 — Anthropic multi-turn tool use: assistant tool_calls
@@ -915,7 +914,7 @@
 (test-case "HTTP 429 includes retry/wait guidance"
   (define exn
     (with-handlers ([exn:fail? identity])
-      ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+      (check-provider-status!
        #"HTTP/1.1 429 Too Many Requests"
        #"{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Rate limited\"}}")))
   (check-pred exn? exn)
@@ -927,7 +926,7 @@
 (test-case "HTTP 429 with retry_after_ms includes seconds hint"
   (define exn
     (with-handlers ([exn:fail? identity])
-      ((lambda (sl rb) (check-provider-status! "Anthropic" sl rb))
+      (check-provider-status!
        #"HTTP/1.1 429 Too Many Requests"
        #"{\"error\":{\"type\":\"rate_limit_error\",\"retry_after_ms\":30000,\"message\":\"Slow down\"}}")))
   (check-pred exn? exn)
