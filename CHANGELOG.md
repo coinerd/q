@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.28.5 — 2026-05-04
+
+### Cross-Cutting: Contracts, Boundaries, Polish
+
+- **W0**: Audit confirms contract boundaries already adequate — all public API
+  boundaries use contract-out, internal modules don't meet abstraction gate.
+- **W1**: Convert 30 cond forms to match across 7 files:
+  anthropic (4), gemini (3), openai-compatible (2), stream (3),
+  serialization (9), context-summary (2), model-registry (7).
+- **W2**: Audit confirms struct provide consolidation already canonical.
+- **W3**: Final regression + architecture fitness verification — all pass.
+
+
 ## v0.28.4 — 2026-05-03
 
 ### Runtime Core Abstraction
