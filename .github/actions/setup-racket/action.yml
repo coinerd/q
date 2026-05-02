@@ -20,7 +20,23 @@ runs:
       if: runner.os == 'Linux' && steps.cache-racket.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        curl -L https://download.racket-lang.org/installers/${{ inputs.racket-version }}/racket-${{ inputs.racket-version }}-x86_64-linux-cs.sh -o /tmp/racket.sh
+        BASE_URL="https://download.racket-lang.org/installers/${{ inputs.racket-version }}"
+        FILE="racket-${{ inputs.racket-version }}-x86_64-linux-cs.sh"
+        echo "Downloading Racket ${{ inputs.racket-version }}..."
+        # Try with retries and timeout to handle mirror instability
+        for attempt in 1 2 3; do
+          echo "  Attempt $attempt..."
+          if curl -L --connect-timeout 30 --max-time 300 -o /tmp/racket.sh "$BASE_URL/$FILE"; then
+            echo "  Download succeeded ($(stat -c%s /tmp/racket.sh) bytes)"
+            break
+          fi
+          echo "  Download failed, waiting 10s..."
+          sleep 10
+        done
+        if [ ! -s /tmp/racket.sh ]; then
+          echo "ERROR: Failed to download Racket after 3 attempts"
+          exit 1
+        fi
         sh /tmp/racket.sh --in-place --dest $HOME/racket-install
         ls -la $HOME/racket-install/bin/raco || (echo "Racket installation failed" && exit 1)
 
