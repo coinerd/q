@@ -210,7 +210,7 @@
   (define evt-3
     (make-event "runtime.error" 1775500999 "sess-1" #f
                 '#hash((message . "oops"))
-                #:version 2))
+                2))
   (check-equal? (event-version evt-3) 2))
 
 ;; ------------------------------------------------------------
