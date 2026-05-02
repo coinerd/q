@@ -176,20 +176,6 @@
 
   (make-model-response content usage model-name stop-reason))
 
-;; Translate Anthropic stop reasons to normalized symbols.
-(define (anthropic-translate-stop-reason reason)
-  (cond
-    [(string? reason)
-     (let ([r (string-trim reason)])
-       (cond
-         [(equal? r "end_turn") 'stop]
-         [(equal? r "max_tokens") 'length]
-         [(equal? r "stop_sequence") 'stop]
-         [(equal? r "tool_use") 'tool-calls]
-         [else (string->symbol r)]))]
-    [(symbol? reason) reason]
-    [else 'stop]))
-
 ;; ============================================================
 ;; Stream chunk parsing
 ;; ============================================================
@@ -283,40 +269,6 @@
 ;; ============================================================
 ;; HTTP status check (exported for tests)
 ;; ============================================================
-
-(define (anthropic-check-http-status! status-line response-body)
-  (define status-code (extract-status-code status-line))
-  (when (http-error? status-code)
-    (define error-body
-      (if (bytes? response-body)
-          (bytes->string/utf-8 response-body)
-          response-body))
-    (cond
-      [(= status-code 401)
-       (raise-http-error! (format "Anthropic API authentication failed (401): ~a" error-body)
-                          status-code)]
-      [(= status-code 403)
-       (raise-http-error! (format "Anthropic API forbidden (403): ~a" error-body) status-code)]
-      [(= status-code 429)
-       (define retry-hint
-         (with-logged-catch ""
-                            (lambda ()
-                              (define err-json (string->jsexpr error-body))
-                              (define retry-ms
-                                (hash-ref (hash-ref err-json 'error (hash)) 'retry_after_ms #f))
-                              (if retry-ms
-                                  (format " Retry after ~a seconds." (quotient retry-ms 1000))
-                                  " Please wait and try again."))))
-       (raise-http-error! (format "Anthropic API rate limited (429):~a\n~a" retry-hint error-body)
-                          status-code)]
-      [(>= status-code 500)
-       (raise-http-error! (format "Anthropic API server error (~a): ~a" status-code error-body)
-                          status-code)]
-      [else
-       (raise-http-error! (format "Anthropic API error (~a): ~a" status-code error-body)
-                          status-code)])))
-
-;; ============================================================
 ;; HTTP request execution (non-streaming)
 ;; ============================================================
 
@@ -386,7 +338,7 @@
                0)))
        (when (>= status-code 400)
          (define resp-body (read-response-body/timeout response-port))
-         (anthropic-check-http-status! status-line resp-body))
+         (check-provider-status! "Anthropic" status-line resp-body))
        ;; Incremental SSE parsing — generator yields chunks one at a time
        (define raw-port response-port)
        (define current-tool-id (box #f))
