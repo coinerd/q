@@ -8,7 +8,8 @@
 ;;
 ;; Extracted from terminal.rkt for separation of concerns.
 
-(require racket/port
+(require racket/match
+         racket/port
          racket/string)
 
 ;; Raw stdin reading (used by facade for input selection)
@@ -77,13 +78,13 @@
 ;; Determine the number of bytes in a UTF-8 sequence from the lead byte value.
 ;; Returns 1 for ASCII/continuation, 2/3/4 for valid lead bytes.
 (define (utf8-lead-byte-count b)
-  (cond
-    [(<= b 127) 1] ; ASCII
-    [(<= 128 b 191) 1] ; continuation byte (0x80-0xBF)
-    [(<= 192 b 223) 2] ; 2-byte sequence (0xC0-0xDF)
-    [(<= 224 b 239) 3] ; 3-byte sequence (0xE0-0xEF)
-    [(<= 240 b 247) 4] ; 4-byte sequence (0xF0-0xF7)
-    [else 1]))
+  (match b
+    [(? (lambda (v) (<= v 127))) 1]
+    [(? (lambda (v) (<= 128 v 191))) 1]
+    [(? (lambda (v) (<= 192 v 223))) 2]
+    [(? (lambda (v) (<= 224 v 239))) 3]
+    [(? (lambda (v) (<= 240 v 247))) 4]
+    [_ 1]))
 
 ;; Check if a byte value is a UTF-8 continuation byte (10xxxxxx = 0x80-0xBF)
 (define (utf8-continuation-byte? b)
@@ -121,13 +122,13 @@
   ;; The lead byte is the last element (was first pushed, now at end of cons list)
   (define lead-byte (char->integer (list-ref utf8-accumulator (- n 1))))
   (define expected (utf8-lead-byte-count lead-byte))
-  (cond
-    [(>= n expected)
+  (match (>= n expected)
+    [#t
      ;; Complete sequence — reverse and decode
      (define decoded (reassemble-utf8-chars (reverse utf8-accumulator)))
      (set! utf8-accumulator (list))
      decoded]
-    [else #f]))
+    [_ #f]))
 
 ;; ============================================================
 ;; Raw message constructors (compatible with tkeymsg?/tsizemsg? predicates)
@@ -208,34 +209,34 @@
 ;; Decode a CSI sequence (ESC [ already consumed)
 (define (decode-csi-sequence in)
   (define b (buffered-read-byte in 0.01))
-  (cond
-    [(not b) (make-tkeymsg-raw 'escape)]
-    [(= b 65) (make-tkeymsg-raw 'up)] ;; ESC[A
-    [(= b 66) (make-tkeymsg-raw 'down)] ;; ESC[B
-    [(= b 67) (make-tkeymsg-raw 'right)] ;; ESC[C
-    [(= b 68) (make-tkeymsg-raw 'left)] ;; ESC[D
-    [(= b 72) (make-tkeymsg-raw 'home)] ;; ESC[H
-    [(= b 70) (make-tkeymsg-raw 'end)] ;; ESC[F
-    [(= b 80) (make-tkeymsg-raw 'f1)] ;; ESC[P
-    [(= b 81) (make-tkeymsg-raw 'f2)] ;; ESC[Q
-    [(= b 82) (make-tkeymsg-raw 'f3)] ;; ESC[R
-    [(= b 83) (make-tkeymsg-raw 'f4)] ;; ESC[S
-    [(= b 49) (decode-csi-tilled in 49)]
-    [(= b 52) (decode-csi-tilled in 52)]
-    [(= b 53) (decode-csi-tilled in 53)]
-    [(= b 54) (decode-csi-tilled in 54)]
-    [(= b 50) (decode-csi-tilled in 50)]
-    [(= b 51) (decode-csi-tilled in 51)]
+  (match b
+    [#f (make-tkeymsg-raw 'escape)]
+    [65 (make-tkeymsg-raw 'up)]
+    [66 (make-tkeymsg-raw 'down)]
+    [67 (make-tkeymsg-raw 'right)]
+    [68 (make-tkeymsg-raw 'left)]
+    [72 (make-tkeymsg-raw 'home)]
+    [70 (make-tkeymsg-raw 'end)]
+    [80 (make-tkeymsg-raw 'f1)]
+    [81 (make-tkeymsg-raw 'f2)]
+    [82 (make-tkeymsg-raw 'f3)]
+    [83 (make-tkeymsg-raw 'f4)]
+    [49 (decode-csi-tilled in 49)]
+    [52 (decode-csi-tilled in 52)]
+    [53 (decode-csi-tilled in 53)]
+    [54 (decode-csi-tilled in 54)]
+    [50 (decode-csi-tilled in 50)]
+    [51 (decode-csi-tilled in 51)]
     ;; ESC[< — SGR mouse event (mode 1006)
-    [(= b 60) (decode-sgr-mouse in)]
-    [(= b 77) ;; ESC[M — X10 mouse event
+    [60 (decode-sgr-mouse in)]
+    [77 ;; ESC[M — X10 mouse event
      (define cb (buffered-read-byte in 0.01))
      (define cx (buffered-read-byte in 0.01))
      (define cy (buffered-read-byte in 0.01))
      (if (and cb cx cy)
          (make-tmousemsg-raw cb cx cy)
          (make-tkeymsg-raw 'escape))]
-    [else (make-tkeymsg-raw 'escape)]))
+    [_ (make-tkeymsg-raw 'escape)]))
 
 ;; Decode ESC[N~ style sequences (first digit of N already consumed as `first-digit`)
 ;; Accumulates all remaining digit bytes to support multi-digit params like 200, 201.
@@ -245,17 +246,17 @@
     (and (byte? b) (>= b 48) (<= b 57)))
   (define (read-digits acc)
     (define b (buffered-read-byte in 0.01))
-    (cond
-      [(digit-byte? b) (read-digits (cons (integer->char b) acc))]
-      [else (values (list->string (reverse acc)) b)]))
+    (match b
+      [(? digit-byte?) (read-digits (cons (integer->char b) acc))]
+      [_ (values (list->string (reverse acc)) b)]))
   (define-values (param-str final-byte) (read-digits (list (integer->char first-digit))))
   (define final-ch (and (byte? final-byte) (integer->char final-byte)))
-  (cond
+  (match (list final-ch (char=? final-ch #\~))
     ;; Final ~ — standard CSI N ~ sequence
-    [(and final-ch (char=? final-ch #\~))
-     (cond
+    [(list _ #t)
+     (match param-str
        ;; Bracketed paste start: ESC[200~
-       [(string=? param-str "200")
+       ["200"
         (set-in-paste! #t)
         (paste-buffer-reset!)
         ;; Read all bytes until ESC[201~ and return as paste event
@@ -263,45 +264,46 @@
        ;; Bracketed paste end: ESC[201~
        ;; Should not reach here normally (handled in read-paste-until-end),
        ;; but handle gracefully if it does.
-       [(string=? param-str "201")
+       ["201"
         (set-in-paste! #f)
         (define text (paste-buffer-get))
         (paste-buffer-reset!)
         (make-paste-event text)]
        ;; Standard key codes
-       [else
+       [_
         (define key (csi-num->key param-str))
         (if key
             (make-tkeymsg-raw key)
             (make-tkeymsg-raw 'escape))])]
     ;; ; — modifier like ESC[1;5A
-    [(and final-ch (char=? final-ch #\;))
+    [(list _ _)
+     #:when (and final-ch (char=? final-ch #\;))
      (define mod-byte (buffered-read-byte in 0.01)) ;; modifier number
      (define b4 (buffered-read-byte in 0.01))
      (define base-key (csi-num->key param-str))
      (define base-key-or-dir
-       (cond
-         [(and (byte? b4) (= b4 65)) 'up]
-         [(and (byte? b4) (= b4 66)) 'down]
-         [(and (byte? b4) (= b4 67)) 'right]
-         [(and (byte? b4) (= b4 68)) 'left]
-         [(and (byte? b4) (= b4 72)) 'home]
-         [(and (byte? b4) (= b4 70)) 'end]
-         [else base-key]))
-     (cond
-       [(not base-key-or-dir) (make-tkeymsg-raw 'escape)]
-       [(not (and (byte? mod-byte) (> mod-byte 49))) (make-tkeymsg-raw base-key-or-dir)]
-       [else
+       (match b4
+         [65 'up]
+         [66 'down]
+         [67 'right]
+         [68 'left]
+         [72 'home]
+         [70 'end]
+         [_ base-key]))
+     (match (list base-key-or-dir (and (byte? mod-byte) (> mod-byte 49)))
+       [(list #f _) (make-tkeymsg-raw 'escape)]
+       [(list _ #f) (make-tkeymsg-raw base-key-or-dir)]
+       [(list _ #t)
         (define mod-sym
-          (cond
-            [(= mod-byte 50) 'shift]
-            [(= mod-byte 51) 'alt]
-            [(= mod-byte 52) 'S-A]
-            [(= mod-byte 53) 'ctrl]
-            [(= mod-byte 54) 'S-C]
-            [(= mod-byte 55) 'A-C]
-            [(= mod-byte 56) 'S-A-C]
-            [else #f]))
+          (match mod-byte
+            [50 'shift]
+            [51 'alt]
+            [52 'S-A]
+            [53 'ctrl]
+            [54 'S-C]
+            [55 'A-C]
+            [56 'S-A-C]
+            [_ #f]))
         (if mod-sym
             (make-tkeymsg-raw (string->symbol (format "~a-~a" mod-sym base-key-or-dir)))
             (make-tkeymsg-raw base-key-or-dir))])]
@@ -310,14 +312,14 @@
 ;; Map CSI tilde parameter string to key symbol.
 ;; Standard keys: 1=home, 2=insert, 3=delete, 4=end, 5=page-up, 6=page-down
 (define (csi-num->key param-str)
-  (cond
-    [(string=? param-str "1") 'home]
-    [(string=? param-str "2") 'insert]
-    [(string=? param-str "3") 'delete]
-    [(string=? param-str "4") 'end]
-    [(string=? param-str "5") 'page-up]
-    [(string=? param-str "6") 'page-down]
-    [else #f]))
+  (match param-str
+    ["1" 'home]
+    ["2" 'insert]
+    ["3" 'delete]
+    ["4" 'end]
+    ["5" 'page-up]
+    ["6" 'page-down]
+    [_ #f]))
 
 ;; Decode pasted bytes to string, replacing invalid UTF-8 with U+FFFD.
 (define (decode-paste-bytes bs)
@@ -340,27 +342,27 @@
     (and (= (length pending) end-len) (equal? pending end-seq)))
   (define (loop pending byte-acc)
     (define b (buffered-read-byte in 0.1))
-    (cond
-      [(not b)
+    (match b
+      [#f
        ;; Timeout — flush whatever we have
        (set-in-paste! #f)
        (define text (decode-paste-bytes (apply bytes (reverse byte-acc))))
        (paste-buffer-reset!)
        (make-paste-event text)]
-      [else
+      [_
        (define new-pending (append pending (list b)))
-       (cond
-         [(match-end? new-pending)
+       (match (match-end? new-pending)
+         [#t
           ;; Found end sequence — emit paste event
           (set-in-paste! #f)
           (define text (decode-paste-bytes (apply bytes (reverse byte-acc))))
           (paste-buffer-reset!)
           (make-paste-event text)]
-         [(>= (length new-pending) end-len)
-          ;; Not a match — oldest byte is data, keep checking
-          (loop (cdr new-pending) (cons (car new-pending) byte-acc))]
-         ;; Still building potential match — keep reading
-         [else (loop new-pending byte-acc)])]))
+         [_
+          (match (>= (length new-pending) end-len)
+            ;; Not a match — oldest byte is data, keep checking
+            [#t (loop (cdr new-pending) (cons (car new-pending) byte-acc))]
+            [_ (loop new-pending byte-acc)])])]))
   (loop '() '()))
 
 ;; ============================================================
@@ -416,12 +418,12 @@
 ;; Returns (list 'key key-symbol modifiers) or #f
 (define (parse-modify-other-keys modifiers keycode)
   (define base-key
-    (cond
-      [(= keycode 13) 'return]
-      [(= keycode 27) 'escape]
-      [(= keycode 127) 'backspace]
-      [(<= 32 keycode 126) (integer->char keycode)]
-      [else #f]))
+    (match keycode
+      [13 'return]
+      [27 'escape]
+      [127 'backspace]
+      [(? (lambda (v) (<= 32 v 126))) (integer->char keycode)]
+      [_ #f]))
   (if base-key
       (list base-key (bitmask->modifiers modifiers))
       #f))
@@ -443,36 +445,36 @@
 ;; Map Kitty key codepoints to key symbols
 ;; Special keys have fixed codepoints per the Kitty protocol
 (define (kitty-codepoint->key cp)
-  (cond
+  (match cp
     ;; Printable ASCII (32-126)
-    [(and (>= cp 32) (<= cp 126)) (integer->char cp)]
+    [(? (lambda (v) (and (>= v 32) (<= v 126)))) (integer->char cp)]
     ;; Special keys (Kitty-defined codepoints)
-    [(= cp 57344) 'escape]
-    [(= cp 57345) 'enter]
-    [(= cp 57346) 'tab]
-    [(= cp 57347) 'backspace]
-    [(= cp 57348) 'insert]
-    [(= cp 57349) 'delete]
-    [(= cp 57350) 'left]
-    [(= cp 57351) 'right]
-    [(= cp 57352) 'up]
-    [(= cp 57353) 'down]
-    [(= cp 57354) 'page-up]
-    [(= cp 57355) 'page-down]
-    [(= cp 57356) 'home]
-    [(= cp 57357) 'end]
-    [(= cp 57358) 'caps-lock]
-    [(= cp 57359) 'scroll-lock]
-    [(= cp 57360) 'num-lock]
-    [(= cp 57361) 'print-screen]
-    [(= cp 57362) 'pause]
-    [(= cp 57363) 'menu]
+    [57344 'escape]
+    [57345 'enter]
+    [57346 'tab]
+    [57347 'backspace]
+    [57348 'insert]
+    [57349 'delete]
+    [57350 'left]
+    [57351 'right]
+    [57352 'up]
+    [57353 'down]
+    [57354 'page-up]
+    [57355 'page-down]
+    [57356 'home]
+    [57357 'end]
+    [57358 'caps-lock]
+    [57359 'scroll-lock]
+    [57360 'num-lock]
+    [57361 'print-screen]
+    [57362 'pause]
+    [57363 'menu]
     ;; F1-F12: 57376-57387
-    [(and (>= cp 57376) (<= cp 57387)) (string->symbol (format "f~a" (- cp 57375)))]
+    [(? (lambda (v) (and (>= v 57376) (<= v 57387)))) (string->symbol (format "f~a" (- cp 57375)))]
     ;; F13-F24: 57388-57399
-    [(and (>= cp 57388) (<= cp 57399)) (string->symbol (format "f~a" (- cp 57375)))]
+    [(? (lambda (v) (and (>= v 57388) (<= v 57399)))) (string->symbol (format "f~a" (- cp 57375)))]
     ;; Unknown
-    [else 'unknown]))
+    [_ 'unknown]))
 
 ;; ============================================================
 ;; Input byte buffer (Issue #409)
@@ -494,21 +496,19 @@
 ;; Read one byte, using the buffer first.
 ;; Returns byte? or #f on timeout.
 (define (buffered-read-byte in timeout)
-  (cond
-    ;; Data available in buffer
-    [(and input-buffer-data (< (car input-buffer-data) (cdr input-buffer-data)))
+  (match (and input-buffer-data (< (car input-buffer-data) (cdr input-buffer-data)))
+    [#t
      (define b (bytes-ref input-buffer (car input-buffer-data)))
      (set! input-buffer-data (cons (add1 (car input-buffer-data)) (cdr input-buffer-data)))
      b]
-    ;; Buffer exhausted or empty — refill
-    [else
+    [_ ;; Buffer exhausted or empty — refill
      (define ready (sync/timeout timeout in))
      (if (not ready)
          #f ;; timeout
          (let ([n (read-bytes-avail! input-buffer in)])
-           (cond
-             [(eof-object? n) #f]
-             [(and (integer? n) (> n 0))
+           (match n
+             [(? eof-object?) #f]
+             [(? (lambda (v) (and (integer? v) (> v 0))))
               (set! input-buffer-data (cons 0 n))
               (buffered-read-byte in 0)] ;; recursive call to consume
              [else #f])))]))
@@ -529,41 +529,39 @@
   ;; Read SGR params: button;x;y terminated by M or m
   (define (read-sgr-param acc)
     (define b (buffered-read-byte in 0.01))
-    (cond
-      [(not b)
+    (match b
+      [#f
        (values (if (null? acc)
                    #f
                    (string->number (list->string (reverse acc))))
                #f)]
       ;; digit
-      [(and (>= b 48) (<= b 57)) (read-sgr-param (cons (integer->char b) acc))]
-      [(= b 59) ;; semicolon — end of param
+      [(? (lambda (v) (and (>= v 48) (<= v 57)))) (read-sgr-param (cons (integer->char b) acc))]
+      [59 ;; semicolon — end of param
        (values (if (null? acc)
                    0
                    (string->number (list->string (reverse acc))))
                'cont)]
-      [else
+      [_
        (values (if (null? acc)
                    #f
                    (string->number (list->string (reverse acc))))
                b)]))
   (define-values (sgr-button rest1) (read-sgr-param '()))
-  (cond
-    [(not sgr-button) (make-tkeymsg-raw 'escape)]
-    ;; No semicolon after button — incomplete SGR
-    [(not (eq? rest1 'cont)) (make-tkeymsg-raw 'escape)]
-    [else
+  (match (list sgr-button rest1)
+    [(list #f _) (make-tkeymsg-raw 'escape)]
+    [(list _ (not 'cont)) (make-tkeymsg-raw 'escape)]
+    [_
      (define-values (sgr-x rest2) (read-sgr-param '()))
-     (cond
-       [(not sgr-x) (make-tkeymsg-raw 'escape)]
-       ;; No semicolon after x — incomplete SGR
-       [(not (eq? rest2 'cont)) (make-tkeymsg-raw 'escape)]
-       [else
+     (match (list sgr-x rest2)
+       [(list #f _) (make-tkeymsg-raw 'escape)]
+       [(list _ (not 'cont)) (make-tkeymsg-raw 'escape)]
+       [_
         (define-values (sgr-y final-byte) (read-sgr-param '()))
-        (cond
-          [(not sgr-y) (make-tkeymsg-raw 'escape)]
-          [(not final-byte) (make-tkeymsg-raw 'escape)]
-          [else
+        (match (list sgr-y final-byte)
+          [(list #f _) (make-tkeymsg-raw 'escape)]
+          [(list _ #f) (make-tkeymsg-raw 'escape)]
+          [_
            ;; final-byte: 77 = 'M' (press/drag/scroll), 109 = 'm' (release)
            (define release? (= final-byte 109))
            ;; Convert SGR button to X10 cb byte:
@@ -593,20 +591,20 @@
 (define (real-stdin-read-msg #:timeout [timeout 0.20])
   (define in (current-input-port))
   (define b (buffered-read-byte in timeout))
-  (cond
-    [(not b) #f]
-    [(= b 27)
+  (match b
+    [#f #f]
+    [27
      (define b2 (buffered-read-byte in 0.01))
-     (cond
-       [(not b2) (make-tkeymsg-raw 'escape)]
-       [(= b2 91) (decode-csi-sequence in)]
-       [else (make-tkeymsg-raw (integer->char b2))])]
-    [(= b 13) (make-tkeymsg-raw 'return)]
-    [(= b 10) (make-tkeymsg-raw 'return)]
-    [(= b 127) (make-tkeymsg-raw 'backspace)]
-    [(= b 8) (make-tkeymsg-raw 'backspace)]
-    [(= b 3) (make-tkeymsg-raw 'ctrl-c)]
-    [(>= b 192)
+     (match b2
+       [#f (make-tkeymsg-raw 'escape)]
+       [91 (decode-csi-sequence in)]
+       [_ (make-tkeymsg-raw (integer->char b2))])]
+    [13 (make-tkeymsg-raw 'return)]
+    [10 (make-tkeymsg-raw 'return)]
+    [127 (make-tkeymsg-raw 'backspace)]
+    [8 (make-tkeymsg-raw 'backspace)]
+    [3 (make-tkeymsg-raw 'ctrl-c)]
+    [(? (lambda (v) (>= v 192)))
      (utf8-accumulator-reset!)
      (define lead-char (integer->char b))
      (define total-bytes (utf8-lead-byte-count b))
@@ -614,9 +612,9 @@
          (make-tkeymsg-raw lead-char)
          (let _loop ()
            (define decoded (utf8-accumulate-char lead-char))
-           (cond
-             [decoded (make-tkeymsg-raw decoded)]
-             [else
+           (match decoded
+             [(? values) (make-tkeymsg-raw decoded)]
+             [_
               (define cb (buffered-read-byte in 0.05))
               (if (and cb (utf8-continuation-byte? cb))
                   (begin
@@ -625,11 +623,11 @@
                   (begin
                     (utf8-accumulator-reset!)
                     #f))])))]
-    [(>= b 128) #f]
-    [(>= b 32)
+    [(? (lambda (v) (>= v 128))) #f]
+    [(? (lambda (v) (>= v 32)))
      (utf8-accumulator-reset!)
      (make-tkeymsg-raw (integer->char b))]
-    [else #f]))
+    [_ #f]))
 
 (define (stub-byte-ready?)
   (char-ready? (current-input-port)))
