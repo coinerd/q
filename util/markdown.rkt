@@ -79,19 +79,15 @@
   (define pos 0)
   (let loop ()
     (define open-pos (find-triple-backtick text pos))
-    (cond
-      [(not open-pos)
+    (match open-pos
+      [#f
        ;; No more code blocks — emit remaining text
        (when (< pos len)
-         (set! result-acc
-               (foldl cons result-acc
-                      (parse-regular-text (substring text pos len)))))]
-      [else
+         (set! result-acc (foldl cons result-acc (parse-regular-text (substring text pos len)))))]
+      [_
        ;; Emit text before the code block
        (when (> open-pos pos)
-         (set! result-acc
-               (foldl cons result-acc
-                      (parse-regular-text (substring text pos open-pos)))))
+         (set! result-acc (foldl cons result-acc (parse-regular-text (substring text pos open-pos)))))
        ;; Find the language tag (rest of the opening line)
        (define after-open (+ open-pos 3)) ; skip ```
        (define newline-pos (find-char text after-open #\newline))
@@ -108,9 +104,7 @@
        (cond
          [(not close-pos)
           ;; Unclosed code block — emit opening fence as text
-          (set! result-acc
-                (cons (md-token 'text (substring text open-pos len))
-                      result-acc))
+          (set! result-acc (cons (md-token 'text (substring text open-pos len)) result-acc))
           (set! pos len)]
          [else
           (define code (substring text code-start close-pos))
@@ -120,8 +114,7 @@
             (and (< after-close len) (char=? (string-ref text after-close) #\newline)))
           (set! result-acc
                 (cons (md-token 'newline "\n")
-                      (cons (md-token 'code-block
-                                      (cons (if (string=? lang "") #f lang) code))
+                      (cons (md-token 'code-block (cons (if (string=? lang "") #f lang) code))
                             result-acc)))
           (set! pos
                 (if trailing-nl?
@@ -129,8 +122,7 @@
                     after-close))
           (loop)])]))
   ;; Filter out empty text tokens
-  (filter (lambda (t) (not (and (eq? (md-token-type t) 'text)
-                                 (string=? (md-token-content t) ""))))
+  (filter (lambda (t) (not (and (eq? (md-token-type t) 'text) (string=? (md-token-content t) ""))))
           (reverse result-acc)))
 
 ;; Find the start of a triple-backtick sequence (```) at or after pos
@@ -166,8 +158,8 @@
   (cond
     ;; Horizontal rule: 3+ hyphens/asterisks/underscores with optional spaces
     [(or (regexp-match? #px"^[ \t]*-[- \t]*-[- \t]*-[ \t]*$" line)
-          (regexp-match? #px"^[ \t]*[*][*][*][* \t]*$" line)
-          (regexp-match? #px"^[ \t]*___+[_ \t]*$" line))
+         (regexp-match? #px"^[ \t]*[*][*][*][* \t]*$" line)
+         (regexp-match? #px"^[ \t]*___+[_ \t]*$" line))
      (list (md-token 'hr #t))]
     ;; Header: # heading
     [(regexp-match-positions #px"^(#{1,6})[ \t]+(.+)$" line)
@@ -215,9 +207,9 @@
 
 (define (parse-inline-markdown text)
   (define len (string-length text))
-  (cond
-    [(= len 0) '()]
-    [else
+  (match len
+    [0 '()]
+    [_
      ;; Collect all matches with their positions, then process left-to-right
      ;; by repeatedly scanning from the current position.
      (let loop ([pos 0]
@@ -227,13 +219,13 @@
          [else
           ;; Find the first inline construct starting at pos
           (define result (find-first-inline text pos))
-          (cond
-            [(not result)
+          (match result
+            [#f
              ;; No more constructs — emit remaining text
              (if (= pos len)
                  (reverse acc)
                  (reverse (cons (md-token 'text (substring text pos len)) acc)))]
-            [else
+            [_
              (match-define (list type start end content) result)
              ;; Emit text before the match (if any)
              (define new-acc
@@ -355,9 +347,9 @@
          [(and (< (add1 close-bracket) len) (char=? (string-ref text (add1 close-bracket)) #\())
           ;; Found ](, look for closing )
           (define close-paren (find-char text (+ close-bracket 2) #\)))
-          (cond
-            [(not close-paren) (loop (add1 i))]
-            [else
+          (match close-paren
+            [#f (loop (add1 i))]
+            [_
              (define link-text (substring text (add1 i) close-bracket))
              (define url (substring text (+ close-bracket 2) close-paren))
              (list 'link i (add1 close-paren) (cons url link-text))])]

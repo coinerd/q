@@ -17,6 +17,7 @@
 ;;              clipboard-backend-available?, styled-line->text
 
 (require racket/string
+         racket/match
          racket/list
          racket/async-channel
          "../tui/terminal.rkt"
@@ -174,24 +175,24 @@
             (for/list ([i (in-range start-idx (add1 end-idx))])
               (define line (list-ref visible-lines i))
               (define text (styled-line->text line))
-              (cond
-                [(= i start-idx end-idx)
+              (match (list i start-idx end-idx)
+                [(list s s s)
                  ;; Single line: extract column range (display-col→string-offset)
                  (substring text
                             (min (display-col->string-offset text start-col) (string-length text))
                             (min (display-col->string-offset text (add1 end-col))
                                  (string-length text)))]
                 ;; First line: from start-col to end
-                [(= i start-idx)
+                [(list s s _)
                  (substring text
                             (min (display-col->string-offset text start-col) (string-length text)))]
                 ;; Last line: from 0 to end-col
-                [(= i end-idx)
+                [(list _ e e)
                  (substring text
                             0
                             (min (display-col->string-offset text (add1 end-col))
                                  (string-length text)))]
-                [else text]))
+                [_ text]))
             "\n"))))))
 
 ;; ============================================================
@@ -315,21 +316,22 @@
   (define km (get-active-keymap))
   (define ks (keycode->key-spec-from-msg keycode))
   (define action (and ks (keymap-lookup km ks)))
-  (cond
-    [(and action (eq? (dispatch-keymap-action ctx inp state action) 'handled)) 'continue]
+  (match keycode
+    [(? (lambda (k) (and action (eq? (dispatch-keymap-action ctx inp state action) 'handled))))
+     'continue]
     ;; Fallback to hardcoded behavior
-    [(char? keycode)
+    [(? char?)
      (case keycode
        [(#\return)
         ;; Enter → submit input
         (define-values (text new-inp) (input-submit inp))
         (set-box! (tui-ctx-input-state-box ctx) new-inp)
-        (cond
-          [(not text) 'continue]
-          [(input-slash-command text)
+        (match text
+          [#f 'continue]
+          [(? input-slash-command)
            (define cmd (parse-tui-slash-command text))
            (list 'command (or cmd 'unknown) text)]
-          [else
+          [_
            ;; Add user message to transcript
            (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
            (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
@@ -352,19 +354,19 @@
         'continue])]
 
     ;; Symbol keys (arrows, function keys, etc.)
-    [(symbol? keycode)
+    [(? symbol?)
      (case keycode
        ;; Enter key — charterm sends 'return symbol, not #\return char
        [(return kp-return enter kp-enter)
         ;; Submit input (same logic as #\return/#\newline in char branch)
         (define-values (text new-inp) (input-submit inp))
         (set-box! (tui-ctx-input-state-box ctx) new-inp)
-        (cond
-          [(not text) 'continue]
-          [(input-slash-command text)
+        (match text
+          [#f 'continue]
+          [(? input-slash-command)
            (define cmd (parse-tui-slash-command text))
            (list 'command (or cmd 'unknown) text)]
-          [else
+          [_
            ;; Add user message to transcript
            (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
            (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
@@ -465,7 +467,7 @@
         'continue]
        [else 'continue])]
 
-    [else 'continue]))
+    [_ 'continue]))
 
 ;; ============================================================
 ;; Mouse handling
@@ -530,55 +532,57 @@
   (define state (unbox (tui-ctx-ui-state-box ctx)))
   (define ov (ui-state-active-overlay state))
   (define tbs (and ov (overlay-state-extra ov)))
-  (cond
-    [(not (and ov (eq? (overlay-state-type ov) 'tree-browser) (tree-browser-state? tbs))) 'pass]
+  (match keycode
+    [(? (lambda (k)
+          (not (and ov (eq? (overlay-state-type ov) 'tree-browser) (tree-browser-state? tbs)))))
+     'pass]
     ;; Escape — dismiss overlay
-    [(memq keycode '(escape #\e))
+    [(or 'escape #\e)
      (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
      (mark-dirty! ctx)
      'handled]
     ;; Down arrow — move selection down
-    [(memq keycode '(down kp-down))
+    [(or 'down 'kp-down)
      (define new-idx
        (tree-next-node (tree-browser-state-rendered-lines tbs) (tree-browser-state-selected-idx tbs)))
      (update-tree-overlay! ctx state ov tbs new-idx (tree-browser-state-folded-set tbs))
      'handled]
     ;; Up arrow — move selection up
-    [(memq keycode '(up kp-up))
+    [(or 'up 'kp-up)
      (define new-idx
        (tree-prev-node (tree-browser-state-rendered-lines tbs) (tree-browser-state-selected-idx tbs)))
      (update-tree-overlay! ctx state ov tbs new-idx (tree-browser-state-folded-set tbs))
      'handled]
     ;; Enter — toggle fold or navigate to entry
-    [(memq keycode '(return kp-return enter kp-enter #\return))
+    [(or 'return 'kp-return 'enter 'kp-enter #\return)
      (define nodes (tree-browser-state-nodes tbs))
      (define idx (tree-browser-state-selected-idx tbs))
-     (cond
-       [(and (>= idx 0) (< idx (length nodes)))
+     (match idx
+       [(? (lambda (i) (and (>= i 0) (< i (length nodes)))))
         (define entry (list-ref nodes idx))
         (define entry-id (list-ref entry 0))
         (define new-folded (tree-toggle-fold (tree-browser-state-folded-set tbs) entry-id))
         (update-tree-overlay! ctx state ov tbs idx new-folded)]
-       [else (void)])
+       [_ (void)])
      'handled]
     ;; f — fold/unfold
-    [(eq? keycode #\f)
+    [#\f
      (define nodes (tree-browser-state-nodes tbs))
      (define idx (tree-browser-state-selected-idx tbs))
-     (cond
-       [(and (>= idx 0) (< idx (length nodes)))
+     (match idx
+       [(? (lambda (i) (and (>= i 0) (< i (length nodes)))))
         (define entry (list-ref nodes idx))
         (define entry-id (list-ref entry 0))
         (define new-folded (tree-toggle-fold (tree-browser-state-folded-set tbs) entry-id))
         (update-tree-overlay! ctx state ov tbs idx new-folded)]
-       [else (void)])
+       [_ (void)])
      'handled]
     ;; q — dismiss
-    [(eq? keycode #\q)
+    [#\q
      (set-box! (tui-ctx-ui-state-box ctx) (dismiss-overlay state))
      (mark-dirty! ctx)
      'handled]
-    [else 'pass]))
+    [_ 'pass]))
 
 (define (update-tree-overlay! ctx state ov tbs new-idx new-folded)
   ;; Re-render tree with updated selection/fold state and update overlay
