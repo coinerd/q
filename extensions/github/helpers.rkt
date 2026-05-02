@@ -1,5 +1,13 @@
 #lang racket/base
 
+;; Execute body, returning make-error-result on exception.
+;; Shared macro for all GitHub handler files.
+(define-syntax-rule (with-error-result ctx-msg body ...)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-warning (format "~a: ~a" ctx-msg (exn-message e)))
+                               (make-error-result (exn-message e)))])
+    body ...))
+
 ;; extensions/github/helpers.rkt — Common GitHub CLI utilities
 ;;
 ;; Extracted from github-integration.rkt to reduce its size (Q01).
@@ -30,7 +38,8 @@
          gh-success
          gh-success-json
          git-success
-         get-repo-info)
+         get-repo-info
+         with-error-result)
 
 ;; ============================================================
 ;; Configuration

@@ -33,6 +33,7 @@
          ;; Hook dispatch
          (contract-out [dispatch-hooks (->* (symbol? any/c any/c) (#:ctx any/c) hook-result?)])
          current-hook-timeout-ms
+         current-hook-violation-callback
          critical-hook?
          critical-hooks)
 
@@ -79,6 +80,15 @@
 ;; Per-hook timeout in milliseconds (default: 100ms for streaming hooks).
 ;; Set to #f to disable timeout.
 (define current-hook-timeout-ms (make-parameter 500))
+
+;; Violation callback — called when a hook handler returns an invalid action.
+;; Receives (ext-name hook-point action schema-version).
+;; Default: #f (no callback). Set to a procedure to enable structured violation reporting.
+;; Example: (current-hook-violation-callback
+;;           (lambda (ext hp act sv)
+;;             (emit-session-event! bus sid "hook.violation"
+;;               (hasheq 'extension ext 'action act 'hook-point hp 'schema-version sv))))
+(define current-hook-violation-callback (make-parameter #f))
 
 ;; Internal: call handler with or without ctx based on arity.
 ;; If ctx is provided and handler accepts 2 args, call (handler ctx payload).
@@ -135,6 +145,9 @@
                              (hook-result-action raw-result)
                              hook-point
                              (hook-schema-version))
+                (let ([cb (current-hook-violation-callback)])
+                  (when cb
+                    (cb ext-name hook-point (hook-result-action raw-result) (hook-schema-version))))
                 (hook-pass payload))))
         (begin
           (log-warning "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
