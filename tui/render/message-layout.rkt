@@ -154,27 +154,23 @@
   (cond
     [(null? segs) ""]
     [else
-     (define any-styled?
-       (for/or ([s (in-list segs)])
-         (not (null? (styled-segment-style s)))))
-     (define parts
-       (for/list ([seg (in-list segs)]
-                  [i (in-naturals)])
+     (define-values (rev-parts any-styled? _)
+       (for/fold ([acc '()]
+                  [saw-styled? #f]
+                  [prev-styled? #f])
+                 ([seg (in-list segs)])
          (define txt (styled-segment-text seg))
          (define sty (styled-segment-style seg))
-         (cond
-           [(not (null? sty))
-            ;; Styled segment: reset previous if not first, then SGR + text
-            (define reset (if (> i 0) "\x1b[0m" ""))
-            (string-append reset (styles->sgr sty) txt)]
-           [else
-            ;; Plain segment: reset if previous was styled
-            (define prev-styled?
-              (and (> i 0) (not (null? (styled-segment-style (list-ref segs (sub1 i)))))))
-            (if prev-styled?
-                (string-append "\x1b[0m" txt)
-                txt)])))
-     (string-append (string-join parts "") (if any-styled? "\x1b[0m" ""))]))
+         (define styled? (not (null? sty)))
+         (define part
+           (cond
+             [styled?
+              (define reset (if prev-styled? "\x1b[0m" ""))
+              (string-append reset (styles->sgr sty) txt)]
+             [prev-styled? (string-append "\x1b[0m" txt)]
+             [else txt]))
+         (values (cons part acc) (or saw-styled? styled?) styled?)))
+     (string-append (string-join (reverse rev-parts) "") (if any-styled? "\x1b[0m" ""))]))
 
 ;; Convert style list to SGR escape sequence.
 (define (styles->sgr styles)
