@@ -27,7 +27,8 @@
                   gsd-state-snapshot
                   gsd-state-update!
                   gsd-state-sem
-                  gsd-history-snapshot))
+                  gsd-history-snapshot
+                  with-gsd-lock))
 
 ;; States
 (provide gsm-state?
@@ -120,8 +121,7 @@
   (gsd-history-snapshot))
 
 (define (gsm-transition! target)
-  (call-with-semaphore
-   gsd-state-sem
+  (with-gsd-lock
    (lambda ()
      (define state (current-gsd-state))
      (define current (gsd-runtime-state-mode state))
@@ -148,8 +148,7 @@
          target)]))))
 
 (define (gsm-reset!)
-  (call-with-semaphore
-   gsd-state-sem
+  (with-gsd-lock
    (lambda ()
      (define old (gsd-runtime-state-mode (current-gsd-state)))
      (set-gsd-state!
@@ -158,11 +157,10 @@
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
-  (call-with-semaphore gsd-state-sem
-                       (lambda ()
-                         (set-gsd-state! (make-initial-gsd-state))
-                         (set-gsd-history! '())
-                         (void))))
+  (with-gsd-lock (lambda ()
+                   (set-gsd-state! (make-initial-gsd-state))
+                   (set-gsd-history! '())
+                   (void))))
 
 (define (gsm-valid-next-states)
   (define current (gsm-current))

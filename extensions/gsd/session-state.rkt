@@ -39,6 +39,10 @@
 ;; Semaphore for atomic state transitions
 (define gsd-state-sem (make-semaphore 1))
 
+;; Thread-safe GSD state lock helper (Finding A4)
+(define (with-gsd-lock thunk)
+  (call-with-semaphore gsd-state-sem thunk))
+
 ;; ============================================================
 ;; Parameter-compatible accessors (readers)
 ;; ============================================================
@@ -90,18 +94,16 @@
 ;; ============================================================
 
 (define (gsd-state-snapshot)
-  (call-with-semaphore gsd-state-sem (lambda () (unbox gsd-state-box))))
+  (with-gsd-lock (lambda () (unbox gsd-state-box))))
 
 (define (gsd-state-update! update-thunk)
-  (call-with-semaphore gsd-state-sem
-                       (lambda () (set-box! gsd-state-box (update-thunk (unbox gsd-state-box))))))
+  (with-gsd-lock (lambda () (set-box! gsd-state-box (update-thunk (unbox gsd-state-box))))))
 
 (define (gsd-history-snapshot)
-  (call-with-semaphore gsd-state-sem (lambda () (reverse (unbox gsd-history-box)))))
+  (with-gsd-lock (lambda () (reverse (unbox gsd-history-box)))))
 
 (define (gsd-history-update! update-thunk)
-  (call-with-semaphore gsd-state-sem
-                       (lambda () (set-box! gsd-history-box (update-thunk (unbox gsd-history-box))))))
+  (with-gsd-lock (lambda () (set-box! gsd-history-box (update-thunk (unbox gsd-history-box))))))
 
 ;; ============================================================
 ;; Provide
@@ -126,4 +128,5 @@
          gsd-state-snapshot
          gsd-state-update!
          gsd-history-snapshot
-         gsd-history-update!)
+         gsd-history-update!
+         with-gsd-lock)

@@ -121,7 +121,7 @@
 ;; Tools should call this to report incremental progress.
 (define (emit-progress! ctx percentage message)
   (define cb (exec-context-progress-callback ctx))
-         exec-context-permission-config
+  exec-context-permission-config
   (when cb
     (cb percentage message)))
 
@@ -304,21 +304,23 @@
 (define (make-tool-registry)
   (tool-registry (make-hash) (box #f) (make-semaphore 1)))
 
+;; Thread-safe registry lock helper (Finding A2: 7 call sites)
+(define (with-registry-lock reg thunk)
+  (call-with-semaphore (tool-registry-sem reg) thunk))
+
 (define (register-tool! reg t)
   (unless (tool? t)
     (raise-argument-error 'register-tool! "tool?" t))
-  (call-with-semaphore (tool-registry-sem reg)
-                       (lambda ()
-                         (define tbl (tool-registry-tools-box reg))
-                         (hash-set! tbl (tool-name t) t))))
+  (with-registry-lock reg
+                      (lambda ()
+                        (define tbl (tool-registry-tools-box reg))
+                        (hash-set! tbl (tool-name t) t))))
 
 (define (unregister-tool! reg name)
-  (call-with-semaphore (tool-registry-sem reg)
-                       (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
+  (with-registry-lock reg (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
 
 (define (lookup-tool reg name)
-  (call-with-semaphore (tool-registry-sem reg)
-                       (lambda () (hash-ref (tool-registry-tools-box reg) name #f))))
+  (with-registry-lock reg (lambda () (hash-ref (tool-registry-tools-box reg) name #f))))
 
 ;; tool->jsexpr : tool? -> hash?
 ;; Serialize a tool struct to the OpenAI normalized format.
@@ -343,10 +345,10 @@
 ;; Set which tools are active. #f means all tools are active.
 ;; active-names is (or/c #f (listof string?))
 (define (set-active-tools! reg active-names)
-  (call-with-semaphore (tool-registry-sem reg)
-                       (lambda ()
-                         (set-box! (tool-registry-active-set-box reg)
-                                   (and active-names (list->set active-names))))))
+  (with-registry-lock reg
+                      (lambda ()
+                        (set-box! (tool-registry-active-set-box reg)
+                                  (and active-names (list->set active-names))))))
 
 ;; Check if a tool is active.
 (define (tool-active? reg name)
@@ -355,10 +357,10 @@
 
 ;; List only active tools.
 (define (list-active-tools reg)
-  (call-with-semaphore (tool-registry-sem reg)
-                       (lambda ()
-                         (filter (lambda (t) (tool-active? reg (tool-name t)))
-                                 (hash-values (tool-registry-tools-box reg))))))
+  (with-registry-lock reg
+                      (lambda ()
+                        (filter (lambda (t) (tool-active? reg (tool-name t)))
+                                (hash-values (tool-registry-tools-box reg))))))
 
 ;; List active tools in jsexpr format.
 (define (list-active-tools-jsexpr reg)
@@ -369,11 +371,10 @@
   (map tool->jsexpr (list-active-tools reg)))
 
 (define (list-tools reg)
-  (call-with-semaphore (tool-registry-sem reg)
-                       (lambda () (hash-values (tool-registry-tools-box reg)))))
+  (with-registry-lock reg (lambda () (hash-values (tool-registry-tools-box reg)))))
 
 (define (tool-names reg)
-  (call-with-semaphore (tool-registry-sem reg) (lambda () (hash-keys (tool-registry-tools-box reg)))))
+  (with-registry-lock reg (lambda () (hash-keys (tool-registry-tools-box reg)))))
 
 ;; ============================================================
 ;; Tool-call argument validation (for post-processing)
