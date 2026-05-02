@@ -336,10 +336,10 @@
         ;; Last line should be the streaming text (dim)
         (define last-seg (first (styled-line-segments (last lines))))
         (check-equal? (styled-segment-text last-seg) "streaming...")
-        ;; Streaming text uses theme 'muted → 'bright-black in default dark theme
+        ;; Streaming text dispatched as 'assistant → md-format-assistant → plain style (no markdown)
         (check-equal? (styled-segment-style last-seg)
-                      '(bright-black)
-                      "streaming uses theme muted")))))
+                      '()
+                      "streaming text has plain style (no markdown)")))))
 
 (run-tests render-tests)
 
@@ -472,7 +472,7 @@
       (define lines
         (list (styled-line (list (styled-segment "> " '(bold cyan))
                                  (styled-segment "Hello" '(bold))))))
-      (define result (apply-selection-highlight lines (cons 0 1) (cons 6 1) 1))
+      (define result (apply-selection-highlight lines (cons 0 1) (cons 7 1) 1))
       (define segs (styled-line-segments (first result)))
       ;; All segments should be inverted
       (for ([s segs])
