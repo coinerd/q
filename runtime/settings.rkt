@@ -14,6 +14,7 @@
 ;;   - Query: setting-ref (flat), setting-ref* (nested path)
 ;;   - Provider access: convenience functions for providers section
 
+(require "../util/json-helpers.rkt")
 (require racket/file
          racket/port
          racket/hash
@@ -193,7 +194,7 @@
     (if config-path
         (if (file-exists? config-path)
             (with-handlers ([exn:fail? (λ (_) (hash))])
-              (let ([result (call-with-input-file config-path (λ (in) (read-json in)))])
+              (let ([result (read-json-file config-path)])
                 (if (hash? result)
                     result
                     (hash))))

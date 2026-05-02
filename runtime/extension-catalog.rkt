@@ -11,6 +11,7 @@
 ;; - activate-extension!: create symlink in target directory
 ;; - deactivate-extension!: remove symlink
 
+(require "../util/json-helpers.rkt")
 (require racket/file
          racket/path
          json
@@ -52,7 +53,7 @@
   (define cfg-path (build-path home-dir ".q" "config.json"))
   (and (file-exists? cfg-path)
        (with-handlers ([exn:fail? (λ (_) #f)])
-         (define cfg (call-with-input-file cfg-path (λ (in) (read-json in))))
+         (define cfg (read-json-file cfg-path))
          (define dir-str (hash-ref cfg 'extensions (hash)))
          (define source-dir
            (if (hash? dir-str)

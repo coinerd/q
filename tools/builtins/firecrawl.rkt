@@ -1,5 +1,6 @@
 #lang racket/base
 
+(require "../../util/json-helpers.rkt")
 (require racket/string
          racket/format
          racket/port
@@ -63,7 +64,7 @@
       (let ([cfg-path (build-path (find-system-path 'home-dir) ".q" "config.json")])
         (and (file-exists? cfg-path)
              (let ([cfg (with-handlers ([exn:fail? (lambda (_) #f)])
-                          (call-with-input-file cfg-path (lambda (port) (read-json port))))])
+                          (read-json-file cfg-path))])
                (and (hash? cfg)
                     (let ([fc (hash-ref cfg 'firecrawl #f)])
                       (and (hash? fc)

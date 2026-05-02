@@ -2,6 +2,7 @@
 
 ;; extensions/github/handlers/milestone-ops.rkt — GitHub milestone + board handlers
 
+(require "../../util/json-helpers.rkt")
 (require racket/format
          racket/string
          json
@@ -30,7 +31,7 @@
        (with-handlers ([exn:fail? (lambda (e)
                                     (log-warning (format "github/spec-read: ~a" (exn-message e)))
                                     #f)])
-         (call-with-input-file spec-path read-json)))
+         (read-json-file spec-path)))
      (cond
        [(not spec-data) (make-error-result (format "Invalid JSON in spec file: ~a" spec-file))]
        [dry-run?

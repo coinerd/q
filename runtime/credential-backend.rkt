@@ -9,6 +9,7 @@
 ;; different backends: file (JSON), environment variables, memory (testing),
 ;; OS keychain (secret-tool / macOS security), and chained (fallback chain).
 
+(require "../util/json-helpers.rkt")
 (require json
          racket/file
          racket/string
@@ -98,7 +99,7 @@
     [(not (file-exists? path)) (hash)]
     [else
      (with-handlers ([exn:fail? (λ (e) (hash))])
-       (define content (call-with-input-file path read-json))
+       (define content (read-json-file path))
        (if (eof-object? content)
            (hash)
            (let ([providers (hash-ref content 'providers (hash))])
@@ -166,7 +167,7 @@
                                (with-handlers ([exn:fail? void])
                                  (delete-file tmp))
                                (raise e))])
-    (call-with-output-file tmp (λ (out) (write-json data out)) #:exists 'truncate)
+    (write-json-file tmp data)
     (rename-file-or-directory tmp path #t)
     (file-or-directory-permissions path #o600)))
 

@@ -6,6 +6,7 @@
 ;;; first, then falling back to config. No coupling to settings.rkt —
 ;;; all config is received as parameter hashes.
 
+(require "../util/json-helpers.rkt")
 (require json
          racket/file
          racket/string
@@ -238,7 +239,7 @@
     [(not (file-exists? path)) (hash)]
     [else
      (with-handlers ([exn:fail? (λ (e) (hash))])
-       (define content (call-with-input-file path read-json))
+       (define content (read-json-file path))
        (if (eof-object? content)
            (hash)
            (let ([providers (hash-ref content 'providers (hash))])
@@ -309,7 +310,7 @@
   ;; Read existing config or start fresh
   (define existing
     (if (file-exists? config-path)
-        (let ([content (call-with-input-file config-path read-json)])
+        (let ([content (read-json-file config-path)])
           (if (eof-object? content)
               (hasheq)
               content))
@@ -351,6 +352,6 @@
                                                                          (exn-message e)))])
                                  (delete-file tmp))
                                (raise e))])
-    (call-with-output-file tmp (lambda (out) (write-json data out)) #:exists 'truncate)
+    (write-json-file tmp data)
     (rename-file-or-directory tmp path #t)
     (file-or-directory-permissions path #o600)))

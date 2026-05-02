@@ -7,6 +7,7 @@
 ;;
 ;; Provides functions to search, resolve, and query the package index.
 
+(require "../util/json-helpers.rkt")
 (require json
          racket/string
          racket/list
@@ -73,7 +74,7 @@
     (cond
       [(not (file-exists? p)) (hash 'version 1 'updated "" 'packages '())]
       [else
-       (define content (call-with-input-file p read-json))
+       (define content (read-json-file p))
        (if (eof-object? content)
            (hash 'version 1 'updated "" 'packages '())
            content)])))

@@ -12,6 +12,7 @@
 ;;   - list-quarantined       : list all quarantined extensions with metadata
 ;;   - format-extension-status : human-readable status string
 
+(require "../util/json-helpers.rkt")
 (require racket/contract
          racket/file
          racket/format
@@ -96,7 +97,7 @@
                                   (log-warning "quarantine state corrupted, resetting: ~a"
                                                (exn-message e))
                                   (hasheq 'disabled '() 'quarantined (hasheq) 'active '()))])
-       (define data (call-with-input-file sf read-json))
+       (define data (read-json-file sf))
        (hasheq 'disabled
                (hash-ref data 'disabled '())
                'quarantined
