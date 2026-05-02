@@ -47,7 +47,12 @@
 
 (provide tool-spawn-subagent
          tool-spawn-subagents
-         resolve-role-prompt)
+         resolve-role-prompt
+         parse-subagent-config
+         (struct-out subagent-config))
+
+;; Subagent configuration struct — replaces ad-hoc hash extraction
+(struct subagent-config (task role max-turns tools model) #:transparent)
 
 ;; Default role prompt when no role is specified
 (define default-role-prompt
@@ -68,15 +73,35 @@
 
 ;; The spawn-subagent tool implementation
 (define (tool-spawn-subagent args [exec-ctx #f])
-  (define task (hash-ref args 'task #f))
-  (define role-arg (hash-ref args 'role default-role-prompt))
-  (define role-prompt (resolve-role-prompt role-arg))
-  (define max-turns (hash-ref args 'max-turns 5))
-  (define allowed-tools (hash-ref args 'tools #f)) ;; optional list of tool names
-
-  (if (not task)
+  (define cfg (parse-subagent-config args))
+  (if (not (subagent-config-task cfg))
       (make-error-result "task is required")
-      (run-subagent args role-prompt max-turns allowed-tools exec-ctx)))
+      (run-subagent-with-config cfg exec-ctx)))
+
+;; Parse subagent-config from tool call args hash.
+(define (parse-subagent-config args)
+  (subagent-config (hash-ref args 'task #f)
+                   (resolve-role-prompt (hash-ref args 'role default-role-prompt))
+                   (hash-ref args 'max-turns 5)
+                   (hash-ref args 'tools #f)
+                   (hash-ref args 'model #f)))
+
+;; Execute subagent using typed config struct.
+(define (run-subagent-with-config cfg exec-ctx)
+  (run-subagent (hasheq 'task
+                        (subagent-config-task cfg)
+                        'role
+                        (subagent-config-role cfg)
+                        'max-turns
+                        (subagent-config-max-turns cfg)
+                        'tools
+                        (subagent-config-tools cfg)
+                        'model
+                        (subagent-config-model cfg))
+                (subagent-config-role cfg)
+                (subagent-config-max-turns cfg)
+                (subagent-config-tools cfg)
+                exec-ctx))
 
 ;; Resolve the provider from exec-context runtime-settings.
 ;; Returns the real provider if available, or falls back to a mock.
