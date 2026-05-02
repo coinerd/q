@@ -23,19 +23,19 @@
 ;; ============================================================
 
 (struct event ([version : Integer]
-               [ev : Symbol]
+               [ev : Any]
                [time : Integer]
                [session-id : String]
                [turn-id : (Option String)]
                [payload : Any]) #:transparent)
 
-(: make-event (->* (Symbol Integer String (Option String) Any) (Integer) event))
+(: make-event (->* (Any Integer String (Option String) Any) (Integer) event))
 (define (make-event ev time session-id turn-id payload [version 1])
   (event version ev time session-id turn-id payload))
 
 ;; Accessor alias: the field is called `ev` internally to avoid
 ;; name collision with the struct, but the logical name is `event`.
-(: event-event : (-> event Symbol))
+(: event-event : (-> event Any))
 (define event-event event-ev)
 
 ;; Serialize event to jsexpr (hash)
@@ -67,7 +67,7 @@
                  CURRENT-EVENT-VERSION
                  (cast (hash-ref h (quote event) (lambda () "<unknown>")) String)))
   (event ver
-         (cast (hash-ref h (quote event)) Symbol)
+         (hash-ref h (quote event))
          (cast (hash-ref h (quote time)) Integer)
          (cast (hash-ref h (quote sessionId)) String)
          (cast (hash-ref h (quote turnId) (lambda () #f)) (Option String))

@@ -31,3 +31,26 @@
 (test-case "CURRENT-EVENT-VERSION is defined"
   (check-true (integer? CURRENT-EVENT-VERSION))
   (check-equal? CURRENT-EVENT-VERSION 1))
+
+;; Test that util/hook-types.rkt (now #lang typed/racket) exports work from untyped
+(require "../util/hook-types.rkt")
+
+(test-case "hook-pass creates pass result"
+  (define r (hook-pass "data"))
+  (check-equal? (hook-result-action r) 'pass)
+  (check-equal? (hook-result-payload r) "data"))
+
+(test-case "hook-amend creates amend result"
+  (define r (hook-amend "new-data"))
+  (check-equal? (hook-result-action r) 'amend))
+
+(test-case "hook-block creates block result"
+  (define r (hook-block "reason"))
+  (check-equal? (hook-result-action r) 'block))
+
+(test-case "validate-hook-result TR boundary"
+  (check-true (validate-hook-result 'model-request-pre (hook-pass "x")))
+  (check-false (validate-hook-result 'turn-end (hook-block "x"))))
+
+(test-case "hook-schema-version from TR"
+  (check-equal? (hook-schema-version) 1))
