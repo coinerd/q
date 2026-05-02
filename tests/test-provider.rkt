@@ -339,44 +339,39 @@
 ;; ============================================================
 
 (test-case "BUG-16: HTTP 200 passes without error"
-  (check-not-exn (λ () (check-provider-status! "Test" "Test" #"HTTP/1.1 200 OK" #"{}"))))
+  (check-not-exn (λ () (check-provider-status! "Test" #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "BUG-16: HTTP 201 passes without error"
-  (check-not-exn (λ () (check-provider-status! "Test" "Test" #"HTTP/1.1 201 Created" #"{}"))))
+  (check-not-exn (λ () (check-provider-status! "Test" #"HTTP/1.1 201 Created" #"{}"))))
 
 (test-case "BUG-16: HTTP 401 raises error"
   (check-exn exn:fail?
              (λ ()
                (check-provider-status! "Test"
-                                       "Test"
                                        #"HTTP/1.1 401 Unauthorized"
                                        #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
 
 (test-case "BUG-16: HTTP 403 raises error"
-  (check-exn exn:fail?
-             (λ () (check-provider-status! "Test" "Test" #"HTTP/1.1 403 Forbidden" #"forbidden"))))
+  (check-exn exn:fail? (λ () (check-provider-status! "Test" #"HTTP/1.1 403 Forbidden" #"forbidden"))))
 
 (test-case "BUG-16: HTTP 404 raises error"
-  (check-exn exn:fail?
-             (λ () (check-provider-status! "Test" "Test" #"HTTP/1.1 404 Not Found" #"not found"))))
+  (check-exn exn:fail? (λ () (check-provider-status! "Test" #"HTTP/1.1 404 Not Found" #"not found"))))
 
 (test-case "BUG-16: HTTP 500 raises error"
   (check-exn
    exn:fail?
-   (λ ()
-     (check-provider-status! "Test" "Test" #"HTTP/2 500 Internal Server Error" #"internal error"))))
+   (λ () (check-provider-status! "Test" #"HTTP/2 500 Internal Server Error" #"internal error"))))
 
 (test-case "BUG-16: HTTP 429 raises error with JSON body"
   (check-exn #rx"API rate limited [(]429[)]"
              (λ ()
                (check-provider-status! "Test"
-                                       "Test"
                                        #"HTTP/1.1 429 Too Many Requests"
                                        #"{\"error\":{\"message\":\"Rate limited\"}}"))))
 
 (test-case "BUG-16: HTTP 301 redirect raises error"
   (check-exn #rx"redirected"
-             (λ () (check-provider-status! "Test" "Test" #"HTTP/1.1 301 Moved Permanently" #""))))
+             (λ () (check-provider-status! "Test" #"HTTP/1.1 301 Moved Permanently" #""))))
 
 (test-case "BUG-16: String status-line also works"
   (check-not-exn (λ () (check-provider-status! "Test" "HTTP/1.1 200 OK" #"{}"))))

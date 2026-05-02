@@ -268,7 +268,7 @@
                                       'translate-tool
                                       anthropic-translate-tool
                                       'translate-stop
-                                      translate-stop-reason
+                                      (lambda (r) (translate-stop-reason 'anthropic r))
                                       'stop-translations
                                       '(("end_turn" . stop) ("tool_use" . tool-calls)
                                                             ("max_tokens" . length))))
@@ -297,7 +297,7 @@
         'usage
         (hash 'prompt_tokens 10 'completion_tokens 5 'total_tokens 15))
   'check-status
-  check-provider-status!
+  (lambda (sl rb) (check-provider-status! "OpenAI-compatible" sl rb))
   'expected-stop
   'stop
   'expected-model
@@ -352,7 +352,7 @@
   'translate-tool
   gemini-translate-tool
   'translate-stop
-  translate-stop-reason
+  (lambda (r) (translate-stop-reason 'gemini r))
   'stop-translations
   '(("STOP" . stop) ("MAX_TOKENS" . length))))
 
@@ -439,15 +439,21 @@
     (check-true (symbol? (model-response-stop-reason parsed)))))
 
 (test-case "All providers: HTTP 401 raises exn:fail?"
-  (for ([check-fn (list check-provider-status! check-provider-status! check-provider-status!)])
+  (for ([check-fn (list (lambda (sl rb) (check-provider-status! "test" sl rb))
+                        (lambda (sl rb) (check-provider-status! "test" sl rb))
+                        (lambda (sl rb) (check-provider-status! "test" sl rb)))])
     (check-exn exn:fail? (lambda () (check-fn #"HTTP/1.1 401 Unauthorized" #"error")))))
 
 (test-case "All providers: HTTP 500 raises exn:fail?"
-  (for ([check-fn (list check-provider-status! check-provider-status! check-provider-status!)])
+  (for ([check-fn (list (lambda (sl rb) (check-provider-status! "test" sl rb))
+                        (lambda (sl rb) (check-provider-status! "test" sl rb))
+                        (lambda (sl rb) (check-provider-status! "test" sl rb)))])
     (check-exn exn:fail? (lambda () (check-fn #"HTTP/1.1 500 Internal Server Error" #"error")))))
 
 (test-case "All providers: HTTP 200 passes without exception"
-  (for ([check-fn (list check-provider-status! check-provider-status! check-provider-status!)])
+  (for ([check-fn (list (lambda (sl rb) (check-provider-status! "test" sl rb))
+                        (lambda (sl rb) (check-provider-status! "test" sl rb))
+                        (lambda (sl rb) (check-provider-status! "test" sl rb)))])
     (check-not-exn (lambda () (check-fn #"HTTP/1.1 200 OK" #"{}")))))
 
 (test-case "Mock provider: stream returns generator yielding stream-chunk? then #f"
