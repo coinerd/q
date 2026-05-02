@@ -492,13 +492,12 @@
 ;; ============================================================
 
 (test-case "HTTP 200 passes without error"
-  (check-not-exn (lambda () (check-provider-status! "Gemini" "Gemini" #"HTTP/1.1 200 OK" #"{}"))))
+  (check-not-exn (lambda () (check-provider-status! "Gemini" #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "HTTP 400 raises bad request error"
   (check-exn #rx"bad request [(]400[)]"
              (lambda ()
                (check-provider-status! "Gemini"
-                                       "Gemini"
                                        #"HTTP/1.1 400 Bad Request"
                                        #"{\"error\":{\"message\":\"Invalid\"}}"))))
 
@@ -506,7 +505,6 @@
   (check-exn #rx"authentication failed [(]401[)]"
              (lambda ()
                (check-provider-status! "Gemini"
-                                       "Gemini"
                                        #"HTTP/1.1 401 Unauthorized"
                                        #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
 
@@ -514,7 +512,6 @@
   (check-exn #rx"forbidden [(]403[)]"
              (lambda ()
                (check-provider-status! "Gemini"
-                                       "Gemini"
                                        #"HTTP/1.1 403 Forbidden"
                                        #"{\"error\":{\"message\":\"Access denied\"}}"))))
 
@@ -522,7 +519,6 @@
   (check-exn #rx"rate limited [(]429[)]"
              (lambda ()
                (check-provider-status! "Gemini"
-                                       "Gemini"
                                        #"HTTP/1.1 429 Too Many Requests"
                                        #"{\"error\":{\"message\":\"Rate limited\"}}"))))
 
@@ -530,14 +526,13 @@
   (check-exn #rx"server error [(]500[)]"
              (lambda ()
                (check-provider-status! "Gemini"
-                                       "Gemini"
                                        #"HTTP/1.1 500 Internal Server Error"
                                        #"{\"error\":{\"message\":\"Internal error\"}}"))))
 
 (test-case "HTTP 502 raises server error"
-  (check-exn
-   #rx"server error [(]502[)]"
-   (lambda () (check-provider-status! "Gemini" "Gemini" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
+  (check-exn #rx"server error [(]502[)]"
+             (lambda ()
+               (check-provider-status! "Gemini" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
 
 (test-case "String status-line also works"
   (check-not-exn (lambda () (check-provider-status! "Gemini" "HTTP/1.1 200 OK" "{}"))))
@@ -1014,7 +1009,6 @@
   (define exn
     (with-handlers ([exn:fail? identity])
       (check-provider-status! "Gemini"
-                              "Gemini"
                               #"HTTP/1.1 429 Too Many Requests"
                               #"{\"error\":{\"message\":\"Rate limited\"}}")))
   (check-pred exn? exn)
