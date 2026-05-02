@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.28.7 — 2026-05-04
+
+### Event Algebra & Boundary Contracts
+
+- **W0**: Add bidirectional event payload codec (`util/event-codec.rkt`) with
+  `hash->payload` decode and `payload-type-tag` dispatch. 12 tests.
+- **W1**: Structify subagent config with `subagent-config` struct and
+  `parse-subagent-config`. 4 tests.
+- **W2**: Add `contract-out` to `dispatch-hooks` in `extensions/hooks.rkt` with
+  `->*` contract for optional `#:ctx`. Trust boundaries audited.
+- **W3**: Version bump + release.
+
+
 ## v0.28.6 — 2026-05-04
 
 ### Error Taxonomy & Effect Policy Completion
