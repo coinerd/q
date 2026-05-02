@@ -23,7 +23,9 @@
          raise-http-error!
          ;; Consolidated HTTP helpers (QUAL-02)
          make-provider-http-request
-         check-provider-status!)
+         check-provider-status!
+         ;; Provider stop-reason dispatch (Finding A9)
+         translate-stop-reason)
 
 ;; ============================================================
 ;; Contracts
@@ -181,3 +183,39 @@
      (define msg (hash-ref jsexpr 'message))
      (if (string? msg) msg #f)]
     [else #f]))
+
+;; ============================================================
+;; Provider stop-reason dispatch (Finding A9)
+;; ============================================================
+
+;; Provider-specific stop reason mappings.
+(define stop-reason-table
+  (hash
+   'anthropic
+   '(("end_turn" . stop) ("max_tokens" . length) ("stop_sequence" . stop) ("tool_use" . tool-calls))
+   'gemini
+   '(("STOP" . stop) ("MAX_TOKENS" . length)
+                     ("SAFETY" . content-filtered)
+                     ("RECITATION" . content-filtered))))
+
+;; translate-stop-reason : (or/c 'anthropic 'gemini 'openai #f)
+;;   (or/c string? symbol?) -> symbol?
+;;
+;; Translate a provider-specific stop/finish reason to a canonical symbol.
+;; For providers not in the table (e.g. openai-family), applies
+;; string->symbol with underscore→hyphen replacement.
+(define (translate-stop-reason provider reason)
+  (define r
+    (cond
+      [(string? reason) (string-trim reason)]
+      [(symbol? reason) reason]
+      [else 'stop]))
+  (cond
+    [(symbol? r) r]
+    [(and provider (hash-has-key? stop-reason-table provider))
+     (let* ([mapping (hash-ref stop-reason-table provider)]
+            [entry (assoc r mapping)])
+       (if entry
+           (cdr entry)
+           (string->symbol r)))]
+    [else (string->symbol (string-replace r "_" "-"))]))

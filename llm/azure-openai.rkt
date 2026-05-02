@@ -163,7 +163,7 @@
                      ;; W2.3: extract finish-reason and usage from chunks
                      (define finish-reason
                        (let ([fr (hash-ref first-choice 'finish_reason #f)])
-                         (and (string? fr) (string->symbol (string-replace fr "_" "-")))))
+                         (and (string? fr) (translate-stop-reason #f fr))))
                      (define usage
                        (let ([u (hash-ref js 'usage #f)])
                          (and u
