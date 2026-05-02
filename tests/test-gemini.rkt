@@ -491,44 +491,53 @@
 ;; ============================================================
 
 (test-case "HTTP 200 passes without error"
-  (check-not-exn (lambda () (gemini-check-http-status! #"HTTP/1.1 200 OK" #"{}"))))
+  (check-not-exn
+   (lambda () ((lambda (sl rb) (check-provider-status! "Gemini" sl rb)) #"HTTP/1.1 200 OK" #"{}"))))
 
 (test-case "HTTP 400 raises bad request error"
   (check-exn #rx"bad request [(]400[)]"
              (lambda ()
-               (gemini-check-http-status! #"HTTP/1.1 400 Bad Request"
-                                          #"{\"error\":{\"message\":\"Invalid\"}}"))))
+               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
+                #"HTTP/1.1 400 Bad Request"
+                #"{\"error\":{\"message\":\"Invalid\"}}"))))
 
 (test-case "HTTP 401 raises authentication error"
   (check-exn #rx"authentication failed [(]401[)]"
              (lambda ()
-               (gemini-check-http-status! #"HTTP/1.1 401 Unauthorized"
-                                          #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
+               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
+                #"HTTP/1.1 401 Unauthorized"
+                #"{\"error\":{\"message\":\"Invalid API key\"}}"))))
 
 (test-case "HTTP 403 raises forbidden error"
   (check-exn #rx"forbidden [(]403[)]"
              (lambda ()
-               (gemini-check-http-status! #"HTTP/1.1 403 Forbidden"
-                                          #"{\"error\":{\"message\":\"Access denied\"}}"))))
+               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
+                #"HTTP/1.1 403 Forbidden"
+                #"{\"error\":{\"message\":\"Access denied\"}}"))))
 
 (test-case "HTTP 429 raises rate limit error"
   (check-exn #rx"rate limited [(]429[)]"
              (lambda ()
-               (gemini-check-http-status! #"HTTP/1.1 429 Too Many Requests"
-                                          #"{\"error\":{\"message\":\"Rate limited\"}}"))))
+               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
+                #"HTTP/1.1 429 Too Many Requests"
+                #"{\"error\":{\"message\":\"Rate limited\"}}"))))
 
 (test-case "HTTP 500 raises server error"
   (check-exn #rx"server error [(]500[)]"
              (lambda ()
-               (gemini-check-http-status! #"HTTP/1.1 500 Internal Server Error"
-                                          #"{\"error\":{\"message\":\"Internal error\"}}"))))
+               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
+                #"HTTP/1.1 500 Internal Server Error"
+                #"{\"error\":{\"message\":\"Internal error\"}}"))))
 
 (test-case "HTTP 502 raises server error"
   (check-exn #rx"server error [(]502[)]"
-             (lambda () (gemini-check-http-status! #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
+             (lambda ()
+               ((lambda (sl rb) (check-provider-status! "Gemini" sl rb)) #"HTTP/1.1 502 Bad Gateway"
+                                                                         #"Bad Gateway"))))
 
 (test-case "String status-line also works"
-  (check-not-exn (lambda () (gemini-check-http-status! "HTTP/1.1 200 OK" "{}"))))
+  (check-not-exn
+   (lambda () ((lambda (sl rb) (check-provider-status! "Gemini" sl rb)) "HTTP/1.1 200 OK" "{}"))))
 
 ;; ============================================================
 ;; 21. Tool translation helper
@@ -1001,8 +1010,9 @@
 (test-case "Gemini HTTP 429 includes wait/retry guidance"
   (define exn
     (with-handlers ([exn:fail? identity])
-      (gemini-check-http-status! #"HTTP/1.1 429 Too Many Requests"
-                                 #"{\"error\":{\"message\":\"Rate limited\"}}")))
+      ((lambda (sl rb) (check-provider-status! "Gemini" sl rb))
+       #"HTTP/1.1 429 Too Many Requests"
+       #"{\"error\":{\"message\":\"Rate limited\"}}")))
   (check-pred exn? exn)
   (define msg (exn-message exn))
   (check-true (or (string-contains? msg "wait")
@@ -1075,19 +1085,24 @@
   (gemini-reset-tool-id-counter!)
   ;; Simulate Gemini streaming: functionCall A in chunk 1, functionCall B in chunk 2
   (define stream-events
-    (list
-     (hash 'candidates
-           (list (hash 'content
-                       (hash 'role "model"
-                             'parts (list (hash 'functionCall
-                                                (hash 'name "bash" 'args (hash 'command "ls")))))
-                       'finishReason #f)))
-     (hash 'candidates
-           (list (hash 'content
-                       (hash 'role "model"
-                             'parts (list (hash 'functionCall
-                                                (hash 'name "read" 'args (hash 'path "/tmp")))))
-                       'finishReason "STOP")))))
+    (list (hash 'candidates
+                (list (hash 'content
+                            (hash 'role
+                                  "model"
+                                  'parts
+                                  (list (hash 'functionCall
+                                              (hash 'name "bash" 'args (hash 'command "ls")))))
+                            'finishReason
+                            #f)))
+          (hash 'candidates
+                (list (hash 'content
+                            (hash 'role
+                                  "model"
+                                  'parts
+                                  (list (hash 'functionCall
+                                              (hash 'name "read" 'args (hash 'path "/tmp")))))
+                            'finishReason
+                            "STOP")))))
   (define chunks (gemini-parse-stream-chunks stream-events))
   (define tc-chunks (filter (lambda (c) (stream-chunk-delta-tool-call c)) chunks))
   (check-equal? (length tc-chunks) 2 "two tool-call deltas across two SSE chunks")
@@ -1097,31 +1112,30 @@
   (check-equal? (hash-ref tc1 'index) 0 "first tool call has index 0")
   (check-equal? (hash-ref tc2 'index) 1 "second tool call has index 1")
   ;; IDs must be unique
-  (check-not-equal? (hash-ref tc1 'id) (hash-ref tc2 'id)
-                     "streaming tool calls across chunks have unique IDs")
+  (check-not-equal? (hash-ref tc1 'id)
+                    (hash-ref tc2 'id)
+                    "streaming tool calls across chunks have unique IDs")
   ;; Names preserved
-  (check-equal? (hash-ref (hash-ref tc1 'function) 'name) "bash"
-                "first tool call name preserved")
-  (check-equal? (hash-ref (hash-ref tc2 'function) 'name) "read"
-                "second tool call name preserved")
+  (check-equal? (hash-ref (hash-ref tc1 'function) 'name) "bash" "first tool call name preserved")
+  (check-equal? (hash-ref (hash-ref tc2 'function) 'name) "read" "second tool call name preserved")
   ;; Verify accumulation produces two separate tool calls
   (define accumulated (accumulate-tool-call-deltas tc-chunks))
-  (check-equal? (length accumulated) 2
-                "accumulated tool calls produce 2 separate entries")
-  (check-equal? (hash-ref (car accumulated) 'name) "bash"
-                "first accumulated tool call is bash")
-  (check-equal? (hash-ref (cadr accumulated) 'name) "read"
-                "second accumulated tool call is read"))
+  (check-equal? (length accumulated) 2 "accumulated tool calls produce 2 separate entries")
+  (check-equal? (hash-ref (car accumulated) 'name) "bash" "first accumulated tool call is bash")
+  (check-equal? (hash-ref (cadr accumulated) 'name) "read" "second accumulated tool call is read"))
 
 (test-case "Issue #443: single SSE chunk with two functionCalls gets distinct indices"
   (gemini-reset-tool-id-counter!)
   (define event
     (hash 'candidates
           (list (hash 'content
-                      (hash 'role "model"
-                            'parts (list (hash 'functionCall (hash 'name "bash" 'args (hash 'command "ls")))
-                                         (hash 'functionCall (hash 'name "read" 'args (hash 'path "/tmp")))))
-                      'finishReason "STOP"))))
+                      (hash 'role
+                            "model"
+                            'parts
+                            (list (hash 'functionCall (hash 'name "bash" 'args (hash 'command "ls")))
+                                  (hash 'functionCall (hash 'name "read" 'args (hash 'path "/tmp")))))
+                      'finishReason
+                      "STOP"))))
   (define chunks (gemini-parse-single-event event))
   (define tc-chunks (filter (lambda (c) (stream-chunk-delta-tool-call c)) chunks))
   (check-equal? (length tc-chunks) 2 "two tool-call deltas in one event")
@@ -1130,5 +1144,4 @@
   ;; First gets index 0, second gets index 1 (sequential)
   (check-equal? (hash-ref tc1 'index) 0 "first tool call in same event: index 0")
   (check-equal? (hash-ref tc2 'index) 1 "second tool call in same event: index 1")
-  (check-not-equal? (hash-ref tc1 'id) (hash-ref tc2 'id)
-                     "tool calls in same event have unique IDs"))
+  (check-not-equal? (hash-ref tc1 'id) (hash-ref tc2 'id) "tool calls in same event have unique IDs"))

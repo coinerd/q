@@ -3,7 +3,7 @@
 ;; extensions/github/handlers/milestone-ops.rkt — GitHub milestone + board handlers
 
 (require "../../../util/error-helpers.rkt")
-(require "../../util/json-helpers.rkt")
+(require "../../../util/json-helpers.rkt")
 (require racket/format
          racket/string
          json
