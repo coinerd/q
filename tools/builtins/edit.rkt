@@ -13,6 +13,7 @@
 ;;   - pre-edit backup save to ~/.q/edit-backups/
 
 (require racket/file
+         racket/match
          racket/string
          (only-in racket/list last drop)
          (only-in "../tool.rkt" make-success-result make-error-result)
@@ -135,11 +136,12 @@
          (let loop ([di 0]
                     [dj 0]
                     [len 0])
-           (cond
-             [(or (>= (+ i di) la) (>= (+ j dj) lb)) (max best len)]
-             [(char=? (string-ref a (+ i di)) (string-ref b (+ j dj)))
+           (match (list (+ i di) (+ j dj))
+             [(list (? (lambda (x) (or (>= x la))) _) _) (max best len)]
+             [(list _ (? (lambda (x) (>= x lb)))) (max best len)]
+             [(list (? (lambda (x) (char=? (string-ref a x) (string-ref b (+ j dj))))) _)
               (loop (add1 di) (add1 dj) (add1 len))]
-             [else (max best len)]))))]))
+             [_ (max best len)]))))]))
 
 ;; Extract a search key from old-text: trimmed, up to 60 chars.
 (define (extract-search-key old-text)
@@ -155,9 +157,9 @@
   (define lines (string-split content "\n" #:trim? #f))
   (define key (extract-search-key old-text))
   (define key-len (string-length key))
-  (cond
-    [(zero? key-len) (values #f #f)]
-    [else
+  (match key-len
+    [0 (values #f #f)]
+    [_
      (for/fold ([best-line #f]
                 [best-num #f]
                 [best-score 0]
@@ -177,25 +179,24 @@
 (define (make-not-found-error path-str old-text content)
   (define-values (line-num line-text) (find-nearest-match content old-text))
   (define hint
-    (cond
-      [(and (string? old-text) (regexp-match? #rx"^ +" old-text))
+    (match old-text
+      [(? (lambda (s) (and (string? s) (regexp-match? #rx"^ +" s))))
        "Hint: old-text has leading whitespace — check indentation."]
-      [(and (string? old-text)
-            (> (string-length old-text) 200)
-            (< (length (string-split old-text "\n")) 2))
+      [(? (lambda (s)
+            (and (string? s) (> (string-length s) 200) (< (length (string-split s "\n")) 2))))
        "Hint: old-text is very long and single-line — try a smaller unique snippet."]
-      [else ""]))
-  (cond
-    [line-num
+      [_ ""]))
+  (match line-num
+    [#f
+     (string-append (format "old-text not found in ~a. Read the file first to get exact text.\n"
+                            path-str)
+                    hint)]
+    [_
      (string-append
       (format "old-text not found in ~a.\nNearest match at line ~a:\n  \"" path-str line-num)
       (string-trim line-text)
       "\"\nRe-read the file to get exact text.\n"
-      hint)]
-    [else
-     (string-append (format "old-text not found in ~a. Read the file first to get exact text.\n"
-                            path-str)
-                    hint)]))
+      hint)]))
 
 ;; --------------------------------------------------
 ;; Main tool function
@@ -212,102 +213,74 @@
                       (path->string expanded))])
            (with-handlers ([exn:fail? (lambda (_) p)])
              (path->string (simplify-path (resolve-path p)))))))
-  (cond
-    [(not path-str) (make-error-result "Missing required argument: path")]
-    [else
-     (define old-text (hash-ref args 'old-text #f))
+  ;; Argument validation via match — flattened pyramid
+  (match (list path-str (hash-ref args 'old-text #f) (hash-ref args 'new-text #f))
+    [(list #f _ _) (make-error-result "Missing required argument: path")]
+    [(list _ #f _) (make-error-result "Missing required argument: old-text")]
+    [(list _ _ #f) (make-error-result "Missing required argument: new-text")]
+    [(list (? string? path) (? string? old-text) (? string? new-text))
      (cond
-       [(not old-text) (make-error-result "Missing required argument: old-text")]
+       ;; Defense-in-depth: verify path even if scheduler already checked (SEC-09)
+       [(and (safe-mode?) (not (allowed-path? path)))
+        (make-error-result
+         (format "edit: path '~a' outside project root (~a)" path (safe-mode-project-root)))]
+       [(not (file-exists? path)) (make-error-result (format "File not found: ~a" path))]
        [else
-        (define new-text (hash-ref args 'new-text #f))
-        (cond
-          [(not new-text) (make-error-result "Missing required argument: new-text")]
-          [else
-           ;; Defense-in-depth: verify path even if scheduler already checked (SEC-09)
-           (cond
-             [(and (safe-mode?) (not (allowed-path? path-str)))
-              (make-error-result (format "edit: path '~a' outside project root (~a)"
-                                         path-str
-                                         (safe-mode-project-root)))]
-             [(not (file-exists? path-str))
-              (make-error-result (format "File not found: ~a" path-str))]
-
-             [else
-              ;; Read file content
-              (define content (file->string path-str))
-
-              ;; W0.1: Old-text length limit
-              (cond
-                [(> (string-length old-text) (current-max-old-text-len))
+        (define content (file->string path))
+        (match (string-length old-text)
+          [(? (lambda (n) (> n (current-max-old-text-len))))
+           (make-error-result
+            (format
+             "old-text is too long (~a chars, max ~a). Break your edit into smaller pieces — each edit should change ≤20 lines."
+             (string-length old-text)
+             (current-max-old-text-len)))]
+          [_
+           (define occurrences (count-occurrences content old-text))
+           (match occurrences
+             [0 (make-error-result (make-not-found-error path old-text content))]
+             [(? (lambda (n) (> n 1)))
+              (make-error-result
+               (format "old-text appears ~a times in ~a; be more specific" occurrences path))]
+             [1
+              (define backup-path (save-backup path content))
+              (define new-content (string-replace content old-text new-text #:all? #f))
+              (define expected-delta (- (line-count new-text) (line-count old-text)))
+              (define actual-delta (- (line-count new-content) (line-count content)))
+              (define delta-diff (abs (- actual-delta expected-delta)))
+              (match delta-diff
+                [(? (lambda (d) (> d 2)))
+                 ;; Auto-revert: write back original content
+                 (with-handlers ([exn:fail? (lambda (e)
+                                              (log-warning (format "edit/auto-revert: ~a"
+                                                                   (exn-message e)))
+                                              (void))])
+                   (display-to-file content path #:exists 'replace))
                  (make-error-result
-                  (format
-                   "old-text is too long (~a chars, max ~a). Break your edit into smaller pieces — each edit should change ≤20 lines."
-                   (string-length old-text)
-                   (current-max-old-text-len)))]
-
-                [else
-                 ;; Check for ambiguity (multiple matches)
-                 (define occurrences (count-occurrences content old-text))
-
-                 (cond
-                   [(zero? occurrences)
-                    (make-error-result (make-not-found-error path-str old-text content))]
-
-                   [(> occurrences 1)
-                    (make-error-result (format "old-text appears ~a times in ~a; be more specific"
-                                               occurrences
-                                               path-str))]
-
-                   [else
-                    ;; W0.3: Save backup before edit
-                    (define backup-path (save-backup path-str content))
-
-                    ;; Perform replacement (string-replace, not regexp-replace,
-                    ;; to avoid & and \digit expansion in new-text)
-                    (define new-content (string-replace content old-text new-text #:all? #f))
-
-                    ;; W0.2: Post-edit line-count integrity check
-                    (define expected-delta (- (line-count new-text) (line-count old-text)))
-                    (define actual-delta (- (line-count new-content) (line-count content)))
-                    (define delta-diff (abs (- actual-delta expected-delta)))
-
-                    (cond
-                      [(> delta-diff 2)
-                       ;; Auto-revert: write back original content
-                       (with-handlers ([exn:fail? (lambda (e)
-                                                    (log-warning (format "edit/auto-revert: ~a"
-                                                                         (exn-message e)))
-                                                    (void))])
-                         (display-to-file content path-str #:exists 'replace))
-                       (make-error-result
-                        (format
-                         (string-append "Edit reverted: line count changed unexpectedly "
-                                        "(expected ~a lines delta, got ~a). "
-                                        "The file may have been modified since your last read. "
-                                        "Re-read the file and try a smaller edit.")
-                         expected-delta
-                         actual-delta))]
-
-                      [else
-                       ;; Write new content
-                       (with-handlers ([exn:fail:filesystem?
-                                        (lambda (e)
-                                          (make-error-result (sanitize-error-message
-                                                              (format "Write error: ~a"
-                                                                      (exn-message e)))))])
-                         (call-with-output-file path-str
-                                                (lambda (out) (display new-content out))
-                                                #:exists 'replace)
-
-                         (make-success-result
-                          (list (format "Edited ~a (replaced ~a occurrence)" path-str occurrences))
-                          (hasheq 'path
-                                  path-str
-                                  'replacements
-                                  1
-                                  'old-length
-                                  (string-length old-text)
-                                  'new-length
-                                  (string-length new-text)
-                                  'backup
-                                  (or backup-path ""))))])])])])])])]))
+                  (format (string-append "Edit reverted: line count changed unexpectedly "
+                                         "(expected ~a lines delta, got ~a). "
+                                         "The file may have been modified since your last read. "
+                                         "Re-read the file and try a smaller edit.")
+                          expected-delta
+                          actual-delta))]
+                [_
+                 ;; Write new content
+                 (with-handlers ([exn:fail:filesystem?
+                                  (lambda (e)
+                                    (make-error-result (sanitize-error-message
+                                                        (format "Write error: ~a"
+                                                                (exn-message e)))))])
+                   (call-with-output-file path
+                                          (lambda (out) (display new-content out))
+                                          #:exists 'replace)
+                   (make-success-result
+                    (list (format "Edited ~a (replaced ~a occurrence)" path occurrences))
+                    (hasheq 'path
+                            path
+                            'replacements
+                            1
+                            'old-length
+                            (string-length old-text)
+                            'new-length
+                            (string-length new-text)
+                            'backup
+                            (or backup-path ""))))])])])])]))
