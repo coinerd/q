@@ -8,7 +8,16 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install Racket
+    - name: Install Racket (Linux via apt)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq racket
+        racket --version
+
+    - name: Install Racket (macOS via DeLaGuardo)
+      if: runner.os == 'macOS'
       uses: DeLaGuardo/setup-racket@v1
       with:
         racket-version: ${{ inputs.racket-version }}
