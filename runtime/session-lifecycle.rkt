@@ -35,6 +35,7 @@
          "../runtime/session-index.rkt"
          (only-in "../extensions/message-inject.rkt" injection-event-topic)
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
+         (only-in "../util/error-helpers.rkt" with-telemetry)
          (only-in "../runtime/context-assembly.rkt"
                   build-assembled-context
                   context-assembly-config?
@@ -288,7 +289,9 @@
   (ensure-persisted!-fn sess)
 
   ;; 4. Run the core agent loop (model-select hook + iteration dispatch)
-  (define final-result (dispatch-iteration sess context-after-compact max-iterations))
+  (define final-result
+    (with-telemetry "dispatch-iteration"
+                    (dispatch-iteration sess context-after-compact max-iterations)))
 
   ;; 5. Rebuild index
   (set-agent-session-index! sess (build-index! log-path idx-path))

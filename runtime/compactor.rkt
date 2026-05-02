@@ -25,6 +25,7 @@
          racket/set
          "../util/protocol-types.rkt"
          "../util/message-helpers.rkt"
+         (only-in "../util/error-helpers.rkt" with-telemetry)
          "../runtime/session-store.rkt"
          (only-in "../runtime/compaction-prompts.rkt"
                   summary-prompt
@@ -421,16 +422,16 @@
                               #:previous-summary [prev-summary #f]
                               #:hook-dispatcher [hook-dispatcher #f]
                               #:token-config [token-config (default-token-compaction-config)])
-  (define result
-    (compact-history messages
-                     #:summarize-fn summarize-fn
-                     #:provider provider
-                     #:model-name model-name
-                     #:previous-summary prev-summary
-                     #:hook-dispatcher hook-dispatcher
-                     #:token-config token-config))
-  (write-compaction-entry! session-log-path result)
-  result)
+  (with-telemetry "compact-and-persist"
+                  (let ([result (compact-history messages
+                                                 #:summarize-fn summarize-fn
+                                                 #:provider provider
+                                                 #:model-name model-name
+                                                 #:previous-summary prev-summary
+                                                 #:hook-dispatcher hook-dispatcher
+                                                 #:token-config token-config)])
+                    (write-compaction-entry! session-log-path result)
+                    result)))
 
 ;; ============================================================
 ;; write-compaction-entry!
