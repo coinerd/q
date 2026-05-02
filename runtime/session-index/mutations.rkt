@@ -10,6 +10,7 @@
          racket/path
          racket/list
          json
+         "../../util/json-helpers.rkt"
          (only-in "../../util/protocol-types.rkt"
                   message-id
                   message-parent-id
@@ -108,7 +109,8 @@
   (define blob
     (with-output-to-string (lambda ()
                              (for ([entry (in-list lines)])
-                               (write-json entry) (newline)))))
+                               (write-json entry)
+                               (newline)))))
   (call-with-output-file path (lambda (out) (display blob out)) #:mode 'text #:exists 'truncate))
 
 (define (load-index path)
@@ -132,7 +134,12 @@
              (define pid (message-parent-id msg))
              (when (and pid (hash-has-key? children pid))
                (hash-update! children pid (lambda (lst) (append lst (list msg))))))
-           (session-index by-id children (list->vector entries) (make-hash) (box #f) (make-semaphore 1))]))))
+           (session-index by-id
+                          children
+                          (list->vector entries)
+                          (make-hash)
+                          (box #f)
+                          (make-semaphore 1))]))))
 
 ;; ============================================================
 ;; Active leaf
@@ -140,12 +147,16 @@
 
 (define (switch-leaf! idx entry-id)
   (if (lookup-entry idx entry-id)
-      (begin (set-box! (session-index-active-leaf-id idx) entry-id) entry-id)
+      (begin
+        (set-box! (session-index-active-leaf-id idx) entry-id)
+        entry-id)
       #f))
 
 (define (mark-active-leaf! idx entry-id)
   (if (lookup-entry idx entry-id)
-      (begin (set-box! (session-index-active-leaf-id idx) entry-id) entry-id)
+      (begin
+        (set-box! (session-index-active-leaf-id idx) entry-id)
+        entry-id)
       #f))
 
 ;; ============================================================
@@ -175,7 +186,9 @@
              [current-pos (if current-id
                               (or (for/first ([id (in-list leaf-ids)]
                                               [i (in-naturals)]
-                                              #:when (equal? id current-id)) i) -1)
+                                              #:when (equal? id current-id))
+                                    i)
+                                  -1)
                               -1)]
              [next-pos (modulo (add1 current-pos) (length leaves))]
              [next-entry (list-ref leaves next-pos)])
@@ -191,7 +204,9 @@
              [current-pos (if current-id
                               (or (for/first ([id (in-list leaf-ids)]
                                               [i (in-naturals)]
-                                              #:when (equal? id current-id)) i) 0)
+                                              #:when (equal? id current-id))
+                                    i)
+                                  0)
                               0)]
              [prev-pos (modulo (sub1 current-pos) n)]
              [prev-entry (list-ref leaves prev-pos)])
@@ -216,7 +231,9 @@
     [else
      (define summary-msg
        (make-message (format "branch-summary-~a" (current-inexact-milliseconds))
-                     entry-id 'system 'branch-summary
+                     entry-id
+                     'system
+                     'branch-summary
                      (list (make-text-part summary-text))
                      (current-seconds)
                      (hasheq 'type "branch-summary" 'from-id entry-id)))
@@ -229,14 +246,19 @@
 
 (define (append-to-leaf! idx entry)
   (define parent (active-leaf idx))
-  (define parent-id (if parent (message-id parent) #f))
+  (define parent-id
+    (if parent
+        (message-id parent)
+        #f))
   (define fixed-entry
     (if (and parent-id (not (message-parent-id entry)))
         (struct-copy message entry [parent-id parent-id])
         entry))
   (hash-set! (session-index-by-id idx) (message-id fixed-entry) fixed-entry)
   (when parent-id
-    (hash-update! (session-index-children idx) parent-id (lambda (lst) (append lst (list fixed-entry)))))
+    (hash-update! (session-index-children idx)
+                  parent-id
+                  (lambda (lst) (append lst (list fixed-entry)))))
   (hash-set! (session-index-children idx) (message-id fixed-entry) '())
   (set-box! (session-index-active-leaf-id idx) (message-id fixed-entry))
   fixed-entry)
@@ -247,23 +269,26 @@
 
 (define (add-bookmark! idx entry-id label)
   (call-with-semaphore (session-index-bookmark-sem idx)
-    (lambda ()
-      (define bookmarks (session-index-bookmarks idx))
-      (define existing (find-bookmark-by-label idx label))
-      (when existing (hash-remove! bookmarks (bookmark-id existing)))
-      (define id (generate-bookmark-id))
-      (define ts (current-seconds))
-      (define bm (make-bookmark id entry-id label ts))
-      (hash-set! bookmarks id bm)
-      id)))
+                       (lambda ()
+                         (define bookmarks (session-index-bookmarks idx))
+                         (define existing (find-bookmark-by-label idx label))
+                         (when existing
+                           (hash-remove! bookmarks (bookmark-id existing)))
+                         (define id (generate-bookmark-id))
+                         (define ts (current-seconds))
+                         (define bm (make-bookmark id entry-id label ts))
+                         (hash-set! bookmarks id bm)
+                         id)))
 
 (define (remove-bookmark! idx bookmark-id)
   (call-with-semaphore (session-index-bookmark-sem idx)
-    (lambda ()
-      (define bookmarks (session-index-bookmarks idx))
-      (if (hash-has-key? bookmarks bookmark-id)
-          (begin (hash-remove! bookmarks bookmark-id) #t)
-          #f))))
+                       (lambda ()
+                         (define bookmarks (session-index-bookmarks idx))
+                         (if (hash-has-key? bookmarks bookmark-id)
+                             (begin
+                               (hash-remove! bookmarks bookmark-id)
+                               #t)
+                             #f))))
 
 (define (list-bookmarks idx)
   (hash-values (session-index-bookmarks idx)))
@@ -292,10 +317,14 @@
   (build-path dir (format "~a-bookmarks.json" name)))
 
 (define (bookmark->jsexpr bm)
-  (hasheq 'id (bookmark-id bm)
-          'entryId (bookmark-entry-id bm)
-          'label (bookmark-label bm)
-          'timestamp (bookmark-timestamp bm)))
+  (hasheq 'id
+          (bookmark-id bm)
+          'entryId
+          (bookmark-entry-id bm)
+          'label
+          (bookmark-label bm)
+          'timestamp
+          (bookmark-timestamp bm)))
 
 (define (jsexpr->bookmark h)
   (make-bookmark (hash-ref h 'id) (hash-ref h 'entryId) (hash-ref h 'label) (hash-ref h 'timestamp)))
@@ -306,8 +335,9 @@
   (define data (map bookmark->jsexpr bookmarks))
   (ensure-parent-dirs! bpath)
   (define temp-path (format "~a.tmp" bpath))
-  (call-with-output-file temp-path (lambda (out) (write-json data out)) #:mode 'text #:exists 'truncate)
-  (when (file-exists? bpath) (delete-file bpath))
+  (write-json-file temp-path data)
+  (when (file-exists? bpath)
+    (delete-file bpath))
   (rename-file-or-directory temp-path bpath))
 
 (define (load-bookmarks session-path)
@@ -317,13 +347,16 @@
     [else
      (with-handlers ([exn:fail? (lambda (e) '())])
        (define data (call-with-input-file bpath (lambda (in) (read-json in)) #:mode 'text))
-       (if (list? data) (map jsexpr->bookmark data) '()))]))
+       (if (list? data)
+           (map jsexpr->bookmark data)
+           '()))]))
 
 (define (load-index-with-bookmarks session-path index-path)
   (define idx (load-index index-path))
   (define bookmarks (load-bookmarks session-path))
   (define bm-hash (make-hash))
-  (for ([bm (in-list bookmarks)]) (hash-set! bm-hash (bookmark-id bm) bm))
+  (for ([bm (in-list bookmarks)])
+    (hash-set! bm-hash (bookmark-id bm) bm))
   (session-index (session-index-by-id idx)
                  (session-index-children idx)
                  (session-index-entry-order idx)

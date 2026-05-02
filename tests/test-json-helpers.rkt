@@ -1,33 +1,43 @@
-#lang racket
+#lang racket/base
 
 (require rackunit
+         racket/file
+         json
          "../util/json-helpers.rkt")
 
-;; ============================================================
-;; Test suite: util/json-helpers.rkt — ensure-hash-args
-;; ============================================================
+(define tmp-dir (make-temporary-file "json-helpers-test-~a" 'directory))
 
-(test-case "ensure-hash-args: hash input returns same hash"
-  (define h (hasheq 'a 1 'b 2))
-  (check-equal? (ensure-hash-args h) h))
+(define (tmp-path name)
+  (build-path tmp-dir name))
 
-(test-case "ensure-hash-args: valid JSON string parses to hash"
-  (define result (ensure-hash-args "{\"key\": \"val\"}"))
-  (check-true (hash? result))
-  (check-equal? (hash-ref result 'key #f) "val"))
+;; Basic read/write round-trip
+(test-case "read-json-file / write-json-file round-trip"
+  (define p (tmp-path "basic.json"))
+  (define data (hasheq 'name "test" 'value 42 'items '(1 2 3)))
+  (write-json-file p data)
+  (check-equal? (read-json-file p) data)
+  (delete-file p))
 
-(test-case "ensure-hash-args: empty string returns empty hash"
-  (define result (ensure-hash-args ""))
-  (check-true (hash? result))
-  (check-true (hash-empty? result)))
+;; write with #:exists 'replace
+(test-case "write-json-file #:exists 'replace"
+  (define p (tmp-path "replace.json"))
+  (write-json-file p (hasheq 'v 1))
+  (write-json-file p (hasheq 'v 2) #:exists 'replace)
+  (check-equal? (read-json-file p) (hasheq 'v 2))
+  (delete-file p))
 
-(test-case "ensure-hash-args: empty JSON object string returns empty hash"
-  (define result (ensure-hash-args "{}"))
-  (check-true (hash? result))
-  (check-true (hash-empty? result)))
+;; read non-existent file raises exception
+(test-case "read-json-file missing file"
+  (define p (tmp-path "nonexistent.json"))
+  (check-exn exn:fail:filesystem? (lambda () (read-json-file p))))
 
-(test-case "ensure-hash-args: invalid JSON string returns _parse_failed hash"
-  (define result (ensure-hash-args "not json"))
-  (check-true (hash? result))
-  (check-true (hash-ref result '_parse_failed #f))
-  (check-equal? (hash-ref result '_raw_args #f) "not json"))
+;; write nested structures
+(test-case "write-json-file nested structures"
+  (define p (tmp-path "nested.json"))
+  (define data (hasheq 'outer (hasheq 'inner (list (hasheq 'x 1) (hasheq 'y 2)))))
+  (write-json-file p data)
+  (check-equal? (read-json-file p) data)
+  (delete-file p))
+
+;; Cleanup
+(delete-directory/files tmp-dir)

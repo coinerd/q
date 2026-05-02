@@ -6,6 +6,7 @@
 ;; for SSO/corporate auth flows. Token exchange and refresh are
 ;; stub implementations pending an HTTP client library.
 
+(require "../util/json-helpers.rkt")
 (require racket/string
          racket/format
          json
@@ -165,7 +166,7 @@
     [(not (file-exists? path)) (hash)]
     [else
      (with-handlers ([exn:fail? (lambda (e) (hash))])
-       (define content (call-with-input-file path read-json))
+       (define content (read-json-file path))
        (if (eof-object? content)
            (hash)
            (for/hash ([(k v) (in-hash content)])
@@ -192,7 +193,7 @@
                                  (with-handlers ([exn:fail? (lambda (_) (void))])
                                    (delete-file tmp))
                                  (raise e))])
-      (call-with-output-file tmp (lambda (out) (write-json file-content out)) #:exists 'truncate)
+      (write-json-file tmp file-content)
       (rename-file-or-directory tmp path #t)
       (file-or-directory-permissions path #o600))))
 
