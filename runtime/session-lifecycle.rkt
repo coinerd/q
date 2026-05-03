@@ -342,6 +342,12 @@
   (set-agent-session-prompt-running?! sess #t)
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
+  ;; F2: Emit turn.started immediately so TUI shows activity
+  ;; before context build + compaction. The handler in state-events.rkt
+  ;; is idempotent (just sets busy? #t), so the second turn.started
+  ;; from agent/loop.rkt during iteration is safe.
+  (emit-session-event! bus sid "turn.started"
+                       (hasheq 'turnId #f 'sessionId sid))
   (define base-cfg (agent-session-config sess))
   ;; #1391: Inject session index into config for session_recall tool access
   (dynamic-wind

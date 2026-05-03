@@ -328,6 +328,21 @@
                     (mark-dirty! ctx)]
                    [else
                     ;; Not busy (or no queue) — submit to runtime (non-blocking)
+                    ;; F1: Immediately set busy? so status bar shows [thinking...]
+                    ;; before the LLM responds (was waiting for turn.started event)
+                    (set-box! (tui-ctx-ui-state-box ctx)
+                              (struct-copy ui-state
+                                           cur-state
+                                           [busy? #t]
+                                           [streaming-text #f]
+                                           [pending-tool-name #f]))
+                    (mark-dirty! ctx)
+                    ;; F1: Show user message in transcript immediately
+                    ;; (don't wait for JSONL events — the TUI transcript is display-only)
+                    (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
+                    (set-box! (tui-ctx-ui-state-box ctx)
+                              (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) user-entry))
+                    (mark-dirty! ctx)
                     (define runner (tui-ctx-session-runner ctx))
                     ;; Wrap runner thread with exception handler to prevent TUI hang
                     (thread (lambda ()
