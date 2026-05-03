@@ -33,6 +33,7 @@
          "../tui/terminal-input.rkt"
          "../util/output-guard.rkt"
          "../agent/queue.rkt"
+         (only-in "../runtime/session-lifecycle.rkt" write-crash-log!)
          "../tui/tree-view.rkt"
          racket/set)
 
@@ -375,6 +376,8 @@
                                          (define bus (tui-ctx-event-bus ctx))
                                          (define sid
                                            (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
+                                         ;; B3-A: Write crash log for unhandled exceptions
+                                         (write-crash-log! sid (exn-message e) "run-prompt")
                                          (when (and bus sid)
                                            (publish! bus
                                                      (make-event "runtime.error"
