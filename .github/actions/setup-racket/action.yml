@@ -18,18 +18,7 @@ runs:
         restore-keys: |
           racket-${{ runner.os }}-${{ inputs.racket-version }}-
 
-    - name: Install Racket via apt (Linux)
-      if: runner.os == 'Linux'
-      shell: bash
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y racket racket-common
-        which racket || echo "racket not in PATH"
-        which raco || echo "raco not in PATH"
-        racket --version
-
-    - name: Install Racket (macOS)
-      if: runner.os == 'macOS'
+    - name: Install Racket
       uses: Bogdanp/setup-racket@v1.15
       with:
         racket-version: ${{ inputs.racket-version }}

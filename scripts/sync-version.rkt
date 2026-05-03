@@ -13,8 +13,11 @@
 ;;   racket scripts/sync-version.rkt              # dry-run (report only)
 ;;   racket scripts/sync-version.rkt --write      # write info.rkt + README.md
 ;;   racket scripts/sync-version.rkt --write --all  # write all surfaces including docs/
+;;   racket scripts/sync-version.rkt --fix          # auto-fix + git commit + push
+;;   racket scripts/sync-version.rkt --fix --all    # auto-fix all docs + git commit + push
 ;;
 ;; Exit 0 if all in sync, 1 if drift detected (or --write applied fixes).
+;; --fix mode: applies fixes, stages changed files, commits, and pushes.
 
 (require racket/file
          racket/list
@@ -185,9 +188,10 @@
 
 (define (main)
   (define args (vector->list (current-command-line-arguments)))
-  (define write-mode? (member "--write" args))
+  (define write-mode? (or (member "--write" args) (member "--fix" args)))
   (define all-mode? (member "--all" args))
   (define validate-mode? (member "--validate" args))
+  (define fix-mode? (member "--fix" args))
 
   ;; --- Read canonical version from util/version.rkt ---
   (define util-path (build-path (current-directory) "util" "version.rkt"))
@@ -262,8 +266,37 @@
     [(= changes 0)
      (displayln "All targets in sync. No changes needed.")
      (exit 0)]
-    [write-mode?
+    [(or write-mode? fix-mode?)
      (printf "~a change(s) synced.~n" changes)
+     ;; --fix mode: git add + commit + push
+     (when fix-mode?
+       (printf "~n--- Auto-fix: committing changes ---~n")
+       (define git "git")
+       (define (git-run . cmd-args)
+         (define-values (sp stdout-pipe stdin-pipe stderr-pipe)
+           (apply subprocess #f #f #f (find-executable-path git) cmd-args))
+         (close-output-port stdin-pipe)
+         (define out (port->string stdout-pipe))
+         (close-input-port stdout-pipe)
+         (close-input-port stderr-pipe)
+         (define code (subprocess-status sp))
+         (values code out))
+       (define-values (add-code add-out) (git-run "add" "info.rkt" "README.md"))
+       (when all-mode?
+         ;; Stage all changed .md files in docs/ and wiki-src/
+         (git-run "add" "docs/" "wiki-src/"))
+       (define commit-msg (format "chore: sync version refs to ~a [auto]" version))
+       (define-values (commit-code commit-out) (git-run "commit" "-m" commit-msg))
+       (cond
+         [(zero? commit-code)
+          (printf "  Committed: ~a~n" commit-msg)
+          (define-values (push-code push-out) (git-run "push"))
+          (cond
+            [(zero? push-code) (printf "  Pushed to remote.~n")]
+            [else
+             (printf "  WARNING: git push failed (may be read-only token): ~a~n"
+                     (string-trim push-out))])]
+         [else (printf "  Nothing to commit (changes already committed).~n")]))
      (exit 0)]
     [else
      (printf "~a change(s) out of sync. Run with --write to fix.~n" changes)
