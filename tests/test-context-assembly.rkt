@@ -218,3 +218,41 @@
 (test-case "summary-cache: miss returns #f"
   (define cache (make-summary-cache))
   (check-false (summary-cache-lookup cache "x" "y")))
+
+;; ============================================================
+;; v0.28.21 W4: Dynamic Tier-B sizing
+;; ============================================================
+
+(test-case "compute-dynamic-tier-b-count: minimum is 20"
+  (check-equal? (compute-dynamic-tier-b-count 5) 20)
+  (check-equal? (compute-dynamic-tier-b-count 0) 20)
+  (check-equal? (compute-dynamic-tier-b-count 100) 20))
+
+(test-case "compute-dynamic-tier-b-count: scales at total/10"
+  (check-equal? (compute-dynamic-tier-b-count 200) 20)
+  (check-equal? (compute-dynamic-tier-b-count 300) 30)
+  (check-equal? (compute-dynamic-tier-b-count 400) 40)
+  (check-equal? (compute-dynamic-tier-b-count 500) 50))
+
+(test-case "compute-dynamic-tier-b-count: capped at 50"
+  (check-equal? (compute-dynamic-tier-b-count 600) 50)
+  (check-equal? (compute-dynamic-tier-b-count 1000) 50))
+
+(test-case "build-tiered-context: dynamic tier-b grows with messages"
+  ;; With 300 messages, dynamic tier-b = 30
+  (define msgs-300
+    (for/list ([i (in-range 300)])
+      (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
+  (define tiered-300 (build-tiered-context msgs-300 #:tier-c-count 4))
+  (define tier-b-300 (tiered-context-tier-b tiered-300))
+  ;; Tier-B should be ~30 (300/10 = 30), minus tier-c (4)
+  (check-true (>= (length tier-b-300) 20)
+              "tier-b scales with message count"))
+
+(test-case "build-tiered-context: explicit tier-b-count overrides dynamic"
+  (define msgs
+    (for/list ([i (in-range 300)])
+      (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
+  (define tiered (build-tiered-context msgs #:tier-b-count 5 #:tier-c-count 4))
+  (check-true (<= (length (tiered-context-tier-b tiered)) 5)
+              "explicit tier-b-count overrides dynamic"))
