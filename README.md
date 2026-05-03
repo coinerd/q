@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.28.17-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.28.18-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.28.17
+racket main.rkt --version  # q version 0.28.18
 raco test tests/           # run the full test suite
 ```
 
@@ -272,7 +272,7 @@ q/
 |--------|-------|
 | Test files | 480 |
 | Source modules | 377 |
-| Source lines | 60119 |
+| Source lines | 60122 |
 | Test lines | 91366 |
 | Test assertions | 14141 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -335,7 +335,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 <!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->
 ## Status
 
-**v0.28.17** — Audit Remediation. Fix `translate-stop-reason` arity in test-anthropic/gemini (14 calls), correct inaccurate CHANGELOG/README claims, fix 429 test expectation.
+**v0.28.18** — Audit Remediation. Fix `translate-stop-reason` arity in test-anthropic/gemini (14 calls), correct inaccurate CHANGELOG/README claims, fix 429 test expectation.
 
 **v0.28.12** — Audit Remediation + Pre-existing Test Fixes. Fix README corruption guard, `check-provider-status!` arity in 4 test files, ADR completion, test-types keyword fix.
 
