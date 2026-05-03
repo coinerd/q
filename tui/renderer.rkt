@@ -248,7 +248,6 @@
   (define ubuf-putstring! (current-ubuf-putstring))
 
   ;; Layout rows are 0-based, matching ubuf's 0-based indexing.
-  (define header-y header-row)
   (define trans-y transcript-start-row)
   (define status-y status-row)
   (define input-y input-row)
@@ -256,14 +255,17 @@
   ;; 1. Clear the buffer
   (ubuf-clear! ubuf)
 
-  ;; 2. Draw header row (inverse = fg=0, bg=7)
-  (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
-  (ubuf-putstring! ubuf 0 header-y header-text #:fg 0 #:bg 7)
+  ;; 2. Draw header row (only if header-row is not #f)
+  (when header-row
+    (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
+    (ubuf-putstring! ubuf 0 header-row header-text #:fg 0 #:bg 7))
 
   ;; Build frame-lines for diffing
   (define frame-vec (make-vector rows ""))
   ;; Header: store ANSI-encoded (inverse video) for correct incremental diff
-  (vector-set! frame-vec header-y (string-append "\x1b[0m\x1b[30;47m" header-text "\x1b[0m"))
+  (when header-row
+    (define header-text (format " q ~a" (make-string (max 0 (- cols 3)) #\space)))
+    (vector-set! frame-vec header-row (string-append "\x1b[0m\x1b[30;47m" header-text "\x1b[0m")))
 
   ;; 3. Draw transcript entries (with render cache)
   (define-values (trans-lines-raw ui-state*) (render-transcript ui-state transcript-height cols))

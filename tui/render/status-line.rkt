@@ -3,8 +3,10 @@
 ;; q/tui/render/status-line.rkt — status bar and input line rendering
 ;;
 ;; Pure functions that compose status bar and input line.
+;; v0.28.14: Multi-segment status bar — inverse content + normal context/cost.
 
 (require racket/string
+         "../../util/cost-tracker.rkt"
          "../state.rkt"
          "../input.rkt"
          "../char-width.rkt"
@@ -14,33 +16,53 @@
 (provide render-status-bar
          render-input-line)
 
-;; Render the status bar.
-;; Always uses inverse style (bg=7) for visibility.
-;; Composes: prefix | session | model [tool] [thinking] [queues] [scroll] [No API key]
+;; ── Token formatting helper ──
+
+(define (format-tokens n)
+  (cond
+    [(>= n 1000000) (format "~aM" (exact->inexact (/ (round (/ n 1000)) 1000)))]
+    [(>= n 1000) (format "~aK" (exact->inexact (/ (round (/ n 100)) 100)))]
+    [else (format "~a" n)]))
+
+;; ── Status bar ──
+
+;; Render the status bar as a multi-segment styled-line.
+;; Inverse video covers ONLY the content portion; the rest of the line
+;; is plain spaces (no inverse fill to end of line).
+;; Segments: prefix | session | model | state | [ctx] [cost] [scroll]
 (define (render-status-bar state width)
-  (define session-name (or (ui-state-session-id state) "q"))
+  (define session-name (ui-state-session-id state))
+  (define session-label
+    (if (and session-name (> (string-length session-name) 8))
+        (substring session-name (- (string-length session-name) 8))
+        (or session-name "q")))
   (define model-name (or (ui-state-model-name state) ""))
   (define busy (ui-state-busy? state))
   (define status-msg (ui-state-status-message state))
   (define pending-tool (ui-state-pending-tool-name state))
+  (define streaming (ui-state-streaming-text state))
   (define queue-cts (ui-state-queue-counts state))
   (define scroll-off (ui-state-scroll-offset state))
-  ;; Build status text
-  (define base-text
+  (define ctx-tokens (ui-state-context-tokens state))
+  (define cost-trk (ui-state-cost-tracker state))
+
+  ;; Build state indicator based on busy state
+  (define state-indicator
     (cond
-      ;; Status message takes priority when set
-      [(and status-msg (not (string=? status-msg "")))
-       (format " q * ~a | ~a" session-name status-msg)]
-      [busy
-       (define tool-part
-         (if pending-tool
-             (format " [~a]" pending-tool)
-             ""))
-       (define think-part (if (ui-state-streaming-text state) "" " [thinking...]"))
-       (format " q * ~a | ~a~a~a" session-name model-name tool-part think-part)]
-      [(string=? model-name "") (format " q   ~a [No API key]" session-name)]
-      [else (format " q   ~a | ~a" session-name model-name)]))
-  ;; Append queue counts if present
+      [(and status-msg (not (string=? status-msg ""))) (format " | ~a" status-msg)]
+      [(and busy pending-tool) (format " | ~a [~a]" model-name pending-tool)]
+      [(and busy (not streaming))
+       (if (string=? model-name "")
+           " [thinking...]"
+           (format " | ~a [thinking...]" model-name))]
+      [(and busy streaming)
+       (if (string=? model-name "")
+           " [streaming...]"
+           (format " | ~a [streaming...]" model-name))]
+      [(string=? model-name "") ""]
+      [else (format " | ~a" model-name)]))
+
+  ;; Queue counts
   (define queue-text
     (if (and queue-cts (hash? queue-cts) (positive? (hash-count queue-cts)))
         (let* ([parts (for/list ([(k v) (in-hash queue-cts)])
@@ -48,11 +70,34 @@
                [joined (string-join parts " ")])
           (format " [~a]" joined))
         ""))
-  ;; Append scroll indicator if scrolled
+
+  ;; Inverse segment (prefix + session + model + state)
+  (define busy-marker (if busy " *" "  "))
+  (define inv-text (string-append " q" busy-marker " " session-label state-indicator queue-text))
+
+  ;; Normal-style segments (context + cost + scroll)
+  (define ctx-part
+    (if ctx-tokens
+        (format " ctx:~a" (format-tokens ctx-tokens))
+        ""))
+  (define cost-part
+    (if (and cost-trk (positive? (cost-tracker-input-tokens-total cost-trk)))
+        (format " ~a" (format-cost (cost-tracker-total cost-trk)))
+        ""))
   (define scroll-text (if (and scroll-off (positive? scroll-off)) " \u2191" ""))
-  (define full-text (string-append base-text queue-text scroll-text))
-  (define style (theme->style 'status-busy '(inverse)))
-  (styled-line (list (styled-segment full-text style))))
+  (define normal-text (string-append ctx-part cost-part scroll-text))
+
+  ;; Padding to fill remaining width (plain spaces, no inverse)
+  (define used (+ (string-length inv-text) (string-length normal-text)))
+  (define padding (make-string (max 0 (- width used)) #\space))
+
+  ;; Build styled-line with 3 segments: inverse-content, normal-info, padding
+  (define inv-style (theme->style 'status-busy '(inverse)))
+  (styled-line (list (styled-segment inv-text inv-style)
+                     (styled-segment normal-text '())
+                     (styled-segment padding '()))))
+
+;; ── Input line ──
 
 ;; Render the input line with prompt.
 (define (render-input-line input-st width)
