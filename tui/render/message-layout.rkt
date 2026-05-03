@@ -97,8 +97,19 @@
      (list (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
     [(error) (list (styled-line (list (styled-segment (format "[ERR] ~a" raw-text) '(bold red)))))]
     [(thinking)
-     ;; v0.28.19: Show reasoning text in dim+italic, distinct from content
-     (list (styled-line (list (styled-segment (format "[thinking] ~a" raw-text) '(dim italic)))))]
+     ;; v0.28.21 W1: Distinct thinking rendering with truncation + separator
+     (define max-lines 3)
+     (define lines (string-split raw-text "\n"))
+     (define visible-lines (take lines (min max-lines (length lines))))
+     (define truncated? (> (length lines) max-lines))
+     (define base-style '(dim italic cyan))
+     (append (for/list ([l (in-list visible-lines)])
+               (styled-line (list (styled-segment (format "── [thinking] ~a" l) base-style))))
+             (if truncated?
+                 (list (styled-line (list (styled-segment (format "... ~a more lines"
+                                                                  (- (length lines) max-lines))
+                                                          base-style))))
+                 '()))]
     [else (list (styled-line (list (styled-segment raw-text '()))))]))
 
 ;; Convert a markdown token to a list of styled segments.
