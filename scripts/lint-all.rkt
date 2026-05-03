@@ -24,23 +24,22 @@
 ;; Each check: (name script-path args continue-on-error?)
 
 (define checks
-  (list
-   (list "format"            "scripts/lint-format.rkt"              '()              #f)
-   (list "version-sync"      "scripts/sync-version.rkt"             '("--all")        #f)
-   (list "version-validate"  "scripts/sync-version.rkt"             '("--validate")   #f)
-   (list "version-cross"     "scripts/lint-version.rkt"             '()               #f)
-   (list "protocols"         "scripts/check-protocols.rkt"          '()               #f)
-   (list "imports"           "scripts/check-imports.rkt"            '()               #f)
-   (list "deps"              "scripts/check-deps.rkt"               '()               #f)
-   (list "metrics-sync"      "scripts/metrics.rkt"                  '("--sync-all")   #f)
-   (list "metrics-lint"      "scripts/metrics.rkt"                  '("--lint")       #f)
-   (list "prose"             "scripts/metrics.rkt"                  '("--lint-prose") #f)
-   (list "readme-status"     "scripts/sync-readme-status.rkt"       '("--check")      #f)
-   (list "audit"             "scripts/audit-project.rkt"            '("--ci")         #t)
-   (list "tests"             "scripts/lint-tests.rkt"               '()               #f)
-   (list "deprecation"       "scripts/lint-deprecation-deadlines.rkt" '("--ci")       #f)
-   (list "ci-readiness"      "scripts/lint-ci-readiness.rkt"        '()               #f)
-   (list "arch"              "scripts/arch-report.rkt"              '("--ci")         #f)))
+  (list (list "format" "scripts/lint-format.rkt" '() #f)
+        (list "version-sync" "scripts/sync-version.rkt" '("--all") #f)
+        (list "version-validate" "scripts/sync-version.rkt" '("--validate") #f)
+        (list "version-cross" "scripts/lint-version.rkt" '() #f)
+        (list "protocols" "scripts/check-protocols.rkt" '() #f)
+        (list "imports" "scripts/check-imports.rkt" '() #f)
+        (list "deps" "scripts/check-deps.rkt" '() #f)
+        (list "metrics-sync" "scripts/metrics.rkt" '("--sync-all") #f)
+        (list "metrics-lint" "scripts/metrics.rkt" '("--lint") #f)
+        (list "prose" "scripts/metrics.rkt" '("--lint-prose") #f)
+        (list "readme-status" "scripts/sync-readme-status.rkt" '("--check") #f)
+        (list "audit" "scripts/audit-project.rkt" '("--ci") #t)
+        (list "tests" "scripts/lint-tests.rkt" '() #f)
+        (list "deprecation" "scripts/lint-deprecation-deadlines.rkt" '("--ci") #f)
+        (list "ci-readiness" "scripts/lint-ci-readiness.rkt" '() #f)
+        (list "arch" "scripts/arch-report.rkt" '("--ci") #f)))
 
 ;; ── Helpers ──
 
@@ -59,6 +58,7 @@
   (define stderr-text (port->string child-stderr))
   (close-input-port child-stdout)
   (close-input-port child-stderr)
+  (subprocess-wait sp)
   (define code (subprocess-status sp))
   (values code stdout-text stderr-text))
 
@@ -81,8 +81,12 @@
   ;; --list mode
   (when (member "--list" argv)
     (for ([c (in-list checks)])
-      (printf "  ~a — ~a ~a~n" (car c) (cadr c)
-              (if (null? (caddr c)) "" (string-join (caddr c) " "))))
+      (printf "  ~a — ~a ~a~n"
+              (car c)
+              (cadr c)
+              (if (null? (caddr c))
+                  ""
+                  (string-join (caddr c) " "))))
     (exit 0))
 
   ;; --only filter

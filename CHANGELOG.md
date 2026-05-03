@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.28.15 — 2026-05-02
+
+### CI Pipeline Improvements
+
+- **W0**: Create `scripts/lint-all.rkt` unified lint runner — runs all 16
+  lint/check scripts via subprocess with structured summary output. Add
+  `actions/cache` to `setup-racket` for `~/.racket` and `compiled/`
+  (keyed by OS + Racket version + `info.rkt` hash). Decouple smoke from
+  test matrix (`needs: lint` instead of `needs: test`). Replace 16
+  individual lint steps with single `lint-all.rkt` invocation.
+- **W1**: Add `--fix` flag to `sync-version.rkt` for CI self-healing —
+  applies fixes, stages, commits, pushes. Switch Linux from `apt-get`
+  to `Bogdanp/setup-racket` for version pinning. Add Racket 8.11 to
+  test matrix (3 cells: ubuntu+8.10, ubuntu+8.11, macos+8.10). Add
+  `workflow_dispatch` with `racket-version` input override for manual
+  testing against future Racket releases.
+- **W2**: Version bump + validation.
+
 ## v0.28.14 — 2026-05-02
 
 ### TUI Feedback Fixes + Status Bar Enhancement
