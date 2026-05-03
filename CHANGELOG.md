@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.28.21 — 2026-05-04
+
+### TUI Thinking Leak Fix + Phase A
+
+**T1 FIX:** Thinking text persisted as permanent transcript entry when
+assistant turn completes with empty content (tool-call turns).
+Prevents thinking from vanishing on reasoning-heavy models.
+
+**T2 ENHANCEMENT:** Thinking entries render with distinct cyan dim italic
+style, horizontal rule separator prefix (── [thinking]), and 3-line
+truncation for long reasoning text.
+
+**T3 TEST:** Streaming thinking suppression verified — hidden when
+streaming text present, shown when only thinking, persisted entries
+always visible.
+
+
 ## v0.28.20 — 2026-05-03
 
 ### Credential Resolution + Test Isolation + Audit Minor Findings
