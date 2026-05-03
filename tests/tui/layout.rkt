@@ -1,37 +1,39 @@
 #lang racket
 
 ;; tests/tui/layout.rkt — Tests for tui/layout module
+;; Updated v0.28.14: header-row is now #f (removed header row)
 
 (require rackunit
          rackunit/text-ui
-         "../../../q/tui/layout.rkt")
+         "../../tui/layout.rkt")
 
 (define layout-tests
   (test-suite "TUI Layout"
 
     ;; --------------------------------------------------------
-    ;; compute-layout: 80x24 standard terminal
+    ;; compute-layout: 80x24 standard terminal (no header)
     ;; --------------------------------------------------------
-    (test-case "standard 80x24 terminal layout"
+    (test-case "standard 80x24 terminal layout (no header)"
       (let ([L (compute-layout 80 24)])
         (check-equal? (tui-layout-cols L) 80)
         (check-equal? (tui-layout-rows L) 24)
-        (check-equal? (tui-layout-header-row L) 0)
-        (check-equal? (tui-layout-transcript-start-row L) 1)
-        (check-equal? (tui-layout-transcript-height L) 21) ;; 24 - 3
-        (check-equal? (tui-layout-status-row L) 22) ;; 1 + 21
-        (check-equal? (tui-layout-input-row L) 23))) ;; 2 + 21
+        (check-false (tui-layout-header-row L))
+        (check-equal? (tui-layout-transcript-start-row L) 0)
+        (check-equal? (tui-layout-transcript-height L) 22) ;; 24 - 2
+        (check-equal? (tui-layout-status-row L) 22)
+        (check-equal? (tui-layout-input-row L) 23)))
 
     ;; --------------------------------------------------------
-    ;; compute-layout: minimum size clamped to 4 rows
+    ;; compute-layout: minimum size clamped to 3 rows
     ;; --------------------------------------------------------
-    (test-case "minimum size 80x3 clamped to 4 rows"
-      (let ([L (compute-layout 80 3)])
-        (check-equal? (tui-layout-rows L) 4)
+    (test-case "minimum size 80x2 clamped to 3 rows"
+      (let ([L (compute-layout 80 2)])
+        (check-equal? (tui-layout-rows L) 3)
         (check-equal? (tui-layout-transcript-height L) 1)
-        (check-equal? (tui-layout-header-row L) 0)
-        (check-equal? (tui-layout-status-row L) 2)
-        (check-equal? (tui-layout-input-row L) 3)))
+        (check-false (tui-layout-header-row L))
+        (check-equal? (tui-layout-transcript-start-row L) 0)
+        (check-equal? (tui-layout-status-row L) 1)
+        (check-equal? (tui-layout-input-row L) 2)))
 
     ;; --------------------------------------------------------
     ;; compute-layout: tall terminal 120x50
@@ -40,28 +42,30 @@
       (let ([L (compute-layout 120 50)])
         (check-equal? (tui-layout-cols L) 120)
         (check-equal? (tui-layout-rows L) 50)
-        (check-equal? (tui-layout-transcript-height L) 47) ;; 50 - 3
+        (check-false (tui-layout-header-row L))
+        (check-equal? (tui-layout-transcript-start-row L) 0)
+        (check-equal? (tui-layout-transcript-height L) 48) ;; 50 - 2
         (check-equal? (tui-layout-status-row L) 48)
         (check-equal? (tui-layout-input-row L) 49)))
 
     ;; --------------------------------------------------------
-    ;; Transcript height = rows - 3 for rows >= 4
+    ;; Transcript height = rows - 2 for rows >= 3
     ;; --------------------------------------------------------
-    (test-case "transcript height equals rows minus 3 for rows 4..29"
-      (for ([r (in-range 4 30)])
+    (test-case "transcript height equals rows minus 2 for rows 3..29"
+      (for ([r (in-range 3 30)])
         (define L (compute-layout 80 r))
         (check-equal? (tui-layout-transcript-height L)
-                      (- r 3)
+                      (- r 2)
                       (format "transcript height for rows=~a" r))))
 
     ;; --------------------------------------------------------
     ;; Row positions are consistent
     ;; --------------------------------------------------------
-    (test-case "row positions are internally consistent for rows 4..19"
-      (for ([r (in-range 4 20)])
+    (test-case "row positions are internally consistent for rows 3..19"
+      (for ([r (in-range 3 20)])
         (define L (compute-layout 80 r))
-        (check-equal? (tui-layout-header-row L) 0)
-        (check-equal? (tui-layout-transcript-start-row L) 1)
+        (check-false (tui-layout-header-row L))
+        (check-equal? (tui-layout-transcript-start-row L) 0)
         (check-equal? (+ (tui-layout-transcript-start-row L) (tui-layout-transcript-height L))
                       (tui-layout-status-row L)
                       (format "rows=~a: transcript-start + height = status-row" r))

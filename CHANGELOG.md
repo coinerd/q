@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.28.14 — 2026-05-02
+
+### TUI Feedback Fixes + Status Bar Enhancement
+
+- **W0**: Set `busy?=#t` immediately on submit so status bar shows
+  `[thinking...]` before the LLM responds. Emit `turn.started` early
+  in `run-prompt!` before context build/compaction (idempotent). Add
+  user message to TUI transcript immediately on submit.
+- **W1**: Remove header row from layout (frees 1 line for transcript).
+  Enhanced multi-segment status bar: inverse video on content only,
+  context tokens (`ctx:12K`), cost tracker (`$0.04`), busy/thinking/
+  streaming indicators, scroll arrow. Fix HTTP 400 regex test.
+- **W2**: Expand status-line tests to 14 cases. Update layout tests
+  for no-header geometry. Version bump.
+
 ## v0.28.13 — 2026-05-05
 
 ### Audit Remediation
