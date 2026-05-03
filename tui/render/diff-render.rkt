@@ -95,13 +95,27 @@
   (define entries (ui-state-transcript state))
   (define scroll (ui-state-scroll-offset state))
   (define streaming-text (ui-state-streaming-text state))
+  (define streaming-thinking (ui-state-streaming-thinking state))
   (define chronological-entries (reverse entries))
+  ;; v0.28.19: Show thinking entry during reasoning phase (when no content yet)
   (define all-entries
-    (if streaming-text
-        (append
-         chronological-entries
-         (list (transcript-entry 'assistant streaming-text (current-inexact-milliseconds) (hash) #f)))
-        chronological-entries))
+    (let* ([with-thinking (if (and streaming-thinking (not streaming-text))
+                              (append chronological-entries
+                                      (list (transcript-entry 'thinking
+                                                              streaming-thinking
+                                                              (current-inexact-milliseconds)
+                                                              (hash)
+                                                              #f)))
+                              chronological-entries)]
+           [with-text (if streaming-text
+                          (append with-thinking
+                                  (list (transcript-entry 'assistant
+                                                          streaming-text
+                                                          (current-inexact-milliseconds)
+                                                          (hash)
+                                                          #f)))
+                          with-thinking)])
+      with-text))
   (define styled-lines (apply append (map (lambda (e) (format-entry e width)) all-entries)))
   ;; Apply scroll offset — scroll=0 means show bottom (newest), positive = scrolled up
   (define total-lines (length styled-lines))
