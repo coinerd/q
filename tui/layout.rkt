@@ -25,8 +25,7 @@
 
 ;; Compute layout given screen dimensions
 ;; Layout (0-based row numbers):
-;;   Row 0:        Header (1 line) — "q | session | model"
-;;   Row 1..H-3:   Transcript (H-3 lines)
+;;   Row 0..H-3:   Transcript (H-2 lines)
 ;;   Row H-2:      Status bar (1 line)
 ;;   Row H-1:      Input line (1 line)
 (define (compute-layout cols rows)
@@ -35,15 +34,15 @@
 ;; Compute layout accounting for widget container rows.
 ;; widget-rows-above: number of widget lines above input.
 (define (compute-layout-with-widgets cols rows [widget-rows-above 0])
-  (define min-height 4) ; Need at least header + 1 transcript + status + input
+  (define min-height 3) ; Need at least 1 transcript + status + input
   (define actual-rows (max min-height rows))
-  (define non-transcript (+ 3 widget-rows-above))
+  (define non-transcript (+ 2 widget-rows-above)) ; status + input (no header)
   (define transcript-h (max 1 (- actual-rows non-transcript)))
   (tui-layout cols
               actual-rows
-              0 ; header-row
-              1 ; transcript-start-row
+              #f ; header-row: #f = no header (v0.28.14)
+              0 ; transcript-start-row
               transcript-h ; transcript-height
-              (+ 1 transcript-h widget-rows-above) ; status-row
-              (+ 2 transcript-h widget-rows-above) ; input-row
+              (+ transcript-h widget-rows-above) ; status-row
+              (+ 1 transcript-h widget-rows-above) ; input-row
               ))

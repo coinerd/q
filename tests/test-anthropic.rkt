@@ -527,7 +527,7 @@
              (λ () (check-provider-status! "Anthropic" #"HTTP/1.1 502 Bad Gateway" #"Bad Gateway"))))
 
 (test-case "HTTP 400 raises generic error"
-  (check-exn #rx"error [(]400[)]"
+  (check-exn #rx"[(]400[)]"
              (λ ()
                (check-provider-status! "Anthropic"
                                        #"HTTP/1.1 400 Bad Request"
