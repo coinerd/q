@@ -19,6 +19,13 @@
 (define (ui-model-label state)
   (or (ui-state-model-name state) "no model"))
 
+;; Truncate error messages for status bar display
+(define (truncate-status-msg msg)
+  (define clean (string-replace (string-trim msg) "\n" " "))
+  (if (> (string-length clean) 40)
+      (string-append (substring clean 0 37) "...")
+      clean))
+
 ;; ============================================================
 ;; Event reduction
 ;; ============================================================
@@ -148,7 +155,8 @@
                     [busy? #f]
                     [pending-tool-name #f]
                     [streaming-text #f]
-                    [streaming-thinking #f]))
+                    [streaming-thinking #f]
+                    [status-message (truncate-status-msg err)]))
      (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
      (append-entry s2 (make-entry 'system hint ts (hash)))]
 
@@ -176,7 +184,8 @@
                   [busy? #t]
                   [pending-tool-name #f]
                   [streaming-text #f]
-                  [streaming-thinking #f])]
+                  [streaming-thinking #f]
+                  [status-message #f])]
 
     [("turn.completed")
      (struct-copy ui-state

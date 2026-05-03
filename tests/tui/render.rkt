@@ -955,6 +955,19 @@
       (define line (render-status-bar s 80))
       (define text (styled-line->text line))
       ;; The warning should contain "[No API key]"
-      (check-not-false (string-contains? text "[No API key]") "formatted warning visible"))))
+      (check-not-false (string-contains? text "[No API key]") "formatted warning visible"))
+
+    (test-case "status bar shows ctx:0 when no context built"
+      (define s (initial-ui-state #:session-id "s1" #:model-name "gpt-4"))
+      (define line (render-status-bar s 80))
+      (define text (styled-line->text line))
+      (check-true (string-contains? text "ctx:0") "shows ctx:0 when no context"))
+
+    (test-case "status bar shows error in status-message"
+      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1")
+                              [status-message "API key error"]))
+      (define line (render-status-bar s 80))
+      (define text (styled-line->text line))
+      (check-true (string-contains? text "API key error") "error shown in status bar"))))
 
 (run-tests bug55-tests)

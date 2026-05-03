@@ -76,10 +76,8 @@
   (define inv-text (string-append " q" busy-marker " " session-label state-indicator queue-text))
 
   ;; Normal-style segments (context + cost + scroll)
-  (define ctx-part
-    (if ctx-tokens
-        (format " ctx:~a" (format-tokens ctx-tokens))
-        ""))
+  ;; Always show context tokens — default to 0 when not yet built
+  (define ctx-part (format " ctx:~a" (format-tokens (or ctx-tokens 0))))
   (define cost-part
     (if (and cost-trk (positive? (cost-tracker-input-tokens-total cost-trk)))
         (format " ~a" (format-cost (cost-tracker-total cost-trk)))
