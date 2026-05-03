@@ -29,7 +29,8 @@
          (only-in "loop-state.rkt" resolve-estimate-tokens))
 
 (provide check-mid-turn-budget!
-         call-with-overflow-recovery)
+         call-with-overflow-recovery
+         detect-exploration-loop)
 
 ;; Check if context exceeds mid-turn token budget.
 ;; When session is provided and over budget, triggers mid-turn compaction.
@@ -99,3 +100,48 @@
                      (thunk))]
                   [exn:fail? (lambda (e) (raise e))])
     (thunk)))
+
+;; ============================================================
+;; v0.28.21 W6: Exploration loop detection
+;; ============================================================
+
+;;; detect-exploration-loop : (listof string?) integer? -> (or/c #f string?)
+;;;
+;;; Checks recent tool names for repeating patterns that indicate
+;;; an exploration loop (e.g., read-grep-read-grep cycles).
+;;; Returns #f if no loop detected, or a string describing the loop.
+(define (detect-exploration-loop recent-tool-names [min-repeats 3])
+  (define n (length recent-tool-names))
+  (cond
+    [(< n (* min-repeats 2)) #f]
+    [else
+     ;; Check for repeating 2-tool patterns in the last N tool calls
+     (define recent (take-at-most recent-tool-names (* min-repeats 4)))
+     (define pairs
+       (for/list ([i (in-range (sub1 (length recent)))])
+         (list (list-ref recent i) (list-ref recent (add1 i)))))
+     (define pair-counts (count-occurrences pairs))
+     ;; Find any pair repeated 3+ times
+     (define looping-pair
+       (for/first ([pair (in-hash-keys pair-counts)]
+                   #:when (>= (hash-ref pair-counts pair) min-repeats))
+         pair))
+     (cond
+       [looping-pair
+        (format "exploration loop detected: ~a repeated ~a times"
+                looping-pair
+                (hash-ref pair-counts looping-pair))]
+       [else #f])]))
+
+;; Helper: count occurrences in a list of items
+(define (count-occurrences items)
+  (define counts (make-hash))
+  (for ([item (in-list items)])
+    (hash-update! counts item add1 0))
+  counts)
+
+;; Helper: take at most N from list
+(define (take-at-most lst n)
+  (if (> (length lst) n)
+      (take lst n)
+      lst))
