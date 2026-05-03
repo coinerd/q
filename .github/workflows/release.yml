@@ -1,5 +1,8 @@
 name: Release
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     tags:
@@ -25,7 +28,23 @@ jobs:
         run: racket scripts/lint-version.rkt
 
       - name: Run tests
-        run: racket scripts/run-tests.rkt --suite fast --jobs 4
+        run: racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
+
+      - name: Test failure summary
+        if: failure()
+        run: |
+          echo "## Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 4 'FAILURE\|ERROR' test-output.log >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-output-release
+          path: test-output.log
+          retention-days: 7
 
   release:
     needs: test
