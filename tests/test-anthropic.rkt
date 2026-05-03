@@ -587,13 +587,13 @@
 ;; 29. Stop reason translation helper
 ;; ============================================================
 
-(check-equal? (translate-stop-reason "end_turn") 'stop)
-(check-equal? (translate-stop-reason "max_tokens") 'length)
-(check-equal? (translate-stop-reason "stop_sequence") 'stop)
-(check-equal? (translate-stop-reason "tool_use") 'tool-calls)
-(check-equal? (translate-stop-reason "unknown_reason") 'unknown_reason)
-(check-equal? (translate-stop-reason 'already-symbol) 'already-symbol)
-(check-equal? (translate-stop-reason 123) 'stop)
+(check-equal? (translate-stop-reason 'anthropic "end_turn") 'stop)
+(check-equal? (translate-stop-reason 'anthropic "max_tokens") 'length)
+(check-equal? (translate-stop-reason 'anthropic "stop_sequence") 'stop)
+(check-equal? (translate-stop-reason 'anthropic "tool_use") 'tool-calls)
+(check-equal? (translate-stop-reason 'anthropic "unknown_reason") 'unknown_reason)
+(check-equal? (translate-stop-reason 'anthropic 'already-symbol) 'already-symbol)
+(check-equal? (translate-stop-reason 'anthropic 123) 'stop)
 
 ;; ============================================================
 ;; 31. Issue #106 — Anthropic multi-turn tool use: assistant tool_calls
