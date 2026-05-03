@@ -34,6 +34,37 @@
 (check-equal? (stream-chunk-delta-text chunk1) "Hello")
 (check-false (stream-chunk-delta-tool-call chunk1))
 
+;; v0.28.19: reasoning_content → delta-thinking (singular)
+(define reasoning-chunk
+  (normalize-openai-chunk
+   (hash
+    'id
+    "chatcmpl-r1"
+    'choices
+    (list (hash 'delta (hash 'reasoning_content "Let me think about this...") 'finish_reason 'null))
+    'usage
+    (hash))))
+(check-pred stream-chunk? reasoning-chunk)
+(check-false (stream-chunk-delta-text reasoning-chunk)) ;; no content during reasoning
+(check-equal? (stream-chunk-delta-thinking reasoning-chunk) "Let me think about this...")
+
+;; v0.28.19: reasoning_content → delta-thinking (batch)
+(define reasoning-batch
+  (normalize-openai-chunks
+   (list (hash 'id
+               "c1"
+               'choices
+               (list (hash 'delta (hash 'reasoning_content "Step 1") 'finish_reason 'null)))
+         (hash 'id
+               "c2"
+               'choices
+               (list (hash 'delta (hash 'content "The answer is 42") 'finish_reason 'null))))))
+(check-equal? (length reasoning-batch) 2)
+(check-equal? (stream-chunk-delta-thinking (car reasoning-batch)) "Step 1")
+(check-false (stream-chunk-delta-text (car reasoning-batch)))
+(check-equal? (stream-chunk-delta-text (cadr reasoning-batch)) "The answer is 42")
+(check-false (stream-chunk-delta-thinking (cadr reasoning-batch)))
+
 (define chunk2
   (normalize-openai-chunk
    (hash
