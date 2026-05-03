@@ -991,45 +991,27 @@
  (test-suite "Issue #143: run-init-wizard"
 
    (test-case "wizard creates config with valid provider"
-     ;; Save and restore ~/.q/config.json to avoid polluting other tests
-     (define config-path (build-path (find-system-path 'home-dir) ".q" "config.json"))
-     (define backup-path (make-temporary-file "q-init-backup-~a"))
-     (define had-config? (file-exists? config-path))
-     (when had-config?
-       (copy-file config-path backup-path #t))
-     (dynamic-wind (lambda () (void))
-                   (lambda ()
-                     (check-not-exn (lambda ()
-                                      (run-init-wizard #:in (open-input-string "openai\nsk-test\n\n")
-                                                       #:out (open-output-string)))))
-                   (lambda ()
-                     (if had-config?
-                         (copy-file backup-path config-path #t)
-                         (when (file-exists? config-path)
-                           (delete-file config-path)))
-                     (when (file-exists? backup-path)
-                       (delete-file backup-path)))))
+     ;; v0.28.20: Use temp dir instead of backing up real ~/.q/
+     (define tmp (make-temporary-file "q-cli-wizard-~a" 'directory))
+     (dynamic-wind
+      (lambda () (void))
+      (lambda ()
+        (check-not-exn (lambda ()
+                         (run-init-wizard #:in (open-input-string "openai\nsk-real-key-not-test\n\n")
+                                          #:out (open-output-string)
+                                          #:config-dir tmp))))
+      (lambda () (delete-directory/files tmp #:must-exist? #f))))
 
    (test-case "wizard rejects invalid provider"
-     (define config-path (build-path (find-system-path 'home-dir) ".q" "config.json"))
-     (define backup-path (make-temporary-file "q-init-backup-~a"))
-     (define had-config? (file-exists? config-path))
-     (when had-config?
-       (copy-file config-path backup-path #t))
-     (dynamic-wind (lambda () (void))
-                   (lambda ()
-                     (define out (open-output-string))
-                     (run-init-wizard #:in (open-input-string "y\ninvalid\n") #:out out)
-                     (define output (get-output-string out))
-                     (check-true (string-contains? output "Invalid provider")
-                                 "should reject invalid provider"))
-                   (lambda ()
-                     (if had-config?
-                         (copy-file backup-path config-path #t)
-                         (when (file-exists? config-path)
-                           (delete-file config-path)))
-                     (when (file-exists? backup-path)
-                       (delete-file backup-path)))))))
+     (define tmp (make-temporary-file "q-cli-wizard-~a" 'directory))
+     (dynamic-wind
+      (lambda () (void))
+      (lambda ()
+        (define out (open-output-string))
+        (run-init-wizard #:in (open-input-string "y\ninvalid\n") #:out out #:config-dir tmp)
+        (define output (get-output-string out))
+        (check-true (string-contains? output "Invalid provider") "should reject invalid provider"))
+      (lambda () (delete-directory/files tmp #:must-exist? #f))))))
 ;; ═══════════════════════════════════════════
 ;; Issue #160: 'sessions' subcommand parsing
 ;; ═══════════════════════════════════════════

@@ -55,16 +55,19 @@
  ;; --- Stale lock detection ---
  (test-case "stale lock from dead PID is cleaned up"
    (define tmp-name (format "locktest-stale-~a" (current-milliseconds)))
-   ;; Manually create a lock file with a dead PID
-   (define lf (build-path (find-system-path 'home-dir) ".q" "locks" (string-append "lock-" tmp-name)))
-   (make-directory* (build-path (find-system-path 'home-dir) ".q" "locks"))
-   (call-with-output-file lf
-                          (lambda (out)
-                            (display 4194303 out)
-                            (newline out))
-                          #:exists 'truncate)
-   ;; Now try to acquire — should detect stale lock and succeed
-   (define result (with-lock-result tmp-name (lambda () 'stale-cleaned)))
-   (check-equal? result '(ok stale-cleaned))))
+   ;; v0.28.20: Use temp dir for lock files — no ~/.q/ pollution
+   (define tmp-locks (make-temporary-file "q-locks-test-~a" 'directory))
+   (parameterize ([current-locks-dir tmp-locks])
+     ;; Manually create a lock file with a dead PID
+     (define lf (build-path tmp-locks (string-append "lock-" tmp-name)))
+     (call-with-output-file lf
+                            (lambda (out)
+                              (display 4194303 out)
+                              (newline out))
+                            #:exists 'truncate)
+     ;; Now try to acquire — should detect stale lock and succeed
+     (define result (with-lock-result tmp-name (lambda () 'stale-cleaned)))
+     (check-equal? result '(ok stale-cleaned)))
+   (delete-directory/files tmp-locks #:must-exist? #f)))
 
 (run-tests lockfile-tests)

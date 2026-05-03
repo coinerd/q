@@ -27,7 +27,8 @@
                                      #:stale-ms (or/c #f exact-nonnegative-integer?))
                              (or/c (list/c 'ok any/c) (list/c 'timeout #f)))]
                        [pid-alive? (-> exact-positive-integer? boolean?)])
-         getpid)
+         getpid
+         current-locks-dir)
 
 ;; ══════════════════════════════════════════════════════════════
 ;; Get PID — uses FFI direct syscall (no shell)
@@ -57,9 +58,11 @@
     ;; Returns 0 on success (process exists), -1 on error (no such process)
     [else (zero? (raw-kill pid 0))]))
 
-;; Lock directory — ~/.q/locks/
+;; Lock directory — ~/.q/locks/ (parameterized for testing)
+(define current-locks-dir (make-parameter #f (lambda (v) v)))
+
 (define (locks-dir)
-  (build-path (find-system-path 'home-dir) ".q" "locks"))
+  (or (current-locks-dir) (build-path (find-system-path 'home-dir) ".q" "locks")))
 
 ;; Ensure lock directory exists
 (define (ensure-locks-dir!)
