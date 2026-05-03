@@ -25,7 +25,7 @@ runs:
     - name: Install Racket
       uses: Bogdanp/setup-racket@v1.15
       with:
-        racket-version: ${{ inputs.racket-version }}
+        version: ${{ inputs.racket-version }}
 
     - name: Install dependencies
       shell: bash
