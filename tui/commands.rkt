@@ -141,6 +141,24 @@
                                 #f
                                 (hash))))
         'continue]
+       [(status)
+        ;; Show session and provider status
+        (define sid (ui-state-session-id state))
+        (define model-name (ui-state-model-name state))
+        (define busy (ui-state-busy? state))
+        (define status-msg (ui-state-status-message state))
+        (define sess-dir (cmd-ctx-session-dir cctx))
+        (define lines
+          (list (format "Session: ~a" (or sid "none"))
+                (format "Model: ~a" (or model-name "none"))
+                (format "Prompt running: ~a" (if busy "yes" "no"))
+                (format "Last status: ~a" (or status-msg "none"))
+                (format "Session dir: ~a" (or sess-dir "not set"))))
+        (define new-state
+          (for/fold ([s state]) ([line (in-list lines)])
+            (add-transcript-entry s (make-entry 'system (format "[STATUS] ~a" line) 0 (hash)))))
+        (set-box! (cmd-ctx-state-box cctx) new-state)
+        'continue]
        [(interrupt)
         ;; Interrupt: notify runtime
         (when (cmd-ctx-event-bus cctx)

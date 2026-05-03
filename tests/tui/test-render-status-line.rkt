@@ -1,7 +1,7 @@
 #lang racket
 
 ;; tests/tui/test-render-status-line.rkt — comprehensive tests for render/status-line
-;; Expanded v0.28.14: multi-segment status bar, busy/thinking/streaming, ctx, cost, scroll
+;; v0.28.17: Single inverse segment status bar, busy/thinking/streaming, ctx, cost, scroll
 
 (require rackunit
          rackunit/text-ui
@@ -37,19 +37,15 @@
       (check-pred styled-line? result))
 
     ;; --------------------------------------------------------
-    ;; Multi-segment structure
+    ;; Single-segment structure (v0.28.17: unified inverse)
     ;; --------------------------------------------------------
-    (test-case "status bar has 3 segments (inverse content, normal info, padding)"
+    (test-case "status bar has 1 segment (unified inverse)"
       (define state (initial-ui-state))
       (define result (render-status-bar state 80))
       (define segs (get-segments result))
-      (check-equal? (length segs) 3)
-      ;; First segment has inverse style
-      (check-not-false (member 'inverse (styled-segment-style (car segs))))
-      ;; Second segment is normal style (no inverse)
-      (check-false (member 'inverse (styled-segment-style (cadr segs))))
-      ;; Third segment is padding (spaces, no style)
-      (check-equal? (styled-segment-style (caddr segs)) '()))
+      (check-equal? (length segs) 1)
+      ;; Single segment has inverse style
+      (check-not-false (member 'inverse (styled-segment-style (car segs)))))
 
     ;; --------------------------------------------------------
     ;; Idle state
@@ -57,15 +53,15 @@
     (test-case "idle state shows prefix and session label"
       (define state (initial-ui-state #:session-id "test-session-1234"))
       (define result (render-status-bar state 80))
-      (define inv (styled-segment-text (first-segment result)))
-      (check-true (string-contains? inv " q"))
-      (check-true (string-contains? inv "1234"))) ;; last 8 chars of session id
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text " q"))
+      (check-true (string-contains? text "1234"))) ;; last 8 chars of session id
 
     (test-case "idle state with model shows model name"
       (define state (initial-ui-state #:model-name "gpt-4o"))
       (define result (render-status-bar state 80))
-      (define inv (styled-segment-text (first-segment result)))
-      (check-true (string-contains? inv "gpt-4o")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "gpt-4o")))
 
     ;; --------------------------------------------------------
     ;; Busy + thinking
@@ -73,8 +69,8 @@
     (test-case "busy with no streaming shows [thinking...]"
       (define state (struct-copy ui-state (initial-ui-state) [busy? #t]))
       (define result (render-status-bar state 80))
-      (define inv (styled-segment-text (first-segment result)))
-      (check-true (string-contains? inv "[thinking...]")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "[thinking...]")))
 
     ;; --------------------------------------------------------
     ;; Busy + tool
@@ -82,8 +78,8 @@
     (test-case "busy with pending tool shows [tool-name]"
       (define state (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "bash"]))
       (define result (render-status-bar state 80))
-      (define inv (styled-segment-text (first-segment result)))
-      (check-true (string-contains? inv "[bash]")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "[bash]")))
 
     ;; --------------------------------------------------------
     ;; Busy + streaming
@@ -91,55 +87,55 @@
     (test-case "busy with streaming text shows [streaming...]"
       (define state (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "Hello"]))
       (define result (render-status-bar state 80))
-      (define inv (styled-segment-text (first-segment result)))
-      (check-true (string-contains? inv "[streaming...]")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "[streaming...]")))
 
     ;; --------------------------------------------------------
-    ;; Context tokens
+    ;; Context tokens (v0.28.17: in single segment)
     ;; --------------------------------------------------------
-    (test-case "context-tokens shows in normal segment"
+    (test-case "context-tokens shows in status bar text"
       (define state (struct-copy ui-state (initial-ui-state) [context-tokens 12000]))
       (define result (render-status-bar state 80))
-      (define norm (styled-segment-text (cadr (get-segments result))))
-      (check-true (string-contains? norm "ctx:"))
-      (check-true (string-contains? norm "1.2K")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "ctx:"))
+      (check-true (string-contains? text "1.2K")))
 
     (test-case "context-tokens 1500000 formats as M"
       (define state (struct-copy ui-state (initial-ui-state) [context-tokens 1500000]))
       (define result (render-status-bar state 80))
-      (define norm (styled-segment-text (cadr (get-segments result))))
-      (check-true (string-contains? norm "M")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "M")))
 
     ;; --------------------------------------------------------
-    ;; Cost tracker
+    ;; Cost tracker (v0.28.17: in single segment)
     ;; --------------------------------------------------------
-    (test-case "cost tracker with tokens shows cost in normal segment"
+    (test-case "cost tracker with tokens shows cost in status bar text"
       (define trk (make-cost-tracker "gpt-4o"))
       (cost-tracker-update! trk 1000 500)
       (define state (struct-copy ui-state (initial-ui-state) [cost-tracker trk]))
       (define result (render-status-bar state 80))
-      (define norm (styled-segment-text (cadr (get-segments result))))
-      (check-true (string-contains? norm "$")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "$")))
 
     ;; --------------------------------------------------------
-    ;; Scroll indicator
+    ;; Scroll indicator (v0.28.17: in single segment)
     ;; --------------------------------------------------------
-    (test-case "scroll offset shows arrow in normal segment"
+    (test-case "scroll offset shows arrow in status bar text"
       (define state (struct-copy ui-state (initial-ui-state) [scroll-offset 5]))
       (define result (render-status-bar state 80))
-      (define norm (styled-segment-text (cadr (get-segments result))))
-      (check-true (string-contains? norm "\u2191")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (string-contains? text "\u2191")))
 
     (test-case "zero scroll offset shows no arrow"
       (define state (struct-copy ui-state (initial-ui-state) [scroll-offset 0]))
       (define result (render-status-bar state 80))
-      (define norm (styled-segment-text (cadr (get-segments result))))
-      (check-false (string-contains? norm "\u2191")))
+      (define text (styled-segment-text (first-segment result)))
+      (check-false (string-contains? text "\u2191")))
 
     ;; --------------------------------------------------------
-    ;; Width fitting
+    ;; Width fitting (v0.28.17: single segment fills width)
     ;; --------------------------------------------------------
-    (test-case "total segment lengths fit within width"
+    (test-case "single segment length fits within width"
       (define state
         (struct-copy ui-state
                      (initial-ui-state #:model-name "gpt-4o")
@@ -147,9 +143,9 @@
                      [context-tokens 12000]))
       (define width 80)
       (define result (render-status-bar state width))
-      (define texts (segment-texts result))
-      (define total (apply + (map string-length texts)))
-      (check-true (<= total width) (format "total ~a > width ~a" total width)))))
+      (define text (styled-segment-text (first-segment result)))
+      (check-true (<= (string-length text) width)
+                  (format "length ~a > width ~a" (string-length text) width)))))
 
 (module+ main
   (run-tests status-tests))
