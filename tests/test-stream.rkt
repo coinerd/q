@@ -65,6 +65,23 @@
 (check-equal? (stream-chunk-delta-text (cadr reasoning-batch)) "The answer is 42")
 (check-false (stream-chunk-delta-thinking (cadr reasoning-batch)))
 
+;; v0.28.20 T11: Co-located content + reasoning_content in single chunk (DeepSeek-R1 edge case)
+(define co-located-chunk
+  (normalize-openai-chunks
+   (list (hash 'id
+               "chatcmpl-coloc"
+               'object
+               "chat.completion.chunk"
+               'choices
+               (list (hash 'delta
+                           (hash 'reasoning_content "thinking..." 'content "hello")
+                           'finish_reason
+                           'null))))))
+(check-equal? (length co-located-chunk) 1)
+(define coloc (car co-located-chunk))
+(check-equal? (stream-chunk-delta-thinking coloc) "thinking...")
+(check-equal? (stream-chunk-delta-text coloc) "hello")
+
 (define chunk2
   (normalize-openai-chunk
    (hash

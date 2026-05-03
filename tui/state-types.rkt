@@ -39,7 +39,7 @@
 
 ;; A single line in the transcript display
 (struct transcript-entry
-        (kind ; symbol: 'assistant | 'tool-start | 'tool-end | 'tool-fail | 'system | 'error | 'user
+        (kind ; symbol: 'assistant | 'tool-start | 'tool-end | 'tool-fail | 'system | 'error | 'user | 'thinking
          text ; string — the display text
          timestamp ; number — epoch seconds (or 0)
          meta ; hash — extra data (tool name, error message, etc.)

@@ -47,7 +47,8 @@
                   (append-entry state (make-entry 'assistant content ts (hash)))
                   [busy? #f]
                   [pending-tool-name #f]
-                  [streaming-text #f])]
+                  [streaming-text #f]
+                  [streaming-thinking #f])]
 
     [("tool.call.started")
      (let* ([name (hash-ref payload 'name "?")]
