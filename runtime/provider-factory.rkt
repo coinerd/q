@@ -127,7 +127,7 @@
         (define prov-name (model-resolution-provider-name resolution))
         (define prov-cfg (model-resolution-provider-config resolution))
         (define base-url (model-resolution-base-url resolution))
-        (define cred (lookup-credential prov-name prov-cfg))
+        (define cred (lookup-credential prov-name prov-cfg #:project-dir project-dir))
         (cond
           [(not cred)
            ;; No credentials - check if local provider (no auth needed)

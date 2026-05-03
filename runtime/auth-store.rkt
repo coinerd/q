@@ -112,7 +112,9 @@
 ;;      (key: 'api-key-env or "api-key-env")
 ;;   2. Config file: check provider-config for 'api-key or "api-key"
 ;;   3. Return #f if not found
-(define (lookup-credential provider-name provider-config)
+(define (lookup-credential provider-name
+                           provider-config
+                           #:project-dir [project-dir (current-directory)])
   ;; Normalize provider-name to string (JSON keys may be symbols)
   (define norm-name
     (if (symbol? provider-name)
@@ -120,7 +122,7 @@
         provider-name))
   ;; Guard: if provider-config is #f, try credential file only
   (cond
-    [(not provider-config) (credential-from-file norm-name)]
+    [(not provider-config) (credential-from-file norm-name #:project-dir project-dir)]
     [else
      (let* ([env-var-name (config-ref provider-config 'api-key-env "api-key-env")]
             [env-val (and env-var-name (getenv env-var-name))])
@@ -131,29 +133,50 @@
             (cond
               [(and config-key (non-empty-string? config-key))
                (credential norm-name config-key 'config)]
-              ;; Fall back to credential file (~/.q/credentials.json)
-              [else (credential-from-file norm-name)]))]))]))
+              ;; Fall back to credential file (project-local first, then global)
+              [else (credential-from-file norm-name #:project-dir project-dir)]))]))]))
 
-;; Lookup credential from the dedicated credential file.
+;; v0.28.20: Known test keys that should never be used in production.
+(define test-api-keys '("sk-test" "sk-test-key-123" "sk-ant-test" "sk-ant-test-key"))
+
+;; Check if a key looks like a test key.
+(define (test-key? key)
+  (and (string? key) (member key test-api-keys)))
+
+;; Try to load a credential from a specific file path.
 ;; Returns #<credential ...> or #f.
-(define (credential-from-file provider-name)
-  (define file-creds (load-credential-file))
+;; Rejects test keys with a warning.
+(define (try-credential-from-file provider-name path)
+  (define file-creds (load-credential-file path))
   (define prov-cfg (hash-ref file-creds provider-name #f))
   (cond
     [(not prov-cfg) #f]
     [else
      (define key (hash-ref prov-cfg 'api-key #f))
-     (if (and key (non-empty-string? key))
-         (credential provider-name key 'stored)
-         #f)]))
+     (cond
+       [(test-key? key)
+        (log-warning "credential-from-file: ~a has test key in ~a — ignoring" provider-name path)
+        #f]
+       [(and key (non-empty-string? key)) (credential provider-name key 'stored)]
+       [else #f])]))
+
+;; Lookup credential from the dedicated credential file.
+;; v0.28.20: Resolution order — project-local first, then global.
+;; Returns #<credential ...> or #f.
+(define (credential-from-file provider-name #:project-dir [project-dir (current-directory)])
+  (define project-cred-path (build-path project-dir ".q" "credentials.json"))
+  (or (try-credential-from-file provider-name project-cred-path)
+      (try-credential-from-file provider-name (credential-file-path))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; credential-present?
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; Check if a credential is available (without returning it)
-(define (credential-present? provider-name provider-config)
-  (and (lookup-credential provider-name provider-config) #t))
+(define (credential-present? provider-name
+                             provider-config
+                             #:project-dir [project-dir (current-directory)])
+  (and (lookup-credential provider-name provider-config #:project-dir project-dir) #t))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; store-credential!

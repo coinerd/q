@@ -22,9 +22,11 @@
 
 ;; Guided setup wizard that creates ~/.q/config.json.
 ;; For testability, accepts optional input/output ports.
-(define (run-init-wizard #:in [in (current-input-port)] #:out [out (current-output-port)])
-  (define config-dir (build-path (find-system-path 'home-dir) ".q"))
-  (define config-path (build-path config-dir "config.json"))
+(define (run-init-wizard #:in [in (current-input-port)]
+                         #:out [out (current-output-port)]
+                         #:config-dir [config-dir #f])
+  (define effective-config-dir (or config-dir (build-path (find-system-path 'home-dir) ".q")))
+  (define config-path (build-path effective-config-dir "config.json"))
 
   ;; Helper: read a line, handling EOF
   (define (read-input)
@@ -61,8 +63,7 @@
              (begin
                (display "Base URL (e.g. http://localhost:11434/v1): " out)
                (flush-output out)
-               (let ([url (read-input)])
-                 (if (string=? url "") #f url)))
+               (let ([url (read-input)]) (if (string=? url "") #f url)))
              #f))
 
        ;; Ask for API key (optional for local providers)
@@ -95,11 +96,7 @@
 
        ;; Build provider config (no secrets)
        (define provider-hash-base
-         (list
-          (cons 'default-model
-                (if (and model (not (string=? model "")))
-                    model
-                    default-model))))
+         (list (cons 'default-model (if (and model (not (string=? model ""))) model default-model))))
        ;; Add base-url for openai-compatible providers
        (define provider-hash-entries
          (if base-url
@@ -110,25 +107,18 @@
        ;; Build non-secret config
        (define config
          (make-hash
-          (list
-           (cons 'default-provider
-                 (if (string=? provider "openai-compatible")
-                     "openai-compatible"
-                     provider))
-           (cons 'providers
-                 (make-hash
-                  (list
-                   (cons config-provider-name provider-hash)))))))
+          (list (cons 'default-provider
+                      (if (string=? provider "openai-compatible") "openai-compatible" provider))
+                (cons 'providers (make-hash (list (cons config-provider-name provider-hash)))))))
 
        ;; Write config
-       (make-directory* config-dir)
-       (call-with-output-file config-path
-         (lambda (port) (write-json config port))
-         #:exists 'replace)
+       (make-directory* effective-config-dir)
+       (call-with-output-file config-path (lambda (port) (write-json config port)) #:exists 'replace)
 
        ;; Store API key in dedicated credentials file with restricted permissions (#455)
        (when (and api-key (not (string=? api-key "")))
-         (save-credential-file! (symbol->string config-provider-name) api-key))
+         (define cred-path (build-path effective-config-dir "credentials.json"))
+         (save-credential-file! (symbol->string config-provider-name) api-key cred-path))
 
        (displayln "Configuration saved to ~/.q/config.json." out)
        (when (and api-key (not (string=? api-key "")))
