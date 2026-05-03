@@ -170,8 +170,8 @@
      (define recorder (workflow-result-events wr))
      (define turn-started (events-of-type recorder "turn.started"))
      (define turn-completed (events-of-type recorder "turn.completed"))
-     (check-equal? (length turn-started) 2
-                   "expected 2 turn.started events in 2-turn workflow")
+     (check-equal? (length turn-started) 4
+                   "expected 4 turn.started events in 2-turn workflow (early + iteration per turn)")
      (check-equal? (length turn-completed) 2
                    "expected 2 turn.completed events in 2-turn workflow")
 
