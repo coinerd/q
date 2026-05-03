@@ -30,6 +30,7 @@
          build-tiered-context
          tiered-context->message-list
          build-tiered-context-with-hooks
+         compute-dynamic-tier-b-count
          context-assembly-payload
          context-assembly-payload?
          context-assembly-payload-tier-a-messages
@@ -48,6 +49,12 @@
 ;; Default tier boundaries
 (define DEFAULT-TIER-B-COUNT 20)
 (define DEFAULT-TIER-C-COUNT 4)
+
+;; v0.28.21 W4: Dynamic Tier-B sizing
+;; Scales Tier-B with total message count: min(50, max(20, total/10))
+;; More messages → larger Tier-B window for better mid-context retention.
+(define (compute-dynamic-tier-b-count total-messages)
+  (min 50 (max 20 (quotient total-messages 10))))
 
 ;; R2-6: Context Assembly Hook Payload
 (struct context-assembly-payload (tier-a-messages tier-b-messages tier-c-messages max-tokens metadata)
@@ -68,7 +75,7 @@
                             metadata))
 
 (define (build-tiered-context messages
-                              #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
+                              #:tier-b-count [tier-b-count #f]
                               #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
                               #:working-set-messages [ws-messages '()])
   (define-values (compaction-summaries regular-msgs)
@@ -86,6 +93,8 @@
                 (append (take regular first-user-idx) (drop regular (add1 first-user-idx))))
         (values '() regular)))
   (define total (length unpinned))
+  ;; v0.28.21 W4: Use dynamic Tier-B sizing when not explicitly specified
+  (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
   (define tier-c-size (min tier-c-count total))
   (define tier-c
     (if (> tier-c-size 0)
@@ -96,7 +105,7 @@
         (drop-right unpinned tier-c-size)
         unpinned))
   (define remaining-count (length remaining-after-c))
-  (define tier-b-size (min tier-b-count remaining-count))
+  (define tier-b-size (min effective-tier-b remaining-count))
   (define tier-b
     (if (> tier-b-size 0)
         (take-right remaining-after-c tier-b-size)
@@ -105,7 +114,7 @@
 
 (define (build-tiered-context-with-hooks messages
                                          #:hook-dispatcher [hook-dispatcher #f]
-                                         #:tier-b-count [tier-b-count DEFAULT-TIER-B-COUNT]
+                                         #:tier-b-count [tier-b-count #f]
                                          #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
                                          #:max-tokens [max-tokens 8192]
                                          #:working-set-messages [ws-messages '()])
@@ -114,11 +123,12 @@
                           #:tier-b-count tier-b-count
                           #:tier-c-count tier-c-count
                           #:working-set-messages ws-messages))
+  (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count (length messages))))
   (define payload
     (tiered-context->payload base-context
                              max-tokens
                              (hasheq 'tier-b-count
-                                     tier-b-count
+                                     effective-tier-b
                                      'tier-c-count
                                      tier-c-count
                                      'total-messages
