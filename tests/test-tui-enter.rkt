@@ -85,23 +85,21 @@
       (check-equal? (input-state-buffer (unbox (tui-ctx-input-state-box ctx))) ""))
 
     ;; --------------------------------------------------
-    ;; Test 7: 'return adds user message to transcript
+    ;; Test 7: 'return does NOT add user entry (D2 fix)
     ;; --------------------------------------------------
-    (test-case "handle-key 'return adds user entry to transcript"
+    (test-case "handle-key 'return does NOT add user entry (D2 fix)"
       (define ctx (make-test-ctx))
       (type-text ctx "test message")
       (handle-key ctx 'return)
       (define state (unbox (tui-ctx-ui-state-box ctx)))
       (define transcript (ui-state-transcript state))
-      (check-equal? (length transcript) 1)
-      (define entry (car transcript))
-      (check-equal? (transcript-entry-kind entry) 'user)
-      (check-equal? (transcript-entry-text entry) "test message"))
+      ;; D2 fix: handle-key no longer adds user entries — submit handler does
+      (check-equal? (length transcript) 0))
 
     ;; --------------------------------------------------
-    ;; Test 8: Multiple enters work correctly
+    ;; Test 8: Multiple enters — no transcript entries (D2 fix)
     ;; --------------------------------------------------
-    (test-case "handle-key multiple enters work"
+    (test-case "handle-key multiple enters — no transcript entries (D2 fix)"
       (define ctx (make-test-ctx))
       (type-text ctx "first")
       (handle-key ctx 'return)
@@ -109,7 +107,7 @@
       (define result (handle-key ctx 'return))
       (check-equal? result '(submit "second"))
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (check-equal? (length (ui-state-transcript state)) 2))
+      (check-equal? (length (ui-state-transcript state)) 0))
 
     ;; --------------------------------------------------
     ;; Test 9: 'return with whitespace-only input continues

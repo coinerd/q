@@ -224,6 +224,12 @@
     ;; JSON null is represented as 'null symbol in Racket - filter it out
     (define delta-text (if (string? delta-content) delta-content #f))
 
+    ;; v0.28.19: Extract reasoning_content for thinking models (glm-5.1, DeepSeek-R1)
+    (define delta-thinking
+      (if delta
+          (hash-ref delta 'reasoning_content #f)
+          #f))
+
     ;; Extract tool-call delta
     (define delta-tool-call
       (if delta
@@ -237,6 +243,7 @@
                        delta-tool-call
                        usage
                        (and (string? finish-reason) #t)
+                       #:delta-thinking delta-thinking
                        #:finish-reason finish-reason)))
 
 ;; ============================================================
@@ -348,6 +355,11 @@
         (hash-ref delta 'content #f)
         #f))
   (define delta-text (if (string? delta-content) delta-content #f))
+  ;; v0.28.19: Extract reasoning_content for thinking models (glm-5.1, DeepSeek-R1)
+  (define delta-thinking
+    (if delta
+        (hash-ref delta 'reasoning_content #f)
+        #f))
   (define delta-tool-call
     (if delta
         (let ([tcs (hash-ref delta 'tool_calls #f)])
@@ -359,6 +371,7 @@
                      delta-tool-call
                      usage
                      (and (string? finish-reason) #t)
+                     #:delta-thinking delta-thinking
                      #:finish-reason finish-reason))
 
 ;; ============================================================
