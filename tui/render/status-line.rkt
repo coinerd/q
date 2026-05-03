@@ -86,15 +86,13 @@
   (define mock-warn (if (ui-state-mock-provider? state) " [No API key]" ""))
   (define normal-text (string-append ctx-part cost-part scroll-text mock-warn))
 
-  ;; Padding to fill remaining width (plain spaces, no inverse)
-  (define used (+ (string-length inv-text) (string-length normal-text)))
-  (define padding (make-string (max 0 (- width used)) #\space))
+  ;; Padding to fill remaining width
 
-  ;; Build styled-line with 3 segments: inverse-content, normal-info, padding
+  ;; Build styled-line with single inverse segment — entire line visible on all terminals
+  (define full-text (string-append inv-text normal-text))
+  (define padding (make-string (max 0 (- width (string-length full-text))) #\space))
   (define inv-style (theme->style 'status-busy '(inverse)))
-  (styled-line (list (styled-segment inv-text inv-style)
-                     (styled-segment normal-text '())
-                     (styled-segment padding '()))))
+  (styled-line (list (styled-segment (string-append full-text padding) inv-style))))
 
 ;; ── Input line ──
 

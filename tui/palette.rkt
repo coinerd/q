@@ -46,6 +46,7 @@
           (cmd-entry "/tree" "Show session tree" 'session '() '("t"))
           (cmd-entry "/name" "Set session name" 'session '("<title>") '())
           (cmd-entry "/sessions" "List and manage sessions" 'session '("list|info|delete") '())
+          (cmd-entry "/status" "Show session and provider status" 'general '() '("st" "info"))
           (cmd-entry "/activate" "Activate extension" 'general '("<name>") '("a"))
           (cmd-entry "/deactivate" "Deactivate extension" 'general '("<name>") '())
           (cmd-entry "/reload" "Hot-reload all extensions" 'general '() '())))
