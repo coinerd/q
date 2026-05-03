@@ -25,52 +25,6 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-racket
 
-      - name: Format lint
-        run: racket scripts/lint-format.rkt
-
-      - name: Version sync check (all docs)
-        run: racket scripts/sync-version.rkt --all
-
-      - name: README status validation
-        run: racket scripts/sync-version.rkt --validate
-
-      - name: Version cross-check
-        run: racket scripts/lint-version.rkt
-
-      - name: Protocol consistency
-        run: racket scripts/check-protocols.rkt
-
-      - name: Import conflicts
-        run: racket scripts/check-imports.rkt
-
-      - name: Dependency completeness
-        run: racket scripts/check-deps.rkt
-
-      - name: Metrics sync
-        run: racket scripts/metrics.rkt --sync-all && racket scripts/metrics.rkt --lint
-
-      - name: Prose metrics
-        run: racket scripts/metrics.rkt --lint-prose
-
-      - name: README status block
-        run: racket scripts/sync-readme-status.rkt --check
-
-      - name: Project audit
-        run: racket scripts/audit-project.rkt --ci
-        continue-on-error: true
-
-      - name: Test portability
-        run: racket scripts/lint-tests.rkt
-
-      - name: Deprecation deadline check
-        run: racket scripts/lint-deprecation-deadlines.rkt --ci
-
-      - name: CI readiness
-        run: racket scripts/lint-ci-readiness.rkt
-
-      - name: Architecture fitness gate
-        run: racket scripts/arch-report.rkt --ci
-
       - name: Workflow YAML validation
         run: |
           pip install pyyaml
@@ -88,6 +42,9 @@ jobs:
             sys.exit(1)
           print('All workflows and actions valid YAML')
           "
+
+      - name: Run all lint checks
+        run: racket scripts/lint-all.rkt
 
   # ────────────────────────────────────────────────────────────
   # Gate 2: Test matrix — depends on lint passing
@@ -161,10 +118,10 @@ jobs:
           echo "Release notes generated ($(wc -l < /tmp/notes.md) lines)"
 
   # ────────────────────────────────────────────────────────────
-  # Gate 4: Smoke — depends on test matrix passing
+  # Gate 4: Smoke — depends on lint only (not test)
   # ────────────────────────────────────────────────────────────
   smoke:
-    needs: test
+    needs: lint
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]

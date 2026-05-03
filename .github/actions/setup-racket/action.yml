@@ -8,6 +8,16 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Cache Racket packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.racket
+          ./compiled
+        key: racket-${{ runner.os }}-${{ inputs.racket-version }}-${{ hashFiles('info.rkt') }}
+        restore-keys: |
+          racket-${{ runner.os }}-${{ inputs.racket-version }}-
+
     - name: Install Racket via apt (Linux)
       if: runner.os == 'Linux'
       shell: bash
