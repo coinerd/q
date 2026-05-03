@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.28.19 — 2026-05-03
+
+### Reasoning Content Streaming + Test Regression Fix
+
+- **R1 (CRITICAL):** Add `reasoning_content` → `delta-thinking` extraction in `normalize-openai-chunk` (singular) and `normalize-openai-chunks` (batch) — thinking tokens from glm-5.1, DeepSeek-R1 now correctly captured
+- **R2 (HIGH):** Render `streaming-thinking` as dim `[thinking]` entry in transcript during reasoning phase; content always takes priority during reasoning→content transition
+- **F1 (HIGH):** Fix `test-tui-enter.rkt` tests 7+8 to expect 0 transcript entries (D2 fix: handle-key no longer adds user entries)
+- **Tests:** Added reasoning_content test cases for both singular and batch chunk normalization
+
 ## v0.28.18 — 2026-05-03
 
 ### v0.28.17 Critical Bug Fixes
