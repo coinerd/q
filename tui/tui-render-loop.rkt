@@ -328,46 +328,70 @@
                     (mark-dirty! ctx)]
                    [else
                     ;; Not busy (or no queue) — submit to runtime (non-blocking)
-                    ;; F1: Immediately set busy? so status bar shows [thinking...]
-                    ;; before the LLM responds (was waiting for turn.started event)
-                    (set-box! (tui-ctx-ui-state-box ctx)
-                              (struct-copy ui-state
-                                           cur-state
-                                           [busy? #t]
-                                           [streaming-text #f]
-                                           [pending-tool-name #f]))
-                    (mark-dirty! ctx)
-                    ;; F1: Show user message in transcript immediately
-                    ;; (don't wait for JSONL events — the TUI transcript is display-only)
-                    (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
-                    (set-box! (tui-ctx-ui-state-box ctx)
-                              (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) user-entry))
-                    (mark-dirty! ctx)
-                    (define runner (tui-ctx-session-runner ctx))
-                    ;; Wrap runner thread with exception handler to prevent TUI hang
-                    (thread (lambda ()
-                              (with-handlers
-                                  ([exn:fail?
-                                    (lambda (e)
-                                      (define bus (tui-ctx-event-bus ctx))
-                                      (define sid
-                                        (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
-                                      (when (and bus sid)
-                                        (publish!
-                                         bus
-                                         (make-event
-                                          "runtime.error"
-                                          (current-inexact-milliseconds)
-                                          sid
-                                          #f
-                                          (hasheq 'error (exn-message e) 'errorType 'internal-error)))
-                                        (publish! bus
-                                                  (make-event "turn.completed"
-                                                              (current-inexact-milliseconds)
-                                                              sid
-                                                              #f
-                                                              (hasheq 'reason "error")))))])
-                                (runner text))))])]
+                    ;; B2-D: Double-submit debounce — ignore rapid identical submits
+                    (define entries (ui-state-transcript cur-state))
+                    (define last-entry
+                      (and (pair? entries) (list-ref entries (- (length entries) 1))))
+                    (define is-duplicate
+                      (and last-entry
+                           (eq? (transcript-entry-kind last-entry) 'user)
+                           (string=? (transcript-entry-text last-entry) text)
+                           (< (- (current-inexact-milliseconds)
+                                 (transcript-entry-timestamp last-entry))
+                              500)))
+                    (cond
+                      [is-duplicate
+                       (define dup-entry
+                         (make-entry 'system
+                                     "[Duplicate input ignored]"
+                                     (current-inexact-milliseconds)
+                                     (hash)))
+                       (set-box! (tui-ctx-ui-state-box ctx)
+                                 (add-transcript-entry cur-state dup-entry))
+                       (mark-dirty! ctx)]
+                      [else
+                       ;; F1: Immediately set busy? so status bar shows [thinking...]
+                       ;; before the LLM responds (was waiting for turn.started event)
+                       (set-box! (tui-ctx-ui-state-box ctx)
+                                 (struct-copy ui-state
+                                              cur-state
+                                              [busy? #t]
+                                              [streaming-text #f]
+                                              [pending-tool-name #f]))
+                       (mark-dirty! ctx)
+                       ;; F1: Show user message in transcript immediately
+                       ;; (don't wait for JSONL events — the TUI transcript is display-only)
+                       (define user-entry
+                         (make-entry 'user text (current-inexact-milliseconds) (hash)))
+                       (set-box! (tui-ctx-ui-state-box ctx)
+                                 (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) user-entry))
+                       (mark-dirty! ctx)
+                       (define runner (tui-ctx-session-runner ctx))
+                       ;; Wrap runner thread with exception handler to prevent TUI hang
+                       (thread (lambda ()
+                                 (with-handlers
+                                     ([exn:fail?
+                                       (lambda (e)
+                                         (define bus (tui-ctx-event-bus ctx))
+                                         (define sid
+                                           (ui-state-session-id (unbox (tui-ctx-ui-state-box ctx))))
+                                         (when (and bus sid)
+                                           (publish! bus
+                                                     (make-event "runtime.error"
+                                                                 (current-inexact-milliseconds)
+                                                                 sid
+                                                                 #f
+                                                                 (hasheq 'error
+                                                                         (exn-message e)
+                                                                         'errorType
+                                                                         'internal-error)))
+                                           (publish! bus
+                                                     (make-event "turn.completed"
+                                                                 (current-inexact-milliseconds)
+                                                                 sid
+                                                                 #f
+                                                                 (hasheq 'reason "error")))))])
+                                   (runner text))))])])]
                 [(and (list? result) (eq? (car result) 'command))
                  (define cmd (cadr result))
                  (define raw-text

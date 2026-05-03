@@ -20,6 +20,7 @@
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/provider-factory.rkt"
+         "../llm/provider.rkt"
          "../runtime/session-index.rkt"
          "../runtime/session-switch.rkt"
          "../tui/tui-keybindings.rkt"
@@ -181,7 +182,18 @@
                        state
                        [transcript (append welcome-entries (ui-state-transcript state))])
           state)))
-  (set-box! (tui-ctx-ui-state-box ctx) init-state)
+  ;; B2-C: Show provider info message on startup
+  (when (and prov (not (provider-is-mock? prov)))
+    (define prov-info-entry
+      (make-entry 'system
+                  (format "Provider: ~a | Model: ~a"
+                          (provider-name prov)
+                          (or (hash-ref rt-config 'model-name #f) "unknown"))
+                  (current-inexact-milliseconds)
+                  (hash)))
+    (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry init-state prov-info-entry)))
+  (unless (and prov (not (provider-is-mock? prov)))
+    (set-box! (tui-ctx-ui-state-box ctx) init-state))
 
   ;; Initialize terminal, run main loop, cleanup on exit
   (tui-ctx-init-terminal! ctx)
