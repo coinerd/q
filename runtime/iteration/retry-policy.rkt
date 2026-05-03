@@ -25,18 +25,22 @@
                   compact-result-payload/c
                   error-detail-payload/c)
          (only-in "../runtime-helpers.rkt" emit-session-event!)
+         (only-in "../session-compaction.rkt" compact-context-mid-turn)
          (only-in "loop-state.rkt" resolve-estimate-tokens))
 
 (provide check-mid-turn-budget!
          call-with-overflow-recovery)
 
 ;; Check if context exceeds mid-turn token budget.
-;; Returns estimated token count. Emits event if over budget.
+;; When session is provided and over budget, triggers mid-turn compaction.
+;; Returns (listof message?) if session provided (possibly compacted),
+;; or integer token estimate if no session.
 (define (check-mid-turn-budget! ctx
                                 bus
                                 session-id
                                 config
-                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
+                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
+                                #:session [sess #f])
   (define max-tokens (hash-ref config 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (define texts
@@ -51,13 +55,21 @@
                   (text-part-text part)))]
         [else ""])))
   (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
-  (when (> estimated budget-threshold)
-    (emit-session-event!
-     bus
-     session-id
-     "context.mid-turn-over-budget"
-     (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
-  estimated)
+  (cond
+    ;; Under budget: return ctx if session, else estimate
+    [(<= estimated budget-threshold) (if sess ctx estimated)]
+    [else
+     ;; Over budget
+     (when (and bus session-id)
+       (emit-session-event!
+        bus
+        session-id
+        "context.mid-turn-over-budget"
+        (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
+     (if sess
+         ;; v0.28.21 W3: Trigger mid-turn compaction when session available
+         (compact-context-mid-turn sess ctx)
+         estimated)]))
 
 ;; Handle context overflow by compacting the context and retrying once.
 ;; Catches both context-overflow-error? and plain exn:fail with overflow messages.

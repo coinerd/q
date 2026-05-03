@@ -14,7 +14,8 @@
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          "session-types.rkt")
 
-(provide maybe-compact-context)
+(provide maybe-compact-context
+         compact-context-mid-turn)
 
 ;; ============================================================
 ;; Compaction dispatch
@@ -108,3 +109,18 @@
                                   'tokenCount
                                   token-count))
      (compaction-result->message-list compact-result)]))
+
+;; ============================================================
+;; Mid-turn compaction (v0.28.21 W3)
+;; ============================================================
+
+;;; compact-context-mid-turn : agent-session? (listof message?) -> (listof message?)
+;;;
+;;; Lightweight mid-turn compaction. Reuses maybe-compact-context
+;;; but is designed to be called from check-mid-turn-budget! when
+;;; context exceeds 90% budget during tool-call loops.
+;;; Returns compacted context or original if compaction not possible.
+(define (compact-context-mid-turn sess context)
+  (define max-tokens (hash-ref (agent-session-config sess) 'max-context-tokens 128000))
+  (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
+  (maybe-compact-context sess context budget-threshold))
