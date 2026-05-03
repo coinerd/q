@@ -8,6 +8,10 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Clean stale compiled bytecode
+      shell: bash
+      run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
+
     - name: Cache Racket packages
       uses: actions/cache@v4
       with:
@@ -22,10 +26,6 @@ runs:
       uses: Bogdanp/setup-racket@v1.15
       with:
         racket-version: ${{ inputs.racket-version }}
-
-    - name: Clean stale compiled bytecode
-      shell: bash
-      run: find . -name '*.zo' -delete -o -name 'compiled' -type d -exec rm -rf {} + 2>/dev/null; true
 
     - name: Install dependencies
       shell: bash
