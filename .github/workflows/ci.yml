@@ -28,8 +28,11 @@ jobs:
       - name: Format lint
         run: racket scripts/lint-format.rkt
 
-      - name: Version sync check
-        run: racket scripts/sync-version.rkt --check --all
+      - name: Version sync check (all docs)
+        run: racket scripts/sync-version.rkt --all
+
+      - name: README status validation
+        run: racket scripts/sync-version.rkt --validate
 
       - name: Version cross-check
         run: racket scripts/lint-version.rkt
@@ -95,8 +98,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            racket-version: '8.10'
           - os: ubuntu-latest
             racket-version: '8.10'
           - os: macos-latest
