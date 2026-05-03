@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.28.16 — 2026-05-02
+
+### Audit Remediation + TUI Status Bar + Error Visibility
+
+- **F1**: Fixed turn.started count expectations (early emission now counted)
+- **F2**: Fixed layout test expectations for no-header layout
+- **F3**: Restored mock provider [No API key] warning in status bar
+- **F4**: Updated header-related renderer tests to use status-row
+- **S1/S4**: Status bar always shows `ctx:0` (never empty normal segment)
+- **S2**: Error messages persist in status bar until next prompt
+- **F7**: Fixed CI cache clean step ordering (clean before restore)
+
 ## v0.28.15 — 2026-05-02
 
 ### CI Pipeline Improvements
