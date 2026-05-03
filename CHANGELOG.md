@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.28.17 — 2026-05-02
+
+### TUI Visibility + Session Persistence
+
+- **Status Bar Unification**: Single inverse segment for entire status bar — consistent appearance across all terminals (W0 #3148)
+- **`/status` Command**: New `/status` (aliases: `/st`, `/info`) shows session ID, model, busy state, and session directory (W0 #3148)
+- **Double-Submit Debounce**: Identical prompts within 500ms are silently ignored with a system note (W1 #3153)
+- **Provider Info on Startup**: Non-mock provider name and model displayed in transcript on TUI launch (W1 #3153)
+- **Emergency Session Persist**: `dynamic-wind` cleanup ensures session directory exists even if first prompt crashes (W2 #3157)
+- **Crash Log**: Unhandled exceptions logged to `~/.q/crash-<ts>.jsonl` for post-mortem debugging (W2 #3157)
+- **Scrollback Fallback**: Transcript always saved — falls back to `/tmp/q-scrollback-<ts>.jsonl` if session dir unavailable (W2 #3157)
+
 ## v0.28.16 — 2026-05-02
 
 ### Audit Remediation + TUI Status Bar + Error Visibility
