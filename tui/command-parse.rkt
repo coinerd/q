@@ -58,6 +58,13 @@
         (cons 'fork 'optional)
         "/sessions"
         (cons 'sessions 'optional)
+        ;; Session status
+        "/status"
+        (cons 'status 'none)
+        "/st"
+        (cons 'status 'none)
+        "/info"
+        (cons 'status 'none)
         ;; Model
         "/tree"
         (cons 'tree 'none)

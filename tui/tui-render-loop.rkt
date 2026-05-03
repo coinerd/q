@@ -332,7 +332,7 @@
                     ;; B2-D: Double-submit debounce — ignore rapid identical submits
                     (define entries (ui-state-transcript cur-state))
                     (define last-entry
-                      (and (pair? entries) (list-ref entries (- (length entries) 1))))
+                      (and (pair? entries) (car entries)))
                     (define is-duplicate
                       (and last-entry
                            (eq? (transcript-entry-kind last-entry) 'user)
