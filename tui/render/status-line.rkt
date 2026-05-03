@@ -3,7 +3,7 @@
 ;; q/tui/render/status-line.rkt — status bar and input line rendering
 ;;
 ;; Pure functions that compose status bar and input line.
-;; v0.28.14: Multi-segment status bar — inverse content + normal context/cost.
+;; Single inverse segment covering entire status bar (v0.28.17+).
 
 (require racket/string
          "../../util/cost-tracker.rkt"

@@ -20,7 +20,6 @@
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/provider-factory.rkt"
-         "../llm/provider.rkt"
          "../runtime/session-index.rkt"
          "../runtime/session-switch.rkt"
          "../tui/tui-keybindings.rkt"

@@ -22,7 +22,8 @@
          build-mock-provider
          local-provider?
          create-provider-for-name ;; for testing
-         provider-is-mock?) ;; v0.14.1: for tui-init without importing llm/
+         provider-is-mock? ;; v0.14.1: for tui-init without importing llm/
+         provider-name) ;; re-export for tui-init.rkt (A1 fix)
 
 ;; Build the appropriate provider based on provider name.
 (define (create-provider-for-name prov-name base-url api-key model-name [max-tokens #f])

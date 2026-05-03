@@ -332,9 +332,7 @@
            (define cmd (parse-tui-slash-command text))
            (list 'command (or cmd 'unknown) text)]
           [_
-           ;; Add user message to transcript
-           (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
-           (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
+           ;; User entry added by submit handler in tui-render-loop.rkt
            (list 'submit text)])]
        [(#\newline)
         ;; Ctrl+J → insert newline (multi-line input)
@@ -367,9 +365,7 @@
            (define cmd (parse-tui-slash-command text))
            (list 'command (or cmd 'unknown) text)]
           [_
-           ;; Add user message to transcript
-           (define user-entry (make-entry 'user text (current-inexact-milliseconds) (hash)))
-           (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry state user-entry))
+           ;; User entry added by submit handler in tui-render-loop.rkt
            (list 'submit text)])]
        [(left kp-left)
         (set-box! (tui-ctx-input-state-box ctx) (input-cursor-left inp))
