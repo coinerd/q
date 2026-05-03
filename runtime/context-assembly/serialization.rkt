@@ -13,8 +13,10 @@
                   message-id
                   message-kind
                   message-role
+                  message-content
                   make-message
                   make-text-part)
+         (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
          (only-in "../context-policy.rkt" estimate-message-tokens)
          (only-in "../context-fit.rkt" truncate-messages-to-budget)
          (only-in "../../llm/provider.rkt" provider?)
@@ -31,6 +33,7 @@
          tiered-context->message-list
          build-tiered-context-with-hooks
          compute-dynamic-tier-b-count
+         summarize-tool-result
          context-assembly-payload
          context-assembly-payload?
          context-assembly-payload-tier-a-messages
@@ -196,6 +199,32 @@
      (define-values (pre post) (split-at path idx))
      (values pre post)]))
 
+;; v0.28.21 W5: Tool result summarization
+;; Truncates tool/bash results exceeding max-chars to a summary.
+;; Preserves first and last lines with a [... N lines truncated ...] indicator.
+(define MAX-TOOL-RESULT-CHARS 8000)
+
+(define (summarize-tool-result entry)
+  (define content (message-content entry))
+  (define text
+    (string-join (for/list ([part (in-list content)]
+                            #:when (text-part? part))
+                   (text-part-text part))
+                 "\n"))
+  (cond
+    [(<= (string-length text) MAX-TOOL-RESULT-CHARS) entry]
+    [else
+     (define lines (string-split text "\n"))
+     (cond
+       [(<= (length lines) 40) entry]
+       [else
+        (define head (take lines 10))
+        (define tail (take-right lines 10))
+        (define dropped (- (length lines) 20))
+        (define summary-text
+          (string-join (append head (list (format "... ~a lines truncated ..." dropped)) tail) "\n"))
+        (struct-copy message entry [content (list (text-part "text" summary-text))])])]))
+
 (define (entry->context-message entry)
   (define kind (message-kind entry))
   (match kind
@@ -203,7 +232,7 @@
     ['compaction-summary (struct-copy message entry [role 'user])]
     ['branch-summary (struct-copy message entry [role 'user])]
     [(or 'session-info 'model-change 'thinking-level-change) #f]
-    [(or 'tool-result 'bash-execution) entry]
+    [(or 'tool-result 'bash-execution) (summarize-tool-result entry)]
     ['system-instruction entry]
     ['custom-message entry]
     [_ entry]))

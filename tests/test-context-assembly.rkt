@@ -5,8 +5,10 @@
 
 (require rackunit
          racket/list
+         racket/string
          racket/file
          "../util/protocol-types.rkt"
+         "../util/content-parts.rkt"
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          "../runtime/context-assembly.rkt")
@@ -256,3 +258,30 @@
   (define tiered (build-tiered-context msgs #:tier-b-count 5 #:tier-c-count 4))
   (check-true (<= (length (tiered-context-tier-b tiered)) 5)
               "explicit tier-b-count overrides dynamic"))
+
+;; ============================================================
+;; v0.28.21 W5: Tool result summarization
+;; ============================================================
+
+(test-case "summarize-tool-result: short result unchanged"
+  (define short-msg
+    (make-test-msg "tr1" 'tool 'tool-result "short output"))
+  (define result (summarize-tool-result short-msg))
+  (check-equal? result short-msg "short tool result not modified"))
+
+(test-case "summarize-tool-result: long result gets truncated"
+  (define long-text
+    (string-join (for/list ([i (in-range 100)]) (format "Line ~a: ~a" i (make-string 100 #\x))) "\n"))
+  (define long-msg
+    (make-test-msg "tr2" 'tool 'tool-result long-text))
+  (define result (summarize-tool-result long-msg))
+  (define result-text
+    (string-join
+     (for/list ([part (in-list (message-content result))]
+                #:when (text-part? part))
+       (text-part-text part))
+     "\n"))
+  (check-true (< (string-length result-text) (string-length long-text))
+              "long tool result truncated")
+  (check-true (string-contains? result-text "lines truncated")
+              "truncation indicator present"))
