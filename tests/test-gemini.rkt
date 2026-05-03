@@ -563,13 +563,13 @@
 ;; 22. Stop reason translation helper (all variants)
 ;; ============================================================
 
-(check-equal? (translate-stop-reason "STOP") 'stop)
-(check-equal? (translate-stop-reason "MAX_TOKENS") 'length)
-(check-equal? (translate-stop-reason "SAFETY") 'content-filtered)
-(check-equal? (translate-stop-reason "RECITATION") 'content-filtered)
-(check-equal? (translate-stop-reason "OTHER") 'OTHER "unknown reason → symbol")
-(check-equal? (translate-stop-reason 'already-symbol) 'already-symbol)
-(check-equal? (translate-stop-reason 123) 'stop "non-string/non-symbol → stop")
+(check-equal? (translate-stop-reason 'gemini "STOP") 'stop)
+(check-equal? (translate-stop-reason 'gemini "MAX_TOKENS") 'length)
+(check-equal? (translate-stop-reason 'gemini "SAFETY") 'content-filtered)
+(check-equal? (translate-stop-reason 'gemini "RECITATION") 'content-filtered)
+(check-equal? (translate-stop-reason 'gemini "OTHER") 'OTHER "unknown reason → symbol")
+(check-equal? (translate-stop-reason 'gemini 'already-symbol) 'already-symbol)
+(check-equal? (translate-stop-reason 'gemini 123) 'stop "non-string/non-symbol → stop")
 
 ;; ============================================================
 ;; 23. gemini-build-request-body — streaming flag (accepted but not in body)
