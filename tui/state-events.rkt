@@ -43,8 +43,16 @@
      (define streamed (ui-state-streaming-text state))
      (define content (or streamed (hash-ref payload 'content "")))
      (define ts (event-time evt))
+     ;; v0.28.21 W0: Persist thinking when content is empty (tool-call turn)
+     (define thinking (ui-state-streaming-thinking state))
+     (define s0
+       (if (and thinking
+                (> (string-length (string-trim thinking)) 0)
+                (string=? (string-trim content) ""))
+           (append-entry state (make-entry 'thinking thinking ts (hash)))
+           state))
      (struct-copy ui-state
-                  (append-entry state (make-entry 'assistant content ts (hash)))
+                  (append-entry s0 (make-entry 'assistant content ts (hash)))
                   [busy? #f]
                   [pending-tool-name #f]
                   [streaming-text #f]
