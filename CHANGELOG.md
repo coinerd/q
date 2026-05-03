@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.28.18 — 2026-05-03
+
+### v0.28.17 Critical Bug Fixes
+
+- **D1 (CRITICAL):** Fix debounce reading oldest transcript entry instead of newest — duplicate prompts never detected
+- **D2 (CRITICAL):** Remove duplicate user entry insertion from handle-key (was adding entry in both keybindings and submit handler)
+- **S1 (HIGH):** Add `/status`, `/st`, `/info` to command parse table — was unreachable ("Unknown command")
+- **S2 (HIGH):** Verified status-message persistence across `turn.completed` (struct-copy semantics — no change needed)
+- **A1 (HIGH):** Remove `llm/provider.rkt` import from `tui-init.rkt` — re-export `provider-name` from `runtime/provider-factory.rkt` (arch boundary restored)
+- **L1 (INFO):** Update stale comment in `status-line.rkt`
+
 ## v0.28.17 — 2026-05-02
 
 ### TUI Visibility + Session Persistence
