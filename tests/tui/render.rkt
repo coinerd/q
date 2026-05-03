@@ -588,6 +588,50 @@
 
 (run-tests thinking-tests)
 
+;; v0.28.21 W2: Streaming thinking diff-render tests
+(define streaming-thinking-tests
+  (test-suite "Streaming thinking diff-render"
+
+    (test-case "streaming-thinking shown when no streaming-text"
+      (define state
+        (struct-copy ui-state
+                     (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
+                     [busy? #t]
+                     [streaming-thinking "pondering deeply..."]
+                     [streaming-text #f]))
+      (define-values (lines _st) (render-transcript state 10 200))
+      (define all-text (string-join (map styled-line->text lines) "\n"))
+      (check-true (string-contains? all-text "pondering deeply...")
+                  "streaming thinking visible when no streaming text"))
+
+    (test-case "streaming-thinking hidden when streaming-text present"
+      (define state
+        (struct-copy ui-state
+                     (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
+                     [busy? #t]
+                     [streaming-thinking "hidden thoughts"]
+                     [streaming-text "visible response"]))
+      (define-values (lines _st) (render-transcript state 10 200))
+      (define all-text (string-join (map styled-line->text lines) "\n"))
+      (check-false (string-contains? all-text "hidden thoughts")
+                   "streaming thinking hidden when streaming text present")
+      (check-true (string-contains? all-text "visible response") "streaming text visible instead"))
+
+    (test-case "persisted thinking entry always visible"
+      (define entry (transcript-entry 'thinking "persisted thought" 0 (hasheq) #f))
+      (define state
+        (struct-copy ui-state
+                     (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
+                     [transcript (list entry)]
+                     [streaming-thinking #f]
+                     [streaming-text #f]))
+      (define-values (lines _st) (render-transcript state 10 200))
+      (define all-text (string-join (map styled-line->text lines) "\n"))
+      (check-true (string-contains? all-text "persisted thought")
+                  "persisted thinking always visible in transcript"))))
+
+(run-tests streaming-thinking-tests)
+
 ;; CJK/wide-char wrapping tests (Wave 1: #368)
 (define cjk-wrapping-tests
   (test-suite "CJK/wide-char wrapping"
@@ -964,8 +1008,8 @@
       (check-true (string-contains? text "ctx:0") "shows ctx:0 when no context"))
 
     (test-case "status bar shows error in status-message"
-      (define s (struct-copy ui-state (initial-ui-state #:session-id "s1")
-                              [status-message "API key error"]))
+      (define s
+        (struct-copy ui-state (initial-ui-state #:session-id "s1") [status-message "API key error"]))
       (define line (render-status-bar s 80))
       (define text (styled-line->text line))
       (check-true (string-contains? text "API key error") "error shown in status bar"))))
