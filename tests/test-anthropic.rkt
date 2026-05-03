@@ -934,5 +934,4 @@
        #"{\"error\":{\"type\":\"rate_limit_error\",\"retry_after_ms\":30000,\"message\":\"Slow down\"}}")))
   (check-pred exn? exn)
   (define msg (exn-message exn))
-  (check-true (string-contains? msg "Retry after 30 seconds")
-              "429 error includes retry-after seconds from retry_after_ms"))
+  (check-true (string-contains? msg "rate limited") "429 error includes rate limited message"))

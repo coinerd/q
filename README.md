@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.28.12-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.28.13-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.28.12
+racket main.rkt --version  # q version 0.28.13
 raco test tests/           # run the full test suite
 ```
 
@@ -273,7 +273,7 @@ q/
 | Test files | 480 |
 | Source modules | 376 |
 | Source lines | 59770 |
-| Test lines | 91225 |
+| Test lines | 91224 |
 | Test assertions | 14121 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -335,7 +335,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 <!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->
 ## Status
 
-**v0.28.12** — Audit Remediation + Pre-existing Test Fixes. Fix README corruption guard, provider test arity mismatches (396 tests now pass), ADR completion, test-types keyword fix.
+**v0.28.13** — Audit Remediation. Fix `translate-stop-reason` arity in test-anthropic/gemini (14 calls), correct inaccurate CHANGELOG/README claims, fix 429 test expectation.
+
+**v0.28.12** — Audit Remediation + Pre-existing Test Fixes. Fix README corruption guard, `check-provider-status!` arity in 4 test files, ADR completion, test-types keyword fix.
 
 **v0.28.11** — Audit Remediation. Fix 9 findings from v0.28.6–v0.28.10 audit: TR type fixes (time/session-id), README version restoration, telemetry migration, event codec type-tags, hook violation events, GitHub helper dedup, ADR update, metrics fix.
 
