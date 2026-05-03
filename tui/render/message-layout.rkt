@@ -96,6 +96,9 @@
      (define sanitized (string-replace raw-text "\n" " "))
      (list (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
     [(error) (list (styled-line (list (styled-segment (format "[ERR] ~a" raw-text) '(bold red)))))]
+    [(thinking)
+     ;; v0.28.19: Show reasoning text in dim+italic, distinct from content
+     (list (styled-line (list (styled-segment (format "[thinking] ~a" raw-text) '(dim italic)))))]
     [else (list (styled-line (list (styled-segment raw-text '()))))]))
 
 ;; Convert a markdown token to a list of styled segments.
