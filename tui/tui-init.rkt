@@ -134,7 +134,14 @@
   (subscribe-runtime-events! ctx)
 
   ;; Determine scrollback file path from session dir
-  (define scrollback-path (and sess-dir (build-path sess-dir "scrollback.jsonl")))
+  ;; B3-C: Fallback scrollback — never silently lose transcript
+  (define scrollback-path
+    (cond
+      [(and sess-dir (directory-exists? sess-dir))
+       (build-path sess-dir "scrollback.jsonl")]
+      [else
+       (build-path "/tmp"
+                   (format "q-scrollback-~a.jsonl" (current-seconds)))]))
 
   ;; First-run welcome detection
   (define q-config-dir (build-path (find-system-path 'home-dir) ".q"))

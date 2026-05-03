@@ -72,7 +72,8 @@
          build-session-context
          dispatch-iteration
          ensure-persisted!
-         buffer-or-append!)
+         buffer-or-append!
+         write-crash-log!)
 
 ;; ============================================================
 ;; Helpers
@@ -384,7 +385,32 @@
               user-message))
         (run-prompt-internal sess effective-input max-iterations token-budget-threshold ep! ba!)]))
    ;; Cleanup: always reset prompt-running? even on error
-   (lambda () (set-agent-session-prompt-running?! sess #f))))
+   ;; B3-A: Emergency persist — defense-in-depth if session not yet persisted
+   (lambda ()
+     (set-agent-session-prompt-running?! sess #f)
+     (unless (agent-session-persisted? sess)
+       (with-handlers ([exn:fail? void])
+         (ensure-persisted! sess))))))
+
+;; ============================================================
+;; Crash logging (B3-A)
+;; ============================================================
+
+;; Write crash log entry to ~/.q/crash-<timestamp>.jsonl
+(define (write-crash-log! sid error-msg phase)
+  (with-handlers ([exn:fail? void])
+    (define q-dir (build-path (find-system-path 'home-dir) ".q"))
+    (make-directory* q-dir)
+    (define crash-path (build-path q-dir (format "crash-~a.jsonl" (current-seconds))))
+    (call-with-output-file crash-path
+      (lambda (out)
+        (fprintf out "{\"ts\":~a,\"session\":\"~a\",\"error\":\"~a\",\"phase\":\"~a\"}\n"
+                 (current-seconds)
+                 (or sid "unknown")
+                 error-msg
+                 phase))
+      #:mode 'text
+      #:exists 'append)))
 
 ;; ============================================================
 ;; Persistence helpers (re-exported for agent-session.rkt)
