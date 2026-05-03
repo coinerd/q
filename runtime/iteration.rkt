@@ -362,7 +362,12 @@
 
              [else
               ;; Build assembled context (tiered + hooks) — from turn-orchestrator.rkt
-              (define config-with-ws (hash-set config 'working-set ws))
+              ;; v0.28.21: Handle both mutable and immutable config hashes
+              ;; (build-runtime-from-cli uses hash-set!, making config mutable)
+              (define config-with-ws
+                (if (immutable? config)
+                    (hash-set config 'working-set ws)
+                    (begin (hash-set! config 'working-set ws) config)))
               (define ctx-final
                 (build-assembled-context ctx-to-use config-with-ws ext-reg bus session-id iteration))
 
