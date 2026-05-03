@@ -182,18 +182,29 @@
      (struct-copy ui-state
                   state
                   [busy? #t]
+                  [busy-since (current-inexact-milliseconds)]
                   [pending-tool-name #f]
                   [streaming-text #f]
                   [streaming-thinking #f]
                   [status-message #f])]
 
     [("turn.completed")
-     (struct-copy ui-state
-                  state
-                  [busy? #f]
-                  [streaming-text #f]
-                  [streaming-thinking #f]
-                  [pending-tool-name #f])]
+     ;; v0.28.20 T9: Enforce minimum 500ms busy duration to prevent flicker
+     (define min-busy-ms 500)
+     (define since (ui-state-busy-since state))
+     (define elapsed
+       (if since
+           (- (current-inexact-milliseconds) since)
+           min-busy-ms))
+     (if (< elapsed min-busy-ms)
+         (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])
+         (struct-copy ui-state
+                      state
+                      [busy? #f]
+                      [busy-since #f]
+                      [streaming-text #f]
+                      [streaming-thinking #f]
+                      [pending-tool-name #f]))]
 
     [("turn.cancelled")
      (struct-copy ui-state
