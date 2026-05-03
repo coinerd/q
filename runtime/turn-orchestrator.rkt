@@ -76,6 +76,8 @@
          (only-in "../runtime/auto-retry.rkt" with-auto-retry context-overflow-error?)
          ;; Token estimation for context assembly event
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
+         ;; Mock provider detection
+         (only-in "provider-factory.rkt" provider-is-mock?)
          ;; Shared helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 
@@ -100,8 +102,7 @@
     (if ws
         (working-set-resolve-messages ws ctx-to-use message-id)
         '()))
-  (define ws-message-ids
-    (map message-id ws-messages))
+  (define ws-message-ids (map message-id ws-messages))
 
   ;; R2-6: Create hook dispatcher function for context assembly
   (define ctx-assembly-hook-dispatcher
@@ -128,13 +129,11 @@
 
   ;; v0.26.0: Emit working-set.injected event
   (when ws
-    (emit-session-event! bus
-                         session-id
-                         "working-set.injected"
-                         (hasheq 'entries
-                                 (working-set-entry-count ws)
-                                 'tokens
-                                 (working-set-token-count ws))))
+    (emit-session-event!
+     bus
+     session-id
+     "working-set.injected"
+     (hasheq 'entries (working-set-entry-count ws) 'tokens (working-set-token-count ws))))
 
   ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
   (define ctx-token-count (estimate-context-tokens ctx-assembled))
@@ -150,9 +149,13 @@
                                'tokenCount
                                ctx-token-count
                                'working-set-entries
-                               (if ws (working-set-entry-count ws) 0)
+                               (if ws
+                                   (working-set-entry-count ws)
+                                   0)
                                'working-set-tokens
-                               (if ws (working-set-token-count ws) 0)))
+                               (if ws
+                                   (working-set-token-count ws)
+                                   0)))
 
   ;; Dispatch 'context hook — extensions can amend final context
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
@@ -207,6 +210,16 @@
                            token
                            config
                            #:tool-list-proc [tool-list-proc #f])
+  ;; v0.28.20 T7: Emit system.warning if mock provider is being used
+  (when (provider-is-mock? prov)
+    (emit-session-event! bus
+                         session-id
+                         "system.warning"
+                         (hasheq 'message
+                                 "No API key found — using mock provider. Check .q/credentials.json"
+                                 'provider
+                                 "mock")))
+
   ;; Dispatch 'before-provider-request hook (informational)
   (define-values (_bpr-payload _bpr-res)
     (maybe-dispatch-hooks ext-reg

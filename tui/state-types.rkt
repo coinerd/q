@@ -76,7 +76,7 @@
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
          cost-tracker ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
-         )
+         busy-since)
   #:transparent)
 
 ;; Overlay state for modal/popup UI elements (command palette, etc.)
@@ -195,7 +195,7 @@
             #f ; editor-component
             #f ; context-tokens
             (make-cost-tracker) ; cost-tracker
-            ))
+            #f))
 
 ;; ============================================================
 ;; String helpers
