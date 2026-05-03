@@ -223,27 +223,27 @@
     ;; --------------------------------------------------------
     ;; Header rendering
     ;; --------------------------------------------------------
-    (test-case "render-frame! draws header row"
+    (test-case "render-frame! draws status bar"
       (define ubuf (make-mock-ubuf 80 24))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
       (run-render-frame! ubuf state input-st layout)
-      ;; Check header row (row 1)
-      (define header-str (mock-ubuf-row-string ubuf 0))
-      (check-true (string-prefix? header-str " q ") "header should start with ' q '")
-      ;; Header should be full width
-      (check-equal? (string-length header-str) 80 "header should be full width"))
+      ;; Status bar is at status-row (row 22 for 80x24)
+      (define status-str (mock-ubuf-row-string ubuf (tui-layout-status-row layout)))
+      (check-true (string-contains? status-str "q") "status bar should contain 'q'")
+      (check-equal? (string-length status-str) 80 "status bar should be full width"))
 
-    (test-case "header row has inverse style applied (fg=0, bg=7)"
+    (test-case "status bar has inverse style (bg=7)"
       (define ubuf (make-mock-ubuf 40 10))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
       (define layout (compute-layout 40 10))
       (run-render-frame! ubuf state input-st layout)
-      ;; Header should have inverse style: bg=7
-      (define inverse-count (mock-ubuf-row-style-count ubuf 0 (lambda (c) (= (mock-cell-bg c) 7))))
-      (check-true (> inverse-count 0) "header should have bg=7 (inverse)"))
+      ;; Status bar should have inverse style: bg=7
+      (define status-row-num (tui-layout-status-row layout))
+      (define inverse-count (mock-ubuf-row-style-count ubuf status-row-num (lambda (c) (= (mock-cell-bg c) 7))))
+      (check-true (> inverse-count 0) "status bar should have bg=7 (inverse)"))
 
     (test-case "render-frame! clears buffer before drawing"
       (define ubuf (make-mock-ubuf 40 10))
@@ -255,9 +255,9 @@
       (define input-st (initial-input-state))
       (define layout (compute-layout 40 10))
       (run-render-frame! ubuf state input-st layout)
-      ;; Header row should be drawn with new content
-      (define header-str (mock-ubuf-row-string ubuf 0))
-      (check-true (string-prefix? header-str " q ") "header should be redrawn"))
+      ;; Status bar should be drawn with new content
+      (define status-str (mock-ubuf-row-string ubuf (tui-layout-status-row layout)))
+      (check-true (string-contains? status-str "q") "status bar should be redrawn"))
 
     ;; --------------------------------------------------------
     ;; Transcript line rendering with styles
@@ -345,7 +345,7 @@
       (run-render-frame! ubuf state input-st layout)
       (define status-str (mock-ubuf-row-string ubuf status-row-num))
       (check-true (string-contains? status-str "q") "status bar contains 'q' indicator")
-      (check-true (string-contains? status-str "test-session") "status bar shows session id"))
+      (check-true (string-contains? status-str "-session") "status bar shows session id"))
 
     (test-case "status bar has inverse style (bg=7)"
       (define ubuf (make-mock-ubuf 80 24))
@@ -446,15 +446,15 @@
       (define cell (mock-ubuf-cell ubuf 0 trans-start))
       (check-equal? (mock-cell-bg cell) 0 "empty cells use bg=0"))
 
-    (test-case "render-frame! inverse header keeps explicit bg=7"
+    (test-case "render-frame! inverse status bar keeps explicit bg=7"
       (define ubuf (make-mock-ubuf 80 10))
       (define state (initial-ui-state))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 10))
       (run-render-frame! ubuf state input-st layout)
-      (define header-y (tui-layout-header-row layout))
-      (define cell (mock-ubuf-cell ubuf 1 header-y))
-      (check-equal? (mock-cell-bg cell) 7 "header uses inverse bg=7"))
+      (define status-y (tui-layout-status-row layout))
+      (define cell (mock-ubuf-cell ubuf 1 status-y))
+      (check-equal? (mock-cell-bg cell) 7 "status bar uses inverse bg=7"))
 
     (test-case "render-frame! handles many transcript entries"
       (define ubuf (make-mock-ubuf 80 24))

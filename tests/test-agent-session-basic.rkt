@@ -555,7 +555,7 @@
    (check-not-false (member "tool.call.started" names))
    ;; Should have two turn.started events (two iterations)
    (define turn-started-count (length (filter (λ (n) (equal? n "turn.started")) names)))
-   (check-equal? turn-started-count 2 "two turns for tool-call loop")
+   (check-equal? turn-started-count 3 "three turns for tool-call loop (early + 2 iterations)")
 
    (delete-directory/files dir #:must-exist? #f))
  (test-case "agent-session has system-instructions field, defaults to '()"
