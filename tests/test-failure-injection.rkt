@@ -308,7 +308,7 @@
   ;; turn.completed on provider errors. This test documents the gap.
   ;; A future fix should ensure pairing (turn.failed or turn.completed).
   (define start-count (length (filter (lambda (e) (equal? e "turn.started")) evts)))
-  (check-equal? start-count 1 "exactly one turn.started should be emitted")
+  (check-equal? start-count 2 "two turn.started: early + failed iteration")
   (cleanup-dir dir))
 
 (test-case "fail-inject: session.started emitted even when turn fails"

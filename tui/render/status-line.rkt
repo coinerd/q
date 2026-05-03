@@ -85,7 +85,8 @@
         (format " ~a" (format-cost (cost-tracker-total cost-trk)))
         ""))
   (define scroll-text (if (and scroll-off (positive? scroll-off)) " \u2191" ""))
-  (define normal-text (string-append ctx-part cost-part scroll-text))
+  (define mock-warn (if (ui-state-mock-provider? state) " [No API key]" ""))
+  (define normal-text (string-append ctx-part cost-part scroll-text mock-warn))
 
   ;; Padding to fill remaining width (plain spaces, no inverse)
   (define used (+ (string-length inv-text) (string-length normal-text)))

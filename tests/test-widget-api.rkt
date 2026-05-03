@@ -22,8 +22,8 @@
   (define l (compute-layout 80 24))
   (check-equal? (tui-layout-cols l) 80)
   (check-equal? (tui-layout-rows l) 24)
-  (check-equal? (tui-layout-header-row l) 0)
-  (check-equal? (tui-layout-transcript-start-row l) 1)
+  (check-equal? (tui-layout-header-row l) #f)
+  (check-equal? (tui-layout-transcript-start-row l) 0)
   (check-equal? (tui-layout-status-row l) 22)
   (check-equal? (tui-layout-input-row l) 23))
 
@@ -31,12 +31,12 @@
   (define l (compute-layout-with-widgets 80 24 3))
   (check-equal? (tui-layout-cols l) 80)
   (check-equal? (tui-layout-rows l) 24)
-  ;; non-transcript = 3 (header+status+input) + 3 (widgets) = 6
-  ;; transcript-height = 24 - 6 = 18
-  (check-equal? (tui-layout-transcript-height l) 18)
-  ;; status-row = 1 + 18 + 3 = 22
+  ;; non-transcript = 2 (status+input, no header) + 3 (widgets) = 5
+  ;; transcript-height = 24 - 5 = 19
+  (check-equal? (tui-layout-transcript-height l) 19)
+  ;; status-row = 0 + 19 + 3 = 22
   (check-equal? (tui-layout-status-row l) 22)
-  ;; input-row = 2 + 18 + 3 = 23
+  ;; input-row = 0 + 19 + 3 + 1 = 23
   (check-equal? (tui-layout-input-row l) 23))
 
 (test-case "compute-layout-with-widgets: zero widgets = same as basic"
