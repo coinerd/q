@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.28.20 — 2026-05-03
+
+### Credential Resolution + Test Isolation + Audit Minor Findings
+
+**C1 CRITICAL:** `credential-from-file` now checks project-local
+`.q/credentials.json` before global `~/.q/credentials.json`.
+`#:project-dir` wired through `lookup-credential` and `provider-factory`.
+
+**C2 CRITICAL:** Isolate 4 test files from real `~/.q/`:
+test-init-wizard, test-cli, test-auth-store, test-lockfile all use
+temp dirs — zero `~/.q/` pollution.
+
+**C3 HIGH:** Mock provider emits `system.warning` event with guidance
+("Check .q/credentials.json") on every turn using mock fallback.
+
+**C4 HIGH:** Test-key guard rejects `sk-test*` keys from credential
+files with log warning.
+
+**C5 HIGH:** Minimum 500ms busy duration prevents status bar flicker
+for fast providers. New `busy-since` field in `ui-state`.
+
+**A1:** Add `'thinking` to transcript-entry kind docstring.
+
+**A2:** Add co-located `content`+`reasoning_content` stream test
+(DeepSeek-R1 edge case).
+
+**A3:** Clear `streaming-thinking` on `assistant.message.completed`
+to prevent stale text on protocol anomaly.
+
 ## v0.28.19 — 2026-05-03
 
 ### Reasoning Content Streaming + Test Regression Fix
