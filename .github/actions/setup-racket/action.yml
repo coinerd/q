@@ -30,11 +30,14 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
-        # Idempotent local package setup: install if absent, update if present
+        # Idempotent local package setup: install if absent, update if present.
+        # Use $PWD instead of '.' to avoid macOS "invalid package source" errors.
         if raco pkg show q 2>/dev/null | grep -q "q"; then
+          echo "Package q already installed, updating..."
           raco pkg update --auto q
         else
-          raco pkg install --auto --batch .
+          echo "Installing local package from $PWD ..."
+          raco pkg install --auto --batch "$PWD"
         fi
         # Extra TUI deps (may already be installed as transitive deps)
         raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
