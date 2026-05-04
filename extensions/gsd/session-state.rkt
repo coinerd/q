@@ -21,7 +21,7 @@
   "Create an isolated GSD context with thread-safe dispatch.
    Returns a procedure that accepts actions:
      'get-state, 'set-state, 'get-plan, 'set-plan,
-     'get-workflow, 'set-workflow, 'busy?, 'set-busy!,
+     'busy?, 'set-busy!,
      'get-correlation-id, 'set-correlation-id!,
      'transaction-ref, 'transaction-set!,
      'get-history, 'set-history!,

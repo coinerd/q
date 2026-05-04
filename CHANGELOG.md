@@ -4,11 +4,21 @@
 
 ### Architecture Re-Audit (Verification Gate)
 
-- **Final architecture score: 9.0/10** (up from 5.5/10 baseline at v0.28.28)
-- All 9 verification steps pass: compilation, 17/17 lint checks, 467 test files, 0 failures
-- Dead code IVG verified: decide-next-action=3, handle-hook-result=4, emit-typed-event!=5
-- Dead code removed: termination-decision=0, unused middleware imports=0
-- Documented remaining gaps for v0.30.x: process-chunk bridge, scheduler middleware, emit migration
+- **Architecture score: 7.5/10** (up from 5.5/10 baseline at v0.28.28)
+- Test suite: 467 test files, 463 pass within 15s, 2 pre-existing failures (test-doctor), 2 environment-specific timeouts
+- Lint suite: 17/17 checks pass
+- Compilation: clean
+- **Production wiring verified (grep counts):**
+  - `decide-next-action` in `runtime/iteration.rkt`: 3 (def + call + comment) ✅
+  - `handle-hook-result` in `agent/loop.rkt`: 3 ✅
+  - `handle-hook-result` in `agent/loop-stream.rkt`: 1 (3 inline patterns remain) ⚠️
+  - `emit-typed-event!` in `agent/`: 5 (in event-emitter + loop-messages) ✅
+- **Explicitly deferred (0 production callers outside own module):**
+  - `process-chunk` — defined in loop-stream.rkt, never called from production
+  - `make-default-pipeline` — defined in middleware.rkt, never called from scheduler
+  - `emit-typed-event!` — bridge defined but not used at any emit! site in loop.rkt
+- **Remaining dead code:** ~350 lines across 3 components
+- **Documented remaining gaps for v0.30.x:** process-chunk bridge, scheduler middleware, emit migration
 
 ## v0.29.9 — 2026-05-04
 
