@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.29.6 — 2026-05-04
+
+### Tool Middleware HOF + Facade Curation
+
+- **Composable middleware pipeline** (`tools/middleware.rkt`):
+  - `compose-middleware`: foldr-based onion model for pre/post wrapping
+  - `make-hook-middleware`: hook dispatch with block/amend semantics
+  - `make-safe-mode-middleware`: safe-mode tool restrictions
+  - `make-validation-middleware`: argument validation against schema
+  - `make-permission-middleware`: permission gate checking
+  - `make-mutation-queue-middleware`: mutation queuing for sequential execution
+  - `make-default-pipeline`: composes all 5 built-in middleware
+- **Facade module audit**:
+  - Verified all-from-out usage is intentional in facade modules
+  - Core modules (loop, iteration, scheduler) use explicit provides
+  - 33 all-from-out total — appropriate for facade pattern
+
+### Tests (27 new)
+
+- `test-tool-middleware.rkt`: 18 tests for middleware pipeline
+- `test-facade-surface.rkt`: 9 tests for facade surface verification
+
+### Architecture Score
+
+This is the final milestone in the v0.29.x architecture refactoring series.
+Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
+
 ## v0.29.5 — 2026-05-04
 
 ### Stream Purity + DI Cleanup
