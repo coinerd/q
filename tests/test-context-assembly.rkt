@@ -248,8 +248,7 @@
   (define tiered-300 (build-tiered-context msgs-300 #:tier-c-count 4))
   (define tier-b-300 (tiered-context-tier-b tiered-300))
   ;; Tier-B should be ~30 (300/10 = 30), minus tier-c (4)
-  (check-true (>= (length tier-b-300) 20)
-              "tier-b scales with message count"))
+  (check-true (>= (length tier-b-300) 20) "tier-b scales with message count"))
 
 (test-case "build-tiered-context: explicit tier-b-count overrides dynamic"
   (define msgs
@@ -264,34 +263,34 @@
 ;; ============================================================
 
 (test-case "summarize-tool-result: short result unchanged"
-  (define short-msg
-    (make-test-msg "tr1" 'tool 'tool-result "short output"))
+  (define short-msg (make-test-msg "tr1" 'tool 'tool-result "short output"))
   (define result (summarize-tool-result short-msg))
   (check-equal? result short-msg "short tool result not modified"))
 
 (test-case "summarize-tool-result: long result gets truncated"
   (define long-text
-    (string-join (for/list ([i (in-range 100)]) (format "Line ~a: ~a" i (make-string 100 #\x))) "\n"))
-  (define long-msg
-    (make-test-msg "tr2" 'tool 'tool-result long-text))
+    (string-join (for/list ([i (in-range 100)])
+                   (format "Line ~a: ~a" i (make-string 100 #\x)))
+                 "\n"))
+  (define long-msg (make-test-msg "tr2" 'tool 'tool-result long-text))
   (define result (summarize-tool-result long-msg))
   (define result-text
-    (string-join
-     (for/list ([part (in-list (message-content result))]
-                #:when (text-part? part))
-       (text-part-text part))
-     "\n"))
-  (check-true (< (string-length result-text) (string-length long-text))
-              "long tool result truncated")
-  (check-true (string-contains? result-text "lines truncated")
-              "truncation indicator present"))
+    (string-join (for/list ([part (in-list (message-content result))]
+                            #:when (text-part? part))
+                   (text-part-text part))
+                 "\n"))
+  (check-true (< (string-length result-text) (string-length long-text)) "long tool result truncated")
+  (check-true (string-contains? result-text "lines truncated") "truncation indicator present"))
 
 ;; ============================================================
 ;; v0.28.21 W7: GSD progress pinning
 ;; ============================================================
 
 (define (make-gsd-msg id text)
-  (make-message id #f 'assistant 'message
+  (make-message id
+                #f
+                'assistant
+                'message
                 (list (make-text-part text))
                 (current-seconds)
                 (hasheq 'gsd-pin #t)))
@@ -316,3 +315,36 @@
   (define tier-a (tiered-context-tier-a tiered))
   (define any-pinned (filter (lambda (m) (hash-ref (message-meta m) 'gsd-pin #f)) tier-a))
   (check-equal? (length any-pinned) 0 "no GSD-pinned messages in Tier A"))
+
+;; ============================================================
+;; v0.28.22 W2: GSD progress auto-detection (no gsd-pin meta needed)
+;; ============================================================
+
+(define (make-assistant-msg id text)
+  (make-message id #f 'assistant 'message (list (make-text-part text)) (current-seconds) (hasheq)))
+
+(test-case "T7: GSD progress auto-detected by text pattern in Tier A"
+  (define msgs
+    (append (for/list ([i (in-range 30)])
+              (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i)))
+            (list (make-assistant-msg "gsd-auto1"
+                                      "Wave 2 marked complete. PLAN.md and STATE.md updated."))
+            (for/list ([i (in-range 30 60)])
+              (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i)))))
+  (define tiered (build-tiered-context msgs #:tier-c-count 4))
+  (define tier-a (tiered-context-tier-a tiered))
+  (define gsd-text
+    (filter (lambda (m)
+              (string-contains? (string-join (map (lambda (p)
+                                                    (if (text-part? p)
+                                                        (text-part-text p)
+                                                        ""))
+                                                  (message-content m)))
+                                "Wave 2 marked"))
+            tier-a))
+  (check-equal? (length gsd-text) 1 "GSD progress message auto-detected in Tier A"))
+
+(test-case "T8: make-text-part creates valid text-part"
+  (define tp (make-text-part "test content"))
+  (check-true (text-part? tp))
+  (check-equal? (text-part-text tp) "test content"))
