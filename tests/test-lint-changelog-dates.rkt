@@ -4,23 +4,31 @@
 
 (require rackunit
          racket/file
+         racket/path
          racket/string
          racket/port
          racket/system)
 
 ;; ── Helpers ──
 
+(define q-dir
+  (simplify-path
+   (build-path (path-only (resolved-module-path-name (variable-reference->resolved-module-path
+                                                      (#%variable-reference))))
+               "..")))
+
 (define (run-validator input-text)
   ;; Write CHANGELOG.md to a temp dir, run validator, return exit code + output
   (define tmp-dir (make-temporary-file "changelog-test-~a" 'directory))
   (define changelog-path (build-path tmp-dir "CHANGELOG.md"))
   (with-output-to-file changelog-path (lambda () (display input-text)))
+  (define script-path (build-path q-dir "scripts" "lint-changelog-dates.rkt"))
   (define-values (sp out in err)
     (subprocess #f
                 #f
                 #f
                 (find-executable-path "racket")
-                "scripts/lint-changelog-dates.rkt"
+                (path->string script-path)
                 "--changelog"
                 (path->string changelog-path)))
   (close-output-port in)

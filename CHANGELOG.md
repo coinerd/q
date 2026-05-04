@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.28.28 — 2026-05-04
+
+### Data Corrections + CHANGELOG Date Validator
+
+- Fixed CHANGELOG date errors for v0.28.26, v0.28.27 (2026-05-06 → 2026-05-04)
+- Fixed CHANGELOG date errors for v0.28.24, v0.28.23 (2026-05-05 → 2026-05-04)
+- Fixed CHANGELOG date errors for v0.28.13, v0.28.12, v0.28.11 (2026-05-05 → 2026-05-03)
+- Added `scripts/lint-changelog-dates.rkt` — validates CHANGELOG date entries
+  - ERROR on future dates, ERROR on missing dates, WARNING on chronological order
+- Registered `changelog-dates` in lint-all.rkt (17 checks) and pre-commit.rkt (15 fast checks)
+- Added `tests/test-lint-changelog-dates.rkt` (4 test cases)
+- README Status block re-synced
+
 ## v0.28.27 — 2026-05-04
 
 ### Audit Remediation — Permanent Tooling Automation
