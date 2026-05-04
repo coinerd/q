@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.28.23 — 2026-05-05
+
+### Audit Remediation (7 Warnings from v0.28.22)
+
+Fixes 7 warnings from the v0.28.22 implementation audit. All changes are
+architectural — no runtime guards or nudges.
+
+**W0 — Code fixes:**
+- `gsd-progress-message?` now guards on `(memq role '(tool assistant))` to
+  prevent false positives from user messages with GSD-like text.
+- `summarize-tool-result` uses canonical `make-text-part` instead of raw
+  `(text-part "text" ...)` constructor.
+- `check-mid-turn-budget!` split into `estimate-mid-turn-tokens` (returns
+  integer) and `maybe-compact-mid-turn` (returns message list). Backward-compat
+  wrapper preserved for existing tests.
+- Iteration loop call site updated to use split functions directly, removing
+  fragile `(if (list? ...) ...)` guard.
+
+**W1 — Integration tests:**
+- `estimate-mid-turn-tokens` tested: returns exact positive integer, emits
+  over-budget event.
+- `maybe-compact-mid-turn` tested with real mock agent-session.
+- Exploration loop event emission path tested through event bus.
+- GSD role guard tested: user messages with GSD text NOT pinned, tool
+  messages IS pinned.
+
+**Tests:** 8 mid-turn integration tests, 6 exploration loop tests, 33 context
+assembly tests.
+
 ## v0.28.22 — 2026-05-04
 
 ### Context Loop Prevention Wiring + Audit Remediation
