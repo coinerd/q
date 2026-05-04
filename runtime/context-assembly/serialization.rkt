@@ -85,17 +85,17 @@
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
   ;; v0.28.21 W7 + v0.28.22 W2: GSD progress pinning
-  ;; Messages with meta gsd-pin=#t OR containing GSD progress markers stay in Tier A
+  ;; v0.28.23 W0: tightened to tool/assistant roles only, removed broad wave-done regex
   (define (gsd-progress-message? m)
     (or (hash-ref (message-meta m) 'gsd-pin #f)
-        (let ([txt (string-join (for/list ([part (message-content m)]
-                                           #:when (text-part? part))
-                                  (text-part-text part)))])
-          (and (non-empty-string? txt)
-               (or (regexp-match? #rx"wave [0-9]+ marked complete" txt)
-                   (regexp-match? #rx"PLAN.md.*updated" txt)
-                   (regexp-match? #rx"STATE.md.*updated" txt)
-                   (regexp-match? #rx"wave-done" txt))))))
+        (and (memq (message-role m) '(tool assistant))
+             (let ([txt (string-join (for/list ([part (message-content m)]
+                                                #:when (text-part? part))
+                                       (text-part-text part)))])
+               (and (non-empty-string? txt)
+                    (or (regexp-match? #rx"wave [0-9]+ marked complete" txt)
+                        (regexp-match? #rx"PLAN.md.*updated" txt)
+                        (regexp-match? #rx"STATE.md.*updated" txt)))))))
   (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
   (define-values (sys-protected unpinned-raw)
     (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
@@ -239,7 +239,7 @@
         (define dropped (- (length lines) 20))
         (define summary-text
           (string-join (append head (list (format "... ~a lines truncated ..." dropped)) tail) "\n"))
-        (struct-copy message entry [content (list (text-part "text" summary-text))])])]))
+        (struct-copy message entry [content (list (make-text-part summary-text))])])]))
 
 (define (entry->context-message entry)
   (define kind (message-kind entry))

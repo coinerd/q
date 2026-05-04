@@ -110,6 +110,8 @@
          call-with-overflow-recovery
          ;; v0.14.1: mid-turn token budget check (for testing)
          check-mid-turn-budget!
+         estimate-mid-turn-tokens
+         maybe-compact-mid-turn
          ;; v0.20.5 W3: pre-registration on session open (now from turn-orchestrator)
          register-session-extensions!
          ;; DI parameters for testability (DI-01, v0.22.7)
@@ -499,10 +501,14 @@
                                               token
                                               config))
                  ;; v0.14.1: mid-turn token budget check
-                 ;; v0.28.22 W0: wire session for mid-turn compaction
+                 ;; v0.28.23 W0: use split functions directly
                  (define ctx-after-budget
-                   (check-mid-turn-budget! updated-ctx bus session-id config #:session sess))
-                 (loop (if (list? ctx-after-budget) ctx-after-budget updated-ctx)
+                   (if sess
+                       (maybe-compact-mid-turn sess updated-ctx bus session-id config)
+                       (begin
+                         (estimate-mid-turn-tokens updated-ctx bus session-id config)
+                         updated-ctx)))
+                 (loop ctx-after-budget
                        (add1 iteration)
                        (add1 consecutive-tool-count)
                        seen-paths

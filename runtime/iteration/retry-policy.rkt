@@ -29,19 +29,50 @@
          (only-in "loop-state.rkt" resolve-estimate-tokens))
 
 (provide check-mid-turn-budget!
+         estimate-mid-turn-tokens
+         maybe-compact-mid-turn
          call-with-overflow-recovery
          detect-exploration-loop)
 
-;; Check if context exceeds mid-turn token budget.
-;; When session is provided and over budget, triggers mid-turn compaction.
-;; Returns (listof message?) if session provided (possibly compacted),
-;; or integer token estimate if no session.
-(define (check-mid-turn-budget! ctx
+;; ── Estimate token count for mid-turn context ──
+;; Returns integer token estimate. Emits context.mid-turn-over-budget event
+;; when context exceeds 90% of max budget.
+(define (estimate-mid-turn-tokens ctx
+                                  bus
+                                  session-id
+                                  config
+                                  #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
+  (define max-tokens (hash-ref config 'max-context-tokens 128000))
+  (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
+  (define texts
+    (for/list ([msg (in-list ctx)])
+      (define content (message-content msg))
+      (cond
+        [(string? content) content]
+        [(list? content)
+         (apply string-append
+                (for/list ([part (in-list content)]
+                           #:when (text-part? part))
+                  (text-part-text part)))]
+        [else ""])))
+  (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
+  (when (and (> estimated budget-threshold) bus session-id)
+    (emit-session-event!
+     bus
+     session-id
+     "context.mid-turn-over-budget"
+     (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
+  estimated)
+
+;; ── Compact context mid-turn if over budget ──
+;; Returns (listof message?) — compacted context if over 90% budget,
+;; or original context if under budget.
+(define (maybe-compact-mid-turn sess
+                                ctx
                                 bus
                                 session-id
                                 config
-                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
-                                #:session [sess #f])
+                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
   (define max-tokens (hash-ref config 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (define texts
@@ -57,20 +88,27 @@
         [else ""])))
   (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
   (cond
-    ;; Under budget: return ctx if session, else estimate
-    [(<= estimated budget-threshold) (if sess ctx estimated)]
+    [(<= estimated budget-threshold) ctx]
     [else
-     ;; Over budget
      (when (and bus session-id)
        (emit-session-event!
         bus
         session-id
         "context.mid-turn-over-budget"
         (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
-     (if sess
-         ;; v0.28.21 W3: Trigger mid-turn compaction when session available
-         (compact-context-mid-turn sess ctx)
-         estimated)]))
+     (compact-context-mid-turn sess ctx)]))
+
+;; ── Backward-compat wrapper ──
+;; Returns (listof message?) if session provided, or integer? if not.
+(define (check-mid-turn-budget! ctx
+                                bus
+                                session-id
+                                config
+                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
+                                #:session [sess #f])
+  (if sess
+      (maybe-compact-mid-turn sess ctx bus session-id config #:estimate-tokens estimate-tokens)
+      (estimate-mid-turn-tokens ctx bus session-id config #:estimate-tokens estimate-tokens)))
 
 ;; Handle context overflow by compacting the context and retrying once.
 ;; Catches both context-overflow-error? and plain exn:fail with overflow messages.
