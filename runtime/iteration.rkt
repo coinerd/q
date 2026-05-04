@@ -115,11 +115,7 @@
          maybe-compact-mid-turn
          ;; v0.20.5 W3: pre-registration on session open (now from turn-orchestrator)
          register-session-extensions!
-         ;; DI parameters for testability (DI-01, v0.22.7)
-         current-compact-proc
-         current-estimate-tokens
-         current-inject-topic
-         ;; DI resolve functions (LOW-05, v0.22.8)
+         ;; DI resolve functions (v0.29.5: simplified, no parameters)
          resolve-compact-proc
          resolve-estimate-tokens
          resolve-inject-topic

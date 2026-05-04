@@ -2,60 +2,71 @@
 
 ;; tests/test-di-explicit.rkt — Tests for explicit DI (no parameter fallbacks)
 ;;
-;; W0 scaffolding for v0.29.5: Stream Purity + DI Cleanup.
-;; Tests that run-iteration-loop requires explicit DI arguments
-;; with no parameter fallbacks (W2 removes the parameters).
+;; v0.29.5 W2: Verify DI parameters removed, resolvers use direct imports.
 
-(require rackunit)
-
-;; ============================================================
-;; 1. DI parameters removed
-;; ============================================================
-
-(test-case "current-compact-proc parameter no longer exists"
-  ;; After W2, current-compact-proc should not be exported
-  ;; Callers must pass #:compact-proc explicitly
-  (check-true #t "placeholder — verify in W2"))
-
-(test-case "current-estimate-tokens parameter no longer exists"
-  (check-true #t "placeholder — verify in W2"))
-
-(test-case "current-inject-topic parameter no longer exists"
-  (check-true #t "placeholder — verify in W2"))
+(require rackunit
+         racket/port
+         (only-in "../runtime/iteration/loop-state.rkt"
+                  resolve-compact-proc
+                  resolve-estimate-tokens
+                  resolve-inject-topic)
+         (only-in "../runtime/compactor.rkt" compact-history)
+         (only-in "../llm/token-budget.rkt" estimate-context-tokens))
 
 ;; ============================================================
-;; 2. Explicit DI via keyword arguments
+;; 1. Resolve functions return correct implementations
 ;; ============================================================
 
-(test-case "resolve-compact-proc returns explicit arg when provided"
-  ;; After W2, compact-proc is a required keyword arg, not a parameter
-  (check-true #t "placeholder"))
+(test-case "resolve-compact-proc returns a procedure"
+  (check-true (procedure? (resolve-compact-proc))))
 
-(test-case "resolve-estimate-tokens returns explicit arg when provided"
-  (check-true #t "placeholder"))
+(test-case "resolve-estimate-tokens returns a procedure"
+  (check-true (procedure? (resolve-estimate-tokens))))
 
-(test-case "resolve-inject-topic returns explicit arg when provided"
-  (check-true #t "placeholder"))
-
-;; ============================================================
-;; 3. No lazy-require fallbacks
-;; ============================================================
-
-(test-case "loop-state.rkt has no lazy-require imports"
-  ;; After W2, loop-state.rkt should not use lazy-require
-  (check-true #t "placeholder"))
-
-(test-case "no make-parameter in loop-state.rkt"
-  ;; grep -c 'make-parameter' runtime/iteration/loop-state.rkt → 0
-  (check-true #t "placeholder"))
+(test-case "resolve-inject-topic returns a string"
+  (check-true (string? (resolve-inject-topic))))
 
 ;; ============================================================
-;; 4. Backward compatibility
+;; 2. Resolve functions return the actual implementations
 ;; ============================================================
 
-(test-case "agent-session sets DI via keyword args"
-  ;; agent-session.rkt should pass #:compact-proc etc. explicitly
-  (check-true #t "placeholder"))
+(test-case "resolve-compact-proc returns compact-history"
+  (check-eq? (resolve-compact-proc) compact-history))
 
-(test-case "session-lifecycle sets DI via keyword args"
-  (check-true #t "placeholder"))
+(test-case "resolve-estimate-tokens returns estimate-context-tokens"
+  (check-eq? (resolve-estimate-tokens) estimate-context-tokens))
+
+;; ============================================================
+;; 3. No make-parameter in loop-state.rkt
+;; ============================================================
+
+(test-case "loop-state.rkt has no make-parameter"
+  (define source-file "runtime/iteration/loop-state.rkt")
+  (define content (call-with-input-file source-file port->string))
+  (check-false (regexp-match? #rx"make-parameter" content)
+               "loop-state.rkt should not contain make-parameter"))
+
+(test-case "loop-state.rkt has no lazy-require"
+  (define source-file "runtime/iteration/loop-state.rkt")
+  (define content (call-with-input-file source-file port->string))
+  (check-false (regexp-match? #rx"[(]lazy-require" content)
+               "loop-state.rkt should not contain lazy-require"))
+
+;; ============================================================
+;; 4. No current-*-proc parameters exported from iteration.rkt
+;; ============================================================
+
+(test-case "loop-state.rkt does not export current-compact-proc"
+  (define content (call-with-input-file "runtime/iteration/loop-state.rkt" port->string))
+  (check-false (regexp-match? #rx"current-compact-proc" content)
+               "current-compact-proc should not be in loop-state.rkt"))
+
+(test-case "loop-state.rkt does not export current-estimate-tokens"
+  (define content (call-with-input-file "runtime/iteration/loop-state.rkt" port->string))
+  (check-false (regexp-match? #rx"current-estimate-tokens" content)
+               "current-estimate-tokens should not be in loop-state.rkt"))
+
+(test-case "loop-state.rkt does not export current-inject-topic"
+  (define content (call-with-input-file "runtime/iteration/loop-state.rkt" port->string))
+  (check-false (regexp-match? #rx"current-inject-topic" content)
+               "current-inject-topic should not be in loop-state.rkt"))

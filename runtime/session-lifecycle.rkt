@@ -52,10 +52,7 @@
          (only-in "iteration.rkt"
                   run-iteration-loop
                   emit-session-event!
-                  maybe-dispatch-hooks
-                  current-compact-proc
-                  current-estimate-tokens
-                  current-inject-topic)
+                  maybe-dispatch-hooks)
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
