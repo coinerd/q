@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.28.27 — 2026-05-06
+## v0.28.27 — 2026-05-04
 
 ### Audit Remediation — Permanent Tooling Automation
 
@@ -33,7 +33,7 @@ lint-alignment CI gate to catch future drift automatically.
 - Mark `arch` check as `continue-on-error` in lint-all.rkt (slow lint).
 - Document automation contract in `docs/tooling.md`.
 
-## v0.28.26 — 2026-05-06
+## v0.28.26 — 2026-05-04
 
 ### Status Restoration + Tooling Hardening
 
