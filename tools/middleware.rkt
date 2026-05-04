@@ -146,4 +146,7 @@
          make-validation-middleware
          make-permission-middleware
          make-mutation-queue-middleware
+         ;; NOTE (v0.29.11): make-default-pipeline has 0 production callers.
+         ;; Not wired into existing scheduler — provides composable pipeline for future use.
+         ;; Deferred to v0.30.x — see AUDIT-v0.29.10 for details.
          make-default-pipeline)

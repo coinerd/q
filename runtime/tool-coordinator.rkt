@@ -23,7 +23,7 @@
          racket/path
          json
          (only-in "../util/tool-types.rkt" tool-call?)
-         (only-in "../tools/tool.rkt" tool-result?)
+         (only-in "../tools/tool.rkt" tool-result? tool-registry?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
@@ -62,16 +62,16 @@
                        [make-tool-result-messages
                         (-> (listof tool-call?) (listof tool-result?) string? (listof message?))]
                        [handle-tool-calls-pending
-                        (-> list? ; new-msgs
+                        (-> (listof message?) ; new-msgs
                             list? ; ctx-with-steering
                             any/c ; ext-reg
-                            any/c ; reg
+                            (or/c tool-registry? #f) ; reg
                             any/c ; bus
                             string? ; session-id
                             (or/c path-string? path?) ; log-path
                             any/c ; token
                             hash? ; config
-                            list?)]))
+                            (listof message?))]))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks

@@ -181,10 +181,14 @@
 ;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)
 ;; ============================================================
 
-(define (handle-hook-result result on-block on-continue)
+(define (handle-hook-result result on-block on-continue #:on-amend [on-amend #f])
   (cond
     [(not (hook-result? result)) (on-continue)]
     [else
      (match (hook-result-action result)
        ['block (on-block (hook-result-payload result))]
+       ['amend
+        (if on-amend
+            (on-amend (hook-result-payload result))
+            (on-continue))]
        [_ (on-continue)])]))
