@@ -252,7 +252,8 @@
                         #:config cfg
                         #:working-set ws
                         #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
-                        #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess)))))
+                        #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
+                        #:session sess)))
 
 ;; ============================================================
 ;; run-prompt-internal
@@ -347,8 +348,7 @@
   ;; before context build + compaction. The handler in state-events.rkt
   ;; is idempotent (just sets busy? #t), so the second turn.started
   ;; from agent/loop.rkt during iteration is safe.
-  (emit-session-event! bus sid "turn.started"
-                       (hasheq 'turnId #f 'sessionId sid))
+  (emit-session-event! bus sid "turn.started" (hasheq 'turnId #f 'sessionId sid))
   (define base-cfg (agent-session-config sess))
   ;; #1391: Inject session index into config for session_recall tool access
   (dynamic-wind
@@ -402,15 +402,17 @@
     (define q-dir (build-path (find-system-path 'home-dir) ".q"))
     (make-directory* q-dir)
     (define crash-path (build-path q-dir (format "crash-~a.jsonl" (current-seconds))))
-    (call-with-output-file crash-path
-      (lambda (out)
-        (fprintf out "{\"ts\":~a,\"session\":\"~a\",\"error\":\"~a\",\"phase\":\"~a\"}\n"
-                 (current-seconds)
-                 (or sid "unknown")
-                 error-msg
-                 phase))
-      #:mode 'text
-      #:exists 'append)))
+    (call-with-output-file
+     crash-path
+     (lambda (out)
+       (fprintf out
+                "{\"ts\":~a,\"session\":\"~a\",\"error\":\"~a\",\"phase\":\"~a\"}\n"
+                (current-seconds)
+                (or sid "unknown")
+                error-msg
+                phase))
+     #:mode 'text
+     #:exists 'append)))
 
 ;; ============================================================
 ;; Persistence helpers (re-exported for agent-session.rkt)
