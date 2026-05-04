@@ -11,6 +11,7 @@
 ;;   loop.rkt          — facade: re-exports + run-agent-turn orchestrator
 
 (require racket/contract
+         racket/match
          racket/string
          racket/list
          racket/date
@@ -66,7 +67,21 @@
          MAX-STREAM-CHUNKS
          usage-empty?
          parts->text-string
-         emit!)
+         emit!
+         ;; v0.29.1: match-based hook dispatch
+         handle-hook-result)
+
+;; ============================================================
+;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)
+;; ============================================================
+
+(define (handle-hook-result result on-block on-continue)
+  (cond
+    [(not (hook-result? result)) (on-continue)]
+    [else
+     (match (hook-result-action result)
+       ['block (on-block (hook-result-payload result))]
+       [_ (on-continue)])]))
 
 ;; ============================================================
 ;; Main entry point — thin orchestrator
