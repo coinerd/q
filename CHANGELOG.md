@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.29.11 — 2026-05-02
+
+### Audit Remediation (v0.29.7–v0.29.10 Findings)
+
+- **Data correction**: Replaced fabricated v0.29.10 CHANGELOG score (9.0/10) with verified 7.5/10; added grep-count evidence
+- **Fixed test-doctor**: 5× `check-true (member ...)` → `check-not-false (member ...)` (member returns list, not #t)
+- **Fixed test-gsd-context-factory**: Removed stale `get-workflow` test (action removed in v0.29.9)
+- **Unified hook dispatch**: Extended `handle-hook-result` with `#:on-amend` keyword; replaced 3 inline hook patterns in `loop-stream.rkt` with unified calls
+- **Tightened coordinator contracts**: `handle-tool-calls-pending` now requires `(listof message?)` input and `(or/c tool-registry? #f)` for registry
+- **Mechanical IVG**: New `lint-ivg.rkt` enforcing 5 dead-code/wiring expectations; registered as lint-all check #18
+- **Documented deferred components**: `process-chunk`, `make-default-pipeline` annotated with NOTE comments and v0.30.x deferral
+- **Deprecated session-bytes-written**: Marked for removal in v0.30.x; retained for backward-compat tests
+- **Lint suite**: 18/18 checks pass (was 17/17)
+
 ## v0.29.10 — 2026-05-04
 
 ### Architecture Re-Audit (Verification Gate)
