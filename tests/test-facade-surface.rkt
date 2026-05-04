@@ -2,48 +2,82 @@
 
 ;; tests/test-facade-surface.rkt — Tests for facade module curation
 ;;
-;; v0.29.6 W0: Test scaffolding for facade surface verification.
+;; v0.29.6 W2: Verify facade modules have intentional surfaces.
 
 (require rackunit
          racket/port
          racket/file)
 
 ;; ============================================================
-;; 1. all-from-out audit
+;; 1. Facade modules with all-from-out are intentional
 ;; ============================================================
 
-(test-case "count all-from-out in non-test source files"
-  (define count
-    (for/sum ([f (in-list (find-files (lambda (p)
-                                        (and (regexp-match? #rx"\\.rkt$" (path->string p))
-                                             (not (regexp-match? #rx"test" (path->string p)))
-                                             (not (regexp-match? #rx"compiled" (path->string p)))))
-                                      "runtime/"))])
-      (define content (call-with-input-file f port->string))
-      (length (regexp-match* #rx"all-from-out" content))))
-  ;; Just check it's a number (baseline established)
-  (check-true (integer? count)))
+(test-case "protocol-types.rkt re-exports 8 sub-modules (intentional facade)"
+  (define content (call-with-input-file "util/protocol-types.rkt" port->string))
+  (define count (length (regexp-match* #rx"all-from-out" content)))
+  (check-true (>= count 8)
+              (format "expected >= 8 all-from-out in protocol-types.rkt, found ~a" count)))
 
-(test-case "count all-from-out in interfaces/"
-  (define count
-    (for/sum ([f (in-list (find-files (lambda (p)
-                                        (and (regexp-match? #rx"\\.rkt$" (path->string p))
-                                             (not (regexp-match? #rx"test" (path->string p)))
-                                             (not (regexp-match? #rx"compiled" (path->string p)))))
-                                      "interfaces/"))])
-      (define content (call-with-input-file f port->string))
-      (length (regexp-match* #rx"all-from-out" content))))
-  (check-true (integer? count)))
+(test-case "context-assembly.rkt re-exports 3 sub-modules (intentional facade)"
+  (define content (call-with-input-file "runtime/context-assembly.rkt" port->string))
+  (define count (length (regexp-match* #rx"all-from-out" content)))
+  (check-true (>= count 3)
+              (format "expected >= 3 all-from-out in context-assembly.rkt, found ~a" count)))
+
+(test-case "event-structs.rkt re-exports 6 sub-modules (intentional facade)"
+  (define content (call-with-input-file "agent/event-structs.rkt" port->string))
+  (define count (length (regexp-match* #rx"all-from-out" content)))
+  (check-true (>= count 6)
+              (format "expected >= 6 all-from-out in event-structs.rkt, found ~a" count)))
 
 ;; ============================================================
-;; 2. SDK public surface
+;; 2. Non-facade modules should NOT use all-from-out excessively
 ;; ============================================================
 
-(test-case "interfaces/sdk.rkt provides explicit symbols"
+(test-case "agent/loop.rkt does not use all-from-out"
+  (define content (call-with-input-file "agent/loop.rkt" port->string))
+  (check-false (regexp-match? #rx"all-from-out" content)
+               "agent/loop.rkt should have explicit provides"))
+
+(test-case "runtime/iteration.rkt does not use all-from-out"
+  (define content (call-with-input-file "runtime/iteration.rkt" port->string))
+  (check-false (regexp-match? #rx"all-from-out" content)
+               "runtime/iteration.rkt should have explicit provides"))
+
+(test-case "tools/scheduler.rkt does not use all-from-out"
+  (define content (call-with-input-file "tools/scheduler.rkt" port->string))
+  (check-false (regexp-match? #rx"all-from-out" content)
+               "tools/scheduler.rkt should have explicit provides"))
+
+;; ============================================================
+;; 3. SDK surface is explicit
+;; ============================================================
+
+(test-case "interfaces/sdk.rkt re-exports sdk-core and sdk-compat"
   (define content (call-with-input-file "interfaces/sdk.rkt" port->string))
-  ;; Should have explicit provides, not just all-from-out
-  (check-true (regexp-match? #rx"provide" content)))
+  (check-not-false (regexp-match? #rx"all-from-out.*sdk-core" content))
+  (check-not-false (regexp-match? #rx"all-from-out.*sdk-compat" content)))
 
-(test-case "interfaces/sdk-public.rkt provides explicit symbols"
+(test-case "interfaces/sdk-public.rkt has explicit provides"
   (define content (call-with-input-file "interfaces/sdk-public.rkt" port->string))
-  (check-true (regexp-match? #rx"provide" content)))
+  (check-not-false (regexp-match? #rx"provide" content)))
+
+;; ============================================================
+;; 4. Total all-from-out count (baseline)
+;; ============================================================
+
+(test-case "total all-from-out count is documented"
+  (define source-dirs '("runtime/" "interfaces/" "agent/" "tools/" "extensions/" "util/"))
+  (define total
+    (for/sum ([dir source-dirs])
+      (for/sum ([f (in-list (find-files (lambda (p)
+                                           (and (regexp-match? #rx"\\.rkt$" (path->string p))
+                                                (not (regexp-match? #rx"test" (path->string p)))
+                                                (not (regexp-match? #rx"compiled" (path->string p)))))
+                                       dir))])
+        (with-handlers ([exn:fail? (lambda (_) 0)])
+          (define content (call-with-input-file f port->string))
+          (length (regexp-match* #rx"all-from-out" content))))))
+  ;; Baseline: ~30-50 all-from-out (mostly in facades)
+  (check-true (and (>= total 20) (<= total 100))
+              (format "all-from-out total: ~a (expected 20-100 range)" total)))
