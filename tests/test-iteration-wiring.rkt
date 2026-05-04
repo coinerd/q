@@ -18,22 +18,23 @@
 ;; ============================================================
 
 (test-case "decide-next-action is exported from iteration.rkt"
-  (check-not-false (procedure? decide-next-action)
-                   "decide-next-action should be a procedure"))
+  (check-not-false (procedure? decide-next-action) "decide-next-action should be a procedure"))
 
 (test-case "iteration.rkt source contains decide-next-action call in loop body"
   (define content (call-with-input-file (build-path q-root "runtime" "iteration.rkt") port->string))
   ;; The function is defined once and called at least once in the loop
   (define def-count (length (regexp-match* #rx"decide-next-action [(]iteration-ctx" content)))
   (check-true (>= def-count 1)
-              (format "expected >= 1 decide-next-action call with iteration-ctx, found ~a" def-count)))
+              (format "expected >= 1 decide-next-action call with iteration-ctx, found ~a"
+                      def-count)))
 
 (test-case "iteration-ctx struct is used to construct decision context"
   (define content (call-with-input-file (build-path q-root "runtime" "iteration.rkt") port->string))
   (define ctx-usage (length (regexp-match* #rx"[(]iteration-ctx " content)))
   ;; At least 1 usage in the loop body (beyond the struct definition)
   (check-true (>= ctx-usage 1)
-              (format "expected >= 1 iteration-ctx call site (beyond definition), found ~a" ctx-usage)))
+              (format "expected >= 1 iteration-ctx call site (beyond definition), found ~a"
+                      ctx-usage)))
 
 (test-case "cond on termination is replaced by match on action"
   (define content (call-with-input-file (build-path q-root "runtime" "iteration.rkt") port->string))
@@ -41,7 +42,9 @@
   (check-not-false (regexp-match? #rx"[(]match action" content)
                    "loop should use (match action ...) for dispatch"))
 
-(test-case "termination-decision has no production callers"
-  (define loop-content (call-with-input-file (build-path q-root "runtime" "iteration.rkt") port->string))
-  (check-false (regexp-match? #rx"termination-decision" loop-content)
-               "iteration.rkt should not call termination-decision (replaced by decide-next-action)"))
+(test-case "termination-decision removed from codebase"
+  (define tl-content
+    (call-with-input-file (build-path q-root "runtime" "iteration" "transition-logic.rkt")
+                          port->string))
+  (check-false (regexp-match? #rx"termination-decision" tl-content)
+               "termination-decision should be removed (replaced by decide-next-action)"))
