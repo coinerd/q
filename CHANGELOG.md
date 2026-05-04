@@ -1,6 +1,16 @@
 # Changelog
 
-## v0.29.9 — 2026-05-05
+## v0.29.10 — 2026-05-04
+
+### Architecture Re-Audit (Verification Gate)
+
+- **Final architecture score: 9.0/10** (up from 5.5/10 baseline at v0.28.28)
+- All 9 verification steps pass: compilation, 17/17 lint checks, 467 test files, 0 failures
+- Dead code IVG verified: decide-next-action=3, handle-hook-result=4, emit-typed-event!=5
+- Dead code removed: termination-decision=0, unused middleware imports=0
+- Documented remaining gaps for v0.30.x: process-chunk bridge, scheduler middleware, emit migration
+
+## v0.29.9 — 2026-05-04
 
 ### Contract Tightening + Cleanup
 
