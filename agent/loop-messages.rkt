@@ -11,18 +11,21 @@
 (require racket/string
          racket/list
          racket/set
+         racket/match
          "../util/protocol-types.rkt"
          "event-bus.rkt"
          "state.rkt"
          "../util/ids.rkt"
-         (only-in "../util/content-helpers.rkt" result-content->string))
+         (only-in "../util/content-helpers.rkt" result-content->string)
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
 (provide usage-empty?
          parts->text-string
          emit!
          valid-api-message-sequence?
          merge-consecutive-roles
-         build-raw-messages)
+         build-raw-messages
+         handle-hook-result)
 
 ;; ============================================================
 ;; Helpers
@@ -173,3 +176,15 @@
   ;; Safety net: merge consecutive user messages.
   ;; Some providers (GLM) reject consecutive same-role messages.
   (merge-consecutive-roles raw-msgs))
+
+;; ============================================================
+;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)
+;; ============================================================
+
+(define (handle-hook-result result on-block on-continue)
+  (cond
+    [(not (hook-result? result)) (on-continue)]
+    [else
+     (match (hook-result-action result)
+       ['block (on-block (hook-result-payload result))]
+       [_ (on-continue)])]))
