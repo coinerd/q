@@ -93,8 +93,17 @@
          (only-in "../llm/provider.rkt" provider? make-mock-provider)
          (only-in "../runtime/provider-factory.rkt" build-provider)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! publish!)
-         (only-in "../extensions/api.rkt" make-extension-registry register-extension!)
-         (only-in "../tools/tool.rkt" make-tool-registry register-tool! list-tools))
+         (only-in "../extensions/api.rkt"
+                  make-extension-registry
+                  register-extension!
+                  extension-registry?
+                  extension?)
+         (only-in "../tools/tool.rkt"
+                  make-tool-registry
+                  register-tool!
+                  list-tools
+                  tool-registry?
+                  tool?))
 
 ;; ═══════════════════════════════════════════════════════════
 ;; Contracted SDK boundary — ALL callables have contracts
@@ -103,22 +112,22 @@
 (provide (contract-out
           ;; Runtime lifecycle
           [make-runtime
-           (->* (#:provider any/c)
+           (->* (#:provider provider?)
                 (#:session-dir (or/c path-string? path? #f)
-                               #:tool-registry any/c
-                               #:extension-registry any/c
-                               #:event-bus any/c
+                               #:tool-registry (or/c tool-registry? #f)
+                               #:extension-registry (or/c extension-registry? #f)
+                               #:event-bus (or/c event-bus? #f)
                                #:model-name (or/c string? #f)
                                #:max-iterations exact-positive-integer?
                                #:system-instructions (listof string?)
                                #:token-budget-threshold exact-positive-integer?
-                               #:cancellation-token any/c
-                               #:register-default-tools? any/c
-                               #:auto-load-extensions? any/c
+                               #:cancellation-token (or/c cancellation-token? #f)
+                               #:register-default-tools? boolean?
+                               #:auto-load-extensions? boolean?
                                #:project-dir (or/c path-string? path? #f))
                 runtime?)]
           [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
-          [run-prompt! (-> runtime? string? (values runtime? any/c))]
+          [run-prompt! (-> runtime? string? (values runtime? (or/c hash? #f)))]
           [interrupt! (-> runtime? runtime?)]
           [fork-session! (->* (runtime?) ((or/c string? #f)) (or/c runtime? 'no-active-session))]
           [compact-session! (->* (runtime?) (#:persist? boolean?) any)]
@@ -129,42 +138,46 @@
            (-> runtime?
                (or/c string? exact-integer?)
                (or/c navigate-result? 'no-active-session 'invalid-target))]
-          [dispatch-command! (-> runtime? string? string? (values runtime? any/c))]
+          [dispatch-command! (-> runtime? string? string? (values runtime? (or/c hash? #f)))]
           [subscribe-events!
            (->* (runtime? procedure?) ((or/c procedure? #f)) exact-nonnegative-integer?)]
           [create-agent-session
-           (->* (#:provider any/c)
+           (->* (#:provider provider?)
                 (#:session-dir (or/c path-string? path? #f)
                                #:model-name (or/c string? #f)
                                #:max-iterations exact-positive-integer?
                                #:system-instructions (listof string?))
                 runtime?)]
           ;; GSD convenience API
-          [q:plan (-> runtime? string? (values runtime? any/c))]
-          [q:go (->* (runtime?) ((or/c exact-nonnegative-integer? #f)) (values runtime? any/c))]
+          [q:plan (-> runtime? string? (values runtime? (or/c hash? #f)))]
+          [q:go
+           (->* (runtime?) ((or/c exact-nonnegative-integer? #f)) (values runtime? (or/c hash? #f)))]
           [q:gsd-status (-> (or/c 'no-active-session hash?))]
           [q:reset-gsd! (-> void?)]
           ;; Provider construction
-          [build-provider (-> any/c any/c any)]
-          [make-mock-provider (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) any/c)]
+          [build-provider (-> (or/c hash? #f) (or/c string? #f) (or/c provider? #f))]
+          [make-mock-provider
+           (->* ((or/c list? #f)) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]
           ;; Event bus
-          [make-event-bus (-> any/c)]
-          [subscribe! (->* (any/c procedure?) (#:filter (or/c procedure? #f)) any/c)]
-          [publish! (-> any/c any/c any/c)]
+          [make-event-bus (-> event-bus?)]
+          [subscribe!
+           (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
+          [publish! (-> event-bus? any/c any/c)]
           ;; Extension registration
-          [make-extension-registry (-> any/c)]
-          [register-extension! (-> any/c any/c any/c)]
+          [make-extension-registry (-> extension-registry?)]
+          [register-extension! (-> extension-registry? extension? extension-registry?)]
           ;; Tool registry
-          [make-tool-registry (-> any/c)]
-          [register-tool! (-> any/c any/c any/c)]
-          [list-tools (-> any/c (listof any/c))]
+          [make-tool-registry (-> tool-registry?)]
+          [register-tool! (-> tool-registry? tool? void?)]
+          [list-tools (-> tool-registry? (listof tool?))]
           ;; Cancellation tokens
-          [make-cancellation-token (-> any/c)]
-          [cancel-token! (-> any/c any)]
+          [make-cancellation-token (-> cancellation-token?)]
+          [cancel-token! (-> cancellation-token? void)]
           ;; In-memory session helpers (v0.22.6: moved into contract-out)
-          [in-memory-append! (-> in-memory-session-manager? string? any/c void?)]
-          [in-memory-append-entries! (-> in-memory-session-manager? string? (listof any/c) void?)]
-          [in-memory-load (-> in-memory-session-manager? string? (listof any/c))]
+          [in-memory-append! (-> in-memory-session-manager? string? (or/c string? hash?) void?)]
+          [in-memory-append-entries!
+           (-> in-memory-session-manager? string? (listof (or/c hash? string?)) void?)]
+          [in-memory-load (-> in-memory-session-manager? string? (listof (or/c hash? string?)))]
           [in-memory-list-sessions (-> in-memory-session-manager? (listof string?))]
           [in-memory-fork!
            (->* (in-memory-session-manager? string? string?) ((or/c #f string?)) string?)]
@@ -173,18 +186,18 @@
            (-> exact-nonnegative-integer? exact-nonnegative-integer? context-usage?)]
           ;; Thinking levels (v0.22.5: moved into contract-out)
           [session:set-thinking-level!
-           (-> any/c (or/c 'off 'minimal 'low 'medium 'high 'xhigh) void?)]
+           (-> (or/c runtime? #f) (or/c 'off 'minimal 'low 'medium 'high 'xhigh) void?)]
           ;; GSD status (v0.22.5: moved into contract-out)
           [gsd-status (-> (or/c 'no-active-session hash?))]
           ;; Enriched SDK aliases (v0.22.5: moved into contract-out)
           [q:create-session
-           (->* (#:provider any/c)
+           (->* (#:provider provider?)
                 (#:session-dir (or/c path-string? path? #f)
                                #:model-name (or/c string? #f)
                                #:max-iterations exact-positive-integer?
                                #:system-instructions (listof string?))
                 runtime?)]
-          [q:session-send (-> runtime? string? (values runtime? any/c))]
+          [q:session-send (-> runtime? string? (values runtime? (or/c hash? #f)))]
           [q:session-subscribe
            (->* (runtime? procedure?) ((or/c procedure? #f)) exact-nonnegative-integer?)]
           [q:session-interrupt (-> runtime? runtime?)]
