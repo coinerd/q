@@ -29,6 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Cache Racket packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-lint-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-lint-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
@@ -72,6 +78,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: Cache Racket packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/racket
+            ~/Library/Racket
+          key: racket-pkgs-${{ matrix.os }}-${{ matrix.racket-version }}-${{ hashFiles('**/info.rkt') }}
+          restore-keys: |
+            racket-pkgs-${{ matrix.os }}-${{ matrix.racket-version }}-
+            racket-pkgs-${{ matrix.os }}-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || matrix.racket-version }}
@@ -103,6 +119,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Cache Racket packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-release-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-release-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
@@ -140,6 +162,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: Cache Racket packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/racket
+            ~/Library/Racket
+          key: racket-pkgs-smoke-${{ matrix.os }}-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-smoke-${{ matrix.os }}-
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}

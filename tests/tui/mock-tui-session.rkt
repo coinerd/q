@@ -31,9 +31,13 @@
   (mock-session (initial-ui-state #:session-id session-id #:model-name model-name) '()))
 
 ;; Apply a single event (by string name and payload hash) to the mock session.
-;; Returns a new mock-session with updated state and event appended to log.
-(define (mock-apply-event ms ev-str payload)
-  (define evt (make-event ev-str 0 (ui-state-session-id (mock-session-state ms)) #f payload))
+;; Time is computed from the current event count to ensure deterministic
+;; ordering and to avoid the 500ms minimum-busy-duration rule in tests.
+(define (mock-apply-event ms ev-str payload [time-override #f])
+  (define idx (length (mock-session-events ms)))
+  ;; Space events 600ms apart so turn.completed always clears busy?
+  (define t (or time-override (* idx 600)))
+  (define evt (make-event ev-str t (ui-state-session-id (mock-session-state ms)) #f payload))
   (define new-state (apply-event-to-state (mock-session-state ms) evt))
   (mock-session new-state (append (mock-session-events ms) (list ev-str))))
 
