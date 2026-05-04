@@ -35,6 +35,7 @@
         (list "metrics-lint" "scripts/metrics.rkt" '("--lint") #f)
         (list "prose" "scripts/metrics.rkt" '("--lint-prose") #f)
         (list "readme-status" "scripts/sync-readme-status.rkt" '("--check") #f)
+        (list "changelog-dates" "scripts/lint-changelog-dates.rkt" '() #f)
         (list "audit" "scripts/audit-project.rkt" '("--ci") #t)
         (list "tests" "scripts/lint-tests.rkt" '() #f)
         (list "deprecation" "scripts/lint-deprecation-deadlines.rkt" '("--ci") #f)

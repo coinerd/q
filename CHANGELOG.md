@@ -85,7 +85,7 @@ from mangling historical version references in documentation.
   `exn-fail-migration-analysis.md`, `event-taxonomy.md`, `sdk-guide.md`.
 - 9 test cases in `test-sync-version-historical.rkt` (7 positive + 2 negative).
 
-## v0.28.24 — 2026-05-05
+## v0.28.24 — 2026-05-04
 
 ### Audit Remediation (1 Critical, 4 Warnings from v0.28.23)
 
@@ -104,7 +104,7 @@ helper, eliminating 12-line duplication.
 
 **Tests:** 9 mid-turn integration tests (1 new for shared helper).
 
-## v0.28.23 — 2026-05-05
+## v0.28.23 — 2026-05-04
 
 ### Audit Remediation (7 Warnings from v0.28.22)
 
@@ -304,7 +304,7 @@ to prevent stale text on protocol anomaly.
 - **W2**: Expand status-line tests to 14 cases. Update layout tests
   for no-header geometry. Version bump.
 
-## v0.28.13 — 2026-05-05
+## v0.28.13 — 2026-05-03
 
 ### Audit Remediation
 
@@ -313,7 +313,7 @@ to prevent stale text on protocol anomaly.
 - **W1**: Correct CHANGELOG/README v0.28.12 inaccurate test count claims.
   Fix 429 test expectation to match actual error message. Version bump.
 
-## v0.28.12 — 2026-05-05
+## v0.28.12 — 2026-05-03
 
 ### Audit Remediation + Pre-existing Test Fixes
 
@@ -327,7 +327,7 @@ to prevent stale text on protocol anomaly.
 - **W2**: Add `util/version.rkt` to ADR 0014 migrated modules. Fix
   `test-types.rkt` `#:version` keyword → positional arg. Version bump.
 
-## v0.28.11 — 2026-05-05
+## v0.28.11 — 2026-05-03
 
 ### Audit Remediation
 
