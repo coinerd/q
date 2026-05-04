@@ -348,3 +348,53 @@
   (define tp (make-text-part "test content"))
   (check-true (text-part? tp))
   (check-equal? (text-part-text tp) "test content"))
+
+;; ============================================================
+;; v0.28.23 W1: GSD role guard tests (user messages NOT pinned)
+;; ============================================================
+
+(test-case "T9: user message with wave-done text NOT pinned to Tier A"
+  ;; Build 100 messages so Tier A is selective (only recent messages)
+  (define base-msgs
+    (for/list ([i (in-range 100)])
+      (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
+  ;; Add user message with GSD-like text at position 50 (middle)
+  (define user-gsd
+    (make-message "ug" #f 'user 'message
+                  (list (make-text-part "I want to run wave-done 0"))
+                  (current-seconds) (hasheq)))
+  (define msgs-with-user (append (take base-msgs 50) (list user-gsd) (drop base-msgs 50)))
+  (define tiered (build-tiered-context msgs-with-user #:tier-c-count 4))
+  (define tier-a (tiered-context-tier-a tiered))
+  ;; User message at position 50 should NOT appear in Tier A
+  ;; (too old for recency, NOT GSD-pinned because role=user)
+  (define user-in-a?
+    (for/or ([m (in-list tier-a)])
+      (and (eq? (message-role m) 'user)
+           (string-contains?
+            (string-join (map (lambda (p) (if (text-part? p) (text-part-text p) ""))
+                              (message-content m)))
+            "wave-done"))))
+  (check-false user-in-a? "user message with wave-done NOT pinned to Tier A"))
+
+(test-case "T10: tool message with Wave N marked complete IS pinned to Tier A"
+  ;; Same setup but with tool message containing GSD text
+  (define base-msgs
+    (for/list ([i (in-range 100)])
+      (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
+  (define tool-gsd
+    (make-message "tg" #f 'tool 'message
+                  (list (make-text-part "Wave 3 marked complete. PLAN.md updated."))
+                  (current-seconds) (hasheq)))
+  (define msgs-with-tool (append (take base-msgs 50) (list tool-gsd) (drop base-msgs 50)))
+  (define tiered (build-tiered-context msgs-with-tool #:tier-c-count 4))
+  (define tier-a (tiered-context-tier-a tiered))
+  ;; Tool message at position 50 SHOULD appear in Tier A (GSD-pinned)
+  (define tool-in-a?
+    (for/or ([m (in-list tier-a)])
+      (and (eq? (message-role m) 'tool)
+           (string-contains?
+            (string-join (map (lambda (p) (if (text-part? p) (text-part-text p) ""))
+                              (message-content m)))
+            "Wave 3 marked complete"))))
+  (check-true tool-in-a? "tool message with GSD text IS pinned to Tier A"))
