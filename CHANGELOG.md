@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.29.5 — 2026-05-04
+
+### Stream Purity + DI Cleanup
+
+- **Pure stream accumulator** (`agent/loop-stream.rkt`):
+  - Extracted `process-chunk`: pure function (chunk × accumulator → accumulator)
+  - `stream-accumulator` struct: text-parts, tool-calls, thinking-parts, usage, chunk-count, finish-reason, done?
+  - No I/O, no mutation — deterministic state transitions
+- **DI parameter removal** (`runtime/iteration/loop-state.rkt`):
+  - Removed `make-parameter` and `lazy-require` indirection
+  - Resolve functions now directly import concrete implementations
+  - `current-compact-proc`, `current-estimate-tokens`, `current-inject-topic` parameters removed
+- **Deferred context assembly** (`runtime/turn-orchestrator.rkt`):
+  - Working-set message resolution deferred via `delay`/`force`
+  - Token estimation deferred via `delay`/`force`
+
+### Tests (35 new)
+
+- `test-stream-step.rkt`: 18 tests for pure process-chunk
+- `test-di-explicit.rkt`: 10 tests for DI parameter removal
+- `test-lazy-context-assembly.rkt`: 7 tests for deferred assembly
+
 ## v0.29.4 — 2026-05-04
 
 ### Runtime State Encapsulation
