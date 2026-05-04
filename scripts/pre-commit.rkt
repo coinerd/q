@@ -139,6 +139,24 @@
         (printf "WARNING: ~a not found, skipping metrics lint~n" script)
         #t)))
 
+;; --- Run README Status sync check ---
+
+(define (run-status-sync-check)
+  (printf "~n--- README Status Sync Check ---~n")
+  (define script (build-path "scripts" "sync-readme-status.rkt"))
+  (if (file-exists? script)
+      (let ([exit-code (system/exit-code (format "racket ~a --check" script))])
+        (if (= exit-code 0)
+            (begin
+              (printf "README Status sync: PASS~n")
+              #t)
+            (begin
+              (printf "README Status sync: FAIL~n")
+              #f)))
+      (begin
+        (printf "WARNING: ~a not found, skipping~n" script)
+        #t)))
+
 ;; --- Run CI local lint suite ---
 
 (define (run-ci-local)
@@ -222,6 +240,10 @@
 
   ;; 3. Metrics lint (default mode)
   (unless (run-metrics-lint)
+    (set! all-pass #f))
+
+  ;; 3b. README Status sync check (default mode)
+  (unless (run-status-sync-check)
     (set! all-pass #f))
 
   ;; 4. CI local lint (if --ci or --full)
