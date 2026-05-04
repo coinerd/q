@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.28.24 — 2026-05-05
+
+### Audit Remediation (1 Critical, 4 Warnings from v0.28.23)
+
+Fixes README Status section (4× recurring critical finding) with correct
+v0.28.21–v0.28.23 descriptions. Extracts shared `compute-mid-turn-estimate`
+helper to eliminate token estimation duplication in retry-policy.rkt.
+
+**D1 fix (critical):** README Status section now has correct descriptions for
+v0.28.21, v0.28.22, and v0.28.23. Previous description was from v0.28.12,
+copied forward unchanged for 4 consecutive milestones.
+
+**A1 fix:** Token estimation logic extracted into `compute-mid-turn-estimate`
+helper returning `(values estimated budget-threshold max-tokens)`. Both
+`estimate-mid-turn-tokens` and `maybe-compact-mid-turn` call the shared
+helper, eliminating 12-line duplication.
+
+**Tests:** 9 mid-turn integration tests (1 new for shared helper).
+
 ## v0.28.23 — 2026-05-05
 
 ### Audit Remediation (7 Warnings from v0.28.22)
