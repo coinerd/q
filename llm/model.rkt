@@ -61,10 +61,10 @@
 (struct model-response
         ([content : (Listof Any)] [usage : (HashTable Symbol Any)]
                                   [model : String]
-                                  [stop-reason : Symbol])
+                                  [stop-reason : (U Symbol #f)])
   #:transparent)
 
-(: make-model-response ((Listof Any) (HashTable Symbol Any) String Symbol -> model-response))
+(: make-model-response ((Listof Any) (HashTable Symbol Any) String (U Symbol #f) -> model-response))
 (define (make-model-response content usage model stop-reason)
   (model-response content usage model stop-reason))
 
@@ -77,14 +77,20 @@
           'model
           (model-response-model resp)
           'stopReason
-          (symbol->string (model-response-stop-reason resp))))
+          (let ([sr (model-response-stop-reason resp)])
+            (if sr
+                (symbol->string sr)
+                ""))))
 
 (: jsexpr->model-response ((HashTable Symbol Any) -> model-response))
 (define (jsexpr->model-response h)
   (make-model-response (cast (hash-ref h 'content) (Listof Any))
                        (cast (hash-ref h 'usage) (HashTable Symbol Any))
                        (cast (hash-ref h 'model) String)
-                       (string->symbol (cast (hash-ref h 'stopReason) String))))
+                       (let ([sr (hash-ref h 'stopReason #f)])
+                         (if sr
+                             (string->symbol (cast sr String))
+                             #f))))
 
 ;; ============================================================
 ;; stream-chunk
