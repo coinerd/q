@@ -285,3 +285,34 @@
               "long tool result truncated")
   (check-true (string-contains? result-text "lines truncated")
               "truncation indicator present"))
+
+;; ============================================================
+;; v0.28.21 W7: GSD progress pinning
+;; ============================================================
+
+(define (make-gsd-msg id text)
+  (make-message id #f 'assistant 'message
+                (list (make-text-part text))
+                (current-seconds)
+                (hasheq 'gsd-pin #t)))
+
+(test-case "GSD progress messages pinned in Tier A"
+  (define msgs
+    (append (for/list ([i (in-range 30)])
+              (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i)))
+            (list (make-gsd-msg "gsd1" "Wave 1 complete"))
+            (for/list ([i (in-range 30 60)])
+              (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i)))))
+  (define tiered (build-tiered-context msgs #:tier-c-count 4))
+  (define tier-a (tiered-context-tier-a tiered))
+  (define gsd-in-a (filter (lambda (m) (hash-ref (message-meta m) 'gsd-pin #f)) tier-a))
+  (check-equal? (length gsd-in-a) 1 "GSD progress message in Tier A"))
+
+(test-case "Non-GSD messages not pinned in Tier A"
+  (define msgs
+    (for/list ([i (in-range 30)])
+      (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
+  (define tiered (build-tiered-context msgs #:tier-c-count 4))
+  (define tier-a (tiered-context-tier-a tiered))
+  (define any-pinned (filter (lambda (m) (hash-ref (message-meta m) 'gsd-pin #f)) tier-a))
+  (check-equal? (length any-pinned) 0 "no GSD-pinned messages in Tier A"))

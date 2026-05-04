@@ -14,6 +14,7 @@
                   message-kind
                   message-role
                   message-content
+                  message-meta
                   make-message
                   make-text-part)
          (only-in "../../util/content-parts.rkt" text-part text-part? text-part-text)
@@ -83,18 +84,21 @@
                               #:working-set-messages [ws-messages '()])
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
-  (define-values (sys-protected regular)
-    (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular-msgs))
+  ;; v0.28.21 W7: GSD progress pinning — messages with meta gsd-pin stay in Tier A
+  (define-values (gsd-pinned regular)
+    (partition (lambda (m) (hash-ref (message-meta m) 'gsd-pin #f)) regular-msgs))
+  (define-values (sys-protected unpinned-raw)
+    (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
   (define first-user-idx
-    (for/first ([m (in-list regular)]
+    (for/first ([m (in-list unpinned-raw)]
                 [i (in-naturals)]
                 #:when (eq? (message-role m) 'user))
       i))
   (define-values (pinned-user unpinned)
     (if first-user-idx
-        (values (list (list-ref regular first-user-idx))
-                (append (take regular first-user-idx) (drop regular (add1 first-user-idx))))
-        (values '() regular)))
+        (values (list (list-ref unpinned-raw first-user-idx))
+                (append (take unpinned-raw first-user-idx) (drop unpinned-raw (add1 first-user-idx))))
+        (values '() unpinned-raw)))
   (define total (length unpinned))
   ;; v0.28.21 W4: Use dynamic Tier-B sizing when not explicitly specified
   (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
@@ -113,7 +117,9 @@
     (if (> tier-b-size 0)
         (take-right remaining-after-c tier-b-size)
         '()))
-  (tiered-context (append sys-protected pinned-user compaction-summaries ws-messages) tier-b tier-c))
+  (tiered-context (append sys-protected pinned-user gsd-pinned compaction-summaries ws-messages)
+                  tier-b
+                  tier-c))
 
 (define (build-tiered-context-with-hooks messages
                                          #:hook-dispatcher [hook-dispatcher #f]
