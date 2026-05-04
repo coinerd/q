@@ -11,6 +11,7 @@
 ;;   --install-full   Create .git/hooks/pre-commit (full lint + full tests)
 ;;   --all            Run the full test suite instead of just affected tests
 ;;   --full           Run ALL lint checks (including slow ones) + full tests
+;;   --no-tests       Skip test phase (lint only — used by test-pre-commit.rkt)
 ;;
 ;; Default (no flags): fast lint checks + affected tests.
 ;; Exit 0 if all checks pass, 1 otherwise.
@@ -29,6 +30,7 @@
 (define install-full-mode? #f)
 (define all-mode? #f)
 (define full-mode? #f)
+(define no-tests? #f)
 
 (define (parse-flags!)
   (for ([arg (in-vector (current-command-line-arguments))])
@@ -37,6 +39,7 @@
       [(string=? arg "--install-full") (set! install-full-mode? #t)]
       [(string=? arg "--all") (set! all-mode? #t)]
       [(string=? arg "--full") (set! full-mode? #t)]
+      [(string=? arg "--no-tests") (set! no-tests? #t)]
       [else (printf "Unknown flag: ~a~n" arg)])))
 
 ;; --- Install hook ---
@@ -69,14 +72,18 @@
 
 ;; --- Map source file to test file ---
 
+;; Tests that should NOT be auto-discovered (they run the full lint pipeline
+;; internally and would cause deep recursion / excessive slowness).
+(define excluded-test-names '("test-pre-commit.rkt"))
+
 (define (source->test-files src-path)
   (define fname (file-name-from-path src-path))
   (if fname
       (let* ([name (bytes->string/utf-8 (path->bytes fname))]
-             [test-name (string-append "test-" name)]
-             [test-path (build-path "tests" test-name)])
-        (if (file-exists? test-path)
-            (list (path->string test-path))
+             [test-name (string-append "test-" name)])
+        (if (and (not (member test-name excluded-test-names))
+                 (file-exists? (build-path "tests" test-name)))
+            (list (path->string (build-path "tests" test-name)))
             '()))
       '()))
 
@@ -167,6 +174,7 @@
     (cond
       [full-mode? "--full (all lints + tests)"]
       [all-mode? "--all (fast lints + full tests)"]
+      [no-tests? "--no-tests (lint only)"]
       [else "quick (fast lints + affected tests)"]))
 
   (printf "=== q Pre-commit Check [~a] ===~n" mode-label)
@@ -177,27 +185,28 @@
   (unless (run-lint-checks #:full? full-mode?)
     (set! all-pass #f))
 
-  ;; 2. Tests
-  (cond
-    [all-mode?
-     (unless (run-full-suite)
-       (set! all-pass #f))]
-    [else
-     (define staged (get-staged-rkt-files))
-     (printf "~n--- Staged .rkt files: ~a ---~n"
-             (if (null? staged)
-                 "(none)"
-                 (string-join staged ", ")))
+  ;; 2. Tests (skipped when --no-tests to avoid infinite recursion)
+  (unless no-tests?
+    (cond
+      [all-mode?
+       (unless (run-full-suite)
+         (set! all-pass #f))]
+      [else
+       (define staged (get-staged-rkt-files))
+       (printf "~n--- Staged .rkt files: ~a ---~n"
+               (if (null? staged)
+                   "(none)"
+                   (string-join staged ", ")))
 
-     (define test-files (remove-duplicates (append-map source->test-files staged)))
+       (define test-files (remove-duplicates (append-map source->test-files staged)))
 
-     (if (null? test-files)
-         (printf "No affected test files found.~n")
-         (begin
-           (printf "~n--- Affected Tests ---~n")
-           (for ([tf (in-list (sort test-files string<?))])
-             (unless (run-test tf)
-               (set! all-pass #f)))))])
+       (if (null? test-files)
+           (printf "No affected test files found.~n")
+           (begin
+             (printf "~n--- Affected Tests ---~n")
+             (for ([tf (in-list (sort test-files string<?))])
+               (unless (run-test tf)
+                 (set! all-pass #f)))))]))
 
   ;; 3. Summary
   (printf "~n=== Summary ===~n")
