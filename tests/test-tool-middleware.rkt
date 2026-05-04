@@ -2,59 +2,185 @@
 
 ;; tests/test-tool-middleware.rkt — Tests for tool middleware HOF
 ;;
-;; v0.29.6 W0: Test scaffolding for composable middleware pipeline.
+;; v0.29.6 W1: Tests for composable middleware pipeline.
 
-(require rackunit)
+(require rackunit
+         (only-in racket/string string-contains?)
+         (only-in "../util/tool-types.rkt" tool-call make-tool-call tool-call-name tool-call-arguments tool-call-id)
+         (only-in "../tools/middleware.rkt"
+                  compose-middleware
+                  make-hook-middleware
+                  make-safe-mode-middleware
+                  make-validation-middleware
+                  make-permission-middleware
+                  make-mutation-queue-middleware
+                  make-default-pipeline))
+
+;; Helper: create a fake tool-call
+(define (make-test-tc name [args (hasheq)])
+  (make-tool-call "tc-1" name args))
+
+;; Helper: base executor that returns success
+(define (success-executor tc ctx)
+  (hasheq 'status 'ok 'result (format "executed ~a" (tool-call-name tc))))
 
 ;; ============================================================
-;; 1. Middleware type
-;; ============================================================
-
-(test-case "make-tool-middleware returns a procedure"
-  (check-true #t "placeholder"))
-
-(test-case "middleware accepts tool, exec-ctx, and next"
-  (check-true #t "placeholder"))
-
-;; ============================================================
-;; 2. compose-middleware
+;; 1. compose-middleware basics
 ;; ============================================================
 
 (test-case "compose-middleware returns a procedure"
-  (check-true #t "placeholder"))
-
-(test-case "compose-middleware executes in order"
-  (check-true #t "placeholder"))
+  (define pipeline (compose-middleware))
+  (check-pred procedure? pipeline))
 
 (test-case "compose-middleware with zero middleware calls base executor"
-  (check-true #t "placeholder"))
+  (define pipeline (compose-middleware))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok))
+
+(test-case "compose-middleware with single middleware executes in order"
+  (define log (box '()))
+  (define (logging-mw tc ctx next)
+    (set-box! log (cons 'pre (unbox log)))
+    (define result (next tc ctx))
+    (set-box! log (cons 'post (unbox log)))
+    result)
+  (define pipeline (compose-middleware logging-mw))
+  (pipeline (make-test-tc "read") #f success-executor)
+  (check-equal? (reverse (unbox log)) '(pre post)))
+
+(test-case "compose-middleware with multiple middleware wraps correctly"
+  (define log (box '()))
+  (define (mw-outer tc ctx next)
+    (set-box! log (cons 'outer-pre (unbox log)))
+    (define result (next tc ctx))
+    (set-box! log (cons 'outer-post (unbox log)))
+    result)
+  (define (mw-inner tc ctx next)
+    (set-box! log (cons 'inner-pre (unbox log)))
+    (define result (next tc ctx))
+    (set-box! log (cons 'inner-post (unbox log)))
+    result)
+  (define pipeline (compose-middleware mw-outer mw-inner))
+  (pipeline (make-test-tc "read") #f success-executor)
+  (check-equal? (reverse (unbox log))
+                '(outer-pre inner-pre inner-post outer-post)))
 
 ;; ============================================================
-;; 3. Short-circuit on block
+;; 2. Short-circuit on block
 ;; ============================================================
 
 (test-case "middleware block short-circuits chain"
-  (check-true #t "placeholder"))
+  (define log (box '()))
+  (define (blocking-mw tc ctx next)
+    (hasheq 'status 'blocked 'error-message "blocked"))
+  (define (counting-mw tc ctx next)
+    (set-box! log (cons 'reached (unbox log)))
+    (next tc ctx))
+  (define pipeline (compose-middleware blocking-mw counting-mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'blocked)
+  (check-equal? (unbox log) '() "counting-mw should not be reached"))
 
 ;; ============================================================
-;; 4. Error propagation
+;; 3. Error propagation
 ;; ============================================================
 
 (test-case "middleware propagates errors through chain"
-  (check-true #t "placeholder"))
+  (define (error-mw tc ctx next)
+    (hasheq 'status 'error 'error-message "something went wrong"))
+  (define pipeline (compose-middleware error-mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'error))
 
 ;; ============================================================
-;; 5. Built-in middleware
+;; 4. Hook middleware
 ;; ============================================================
 
-(test-case "with-hook-dispatch middleware exists"
-  (check-true #t "placeholder"))
+(test-case "hook middleware passes through when no hook"
+  (define mw (make-hook-middleware #f 'preflight))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok))
 
-(test-case "with-safe-mode middleware exists"
-  (check-true #t "placeholder"))
+(test-case "hook middleware blocks on block action"
+  (define hook (lambda (phase tc) (hasheq 'action 'block)))
+  (define mw (make-hook-middleware hook 'preflight))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'blocked))
 
-(test-case "with-tool-validation middleware exists"
-  (check-true #t "placeholder"))
+(test-case "hook middleware amends tool-call"
+  (define amended-tc (make-test-tc "write" (hasheq 'path "/tmp/test")))
+  (define hook (lambda (phase tc) (hasheq 'action 'amend 'payload amended-tc)))
+  (define mw (make-hook-middleware hook 'preflight))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok)
+  (check-not-false (string-contains? (hash-ref result 'result) "write")))
 
-(test-case "default-pipeline is composed"
-  (check-true #t "placeholder"))
+;; ============================================================
+;; 5. Safe-mode middleware
+;; ============================================================
+
+(test-case "safe-mode middleware blocks restricted tool"
+  (define mw (make-safe-mode-middleware (lambda () #t) (lambda (n) (equal? n "read"))))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "bash") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'blocked))
+
+(test-case "safe-mode middleware allows permitted tool"
+  (define mw (make-safe-mode-middleware (lambda () #t) (lambda (n) (equal? n "read"))))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok))
+
+(test-case "safe-mode middleware passes through when not in safe-mode"
+  (define mw (make-safe-mode-middleware (lambda () #f) (lambda (_) #f)))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "bash") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok))
+
+;; ============================================================
+;; 6. Validation middleware
+;; ============================================================
+
+(test-case "validation middleware passes valid args"
+  (define mw (make-validation-middleware
+              (lambda (t args) (void))
+              (lambda (_) 'some-tool)))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok))
+
+(test-case "validation middleware blocks invalid args"
+  (define mw (make-validation-middleware
+              (lambda (t args) (raise (exn:fail "invalid" (current-continuation-marks))))
+              (lambda (_) 'some-tool)))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'error))
+
+(test-case "validation middleware blocks unknown tool"
+  (define mw (make-validation-middleware
+              (lambda (t args) (void))
+              (lambda (_) #f)))
+  (define pipeline (compose-middleware mw))
+  (define result (pipeline (make-test-tc "unknown") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'error))
+
+;; ============================================================
+;; 7. Default pipeline
+;; ============================================================
+
+(test-case "default-pipeline executes successfully"
+  (define pipeline (make-default-pipeline
+                    #:lookup-fn (lambda (_) 'some-tool)))
+  (define result (pipeline (make-test-tc "read") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'ok))
+
+(test-case "default-pipeline with safe-mode blocks restricted"
+  (define pipeline (make-default-pipeline
+                    #:safe-mode? (lambda () #t)
+                    #:allowed-tool? (lambda (n) (equal? n "read"))))
+  (define result (pipeline (make-test-tc "bash") #f success-executor))
+  (check-equal? (hash-ref result 'status) 'blocked))
