@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.28.25 — 2026-05-02
+
+### Audit Remediation — Docs Integrity + Tooling Hardening
+
+Fixes the 5th occurrence of D1 (README Status divergence) with a CHANGELOG-based
+generation approach. Adds 7-pattern historical guard to prevent sync-version.rkt
+from mangling historical version references in documentation.
+
+**W0 — sync-readme-status from CHANGELOG + pre-commit hook:**
+- `sync-readme-status.rkt --sync` now generates Status entry description from
+  CHANGELOG top entry instead of using a generic placeholder.
+- `sync-readme-status.rkt --check` now validates description matches CHANGELOG
+  (not just version number).
+- `run-status-sync-check` added to `pre-commit.rkt` as step 3b.
+- 3 new CHANGELOG-based tests in `test-sync-readme-status.rkt`.
+
+**W1 — sync-version.rkt historical guard + lint-version.rkt + doc reverts:**
+- Replace single-pattern `historical-line?` with 7-pattern context-aware guard
+  in both `sync-version.rkt` and `lint-version.rkt`: Status bold entries, "in vX.Y.Z",
+  wave labels, "As of vX.Y.Z", parenthetical EOL, temporal references (case-insensitive),
+  section headers.
+- Revert 4 mangled historical refs in docs: `security-trust-model.md`,
+  `exn-fail-migration-analysis.md`, `event-taxonomy.md`, `sdk-guide.md`.
+- 9 test cases in `test-sync-version-historical.rkt` (7 positive + 2 negative).
+
 ## v0.28.24 — 2026-05-05
 
 ### Audit Remediation (1 Critical, 4 Warnings from v0.28.23)

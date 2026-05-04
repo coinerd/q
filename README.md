@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.28.24-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.28.25-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.28.24
+racket main.rkt --version  # q version 0.28.25
 raco test tests/           # run the full test suite
 ```
 
@@ -334,6 +334,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 <!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->
 ## Status
+
+
+**v0.28.25** — Fixes the 5th occurrence of D1 (README Status divergence) with a CHANGELOG-based generation approach. Adds 7-pattern historical guard to prevent sync-version.rkt from mangling historical version references in documentation. **W0 — sync-readme-status from CHANGELOG + pre-commit hook:** - `sync-readme-status.rkt --sync` now generates Status entry description from CHANGELOG top entry instead of using a generic placeholder. - `sync-readme-status.rkt --check` now validates description matches CHANGELOG (not just version number). - `run-status-sync-check` added to `pre-commit.rkt` as step 3b. - 3 new CHANGELOG-based tests in `test-sync-readme-status.rkt`. **W1 — sync-version.rkt historical guard + lint-version.rkt + doc reverts:** - Replace single-pattern `historical-line?` with 7-pattern context-aware guard in both `sync-version.rkt` and `lint-version.rkt`: Status bold entries, "in vX.Y.Z", wave labels, "As of vX.Y.Z", parenthetical EOL, temporal references (case-insensitive), section headers. - Revert 4 mangled historical refs in docs: `security-trust-model.md`, `exn-fail-migration-analysis.md`, `event-taxonomy.md`, `sdk-guide.md`. - 9 test cases in `test-sync-version-historical.rkt` (7 positive + 2 negative).
 
 **v0.28.24** — Fixes README Status section (4× recurring critical finding) with correct v0.28.24–v0.28.24 descriptions. Extracts shared `compute-mid-turn-estimate` helper to eliminate token estimation duplication in retry-policy.rkt. **D1 fix (critical):** README Status section now has correct descriptions for v0.28.24, v0.28.24, and v0.28.24. Previous description was from v0.28.24, copied forward unchanged for 4 consecutive milestones. **A1 fix:** Token estimation logic extracted into `compute-mid-turn-estimate` helper returning `(values estimated budget-threshold max-tokens)`. Both `estimate-mid-turn-tokens` and `maybe-compact-mid-turn` call the shared helper, eliminating 12-line duplication. **Tests:** 9 mid-turn integration tests (1 new for shared helper).
 
