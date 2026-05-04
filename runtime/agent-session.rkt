@@ -43,10 +43,7 @@
          "../util/ids.rkt"
          (only-in "iteration.rkt"
                   emit-session-event!
-                  maybe-dispatch-hooks
-                  current-compact-proc
-                  current-estimate-tokens
-                  current-inject-topic)
+                  maybe-dispatch-hooks)
          "session-types.rkt"
          (only-in "session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
@@ -185,11 +182,6 @@
                                      (map extension-name (list-extensions ext-reg))
                                      '()))))
 
-  ;; DI-01 (v0.22.7): Set DI parameters
-  (current-compact-proc compact-history)
-  (current-estimate-tokens estimate-context-tokens)
-  (current-inject-topic injection-event-topic)
-
   sess)
 
 ;; ============================================================
@@ -255,11 +247,6 @@
   (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start resume-start-payload)
 
   (wire-session-event-handlers! sess fork-session)
-
-  ;; DI-03 (v0.22.8): Set DI parameters for resumed sessions
-  (current-compact-proc compact-history)
-  (current-estimate-tokens estimate-context-tokens)
-  (current-inject-topic injection-event-topic)
 
   sess)
 

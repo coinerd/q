@@ -132,17 +132,11 @@
       (check-pred values result "run-provider-turn returns with mock tool-list-proc")
       (check-not-false (unbox tool-called-with) "mock tool-list-proc was called"))
 
-    ;; LOW-05 (v0.22.8): Verify DI defaults allow iteration to work
+    ;; LOW-05 (v0.22.8→v0.29.5): Verify DI resolvers work (no parameters)
     (test-case "resolve-* defaults match concrete implementations"
-      ;; The resolve-* functions fall through to lazy-require/concrete imports
-      ;; when DI parameters are #f. Verify injection-event-topic value is correct.
-      (parameterize ([current-compact-proc #f]
-                     [current-estimate-tokens #f]
-                     [current-inject-topic #f])
-        ;; injection-event-topic is a direct import, so resolve-inject-topic
-        ;; should return "message.injected" when current-inject-topic is #f
-        (check-equal? (resolve-inject-topic) "message.injected")
-        (check-true (procedure? (resolve-compact-proc)))
-        (check-true (procedure? (resolve-estimate-tokens)))))))
+      ;; v0.29.5 W2: Parameters removed. Resolve functions use direct imports.
+      (check-equal? (resolve-inject-topic) "message.injected")
+      (check-true (procedure? (resolve-compact-proc)))
+      (check-true (procedure? (resolve-estimate-tokens))))))
 
 (run-tests di-keyword-args-tests)
