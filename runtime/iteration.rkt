@@ -437,63 +437,83 @@
                                                            max-iterations-hard)
                                                    iteration-decision-payload/c))
 
-              (cond
-                ;; ── Completed: append and return ──
-                [(eq? termination 'completed)
-                 (append-entries! log-path new-msgs)
-                 ;; Dispatch 'turn-end hook
-                 (let-values ([(amended-result after-hook-res)
-                               (maybe-dispatch-hooks ext-reg 'turn-end result)])
-                   (let ([effective-result (if (and after-hook-res
-                                                    (eq? (hook-result-action after-hook-res) 'amend))
-                                               amended-result
-                                               result)])
-                     ;; #662: Drain follow-up queue — if follow-ups exist,
-                     ;; inject as user messages and continue the loop.
-                     ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
-                     (define followup-continued?
-                       (and steering-queue
-                            (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
-                                                 (let ([one (dequeue-followup! steering-queue)])
-                                                   (if one
-                                                       (list one)
-                                                       '()))
-                                                 (dequeue-all-followups! steering-queue))])
-                              (if (null? followups)
-                                  #f
-                                  (let ([followup-msgs (for/list ([fu (in-list followups)])
-                                                         (make-message (generate-id)
-                                                                       #f
-                                                                       'user
-                                                                       'text
-                                                                       (list (make-text-part fu))
-                                                                       (now-seconds)
-                                                                       (hasheq 'source "followup")))])
-                                    (emit-session-event! bus
-                                                         session-id
-                                                         "followup.injected"
-                                                         (hasheq 'count
-                                                                 (length followups)
-                                                                 'mode
-                                                                 (symbol->string follow-up-mode)))
-                                    (append-entries! log-path followup-msgs)
-                                    (loop (append ctx-with-injected new-msgs followup-msgs)
-                                          (add1 iteration)
-                                          0
-                                          (set)
-                                          ws
-                                          intent-retry-count
-                                          0
-                                          '()
-                                          explore-count
-                                          implement-count
-                                          0))))))
-                     (define base-result (if followup-continued? effective-result effective-result))
-                     ;; v0.21.3: Intent/stall detection removed.
-                     ;; The prompt is self-correcting by design - no runtime nudging.
-                     base-result))]
+              ;; v0.29.8 W0: Use pure decision function for dispatch
+              (define action
+                (decide-next-action (iteration-ctx iteration
+                                                   consecutive-tool-count
+                                                   explore-count
+                                                   max-iterations
+                                                   max-iterations-hard)
+                                    result))
+
+              (match action
+                ;; ── Stop: check if completed or other termination ──
+                ['stop
+                 (if (eq? termination 'completed)
+                     (begin
+                       (append-entries! log-path new-msgs)
+                       ;; Dispatch 'turn-end hook
+                       (let-values ([(amended-result after-hook-res)
+                                     (maybe-dispatch-hooks ext-reg 'turn-end result)])
+                         (let ([effective-result (if (and after-hook-res
+                                                          (eq? (hook-result-action after-hook-res)
+                                                               'amend))
+                                                     amended-result
+                                                     result)])
+                           ;; #662: Drain follow-up queue — if follow-ups exist,
+                           ;; inject as user messages and continue the loop.
+                           ;; #763: Support 'all (drain all) and 'one-at-a-time modes.
+                           (define followup-continued?
+                             (and
+                              steering-queue
+                              (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
+                                                   (let ([one (dequeue-followup! steering-queue)])
+                                                     (if one
+                                                         (list one)
+                                                         '()))
+                                                   (dequeue-all-followups! steering-queue))])
+                                (if (null? followups)
+                                    #f
+                                    (let ([followup-msgs (for/list ([fu (in-list followups)])
+                                                           (make-message (generate-id)
+                                                                         #f
+                                                                         'user
+                                                                         'text
+                                                                         (list (make-text-part fu))
+                                                                         (now-seconds)
+                                                                         (hasheq 'source
+                                                                                 "followup")))])
+                                      (emit-session-event! bus
+                                                           session-id
+                                                           "followup.injected"
+                                                           (hasheq 'count
+                                                                   (length followups)
+                                                                   'mode
+                                                                   (symbol->string follow-up-mode)))
+                                      (append-entries! log-path followup-msgs)
+                                      (loop (append ctx-with-injected new-msgs followup-msgs)
+                                            (add1 iteration)
+                                            0
+                                            (set)
+                                            ws
+                                            intent-retry-count
+                                            0
+                                            '()
+                                            explore-count
+                                            implement-count
+                                            0))))))
+                           (define base-result
+                             (if followup-continued? effective-result effective-result))
+                           ;; v0.21.3: Intent/stall detection removed.
+                           ;; The prompt is self-correcting by design - no runtime nudging.
+                           base-result)))
+                     ;; Other stop reasons: append and return
+                     (begin
+                       (append-entries! log-path new-msgs)
+                       result))]
+
                 ;; ── Hard iteration limit reached: append and stop ──
-                [(and (eq? termination 'tool-calls-pending) (>= (add1 iteration) max-iterations-hard))
+                ['stop-hard-limit
                  (append-entries! log-path new-msgs)
                  (emit-session-event! bus
                                       session-id
@@ -511,9 +531,7 @@
                                    (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
 
                 ;; ── Soft iteration limit: warn but continue ──
-                [(and (eq? termination 'tool-calls-pending)
-                      (>= (add1 iteration) max-iterations)
-                      (< (add1 iteration) max-iterations-hard))
+                ['stop-soft-limit
                  (append-entries! log-path new-msgs)
                  (emit-session-event! bus
                                       session-id
@@ -557,7 +575,7 @@
                        stall-retry-count)]
 
                 ;; ── Tool calls pending: execute tools and re-run ──
-                [(eq? termination 'tool-calls-pending)
+                ['continue
                  (append-entries! log-path new-msgs)
                  (define updated-ctx
                    (handle-tool-calls-pending new-msgs
@@ -653,9 +671,4 @@
                        new-recent-tools
                        new-explore-count
                        new-implement-count
-                       stall-retry-count)]
-
-                ;; ── Unknown termination: append and return ──
-                [else
-                 (append-entries! log-path new-msgs)
-                 result])])]))))
+                       stall-retry-count)])])]))))
