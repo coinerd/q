@@ -78,7 +78,7 @@
                         (->* ()
                              (#:working-directory (or/c path-string? path? #f)
                                                   #:cancellation-token any/c
-                                                  #:event-publisher (or/c procedure? #f)
+                                                  #:event-publisher (or/c procedure? #f symbol?)
                                                   #:runtime-settings any/c
                                                   #:call-id string?
                                                   #:session-metadata any/c
