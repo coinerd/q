@@ -58,7 +58,6 @@
          tool-prompt-snippet
          tool-prompt-guidelines
          tool-dangerous?
-         tool->jsexpr
          merge-tool-lists
          validate-tool-schema
          format-tool-schema-hint
@@ -75,7 +74,17 @@
          jsexpr->tool-result ; reserved for SDK consumers
 
          ;; ── Execution context ──
-         make-exec-context
+         (contract-out [make-exec-context
+                        (->* ()
+                             (#:working-directory (or/c path-string? path? #f)
+                                                  #:cancellation-token any/c
+                                                  #:event-publisher (or/c procedure? #f)
+                                                  #:runtime-settings any/c
+                                                  #:call-id string?
+                                                  #:session-metadata any/c
+                                                  #:progress-callback (or/c procedure? #f)
+                                                  #:permission-config any/c)
+                             exec-context?)])
          exec-context?
          exec-context-working-directory
          exec-context-cancellation-token
@@ -102,14 +111,15 @@
          ;; ── Tool registry ──
          make-tool-registry
          tool-registry?
-         register-tool!
-         unregister-tool! ; reserved for SDK consumers
+         (contract-out [register-tool! (-> tool-registry? tool? void?)]
+                       [unregister-tool! (-> tool-registry? string? void?)]
+                       [lookup-tool (-> tool-registry? string? (or/c tool? #f))]
+                       [list-tools (-> tool-registry? (listof tool?))]
+                       [tool->jsexpr (-> tool? hash?)])
          set-active-tools!
          tool-active?
          list-active-tools
          list-active-tools-jsexpr
-         lookup-tool
-         list-tools
          list-tools-jsexpr
          tool-names)
 
