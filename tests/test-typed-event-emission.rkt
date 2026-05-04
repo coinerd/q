@@ -22,6 +22,8 @@
          (only-in "../agent/event-structs/session-events.rkt"
                   session-start-event session-start-event?
                   context-event context-event?)
+         (only-in "../util/event.rkt"
+                  event-ev)
          (only-in "../agent/event-bus.rkt"
                   make-event-bus
                   event-bus?
@@ -67,7 +69,7 @@
   (emit-typed-event! bus evt)
   (define events (get-events))
   (check-equal? (length events) 1)
-  (check-equal? (event-type (car events)) "turn.started"))
+  (check-equal? (event-ev (car events)) "turn.started"))
 
 (test-case "emit-typed-event!: turn-end-event"
   (define-values (bus get-events) (make-capturing-bus))
@@ -75,7 +77,7 @@
   (emit-typed-event! bus evt)
   (define events (get-events))
   (check-equal? (length events) 1)
-  (check-equal? (event-type (car events)) "turn.completed"))
+  (check-equal? (event-ev (car events)) "turn.completed"))
 
 (test-case "emit-typed-event!: tool-execution-start-event"
   (define-values (bus get-events) (make-capturing-bus))
