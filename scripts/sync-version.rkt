@@ -86,7 +86,7 @@
 
 ;; Files where version refs are historical / should NOT be overwritten
 (define EXCLUDED-MD-FILES
-  '("CHANGELOG.md" "releasing.md"
+  '("README.md" "CHANGELOG.md" "releasing.md"
                    "why-q.md"
                    "api-stability.md"
                    "compatibility-matrix.md"

@@ -157,6 +157,18 @@
         (printf "WARNING: ~a not found, skipping~n" script)
         #t)))
 
+;; --- Run Version Validate (README Status integrity) ---
+
+(define (run-version-validate)
+  (printf "~n--- Version Validate (README Status integrity) ---~n")
+  (define script (build-path "scripts" "sync-version.rkt"))
+  (if (file-exists? script)
+      (let ([exit-code (system/exit-code (format "racket ~a --validate" script))])
+        (if (= exit-code 0)
+            (begin (printf "Version validate: PASS~n") #t)
+            (begin (printf "Version validate: FAIL~n") #f)))
+      (begin (printf "WARNING: ~a not found, skipping~n" script) #t)))
+
 ;; --- Run CI local lint suite ---
 
 (define (run-ci-local)
@@ -244,6 +256,10 @@
 
   ;; 3b. README Status sync check (default mode)
   (unless (run-status-sync-check)
+    (set! all-pass #f))
+
+  ;; 3c. Version validate (README Status integrity)
+  (unless (run-version-validate)
     (set! all-pass #f))
 
   ;; 4. CI local lint (if --ci or --full)
