@@ -84,9 +84,19 @@
                               #:working-set-messages [ws-messages '()])
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
-  ;; v0.28.21 W7: GSD progress pinning — messages with meta gsd-pin stay in Tier A
-  (define-values (gsd-pinned regular)
-    (partition (lambda (m) (hash-ref (message-meta m) 'gsd-pin #f)) regular-msgs))
+  ;; v0.28.21 W7 + v0.28.22 W2: GSD progress pinning
+  ;; Messages with meta gsd-pin=#t OR containing GSD progress markers stay in Tier A
+  (define (gsd-progress-message? m)
+    (or (hash-ref (message-meta m) 'gsd-pin #f)
+        (let ([txt (string-join (for/list ([part (message-content m)]
+                                           #:when (text-part? part))
+                                  (text-part-text part)))])
+          (and (non-empty-string? txt)
+               (or (regexp-match? #rx"wave [0-9]+ marked complete" txt)
+                   (regexp-match? #rx"PLAN.md.*updated" txt)
+                   (regexp-match? #rx"STATE.md.*updated" txt)
+                   (regexp-match? #rx"wave-done" txt))))))
+  (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
   (define-values (sys-protected unpinned-raw)
     (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
   (define first-user-idx
