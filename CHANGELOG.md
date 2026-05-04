@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.28.22 — 2026-05-04
+
+### Context Loop Prevention Wiring + Audit Remediation
+
+Wires three v0.28.21 features that were implemented but disconnected from
+production code paths. Audit scored 6.5/10 with 3 critical findings;
+this release closes all gaps.
+
+**W0 — Mid-turn compaction wiring:**
+`check-mid-turn-budget!` now receives `#:session` parameter and its return
+value is threaded through the iteration loop. When context exceeds 90%
+budget during tool-call turns, in-place compaction fires automatically.
+
+**W1 — Exploration loop detection wiring:**
+`detect-exploration-loop` called after each tool-call batch in the
+iteration loop. Repeating 2-tool patterns (e.g. read-grep-read-grep)
+emit `iteration.exploration-loop` event for downstream consumers.
+
+**W2 — GSD progress pinning auto-detection:**
+Messages containing GSD progress patterns (wave completion, PLAN.md/
+STATE.md updates) are auto-detected and pinned in Tier A context without
+requiring explicit `gsd-pin` meta flag.
+
+**Tests:** 4 mid-turn integration tests, 4 exploration loop tests,
+2 context assembly tests (31 total in that suite).
+
 ## v0.28.21 — 2026-05-04
 
 ### TUI Thinking Leak Fix + Context Circular Loop Prevention
