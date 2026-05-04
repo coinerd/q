@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.29.4 — 2026-05-04
+
+### Runtime State Encapsulation
+
+- **GSD closure factory** (`extensions/gsd/session-state.rkt`):
+  - Replaced 7 module-level boxes with `make-gsd-context` closure factory
+  - Each context is isolated with its own semaphore for thread safety
+  - Default global context preserves backward compatibility
+  - Actions: get/set state, plan, history, edit-limit, pinned-dir, event-bus, busy, correlation-id, transaction-ref/set
+- **Working-set closure factory** (`runtime/working-set.rkt`):
+  - Added `make-ws-context` for isolated working-set instances
+  - Thread-safe dispatch closure with input validation
+  - LRU eviction when max-entries exceeded
+
+### Tests (36 new)
+
+- `test-gsd-context-factory.rkt`: 17 tests for GSD closure factory
+- `test-working-set-factory.rkt`: 19 tests for working-set closure factory
+
 ## v0.29.3 — 2026-05-02
 
 ### Typed Racket at Provider Boundary
