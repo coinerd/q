@@ -10,9 +10,6 @@
                   loop-result-termination-reason)
          (only-in "../runtime/iteration.rkt"
                   iteration-ctx
-                  iteration-ctx-iteration
-                  iteration-ctx-max-iterations
-                  iteration-ctx-max-iterations-hard
                   decide-next-action))
 
 ;; Helper: build an iteration-ctx

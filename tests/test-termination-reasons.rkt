@@ -23,8 +23,7 @@
   (for ([reason (in-list (known-termination-reasons))])
     (define result (make-loop-result '() reason (hasheq)))
     (define action (decide-next-action ctx result))
-    (check (λ (v) (member v '(stop stop-hard-limit stop-soft-limit continue)))
-           action
+    (check-not-false (member action '(stop stop-hard-limit stop-soft-limit continue))
            (format "Termination reason ~a returned unexpected action ~a" reason action))))
 
 (test-case "known-termination-reasons: list is non-empty"
@@ -34,5 +33,5 @@
 (test-case "known-termination-reasons: includes core reasons"
   (define reasons (known-termination-reasons))
   (for ([required '(completed cancelled tool-calls-pending error)])
-    (check-true (member required reasons)
+    (check-not-false (member required reasons)
                 (format "Missing required termination reason: ~a" required))))

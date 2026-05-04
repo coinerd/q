@@ -19,6 +19,7 @@
 ;; ───────────────────────────────────────────────────────────────
 
 (require racket/contract
+         racket/match
          racket/list
          racket/set
          racket/path
@@ -121,7 +122,46 @@
          ;; DI resolve functions (LOW-05, v0.22.8)
          resolve-compact-proc
          resolve-estimate-tokens
-         resolve-inject-topic)
+         resolve-inject-topic
+         ;; v0.29.1: Pure decision function exports
+         iteration-ctx
+         decide-next-action
+         known-termination-reasons)
+
+;; ============================================================
+;; Pure decision function (v0.29.1: §10 Match Dispatch, §2 Pure/Effect)
+;;
+;; iteration-ctx captures the pure subset of loop state needed
+;; to decide what to do next. No I/O, no mutation.
+;; ============================================================
+
+(struct iteration-ctx
+        (iteration consecutive-tool-count explore-count max-iterations max-iterations-hard)
+  #:transparent)
+
+(define (known-termination-reasons)
+  '(completed cancelled
+              tool-calls-pending
+              error
+              force-shutdown
+              shutdown
+              max-iterations-exceeded
+              hook-blocked))
+
+(define (decide-next-action ctx result)
+  (define term (loop-result-termination-reason result))
+  (match term
+    [(or 'completed 'cancelled 'force-shutdown 'shutdown) 'stop]
+    ['hook-blocked 'stop]
+    ['max-iterations-exceeded 'stop]
+    ['error 'stop]
+    ['tool-calls-pending
+     (define next-iter (add1 (iteration-ctx-iteration ctx)))
+     (cond
+       [(>= next-iter (iteration-ctx-max-iterations-hard ctx)) 'stop-hard-limit]
+       [(>= next-iter (iteration-ctx-max-iterations ctx)) 'stop-soft-limit]
+       [else 'continue])]
+    [_ 'stop]))
 
 ;; ============================================================
 ;; DI parameters (DI-01, v0.22.7; DI-04, v0.22.8)
