@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.29.9 — 2026-05-05
+
+### Contract Tightening + Cleanup
+
+- **Tightened coordinator contracts**: `extract-tool-calls-from-messages` now requires `(listof message?)` returns `(listof tool-call?)`; `make-tool-result-messages` now requires `(listof tool-call?) (listof tool-result?)`
+- **Write budget in exec-context**: Added `bytes-written` field to `exec-context` struct; write tool now reads budget from exec-context when available (backward-compat parameter retained)
+- **Removed dead `termination-decision`**: Function replaced by `decide-next-action` in v0.29.8 W0, now fully removed from `transition-logic.rkt`
+- **Cleaned GSD closure**: Removed dead `'get-workflow`/`'set-workflow` actions; documented two-level locking pattern
+- **Cleaned middleware import**: Removed unused `tool-call-id` import from `tools/middleware.rkt`
+- **Deferred**: Event serialization rewrite (struct->vector + field registry works correctly; accessor-based approach would be 26 match branches with higher bug risk)
+
 ## v0.29.8 — 2026-05-04
 
 ### Production Wiring
