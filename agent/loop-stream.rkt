@@ -426,8 +426,9 @@
         (hash-ref (hook-result-payload msg-end-result) 'content accumulated-text)
         accumulated-text))
 
-  (cond
-    [(and (hook-result? msg-end-result) (eq? (hook-result-action msg-end-result) 'block))
+  (handle-hook-result
+   msg-end-result
+   (lambda (payload)
      ;; message-end blocked -- return completed with empty content
      (emit! bus
             session-id
@@ -437,8 +438,8 @@
             #:state state)
      (make-loop-result (loop-state-messages state)
                        'hook-blocked
-                       (hasheq 'turnId turn-id 'hook 'message-end))]
-    [else
+                       (hasheq 'turnId turn-id 'hook 'message-end)))
+   (lambda ()
      ;; Rebuild text-part with potentially amended content
      (define final-text-part (make-text-part final-text))
      (define final-content-parts (append (list final-text-part) tool-call-parts))
@@ -522,4 +523,4 @@
                                   'model
                                   "streamed"
                                   'toolCallCount
-                                  (length tool-call-parts)))])]))
+                                  (length tool-call-parts)))]))))

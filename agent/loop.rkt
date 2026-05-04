@@ -68,20 +68,7 @@
          usage-empty?
          parts->text-string
          emit!
-         ;; v0.29.1: match-based hook dispatch
          handle-hook-result)
-
-;; ============================================================
-;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)
-;; ============================================================
-
-(define (handle-hook-result result on-block on-continue)
-  (cond
-    [(not (hook-result? result)) (on-continue)]
-    [else
-     (match (hook-result-action result)
-       ['block (on-block (hook-result-payload result))]
-       [_ (on-continue)])]))
 
 ;; ============================================================
 ;; Main entry point — thin orchestrator
@@ -150,16 +137,17 @@
                                   'settings
                                   (model-request-settings req)))))
 
-  (cond
-    [(and (hook-result? pre-hook-result) (eq? (hook-result-action pre-hook-result) 'block))
+  (handle-hook-result
+   pre-hook-result
+   (lambda (payload)
      (emit! bus session-id turn-id "model.request.blocked" (hasheq 'reason "hook"))
      (emit! bus
             session-id
             turn-id
             "turn.completed"
             (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "model-request-pre-blocked"))
-     (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
-    [else
+     (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre)))
+   (lambda ()
      ;; DEBUG: validate raw-messages before sending
      (unless (valid-api-message-sequence? raw-messages)
        (log-warning "INVALID message sequence detected! Dumping raw messages:")
@@ -200,16 +188,17 @@
                                      'message-count
                                      (length raw-messages)))))
 
-     (cond
-       [(and (hook-result? msg-start-result) (eq? (hook-result-action msg-start-result) 'block))
+     (handle-hook-result
+      msg-start-result
+      (lambda (payload)
         (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
         (emit! bus
                session-id
                turn-id
                "turn.completed"
                (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "message-start-blocked"))
-        (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
-       [else
+        (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start)))
+      (lambda ()
         ;; 5-7. Stream from provider
         (define stream-data
           (stream-from-provider provider
@@ -233,4 +222,4 @@
                                 st
                                 tools
                                 provider
-                                hook-dispatcher)])])]))
+                                hook-dispatcher)]))))))
