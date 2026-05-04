@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.29.3 — 2026-05-02
+
+### Typed Racket at Provider Boundary
+
+- Migrated `llm/model.rkt` to `#lang typed/racket`:
+  - `model-request` struct with typed fields
+  - `model-response` struct with typed fields
+  - `stream-chunk` struct with typed fields (including `(Option (U String Symbol))` for finish-reason)
+  - Serialization functions use `cast` for hash-ref type narrowing
+- Verified all LLM adapters compile against typed model boundary:
+  - anthropic, openai-compatible, azure-openai, gemini, stream
+- `llm/provider.rkt` remains `#lang racket/base` due to `define-generics` incompatibility with Typed Racket
+
+### Tests (23 new)
+
+- `test-typed-model.rkt`: 23 tests for model structs, serialization roundtrips, edge cases
+
+### Metrics
+
+- Typed Racket modules: 14 → 15
+
 ## v0.29.2 — 2026-05-02
 
 ### Event Struct Adoption
