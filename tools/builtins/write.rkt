@@ -2,7 +2,11 @@
 
 (require racket/file
          racket/string
-         (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../tool.rkt"
+                  make-success-result
+                  make-error-result
+                  exec-context?
+                  exec-context-bytes-written)
          (only-in "../../util/path-helpers.rkt" path-only expand-home-path)
          (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
          (only-in "../../util/safe-mode-predicates.rkt"
@@ -26,20 +30,21 @@
 (define cumulative-write-budget (make-parameter 52428800))
 
 ;; Track cumulative bytes written in current session.
-;; v0.21.5 (F4): Parameter-based for per-session isolation.
-;; Each session gets its own box via init-session-writes!.
-;; Thread-safety: Racket parameters are per-thread. Each session runs in its own
-;; thread via `runtime/agent-session.rkt` session-thread. Therefore
-;; `session-bytes-written` is isolated per session — no cross-session leakage.
+;; v0.29.9: Migrated from make-parameter+box to exec-context field.
+;; Legacy parameter retained for backward compat (tests, direct calls without exec-ctx).
 (define session-bytes-written (make-parameter (box 0)))
 
-;; Initialize a fresh write tracker for a new session.
-;; Call from session lifecycle (e.g. agent-session creation).
 (define (init-session-writes!)
   (session-bytes-written (box 0)))
 
 (define (reset-cumulative-writes!)
   (set-box! (session-bytes-written) 0))
+
+;; Get the bytes-written box from exec-ctx if available, else fall back to parameter.
+(define (get-bytes-box exec-ctx)
+  (if (and exec-ctx (exec-context-bytes-written exec-ctx))
+      (exec-context-bytes-written exec-ctx)
+      (session-bytes-written)))
 
 ;; Main tool function
 (define (tool-write args [exec-ctx #f])
@@ -79,7 +84,8 @@
                            'write))
 
        ;; SEC-14: Enforce cumulative write budget
-       (define new-total (+ (unbox (session-bytes-written)) bytes-count))
+       (define bytes-box (get-bytes-box exec-ctx))
+       (define new-total (+ (unbox bytes-box) bytes-count))
        (when (> new-total (cumulative-write-budget))
          (raise-tool-error (format "write rejected: cumulative ~a bytes exceeds session budget of ~a"
                                    new-total
@@ -95,7 +101,7 @@
        (call-with-output-file path-str (lambda (out) (display content-str out)) #:exists 'replace)
 
        ;; Track cumulative bytes
-       (set-box! (session-bytes-written) new-total)
+       (set-box! bytes-box new-total)
 
        (make-success-result
         (list (format "Wrote ~a bytes to ~a" bytes-count path-str))

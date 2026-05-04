@@ -94,6 +94,7 @@
          exec-context-session-metadata
          exec-context-progress-callback
          exec-context-permission-config
+         exec-context-bytes-written
          emit-progress!
          ;; ── Tool-call struct (re-exported from agent/types.rkt) ──
          tool-call
@@ -285,7 +286,8 @@
                            call-id
                            session-metadata
                            progress-callback
-                           permission-config) ; G3.4: permission gate config or #f
+                           permission-config
+                           bytes-written) ; G3.4: permission gate config or #f
   #:transparent)
 
 (define (make-exec-context #:working-directory [working-directory (current-directory)]
@@ -303,7 +305,8 @@
                 call-id
                 session-metadata
                 progress-callback
-                permission-config))
+                permission-config
+                (box 0)))
 
 ;; ============================================================
 ;; Tool registry
