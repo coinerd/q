@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.29.8 — 2026-05-04
+
+### Production Wiring
+
+- **decide-next-action wired**: Replaced inline cond chain in `run-iteration-loop` with pure function call + match dispatch
+- **handle-hook-result wired**: Replaced scattered `(and (hook-result? ...) (eq? ... 'block))` checks in `loop.rkt` (2 sites) and `loop-stream.rkt` (1 site) with `handle-hook-result` calls
+- **Moved `handle-hook-result` to shared module** (`loop-messages.rkt`) to break circular dependency
+- **Deferred**: `emit-typed-event!` migration (payload shape incompatibility), `process-chunk` wiring (mutable/immutable accumulator gap), `make-default-pipeline` scheduler integration (high risk)
+
 ## v0.29.7 — 2026-05-04
 
 ### Test Suite Restoration
