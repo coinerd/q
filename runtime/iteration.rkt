@@ -232,7 +232,9 @@
                             #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
                             #:inject-topic [inject-topic (resolve-inject-topic)]
                             ;; v0.26.0: working set memory
-                            #:working-set [initial-ws #f])
+                            #:working-set [initial-ws #f]
+                            ;; v0.28.22 W0: session for mid-turn compaction
+                            #:session [sess #f])
   ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
   ;; v0.14.4 Wave 1: Default hard limit = max(max-iterations * 1.6, 80) for slow models
   (define max-iterations-hard
@@ -367,7 +369,9 @@
               (define config-with-ws
                 (if (immutable? config)
                     (hash-set config 'working-set ws)
-                    (begin (hash-set! config 'working-set ws) config)))
+                    (begin
+                      (hash-set! config 'working-set ws)
+                      config)))
               (define ctx-final
                 (build-assembled-context ctx-to-use config-with-ws ext-reg bus session-id iteration))
 
@@ -495,8 +499,10 @@
                                               token
                                               config))
                  ;; v0.14.1: mid-turn token budget check
-                 (check-mid-turn-budget! updated-ctx bus session-id config)
-                 (loop updated-ctx
+                 ;; v0.28.22 W0: wire session for mid-turn compaction
+                 (define ctx-after-budget
+                   (check-mid-turn-budget! updated-ctx bus session-id config #:session sess))
+                 (loop (if (list? ctx-after-budget) ctx-after-budget updated-ctx)
                        (add1 iteration)
                        (add1 consecutive-tool-count)
                        seen-paths
@@ -529,32 +535,36 @@
                  ;; Convert tool-call structs to hashes for working-set-update!
                  (define current-tool-calls-hashes
                    (for/list ([tc (in-list current-tool-calls)])
-                     (hasheq 'name (tool-call-name tc)
-                             'arguments (tool-call-arguments tc))))
+                     (hasheq 'name (tool-call-name tc) 'arguments (tool-call-arguments tc))))
                  ;; Use estimate-message-tokens from context-policy.rkt
                  ;; v0.26.0: Detect read spirals (re-reading a file already in working set)
                  (define read-spiral-paths
                    (for/list ([tc (in-list current-tool-calls)]
                               #:when (equal? (tool-call-name tc) "read"))
                      (define path (extract-tool-target-path tc))
-                     (and path
-                          (member path (map ws-entry-path (working-set-entries ws)))
-                          path)))
+                     (and path (member path (map ws-entry-path (working-set-entries ws))) path)))
                  (define valid-spiral-paths (filter string? read-spiral-paths))
                  (when (> (length valid-spiral-paths) 0)
-                   (emit-session-event! bus
-                                        session-id
-                                        "working-set.read-spiral-detected"
-                                        (hasheq 'paths valid-spiral-paths
-                                                'count (length valid-spiral-paths))))
-                 (working-set-update! ws current-tool-calls-hashes tool-result-msgs message-id estimate-message-tokens)
+                   (emit-session-event!
+                    bus
+                    session-id
+                    "working-set.read-spiral-detected"
+                    (hasheq 'paths valid-spiral-paths 'count (length valid-spiral-paths))))
+                 (working-set-update! ws
+                                      current-tool-calls-hashes
+                                      tool-result-msgs
+                                      message-id
+                                      estimate-message-tokens)
                  ;; v0.26.0: Emit working-set.update after each change
                  (emit-session-event! bus
                                       session-id
                                       "working-set.update"
-                                      (hasheq 'entry-count (working-set-entry-count ws)
-                                              'token-count (working-set-token-count ws)
-                                              'paths (map ws-entry-path (working-set-entries ws))))
+                                      (hasheq 'entry-count
+                                              (working-set-entry-count ws)
+                                              'token-count
+                                              (working-set-token-count ws)
+                                              'paths
+                                              (map ws-entry-path (working-set-entries ws))))
                  (define-values (new-seen-paths should-increment?)
                    (update-seen-paths current-tool-calls seen-paths))
                  (define effective-tool-count
