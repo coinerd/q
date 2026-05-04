@@ -30,5 +30,11 @@ runs:
     - name: Install dependencies
       shell: bash
       run: |
-        raco pkg install --auto --batch
+        # Idempotent local package setup: install if absent, update if present
+        if raco pkg show q 2>/dev/null | grep -q "q"; then
+          raco pkg update --auto q
+        else
+          raco pkg install --auto --batch .
+        fi
+        # Extra TUI deps (may already be installed as transitive deps)
         raco pkg install --auto --batch tui-term tui-ubuf 2>/dev/null || true
