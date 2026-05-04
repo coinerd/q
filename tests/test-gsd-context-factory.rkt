@@ -10,11 +10,8 @@
          racket/set)
 
 ;; Import the real closure factory from session-state.rkt (W1)
-(require (only-in "../extensions/gsd/runtime-state-types.rkt"
-                  gsd-runtime-state?))
-(require (only-in "../extensions/gsd/session-state.rkt"
-                  make-gsd-context))
-
+(require (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state?))
+(require (only-in "../extensions/gsd/session-state.rkt" make-gsd-context))
 
 ;; ============================================================
 ;; 1. Factory returns a callable dispatch function
@@ -26,8 +23,7 @@
 
 (test-case "context dispatch rejects unknown actions"
   (define ctx (make-gsd-context))
-  (check-exn exn:fail?
-             (lambda () (ctx 'unknown-action))))
+  (check-exn exn:fail? (lambda () (ctx 'unknown-action))))
 
 ;; ============================================================
 ;; 2. State get/set roundtrip
@@ -60,11 +56,11 @@
 ;; 4. Workflow get/set roundtrip
 ;; ============================================================
 
-(test-case "workflow get/set roundtrip"
+(test-case "workflow state accessible via get-state"
   (define ctx (make-gsd-context))
-  ;; Workflow is stored in gsd-runtime-state, not as separate field
-  ;; The closure factory returns #f for get-workflow (no-op set)
-  (check-equal? (ctx 'get-workflow) #f "workflow stored in state struct"))
+  ;; get-workflow/set-workflow actions were removed in v0.29.9 (dead code)
+  ;; Workflow state is stored in gsd-runtime-state, accessed via get-state
+  (check-not-false (ctx 'get-state) "state is accessible"))
 
 ;; ============================================================
 ;; 5. Busy flag get/set roundtrip
@@ -134,12 +130,11 @@
   (define results (box '()))
   ;; Spawn threads that race to set state
   (for ([i (in-range iterations)])
-    (thread
-     (lambda ()
-       (semaphore-wait sem)
-       (ctx 'set-state i)
-       ;; Don't check value — just ensure no crash
-       (semaphore-post sem))))
+    (thread (lambda ()
+              (semaphore-wait sem)
+              (ctx 'set-state i)
+              ;; Don't check value — just ensure no crash
+              (semaphore-post sem))))
   ;; Release all threads
   (for ([_ (in-range iterations)])
     (semaphore-post sem))
