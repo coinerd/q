@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.29.0 — 2026-05-02
+
+### Contract Boundaries
+
+- Added `contract-out` to tool registry surface in `tools/tool.rkt`:
+  - `register-tool!`, `unregister-tool!`, `lookup-tool`, `list-tools`, `tool->jsexpr`
+  - `make-exec-context` with keyword arg contracts
+- Replaced 29 `any/c` usages in `interfaces/sdk-public.rkt` with specific type predicates:
+  - `provider?` for provider arguments
+  - `tool-registry?`/`tool?` for registry operations
+  - `event-bus?` for event bus operations
+  - `extension-registry?`/`extension?` for extension operations
+  - `cancellation-token?` for token operations
+  - `boolean?` for flag arguments
+  - Only 1 `any/c` remains (publish! payload — genuinely any type)
+- Added `contract-out` to `runtime/tool-coordinator.rkt` for all 3 exported functions
+
+### Test Scaffolding (37 new tests)
+
+- `test-tool-registry-contracts.rkt`: 14 tests for registry contract enforcement
+- `test-sdk-contracts.rkt`: 10 tests for SDK public API contract enforcement
+- `test-tool-coordinator-contracts.rkt`: 7 tests for tool coordinator input validation
+- `test-write-budget-encapsulation.rkt`: 6 tests for write budget tracking isolation
+
 ## v0.28.28 — 2026-05-04
 
 ### Data Corrections + CHANGELOG Date Validator
