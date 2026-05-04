@@ -75,7 +75,8 @@
         (path->string (file-name-from-path filename))
         filename))
   (define skip-file?
-    (or (equal? fname "CHANGELOG.md")
+    (or (equal? fname "README.md")
+        (equal? fname "CHANGELOG.md")
         (equal? fname "releasing.md")
         (equal? fname "why-q.md")
         (equal? fname "api-stability.md")

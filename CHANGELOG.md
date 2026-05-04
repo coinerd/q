@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.28.25 — 2026-05-02
+## v0.28.25 — 2026-05-04
 
 ### Audit Remediation — Docs Integrity + Tooling Hardening
 
