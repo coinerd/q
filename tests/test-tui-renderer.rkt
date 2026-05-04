@@ -242,7 +242,8 @@
       (run-render-frame! ubuf state input-st layout)
       ;; Status bar should have inverse style: bg=7
       (define status-row-num (tui-layout-status-row layout))
-      (define inverse-count (mock-ubuf-row-style-count ubuf status-row-num (lambda (c) (= (mock-cell-bg c) 7))))
+      (define inverse-count
+        (mock-ubuf-row-style-count ubuf status-row-num (lambda (c) (= (mock-cell-bg c) 7))))
       (check-true (> inverse-count 0) "status bar should have bg=7 (inverse)"))
 
     (test-case "render-frame! clears buffer before drawing"
@@ -691,9 +692,9 @@
   (test-case "turn.completed clears streaming-thinking"
     (define s0 (initial-ui-state))
     (define events
-      (list (make-test-event "turn.started" (hasheq))
-            (make-test-event "model.stream.thinking" (hasheq 'delta "thinking"))
-            (make-test-event "turn.completed" (hasheq))))
+      (list (make-test-event "turn.started" (hasheq) #:time 1000)
+            (make-test-event "model.stream.thinking" (hasheq 'delta "thinking") #:time 1000)
+            (make-test-event "turn.completed" (hasheq) #:time 1700)))
     (define state (simulate-events s0 events))
     (check-false (ui-state-streaming-thinking state))
     (check-false (ui-busy? state)))

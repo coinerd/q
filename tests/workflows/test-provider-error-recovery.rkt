@@ -19,8 +19,14 @@
 ;; Helpers
 ;; ============================================================
 
+(define evt-counter 0)
 (define (make-evt type payload)
-  (make-test-event type (apply hasheq (append-map (lambda (p) (list (car p) (cdr p))) payload))))
+  (set! evt-counter (add1 evt-counter))
+  ;; Space events 600ms apart so turn.completed always clears busy?
+  (define t (* evt-counter 600))
+  (make-test-event type
+                   (apply hasheq (append-map (lambda (p) (list (car p) (cdr p))) payload))
+                   #:time t))
 
 ;; Count entries of a given kind in the transcript
 (define (count-entries state kind)

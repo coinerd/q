@@ -191,7 +191,7 @@
      (struct-copy ui-state
                   state
                   [busy? #t]
-                  [busy-since (current-inexact-milliseconds)]
+                  [busy-since (event-time evt)]
                   [pending-tool-name #f]
                   [streaming-text #f]
                   [streaming-thinking #f]
@@ -203,7 +203,7 @@
      (define since (ui-state-busy-since state))
      (define elapsed
        (if since
-           (- (current-inexact-milliseconds) since)
+           (- (event-time evt) since)
            min-busy-ms))
      (if (< elapsed min-busy-ms)
          (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])
