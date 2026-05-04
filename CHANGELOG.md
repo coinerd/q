@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.29.2 — 2026-05-02
+
+### Event Struct Adoption
+
+- Added `agent/event-emitter.rkt` — typed event emission bridge:
+  - `emit-typed-event!`: accepts typed event structs, serializes, publishes on bus
+  - `event-struct->hasheq`: serialization with field name mapping for all 24 event types
+  - `#:state` parameter for loop-state accumulation
+- Added `agent/event-struct-coverage.rkt` — emission site coverage tracking
+- Infrastructure for migrating raw `hasheq` payloads to typed structs
+
+### Tests (11 new)
+
+- `test-typed-event-emission.rkt`: 8 tests for emit-typed-event! bridge
+- `test-event-struct-coverage.rkt`: 3 tests for emission site coverage
+
 ## v0.29.1 — 2026-05-02
 
 ### Match Dispatch + Pure Decisions
