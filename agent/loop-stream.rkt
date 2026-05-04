@@ -104,6 +104,10 @@
          stream-accumulator-finish-reason
          stream-accumulator-done?
          make-empty-accumulator
+         ;; NOTE (v0.29.11): process-chunk and stream-accumulator are provided for
+         ;; future use but have 0 production callers. process-chunk is blocked by
+         ;; mutable streaming-message vs immutable stream-accumulator gap.
+         ;; Deferred to v0.30.x — see AUDIT-v0.29.10 for details.
          process-chunk)
 
 ;; ============================================================
@@ -220,8 +224,9 @@
                                          (stream-chunk-delta-text chunk)
                                          'delta-tool-call
                                          #f)))
-              (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
-                (streaming-message-set-blocked! sm))))
+              (handle-hook-result update-result
+                                  (lambda (payload) (streaming-message-set-blocked! sm))
+                                  void)))
           ;; FEAT-72: Thinking/reasoning delta
           (when (stream-chunk-delta-thinking chunk)
             (streaming-message-append-thinking! sm (stream-chunk-delta-thinking chunk))
@@ -253,8 +258,9 @@
                                          #f
                                          'delta-tool-call
                                          tc-delta)))
-              (when (and (hook-result? update-result) (eq? (hook-result-action update-result) 'block))
-                (streaming-message-set-blocked! sm))))
+              (handle-hook-result update-result
+                                  (lambda (payload) (streaming-message-set-blocked! sm))
+                                  void)))
           (when (stream-chunk-done? chunk)
             ;; v0.15.2: Mark that we received a normal done chunk
             (set-box! received-done? #t)
@@ -420,11 +426,8 @@
             (or effective-usage (hasheq))))
   (define msg-end-result (and hook-dispatcher (hook-dispatcher 'message-end msg-end-payload)))
 
-  ;; Handle message-end result -- hook-dispatcher returns (list action payload) or #f
-  (define final-text
-    (if (and (hook-result? msg-end-result) (eq? (hook-result-action msg-end-result) 'amend))
-        (hash-ref (hook-result-payload msg-end-result) 'content accumulated-text)
-        accumulated-text))
+  ;; Mutable text — may be amended by message-end hook
+  (define final-text-box (box accumulated-text))
 
   (handle-hook-result
    msg-end-result
@@ -440,6 +443,7 @@
                        'hook-blocked
                        (hasheq 'turnId turn-id 'hook 'message-end)))
    (lambda ()
+     (define final-text (unbox final-text-box))
      ;; Rebuild text-part with potentially amended content
      (define final-text-part (make-text-part final-text))
      (define final-content-parts (append (list final-text-part) tool-call-parts))
@@ -523,4 +527,6 @@
                                   'model
                                   "streamed"
                                   'toolCallCount
-                                  (length tool-call-parts)))]))))
+                                  (length tool-call-parts)))]))
+   #:on-amend (lambda (payload)
+                (set-box! final-text-box (hash-ref payload 'content accumulated-text)))))
