@@ -3,113 +3,168 @@
 ;; extensions/gsd/session-state.rkt — Per-session GSD state (QUAL-02)
 ;; STABILITY: evolving
 ;;
-;; Provides shared mutable state for GSD session via boxes.
-;; v0.22.2 REV-01: Reverted from make-parameter to box storage because
-;; hook handlers run in child threads (hooks.rkt:108) where parameter
-;; mutations are invisible to the parent thread.
+;; v0.29.4 W1: Replaced raw box exports with closure-encapsulated factory.
+;; The default global context is still available via the accessor functions
+;; for backward compatibility. New code should use make-gsd-context for
+;; isolated contexts.
 ;;
-;; Thread safety: The semaphore gsd-state-sem serializes atomic updates.
-;; Boxes are shared across threads — mutations visible to all threads.
+;; Thread safety: Each context has its own semaphore for atomic updates.
+;; The default context uses gsd-default-sem.
 
 (require racket/set
          "runtime-state-types.rkt")
 
 ;; ============================================================
-;; Shared mutable state (boxes, not parameters)
+;; Closure factory
 ;; ============================================================
 
-;; Core GSD state: gsd-runtime-state struct (F1 fix)
-(define gsd-state-box (box (make-initial-gsd-state)))
+(define (make-gsd-context)
+  "Create an isolated GSD context with thread-safe dispatch.
+   Returns a procedure that accepts actions:
+     'get-state, 'set-state, 'get-plan, 'set-plan,
+     'get-workflow, 'set-workflow, 'busy?, 'set-busy!,
+     'get-correlation-id, 'set-correlation-id!,
+     'transaction-ref, 'transaction-set!,
+     'get-history, 'set-history!,
+     'get-edit-limit, 'set-edit-limit!,
+     'get-pinned-dir, 'set-pinned-dir!,
+     'get-event-bus, 'set-event-bus!"
+  (let ([state (make-initial-gsd-state)]
+        [plan-data #f]
+        [pinned-dir #f]
+        [edit-limit 500]
+        [event-bus #f]
+        [history '()]
+        [busy #f]
+        [correlation-id #f]
+        [transaction (hash)]
+        [sem (make-semaphore 1)])
+    (lambda (action . args)
+      (call-with-semaphore
+       sem
+       (lambda ()
+         (case action
+           ;; Core state
+           [(get-state) state]
+           [(set-state) (set! state (car args))]
+           ;; Plan data
+           [(get-plan) plan-data]
+           [(set-plan) (set! plan-data (car args))]
+           ;; Workflow
+           [(get-workflow) #f] ;; stored in gsd-runtime-state
+           [(set-workflow) (void)]
+           ;; Busy flag
+           [(busy?) busy]
+           [(set-busy!) (set! busy (car args))]
+           ;; Correlation ID
+           [(get-correlation-id) correlation-id]
+           [(set-correlation-id!) (set! correlation-id (car args))]
+           ;; Transaction store
+           [(transaction-ref) (hash-ref transaction (car args))]
+           [(transaction-set!) (set! transaction (hash-set transaction (car args) (cadr args)))]
+           ;; History
+           [(get-history) history]
+           [(set-history!) (set! history (car args))]
+           ;; Edit limit
+           [(get-edit-limit) edit-limit]
+           [(set-edit-limit!) (set! edit-limit (car args))]
+           ;; Pinned dir
+           [(get-pinned-dir) pinned-dir]
+           [(set-pinned-dir!) (set! pinned-dir (car args))]
+           ;; Event bus
+           [(get-event-bus) event-bus]
+           [(set-event-bus!) (set! event-bus (car args))]
+           [else (error 'gsd-context "unknown action: ~a" action)]))))))
 
-;; Plan data
-(define gsd-plan-data-box (box #f))
+;; ============================================================
+;; Default global context (backward compatibility)
+;; ============================================================
 
-;; Planning directory
-(define gsd-pinned-dir-box (box #f))
+(define gsd-default-ctx (make-gsd-context))
 
-;; Edit limit
-(define gsd-edit-limit-box (box 500))
-
-;; Event bus
-(define gsd-event-bus-box (box #f))
-
-;; State machine history
-(define gsd-history-box (box '()))
-
-;; Semaphore for atomic state transitions
+;; Semaphore for atomic operations on default context
 (define gsd-state-sem (make-semaphore 1))
 
-;; Thread-safe GSD state lock helper (Finding A4)
-(define (with-gsd-lock thunk)
-  (call-with-semaphore gsd-state-sem thunk))
-
 ;; ============================================================
-;; Parameter-compatible accessors (readers)
+;; Parameter-compatible accessors (readers/writers)
+;; All use the default global context.
 ;; ============================================================
 
 (define (current-gsd-state)
-  (unbox gsd-state-box))
+  (gsd-default-ctx 'get-state))
 
 (define (set-gsd-state! v)
-  (set-box! gsd-state-box v))
+  (gsd-default-ctx 'set-state v))
 
 (define (current-gsd-mode)
-  (gsd-runtime-state-mode (unbox gsd-state-box)))
+  (gsd-runtime-state-mode (current-gsd-state)))
 
 (define (current-wave-number)
-  (gsd-runtime-state-current-wave (unbox gsd-state-box)))
+  (gsd-runtime-state-current-wave (current-gsd-state)))
 
 (define (current-plan-data)
-  (unbox gsd-plan-data-box))
+  (gsd-default-ctx 'get-plan))
 
 (define (set-plan-data! v)
-  (set-box! gsd-plan-data-box v))
+  (gsd-default-ctx 'set-plan v))
 
 (define (current-pinned-dir)
-  (unbox gsd-pinned-dir-box))
+  (gsd-default-ctx 'get-pinned-dir))
 
 (define (set-pinned-dir! v)
-  (set-box! gsd-pinned-dir-box v))
+  (gsd-default-ctx 'set-pinned-dir! v))
 
 (define (current-edit-limit)
-  (unbox gsd-edit-limit-box))
+  (gsd-default-ctx 'get-edit-limit))
 
 (define (set-edit-limit! v)
-  (set-box! gsd-edit-limit-box v))
+  (gsd-default-ctx 'set-edit-limit! v))
 
 (define (current-gsd-event-bus)
-  (unbox gsd-event-bus-box))
+  (gsd-default-ctx 'get-event-bus))
 
 (define (set-gsd-event-bus! v)
-  (set-box! gsd-event-bus-box v))
+  (gsd-default-ctx 'set-event-bus! v))
 
 (define (current-gsd-history)
-  (unbox gsd-history-box))
+  (gsd-default-ctx 'get-history))
 
 (define (set-gsd-history! v)
-  (set-box! gsd-history-box v))
+  (gsd-default-ctx 'set-history! v))
+
+;; ============================================================
+;; Thread-safe lock helper (uses default semaphore)
+;; ============================================================
+
+(define (with-gsd-lock thunk)
+  (call-with-semaphore gsd-state-sem thunk))
 
 ;; ============================================================
 ;; Atomic state operations
 ;; ============================================================
 
 (define (gsd-state-snapshot)
-  (with-gsd-lock (lambda () (unbox gsd-state-box))))
+  (with-gsd-lock (lambda () (gsd-default-ctx 'get-state))))
 
 (define (gsd-state-update! update-thunk)
-  (with-gsd-lock (lambda () (set-box! gsd-state-box (update-thunk (unbox gsd-state-box))))))
+  (with-gsd-lock (lambda ()
+                   (gsd-default-ctx 'set-state (update-thunk (gsd-default-ctx 'get-state))))))
 
 (define (gsd-history-snapshot)
-  (with-gsd-lock (lambda () (reverse (unbox gsd-history-box)))))
+  (with-gsd-lock (lambda () (gsd-default-ctx 'get-history))))
 
 (define (gsd-history-update! update-thunk)
-  (with-gsd-lock (lambda () (set-box! gsd-history-box (update-thunk (unbox gsd-history-box))))))
+  (with-gsd-lock (lambda ()
+                   (gsd-default-ctx 'set-history! (update-thunk (gsd-default-ctx 'get-history))))))
 
 ;; ============================================================
 ;; Provide
 ;; ============================================================
 
-(provide current-gsd-state
+;; Closure factory
+(provide make-gsd-context
+         ;; Backward-compatible accessors
+         current-gsd-state
          set-gsd-state!
          current-gsd-mode
          current-wave-number
