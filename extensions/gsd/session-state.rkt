@@ -9,7 +9,6 @@
 ;; isolated contexts.
 ;;
 ;; Thread safety: Each context has its own semaphore for atomic updates.
-;; The default context uses gsd-default-sem.
 
 (require racket/set
          "runtime-state-types.rkt")
@@ -50,9 +49,6 @@
            ;; Plan data
            [(get-plan) plan-data]
            [(set-plan) (set! plan-data (car args))]
-           ;; Workflow
-           [(get-workflow) #f] ;; stored in gsd-runtime-state
-           [(set-workflow) (void)]
            ;; Busy flag
            [(busy?) busy]
            [(set-busy!) (set! busy (car args))]
@@ -82,13 +78,11 @@
 
 (define gsd-default-ctx (make-gsd-context))
 
-;; Semaphore for atomic operations on default context
+;; Outer semaphore for compound operations (with-gsd-lock).
+;; The closure has its own inner semaphore for individual operations.
+;; Two-level locking: outer serializes compound ops, inner serializes individual ops.
+;; No deadlock risk since outer is always acquired before inner.
 (define gsd-state-sem (make-semaphore 1))
-
-;; ============================================================
-;; Parameter-compatible accessors (readers/writers)
-;; All use the default global context.
-;; ============================================================
 
 (define (current-gsd-state)
   (gsd-default-ctx 'get-state))
@@ -133,7 +127,7 @@
   (gsd-default-ctx 'set-history! v))
 
 ;; ============================================================
-;; Thread-safe lock helper (uses default semaphore)
+;; Thread-safe lock helper (outer semaphore for compound ops)
 ;; ============================================================
 
 (define (with-gsd-lock thunk)
