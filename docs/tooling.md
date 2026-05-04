@@ -69,3 +69,63 @@ Runs `raco fmt --check` on all `.rkt` files to ensure consistent formatting.
 ## Version Sync (`scripts/sync-version.rkt`)
 
 Synchronizes the version string across `info.rkt`, `README.md`, and other docs from the canonical source in `util/version.rkt`.
+
+## Unified Lint Runner (`scripts/lint-all.rkt`)
+
+Runs all lint/check scripts in a single process. This is the source of truth for CI lint gates.
+
+```bash
+racket scripts/lint-all.rkt                    # run all 16 checks
+racket scripts/lint-all.rkt --list             # list checks without running
+racket scripts/lint-all.rkt --only=format,deps # run subset
+```
+
+Checks include: format, version-sync, version-validate, version-cross, protocols, imports, deps, metrics-sync, metrics-lint, prose, readme-status, audit (non-blocking), tests, deprecation, ci-readiness, arch (non-blocking).
+
+## Pre-commit Hook (`scripts/pre-commit.rkt`)
+
+Installs a Git pre-commit hook that runs fast lint checks (delegated to `lint-all.rkt`) and affected tests.
+
+```bash
+racket scripts/pre-commit.rkt --install        # install quick hook
+racket scripts/pre-commit.rkt --install-full   # install full hook
+racket scripts/pre-commit.rkt                  # run quick checks manually
+racket scripts/pre-commit.rkt --full           # run all lints + full tests
+```
+
+The pre-commit hook delegates lint checks to `lint-all.rkt` so the two never drift.
+
+## Developer Setup (`scripts/setup-dev.rkt`)
+
+One-command bootstrap for new contributors.
+
+```bash
+racket scripts/setup-dev.rkt
+```
+
+Verifies Racket toolchain, installs pre-commit hook, verifies required scripts exist, and runs a quick lint health check.
+
+## Lint Alignment Checker (`scripts/check-lint-alignment.rkt`)
+
+Verifies that `pre-commit.rkt`'s fast-lint-checks list covers all required (non-optional) checks from `lint-all.rkt`. Used in CI to catch drift.
+
+```bash
+racket scripts/check-lint-alignment.rkt
+```
+
+## Automation Contract
+
+The following invariant must hold on every commit to `main`:
+
+1. **lint-all.rkt is the source of truth** for all lint checks.
+2. **pre-commit.rkt delegates to lint-all.rkt** — it never duplicates check logic.
+3. **check-lint-alignment.rkt runs in CI** and fails the build if pre-commit and lint-all drift.
+4. **Default pre-commit mode runs all fast checks** (everything except non-blocking audit/arch).
+5. **--full mode runs everything** including slow lints and full test suite.
+6. **setup-dev.rkt installs the pre-commit hook** so contributors get local validation automatically.
+
+If you add a new lint script, you MUST:
+- Register it in `lint-all.rkt`
+- Decide if it's fast (required) or slow (non-blocking)
+- Add it to `pre-commit.rkt`'s `fast-lint-checks` list if required
+- Verify `check-lint-alignment.rkt` passes before pushing

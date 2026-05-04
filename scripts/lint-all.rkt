@@ -39,7 +39,7 @@
         (list "tests" "scripts/lint-tests.rkt" '() #f)
         (list "deprecation" "scripts/lint-deprecation-deadlines.rkt" '("--ci") #f)
         (list "ci-readiness" "scripts/lint-ci-readiness.rkt" '() #f)
-        (list "arch" "scripts/arch-report.rkt" '("--ci") #f)))
+        (list "arch" "scripts/arch-report.rkt" '("--ci") #t)))
 
 ;; ── Helpers ──
 
