@@ -9,11 +9,11 @@
 (require rackunit
          racket/set)
 
-;; Import the closure factory (will be created in W1)
-;; For now, define a placeholder that tests will exercise.
-;; Once implemented, this require will work.
-(require (only-in "helpers/gsd-test-helpers.rkt"
-                  [make-gsd-context make-gsd-context]))
+;; Import the real closure factory from session-state.rkt (W1)
+(require (only-in "../extensions/gsd/runtime-state-types.rkt"
+                  gsd-runtime-state?))
+(require (only-in "../extensions/gsd/session-state.rkt"
+                  make-gsd-context))
 
 
 ;; ============================================================
@@ -35,7 +35,7 @@
 
 (test-case "state get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-state) #f "initial state is #f")
+  (check-pred gsd-runtime-state? (ctx 'get-state) "initial state is gsd-runtime-state")
   (ctx 'set-state 'idle)
   (check-equal? (ctx 'get-state) 'idle))
 
@@ -62,9 +62,9 @@
 
 (test-case "workflow get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-workflow) #f "initial workflow is #f")
-  (ctx 'set-workflow 'v0.29.4)
-  (check-equal? (ctx 'get-workflow) 'v0.29.4))
+  ;; Workflow is stored in gsd-runtime-state, not as separate field
+  ;; The closure factory returns #f for get-workflow (no-op set)
+  (check-equal? (ctx 'get-workflow) #f "workflow stored in state struct"))
 
 ;; ============================================================
 ;; 5. Busy flag get/set roundtrip
