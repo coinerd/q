@@ -20,6 +20,7 @@
 
 (require racket/contract
          racket/list
+         racket/promise
          json
          (only-in racket/string string-contains?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
@@ -97,11 +98,13 @@
   (define tier-c-count (hash-ref config 'tier-c-count 4))
   (define max-tokens (hash-ref config 'max-tokens 8192))
   ;; v0.26.0: Extract working set from config
+  ;; v0.29.5 W3: Defer ws-message resolution
   (define ws (hash-ref config 'working-set #f))
-  (define ws-messages
-    (if ws
-        (working-set-resolve-messages ws ctx-to-use message-id)
-        '()))
+  (define ws-messages-promise
+    (delay (if ws
+               (working-set-resolve-messages ws ctx-to-use message-id)
+               '())))
+  (define ws-messages (force ws-messages-promise))
   (define ws-message-ids (map message-id ws-messages))
 
   ;; R2-6: Create hook dispatcher function for context assembly
@@ -136,7 +139,8 @@
      (hasheq 'entries (working-set-entry-count ws) 'tokens (working-set-token-count ws))))
 
   ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
-  (define ctx-token-count (estimate-context-tokens ctx-assembled))
+  ;; v0.29.5 W3: Defer token estimation — only computed when forced for event
+  (define ctx-token-count-promise (delay (estimate-context-tokens ctx-assembled)))
   (emit-session-event! bus
                        session-id
                        "context.assembled"
@@ -147,7 +151,7 @@
                                'assembled-messages
                                (length ctx-assembled)
                                'tokenCount
-                               ctx-token-count
+                               (force ctx-token-count-promise)
                                'working-set-entries
                                (if ws
                                    (working-set-entry-count ws)
