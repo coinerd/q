@@ -133,8 +133,53 @@
              #:when (hash-has-key? msg-by-id (ws-entry-message-id e)))
     (hash-ref msg-by-id (ws-entry-message-id e))))
 
+;; ────────────────────────────────────────────────────────────
+;; Closure factory (v0.29.4 W2)
+;; ────────────────────────────────────────────────────────────
+
+;; Create an isolated working-set context using closures.
+;; Returns a dispatch procedure that accepts actions:
+;;   'entries, 'entry-count, 'token-count,
+;;   'max-entries, 'max-tokens,
+;;   'add!, 'remove!, 'reset!
+;; Thread-safe via internal semaphore.
+(define (make-ws-context #:max-entries [max-entries 30] #:max-tokens [max-tokens 15000])
+  (let ([entries '()]
+        [sem (make-semaphore 1)])
+    (lambda (action . args)
+      (call-with-semaphore
+       sem
+       (lambda ()
+         (case action
+           [(entries) entries]
+           [(entry-count) (length entries)]
+           [(token-count) (for/sum ([e (in-list entries)]) (ws-entry-token-estimate e))]
+           [(max-entries) max-entries]
+           [(max-tokens) max-tokens]
+           [(reset!) (set! entries '())]
+           [(add!)
+            (define path (car args))
+            (define msg-id (cadr args))
+            (define tokens (caddr args))
+            (unless (string? path)
+              (error 'ws-context "path must be a string, got: ~a" path))
+            (unless (number? tokens)
+              (error 'ws-context "token-estimate must be a number, got: ~a" tokens))
+            (define new-entry (ws-entry path msg-id tokens (current-seconds)))
+            (define without-existing
+              (filter (lambda (e) (not (equal? (ws-entry-path e) path))) entries))
+            (set! entries (cons new-entry without-existing))
+            ;; Enforce max-entries
+            (when (> (length entries) max-entries)
+              (set! entries (take entries max-entries)))]
+           [(remove!)
+            (define path (car args))
+            (set! entries (filter (lambda (e) (not (equal? (ws-entry-path e) path))) entries))]
+           [else (error 'ws-context "unknown action: ~a" action)]))))))
+
 (provide working-set?
          make-working-set
+         make-ws-context
          working-set-entries
          working-set-entry-count
          working-set-token-count
