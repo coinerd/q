@@ -93,6 +93,7 @@
                           "metrics-lint"
                           "prose"
                           "readme-status"
+                          "changelog-dates"
                           "tests"
                           "deprecation"
                           "ci-readiness")
