@@ -3,14 +3,15 @@
 ;; tests/test-working-set-factory.rkt — Tests for closure-encapsulated working-set
 ;;
 ;; W0 scaffolding for v0.29.4: Runtime State Encapsulation.
-;; These tests define the expected API for make-ws-context, a closure
-;; factory that replaces the mutable struct fields in runtime/working-set.rkt.
+;; These tests verify make-ws-context, a closure factory that wraps
+;; working-set operations behind a thread-safe dispatch closure.
 
 (require rackunit)
 
-;; Import the closure factory (will be created in W2)
-(require (only-in "helpers/ws-test-helpers.rkt"
-                  [make-ws-context make-ws-context]))
+;; Import the real closure factory from runtime/working-set.rkt (W2)
+(require (only-in "../runtime/working-set.rkt"
+                  make-ws-context
+                  ws-entry-path ws-entry-message-id ws-entry-token-estimate))
 
 
 ;; ============================================================
@@ -39,9 +40,9 @@
   (ws 'add! "/tmp/foo.rkt" "msg-1" 500)
   (define entries (ws 'entries))
   (check-equal? (length entries) 1)
-  (check-equal? (car entries) (hasheq 'path "/tmp/foo.rkt"
-                                       'message-id "msg-1"
-                                       'token-estimate 500)))
+  (check-equal? (ws-entry-path (car entries)) "/tmp/foo.rkt")
+  (check-equal? (ws-entry-message-id (car entries)) "msg-1")
+  (check-equal? (ws-entry-token-estimate (car entries)) 500))
 
 (test-case "add multiple entries"
   (define ws (make-ws-context))
@@ -56,8 +57,9 @@
   (ws 'add! "/tmp/foo.rkt" "msg-3" 300)
   (define entries (ws 'entries))
   ;; foo.rkt should be at front (refreshed), bar.rkt second
-  (check-equal? (hash-ref (car entries) 'path) "/tmp/foo.rkt")
-  (check-equal? (hash-ref (cadr entries) 'path) "/tmp/bar.rkt"))
+  (check-equal? (ws-entry-path (car entries)) "/tmp/foo.rkt")
+  (check-equal? (ws-entry-path (cadr entries)) "/tmp/bar.rkt")
+  (check-equal? (ws-entry-message-id (car entries)) "msg-3"))
 
 (test-case "remove entry by path"
   (define ws (make-ws-context))
@@ -65,7 +67,7 @@
   (ws 'add! "/tmp/bar.rkt" "msg-2" 200)
   (ws 'remove! "/tmp/foo.rkt")
   (check-equal? (length (ws 'entries)) 1)
-  (check-equal? (hash-ref (car (ws 'entries)) 'path) "/tmp/bar.rkt"))
+  (check-equal? (ws-entry-path (car (ws 'entries))) "/tmp/bar.rkt"))
 
 (test-case "remove nonexistent entry is no-op"
   (define ws (make-ws-context))
@@ -128,7 +130,7 @@
   (ws 'add! "/tmp/c.rkt" "msg-3" 300)
   ;; a.rkt should be evicted (oldest)
   (check-equal? (ws 'entry-count) 2)
-  (define paths (map (lambda (e) (hash-ref e 'path)) (ws 'entries)))
+  (define paths (map ws-entry-path (ws 'entries)))
   (check-false (member "/tmp/a.rkt" paths))
   (check-not-false (member "/tmp/c.rkt" paths)))
 
@@ -143,8 +145,8 @@
   (ws-b 'add! "/tmp/b.rkt" "msg-2" 200)
   (check-equal? (ws-a 'entry-count) 1)
   (check-equal? (ws-b 'entry-count) 1)
-  (check-equal? (hash-ref (car (ws-a 'entries)) 'path) "/tmp/a.rkt")
-  (check-equal? (hash-ref (car (ws-b 'entries)) 'path) "/tmp/b.rkt"))
+  (check-equal? (ws-entry-path (car (ws-a 'entries))) "/tmp/a.rkt")
+  (check-equal? (ws-entry-path (car (ws-b 'entries))) "/tmp/b.rkt"))
 
 (test-case "reset on one context doesn't affect other"
   (define ws-a (make-ws-context))
