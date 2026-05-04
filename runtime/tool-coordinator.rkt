@@ -22,6 +22,8 @@
          racket/list
          racket/path
          json
+         (only-in "../util/tool-types.rkt" tool-call?)
+         (only-in "../tools/tool.rkt" tool-result?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
@@ -56,11 +58,20 @@
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 
-(provide (contract-out
-          [extract-tool-calls-from-messages (-> list? list?)]
-          [make-tool-result-messages (-> list? list? string? list?)]
-          [handle-tool-calls-pending
-           (-> list? list? any/c any/c any/c string? (or/c path-string? path?) any/c hash? list?)]))
+(provide (contract-out [extract-tool-calls-from-messages (-> (listof message?) (listof tool-call?))]
+                       [make-tool-result-messages
+                        (-> (listof tool-call?) (listof tool-result?) string? (listof message?))]
+                       [handle-tool-calls-pending
+                        (-> list? ; new-msgs
+                            list? ; ctx-with-steering
+                            any/c ; ext-reg
+                            any/c ; reg
+                            any/c ; bus
+                            string? ; session-id
+                            (or/c path-string? path?) ; log-path
+                            any/c ; token
+                            hash? ; config
+                            list?)]))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
