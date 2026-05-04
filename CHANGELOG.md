@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.28.26 — 2026-05-06
+
+### Status Restoration + Tooling Hardening
+
+Fixes the README Status section (41 entries restored from commit 44b26ae) and
+shields it from future auto-sync mangling. Refactors sync-readme-status parser
+to use CHANGELOG ### sub-header instead of body paragraphs (was 1,247-char blob,
+now 74 chars). Extracts 7-pattern historical-line? guard into shared module.
+
+**W0 — README Status restoration + shield:**
+- Restore 40 historical entries from pre-mangling commit 44b26ae.
+- Add README.md to EXCLUDED-MD-FILES in both sync-version.rkt and lint-version.rkt.
+- Fix CHANGELOG v0.28.25 date from 2026-05-02 to 2026-05-04.
+- Add run-version-validate step 3c to pre-commit.rkt.
+
+**W1 — sync-readme-status parser + comparison fix:**
+- Replace body-paragraph parser with ### sub-header title extraction.
+- Truncate summary to 200 chars (was: 1,247-char blob).
+- Fix --check to use full normalized string comparison (was: 60-char prefix).
+- Add length validation: warn >200 chars, reject >300 chars in --sync.
+- 5 new test cases for parser, comparison, length, and replace behavior.
+
+**W2 — Shared guard + version bump 0.28.26:**
+- Extract historical-line? to scripts/version-guard.rkt shared module.
+- Update sync-version.rkt and lint-version.rkt to require from shared module.
+- Update test-sync-version-historical.rkt to require from shared module.
+
 ## v0.28.25 — 2026-05-04
 
 ### Audit Remediation — Docs Integrity + Tooling Hardening

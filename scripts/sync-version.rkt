@@ -23,7 +23,8 @@
          racket/list
          racket/port
          racket/string
-         racket/path)
+         racket/path
+         "version-guard.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing
@@ -86,14 +87,15 @@
 
 ;; Files where version refs are historical / should NOT be overwritten
 (define EXCLUDED-MD-FILES
-  '("README.md" "CHANGELOG.md" "releasing.md"
-                   "why-q.md"
-                   "api-stability.md"
-                   "compatibility-matrix.md"
-                   "package-registry-spec.md"
-                   "publish-verify-workflow.md"
-                   "sdk-rpc-catalog.md"
-                   "EXTENSIONS_INVENTORY.md"))
+  '("README.md" "CHANGELOG.md"
+                "releasing.md"
+                "why-q.md"
+                "api-stability.md"
+                "compatibility-matrix.md"
+                "package-registry-spec.md"
+                "publish-verify-workflow.md"
+                "sdk-rpc-catalog.md"
+                "EXTENSIONS_INVENTORY.md"))
 
 (define (skip-md-path? p)
   (define s (path->string p))
@@ -108,25 +110,7 @@
       (string-contains? s "/docs/adr/")
       (string-contains? s "/docs/security.md")))
 
-(define (historical-line? line)
-  ;; 7-pattern context-aware guard: skip lines that contain historical
-  ;; version references that should NOT be updated to the current version.
-  (define trimmed (string-trim line))
-  (or
-   ;; Pattern 1: README Status bold entries — "**vX.Y.Z** — Description"
-   (regexp-match? #rx"^\\*\\*v[0-9]" trimmed)
-   ;; Pattern 2: "in vX.Y.Z" — e.g. "narrowed in v0.28.22"
-   (regexp-match? #rx" in v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-   ;; Pattern 3: Wave labels — "(vX.Y.Z W0)"
-   (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+ W[0-9]\\)" line)
-   ;; Pattern 4: "As of vX.Y.Z"
-   (regexp-match? #rx"As of v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-   ;; Pattern 5: Parenthetical EOL — "(vX.Y.Z)" at line end
-   (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)[^)]*$" line)
-   ;; Pattern 6: Temporal references — "introduced/added/since vX.Y.Z" (case-insensitive)
-   (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-   ;; Pattern 7: Section headers with version — "## Title (vX.Y.Z)"
-   (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)))
+;; historical-line? is now provided by version-guard.rkt
 
 ;; Replace mismatched version strings in .md content, respecting context.
 ;; Returns (new-content . num-changes).

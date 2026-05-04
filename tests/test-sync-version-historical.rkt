@@ -1,30 +1,12 @@
 #lang racket
 
-;; test-sync-version-historical.rkt — Tests for sync-version.rkt historical-line? guard
+;; test-sync-version-historical.rkt — Tests for version-guard.rkt historical-line? guard
 ;;
 ;; W1 sub-issue #3325: 7 positive patterns + 2 negative cases
+;; W2 sub-issue #3357: Now requires from shared version-guard.rkt
 
-(require rackunit)
-
-;; Replicate the 7-pattern historical-line? guard from sync-version.rkt
-;; (since it's a script, not a module we can require from)
-(define (historical-line? line)
-  (define trimmed (string-trim line))
-  (or
-   ;; Pattern 1: README Status bold entries — "**vX.Y.Z** — Description"
-   (regexp-match? #rx"^\\*\\*v[0-9]" trimmed)
-   ;; Pattern 2: "in vX.Y.Z" — e.g. "narrowed in v0.28.22"
-   (regexp-match? #rx" in v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-   ;; Pattern 3: Wave labels — "(vX.Y.Z W0)"
-   (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+ W[0-9]\\)" line)
-   ;; Pattern 4: "As of vX.Y.Z"
-   (regexp-match? #rx"As of v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-   ;; Pattern 5: Parenthetical EOL — "(vX.Y.Z)" at line end
-   (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)[^)]*$" line)
-   ;; Pattern 6: Temporal references — "introduced/added/since vX.Y.Z" (case-insensitive)
-   (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-   ;; Pattern 7: Section headers with version — "## Title (vX.Y.Z)"
-   (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)))
+(require rackunit
+         (only-in "../scripts/version-guard.rkt" historical-line?))
 
 ;; ---------------------------------------------------------------------------
 ;; 7 positive pattern tests

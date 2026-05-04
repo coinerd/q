@@ -18,7 +18,8 @@
          racket/list
          racket/path
          racket/string
-         racket/port)
+         racket/port
+         "version-guard.rkt")
 
 ;; ---------------------------------------------------------------------------
 ;; Parsing helpers
@@ -106,17 +107,7 @@
                               (path->string filename)
                               filename)
                           "docs/adr/")))
-  ;; 7-pattern context-aware guard: skip lines with historical version refs
-  (define (historical-line? line)
-    (define trimmed (string-trim line))
-    (or
-     (regexp-match? #rx"^\\*\\*v[0-9]" trimmed)
-     (regexp-match? #rx" in v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-     (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+ W[0-9]\\)" line)
-     (regexp-match? #rx"As of v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-     (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)[^)]*$" line)
-     (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+" line)
-     (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)))
+  ;; historical-line? is now provided by version-guard.rkt
   ;; Skip lines inside fenced code blocks (``` ... ```)
   (define in-code-block #f)
   (define (code-fence-line? line)
