@@ -105,8 +105,17 @@
                               (path->string filename)
                               filename)
                           "docs/adr/")))
-  ;; Skip historical release lines like "**v0.6.3** — ..."
-  (define historical-line? (lambda (line) (regexp-match? #rx"^\\*\\*v[0-9]" (string-trim line))))
+  ;; 7-pattern context-aware guard: skip lines with historical version refs
+  (define (historical-line? line)
+    (define trimmed (string-trim line))
+    (or
+     (regexp-match? #rx"^\\*\\*v[0-9]" trimmed)
+     (regexp-match? #rx" in v[0-9]+\\.[0-9]+\\.[0-9]+" line)
+     (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+ W[0-9]\\)" line)
+     (regexp-match? #rx"As of v[0-9]+\\.[0-9]+\\.[0-9]+" line)
+     (regexp-match? #rx"\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)[^)]*$" line)
+     (regexp-match? #px"(?i:introduced|added|since|deprecated|removed) v[0-9]+\\.[0-9]+\\.[0-9]+" line)
+     (regexp-match? #rx"^#+ .*\\(v[0-9]+\\.[0-9]+\\.[0-9]+\\)" trimmed)))
   ;; Skip lines inside fenced code blocks (``` ... ```)
   (define in-code-block #f)
   (define (code-fence-line? line)

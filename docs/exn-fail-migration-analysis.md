@@ -1,4 +1,4 @@
-# Exn:fail Migration Analysis (v0.28.24 W1)
+# Exn:fail Migration Analysis (v0.28.22 W1)
 
 ## Audit Results
 
