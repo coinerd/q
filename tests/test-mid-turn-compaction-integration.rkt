@@ -14,6 +14,7 @@
          "../runtime/compactor.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/iteration/retry-policy.rkt"
+         (only-in "../runtime/iteration/loop-state.rkt" resolve-estimate-tokens)
          "../llm/token-budget.rkt"
          "../agent/event-bus.rkt")
 
@@ -195,6 +196,22 @@
                    (hasheq))))
       (define result
         (maybe-compact-mid-turn sess ctx bus "test-session" (hasheq 'max-context-tokens 128000)))
-      (check-equal? (length result) (length ctx) "under-budget returns original context unchanged"))))
+      (check-equal? (length result) (length ctx) "under-budget returns original context unchanged"))
+
+   ;; v0.28.24 W0: test shared token estimation helper
+
+   (test-case
+    "compute-mid-turn-estimate returns correct triple"
+    (define ctx
+      (for/list ([i (in-range 5)])
+        (message (format "id~a" i) #f 'user 'message
+                 (list (text-part "text" (format "Msg ~a" i)))
+                 (current-seconds) (hasheq))))
+    (define config (hasheq 'max-context-tokens 1000))
+    (define-values (estimated threshold max-tok)
+      (compute-mid-turn-estimate ctx config (resolve-estimate-tokens)))
+    (check-true (exact-positive-integer? estimated) "estimate is positive integer")
+    (check-equal? max-tok 1000 "max-tokens from config")
+    (check-equal? threshold 900 "threshold is 90% of max"))))
 
 (run-tests integration-suite)

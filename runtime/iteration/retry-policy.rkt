@@ -28,20 +28,16 @@
          (only-in "../session-compaction.rkt" compact-context-mid-turn)
          (only-in "loop-state.rkt" resolve-estimate-tokens))
 
-(provide check-mid-turn-budget!
+(provide compute-mid-turn-estimate
+         check-mid-turn-budget!
          estimate-mid-turn-tokens
          maybe-compact-mid-turn
          call-with-overflow-recovery
          detect-exploration-loop)
 
-;; ── Estimate token count for mid-turn context ──
-;; Returns integer token estimate. Emits context.mid-turn-over-budget event
-;; when context exceeds 90% of max budget.
-(define (estimate-mid-turn-tokens ctx
-                                  bus
-                                  session-id
-                                  config
-                                  #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
+;; ── Shared token estimation logic ──
+;; Returns (values estimated budget-threshold max-tokens).
+(define (compute-mid-turn-estimate ctx config estimate-tokens)
   (define max-tokens (hash-ref config 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (define texts
@@ -56,6 +52,18 @@
                   (text-part-text part)))]
         [else ""])))
   (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
+  (values estimated budget-threshold max-tokens))
+
+;; ── Estimate token count for mid-turn context ──
+;; Returns integer token estimate. Emits context.mid-turn-over-budget event
+;; when context exceeds 90% of max budget.
+(define (estimate-mid-turn-tokens ctx
+                                  bus
+                                  session-id
+                                  config
+                                  #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
+  (define-values (estimated budget-threshold max-tokens)
+    (compute-mid-turn-estimate ctx config estimate-tokens))
   (when (and (> estimated budget-threshold) bus session-id)
     (emit-session-event!
      bus
@@ -73,20 +81,8 @@
                                 session-id
                                 config
                                 #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
-  (define max-tokens (hash-ref config 'max-context-tokens 128000))
-  (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
-  (define texts
-    (for/list ([msg (in-list ctx)])
-      (define content (message-content msg))
-      (cond
-        [(string? content) content]
-        [(list? content)
-         (apply string-append
-                (for/list ([part (in-list content)]
-                           #:when (text-part? part))
-                  (text-part-text part)))]
-        [else ""])))
-  (define estimated (for/sum ([t (in-list texts)]) (estimate-tokens (list (hasheq 'content t)))))
+  (define-values (estimated budget-threshold max-tokens)
+    (compute-mid-turn-estimate ctx config estimate-tokens))
   (cond
     [(<= estimated budget-threshold) ctx]
     [else
