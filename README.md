@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.28.23-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.28.24-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.28.23
+racket main.rkt --version  # q version 0.28.24
 raco test tests/           # run the full test suite
 ```
 
@@ -335,7 +335,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 <!-- DO NOT EDIT: Status section is historical. Use sync-version.rkt for version bumps. -->
 ## Status
 
-**v0.28.23** — Audit Remediation (7 Warnings from v0.28.22). GSD role guard prevents false-positive pinning from user messages. `make-text-part` canonicalized in tool summarization. `check-mid-turn-budget!` split into `estimate-mid-turn-tokens` + `maybe-compact-mid-turn`. Integration tests with mock agent-session.
+**v0.28.24** — Audit Remediation (7 Warnings from v0.28.22). GSD role guard prevents false-positive pinning from user messages. `make-text-part` canonicalized in tool summarization. `check-mid-turn-budget!` split into `estimate-mid-turn-tokens` + `maybe-compact-mid-turn`. Integration tests with mock agent-session.
 
 **v0.28.22** — Context Loop Prevention Wiring. Mid-turn compaction wired into iteration loop (session threading). Exploration loop detection emits `iteration.exploration-loop` event. GSD progress auto-detected and pinned in Tier A. 3 critical findings from v0.28.21 resolved.
 
