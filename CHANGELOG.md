@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.29.1 — 2026-05-02
+
+### Match Dispatch + Pure Decisions
+
+- Added pure `decide-next-action` function to `runtime/iteration.rkt`:
+  - `iteration-ctx` struct captures pure loop state
+  - `match`-based dispatch on termination reason
+  - Handles: completed, cancelled, force-shutdown, shutdown, hook-blocked, error, tool-calls-pending (with hard/soft limit checks)
+  - `known-termination-reasons` for exhaustiveness testing
+- Added `handle-hook-result` to `agent/loop.rkt`:
+  - Match-based dispatch on hook-result-action ('block → on-block, else → on-continue)
+  - Handles #f (no hook) gracefully
+
+### Tests (20 new)
+
+- `test-iteration-decision.rkt`: 11 tests for decide-next-action pure function
+- `test-hook-match-dispatch.rkt`: 6 tests for handle-hook-result
+- `test-termination-reasons.rkt`: 3 tests for termination exhaustiveness
+
 ## v0.29.0 — 2026-05-02
 
 ### Contract Boundaries
