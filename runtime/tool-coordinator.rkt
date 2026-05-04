@@ -18,6 +18,7 @@
 ;; header comment for full rationale.
 
 (require racket/contract
+         racket/contract
          racket/list
          racket/path
          json
@@ -55,9 +56,11 @@
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 
-(provide extract-tool-calls-from-messages
-         make-tool-result-messages
-         handle-tool-calls-pending)
+(provide (contract-out
+          [extract-tool-calls-from-messages (-> list? list?)]
+          [make-tool-result-messages (-> list? list? string? list?)]
+          [handle-tool-calls-pending
+           (-> list? list? any/c any/c any/c string? (or/c path-string? path?) any/c hash? list?)]))
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
@@ -175,13 +178,14 @@
         (emit-session-event! bus
                              session-id
                              "tool.call.failed"
-                             (hasheq 'name (tool-call-name tc)
-                                     'error (tool-result-content->string (tool-result-content tr))))
+                             (hasheq 'name
+                                     (tool-call-name tc)
+                                     'error
+                                     (tool-result-content->string (tool-result-content tr))))
         (emit-session-event! bus
                              session-id
                              "tool.call.completed"
-                             (hasheq 'name (tool-call-name tc)
-                                     'result (tool-result-content tr)))))
+                             (hasheq 'name (tool-call-name tc) 'result (tool-result-content tr)))))
 
   ;; Convert scheduler results to tool-result messages.
   (define tool-result-msgs
