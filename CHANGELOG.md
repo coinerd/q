@@ -2,7 +2,9 @@
 
 ## v0.28.21 — 2026-05-04
 
-### TUI Thinking Leak Fix + Phase A
+### TUI Thinking Leak Fix + Context Circular Loop Prevention
+
+**Phase A — TUI Thinking Visibility:**
 
 **T1 FIX:** Thinking text persisted as permanent transcript entry when
 assistant turn completes with empty content (tool-call turns).
@@ -15,6 +17,26 @@ truncation for long reasoning text.
 **T3 TEST:** Streaming thinking suppression verified — hidden when
 streaming text present, shown when only thinking, persisted entries
 always visible.
+
+**Phase B — Context Circular Loop Prevention:**
+
+**T4 CORE:** Mid-turn compaction trigger — `check-mid-turn-budget!` now
+accepts optional `#:session` param to trigger in-place compaction when
+context exceeds 90% budget during tool-call loops.
+
+**T5 CORE:** Dynamic Tier-B sizing — replaces hardcoded Tier-B=20 with
+`min(50, max(20, total/10))`, scaling context retention proportionally.
+
+**T6 CORE:** Tool result summarization — tool/bash outputs > 8000 chars
+automatically truncated to head/tail with indicator. Prevents context
+bloat from large outputs.
+
+**T7 CORE:** Exploration loop detection — `detect-exploration-loop`
+identifies repeating 2-tool patterns (read-grep cycles) in recent calls.
+
+**T8 CORE:** GSD progress pinning — messages with `gsd-pin` meta flag
+are pinned to Tier A, surviving compaction. Critical GSD state
+remains available to LLM during long sessions.
 
 
 ## v0.28.20 — 2026-05-03
