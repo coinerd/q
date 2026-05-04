@@ -589,6 +589,18 @@
                                          (map tool-call-name
                                               (extract-tool-calls-from-messages new-msgs)))
                                  20))
+                 ;; v0.28.22 W1: exploration loop detection
+                 (define loop-warning (detect-exploration-loop new-recent-tools))
+                 (when loop-warning
+                   (emit-session-event! bus
+                                        session-id
+                                        "iteration.exploration-loop"
+                                        (hasheq 'pattern
+                                                loop-warning
+                                                'recent-tools
+                                                new-recent-tools
+                                                'iteration
+                                                iteration)))
                  (loop updated-ctx
                        (add1 iteration)
                        effective-tool-count
