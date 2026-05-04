@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.28.27 — 2026-05-06
+
+### Audit Remediation — Permanent Tooling Automation
+
+Closes the recurring C2 pre-commit/lint-all drift finding with a structural
+solution: pre-commit now delegates ALL lint checks to lint-all.rkt. Adds
+lint-alignment CI gate to catch future drift automatically.
+
+**W0 — Fix release-blocking test failures + CI caching:**
+- Fix `turn.completed` handler: use `event-time` instead of
+  `current-inexact-milliseconds` for elapsed-time calculation, making
+  TUI state deterministic in tests.
+- Fix `test-tui-renderer.rkt`: use 700ms-spaced deterministic timestamps
+  (start at 1000ms, completion at 1700ms) to trigger `busy?=#f` branch.
+- Fix `mock-apply-event`: incrementing timestamps based on event index
+  (`(* idx 600)` ms).
+- Fix `test-provider-error-recovery.rkt`: incrementing `evt-counter`
+  timestamps.
+- Add `actions/cache@v4` to all 4 CI jobs (lint, test, release-dry-run,
+  smoke) with per-job `key: racket-pkgs-<job>-<os>-<racket>-<info.rkt hash>`.
+
+**W1 — Align pre-commit + lint-all + setup-dev + CI gate:**
+- Restructure `pre-commit.rkt` to delegate lint checks to `lint-all.rkt`
+  via `--only` filter. Default mode runs all 14 fast checks; `--full` runs
+  all 16 including slow non-blocking checks (audit, arch).
+- Add `scripts/setup-dev.rkt` — one-command bootstrap verifying Racket
+  toolchain, installing pre-commit hook, verifying required scripts.
+- Add `scripts/check-lint-alignment.rkt` — verifies pre-commit fast checks
+  cover all required (non-optional) lint-all checks.
+- Add CI `lint-alignment` gate job (Gate 1b) that fails on drift.
+- Mark `arch` check as `continue-on-error` in lint-all.rkt (slow lint).
+- Document automation contract in `docs/tooling.md`.
+
 ## v0.28.26 — 2026-05-06
 
 ### Status Restoration + Tooling Hardening
