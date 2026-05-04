@@ -46,23 +46,28 @@
       line))
   (define version
     (let ([m (and header-line (regexp-match changelog-header-rx header-line))]) (and m (cadr m))))
-  (define summary-lines
+  ;; Strategy: use ### sub-header title as summary (concise, authoritative)
+  ;; Fallback: use header subtitle (text after — in ## header)
+  ;; Truncate to MAX-ENTRY-LEN chars
+  (define sub-header-line
     (let loop ([ls lines]
-               [found-header? #f]
-               [acc '()])
+               [found-header? #f])
       (cond
-        [(null? ls) (reverse acc)]
-        [(and (not found-header?) (regexp-match? changelog-header-rx (car ls)))
-         (loop (cdr ls) #t acc)]
-        [(and found-header? (regexp-match? #rx"^## " (car ls))) (reverse acc)]
-        [(and found-header? (regexp-match? sub-header-rx (car ls))) (loop (cdr ls) #t acc)]
-        [(and found-header? (> (string-length (string-trim (car ls))) 0))
-         (loop (cdr ls) #t (cons (string-trim (car ls)) acc))]
-        [else (loop (cdr ls) found-header? acc)])))
+        [(null? ls) #f]
+        [(and (not found-header?) (regexp-match? changelog-header-rx (car ls))) (loop (cdr ls) #t)]
+        [(and found-header? (regexp-match? #rx"^## " (car ls))) #f]
+        [(and found-header? (regexp-match? sub-header-rx (car ls)))
+         (define m (regexp-match #rx"^### (.+)$" (car ls)))
+         (and m (string-trim (cadr m)))]
+        [else (loop (cdr ls) found-header?)])))
+  (define header-subtitle
+    (let ([m (and header-line (regexp-match #rx"^## v[0-9.]+ — (.+)$" header-line))])
+      (and m (cadr m))))
+  (define raw-summary (or sub-header-line header-subtitle (format "v~a release" version)))
   (define summary
-    (cond
-      [(null? summary-lines) #f]
-      [else (string-join summary-lines " ")]))
+    (if (> (string-length raw-summary) MAX-ENTRY-LEN)
+        (string-append (substring raw-summary 0 (- MAX-ENTRY-LEN 3)) "...")
+        raw-summary))
   (values version summary))
 
 ;; ---------------------------------------------------------------------------
@@ -72,6 +77,16 @@
 (define status-heading-rx #rx"^## Status")
 (define next-heading-rx #rx"^## ")
 (define status-version-rx #rx"\\*\\*v([0-9]+\\.[0-9]+\\.[0-9]+)\\*\\*")
+(define MAX-ENTRY-LEN 200)
+(define WARN-ENTRY-LEN 200)
+(define REJECT-ENTRY-LEN 300)
+
+(define (normalize-entry s)
+  ;; Normalize a Status entry for comparison: strip whitespace variation
+  (define no-ws (regexp-replace* #rx"[\\s]+" (string-trim s) " "))
+  ;; Remove \*\*version\*\* prefix for description-only comparison
+  (define stripped (regexp-replace #rx"^\\*\\*v[0-9.]+\\*\\* — " no-ws ""))
+  (string-trim stripped))
 
 (define (find-status-section-range lines)
   (define start
@@ -186,10 +201,9 @@
            (cond
              [(and cl-version cl-summary status-line)
               (define expected-entry (format "**v~a** — ~a" cl-version cl-summary))
-              (define cmp-len (min 60 (string-length status-line) (string-length expected-entry)))
-              (define status-prefix (substring status-line 0 cmp-len))
-              (define expected-prefix (substring expected-entry 0 cmp-len))
-              (if (string=? status-prefix expected-prefix)
+              (define norm-status (normalize-entry status-line))
+              (define norm-expected (normalize-entry expected-entry))
+              (if (string=? norm-status norm-expected)
                   (begin
                     (printf "OK: README Status block version (~a) and description match CHANGELOG~n"
                             version)
@@ -219,6 +233,16 @@
            (begin
              (printf "WARNING: Could not parse CHANGELOG top entry; version-only sync~n")
              (format "v~a release" version))))
+     ;; Length validation
+     (when (> (string-length summary) REJECT-ENTRY-LEN)
+       (printf "ERROR: Generated Status entry too long (~a chars, max ~a). Fix CHANGELOG.~n"
+               (string-length summary)
+               REJECT-ENTRY-LEN)
+       (exit 1))
+     (when (> (string-length summary) WARN-ENTRY-LEN)
+       (printf "WARNING: Status entry is long (~a chars, recommended max ~a)~n"
+               (string-length summary)
+               WARN-ENTRY-LEN))
      (define updated
        (cond
          ;; If Status top version already matches, just update description

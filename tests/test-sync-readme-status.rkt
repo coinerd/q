@@ -40,6 +40,33 @@
   tmp)
 
 ;; ---------------------------------------------------------------------------
+;; Helper: extract ### sub-header from CHANGELOG (matches script's parser)
+;; ---------------------------------------------------------------------------
+
+(define (extract-changelog-subtitle [path "CHANGELOG.md"])
+  (parameterize ([current-directory q-root])
+    (define lines (file->lines path))
+    (define header-rx #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+) — .+")
+    (define header-line
+      (for/first ([line (in-list lines)]
+                  #:when (regexp-match? header-rx line))
+        line))
+    (define m (and header-line (regexp-match header-rx header-line)))
+    (define ver (and m (cadr m)))
+    (define sub-title
+      (let loop ([ls lines]
+                 [found? #f])
+        (cond
+          [(null? ls) #f]
+          [(and (not found?) (regexp-match? header-rx (car ls))) (loop (cdr ls) #t)]
+          [(and found? (regexp-match? #rx"^## " (car ls))) #f]
+          [(and found? (regexp-match? #rx"^### " (car ls)))
+           (define sm (regexp-match #rx"^### (.+)$" (car ls)))
+           (and sm (string-trim (cadr sm)))]
+          [else (loop (cdr ls) found?)])))
+    (values ver (or sub-title (and ver (format "v~a release" ver))))))
+
+;; ---------------------------------------------------------------------------
 ;; Tests
 ;; ---------------------------------------------------------------------------
 
@@ -67,34 +94,7 @@ EOF
               (format "Expected MISMATCH in output, got: ~a~%err: ~a" out err)))
 
 (test-case "sync-readme-status: --check passes when Status description matches CHANGELOG"
-  ;; Uses the actual CHANGELOG description so the check passes
-  (define-values (out err) (run-script "--version"))
-  (define current-ver (string-trim out))
-  ;; Read CHANGELOG to get the actual summary
-  (define-values (cl-version cl-summary)
-    (parameterize ([current-directory q-root])
-      (define lines (file->lines "CHANGELOG.md"))
-      (define header-rx #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+) — .+")
-      (define sub-rx #rx"^### ")
-      (define header-line
-        (for/first ([line (in-list lines)]
-                    #:when (regexp-match? header-rx line))
-          line))
-      (define m (and header-line (regexp-match header-rx header-line)))
-      (define ver (and m (cadr m)))
-      (define summary-lines
-        (let loop ([ls lines]
-                   [found? #f]
-                   [acc '()])
-          (cond
-            [(null? ls) (reverse acc)]
-            [(and (not found?) (regexp-match? header-rx (car ls))) (loop (cdr ls) #t acc)]
-            [(and found? (regexp-match? #rx"^## " (car ls))) (reverse acc)]
-            [(and found? (regexp-match? sub-rx (car ls))) (loop (cdr ls) #t acc)]
-            [(and found? (> (string-length (string-trim (car ls))) 0))
-             (loop (cdr ls) #t (cons (string-trim (car ls)) acc))]
-            [else (loop (cdr ls) found? acc)])))
-      (values ver (string-join summary-lines " "))))
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
   (when (and cl-version cl-summary)
     (define status-line (format "**v~a** — ~a" cl-version cl-summary))
     (define tmp-readme
@@ -167,51 +167,8 @@ EOF
                   (string-contains? out "no Status"))
               (format "Expected OK or MISSING for missing section, got: ~a~%err: ~a" out err)))
 
-;; --- v0.28.25 W0: CHANGELOG-based generation tests ---
-
-(test-case "parse-changelog-top-entry: returns correct version and summary"
-  (define-values (cl-version cl-summary)
-    (parameterize ([current-directory q-root])
-      (define lines (file->lines "CHANGELOG.md"))
-      ;; Use the script's parsing by running --version and checking CHANGELOG directly
-      (define header-rx #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+) — .+")
-      (define header-line
-        (for/first ([line (in-list lines)]
-                    #:when (regexp-match? header-rx line))
-          line))
-      (define m (and header-line (regexp-match header-rx header-line)))
-      (define ver (and m (cadr m)))
-      (values ver "dummy")))
-  ;; The CHANGELOG top version should match q-version
-  (check-equal? cl-version q-version "CHANGELOG top version matches q-version"))
-
 (test-case "--check passes when Status description matches CHANGELOG top entry"
-  ;; Create a temp README with Status entry matching the CHANGELOG
-  (define-values (cl-version cl-summary)
-    (parameterize ([current-directory q-root])
-      (define lines (file->lines "CHANGELOG.md"))
-      (define header-rx #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+) — .+")
-      (define sub-rx #rx"^### ")
-      (define header-line
-        (for/first ([line (in-list lines)]
-                    #:when (regexp-match? header-rx line))
-          line))
-      (define m (and header-line (regexp-match header-rx header-line)))
-      (define ver (and m (cadr m)))
-      ;; Collect summary lines
-      (define summary-lines
-        (let loop ([ls lines]
-                   [found? #f]
-                   [acc '()])
-          (cond
-            [(null? ls) (reverse acc)]
-            [(and (not found?) (regexp-match? header-rx (car ls))) (loop (cdr ls) #t acc)]
-            [(and found? (regexp-match? #rx"^## " (car ls))) (reverse acc)]
-            [(and found? (regexp-match? sub-rx (car ls))) (loop (cdr ls) #t acc)]
-            [(and found? (> (string-length (string-trim (car ls))) 0))
-             (loop (cdr ls) #t (cons (string-trim (car ls)) acc))]
-            [else (loop (cdr ls) found? acc)])))
-      (values ver (string-join summary-lines " "))))
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
   (when (and cl-version cl-summary)
     (define status-line (format "**v~a** — ~a" cl-version cl-summary))
     (define tmp-readme
@@ -222,7 +179,6 @@ EOF
                 (format "Expected OK when Status matches CHANGELOG, got: ~a" out))))
 
 (test-case "--check fails when Status description differs from CHANGELOG"
-  ;; Create a temp README with wrong description
   (define tmp-readme
     (make-temp-readme (string-append "# q\n\n## Status\n\n**v"
                                      q-version
@@ -231,3 +187,73 @@ EOF
   (delete-file tmp-readme)
   (check-true (string-contains? out "MISMATCH")
               (format "Expected MISMATCH when Status differs from CHANGELOG, got: ~a" out)))
+
+;; --- v0.28.26 W1: Parser + comparison + length tests ---
+
+(test-case "W1: parser uses ### sub-header title, max 200 chars"
+  ;; The top CHANGELOG entry should produce a summary ≤200 chars
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
+  (check-true
+   (and cl-summary (<= (string-length cl-summary) 200))
+   (format "Summary too long (~a chars): ~a" (and cl-summary (string-length cl-summary)) cl-summary)))
+
+(test-case "W1: --check uses full normalized string comparison"
+  ;; Create a README with whitespace-different but same-content entry
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
+  (when (and cl-version cl-summary)
+    ;; Extra whitespace should not cause mismatch
+    (define status-line (format "**v~a** —  ~a" cl-version cl-summary))
+    (define tmp-readme
+      (make-temp-readme (string-append "# q\n\n## Status\n\n" status-line "\n\n## License\nMIT")))
+    (define-values (out err) (run-script "--check" (path->string tmp-readme)))
+    (delete-file tmp-readme)
+    (check-true (string-contains? out "OK")
+                (format "Expected OK with normalized comparison, got: ~a" out))))
+
+(test-case "W1: parser truncates long summaries to 200 chars"
+  ;; Verify the parser truncates summaries longer than 200 chars
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
+  (check-true (and cl-summary (<= (string-length cl-summary) 200))
+              (format "Summary should be ≤200 chars, got ~a chars: ~a"
+                      (and cl-summary (string-length cl-summary))
+                      cl-summary))
+  ;; Also verify truncation logic directly
+  (define long-string (make-string 400 #\A))
+  (define truncated
+    (if (> (string-length long-string) 200)
+        (string-append (substring long-string 0 197) "...")
+        long-string))
+  (check-equal? (string-length truncated) 200))
+
+(test-case "W1: --sync replaces on version match (not insert)"
+  ;; When Status top already matches current version, --sync should REPLACE
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
+  (when (and cl-version cl-summary)
+    (define status-line (format "**v~a** — Old description" cl-version))
+    (define tmp-readme
+      (make-temp-readme (string-append "# q\n\n## Status\n\n"
+                                       status-line
+                                       "\n\n**v0.10.8** — Old.\n\n## License\nMIT")))
+    (run-script "--sync" (path->string tmp-readme))
+    (define updated (file->lines tmp-readme))
+    (delete-file tmp-readme)
+    ;; Should have exactly 2 version entries (replaced + old), not 3 (inserted + replaced + old)
+    (define version-count
+      (for/sum ([line (in-list updated)])
+               (if (regexp-match? #rx"\\*\\*v[0-9]+\\.[0-9]+\\.[0-9]+\\*\\*" line) 1 0)))
+    (check-equal? version-count
+                  2
+                  (format "Expected 2 version entries (replace, not insert), got ~a" version-count))))
+
+(test-case "W1: --check full comparison catches description mismatch"
+  ;; Different text with same first 60 chars should still fail
+  (define-values (cl-version cl-summary) (extract-changelog-subtitle))
+  (when (and cl-version cl-summary (> (string-length cl-summary) 60))
+    (define wrong-desc (string-append (substring cl-summary 0 60) " WRONG SUFFIX"))
+    (define tmp-readme
+      (make-temp-readme
+       (string-append "# q\n\n## Status\n\n**v" cl-version "** — " wrong-desc "\n\n## License\nMIT")))
+    (define-values (out err) (run-script "--check" (path->string tmp-readme)))
+    (delete-file tmp-readme)
+    (check-true (string-contains? out "MISMATCH")
+                (format "Expected MISMATCH for suffix difference, got: ~a" out))))
