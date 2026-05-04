@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.29.7 — 2026-05-04
+
+### Test Suite Restoration
+
+- **TR type fix**: Widened `stop-reason` field in `model-response` from `Symbol` to `(U Symbol #f)` — fixes 10 direct + 4 transitive test failures where callers pass `#f` during streaming
+- **Contract fix**: Widened `event-publisher` contract in `make-exec-context` to accept `symbol?` — fixes test sentinels and stub implementations
+- **Path resolution**: Fixed 3 source-scanning test files to use `define-runtime-path` for CWD-independent path resolution
+- **Skeleton test**: Accept `#lang typed/racket` as valid module language in skeleton assertions
+- **Result**: All 18 key test files pass, 17/17 lint checks pass
+
 ## v0.29.6 — 2026-05-04
 
 ### Tool Middleware HOF + Facade Curation
