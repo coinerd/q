@@ -1,20 +1,20 @@
 #lang racket/base
-;; tools/tool.rkt — Tool contract, registry, and execution infrastructure
+;; tools/tool.rkt — Tool contract, execution context, and registry facade
 ;; STABILITY: stable
+;; v0.30.8: Decomposed into submodules (exec-context, registry, schema-helpers)
+;;          This file re-exports everything for backward compatibility.
 
 (require racket/contract
          racket/hash
          racket/set
          (only-in racket/string string-trim string-contains? string-join)
          json
-         ;; 3.2: Thread-safe registry access
          (only-in racket/base make-semaphore call-with-semaphore)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/errors.rkt" with-logged-catch)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../runtime/settings.rkt" q-settings?)
          (only-in "../tools/permission-gate.rkt" permission-config?)
-         ;; ARCH-01: tool-call and tool-result structs from util/protocol-types.rkt
          (only-in "../util/protocol-types.rkt"
                   tool-call
                   tool-call?
@@ -26,26 +26,14 @@
                   tool-result?
                   tool-result-content
                   tool-result-details
-                  tool-result-is-error?))
+                  tool-result-is-error?)
+         ;; Submodule imports
+         "tool-struct.rkt"
+         "exec-context.rkt"
+         "registry.rkt"
+         "schema-helpers.rkt")
 
-;;; tools/tool.rkt — canonical tool contract, execution context,
-;;;                    and tool registry.
-;;;
-;;; Exports:
-;;;   - tool struct & helpers (make-tool, tool?, accessors, validate-tool-args)
-;;;   - tool-result struct & helpers (re-exported from agent/types.rkt,
-;;;                                   plus make-error-result, make-success-result, serialization)
-;;;   - exec-context struct (execution context for tool invocations)
-;;;   - tool-registry (register, lookup, list, unregister)
-;;;
-;;; ARCH-04 NOTE: At 373 lines this module is still cohesive. If tool contracts
-;;; and execution contexts grow independently, consider splitting into
-;;; tools/tool-contract.rkt (tool struct, validation) and
-;;; tools/tool-registry.rkt (registry, lookup). Current size is manageable.
-
-;; ── Tool struct ──
-(provide (struct-out tool)
-         tool?
+(provide (all-from-out "tool-struct.rkt")
          (contract-out [make-tool
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)
@@ -54,13 +42,6 @@
                                                #:prompt-guidelines (or/c string? #f))
                              tool?)]
                        [validate-tool-args (-> tool? hash? any/c)])
-         tool-name
-         tool-description
-         tool-schema
-         tool-execute
-         tool-prompt-snippet
-         tool-prompt-guidelines
-         tool-dangerous?
          merge-tool-lists
          validate-tool-schema
          format-tool-schema-hint
@@ -73,10 +54,10 @@
          tool-result-content
          tool-result-details
          tool-result-is-error?
-         tool-result->jsexpr ; reserved for SDK consumers
-         jsexpr->tool-result ; reserved for SDK consumers
+         tool-result->jsexpr
+         jsexpr->tool-result
 
-         ;; ── Execution context ──
+         ;; ── Execution context (from exec-context.rkt) ──
          (contract-out [make-exec-context
                         (->* ()
                              (#:working-directory (or/c path-string? path? #f)
@@ -112,7 +93,7 @@
          json-serializable?
          validate-tool-result
 
-         ;; ── Tool registry ──
+         ;; ── Tool registry (from registry.rkt) ──
          make-tool-registry
          tool-registry?
          (contract-out [register-tool! (-> tool-registry? tool? void?)]
@@ -131,8 +112,6 @@
 ;; Progress emission
 ;; ============================================================
 
-;; emit-progress! calls the progress-callback if available.
-;; Tools should call this to report incremental progress.
 (define (emit-progress! ctx percentage message)
   (define cb (exec-context-progress-callback ctx))
   exec-context-permission-config
@@ -140,19 +119,8 @@
     (cb percentage message)))
 
 ;; ============================================================
-;; Tool struct
+;; Tool constructor
 ;; ============================================================
-
-(struct tool
-        (name description
-              schema
-              execute
-              prompt-snippet
-              prompt-guidelines
-              render-call
-              render-result
-              dangerous?)
-  #:transparent)
 
 (define (make-tool name
                    description
@@ -182,63 +150,9 @@
         dangerous?))
 
 ;; ============================================================
-;; Tool schema validation (#672)
-;; ============================================================
-
-;; Validates that a tool schema conforms to OpenAI function-calling spec.
-;; Returns #t if valid, raises exn:fail if not.
-(define (validate-tool-schema schema)
-  (unless (hash? schema)
-    (raise-argument-error 'validate-tool-schema "hash?" schema))
-  (unless (equal? (hash-ref schema 'type #f) "object")
-    (raise (exn:fail (format "validate-tool-schema: 'type must be \"object\", got ~v"
-                             (hash-ref schema 'type #f))
-                     (current-continuation-marks))))
-  (define props (hash-ref schema 'properties #f))
-  (when props
-    (unless (hash? props)
-      (raise (exn:fail (format "validate-tool-schema: 'properties must be a hash, got ~v" props)
-                       (current-continuation-marks)))))
-  (define required (hash-ref schema 'required #f))
-  (when required
-    (unless (list? required)
-      (raise (exn:fail (format "validate-tool-schema: 'required must be a list, got ~v" required)
-                       (current-continuation-marks)))))
-  #t)
-
-;; ============================================================
-;; Merge extension tools into LLM tool list (#673)
-;; ============================================================
-
-;; Merges a list of extension-provided tool jsexprs into the base tool list.
-;; Extension tools override built-in tools with the same name.
-(define (merge-tool-lists base-tools ext-tools)
-  (define base-hash
-    (for/hash ([t (in-list base-tools)])
-      (values (hash-ref (hash-ref t 'function) 'name) t)))
-  (define ext-hash
-    (for/hash ([t (in-list ext-tools)])
-      (values (hash-ref (hash-ref t 'function) 'name) t)))
-  ;; Extension tools override base tools with same name
-  (define merged
-    (for/fold ([h base-hash]) ([(k v) (in-hash ext-hash)])
-      (hash-set h k v)))
-  ;; Preserve base order, append new extension tools at end
-  (define base-names
-    (for/list ([t (in-list base-tools)])
-      (hash-ref (hash-ref t 'function) 'name)))
-  (define ext-only-names (filter (lambda (n) (not (member n base-names))) (hash-keys ext-hash)))
-  (append (for/list ([n (in-list base-names)])
-            (hash-ref merged n))
-          (for/list ([n (in-list ext-only-names)])
-            (hash-ref merged n))))
-
-;; ============================================================
 ;; JSON-serializability validation
 ;; ============================================================
 
-;; Check whether a value is JSON-serializable.
-;; Returns #t if jsexpr->string would succeed, #f otherwise.
 (define (json-serializable? v)
   (with-logged-catch #f
                      (lambda ()
@@ -251,8 +165,6 @@
 
 (define (make-tool-result content details is-error)
   (tool-result content details is-error))
-
-;; --- JSON serialization ---
 
 (define (tool-result->jsexpr tr)
   (hasheq 'content
@@ -267,243 +179,18 @@
                     (hash-ref h 'details (hasheq))
                     (hash-ref h 'isError #f)))
 
-;; --- Convenience constructors ---
-
 (define (make-error-result message)
   (make-tool-result (list (hasheq 'type "text" 'text message)) (hasheq) #t))
 
 (define (make-success-result content [details (hasheq)])
-  ;; Validate content is JSON-serializable before accepting
   (unless (json-serializable? content)
     (raise-argument-error 'make-success-result "JSON-serializable content" content))
   (make-tool-result content details #f))
 
 ;; ============================================================
-;; Execution context
-;; ============================================================
-
-(struct exec-context
-        (working-directory cancellation-token
-                           event-publisher
-                           runtime-settings
-                           call-id
-                           session-metadata
-                           progress-callback
-                           permission-config
-                           bytes-written) ; G3.4: permission gate config or #f
-  #:transparent)
-
-(define (make-exec-context #:working-directory [working-directory (current-directory)]
-                           #:cancellation-token [cancellation-token #f]
-                           #:event-publisher [event-publisher #f]
-                           #:runtime-settings [runtime-settings #f]
-                           #:call-id [call-id ""]
-                           #:session-metadata [session-metadata #f]
-                           #:progress-callback [progress-callback #f]
-                           #:permission-config [permission-config #f])
-  (exec-context working-directory
-                cancellation-token
-                event-publisher
-                runtime-settings
-                call-id
-                session-metadata
-                progress-callback
-                permission-config
-                (box 0)))
-
-;; ============================================================
-;; Tool registry
-;; ============================================================
-
-(struct tool-registry (tools-box active-set-box sem) #:transparent)
-
-(define (make-tool-registry)
-  (tool-registry (make-hash) (box #f) (make-semaphore 1)))
-
-;; Thread-safe registry lock helper (Finding A2: 7 call sites)
-(define (with-registry-lock reg thunk)
-  (call-with-semaphore (tool-registry-sem reg) thunk))
-
-(define (register-tool! reg t)
-  (unless (tool? t)
-    (raise-argument-error 'register-tool! "tool?" t))
-  (with-registry-lock reg
-                      (lambda ()
-                        (define tbl (tool-registry-tools-box reg))
-                        (hash-set! tbl (tool-name t) t))))
-
-(define (unregister-tool! reg name)
-  (with-registry-lock reg (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
-
-(define (lookup-tool reg name)
-  (if (not name)
-      #f
-      (with-registry-lock reg (lambda () (hash-ref (tool-registry-tools-box reg) name #f)))))
-
-;; tool->jsexpr : tool? -> hash?
-;; Serialize a tool struct to the OpenAI normalized format.
-;; Output: {"type":"function","function":{"name":"...","description":"...","parameters":{...}}}
-(define (tool->jsexpr t)
-  (define base-fn
-    (hasheq 'name (tool-name t) 'description (tool-description t) 'parameters (tool-schema t)))
-  (define fn-with-snippet
-    (if (tool-prompt-snippet t)
-        (hash-set base-fn 'promptSnippet (tool-prompt-snippet t))
-        base-fn))
-  (define fn-with-guidelines
-    (if (tool-prompt-guidelines t)
-        (hash-set fn-with-snippet 'promptGuidelines (tool-prompt-guidelines t))
-        fn-with-snippet))
-  (hasheq 'type "function" 'function fn-with-guidelines))
-
-;; list-tools-jsexpr : tool-registry? -> (listof hash?)
-;; Return all registered tools serialized to the OpenAI normalized JSON format.
-;; ── Active tool management ──
-
-;; Set which tools are active. #f means all tools are active.
-;; active-names is (or/c #f (listof string?))
-(define (set-active-tools! reg active-names)
-  (with-registry-lock reg
-                      (lambda ()
-                        (set-box! (tool-registry-active-set-box reg)
-                                  (and active-names (list->set active-names))))))
-
-;; Check if a tool is active.
-(define (tool-active? reg name)
-  (define active-set (unbox (tool-registry-active-set-box reg)))
-  (or (not active-set) (set-member? active-set name)))
-
-;; List only active tools.
-(define (list-active-tools reg)
-  (with-registry-lock reg
-                      (lambda ()
-                        (filter (lambda (t) (tool-active? reg (tool-name t)))
-                                (hash-values (tool-registry-tools-box reg))))))
-
-;; List active tools in jsexpr format.
-(define (list-active-tools-jsexpr reg)
-  (map tool->jsexpr (list-active-tools reg)))
-
-;; list-tools-jsexpr now respects the active set.
-(define (list-tools-jsexpr reg)
-  (map tool->jsexpr (list-active-tools reg)))
-
-(define (list-tools reg)
-  (with-registry-lock reg (lambda () (hash-values (tool-registry-tools-box reg)))))
-
-(define (tool-names reg)
-  (with-registry-lock reg (lambda () (hash-keys (tool-registry-tools-box reg)))))
-
-;; ============================================================
-;; Tool-call argument validation (for post-processing)
-;; ============================================================
-
-;; Ensure that tool-call-part-arguments is a hash after processing.
-;; This guards against raw strings or other types leaking through.
-;; ensure-hash-args imported from util/json-helpers.rkt
-
-;; ============================================================
-;; Argument validation
-;; ============================================================
-
-(define (validate-tool-args t args)
-  (unless (hash? args)
-    (raise (exn:fail (format "validate-tool-args: args must be a hash, got ~a" args)
-                     (current-continuation-marks))))
-  (define schema (tool-schema t))
-  ;; Only validate if schema declares required or properties
-  (define required (hash-ref schema 'required #f))
-  (define properties (hash-ref schema 'properties #f))
-  ;; Check required keys
-  (when (and required (list? required))
-    (for ([key (in-list required)])
-      (unless (hash-has-key? args
-                             (if (string? key)
-                                 (string->symbol key)
-                                 key))
-        (raise
-         (exn:fail
-          (format
-           "validate-tool-args: missing required argument '~a' for tool '~a'.~a"
-           key
-           (tool-name t)
-           (if (and (eq? key 'path) (eq? (tool-name t) "read"))
-               " You must include 'path' in every read call, even when making parallel calls with different offsets."
-               ""))
-          (current-continuation-marks))))))
-  ;; Check types for present keys
-  (when (and properties (hash? properties))
-    (for ([(arg-key arg-val) (in-hash args)])
-      (define prop-spec
-        (or (hash-ref properties arg-key #f) (hash-ref properties (symbol->string arg-key) #f)))
-      (when prop-spec
-        (define expected-type (hash-ref prop-spec 'type #f))
-        (when expected-type
-          (unless (type-matches? arg-val expected-type)
-            (raise
-             (exn:fail
-              (format "validate-tool-args: argument '~a' expected type '~a', got ~v for tool '~a'"
-                      arg-key
-                      expected-type
-                      arg-val
-                      (tool-name t))
-              (current-continuation-marks))))))))
-  #t)
-
-;; Basic type checking against JSON Schema type strings
-(define (type-matches? v type-str)
-  (case type-str
-    [("string") (string? v)]
-    [("integer") (exact-integer? v)]
-    [("number") (real? v)]
-    [("boolean") (boolean? v)]
-    [("object") (hash? v)]
-    [("array") (list? v)]
-    [else #t])) ; unknown type spec -> pass
-
-;; ============================================================
-;; Tool schema hint formatting (v0.19.3 Wave 1)
-;; ============================================================
-
-;; format-tool-schema-hint : tool? -> string?
-;; Format a one-line parameter hint from a tool's JSON schema.
-;; Example: "read(path: string, offset?: integer, limit?: integer)"
-(define (format-tool-schema-hint t)
-  (define schema (tool-schema t))
-  (define props (hash-ref schema 'properties (hasheq)))
-  (define required
-    (for/set ([r (in-list (hash-ref schema 'required '()))])
-      (if (string? r)
-          (string->symbol r)
-          r)))
-  (define param-strs
-    (for/list ([(k v) (in-hash props)])
-      (define key-sym
-        (if (string? k)
-            (string->symbol k)
-            k))
-      (define type-str (hash-ref v 'type "any"))
-      (if (set-member? required key-sym)
-          (format "~a: ~a" key-sym type-str)
-          (format "~a?: ~a" key-sym type-str))))
-  ;; Sort: required first, then optional, alphabetically within each group
-  (define sorted
-    (sort param-strs
-          (lambda (a b)
-            (define a-req? (not (string-contains? a "?")))
-            (define b-req? (not (string-contains? b "?")))
-            (cond
-              [(and a-req? (not b-req?)) #t]
-              [(and (not a-req?) b-req?) #f]
-              [else (string<? a b)]))))
-  (format "~a(~a)" (tool-name t) (string-join sorted ", ")))
-
-;; ============================================================
 ;; Tool result validation
 ;; ============================================================
 
-;; Validate that a value is a proper tool-result with JSON-serializable content.
-;; Returns the tool-result if valid, or #f if invalid.
 (define (validate-tool-result v)
   (and (tool-result? v)
        (json-serializable? (tool-result-content v))

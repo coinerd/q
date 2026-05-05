@@ -1,0 +1,97 @@
+#lang racket/base
+;; tools/registry.rkt — Thread-safe tool registry
+;; Extracted from tools/tool.rkt (v0.30.8 W0)
+;; STABILITY: stable
+
+(require racket/set
+         (only-in racket/base make-semaphore call-with-semaphore)
+         (only-in "tool-struct.rkt" tool? tool-name tool-description tool-schema tool-prompt-snippet tool-prompt-guidelines))
+
+(provide (struct-out tool-registry)
+         tool-registry?
+         make-tool-registry
+         register-tool!
+         unregister-tool!
+         lookup-tool
+         list-tools
+         tool-names
+         tool->jsexpr
+         list-active-tools
+         list-active-tools-jsexpr
+         list-tools-jsexpr
+         set-active-tools!
+         tool-active?)
+
+;; ============================================================
+;; Tool registry
+;; ============================================================
+
+(struct tool-registry (tools-box active-set-box sem) #:transparent)
+
+(define (make-tool-registry)
+  (tool-registry (make-hash) (box #f) (make-semaphore 1)))
+
+;; Thread-safe registry lock helper (Finding A2: 7 call sites)
+(define (with-registry-lock reg thunk)
+  (call-with-semaphore (tool-registry-sem reg) thunk))
+
+(define (register-tool! reg t)
+  (unless (tool? t)
+    (raise-argument-error 'register-tool! "tool?" t))
+  (with-registry-lock reg
+                      (lambda ()
+                        (define tbl (tool-registry-tools-box reg))
+                        (hash-set! tbl (tool-name t) t))))
+
+(define (unregister-tool! reg name)
+  (with-registry-lock reg (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
+
+(define (lookup-tool reg name)
+  (if (not name)
+      #f
+      (with-registry-lock reg (lambda () (hash-ref (tool-registry-tools-box reg) name #f)))))
+
+;; tool->jsexpr : tool? -> hash?
+;; Serialize a tool struct to the OpenAI normalized format.
+(define (tool->jsexpr t)
+  (define base-fn
+    (hasheq 'name (tool-name t) 'description (tool-description t) 'parameters (tool-schema t)))
+  (define fn-with-snippet
+    (if (tool-prompt-snippet t)
+        (hash-set base-fn 'promptSnippet (tool-prompt-snippet t))
+        base-fn))
+  (define fn-with-guidelines
+    (if (tool-prompt-guidelines t)
+        (hash-set fn-with-snippet 'promptGuidelines (tool-prompt-guidelines t))
+        fn-with-snippet))
+  (hasheq 'type "function" 'function fn-with-guidelines))
+
+;; ── Active tool management ──
+
+(define (set-active-tools! reg active-names)
+  (with-registry-lock reg
+                      (lambda ()
+                        (set-box! (tool-registry-active-set-box reg)
+                                  (and active-names (list->set active-names))))))
+
+(define (tool-active? reg name)
+  (define active-set (unbox (tool-registry-active-set-box reg)))
+  (or (not active-set) (set-member? active-set name)))
+
+(define (list-active-tools reg)
+  (with-registry-lock reg
+                      (lambda ()
+                        (filter (lambda (t) (tool-active? reg (tool-name t)))
+                                (hash-values (tool-registry-tools-box reg))))))
+
+(define (list-active-tools-jsexpr reg)
+  (map tool->jsexpr (list-active-tools reg)))
+
+(define (list-tools-jsexpr reg)
+  (map tool->jsexpr (list-active-tools reg)))
+
+(define (list-tools reg)
+  (with-registry-lock reg (lambda () (hash-values (tool-registry-tools-box reg)))))
+
+(define (tool-names reg)
+  (with-registry-lock reg (lambda () (hash-keys (tool-registry-tools-box reg)))))
