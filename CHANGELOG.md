@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.29.17 — 2026-05-05
+
+### Audit Remediation + Test Coverage + Cleanup
+
+**Scope:** 2 waves (W0: integration tests for struct refactor + duration-ms, W1: CHANGELOG fix + dead code + cleanup + version bump)
+
+**Correctness:**
+- G1: Fixed v0.29.16 CHANGELOG factual errors — `dispatch-loop-action` params: 26→13 (was 26→12); files changed: 20 modified + 1 new (was ~15 + 2); lines changed: 508 added, 376 removed, net +132 (was ~380 + ~280, net +100)
+- G2: Docs version drift fixed — all docs/ and wiki-src/ files synced to 0.29.17
+- G5: Deleted dead code `runtime/iteration/transition-logic.rkt` and `tests/test-iteration-transition.rkt`; removed stale assertion from `tests/test-iteration-wiring.rkt`
+- G6: Fixed trailing `)` typo in `runtime/iteration.rkt` comment
+- G7: Added TUI dedup guard — prevents duplicate `[TOOL: ...]` transcript entries when both raw `tool.call.started` and typed `tool-execution-start` fire
+- G8: Added `only-in` import for `iteration/tool-turn-bridge.rkt` in `runtime/iteration.rkt`
+
+**Tests:**
+- G3: `tests/test-iteration-integration.rkt` — 7 tests for `compute-next-counters`, `decide-next-action` via `(module+ for-testing)`
+- G4: `tests/test-tool-coordinator-duration.rkt` — 2 tests verifying `duration-ms` is non-zero and correlates with wall time
+- G7: `tests/test-tui-dedup.rkt` — 5 tests for TUI tool-start dedup guard
+
+**Files changed:** 16 modified, 3 new (test-iteration-integration.rkt, test-tool-coordinator-duration.rkt, test-tui-dedup.rkt), 2 deleted (transition-logic.rkt, test-iteration-transition.rkt)
+**Lines changed:** ~220 added, ~110 removed (net +110)
+
+---
+
 ## v0.29.16 — 2026-05-05
 
 ### Audit Remediation + Struct Refactor + Completion
@@ -10,7 +34,7 @@
 - W1: `duration-ms` now computed from batch start time (was hardcoded 0)
 - W2: All 13 remaining bare `(error '` calls in runtime/ migrated to domain error types (session-error, argument-error, extension-error, provider-error). Runtime/ error migration: 100% complete.
 - W3: CHANGELOG metrics verified against actual diff (no estimates)
-- W4: `dispatch-loop-action` refactored from 26→12 params using `loop-infra` + `loop-counters` structs
+- W4: `dispatch-loop-action` refactored from 26→13 params using `loop-infra` + `loop-counters` structs
 - W5: run-modes.rkt fan-in reduced from 12→10 `"../` imports (consolidated trace-logger + project-tree into mode-helpers.rkt)
 - W6: Stale tool-coordinator header comment updated
 
@@ -28,8 +52,8 @@
 - Updated dependency policy max-require-fan-in from 16→14
 - Added `iteration-events-wired` IVG check (9→10)
 
-**Files changed:** ~15 modified, 2 new (test-iteration-loop-state.rkt, iteration-events-wired IVG), 0 deleted
-**Lines changed:** ~380 added, ~280 removed (net +100)
+**Files changed:** 20 modified, 1 new (test-iteration-loop-state.rkt), 0 deleted
+**Lines changed:** 508 added, 376 removed (net +132)
 
 ---
 
