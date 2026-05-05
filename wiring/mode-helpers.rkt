@@ -5,21 +5,22 @@
 ;; Purpose: Reduce require fan-in in run-modes.rkt by bundling
 ;; security configuration and timeout wiring into a single module.
 ;; Layer: wiring (interface construction helpers)
+;;
+;; NOTE (v0.29.14): This module still imports tools/builtins/bash.rkt
+;; and sandbox/subprocess.rkt directly. True decoupling would move
+;; those current-parameter bindings into runtime/settings.rkt.
+;; run-modes.rkt decomposition deferred to v0.29.15.
 
 (require (only-in "../runtime/settings.rkt"
                   setting-ref
                   security-config-from-settings
                   http-request-timeout
                   q-settings-merged)
-         (only-in "../tools/builtins/bash.rkt"
-                  current-execution-policy
-                  current-allowed-commands)
+         (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
          (only-in "../sandbox/subprocess.rkt"
                   current-secret-scrub-denylist
                   current-secret-scrub-allowlist)
-         (only-in "../llm/stream.rkt"
-                  current-http-request-timeout
-                  current-model-timeouts))
+         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts))
 
 (provide wire-security-config!
          wire-timeouts!)

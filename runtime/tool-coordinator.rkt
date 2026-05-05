@@ -56,7 +56,12 @@
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload hook-result?)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
-         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         ;; G13: typed event emission for tool execution
+         (only-in "../agent/event-emitter.rkt" emit-typed-event!)
+         (only-in "../agent/event-structs/tool-events.rkt"
+                  make-tool-execution-start-event
+                  make-tool-execution-end-event))
 
 (provide (contract-out [extract-tool-calls-from-messages (-> (listof message?) (listof tool-call?))]
                        [make-tool-result-messages
@@ -159,8 +164,18 @@
            (make-exec-context
             #:working-directory (path-only log-path)
             #:cancellation-token token
-            #:event-publisher (lambda (event-type payload)
-                                (emit-session-event! bus session-id event-type payload))
+            #:event-publisher
+            (lambda (event-type payload)
+              (cond
+                [(equal? event-type "tool.execution.start")
+                 (emit-typed-event! bus
+                                    (make-tool-execution-start-event
+                                     #:session-id session-id
+                                     #:turn-id #f
+                                     #:timestamp (current-inexact-milliseconds)
+                                     #:tool-name (hash-ref payload 'tool-name)
+                                     #:tool-call-id (hash-ref payload 'tool-call-id)))]
+                [else (emit-session-event! bus session-id event-type payload)]))
             #:runtime-settings (or (hash-ref config 'settings #f)
                                    (make-minimal-settings #:provider (hash-ref config 'provider #f)
                                                           #:model (hash-ref config 'model-name #f)))
@@ -197,6 +212,18 @@
                              session-id
                              "tool.call.completed"
                              (hasheq 'name (tool-call-name tc) 'result (tool-result-content tr)))))
+
+  ;; G13: Emit typed tool-execution-end events
+  (for ([tc (in-list tool-calls-to-run)]
+        [tr (in-list (scheduler-result-results sched-result))])
+    (emit-typed-event! bus
+                       (make-tool-execution-end-event
+                        #:session-id session-id
+                        #:turn-id #f
+                        #:timestamp (current-inexact-milliseconds)
+                        #:tool-name (tool-call-name tc)
+                        #:duration-ms 0
+                        #:result-summary (if (tool-result-is-error? tr) 'error 'completed))))
 
   ;; Convert scheduler results to tool-result messages.
   (define tool-result-msgs

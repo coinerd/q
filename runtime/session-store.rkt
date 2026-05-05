@@ -18,6 +18,7 @@
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
          (only-in "../util/message-helpers.rkt" ensure-parent-dirs!)
+         (only-in "../util/errors.rkt" raise-session-error)
          ;; Extracted modules (v0.22.9 W2)
          "session-store-integrity.rkt"
          "session-store-tree.rkt")
@@ -247,7 +248,7 @@
 (define (import-session! source-path dest-session-dir)
   (cond
     [(not (file-exists? source-path))
-     (error 'import-session! "Source file not found: ~a" source-path)]
+     (raise-session-error 'import-session! "Source file not found" #f source-path)]
     [else
      (define-values (raw corrupted-count) (jsonl-read-all-valid-with-count source-path))
      (when (> corrupted-count 0)
@@ -256,7 +257,7 @@
                 corrupted-count
                 source-path))
      (when (null? raw)
-       (error 'import-session! "No valid entries found in source: ~a" source-path))
+       (raise-session-error 'import-session! "No valid entries found in source" #f source-path))
      (define new-session-id (format "imported-~a" (current-inexact-milliseconds)))
      (define dest-path (build-path dest-session-dir (format "~a.jsonl" new-session-id)))
      (ensure-parent-dirs! dest-path)

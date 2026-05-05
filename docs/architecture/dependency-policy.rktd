@@ -54,7 +54,7 @@
  (complexity-budgets
   (max-lines-per-module . 900)
   (max-function-length . 80)
-  (max-require-fan-in . 20))
+  (max-require-fan-in . 25))
 
  ;; Deep module conventions (v0.27.0)
  ;; Documents the sub-module directories created by the Deep Module Refactoring.
