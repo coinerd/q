@@ -20,7 +20,8 @@
          "event-structs/tool-events.rkt"
          "event-structs/provider-events.rkt"
          "event-structs/session-events.rkt"
-         "event-structs/iteration-events.rkt")
+         "event-structs/iteration-events.rkt"
+         "event-structs/hook-events.rkt")
 
 (provide (all-from-out "event-structs/base.rkt")
          (all-from-out "event-structs/turn-events.rkt")
@@ -28,4 +29,5 @@
          (all-from-out "event-structs/tool-events.rkt")
          (all-from-out "event-structs/provider-events.rkt")
          (all-from-out "event-structs/session-events.rkt")
-         (all-from-out "event-structs/iteration-events.rkt"))
+         (all-from-out "event-structs/iteration-events.rkt")
+         (all-from-out "event-structs/hook-events.rkt"))
