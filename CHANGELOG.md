@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.30.2 — 2026-05-05
+
+### Typed Racket Beachhead: loop-state + retry-policy
+
+**Goal:** Migrate 2 pure modules to Typed Racket (5 → 7 TR modules)
+
+**W0 — loop-state.rkt → Typed Racket:**
+- `runtime/iteration/loop-state.rkt`: 2 structs (loop-infra, loop-counters) + 3 DI resolvers
+- Struct field types: EventBus, ToolRegistry, ExtRegistry, CancellationToken (via `#:opaque`)
+- TR revealed: `any-wrap/c` cannot protect opaque struct values at TR boundaries; fixed with `#:opaque` type definitions
+
+**W1 — retry-policy.rkt → Typed Racket:**
+- `runtime/iteration/retry-policy.rkt`: 6 exported functions (overflow recovery, budget checking, loop detection)
+- `require/typed` boundaries for 6 untyped modules
+- TR issues resolved: `hash-ref` polymorphism (thunk defaults), `exn-message` casts, `for/first` with `in-hash-keys` (replaced with `for/or`)
+
+
 ## v0.30.1 — 2026-05-05
 
 ### Top-5 Contract Gaps: Provider Registry + Agent Session + Settings + Iteration + Turn Orchestrator
