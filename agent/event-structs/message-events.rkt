@@ -23,18 +23,18 @@
                                   #:timestamp timestamp
                                   #:role role
                                   #:model model)
-  (message-start-event "message-start" timestamp session-id turn-id role model))
+  (message-start-event "message.started" timestamp session-id turn-id role model))
 
 (define (make-message-update-event #:session-id session-id
                                    #:turn-id turn-id
                                    #:timestamp timestamp
                                    #:content content
                                    #:delta delta)
-  (message-update-event "message-update" timestamp session-id turn-id content delta))
+  (message-update-event "message.updated" timestamp session-id turn-id content delta))
 
 (define (make-message-end-event #:session-id session-id
                                 #:turn-id turn-id
                                 #:timestamp timestamp
                                 #:role role
                                 #:content-length content-length)
-  (message-end-event "message-end" timestamp session-id turn-id role content-length))
+  (message-end-event "message.completed" timestamp session-id turn-id role content-length))

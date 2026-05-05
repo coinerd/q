@@ -18,7 +18,7 @@
 ;;   - runtime/ files: 15 emit-typed-event! sites (fully migrated)
 ;;   - agent/loop*.rkt: 28 raw emit! sites (use dotted event names)
 ;;   - These two systems coexist: typed events use hyphenated names
-;;     ("turn-start"), raw emit! uses dotted names ("turn.started").
+;;     ("turn.started"), raw emit! uses dotted names ("turn.started").
 ;;   - New hook-events.rkt sub-module adds: model-request-blocked,
 ;;     message-blocked, turn-cancelled, assistant-message-completed
 ;;   - New provider streaming events: model-stream-delta,

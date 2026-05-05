@@ -58,7 +58,7 @@
                            #:timestamp 1000
                            #:model "gpt-4"
                            #:provider "openai"))
-  (check-equal? (typed-event-type evt) "turn-start")
+  (check-equal? (typed-event-type evt) "turn.started")
   (check-equal? (turn-start-event-model evt) "gpt-4")
   (check-equal? (turn-start-event-provider evt) "openai")
   (check-true (turn-start-event? evt))
@@ -80,7 +80,7 @@
                          #:timestamp 2000
                          #:reason "completed"
                          #:duration-ms 1000))
-  (check-equal? (typed-event-type evt) "turn-end")
+  (check-equal? (typed-event-type evt) "turn.completed")
   (check-equal? (turn-end-event-reason evt) "completed")
   (check-equal? (turn-end-event-duration-ms evt) 1000)
   (check-true (turn-end-event? evt)))
@@ -105,7 +105,7 @@
                               #:timestamp 1000
                               #:role "assistant"
                               #:model "gpt-4"))
-  (check-equal? (typed-event-type evt) "message-start")
+  (check-equal? (typed-event-type evt) "message.started")
   (check-equal? (message-start-event-role evt) "assistant")
   (check-true (message-start-event? evt)))
 
@@ -125,7 +125,7 @@
                                #:timestamp 1000
                                #:content "hello"
                                #:delta "lo"))
-  (check-equal? (typed-event-type evt) "message-update")
+  (check-equal? (typed-event-type evt) "message.updated")
   (check-equal? (message-update-event-delta evt) "lo"))
 
 (test-case "message-update-event: JSON roundtrip"
@@ -144,7 +144,7 @@
                             #:timestamp 2000
                             #:role "assistant"
                             #:content-length 42))
-  (check-equal? (typed-event-type evt) "message-end")
+  (check-equal? (typed-event-type evt) "message.completed")
   (check-equal? (message-end-event-content-length evt) 42))
 
 (test-case "message-end-event: JSON roundtrip"
@@ -167,7 +167,7 @@
                                      #:timestamp 1000
                                      #:tool-name "bash"
                                      #:tool-call-id "tc-1"))
-  (check-equal? (typed-event-type evt) "tool-execution-start")
+  (check-equal? (typed-event-type evt) "tool.execution.started")
   (check-equal? (tool-execution-start-event-tool-name evt) "bash")
   (check-equal? (tool-execution-start-event-tool-call-id evt) "tc-1"))
 
@@ -187,7 +187,7 @@
                                       #:timestamp 1100
                                       #:tool-name "bash"
                                       #:progress "running..."))
-  (check-equal? (typed-event-type evt) "tool-execution-update"))
+  (check-equal? (typed-event-type evt) "tool.execution.updated"))
 
 (test-case "tool-execution-end-event: construction"
   (define evt
@@ -197,7 +197,7 @@
                                    #:tool-name "bash"
                                    #:duration-ms 1000
                                    #:result-summary "exit 0"))
-  (check-equal? (typed-event-type evt) "tool-execution-end"))
+  (check-equal? (typed-event-type evt) "tool.execution.completed"))
 
 ;; ============================================================
 ;; Tool call/result events (generic)
@@ -211,7 +211,7 @@
                           #:tool-name "bash"
                           #:arguments '#hasheq((command . "ls"))
                           #:tool-call-id "tc-1"))
-  (check-equal? (typed-event-type evt) "tool-call")
+  (check-equal? (typed-event-type evt) "tool.called")
   (check-equal? (tool-call-event-tool-name evt) "bash")
   (check-true (tool-call-event? evt)))
 
@@ -233,7 +233,7 @@
                             #:tool-call-id "tc-1"
                             #:content "file1.txt\nfile2.txt"
                             #:is-error? #f))
-  (check-equal? (typed-event-type evt) "tool-result")
+  (check-equal? (typed-event-type evt) "tool.result")
   (check-equal? (tool-result-event-tool-call-id evt) "tc-1")
   (check-false (tool-result-event-is-error? evt)))
 
@@ -260,7 +260,7 @@
                                #:timeout 30
                                #:cwd "/tmp"
                                #:tool-call-id "tc-bash"))
-  (check-equal? (typed-event-type evt) "bash-tool-call")
+  (check-equal? (typed-event-type evt) "tool.bash.called")
   (check-equal? (bash-tool-call-event-command evt) "ls -la")
   (check-equal? (bash-tool-call-event-timeout evt) 30)
   (check-equal? (bash-tool-call-event-cwd evt) "/tmp")
@@ -288,7 +288,7 @@
                                #:path "test.rkt"
                                #:edits '(((oldText . "foo") (newText . "bar")))
                                #:tool-call-id "tc-edit"))
-  (check-equal? (typed-event-type evt) "edit-tool-call")
+  (check-equal? (typed-event-type evt) "tool.edit.called")
   (check-equal? (edit-tool-call-event-path evt) "test.rkt")
   (check-true (tool-call-event? evt))
   (check-equal? (tool-call-event-tool-name evt) "edit"))
@@ -311,7 +311,7 @@
                                 #:path "out.rkt"
                                 #:content "(#lang racket)"
                                 #:tool-call-id "tc-write"))
-  (check-equal? (typed-event-type evt) "write-tool-call")
+  (check-equal? (typed-event-type evt) "tool.write.called")
   (check-equal? (write-tool-call-event-path evt) "out.rkt"))
 
 (test-case "write-tool-call-event: JSON roundtrip"
@@ -333,7 +333,7 @@
                                #:offset 1
                                #:limit 50
                                #:tool-call-id "tc-read"))
-  (check-equal? (typed-event-type evt) "read-tool-call")
+  (check-equal? (typed-event-type evt) "tool.read.called")
   (check-equal? (read-tool-call-event-offset evt) 1)
   (check-equal? (read-tool-call-event-limit evt) 50)
   (check-true (tool-call-event? evt)))
@@ -358,7 +358,7 @@
                                #:path "src/"
                                #:glob "*.rkt"
                                #:tool-call-id "tc-grep"))
-  (check-equal? (typed-event-type evt) "grep-tool-call")
+  (check-equal? (typed-event-type evt) "tool.grep.called")
   (check-equal? (grep-tool-call-event-pattern evt) "TODO"))
 
 (test-case "grep-tool-call-event: JSON roundtrip"
@@ -380,7 +380,7 @@
                                #:pattern "test"
                                #:path "src/"
                                #:tool-call-id "tc-find"))
-  (check-equal? (typed-event-type evt) "find-tool-call"))
+  (check-equal? (typed-event-type evt) "tool.find.called"))
 
 (test-case "find-tool-call-event: JSON roundtrip"
   (define evt
@@ -400,7 +400,7 @@
                                  #:tool-name "my-custom-tool"
                                  #:arguments '#hasheq((x . 1))
                                  #:tool-call-id "tc-custom"))
-  (check-equal? (typed-event-type evt) "custom-tool-call")
+  (check-equal? (typed-event-type evt) "tool.custom.called")
   (check-equal? (tool-call-event-tool-name evt) "my-custom-tool")
   (check-true (tool-call-event? evt)))
 
@@ -425,7 +425,7 @@
                                  #:timestamp 1000
                                  #:model "gpt-4"
                                  #:provider "openai"))
-  (check-equal? (typed-event-type evt) "provider-request")
+  (check-equal? (typed-event-type evt) "model.request.started")
   (check-equal? (provider-request-event-model evt) "gpt-4")
   (check-roundtrip evt "provider-request-event"))
 
@@ -437,7 +437,7 @@
                                   #:model "gpt-4"
                                   #:provider "openai"
                                   #:latency-ms 1500))
-  (check-equal? (typed-event-type evt) "provider-response")
+  (check-equal? (typed-event-type evt) "model.request.completed")
   (check-equal? (provider-response-event-latency-ms evt) 1500)
   (check-roundtrip evt "provider-response-event"))
 
@@ -448,7 +448,7 @@
 (test-case "session-start-event: construction and roundtrip"
   (define evt
     (make-session-start-event #:session-id "s1" #:turn-id #f #:timestamp 1000 #:model "gpt-4"))
-  (check-equal? (typed-event-type evt) "session-start")
+  (check-equal? (typed-event-type evt) "session.started")
   (check-roundtrip evt "session-start-event"))
 
 (test-case "session-shutdown-event: construction and roundtrip"
@@ -457,7 +457,7 @@
                                  #:turn-id #f
                                  #:timestamp 5000
                                  #:reason "user-exit"))
-  (check-equal? (typed-event-type evt) "session-shutdown")
+  (check-equal? (typed-event-type evt) "session.shutdown")
   (check-equal? (session-shutdown-event-reason evt) "user-exit")
   (check-roundtrip evt "session-shutdown-event"))
 
@@ -487,7 +487,7 @@
                              #:timestamp 1000
                              #:model "gpt-4"
                              #:provider "openai"))
-  (check-equal? (typed-event-type evt) "model-select")
+  (check-equal? (typed-event-type evt) "model.selected")
   (check-roundtrip evt "model-select-event"))
 
 ;; ============================================================
@@ -497,7 +497,7 @@
 (test-case "agent-start-event: construction and roundtrip"
   (define evt
     (make-agent-start-event #:session-id "s1" #:turn-id "t1" #:timestamp 1000 #:model "gpt-4"))
-  (check-equal? (typed-event-type evt) "agent-start")
+  (check-equal? (typed-event-type evt) "agent.started")
   (check-roundtrip evt "agent-start-event"))
 
 (test-case "agent-end-event: construction and roundtrip"
@@ -507,7 +507,7 @@
                           #:timestamp 5000
                           #:reason "completed"
                           #:duration-ms 4000))
-  (check-equal? (typed-event-type evt) "agent-end")
+  (check-equal? (typed-event-type evt) "agent.completed")
   (check-equal? (agent-end-event-reason evt) "completed")
   (check-roundtrip evt "agent-end-event"))
 
@@ -522,7 +522,7 @@
                         #:timestamp 1000
                         #:token-count 1000
                         #:window-size 4096))
-  (check-equal? (typed-event-type evt) "context")
+  (check-equal? (typed-event-type evt) "context.built")
   (check-equal? (context-event-token-count evt) 1000)
   (check-roundtrip evt "context-event"))
 
@@ -532,34 +532,34 @@
 
 (test-case "all-known-event-types returns comprehensive list"
   (define types (all-known-event-types))
-  (check-not-false (member "turn-start" types))
-  (check-not-false (member "turn-end" types))
-  (check-not-false (member "message-start" types))
-  (check-not-false (member "tool-call" types))
-  (check-not-false (member "tool-result" types))
-  (check-not-false (member "bash-tool-call" types))
-  (check-not-false (member "edit-tool-call" types))
-  (check-not-false (member "session-start" types))
-  (check-not-false (member "session-shutdown" types))
-  (check-not-false (member "agent-start" types))
-  (check-not-false (member "agent-end" types))
+  (check-not-false (member "turn.started" types))
+  (check-not-false (member "turn.completed" types))
+  (check-not-false (member "message.started" types))
+  (check-not-false (member "tool.called" types))
+  (check-not-false (member "tool.result" types))
+  (check-not-false (member "tool.bash.called" types))
+  (check-not-false (member "tool.edit.called" types))
+  (check-not-false (member "session.started" types))
+  (check-not-false (member "session.shutdown" types))
+  (check-not-false (member "agent.started" types))
+  (check-not-false (member "agent.completed" types))
   (check-not-false (member "input" types))
-  (check-not-false (member "model-select" types))
-  (check-not-false (member "context" types))
-  (check-not-false (member "provider-request" types))
-  (check-not-false (member "provider-response" types))
+  (check-not-false (member "model.selected" types))
+  (check-not-false (member "context.built" types))
+  (check-not-false (member "model.request.started" types))
+  (check-not-false (member "model.request.completed" types))
   ;; At least 20 types
   (check-true (>= (length types) 20)))
 
 (test-case "event-name->tool-name maps correctly"
-  (check-equal? (event-name->tool-name "bash-tool-call") "bash")
-  (check-equal? (event-name->tool-name "edit-tool-call") "edit")
-  (check-equal? (event-name->tool-name "write-tool-call") "write")
-  (check-equal? (event-name->tool-name "read-tool-call") "read")
-  (check-equal? (event-name->tool-name "grep-tool-call") "grep")
-  (check-equal? (event-name->tool-name "find-tool-call") "find")
-  (check-equal? (event-name->tool-name "custom-tool-call") #f)
-  (check-equal? (event-name->tool-name "tool-call") #f))
+  (check-equal? (event-name->tool-name "tool.bash.called") "bash")
+  (check-equal? (event-name->tool-name "tool.edit.called") "edit")
+  (check-equal? (event-name->tool-name "tool.write.called") "write")
+  (check-equal? (event-name->tool-name "tool.read.called") "read")
+  (check-equal? (event-name->tool-name "tool.grep.called") "grep")
+  (check-equal? (event-name->tool-name "tool.find.called") "find")
+  (check-equal? (event-name->tool-name "tool.custom.called") #f)
+  (check-equal? (event-name->tool-name "tool.called") #f))
 
 ;; ============================================================
 ;; Deserialization: unknown type handling

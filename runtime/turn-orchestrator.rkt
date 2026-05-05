@@ -144,7 +144,7 @@
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
     (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
-    (raise-extension-error "Context assembly blocked by extension" "unknown" "turn-start"))
+    (raise-extension-error "Context assembly blocked by extension" "unknown" "turn.started"))
 
   (define ctx-assembled (tiered-context->message-list tc))
 

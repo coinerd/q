@@ -39,7 +39,7 @@
     (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
 
   ;; v0.29.17 W1: Dedup guard — prevent duplicate tool-start entries when
-  ;; both raw "tool.call.started" and typed "tool-execution-start" fire.
+  ;; both raw "tool.call.started" and typed "tool.execution.started" fire.
   (define (recent-tool-start? st name)
     (define transcript (ui-state-transcript st))
     (and (not (null? transcript))
@@ -85,7 +85,7 @@
                  (struct-copy ui-state new-state (busy? #t))
                  (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))))]
 
-    [("tool-execution-start")
+    [("tool.execution.started")
      (let* ([name (hash-ref payload 'tool-name "?")])
        (if (recent-tool-start? state name)
            (struct-copy ui-state state (busy? #t) (pending-tool-name name))
@@ -103,7 +103,7 @@
                  (struct-copy ui-state new-state (busy? #t))
                  (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))))]
 
-    [("tool-execution-end")
+    [("tool.execution.completed")
      (define name (hash-ref payload 'tool-name "?"))
      (define result-summary (hash-ref payload 'result-summary 'error))
      (define ts (event-time evt))

@@ -205,29 +205,29 @@
 ;; Dispatch deserialization by type string
 (define (dispatch-deserialize type ts sid tid h)
   (match type
-    ["turn-start" (turn-start-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["turn-end" (turn-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
-    ["message-start"
+    ["turn.started" (turn-start-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
+    ["turn.completed" (turn-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
+    ["message.started"
      (message-start-event type ts sid tid (hash-ref h 'role "") (hash-ref h 'model ""))]
-    ["message-update"
+    ["message.updated"
      (message-update-event type ts sid tid (hash-ref h 'content "") (hash-ref h 'delta ""))]
-    ["message-end"
+    ["message.completed"
      (message-end-event type ts sid tid (hash-ref h 'role "") (hash-ref h 'contentLength 0))]
-    ["tool-execution-start"
+    ["tool.execution.started"
      (tool-execution-start-event type
                                  ts
                                  sid
                                  tid
                                  (hash-ref h 'toolName "")
                                  (hash-ref h 'toolCallId ""))]
-    ["tool-execution-update"
+    ["tool.execution.updated"
      (tool-execution-update-event type
                                   ts
                                   sid
                                   tid
                                   (hash-ref h 'toolName "")
                                   (hash-ref h 'progress ""))]
-    ["tool-execution-end"
+    ["tool.execution.completed"
      (tool-execution-end-event type
                                ts
                                sid
@@ -235,7 +235,7 @@
                                (hash-ref h 'toolName "")
                                (hash-ref h 'durationMs 0)
                                (hash-ref h 'resultSummary ""))]
-    ["bash-tool-call"
+    ["tool.bash.called"
      (bash-tool-call-event type
                            ts
                            sid
@@ -246,7 +246,7 @@
                            (hash-ref h 'command "")
                            (hash-ref h 'timeout 30)
                            (hash-ref h 'cwd ""))]
-    ["edit-tool-call"
+    ["tool.edit.called"
      (edit-tool-call-event type
                            ts
                            sid
@@ -256,7 +256,7 @@
                            (hash-ref h 'toolCallId "")
                            (hash-ref h 'path "")
                            (hash-ref h 'edits '()))]
-    ["write-tool-call"
+    ["tool.write.called"
      (write-tool-call-event type
                             ts
                             sid
@@ -266,7 +266,7 @@
                             (hash-ref h 'toolCallId "")
                             (hash-ref h 'path "")
                             (hash-ref h 'content ""))]
-    ["read-tool-call"
+    ["tool.read.called"
      (read-tool-call-event type
                            ts
                            sid
@@ -277,7 +277,7 @@
                            (hash-ref h 'path "")
                            (hash-ref h 'offset #f)
                            (hash-ref h 'limit #f))]
-    ["grep-tool-call"
+    ["tool.grep.called"
      (grep-tool-call-event type
                            ts
                            sid
@@ -288,7 +288,7 @@
                            (hash-ref h 'pattern "")
                            (hash-ref h 'path "")
                            (hash-ref h 'glob ""))]
-    ["find-tool-call"
+    ["tool.find.called"
      (find-tool-call-event type
                            ts
                            sid
@@ -298,7 +298,7 @@
                            (hash-ref h 'toolCallId "")
                            (hash-ref h 'pattern "")
                            (hash-ref h 'path ""))]
-    ["custom-tool-call"
+    ["tool.custom.called"
      (custom-tool-call-event type
                              ts
                              sid
@@ -306,7 +306,7 @@
                              (hash-ref h 'toolName "unknown")
                              (hash-ref h 'arguments (hasheq))
                              (hash-ref h 'toolCallId ""))]
-    ["tool-call"
+    ["tool.called"
      (tool-call-event type
                       ts
                       sid
@@ -314,7 +314,7 @@
                       (hash-ref h 'toolName "")
                       (hash-ref h 'arguments (hasheq))
                       (hash-ref h 'toolCallId ""))]
-    ["tool-result"
+    ["tool.result"
      (tool-result-event type
                         ts
                         sid
@@ -322,9 +322,9 @@
                         (hash-ref h 'toolCallId "")
                         (hash-ref h 'content "")
                         (hash-ref h 'isError #f))]
-    ["provider-request"
+    ["model.request.started"
      (provider-request-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["provider-response"
+    ["model.request.completed"
      (provider-response-event type
                               ts
                               sid
@@ -332,14 +332,14 @@
                               (hash-ref h 'model "")
                               (hash-ref h 'provider "")
                               (hash-ref h 'latencyMs 0))]
-    ["session-start" (session-start-event type ts sid tid (hash-ref h 'model ""))]
-    ["session-shutdown" (session-shutdown-event type ts sid tid (hash-ref h 'reason ""))]
+    ["session.started" (session-start-event type ts sid tid (hash-ref h 'model ""))]
+    ["session.shutdown" (session-shutdown-event type ts sid tid (hash-ref h 'reason ""))]
     ["input" (input-event type ts sid tid (hash-ref h 'inputType "") (hash-ref h 'content ""))]
-    ["model-select"
+    ["model.selected"
      (model-select-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["agent-start" (agent-start-event type ts sid tid (hash-ref h 'model ""))]
-    ["agent-end" (agent-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
-    ["context" (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
+    ["agent.started" (agent-start-event type ts sid tid (hash-ref h 'model ""))]
+    ["agent.completed" (agent-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
+    ["context.built" (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
     ;; Streaming events
     ["model.stream.delta"
      (model-stream-delta-event type ts sid tid (hash-ref h 'delta "") (hash-ref h 'model ""))]
@@ -363,31 +363,31 @@
 ;; ============================================================
 
 (define (all-known-event-types)
-  '("turn-start" "turn-end"
-                 "message-start"
-                 "message-update"
-                 "message-end"
-                 "tool-execution-start"
-                 "tool-execution-update"
-                 "tool-execution-end"
-                 "tool-call"
-                 "tool-result"
-                 "bash-tool-call"
-                 "edit-tool-call"
-                 "write-tool-call"
-                 "read-tool-call"
-                 "grep-tool-call"
-                 "find-tool-call"
-                 "custom-tool-call"
-                 "provider-request"
-                 "provider-response"
-                 "session-start"
-                 "session-shutdown"
+  '("turn.started" "turn.completed"
+                 "message.started"
+                 "message.updated"
+                 "message.completed"
+                 "tool.execution.started"
+                 "tool.execution.updated"
+                 "tool.execution.completed"
+                 "tool.called"
+                 "tool.result"
+                 "tool.bash.called"
+                 "tool.edit.called"
+                 "tool.write.called"
+                 "tool.read.called"
+                 "tool.grep.called"
+                 "tool.find.called"
+                 "tool.custom.called"
+                 "model.request.started"
+                 "model.request.completed"
+                 "session.started"
+                 "session.shutdown"
                  "input"
-                 "model-select"
-                 "agent-start"
-                 "agent-end"
-                 "context"
+                 "model.selected"
+                 "agent.started"
+                 "agent.completed"
+                 "context.built"
                  "model.stream.delta"
                  "model.stream.thinking"
                  "model.stream.completed"
@@ -398,10 +398,10 @@
 
 (define (event-name->tool-name type)
   (match type
-    ["bash-tool-call" "bash"]
-    ["edit-tool-call" "edit"]
-    ["write-tool-call" "write"]
-    ["read-tool-call" "read"]
-    ["grep-tool-call" "grep"]
-    ["find-tool-call" "find"]
+    ["tool.bash.called" "bash"]
+    ["tool.edit.called" "edit"]
+    ["tool.write.called" "write"]
+    ["tool.read.called" "read"]
+    ["tool.grep.called" "grep"]
+    ["tool.find.called" "find"]
     [_ #f]))

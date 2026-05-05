@@ -63,7 +63,7 @@
                                          #:timestamp timestamp
                                          #:tool-name tool-name
                                          #:tool-call-id tool-call-id)
-  (tool-execution-start-event "tool-execution-start"
+  (tool-execution-start-event "tool.execution.started"
                               timestamp
                               session-id
                               turn-id
@@ -75,7 +75,7 @@
                                           #:timestamp timestamp
                                           #:tool-name tool-name
                                           #:progress progress)
-  (tool-execution-update-event "tool-execution-update"
+  (tool-execution-update-event "tool.execution.updated"
                                timestamp
                                session-id
                                turn-id
@@ -88,7 +88,7 @@
                                        #:tool-name tool-name
                                        #:duration-ms duration-ms
                                        #:result-summary result-summary)
-  (tool-execution-end-event "tool-execution-end"
+  (tool-execution-end-event "tool.execution.completed"
                             timestamp
                             session-id
                             turn-id
@@ -109,7 +109,7 @@
                               #:tool-name tool-name
                               #:arguments arguments
                               #:tool-call-id tool-call-id)
-  (tool-call-event "tool-call" timestamp session-id turn-id tool-name arguments tool-call-id))
+  (tool-call-event "tool.called" timestamp session-id turn-id tool-name arguments tool-call-id))
 
 (define (make-tool-result-event #:session-id session-id
                                 #:turn-id turn-id
@@ -117,7 +117,7 @@
                                 #:tool-call-id tool-call-id
                                 #:content content
                                 #:is-error? is-error?)
-  (tool-result-event "tool-result" timestamp session-id turn-id tool-call-id content is-error?))
+  (tool-result-event "tool.result" timestamp session-id turn-id tool-call-id content is-error?))
 
 ;; ============================================================
 ;; Per-tool typed events (Issue #1311)
@@ -133,7 +133,7 @@
                                    #:timeout timeout
                                    #:cwd cwd
                                    #:tool-call-id tool-call-id)
-  (bash-tool-call-event "bash-tool-call"
+  (bash-tool-call-event "tool.bash.called"
                         timestamp
                         session-id
                         turn-id
@@ -153,7 +153,7 @@
                                    #:path path
                                    #:edits edits
                                    #:tool-call-id tool-call-id)
-  (edit-tool-call-event "edit-tool-call"
+  (edit-tool-call-event "tool.edit.called"
                         timestamp
                         session-id
                         turn-id
@@ -172,7 +172,7 @@
                                     #:path path
                                     #:content content
                                     #:tool-call-id tool-call-id)
-  (write-tool-call-event "write-tool-call"
+  (write-tool-call-event "tool.write.called"
                          timestamp
                          session-id
                          turn-id
@@ -192,7 +192,7 @@
                                    #:offset offset
                                    #:limit limit
                                    #:tool-call-id tool-call-id)
-  (read-tool-call-event "read-tool-call"
+  (read-tool-call-event "tool.read.called"
                         timestamp
                         session-id
                         turn-id
@@ -217,7 +217,7 @@
                                    #:path path
                                    #:glob glob
                                    #:tool-call-id tool-call-id)
-  (grep-tool-call-event "grep-tool-call"
+  (grep-tool-call-event "tool.grep.called"
                         timestamp
                         session-id
                         turn-id
@@ -237,7 +237,7 @@
                                    #:pattern pattern
                                    #:path path
                                    #:tool-call-id tool-call-id)
-  (find-tool-call-event "find-tool-call"
+  (find-tool-call-event "tool.find.called"
                         timestamp
                         session-id
                         turn-id
@@ -256,7 +256,7 @@
                                      #:tool-name tool-name
                                      #:arguments arguments
                                      #:tool-call-id tool-call-id)
-  (custom-tool-call-event "custom-tool-call"
+  (custom-tool-call-event "tool.custom.called"
                           timestamp
                           session-id
                           turn-id

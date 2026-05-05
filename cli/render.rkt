@@ -179,7 +179,7 @@
      (if detail
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
-    [("tool-execution-start")
+    [("tool.execution.started")
      (define name (hash-ref payload 'tool-name "?"))
      (define args-raw (hash-ref payload 'arguments #f))
      (define args
@@ -199,7 +199,7 @@
      (if detail
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
-    [("tool-execution-end")
+    [("tool.execution.completed")
      (define name (hash-ref payload 'tool-name "?"))
      (define result-summary (hash-ref payload 'result-summary 'error))
      (if (eq? result-summary 'completed)

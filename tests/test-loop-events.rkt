@@ -14,18 +14,18 @@
   (test-suite "loop-events: typed event emission"
 
     (test-case "typed-event structs are constructable"
-      (define tse (turn-start-event "turn-start" 1000.0 "s1" "t1" "model-a" "provider-b"))
-      (check-equal? (typed-event-type tse) "turn-start")
+      (define tse (turn-start-event "turn.started" 1000.0 "s1" "t1" "model-a" "provider-b"))
+      (check-equal? (typed-event-type tse) "turn.started")
       (check-equal? (typed-event-session-id tse) "s1")
       (check-equal? (turn-start-event-model tse) "model-a")
       (check-equal? (turn-start-event-provider tse) "provider-b"))
 
     (test-case "message events have content fields"
-      (define mse (message-start-event "message-start" 1000.0 "s1" "t1" 'assistant "model-a"))
+      (define mse (message-start-event "message.started" 1000.0 "s1" "t1" 'assistant "model-a"))
       (check-equal? (message-start-event-role mse) 'assistant)
-      (define mue (message-update-event "message-update" 1001.0 "s1" "t1" 'assistant "hello"))
+      (define mue (message-update-event "message.updated" 1001.0 "s1" "t1" 'assistant "hello"))
       (check-equal? (message-update-event-delta mue) "hello")
-      (define mee (message-end-event "message-end" 1002.0 "s1" "t1" 'assistant "stop"))
+      (define mee (message-end-event "message.completed" 1002.0 "s1" "t1" 'assistant "stop"))
       (check-equal? (message-end-event-role mee) 'assistant))
 
     (test-case "tool execution events have tool-name fields"
@@ -41,7 +41,7 @@
       (define received '())
       (subscribe! bus (lambda (evt) (set! received (cons evt received))))
       ;; Publish a raw event with typed-event as payload
-      (define tse (turn-start-event "turn-start" 1000.0 "s1" "t1" "model-a" "prov"))
+      (define tse (turn-start-event "turn.started" 1000.0 "s1" "t1" "model-a" "prov"))
       (publish! bus (make-event "turn.start" 1000.0 "s1" "t1" tse))
       (check-equal? (length received) 1)
       (define payload (event-payload (car received)))

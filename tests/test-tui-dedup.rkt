@@ -20,7 +20,7 @@
 ;; ============================================================
 
 (define (make-tool-start-event name args)
-  (make-event "tool-execution-start"
+  (make-event "tool.execution.started"
               (current-inexact-milliseconds)
               "test-session"
               #f
