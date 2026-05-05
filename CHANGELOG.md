@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.30.4 — 2026-05-05
+
+### Config Migration Batch 1
+
+**Goal:** Convert runtime files from `hash-ref` to `dict-ref` via session-config struct
+
+**W0 — session-config redesign:**
+- `runtime/session-config.rkt`: Redesigned from 24 named struct fields to single hash wrapper
+  - `hash->session-config` wraps the original hash (immutable copy)
+  - `session-config->hash` unwraps for backward compat
+  - 24 smart accessor functions with correct defaults (config-*)
+  - Full gen:dict with iteration protocol (dict-iterate-first/next/key/value)
+  - Fixed defaults: system-instructions → '(), thinking-level → 'medium,
+    max-iterations → 50, max-context-tokens → 128000, tier-b/c → 20/4
+
+**W1 — config migration (6 runtime files):**
+- `runtime/agent-session.rkt`: Convert config → session-config at entry points
+  - make-agent-session: auto-converts hash? to session-config via hash->session-config
+  - resume-agent-session: same conversion
+  - Replaced hash-ref with config-* smart accessors (20 sites)
+  - Contracts updated: hash? → any/c for config params
+- `runtime/session-lifecycle.rkt`: 3-way mutable/immutable dispatch eliminated
+  - hash-ref → dict-ref (4 sites)
+  - 2x hash-set!/hash-set → dict-set (working-set, session-index)
+- `runtime/session-compaction.rkt`: hash-ref → dict-ref (1 site)
+- `runtime/iteration.rkt`: hash-ref → dict-ref (1 site), config contract → any/c
+  - mutable/immutable dispatch → dict-set
+- `runtime/turn-orchestrator.rkt`: hash-ref → dict-ref (6 sites), in-hash → in-dict
+  - config contracts: hash? → any/c (run-provider-turn, build-assembled-context)
+- `runtime/tool-coordinator.rkt`: hash-ref → dict-ref (5 sites), config contract → any/c
+- `runtime/iteration/retry-policy.rkt` (Typed Racket): hash-ref → dict-ref (1 site)
+  - Added require/typed boundary for dict-ref
+- 24 unit tests for session-config (dict interface, smart accessors, round-trip)
+
+**Key discovery:** Racket's `hash-ref` does NOT dispatch to gen:dict.
+Solution: hash wrapper (not named struct fields) + `dict-ref` at all config sites.
+
+
 ## v0.30.3 — 2026-05-05
 
 ### Session Config Struct + Dict Compat Layer
