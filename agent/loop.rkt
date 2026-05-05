@@ -29,7 +29,14 @@
          (only-in "../util/content-helpers.rkt" result-content->string)
          "streaming-message.rkt"
          "loop-messages.rkt"
-         "loop-stream.rkt")
+         "loop-stream.rkt"
+         (only-in "event-emitter.rkt" emit-typed-event!)
+         (only-in "event-structs.rkt"
+                  make-turn-start-event make-turn-end-event
+                  make-provider-request-event
+                  make-context-event
+                  make-model-request-blocked-event
+                  make-message-blocked-event))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -96,12 +103,11 @@
   (define st (or state (make-loop-state session-id turn-id)))
 
   ;; 1. Emit turn.started
-  (emit! bus
-         session-id
-         turn-id
-         "turn.started"
-         (hasheq 'turnId turn-id 'sessionId session-id)
-         #:state st)
+  (emit-typed-event! bus
+                       (make-turn-start-event #:session-id session-id #:turn-id turn-id
+                                              #:timestamp (current-inexact-milliseconds)
+                                              #:model "" #:provider "")
+                       #:state st)
 
   ;; #667: Dispatch 'agent-start hook at LLM call begin
   (when hook-dispatcher
@@ -114,12 +120,12 @@
 
   ;; 3. Emit context.built (v0.19.12 W1: added tokenCount)
   (define ctx-built-token-count (estimate-context-tokens raw-messages))
-  (emit! bus
-         session-id
-         turn-id
-         "context.built"
-         (hasheq 'messageCount (length raw-messages) 'tokenCount ctx-built-token-count)
-         #:state st)
+  (emit-typed-event! bus
+                       (make-context-event #:session-id session-id #:turn-id turn-id
+                                           #:timestamp (current-inexact-milliseconds)
+                                           #:token-count ctx-built-token-count
+                                           #:window-size (length raw-messages))
+                       #:state st)
 
   ;; 4. Build model-request
   (define req (make-model-request raw-messages tools (or provider-settings (hasheq))))
@@ -140,12 +146,13 @@
   (handle-hook-result
    pre-hook-result
    (lambda (payload)
-     (emit! bus session-id turn-id "model.request.blocked" (hasheq 'reason "hook"))
-     (emit! bus
-            session-id
-            turn-id
-            "turn.completed"
-            (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "model-request-pre-blocked"))
+     (emit-typed-event! bus (make-model-request-blocked-event #:session-id session-id #:turn-id turn-id
+                                                                           #:timestamp (current-inexact-milliseconds)
+                                                                           #:reason "hook"))
+     (emit-typed-event! bus (make-turn-end-event #:session-id session-id #:turn-id turn-id
+                                                                    #:timestamp (current-inexact-milliseconds)
+                                                                    #:reason "hook-blocked"
+                                                                    #:duration-ms 0))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre)))
    (lambda ()
      ;; DEBUG: validate raw-messages before sending
@@ -156,25 +163,14 @@
          (log-warning "  msg[~a]: role=~a keys=~a" i (hash-ref rm 'role #f) (hash-keys rm)))
        (log-warning "End of invalid sequence dump"))
 
-     (emit! bus
-            session-id
-            turn-id
-            "model.request.started"
-            (hasheq 'messageCount
-                    (length raw-messages)
-                    'toolCount
-                    (if tools
-                        (length tools)
-                        0)
-                    'model
-                    (hash-ref (model-request-settings req)
-                              'model
-                              (lambda () (format "~a" (provider-name provider))))
-                    'max_tokens
-                    (hash-ref (model-request-settings req) 'max-tokens #f)
-                    'settings
-                    (model-request-settings req))
-            #:state st)
+     (emit-typed-event! bus
+                        (make-provider-request-event #:session-id session-id #:turn-id turn-id
+                                                     #:timestamp (current-inexact-milliseconds)
+                                                     #:model (hash-ref (model-request-settings req)
+                                                                       'model
+                                                                       (lambda () (format "~a" (provider-name provider))))
+                                                     #:provider (format "~a" (provider-name provider)))
+                        #:state st)
 
      (define msg-start-result
        (and hook-dispatcher
@@ -191,12 +187,13 @@
      (handle-hook-result
       msg-start-result
       (lambda (payload)
-        (emit! bus session-id turn-id "message.blocked" (hasheq 'hook 'message-start))
-        (emit! bus
-               session-id
-               turn-id
-               "turn.completed"
-               (hasheq 'termination 'hook-blocked 'turnId turn-id 'reason "message-start-blocked"))
+        (emit-typed-event! bus (make-message-blocked-event #:session-id session-id #:turn-id turn-id
+                                                                         #:timestamp (current-inexact-milliseconds)
+                                                                         #:hook "message-start" #:reason "blocked"))
+        (emit-typed-event! bus (make-turn-end-event #:session-id session-id #:turn-id turn-id
+                                                                    #:timestamp (current-inexact-milliseconds)
+                                                                    #:reason "hook-blocked"
+                                                                    #:duration-ms 0))
         (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start)))
       (lambda ()
         ;; 5-7. Stream from provider
