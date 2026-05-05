@@ -7,6 +7,11 @@
 ;; for full backward compatibility.
 ;;
 ;; v0.30.3 W0: Struct definition + gen:dict interface.
+;;
+;; NOTE (v0.30.3 W1 discovery): Racket's hash-ref does NOT dispatch to
+;; gen:dict. All 44+ consumer sites use hash-ref, not dict-ref. Full
+;; wiring requires migrating sites to dict-ref (v0.30.4+ scope). The
+;; struct + dict interface is ready for incremental adoption.
 
 (require racket/dict
          (only-in "../agent/event-bus.rkt" event-bus?)
