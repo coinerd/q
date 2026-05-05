@@ -73,7 +73,17 @@
    (list "handle-hook-result-loop"
          (lambda ()
            (>= (grep-count "handle-hook-result" "agent/loop.rkt") 3))
-         "handle-hook-result has fewer than 3 calls in loop.rkt")))
+         "handle-hook-result has fewer than 3 calls in loop.rkt")
+   ;; emit-typed-event! must have NOTE comment in event-emitter.rkt (deferred dead code)
+   (list "emit-typed-event-note"
+         (lambda ()
+           (>= (grep-count "NOTE.*v0.29.12.*emit-typed-event" "agent/event-emitter.rkt") 1))
+         "emit-typed-event! missing NOTE comment documenting deferred status")
+   ;; session-bytes-written must have DEPRECATED comment
+   (list "session-bytes-written-deprecated"
+         (lambda ()
+           (>= (grep-count "DEPRECATED.*session-bytes-written" "tools/builtins/write.rkt") 1))
+         "session-bytes-written missing DEPRECATED comment")))
 
 ;; ── Runner ──
 

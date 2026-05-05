@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.29.11-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.29.12-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.29.11
+racket main.rkt --version  # q version 0.29.12
 raco test tests/           # run the full test suite
 ```
 
@@ -271,8 +271,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 506 |
-| Source modules | 385 |
-| Source lines | 61553 |
+| Source modules | 386 |
+| Source lines | 62244 |
 | Test lines | 94352 |
 | Test assertions | 14528 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -349,6 +349,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.29.12** — Test Health Restoration
 
 **v0.29.11** — Audit Remediation (v0.29.7–v0.29.10 Findings)
 
