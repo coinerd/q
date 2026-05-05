@@ -28,7 +28,8 @@
          config-max-iterations-hard config-thinking-level
          config-working-set config-parallel-tools
          config-cancellation-token config-tier-b-count config-tier-c-count
-         config-templates config-trace-logger config-verbose?)
+         config-templates config-trace-logger config-verbose?
+         config-max-tokens config-token-budget-threshold config-session-index)
 
 ;; ── session-config struct ────────────────────────────────────────
 
@@ -88,6 +89,9 @@
 (define (config-templates c) (hash-ref (session-config-data c) 'templates #f))
 (define (config-trace-logger c) (hash-ref (session-config-data c) 'trace-logger #f))
 (define (config-verbose? c) (hash-ref (session-config-data c) 'verbose? #f))
+(define (config-max-tokens c) (hash-ref (session-config-data c) 'max-tokens 8192))
+(define (config-token-budget-threshold c) (hash-ref (session-config-data c) 'token-budget-threshold #f))
+(define (config-session-index c) (hash-ref (session-config-data c) 'session-index #f))
 
 ;; ── Conversion helpers ───────────────────────────────────────────
 

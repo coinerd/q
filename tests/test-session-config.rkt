@@ -166,3 +166,28 @@
   (define c (hash->session-config (hasheq 'provider 'prov 'model-name "m")))
   ;; hash-ref on gen:dict implementation works through dict-ref
   (check-eq? (dict-ref c 'provider) 'prov))
+
+
+;; ── New accessor defaults (v0.30.5) ─────────────────────────────
+
+(test-case "config-max-tokens defaults to 8192"
+  (define c (hash->session-config (hasheq)))
+  (check-equal? (config-max-tokens c) 8192))
+
+(test-case "config-max-tokens returns set value"
+  (define c (hash->session-config (hasheq 'max-tokens 4096)))
+  (check-equal? (config-max-tokens c) 4096))
+
+(test-case "config-token-budget-threshold defaults to #f"
+  (define c (hash->session-config (hasheq)))
+  (check-false (config-token-budget-threshold c)))
+
+(test-case "config-session-index defaults to #f"
+  (define c (hash->session-config (hasheq)))
+  (check-false (config-session-index c)))
+
+(test-case "config-session-index returns set value"
+  (define c (hash->session-config (hasheq 'session-index 42)))
+  (check-equal? (config-session-index c) 42))
+
+;; ── Full integration: agent-session round-trip ───────────────────
