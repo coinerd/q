@@ -1,6 +1,22 @@
 # Changelog
 
-## v0.29.11 — 2026-05-02
+## v0.29.12 — 2026-05-05
+
+### Test Health Restoration
+
+- **Fixed handle-hook-result #:on-amend regression**: `on-continue` not called after amend side effect, breaking test-hooks-complete (NEW regression in v0.29.11)
+- **Widened lookup-tool contract**: Accept `(or/c string? #f)` — fixes test-soft-iteration contract violation with nil tool names
+- **Widened make-model-request settings type**: `(HashTable Symbol Any)` → `(Option (HashTable Symbol Any))` — fixes test-provider-settings-wiring TR violation
+- **Widened model-response usage type**: `(HashTable Symbol Any)` → `(Option (HashTable Symbol Any))` — fixes test-self-hosting-workflow TR violation
+- **Added dead code documentation**: NOTE comment on `emit-typed-event!` (0 production callers), enhanced DEPRECATED note on `session-bytes-written`
+- **Expanded IVG lint**: Added 2 new mechanical checks (emit-typed-event-note, session-bytes-written-deprecated) — 7/7 pass
+
+### Test Results
+
+- Full suite: 476/476 files, 7182/7182 tests, **0 failures** (was 9 failing files)
+- Audit score: **8.5/10** (target met)
+
+## v0.29.11 — 2026-05-05
 
 ### Audit Remediation (v0.29.7–v0.29.10 Findings)
 

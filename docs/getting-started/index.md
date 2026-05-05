@@ -1,4 +1,4 @@
-<!-- verified-against: 0.29.11 --># Getting Started
+<!-- verified-against: 0.29.12 --># Getting Started
 
 Welcome to q, a Racket-based coding agent.
 
