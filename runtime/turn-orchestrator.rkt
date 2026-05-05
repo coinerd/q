@@ -23,6 +23,7 @@
          racket/promise
          json
          (only-in racket/string string-contains?)
+         (only-in "../util/errors.rkt" raise-extension-error)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
@@ -126,7 +127,7 @@
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
     (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
-    (raise (exn:fail "Context assembly blocked by extension" (current-continuation-marks))))
+    (raise-extension-error "Context assembly blocked by extension" "unknown" "turn-start"))
 
   (define ctx-assembled (tiered-context->message-list tc))
 

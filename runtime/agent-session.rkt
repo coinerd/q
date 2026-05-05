@@ -25,6 +25,7 @@
          racket/file
          racket/list
          racket/path
+         (only-in "../util/errors.rkt" raise-session-error)
          (only-in "../util/protocol-types.rkt" message-id message-kind make-loop-result)
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
@@ -256,8 +257,8 @@
 
 (define (fork-session sess [parent-entry-id #f])
   (unless (session-active? sess)
-    (raise (exn:fail (format "fork-session: session ~a is closed" (agent-session-session-id sess))
-                     (current-continuation-marks))))
+    (raise-session-error (format "fork-session: session ~a is closed" (agent-session-session-id sess))
+                         (agent-session-session-id sess)))
   (let* ([ext-reg (agent-session-extension-registry sess)]
          [fork-payload (hasheq 'session-id
                                (agent-session-session-id sess)
