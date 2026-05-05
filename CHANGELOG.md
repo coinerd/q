@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.30.8 — 2026-05-05
+
+### Module Decomposition: tools/tool.rkt
+
+**Goal:** Extract submodules from the 511-line tools/tool.rkt god module
+
+**W0 — Extracted 4 submodules:**
+- `tools/tool-struct.rkt` (25 lines) — `tool` struct definition
+- `tools/exec-context.rkt` (56 lines) — execution context struct + constructor
+- `tools/registry.rkt` (97 lines) — thread-safe tool registry + active set management
+- `tools/schema-helpers.rkt` (127 lines) — argument validation, schema hints, merge
+- `tools/tool.rkt` reduced from 511 → 198 lines (facade + tool result helpers)
+
+**W1 — Verified all 44 consumers unaffected via re-export**
+
+
 ## v0.30.7 — 2026-05-05
 
 ### Event Payload Structs (Batch 2) + Full Adoption
