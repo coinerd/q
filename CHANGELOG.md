@@ -16,7 +16,7 @@
 - Full suite: 476/476 files, 7182/7182 tests, **0 failures** (was 9 failing files)
 - Audit score: **8.5/10** (target met)
 
-## v0.29.11 — 2026-05-05
+## v0.29.11 — 2026-05-04
 
 ### Audit Remediation (v0.29.7–v0.29.10 Findings)
 

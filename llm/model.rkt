@@ -90,7 +90,8 @@
 (: jsexpr->model-response ((HashTable Symbol Any) -> model-response))
 (define (jsexpr->model-response h)
   (make-model-response (cast (hash-ref h 'content) (Listof Any))
-                       (cast (hash-ref h 'usage #f) (HashTable Symbol Any))
+                       (let ([u (hash-ref h 'usage #f)])
+                         (if (hash? u) (cast u (HashTable Symbol Any)) (hasheq)))
                        (cast (hash-ref h 'model) String)
                        (let ([sr (hash-ref h 'stopReason #f)])
                          (if sr

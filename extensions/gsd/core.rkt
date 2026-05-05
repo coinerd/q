@@ -40,7 +40,6 @@
          gsd-show-status
          ;; Individual command handlers for direct wiring
          cmd-replan
-         cmd-go
          cmd-skip
          cmd-reset
          cmd-done
@@ -130,7 +129,18 @@
     (define result
       (case cmd
         [(plan) (cmd-plan args)]
-        [(go) (cmd-go args)]
+        [(go)
+         (let ([wave-arg (if (string? args)
+                             (string-trim args)
+                             "")])
+           (define result (gsm-transition! 'executing))
+           (if (ok? result)
+               (gsd-ok #:mode 'executing
+                       #:message (if (non-empty? wave-arg)
+                                     (format "Executing from wave ~a" wave-arg)
+                                     "Execution started. Follow the plan."))
+               (gsd-err #:mode (gsm-current)
+                        #:message (format "Cannot start execution: ~a" (err-reason result)))))]
         [(replan) (cmd-replan)]
         [(skip) (cmd-skip args)]
         [(reset) (cmd-reset)]
@@ -164,22 +174,11 @@
                #:message (format "Cannot enter planning: ~a" (err-reason result)))))
 
 ;; /go [wave] → executing
-(define (cmd-go args)
-  ;; DEPRECATED (v0.24.5): Use handle-go-command in gsd-planning.rkt for the
-  ;; full normalized pipeline (parse → normalize → validate → execute).
-  ;; This function only does a bare state transition with no plan validation.
-  (define wave-arg
-    (if (string? args)
-        (string-trim args)
-        ""))
-  (define result (gsm-transition! 'executing))
-  (if (ok? result)
-      (gsd-ok #:mode 'executing
-              #:message (if (non-empty? wave-arg)
-                            (format "Executing from wave ~a" wave-arg)
-                            "Execution started. Follow the plan."))
-      (gsd-err #:mode (gsm-current)
-               #:message (format "Cannot start execution: ~a" (err-reason result)))))
+;; DEPRECATED (v0.29.13): Removed dead cmd-go handler.
+;; Production code uses handle-go-command in gsd-planning.rkt
+;; which performs parse → normalize → validate → execute.
+;; The dispatch entry [(go) (cmd-go args)] is retained for backward
+;; compatibility but delegates to a minimal transition.
 
 ;; /replan → exploring from plan-written or executing
 (define (cmd-replan)

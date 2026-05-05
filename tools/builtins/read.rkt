@@ -1,5 +1,12 @@
 #lang racket/base
 
+;; tools/builtins/read.rkt — File read tool
+;;
+;; Layer: tools (interface layer consumer)
+;; Purpose: Read file contents with encoding detection, line range support,
+;; and safe-mode path validation. Handles text files, images, and binary
+;; content with appropriate encoding. Primary tool for source exploration.
+
 (require racket/port
          racket/string
          racket/file
