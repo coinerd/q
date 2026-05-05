@@ -38,7 +38,8 @@
          handle-sessions-interactive-command
          run-interactive
          run-single-shot
-         run-resume)
+         run-resume
+         run-print-mode)
 
 ;; ============================================================
 ;; Terminal event subscriber
@@ -187,3 +188,35 @@
    #:sessions-fn (lambda (cmd out)
                    (define sdir (hash-ref rt-config 'session-dir #f))
                    (handle-sessions-interactive-command cmd out sdir))))
+
+;; ============================================================
+;; run-print-mode (G9.3)
+;; ============================================================
+
+;; Run a single-shot prompt and print plain-text assistant response to stdout.
+;; No streaming, no TUI, no interactivity. Designed for piping/automation.
+(define (run-print-mode cfg rt-config)
+  (define prompt (cli-config-prompt cfg))
+  (unless prompt
+    (displayln "Error: -p/--print requires a prompt argument." (current-error-port))
+    (exit 1))
+  (define sess (make-agent-session rt-config))
+  ;; Subscribe a collector that accumulates assistant text deltas
+  (define accumulated-text (box ""))
+  (define (print-subscriber evt)
+    (define ev (event-ev evt))
+    (cond
+      [(equal? ev "model.stream.delta")
+       (define delta (hash-ref (event-payload evt) 'delta ""))
+       (when (> (string-length delta) 0)
+         (set-box! accumulated-text (string-append (unbox accumulated-text) delta)))]
+      [else (void)]))
+  (define bus (hash-ref rt-config 'event-bus))
+  (subscribe! bus print-subscriber)
+  ;; Run the prompt
+  (with-handlers ([exn:fail? (lambda (e)
+                               (displayln (exn-message e) (current-error-port))
+                               (exit 1))])
+    (run-prompt! sess prompt))
+  ;; Output plain text
+  (displayln (unbox accumulated-text)))

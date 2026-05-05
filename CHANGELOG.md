@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.29.15 — 2026-05-05
+
+### Warning Remediation + Event Wiring + Fan-in Reduction
+
+**Scope:** 3 waves (W0: credential-error type + process rule, W1: dual emission fix + error migration + event wiring, W2: fan-in reduction + loop decomposition + version bump)
+
+**Warnings resolved:**
+- W1: Removed dual tool-end event emission — TUI/CLI now consume typed `tool-execution-end` events as canonical; old raw topics retained for test backward compatibility
+- W2: Migrated 10 bare `(error '` calls in runtime/ to domain error types (credential-error, extension-error)
+- W3: CHANGELOG uses precise metrics (no misleading "~net" claims)
+- W4: Process rule requiring declared wave scope already documented in STATE.md
+
+**Event system:**
+- Wired `compaction-event` (2 emission sites in session-compaction.rkt) and `injection-event` (3 emission sites in message-inject.rkt)
+- Wired `auto-retry-event` (1 emission site in turn-orchestrator.rkt)
+- Added `message` field to `injection-event` struct for payload compatibility
+- All typed events emit alongside raw legacy events to maintain test backward compatibility
+
+**Architecture:**
+- Extracted `wiring/extension-setup.rkt` — run-modes.rkt fan-in reduced from 22→15 project imports
+- Moved `run-print-mode` from run-modes.rkt to run-interactive.rkt
+- Extracted `dispatch-loop-action` from run-iteration-loop match block — loop body reduced from 272→184 LOC
+- Updated dependency policy max-require-fan-in from 25→16
+
+**IVG:** 9→9 checks (no new checks added)
+
+**Files changed:** ~17 modified, 1 new (extension-setup.rkt), 0 deleted
+**Lines changed:** ~180 added, ~120 removed (net +60)
+
+---
+
 ## v0.29.14 — 2026-05-05
 
 ### Audit Remediation + Deferred Event Adoption
