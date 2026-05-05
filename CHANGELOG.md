@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.29.13 — 2026-05-05
+
+### Architecture Remediation + Event Adoption Phase 1
+
+**Scope:** 3 waves (W0: dead code + safety, W1: god function decomposition, W2: typed events + error types + SDK contracts)
+
+**Architecture:**
+- Removed dead `cmd-go` handler from `extensions/gsd/core.rkt` (inlined into `gsd-command-dispatch`)
+- Decomposed 424-line `run-iteration-loop` god function into 4 focused sub-functions (`check-cancellation`, `process-tool-results`, `compute-next-counters`, `handle-stop-action`)
+- Extracted `wire-security-config!` and `wire-timeouts!` into new `wiring/mode-helpers.rkt`, reducing `run-modes.rkt` fan-in from 22→19 requires
+- Wired 2 session typed events in `runtime/session-switch.rkt` (replacing raw `make-event` with `emit-typed-event!`)
+- Migrated 4 bare `exn:fail` sites to domain error types (`raise-extension-error`, `raise-session-error`)
+- Tightened SDK contracts for `make-cancellation-token` and `make-in-memory-session-manager`
+- Fixed `jsexpr→model-response` cast safety on `#f` usage key in `llm/model.rkt`
+- Created 5 new test scaffolds for uncovered modules
+- Documented 4 layer violations in `docs/architecture/dependency-policy.rktd`
+- Added module header comments to 3 files
+
+**IVG:** 7→8 checks (added `session-switch-typed-events`)
+
+**Files changed:** ~25 modified, 7 new (including 5 test files), 0 deleted
+**Lines changed:** ~350 net
+
+---
+
 ## v0.29.12 — 2026-05-05
 
 ### Test Health Restoration
