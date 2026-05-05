@@ -14,6 +14,9 @@
                   typed-event-session-id
                   typed-event-turn-id))
 
+;; NOTE (v0.29.12): emit-typed-event! is provided for future use but has 0 production
+;; callers outside its own module. The bridge to the event bus exists but no emit! call
+;; site in loop.rkt or loop-stream.rkt uses it. Deferred to v0.30.x.
 (provide emit-typed-event!
          event-struct->hasheq)
 
