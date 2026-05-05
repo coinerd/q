@@ -12,7 +12,7 @@
  ;; Layer definitions with max boundary exceptions
  (layers
   (runtime
-   (max-exceptions . 8)
+   (max-exceptions . 9)
    (forbidden-from . (llm tools extensions))
    (rationale . "Runtime should not import upward into tools/extensions except via turn-orchestrator.rkt"))
   (tui

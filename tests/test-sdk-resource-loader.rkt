@@ -9,7 +9,6 @@
          "../interfaces/sdk.rkt"
          "../extensions/resource-discovery.rkt"
          (only-in "../runtime/session-store.rkt"
-                  make-in-memory-session-manager
                   in-memory-session-manager?
                   in-memory-append!
                   in-memory-load
