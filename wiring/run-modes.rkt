@@ -27,25 +27,10 @@
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
-         "../extensions/api.rkt"
-         (only-in "../extensions/loader.rkt" load-extension!)
-         (only-in "../extensions/hooks.rkt" dispatch-hooks)
-         (only-in "../util/hook-types.rkt" hook-amend hook-result-action hook-result-payload)
-         (only-in "../tui/palette.rkt"
-                  commands-from-hashes
-                  merge-extension-commands
-                  make-command-registry)
-         (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
          (only-in "mode-helpers.rkt" wire-security-config! wire-timeouts!)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
-         (only-in "../util/protocol-types.rkt"
-                  event-ev
-                  event-payload
-                  message-role
-                  message-content
-                  text-part?
-                  text-part-text))
+         (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!))
 
 ;; Re-export mode runners from sub-modules
 (require "run-interactive.rkt"
@@ -63,7 +48,7 @@
          ;; Re-exported from run-json-rpc.rkt
          run-json
          run-rpc
-         ;; G9.3: print mode
+         ;; Re-exported from run-interactive.rkt
          run-print-mode)
 
 ;; ============================================================
@@ -130,24 +115,7 @@
   ;; Extension registry — discover from global + project dirs
   ;; Load order: global (~/.q/extensions/) first, then project-local.
   ;; Project-local extensions override global ones (same name wins from later registration).
-  (define ext-reg (make-extension-registry))
-  (define q-home (build-path (find-system-path 'home-dir) ".q"))
-  (load-extensions-from-dir! ext-reg (build-path q-home "extensions") #:event-bus bus)
-  (load-extensions-from-dir! ext-reg (build-path project-dir ".q" "extensions") #:event-bus bus)
-
-  ;; #677/#678: Query extensions for commands and shortcuts
-  (define ext-cmds
-    (let ()
-      (define result (dispatch-hooks 'register-commands (hasheq) ext-reg))
-      (if (and result (eq? (hook-result-action result) 'amend))
-          (commands-from-hashes (hash-ref (hook-result-payload result) 'commands '()))
-          '())))
-  (define ext-shortcuts
-    (let ()
-      (define result (dispatch-hooks 'register-shortcuts (hasheq) ext-reg))
-      (if (and result (eq? (hook-result-action result) 'amend))
-          (hash-ref (hook-result-payload result) 'shortcuts '())
-          '())))
+  (define-values (ext-reg ext-cmds ext-shortcuts) (make-wired-extension-registry bus project-dir))
 
   ;; Model name from CLI --model flag
   (define model-name (hash-ref base-config 'model #f))
@@ -192,28 +160,6 @@
   base-config)
 
 ;; ============================================================
-;; load-extensions-from-dir! helper
-;; ============================================================
-
-;; Load all .rkt extension files from a directory into the registry.
-;; Silently skips if directory doesn't exist or individual loads fail.
-
-(define (load-extensions-from-dir! ext-reg dir #:event-bus [event-bus #f])
-  (when (directory-exists? dir)
-    ;; v0.21.5 (F1): Sort by filename for deterministic load order across platforms.
-    (define files
-      (sort (filter (λ (f) (regexp-match? #rx"\\.rkt$" (path->string f)))
-                    (directory-list dir #:build? #t))
-            (λ (a b) (string<? (path->string a) (path->string b)))))
-    (for ([f (in-list files)])
-      (with-handlers ([exn:fail? (λ (e)
-                                   (fprintf (current-error-port)
-                                            "Warning: failed to load extension ~a: ~a\n"
-                                            f
-                                            (exn-message e)))])
-        (load-extension! ext-reg f #:event-bus event-bus)))))
-
-;; ============================================================
 ;; mode-for-config
 ;; ============================================================
 
@@ -255,35 +201,3 @@
   ;; v0.14.2 Wave 3: Refresh per-model timeouts
   (wire-timeouts! new-settings)
   new-reg)
-
-;; ============================================================
-;; run-print-mode (G9.3)
-;; ============================================================
-
-;; Run a single-shot prompt and print plain-text assistant response to stdout.
-;; No streaming, no TUI, no interactivity. Designed for piping/automation.
-(define (run-print-mode cfg rt-config)
-  (define prompt (cli-config-prompt cfg))
-  (unless prompt
-    (displayln "Error: -p/--print requires a prompt argument." (current-error-port))
-    (exit 1))
-  (define sess (make-agent-session rt-config))
-  ;; Subscribe a collector that accumulates assistant text deltas
-  (define accumulated-text (box ""))
-  (define (print-subscriber evt)
-    (define ev (event-ev evt))
-    (cond
-      [(equal? ev "model.stream.delta")
-       (define delta (hash-ref (event-payload evt) 'delta ""))
-       (when (> (string-length delta) 0)
-         (set-box! accumulated-text (string-append (unbox accumulated-text) delta)))]
-      [else (void)]))
-  (define bus (hash-ref rt-config 'event-bus))
-  (subscribe! bus print-subscriber)
-  ;; Run the prompt
-  (with-handlers ([exn:fail? (lambda (e)
-                               (displayln (exn-message e) (current-error-port))
-                               (exit 1))])
-    (run-prompt! sess prompt))
-  ;; Output plain text
-  (displayln (unbox accumulated-text)))

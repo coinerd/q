@@ -431,6 +431,147 @@
         result)))
 
 ;; ============================================================
+;; dispatch-loop-action: extracted match block from run-iteration-loop
+;; ============================================================
+
+(define (dispatch-loop-action action
+                              result
+                              new-msgs
+                              ctx-with-injected
+                              log-path
+                              ext-reg
+                              reg
+                              bus
+                              session-id
+                              steering-queue
+                              follow-up-mode
+                              iteration
+                              ws
+                              intent-retry-count
+                              explore-count
+                              implement-count
+                              consecutive-tool-count
+                              seen-paths
+                              consecutive-error-count
+                              recent-tool-names
+                              max-iterations
+                              max-iterations-hard
+                              sess
+                              token
+                              config
+                              on-recurse)
+  (define (call-process-tool-results)
+    (process-tool-results new-msgs
+                          ctx-with-injected
+                          ext-reg
+                          reg
+                          bus
+                          session-id
+                          log-path
+                          token
+                          config
+                          ws))
+  (match action
+    ['stop
+     (handle-stop-action result
+                         new-msgs
+                         log-path
+                         ext-reg
+                         bus
+                         session-id
+                         steering-queue
+                         follow-up-mode
+                         iteration
+                         ctx-with-injected
+                         ws
+                         intent-retry-count
+                         explore-count
+                         implement-count
+                         on-recurse)]
+    ['stop-hard-limit
+     (append-entries! log-path new-msgs)
+     (emit-session-event! bus
+                          session-id
+                          "runtime.error"
+                          (assert-payload "runtime.error"
+                                          (hasheq 'error
+                                                  "max-iterations-exceeded"
+                                                  'iteration
+                                                  iteration
+                                                  'maxIterations
+                                                  max-iterations-hard)
+                                          error-detail-payload/c))
+     (make-loop-result new-msgs
+                       'max-iterations-exceeded
+                       (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
+    ['stop-soft-limit
+     (append-entries! log-path new-msgs)
+     (emit-session-event! bus
+                          session-id
+                          "iteration.soft-warning"
+                          (hasheq 'iteration
+                                  (add1 iteration)
+                                  'soft-limit
+                                  max-iterations
+                                  'hard-limit
+                                  max-iterations-hard
+                                  'remaining
+                                  (- max-iterations-hard (add1 iteration))))
+     (define updated-ctx (call-process-tool-results))
+     (define ctx-after-budget
+       (if sess
+           (maybe-compact-mid-turn sess updated-ctx bus session-id config)
+           (begin
+             (estimate-mid-turn-tokens updated-ctx bus session-id config)
+             updated-ctx)))
+     (on-recurse ctx-after-budget
+                 (add1 iteration)
+                 (add1 consecutive-tool-count)
+                 seen-paths
+                 ws
+                 intent-retry-count
+                 consecutive-error-count
+                 recent-tool-names
+                 explore-count
+                 implement-count
+                 0)]
+    ['continue
+     (append-entries! log-path new-msgs)
+     (define updated-ctx (call-process-tool-results))
+     (define-values (new-seen-paths
+                     effective-tool-count
+                     new-explore-count
+                     new-implement-count
+                     new-error-count
+                     new-recent-tools)
+       (compute-next-counters new-msgs
+                              seen-paths
+                              consecutive-tool-count
+                              explore-count
+                              implement-count
+                              consecutive-error-count
+                              recent-tool-names))
+     ;; v0.28.22 W1: exploration loop detection
+     (define loop-warning (detect-exploration-loop new-recent-tools))
+     (when loop-warning
+       (emit-session-event!
+        bus
+        session-id
+        "iteration.exploration-loop"
+        (hasheq 'pattern loop-warning 'recent-tools new-recent-tools 'iteration iteration)))
+     (on-recurse updated-ctx
+                 (add1 iteration)
+                 effective-tool-count
+                 new-seen-paths
+                 ws
+                 intent-retry-count
+                 new-error-count
+                 new-recent-tools
+                 new-explore-count
+                 new-implement-count
+                 0)]))
+
+;; ============================================================
 
 (define (run-iteration-loop context
                             prov
@@ -587,120 +728,32 @@
                                                    max-iterations
                                                    max-iterations-hard)
                                     result))
-              ;; G7: local helper to deduplicate identical call sites
-              (define (call-process-tool-results)
-                (process-tool-results new-msgs
-                                      ctx-with-injected
-                                      ext-reg
-                                      reg
-                                      bus
-                                      session-id
-                                      log-path
-                                      token
-                                      config
-                                      ws))
-              (match action
-                ['stop
-                 (handle-stop-action result
-                                     new-msgs
-                                     log-path
-                                     ext-reg
-                                     bus
-                                     session-id
-                                     steering-queue
-                                     follow-up-mode
-                                     iteration
-                                     ctx-with-injected
-                                     ws
-                                     intent-retry-count
-                                     explore-count
-                                     implement-count
-                                     ;; followup-continuation: recurse into loop
-                                     (lambda (new-ctx iter tc sp ws2 irc ec rt ecnt implcnt src)
-                                       (loop new-ctx iter tc sp ws2 irc ec rt ecnt implcnt src)))]
-                ['stop-hard-limit
-                 (append-entries! log-path new-msgs)
-                 (emit-session-event! bus
-                                      session-id
-                                      "runtime.error"
-                                      (assert-payload "runtime.error"
-                                                      (hasheq 'error
-                                                              "max-iterations-exceeded"
-                                                              'iteration
-                                                              iteration
-                                                              'maxIterations
-                                                              max-iterations-hard)
-                                                      error-detail-payload/c))
-                 (make-loop-result new-msgs
-                                   'max-iterations-exceeded
-                                   (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
-                ['stop-soft-limit
-                 (append-entries! log-path new-msgs)
-                 (emit-session-event! bus
-                                      session-id
-                                      "iteration.soft-warning"
-                                      (hasheq 'iteration
-                                              (add1 iteration)
-                                              'soft-limit
-                                              max-iterations
-                                              'hard-limit
-                                              max-iterations-hard
-                                              'remaining
-                                              (- max-iterations-hard (add1 iteration))))
-                 (define updated-ctx (call-process-tool-results))
-                 (define ctx-after-budget
-                   (if sess
-                       (maybe-compact-mid-turn sess updated-ctx bus session-id config)
-                       (begin
-                         (estimate-mid-turn-tokens updated-ctx bus session-id config)
-                         updated-ctx)))
-                 (loop ctx-after-budget
-                       (add1 iteration)
-                       (add1 consecutive-tool-count)
-                       seen-paths
-                       ws
-                       intent-retry-count
-                       consecutive-error-count
-                       recent-tool-names
-                       explore-count
-                       implement-count
-                       stall-retry-count)]
-                ['continue
-                 (append-entries! log-path new-msgs)
-                 (define updated-ctx (call-process-tool-results))
-                 (define-values (new-seen-paths
-                                 effective-tool-count
-                                 new-explore-count
-                                 new-implement-count
-                                 new-error-count
-                                 new-recent-tools)
-                   (compute-next-counters new-msgs
-                                          seen-paths
-                                          consecutive-tool-count
-                                          explore-count
-                                          implement-count
-                                          consecutive-error-count
-                                          recent-tool-names))
-                 ;; v0.28.22 W1: exploration loop detection
-                 (define loop-warning (detect-exploration-loop new-recent-tools))
-                 (when loop-warning
-                   (emit-session-event! bus
-                                        session-id
-                                        "iteration.exploration-loop"
-                                        (hasheq 'pattern
-                                                loop-warning
-                                                'recent-tools
-                                                new-recent-tools
-                                                'iteration
-                                                iteration)))
-                 (loop updated-ctx
-                       (add1 iteration)
-                       effective-tool-count
-                       new-seen-paths
-                       ws
-                       intent-retry-count
-                       new-error-count
-                       new-recent-tools
-                       new-explore-count
-                       new-implement-count
-                       stall-retry-count)])])]))))
+              (dispatch-loop-action
+               action
+               result
+               new-msgs
+               ctx-with-injected
+               log-path
+               ext-reg
+               reg
+               bus
+               session-id
+               steering-queue
+               follow-up-mode
+               iteration
+               ws
+               intent-retry-count
+               explore-count
+               implement-count
+               consecutive-tool-count
+               seen-paths
+               consecutive-error-count
+               recent-tool-names
+               max-iterations
+               max-iterations-hard
+               sess
+               token
+               config
+               ;; on-recurse: callback for recursive loop cases
+               (lambda (new-ctx iter tc sp ws2 irc ec rt ecnt implcnt src)
+                 (loop new-ctx iter tc sp ws2 irc ec rt ecnt implcnt src)))])]))))

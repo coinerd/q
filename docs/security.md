@@ -1,4 +1,4 @@
-<!-- verified-against: 0.29.14 --># Security Considerations
+<!-- verified-against: 0.29.15 --># Security Considerations
 
 ## API Key Storage
 
@@ -19,7 +19,7 @@ API keys are stored as plaintext in `~/.q/credentials.json` with `0600` (owner-o
 - Avoid sharing or backing up the credentials file
 - Rotate keys if the file is accidentally exposed
 
-## Command Execution Policy (v0.29.14 — updated from v0.25.3 baseline)
+## Command Execution Policy (v0.29.15 — updated from v0.25.3 baseline)
 
 Three execution policy modes control how commands are handled:
 
@@ -33,7 +33,7 @@ Three execution policy modes control how commands are handled:
 
 A subset of destructive patterns (`rm -rf`, `mkfs`, `dd of=/dev/`, `/etc/passwd` overwrites) are classified as **high-risk**. When in warn-only mode, high-risk matches inject a `[SECURITY NOTICE]` prefix into tool output.
 
-## Environment Variable Scrubbing (v0.29.14 — updated from v0.25.3 baseline)
+## Environment Variable Scrubbing (v0.29.15 — updated from v0.25.3 baseline)
 
 All subprocess environments are sanitized before execution:
 
