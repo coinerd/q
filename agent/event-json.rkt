@@ -169,6 +169,26 @@
              (provider-response-event-provider evt)
              'latencyMs
              (provider-response-event-latency-ms evt))]
+    ;; Streaming events
+    [(model-stream-delta-event? evt)
+     (hasheq 'delta (model-stream-delta-event-delta evt)
+             'model (model-stream-delta-event-model evt))]
+    [(model-stream-thinking-event? evt)
+     (hasheq 'thinking (model-stream-thinking-event-thinking evt)
+             'model (model-stream-thinking-event-model evt))]
+    [(model-stream-completed-event? evt)
+     (hasheq 'model (model-stream-completed-event-model evt)
+             'provider (model-stream-completed-event-provider evt))]
+    ;; Blocked events
+    [(model-request-blocked-event? evt)
+     (hasheq 'reason (model-request-blocked-event-reason evt))]
+    [(message-blocked-event? evt)
+     (hasheq 'hook (message-blocked-event-hook evt)
+             'reason (message-blocked-event-reason evt))]
+    [(turn-cancelled-event? evt)
+     (hasheq 'reason (turn-cancelled-event-reason evt))]
+    [(assistant-message-completed-event? evt)
+     (hasheq 'contentLength (assistant-message-completed-event-content-length evt))]
     [(session-start-event? evt) (hasheq 'model (session-start-event-model evt))]
     [(session-shutdown-event? evt) (hasheq 'reason (session-shutdown-event-reason evt))]
     [(input-event? evt)
@@ -320,6 +340,22 @@
     ["agent-start" (agent-start-event type ts sid tid (hash-ref h 'model ""))]
     ["agent-end" (agent-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
     ["context" (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
+    ;; Streaming events
+    ["model.stream.delta"
+     (model-stream-delta-event type ts sid tid (hash-ref h 'delta "") (hash-ref h 'model ""))]
+    ["model.stream.thinking"
+     (model-stream-thinking-event type ts sid tid (hash-ref h 'thinking "") (hash-ref h 'model ""))]
+    ["model.stream.completed"
+     (model-stream-completed-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
+    ;; Blocked events
+    ["model.request.blocked"
+     (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
+    ["message.blocked"
+     (message-blocked-event type ts sid tid (hash-ref h 'hook "") (hash-ref h 'reason ""))]
+    ["turn.cancelled"
+     (turn-cancelled-event type ts sid tid (hash-ref h 'reason ""))]
+    ["assistant.message.completed"
+     (assistant-message-completed-event type ts sid tid (hash-ref h 'contentLength 0))]
     [_ (typed-event type ts sid tid)]))
 
 ;; ============================================================
@@ -351,7 +387,14 @@
                  "model-select"
                  "agent-start"
                  "agent-end"
-                 "context"))
+                 "context"
+                 "model.stream.delta"
+                 "model.stream.thinking"
+                 "model.stream.completed"
+                 "model.request.blocked"
+                 "message.blocked"
+                 "turn.cancelled"
+                 "assistant.message.completed"))
 
 (define (event-name->tool-name type)
   (match type
