@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.30.6 — 2026-05-05
+
+### Event Payload Structs (Batch 1)
+
+**Goal:** Define typed event structs for streaming, blocked, and cancelled events
+
+**W0 — New event structs (7 types):**
+- `agent/event-structs/hook-events.rkt` — new sub-module:
+  - `model-request-blocked-event` (reason field)
+  - `message-blocked-event` (hook + reason fields)
+  - `turn-cancelled-event` (reason field)
+  - `assistant-message-completed-event` (content-length field)
+- `agent/event-structs/provider-events.rkt` — streaming extensions:
+  - `model-stream-delta-event` (delta + model fields)
+  - `model-stream-thinking-event` (thinking + model fields)
+  - `model-stream-completed-event` (model + provider fields)
+- Updated `agent/event-json.rkt`:
+  - event-extra-fields: 7 new serialization clauses
+  - dispatch-deserialize: 7 new deserialization clauses
+  - all-known-event-types: 7 new type strings in registry
+- 8 round-trip tests (test-event-structs-v2.rkt)
+
+**W1 — Coverage documentation:**
+- Documented event struct system status in event-structs.rkt header
+- 30 typed event structs across 8 sub-modules
+- runtime/ fully migrated (15 emit-typed-event! sites)
+- agent/loop*.rkt uses raw emit! (28 sites, dotted name convention)
+- Two event systems coexist (hyphenated vs dotted names)
+
+
 ## v0.30.5 — 2026-05-05
 
 ### Config Migration Complete
