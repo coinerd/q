@@ -2,16 +2,25 @@
 
 ;; runtime/session-config.rkt — typed config wrapper replacing mutable hasheq anti-pattern
 ;;
-;; v0.30.3 W0: Initial struct with 24 named fields + extra hash + gen:dict.
-;; v0.30.4: Redesigned to wrap a single hash internally. This makes:
-;;   - hash-ref work directly (no dict-ref needed)
-;;   - dict-ref/hash-ref both return correct defaults for missing keys
-;;   - Named accessor functions (config-*) provide typed, default-aware access
-;;   - Full backward compat with all 44+ hash-ref consumer sites
+;; A session-config wraps an immutable hash and implements gen:dict,
+;; enabling transparent dict-ref/dict-set/dict-remove access from consumers.
 ;;
-;; Evolution:
-;;   v0.30.3: Named struct fields + gen:dict → hash-ref doesn't dispatch
-;;   v0.30.4: Hash wrapper → both hash-ref and dict-ref work correctly
+;; Design:
+;;   - Wraps a single immutable hash (session-config-data)
+;;   - gen:dict delegates all operations to the internal hash
+;;   - 27 smart accessor functions (config-*) provide typed, default-aware access
+;;   - hash->session-config and session-config->hash for conversion
+;;   - Full iteration protocol (dict-iterate-first/next/key/value) for for/hash
+;;
+;; Migration note (v0.30.4–v0.30.5):
+;;   All runtime/ consumer files now use dict-ref instead of hash-ref.
+;;   hash-ref does NOT dispatch to gen:dict in Racket; only dict-ref does.
+;;   Wiring files (run-modes, run-interactive, run-json-rpc) still use raw hashes
+;;   which is correct — those configs are CLI-derived, not session-configs.
+;;
+;; Providers consumed: agent-session.rkt, session-lifecycle.rkt,
+;;   session-compaction.rkt, iteration.rkt, turn-orchestrator.rkt,
+;;   tool-coordinator.rkt, iteration/retry-policy.rkt
 
 (require racket/dict)
 
