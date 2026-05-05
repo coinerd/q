@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.30.1 — 2026-05-05
+
+### Top-5 Contract Gaps: Provider Registry + Agent Session + Settings + Iteration + Turn Orchestrator
+
+**Goal:** Add `contract-out` to the 5 highest-risk uncontracted modules (129 exports)
+
+**W0 — Provider registry + agent-session contracts:**
+- `runtime/provider-registry.rkt`: 13 functions contracted (make-provider-registry, register/unregister/lookup/list providers, register/unregister/list models, find-model/find-models, provider-metadata, provider-summary)
+- `runtime/agent-session.rkt`: 8 lifecycle functions contracted (make-agent-session, resume-agent-session, fork-session, run-prompt!, session-id, session-history, session-active?, close-session!)
+
+**W1 — Settings + iteration + turn-orchestrator contracts:**
+- `runtime/settings.rkt`: 9 functions contracted (load-settings, make-minimal-settings, merge-settings, deep-merge-hash, setting-ref, setting-ref*, provider-config, provider-names, config-parse-error)
+- `runtime/iteration.rkt`: run-iteration-loop (8 positional + 11 keyword args), decide-next-action contracted
+- `runtime/turn-orchestrator.rkt`: run-provider-turn, build-assembled-context, register-session-extensions! contracted
+
+
 ## v0.30.0 — 2026-05-05
 
 ### Architecture Debt Resolution: `any/c` Predicate Tightening
