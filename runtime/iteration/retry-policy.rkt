@@ -22,6 +22,9 @@
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
+
+(require/typed racket/dict
+              [dict-ref (->* (Any Symbol) (Any) Any)])
 (require/typed "../auto-retry.rkt"
                [context-overflow-error? (-> Any Boolean)])
 
@@ -54,7 +57,7 @@
        (Values Nonnegative-Integer Nonnegative-Integer Nonnegative-Integer)))
 (define (compute-mid-turn-estimate ctx config estimate-tokens)
   (define max-tokens : Nonnegative-Integer
-    (let ([v (hash-ref config 'max-context-tokens #f)])
+    (let ([v (dict-ref config 'max-context-tokens #f)])
       (if (exact-nonnegative-integer? v) v 128000)))
   (define budget-threshold : Nonnegative-Integer
     (cast (exact-floor (* max-tokens 9/10)) Nonnegative-Integer))

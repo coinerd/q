@@ -18,7 +18,8 @@
 ;; turn-orchestrator.rkt. Listed as known exception in arch-boundaries tests.
 ;; ───────────────────────────────────────────────────────────────
 
-(require racket/contract
+(require (only-in racket/dict dict-ref dict-set)
+         racket/contract
          racket/match
          racket/list
          racket/set
@@ -110,7 +111,7 @@
                                     string?
                                     exact-nonnegative-integer?)
                              (#:cancellation-token (or/c any/c #f)
-                              #:config hash?
+                              #:config any/c
                               #:queue (or/c any/c #f)
                               #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
                               #:injected-box (or/c box? #f)
@@ -591,7 +592,7 @@
   ;; v0.14.1: Soft limit = max-iterations (warn), Hard limit = max-iterations-hard (stop)
   ;; v0.14.4 Wave 1: Default hard limit = max(max-iterations * 1.6, 80) for slow models
   (define max-iterations-hard
-    (hash-ref config 'max-iterations-hard (max (inexact->exact (floor (* max-iterations 1.6))) 80)))
+    (dict-ref config 'max-iterations-hard (max (inexact->exact (floor (* max-iterations 1.6))) 80)))
   ;; v0.26.0: Initialize working set
   (define ws (or initial-ws (make-working-set)))
   ;; Dispatch 'before-agent-start hook — extensions can block or modify config
@@ -676,11 +677,7 @@
                [else
                 ;; Build assembled context
                 (define config-with-ws
-                  (if (immutable? config)
-                      (hash-set config 'working-set ws)
-                      (begin
-                        (hash-set! config 'working-set ws)
-                        config)))
+                  (dict-set config 'working-set ws))
                 (define ctx-final
                   (build-assembled-context ctx-to-use
                                            config-with-ws

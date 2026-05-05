@@ -16,6 +16,7 @@
 (require racket/string
          racket/file
          racket/list
+         (only-in racket/dict dict-ref dict-set)
          racket/path
          (only-in "../util/protocol-types.rkt"
                   message-id
@@ -136,7 +137,7 @@
         user-message))
 
   ;; v0.26.0: Reset working set on new user message
-  (define ws (hash-ref (agent-session-config sess) 'working-set #f))
+  (define ws (dict-ref (agent-session-config sess) 'working-set #f))
   (when ws
     (working-set-reset! ws))
 
@@ -203,7 +204,7 @@
   (define log-path (session-log-path (agent-session-session-dir sess)))
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
-  (define cancellation-tok (hash-ref cfg 'cancellation-token #f))
+  (define cancellation-tok (dict-ref cfg 'cancellation-token #f))
 
   ;; Dispatch 'model-select hook — extensions can override model
   (define-values (_model-hook-res model-hook-res)
@@ -237,7 +238,7 @@
                                ;; Defense-in-depth: ensure turn.completed is emitted
                                (emit-session-event! bus sid "turn.completed" (hasheq 'reason "error"))
                                (make-loop-result context-with-system 'error payload))])
-    (define ws (hash-ref cfg 'working-set #f))
+    (define ws (dict-ref cfg 'working-set #f))
     (run-iteration-loop context-with-system
                         prov
                         bus
@@ -272,10 +273,8 @@
   ;; v0.26.0: Create working set for this prompt and attach to session config
   (define ws (make-working-set))
   (define base-cfg (agent-session-config sess))
-  (cond
-    [(and (hash? base-cfg) (not (immutable? base-cfg))) (hash-set! base-cfg 'working-set ws)]
-    [(hash? base-cfg) (set-agent-session-config! sess (hash-set base-cfg 'working-set ws))]
-    [else (set-agent-session-config! sess (hasheq 'working-set ws))])
+  ;; v0.30.4: dict-set works on both hash? and session-config?
+  (set-agent-session-config! sess (dict-set base-cfg 'working-set ws))
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system
@@ -357,15 +356,11 @@
      ;; v0.14.3: Handle both mutable (make-hash) and immutable (hasheq) configs.
      (define cfg
        (if idx
-           (if (and (hash? base-cfg) (not (immutable? base-cfg)))
-               (begin
-                 (hash-set! base-cfg 'session-index idx)
-                 base-cfg)
-               (hash-set base-cfg 'session-index idx))
+           (dict-set base-cfg 'session-index idx)
            base-cfg))
-     (define max-iterations (or max-iter-override (hash-ref cfg 'max-iterations 50)))
+     (define max-iterations (or max-iter-override (dict-ref cfg 'max-iterations 50)))
      (define token-budget-threshold
-       (hash-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
+       (dict-ref cfg 'token-budget-threshold DEFAULT-TOKEN-BUDGET-THRESHOLD))
 
      ;; #666: Dispatch 'input hook — intercept/transform user input before processing
      (define ext-reg (agent-session-extension-registry sess))
