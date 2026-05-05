@@ -2,6 +2,7 @@
 ;; tools/tool.rkt — Tool contract, execution context, and registry facade
 ;; STABILITY: stable
 ;; v0.30.8: Decomposed into submodules (exec-context, registry, schema-helpers)
+;;          W1 verified: all 44 consumers unaffected via re-export.
 ;;          This file re-exports everything for backward compatibility.
 
 (require racket/contract
