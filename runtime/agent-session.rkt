@@ -42,9 +42,7 @@
                   session-switch-payload
                   session-id-payload)
          "../util/ids.rkt"
-         (only-in "iteration.rkt"
-                  emit-session-event!
-                  maybe-dispatch-hooks)
+         (only-in "iteration.rkt" emit-session-event! maybe-dispatch-hooks)
          "session-types.rkt"
          (only-in "session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
@@ -194,7 +192,7 @@
   (define dir (build-path base-dir session-id))
 
   (unless (directory-exists? dir)
-    (error 'resume-agent-session "session directory not found: ~a" dir))
+    (raise-session-error 'resume-agent-session "session directory not found" session-id dir))
 
   (define log-path (session-log-path dir))
   (when (file-exists? log-path)
@@ -214,7 +212,7 @@
                           'session-before-switch
                           switch-payload))
   (when (and switch-res (eq? (hook-result-action switch-res) 'block))
-    (error 'resume-agent-session "session resume blocked by extension"))
+    (raise-session-error 'resume-agent-session "session resume blocked by extension" session-id))
 
   (define sess
     (agent-session session-id
