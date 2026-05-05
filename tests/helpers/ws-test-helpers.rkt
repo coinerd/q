@@ -20,8 +20,7 @@
          (case action
            [(entries) entries]
            [(entry-count) (length entries)]
-           [(token-count) (for/sum ([e (in-list entries)])
-                            (hash-ref e 'token-estimate 0))]
+           [(token-count) (for/sum ([e (in-list entries)]) (hash-ref e 'token-estimate 0))]
            [(max-entries) max-entries]
            [(max-tokens) max-tokens]
            [(reset!) (set! entries '())]
@@ -31,17 +30,14 @@
             (define tokens (caddr args))
             ;; Validation
             (unless (string? path)
-              (error 'ws-context "path must be a string, got: ~a" path))
+              (raise-argument-error 'ws-context "string" path))
             (unless (number? tokens)
-              (error 'ws-context "token-estimate must be a number, got: ~a" tokens))
+              (raise-argument-error 'ws-context "number" tokens))
             ;; Create entry
-            (define new-entry (hasheq 'path path
-                                      'message-id msg-id
-                                      'token-estimate tokens))
+            (define new-entry (hasheq 'path path 'message-id msg-id 'token-estimate tokens))
             ;; Remove existing entry for same path (refresh)
             (define without-existing
-              (filter (lambda (e) (not (equal? (hash-ref e 'path) path)))
-                      entries))
+              (filter (lambda (e) (not (equal? (hash-ref e 'path) path))) entries))
             ;; Add to front
             (set! entries (cons new-entry without-existing))
             ;; Enforce max-entries (LRU eviction from tail)
@@ -49,7 +45,5 @@
               (set! entries (take entries max-entries)))]
            [(remove!)
             (define path (car args))
-            (set! entries
-                  (filter (lambda (e) (not (equal? (hash-ref e 'path) path)))
-                          entries))]
-           [else (error 'ws-context "unknown action: ~a" action)]))))))
+            (set! entries (filter (lambda (e) (not (equal? (hash-ref e 'path) path))) entries))]
+           [else (raise-argument-error 'ws-context "known action symbol" action)]))))))

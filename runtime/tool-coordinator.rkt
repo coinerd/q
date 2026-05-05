@@ -9,7 +9,7 @@
 ;;   1. Extract tool calls from assistant messages
 ;;   2. Dispatch hooks (tool-call, tool.execution.start/end)
 ;;   3. Run tool batch through scheduler
-;;   4. Emit events (tool.call.completed/failed)
+;;   4. Emit typed tool-execution-start/end events via emit-typed-event!
 ;;   5. Create tool-result messages
 ;;   6. Dispatch tool-result hooks
 ;;
@@ -149,6 +149,9 @@
      'tool.execution.start
      (hasheq 'tools (map tool-call-name tool-calls-to-run) 'count (length tool-calls-to-run))))
 
+  ;; Capture batch start time for per-batch duration (v0.29.16)
+  (define batch-start-ms (current-inexact-milliseconds))
+
   ;; Run tool batch through scheduler (skip if blocked)
   (define sched-result
     (if tool-call-blocked?
@@ -206,7 +209,8 @@
                         #:turn-id #f
                         #:timestamp (current-inexact-milliseconds)
                         #:tool-name (tool-call-name tc)
-                        #:duration-ms 0
+                        #:duration-ms (inexact->exact (floor (- (current-inexact-milliseconds)
+                                                                batch-start-ms)))
                         #:result-summary (if (tool-result-is-error? tr) 'error 'completed))))
 
   ;; Convert scheduler results to tool-result messages.

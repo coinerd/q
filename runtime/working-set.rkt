@@ -14,7 +14,8 @@
 ;;   bash  → no change (transient output)
 ;;   reset → clear all entries (new user message)
 
-(require racket/list)
+(require racket/list
+         (only-in "../util/errors.rkt" raise-session-error))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Data structures
@@ -162,9 +163,9 @@
             (define msg-id (cadr args))
             (define tokens (caddr args))
             (unless (string? path)
-              (error 'ws-context "path must be a string, got: ~a" path))
+              (raise-argument-error 'ws-context "string" path))
             (unless (number? tokens)
-              (error 'ws-context "token-estimate must be a number, got: ~a" tokens))
+              (raise-argument-error 'ws-context "number" tokens))
             (define new-entry (ws-entry path msg-id tokens (current-seconds)))
             (define without-existing
               (filter (lambda (e) (not (equal? (ws-entry-path e) path))) entries))
@@ -175,7 +176,7 @@
            [(remove!)
             (define path (car args))
             (set! entries (filter (lambda (e) (not (equal? (ws-entry-path e) path))) entries))]
-           [else (error 'ws-context "unknown action: ~a" action)]))))))
+           [else (raise-session-error (format "unknown action: ~a" action) #f)]))))))
 
 (provide working-set?
          make-working-set

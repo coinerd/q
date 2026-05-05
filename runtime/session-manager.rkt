@@ -16,7 +16,8 @@
 (require racket/file
          racket/path
          "session-store.rkt"
-         (only-in "../util/protocol-types.rkt" message?))
+         (only-in "../util/protocol-types.rkt" message?)
+         (only-in "../util/errors.rkt" raise-session-error))
 
 (provide session-manager?
          persistent-session-manager?
@@ -56,7 +57,7 @@
      (make-directory* dir)
      (append-entry! (build-path dir "session.jsonl") msg)]
     [(in-memory-session-manager? mgr) (in-memory-append! mgr session-id msg)]
-    [else (error 'sm-append! "not a session manager: ~a" mgr)]))
+    [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))
 
 (define (sm-load mgr session-id)
   (cond
@@ -67,7 +68,7 @@
          (load-session-log log-path)
          '())]
     [(in-memory-session-manager? mgr) (in-memory-load mgr session-id)]
-    [else (error 'sm-load "not a session manager: ~a" mgr)]))
+    [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))
 
 (define (sm-list mgr)
   (cond
@@ -79,7 +80,7 @@
            (path->string d))
          '())]
     [(in-memory-session-manager? mgr) (in-memory-list-sessions mgr)]
-    [else (error 'sm-list "not a session manager: ~a" mgr)]))
+    [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))
 
 (define (sm-fork! mgr src-id dest-id [entry-id #f])
   (cond
@@ -91,4 +92,4 @@
      (define dest-path (build-path dest-dir "session.jsonl"))
      (fork-session! src-path entry-id dest-path)]
     [(in-memory-session-manager? mgr) (in-memory-fork! mgr src-id dest-id entry-id)]
-    [else (error 'sm-fork! "not a session manager: ~a" mgr)]))
+    [else (raise-session-error (format "not a session manager: ~a" mgr) #f)]))

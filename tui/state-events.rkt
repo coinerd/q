@@ -74,6 +74,22 @@
            (struct-copy ui-state new-state (busy? #t))
            (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))]
 
+    [("tool-execution-start")
+     (let* ([name (hash-ref payload 'tool-name "?")]
+            [args-raw (hash-ref payload 'arguments #f)]
+            [arg-summary (if args-raw
+                             (extract-arg-summary args-raw)
+                             "")]
+            [text (if (string=? arg-summary "")
+                      (format "[TOOL: ~a]" name)
+                      (format "[TOOL: ~a] ~a" name arg-summary))]
+            [ts (event-time evt)]
+            [meta (hasheq 'name name 'arguments (or args-raw ""))]
+            [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+       (if (ui-state-pending-tool-name state)
+           (struct-copy ui-state new-state (busy? #t))
+           (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))]
+
     [("tool-execution-end")
      (define name (hash-ref payload 'tool-name "?"))
      (define result-summary (hash-ref payload 'result-summary 'error))
