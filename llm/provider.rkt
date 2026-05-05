@@ -23,15 +23,15 @@
          validate-api-key!
          ensure-model-setting
          gen:provider
-         (contract-out [provider-name (-> provider? string?)]
-                       [provider-send (-> provider? model-request? any/c)]
-                       [provider-stream (-> provider? model-request? any/c)]
-                       [provider-capabilities (-> provider? hash?)]
-                       [provider-count-tokens
-                        (-> provider? any/c (or/c #f exact-nonnegative-integer?))]
-                       [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
-                       [make-mock-provider
-                        (->* (any/c) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
+         (contract-out
+          [provider-name (-> provider? string?)]
+          [provider-send (-> provider? model-request? model-response?)]
+          [provider-stream (-> provider? model-request? generator?)]
+          [provider-capabilities (-> provider? hash?)]
+          [provider-count-tokens (-> provider? model-request? (or/c #f exact-nonnegative-integer?))]
+          [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
+          [make-mock-provider
+           (->* (model-response?) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
 
 ;; ============================================================
 ;; Model-setting helper (ARCH-08)

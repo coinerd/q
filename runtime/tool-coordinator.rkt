@@ -49,6 +49,8 @@
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result scheduler-result-results)
          ;; ARCH-01 upward import — runtime→extensions: hooks
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
+         (only-in "../extensions/api.rkt" extension-registry?)
+         (only-in "../agent/event-bus.rkt" event-bus?)
          (only-in "../runtime/session-store.rkt" append-entries!)
          (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)
          (only-in "../util/content-helpers.rkt" tool-result-content->string)
@@ -69,12 +71,12 @@
                        [handle-tool-calls-pending
                         (-> (listof message?) ; new-msgs
                             list? ; ctx-with-steering
-                            any/c ; ext-reg
+                            (or/c extension-registry? #f) ; ext-reg
                             (or/c tool-registry? #f) ; reg
-                            any/c ; bus
+                            event-bus? ; bus
                             string? ; session-id
                             (or/c path-string? path?) ; log-path
-                            any/c ; token
+                            (or/c cancellation-token? #f) ; token
                             hash? ; config
                             (listof message?))]))
 
