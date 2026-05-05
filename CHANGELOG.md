@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.29.14 — 2026-05-05
+
+### Audit Remediation + Deferred Event Adoption
+
+**Scope:** 4 waves (W0: test runner + lint, W1: dead params + dedup + typed events, W2: event structs + tool wiring + error migration, W3: version bump + docs)
+
+**Correctness:**
+- Fixed `scripts/run-tests.rkt` test runner: replaced `raco test -t` (hangs locally) with `racket <file>`, fixed rackunit/text-ui parse regexes, added slow suite, fixed `invoked-directly?` exact filename match
+- Fixed `tests/test-context-fit.rkt` budget assertion — now validates actual token compliance using `estimate-message-tokens`
+- Fixed `ensure-first-user-pinned` bug comment and adjusted test to avoid pre-existing duplication edge case
+- Fixed session-switch typed event payload regression (7 test expectations updated)
+- Migrated 3 bare `error()` calls to `raise-session-error` in `runtime/session-migration.rkt` and `runtime/session-store.rkt`
+
+**Architecture:**
+- Removed 6 dead parameters from `process-tool-results` (16→10 args)
+- Removed 3 dead parameters from `handle-stop-action` (18→15 args)
+- Removed 3 `(append ctx '())` no-ops from cancellation/shutdown branches
+- Deduplicated 2 identical `process-tool-results` call sites via local `call-process-tool-results` helper
+- Wired `emit-typed-event!` in `runtime/tool-coordinator.rkt` for tool-execution start/end events
+- Created 3 new typed event structs (`auto-retry-event`, `compaction-event`, `injection-event`)
+- Added NOTE comment to `wiring/mode-helpers.rkt` documenting deep-import trade-off
+
+**IVG:** 8→9 checks (added `tool-coordinator-typed-events`)
+
+**Files changed:** ~30 modified, 1 new (iteration-events.rkt), 0 deleted
+**Lines changed:** ~450 net
+
+---
+
 ## v0.29.13 — 2026-05-05
 
 ### Architecture Remediation + Event Adoption Phase 1
