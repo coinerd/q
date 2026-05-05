@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.30.3 — 2026-05-05
+
+### Session Config Struct + Dict Compat Layer
+
+**Goal:** Define `session-config` struct replacing the mutable hasheq config anti-pattern
+
+**W0 — session-config struct definition:**
+- `runtime/session-config.rkt`: New struct with 24 fields + extra hash for rare keys
+- Fields: provider, tool-registry, event-bus, extension-registry, model-registry, settings,
+  model-name, session-dir, project-dir, home-dir, config-path, system-instructions,
+  max-context-tokens, max-iterations, max-iterations-hard, thinking-level, working-set,
+  parallel-tools, cancellation-token, tier-b-count, tier-c-count, templates, trace-logger, verbose?
+- Implements `gen:dict` interface (dict-ref, dict-set, dict-remove, dict-has-key?, dict-keys, dict-count)
+- Conversion helpers: `hash->session-config` and `session-config->hash`
+- 19 unit tests covering all dict operations and round-trip conversion
+
+**W1 — dict compat discovery:**
+- Documented: Racket's `hash-ref` does NOT dispatch to `gen:dict`
+- All 44+ consumer sites use `hash-ref`, not `dict-ref`
+- Full wiring deferred to v0.30.4+ (incremental dict-ref migration)
+- Session-config ready for incremental adoption as consumers migrate
+
+
 ## v0.30.2 — 2026-05-05
 
 ### Typed Racket Beachhead: loop-state + retry-policy
