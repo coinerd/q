@@ -3,6 +3,12 @@
 ;; runtime/context-assembly/selection.rkt — message partitioning, fitting, context building
 ;;
 ;; Selection logic: what messages to include/exclude, pinning, pair-preserving fit.
+;;
+;; TR MIGRATION DEFERRED (v0.30.9 investigation):
+;;   Blocker: local mutable hash `token-memo` used as memoization cache.
+;;   Resolution path: extract memo into a function parameter, making build-assembled-context
+;;   pure. Then wrap with a thin impure shell that creates the memo. This would allow
+;;   the core logic to be typed. Estimated effort: ~2 waves. Deferred to backlog.
 
 (require racket/list
          racket/set
