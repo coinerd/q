@@ -104,10 +104,27 @@
             (raise-fn)))
         (check-pred exn:fail? e)))
 
+    ;; credential-error has backend and details
+    (test-case "credential-error has backend and details"
+      (define e
+        (with-handlers ([credential-error? identity])
+          (raise-credential-error "auth failed" "oauth" "token expired")))
+      (check-equal? (exn-message e) "auth failed")
+      (check-equal? (credential-error-backend e) "oauth")
+      (check-equal? (credential-error-details e) "token expired"))
+
+    ;; credential-error defaults details to #f
+    (test-case "credential-error defaults details to #f"
+      (define e
+        (with-handlers ([credential-error? identity])
+          (raise-credential-error "no key" "api-key")))
+      (check-equal? (credential-error-details e) #f))
+
     ;; New errors are q-error subtypes
     (test-case "new domain errors are q-error subtypes"
       (check-exn q-error? (lambda () (raise-ui-error "x" "c")))
       (check-exn q-error? (lambda () (raise-extension-error "x" "e" "h")))
-      (check-exn q-error? (lambda () (raise-policy-error "x" "p" "v"))))))
+      (check-exn q-error? (lambda () (raise-policy-error "x" "p" "v")))
+      (check-exn q-error? (lambda () (raise-credential-error "x" "b" "d"))))))
 
 (run-tests errors-tests 'verbose)

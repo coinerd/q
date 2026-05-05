@@ -17,12 +17,14 @@
          (struct-out ui-error)
          (struct-out extension-error)
          (struct-out policy-error)
+         (struct-out credential-error)
          raise-q-error
          raise-tool-error
          raise-session-error
          raise-ui-error
          raise-extension-error
          raise-policy-error
+         raise-credential-error
          ;; Quality macros (Q06/Q07)
          with-cleanup
          with-logged-catch)
@@ -48,6 +50,9 @@
 ;; GSD policy violation errors (blocked tools, budget exceeded)
 (struct policy-error q-error (policy-name violation) #:transparent)
 
+;; Credential/authentication errors (OAuth, API keys, backend auth)
+(struct credential-error q-error (backend details) #:transparent)
+
 ;; Convenience constructors
 (define (raise-q-error message [context (hash)])
   (raise (q-error message (current-continuation-marks) context)))
@@ -66,6 +71,9 @@
 
 (define (raise-policy-error message policy-name violation [context (hash)])
   (raise (policy-error message (current-continuation-marks) context policy-name violation)))
+
+(define (raise-credential-error message backend [details #f] [context (hash)])
+  (raise (credential-error message (current-continuation-marks) context backend details)))
 
 ;; ============================================================
 ;; Quality macros (Q06/Q07)
