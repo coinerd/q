@@ -93,6 +93,7 @@
          (only-in "../llm/provider.rkt" provider? make-mock-provider)
          (only-in "../runtime/provider-factory.rkt" build-provider)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! publish!)
+         (only-in "../util/event.rkt" event?)
          (only-in "../extensions/api.rkt"
                   make-extension-registry
                   register-extension!
@@ -162,7 +163,7 @@
           [make-event-bus (-> event-bus?)]
           [subscribe!
            (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
-          [publish! (-> event-bus? any/c any/c)]
+          [publish! (-> event-bus? event? event?)]
           ;; Extension registration
           [make-extension-registry (-> extension-registry?)]
           [register-extension! (-> extension-registry? extension? extension-registry?)]

@@ -1,76 +1,59 @@
-#lang racket/base
+#lang racket
 
-;; tests/test-sdk-contracts.rkt — Contract enforcement tests for SDK public API
+;; tests/test-sdk-contracts.rkt — Contract blame verification for v0.30.0
 ;;
-;; W0 scaffolding for v0.29.0 milestone: Verify that SDK boundary functions
-;; enforce type contracts (reject wrong argument types).
+;; Verifies that tightened contracts in sdk-core.rkt, sdk-public.rkt,
+;; event-bus.rkt, and extensions/events.rkt raise proper blame when
+;; given wrong-type arguments.
 
 (require rackunit
-         (only-in "../interfaces/sdk-public.rkt"
-                  make-runtime
-                  make-event-bus
-                  event-bus?
-                  subscribe!
-                  publish!
-                  make-tool-registry
-                  register-tool!
-                  list-tools
-                  make-cancellation-token
-                  cancellation-token?
-                  cancel-token!
-                  make-extension-registry
-                  register-extension!
-                  make-mock-provider
-                  provider?))
+         rackunit/text-ui
+         (only-in "../interfaces/sdk-public.rkt" make-runtime runtime? publish!)
+         (only-in "../agent/event-bus.rkt" make-event-bus subscribe! unsubscribe!)
+         (only-in "../extensions/events.rkt" ext-publish!)
+         (only-in "../llm/provider.rkt" make-mock-provider)
+         (only-in "../llm/model.rkt" make-model-response))
 
-;; ── make-runtime contracts ──
+(define mock-provider (make-mock-provider (make-model-response '() #f "mock" 'done)))
 
-(test-case "make-runtime-requires-valid-args"
-  ;; Will tighten to provider? once any/c is replaced
-  ;; For now just verify the function exists and rejects completely wrong types
-  (check-true (procedure? make-runtime)))
+(define sdk-contract-tests
+  (test-suite "SDK contract blame tests"
 
-(test-case "make-runtime-is-exported"
-  ;; Verify make-runtime is available as a contracted function
-  (check-true (procedure? make-runtime)))
+    (test-case "make-runtime rejects non-provider for #:provider"
+      (check-exn #rx"expected: provider\\?" (lambda () (make-runtime #:provider "not-a-provider"))))
 
-;; ── Event bus contracts ──
+    (test-case "make-runtime rejects non-tool-registry for #:tool-registry"
+      (check-exn #rx"expected: tool-registry\\?"
+                 (lambda () (make-runtime #:provider mock-provider #:tool-registry "bad"))))
 
-(test-case "make-event-bus-returns-event-bus"
-  (define bus (make-event-bus))
-  (check-true (event-bus? bus)))
+    (test-case "make-runtime rejects non-boolean for #:register-default-tools?"
+      (check-exn #rx"expected: boolean\\?"
+                 (lambda () (make-runtime #:provider mock-provider #:register-default-tools? "yes"))))
 
-(test-case "subscribe!-rejects-non-procedure"
-  (define bus (make-event-bus))
-  (check-exn exn:fail:contract? (lambda () (subscribe! bus "not-a-procedure"))))
+    (test-case "make-runtime rejects non-boolean for #:auto-load-extensions?"
+      (check-exn #rx"expected: boolean\\?"
+                 (lambda () (make-runtime #:provider mock-provider #:auto-load-extensions? "yes"))))
 
-(test-case "subscribe!-accepts-procedure"
-  (define bus (make-event-bus))
-  (check-not-exn (lambda () (subscribe! bus (lambda (evt) (void))))))
+    (test-case "event-bus subscribe! rejects non-procedure handler"
+      (define bus (make-event-bus))
+      (check-exn #rx"expected: procedure\\?" (lambda () (subscribe! bus "not-a-proc"))))
 
-;; ── Cancellation token contracts ──
+    (test-case "event-bus unsubscribe! rejects non-integer sub-id"
+      (define bus (make-event-bus))
+      (check-exn #rx"expected: exact-nonnegative-integer\\?"
+                 (lambda () (unsubscribe! bus "not-an-id"))))
 
-(test-case "make-cancellation-token-returns-token"
-  (define tok (make-cancellation-token))
-  (check-true (cancellation-token? tok)))
+    (test-case "event-bus publish! rejects non-event payload"
+      (define bus (make-event-bus))
+      (check-exn #rx"expected: event\\?" (lambda () (publish! bus "not-an-event"))))
 
-(test-case "cancel-token!-works"
-  (define tok (make-cancellation-token))
-  (check-not-exn (lambda () (cancel-token! tok))))
+    (test-case "ext-publish! rejects non-event payload"
+      (define bus (make-event-bus))
+      (check-exn #rx"expected: event\\?" (lambda () (ext-publish! bus "not-an-event"))))
 
-;; ── Extension registry contracts ──
+    (test-case "make-runtime accepts valid optional arguments"
+      (define rt (make-runtime #:provider mock-provider))
+      (check-true (runtime? rt)))))
 
-(test-case "make-extension-registry-returns-registry"
-  (define reg (make-extension-registry))
-  (check-not-false reg))
-
-;; ── Tool registry contracts ──
-
-(test-case "sdk-make-tool-registry-returns-registry"
-  (define reg (make-tool-registry))
-  (check-not-false reg))
-
-(test-case "sdk-list-tools-returns-list"
-  (define reg (make-tool-registry))
-  (define tools (list-tools reg))
-  (check-true (list? tools)))
+(module+ main
+  (run-tests sdk-contract-tests 'verbose))
