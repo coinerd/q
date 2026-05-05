@@ -72,7 +72,13 @@
           'turn-start-event
           '(model provider)
           'turn-end-event
-          '(reason duration-ms)))
+          '(reason duration-ms)
+          'auto-retry-event
+          '(attempt max-attempts error-type)
+          'compaction-event
+          '(reason tokens-before tokens-after)
+          'injection-event
+          '(source content-type content-length)))
 
 ;; Extract struct name, stripping the struct: prefix from struct->vector
 (define (struct-name evt)

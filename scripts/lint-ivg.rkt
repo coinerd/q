@@ -18,9 +18,7 @@
 (define (grep-count pattern file)
   ;; Count lines matching pattern in file via grep -c
   (define-values (sp out in err)
-    (subprocess #f #f #f
-                (find-executable-path "grep")
-                "-cE" pattern file))
+    (subprocess #f #f #f (find-executable-path "grep") "-cE" pattern file))
   (close-output-port in)
   (define result (string-trim (port->string out)))
   (close-input-port out)
@@ -33,9 +31,7 @@
 (define (grep-count-dir pattern dir)
   ;; Count lines matching pattern recursively in dir
   (define-values (sp out in err)
-    (subprocess #f #f #f
-                (find-executable-path "grep")
-                "-rnE" pattern dir))
+    (subprocess #f #f #f (find-executable-path "grep") "-rnE" pattern dir))
   (close-output-port in)
   (define lines (port->string out))
   (close-input-port out)
@@ -50,34 +46,27 @@
   (list
    ;; No inline hook block patterns in loop-stream.rkt (must use handle-hook-result)
    (list "no-inline-hook-block"
-         (lambda ()
-           (zero? (grep-count "eq\\?.*hook-result-action.*'block"
-                              "agent/loop-stream.rkt")))
+         (lambda () (zero? (grep-count "eq\\?.*hook-result-action.*'block" "agent/loop-stream.rkt")))
          "inline hook block patterns remain in loop-stream.rkt — use handle-hook-result instead")
    ;; No termination-decision references in runtime/
    (list "no-termination-decision"
-         (lambda ()
-           (zero? (grep-count-dir "termination-decision" "runtime/")))
+         (lambda () (zero? (grep-count-dir "termination-decision" "runtime/")))
          "termination-decision still referenced in runtime/ — dead code removed in v0.29.9")
    ;; decide-next-action must be wired (≥1 call site)
    (list "decide-next-action-wired"
-         (lambda ()
-           (>= (grep-count "decide-next-action" "runtime/iteration.rkt") 2))
+         (lambda () (>= (grep-count "decide-next-action" "runtime/iteration.rkt") 2))
          "decide-next-action has fewer than 2 references in iteration.rkt")
    ;; handle-hook-result must be used in loop-stream.rkt (≥3 calls)
    (list "handle-hook-result-stream"
-         (lambda ()
-           (>= (grep-count "handle-hook-result" "agent/loop-stream.rkt") 3))
+         (lambda () (>= (grep-count "handle-hook-result" "agent/loop-stream.rkt") 3))
          "handle-hook-result has fewer than 3 calls in loop-stream.rkt")
    ;; handle-hook-result must be used in loop.rkt (≥3 calls)
    (list "handle-hook-result-loop"
-         (lambda ()
-           (>= (grep-count "handle-hook-result" "agent/loop.rkt") 3))
+         (lambda () (>= (grep-count "handle-hook-result" "agent/loop.rkt") 3))
          "handle-hook-result has fewer than 3 calls in loop.rkt")
    ;; emit-typed-event! must have NOTE comment in event-emitter.rkt (deferred dead code)
    (list "emit-typed-event-note"
-         (lambda ()
-           (>= (grep-count "NOTE.*v0.29.14.*emit-typed-event" "agent/event-emitter.rkt") 1))
+         (lambda () (>= (grep-count "NOTE.*v0.29.14.*emit-typed-event" "agent/event-emitter.rkt") 1))
          "emit-typed-event! missing NOTE comment documenting production callers")
    ;; session-bytes-written must have DEPRECATED comment
    (list "session-bytes-written-deprecated"
@@ -86,9 +75,12 @@
          "session-bytes-written missing DEPRECATED comment")
    ;; v0.29.13 W2: session-switch must use emit-typed-event! (not raw make-event)
    (list "session-switch-typed-events"
-         (lambda ()
-           (>= (grep-count "emit-typed-event!" "runtime/session-switch.rkt") 2))
-         "session-switch.rkt must use emit-typed-event! (≥2 calls)")))
+         (lambda () (>= (grep-count "emit-typed-event!" "runtime/session-switch.rkt") 2))
+         "session-switch.rkt must use emit-typed-event! (≥2 calls)")
+   ;; v0.29.14 W2: tool-coordinator must use emit-typed-event! (≥2 calls)
+   (list "tool-coordinator-typed-events"
+         (lambda () (>= (grep-count "emit-typed-event!" "runtime/tool-coordinator.rkt") 2))
+         "tool-coordinator.rkt must use emit-typed-event! (≥2 calls)")))
 
 ;; ── Runner ──
 

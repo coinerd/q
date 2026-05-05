@@ -21,7 +21,7 @@
          json
          "../util/jsonl.rkt"
          "../util/protocol-types.rkt"
-         (only-in "../util/errors.rkt" with-logged-catch))
+         (only-in "../util/errors.rkt" with-logged-catch raise-session-error))
 
 (provide current-session-version
          read-session-version
@@ -66,7 +66,7 @@
 ;; path-string? -> void?
 (define (migrate-session-log! path)
   (unless (file-exists? path)
-    (error 'migrate-session-log! "file not found: ~a" path))
+    (raise-session-error 'migrate-session-log! "file not found" #f path))
   (define version (read-session-version path))
   (when (< version current-session-version)
     ;; v1 → v2: prepend version header
