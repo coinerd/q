@@ -280,7 +280,8 @@
         "util/hook-types.rkt"
         "util/event-payloads.rkt"
         "extensions/gsd/plan-types.rkt"
-        "extensions/gsd/plan-validator.rkt"))
+        "extensions/gsd/plan-validator.rkt"
+        "runtime/iteration/loop-state.rkt"))
 
 (define v02810-suite
   (test-suite "v0.28.10-features"
