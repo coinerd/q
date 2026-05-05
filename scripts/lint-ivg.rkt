@@ -80,7 +80,14 @@
    ;; v0.29.14 W2: tool-coordinator must use emit-typed-event! (≥2 calls)
    (list "tool-coordinator-typed-events"
          (lambda () (>= (grep-count "emit-typed-event!" "runtime/tool-coordinator.rkt") 2))
-         "tool-coordinator.rkt must use emit-typed-event! (≥2 calls)")))
+         "tool-coordinator.rkt must use emit-typed-event! (≥2 calls)")
+   ;; v0.29.16 W2: iteration typed events must be wired (≥1 each in runtime/ + extensions/)
+   (list
+    "iteration-events-wired"
+    (lambda ()
+      (and (>= (grep-count-dir "make-compaction-event" "runtime/") 1)
+           (>= (grep-count-dir "make-injection-event" "extensions/") 1)))
+    "make-compaction-event and make-injection-event must each have ≥1 call site in runtime/ and extensions/")))
 
 ;; ── Runner ──
 

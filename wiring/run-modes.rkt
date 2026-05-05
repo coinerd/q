@@ -27,9 +27,12 @@
          "../tools/tool.rkt"
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
          "../agent/event-bus.rkt"
-         (only-in "mode-helpers.rkt" wire-security-config! wire-timeouts!)
-         (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
-         (only-in "../runtime/project-tree.rkt" project-tree->string)
+         (only-in "mode-helpers.rkt"
+                  wire-security-config!
+                  wire-timeouts!
+                  make-trace-logger
+                  start-trace-logger!
+                  project-tree->string)
          (only-in "extension-setup.rkt" make-wired-extension-registry load-extensions-from-dir!))
 
 ;; Re-export mode runners from sub-modules

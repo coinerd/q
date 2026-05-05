@@ -23,6 +23,9 @@
 ;; ============================================================
 ;; Auto-retry events
 ;; ============================================================
+;;
+;; NOTE (v0.29.16): auto-retry-event has 1 production emission site
+;; (runtime/turn-orchestrator.rkt). It is wired — not deferred.
 
 (struct auto-retry-event typed-event (attempt max-attempts error-type) #:transparent)
 
