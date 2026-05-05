@@ -28,8 +28,13 @@
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          "iteration/loop-state.rkt"
          "iteration/retry-policy.rkt"
-         "iteration/tool-turn-bridge.rkt"
-         "iteration/transition-logic.rkt"
+         (only-in "iteration/tool-turn-bridge.rkt"
+                  dequeue-all-steering!
+                  drain-injected-messages!
+                  make-injected-collector!
+                  extract-tool-target-path
+                  update-seen-paths
+                  take-at-most)
          (only-in "../util/protocol-types.rkt"
                   message?
                   message-id
@@ -244,7 +249,7 @@
 ;; Returns (values new-seen-paths should-increment?)
 ;; take-at-most moved to iteration/tool-turn-bridge.rkt
 
-;; update-seen-paths moved to iteration/tool-turn-bridge.rkt)
+;; update-seen-paths moved to iteration/tool-turn-bridge.rkt
 
 ;; ============================================================
 ;; v0.29.13 (W1): Extracted sub-functions for run-iteration-loop

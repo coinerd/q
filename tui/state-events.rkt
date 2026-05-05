@@ -38,6 +38,15 @@
     (define-values (id-entry st1) (assign-entry-id entry st))
     (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
 
+  ;; v0.29.17 W1: Dedup guard — prevent duplicate tool-start entries when
+  ;; both raw "tool.call.started" and typed "tool-execution-start" fire.
+  (define (recent-tool-start? st name)
+    (define transcript (ui-state-transcript st))
+    (and (not (null? transcript))
+         (let ([last (car transcript)])
+           (and (eq? (transcript-entry-kind last) 'tool-start)
+                (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+
   (case ev
     [("assistant.message.completed")
      (define streamed (ui-state-streaming-text state))
@@ -59,36 +68,40 @@
                   [streaming-thinking #f])]
 
     [("tool.call.started")
-     (let* ([name (hash-ref payload 'name "?")]
-            [args-raw (hash-ref payload 'arguments #f)]
-            [arg-summary (if args-raw
-                             (extract-arg-summary args-raw)
-                             "")]
-            [text (if (string=? arg-summary "")
-                      (format "[TOOL: ~a]" name)
-                      (format "[TOOL: ~a] ~a" name arg-summary))]
-            [ts (event-time evt)]
-            [meta (hasheq 'name name 'arguments (or args-raw ""))]
-            [new-state (append-entry state (make-entry 'tool-start text ts meta))])
-       (if (ui-state-pending-tool-name state)
-           (struct-copy ui-state new-state (busy? #t))
-           (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))]
+     (let* ([name (hash-ref payload 'name "?")])
+       (if (recent-tool-start? state name)
+           (struct-copy ui-state state (busy? #t) (pending-tool-name name))
+           (let* ([args-raw (hash-ref payload 'arguments #f)]
+                  [arg-summary (if args-raw
+                                   (extract-arg-summary args-raw)
+                                   "")]
+                  [text (if (string=? arg-summary "")
+                            (format "[TOOL: ~a]" name)
+                            (format "[TOOL: ~a] ~a" name arg-summary))]
+                  [ts (event-time evt)]
+                  [meta (hasheq 'name name 'arguments (or args-raw ""))]
+                  [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+             (if (ui-state-pending-tool-name state)
+                 (struct-copy ui-state new-state (busy? #t))
+                 (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))))]
 
     [("tool-execution-start")
-     (let* ([name (hash-ref payload 'tool-name "?")]
-            [args-raw (hash-ref payload 'arguments #f)]
-            [arg-summary (if args-raw
-                             (extract-arg-summary args-raw)
-                             "")]
-            [text (if (string=? arg-summary "")
-                      (format "[TOOL: ~a]" name)
-                      (format "[TOOL: ~a] ~a" name arg-summary))]
-            [ts (event-time evt)]
-            [meta (hasheq 'name name 'arguments (or args-raw ""))]
-            [new-state (append-entry state (make-entry 'tool-start text ts meta))])
-       (if (ui-state-pending-tool-name state)
-           (struct-copy ui-state new-state (busy? #t))
-           (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))]
+     (let* ([name (hash-ref payload 'tool-name "?")])
+       (if (recent-tool-start? state name)
+           (struct-copy ui-state state (busy? #t) (pending-tool-name name))
+           (let* ([args-raw (hash-ref payload 'arguments #f)]
+                  [arg-summary (if args-raw
+                                   (extract-arg-summary args-raw)
+                                   "")]
+                  [text (if (string=? arg-summary "")
+                            (format "[TOOL: ~a]" name)
+                            (format "[TOOL: ~a] ~a" name arg-summary))]
+                  [ts (event-time evt)]
+                  [meta (hasheq 'name name 'arguments (or args-raw ""))]
+                  [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+             (if (ui-state-pending-tool-name state)
+                 (struct-copy ui-state new-state (busy? #t))
+                 (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))))]
 
     [("tool-execution-end")
      (define name (hash-ref payload 'tool-name "?"))

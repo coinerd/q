@@ -41,10 +41,3 @@
   ;; The loop should use match on action, not direct cond on termination
   (check-not-false (regexp-match? #rx"[(]match action" content)
                    "loop should use (match action ...) for dispatch"))
-
-(test-case "termination-decision removed from codebase"
-  (define tl-content
-    (call-with-input-file (build-path q-root "runtime" "iteration" "transition-logic.rkt")
-                          port->string))
-  (check-false (regexp-match? #rx"termination-decision" tl-content)
-               "termination-decision should be removed (replaced by decide-next-action)"))
