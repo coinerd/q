@@ -188,7 +188,7 @@
      (match (hook-result-action result)
        ['block (on-block (hook-result-payload result))]
        ['amend
-        (if on-amend
-            (on-amend (hook-result-payload result))
-            (on-continue))]
+        (when on-amend
+          (on-amend (hook-result-payload result)))
+        (on-continue)]
        [_ (on-continue)])]))
