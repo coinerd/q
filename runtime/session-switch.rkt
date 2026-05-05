@@ -20,7 +20,8 @@
          "../agent/event-bus.rkt"
          "../agent/event-emitter.rkt"
          "../agent/event-structs/session-events.rkt"
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         (only-in "../util/errors.rkt" raise-extension-error))
 
 ;; #704: Teardown
 (provide teardown-session-extensions!
@@ -55,9 +56,11 @@
 (define (default-dispatch-hooks hook-point payload registry)
   (define dispatch-fn
     (with-handlers ([exn:fail:filesystem? (lambda (e)
-                                            (error 'default-dispatch-hooks
-                                                   "Cannot load extensions/hooks.rkt: ~a"
-                                                   (exn-message e)))])
+                                            (raise-extension-error
+                                             (format "Cannot load extensions/hooks.rkt: ~a"
+                                                     (exn-message e))
+                                             "hooks"
+                                             'dispatch-hooks))])
       (dynamic-require hooks-rkt-path 'dispatch-hooks)))
   (dispatch-fn hook-point payload registry))
 
@@ -70,9 +73,11 @@
                                     #:working-directory [working-directory #f])
   (define make-ctx-fn
     (with-handlers ([exn:fail:filesystem? (lambda (e)
-                                            (error 'default-make-extension-ctx
-                                                   "Cannot load extensions/context.rkt: ~a"
-                                                   (exn-message e)))])
+                                            (raise-extension-error
+                                             (format "Cannot load extensions/context.rkt: ~a"
+                                                     (exn-message e))
+                                             "context"
+                                             'make-extension-ctx))])
       (dynamic-require context-rkt-path 'make-extension-ctx)))
   (make-ctx-fn #:session-id sid
                #:session-dir sdir

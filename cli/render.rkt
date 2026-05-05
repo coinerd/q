@@ -179,6 +179,26 @@
      (if detail
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
+    [("tool-execution-start")
+     (define name (hash-ref payload 'tool-name "?"))
+     (define args-raw (hash-ref payload 'arguments #f))
+     (define args
+       (cond
+         [(hash? args-raw) args-raw]
+         [(string? args-raw) (with-safe-fallback #f (string->jsexpr args-raw))]
+         [else #f]))
+     (define detail
+       (cond
+         [(and args (hash? args))
+          (define cmd
+            (or (hash-ref args 'command #f) (hash-ref args 'path #f) (hash-ref args 'pattern #f) #f))
+          (if cmd
+              (truncate-string (format "~a" cmd) 100)
+              #f)]
+         [else #f]))
+     (if detail
+         (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
+         (styled (format "[tool: ~a]" name) '(bold yellow)))]
     [("tool-execution-end")
      (define name (hash-ref payload 'tool-name "?"))
      (define result-summary (hash-ref payload 'result-summary 'error))

@@ -25,26 +25,17 @@
          context-result-summary)
 
 ;; Note: 0 is valid for max-catalog-* (disables catalog)
-(struct context-assembly-config
-        (recent-tokens
-         max-catalog-entries
-         max-catalog-tokens
-         summary-window)
-  #:guard
-  (lambda (recent max-entries max-tokens summary _name)
-    (unless (and (exact-nonnegative-integer? recent) (> recent 0))
-      (error 'context-assembly-config "recent-tokens must be a positive integer, got: ~a" recent))
-    (unless (exact-nonnegative-integer? max-entries)
-      (error 'context-assembly-config
-             "max-catalog-entries must be a non-negative integer, got: ~a"
-             max-entries))
-    (unless (exact-nonnegative-integer? max-tokens)
-      (error 'context-assembly-config
-             "max-catalog-tokens must be a non-negative integer, got: ~a"
-             max-tokens))
-    (unless (and (exact-nonnegative-integer? summary) (> summary 0))
-      (error 'context-assembly-config "summary-window must be a positive integer, got: ~a" summary))
-    (values recent max-entries max-tokens summary))
+(struct context-assembly-config (recent-tokens max-catalog-entries max-catalog-tokens summary-window)
+  #:guard (lambda (recent max-entries max-tokens summary _name)
+            (unless (and (exact-nonnegative-integer? recent) (> recent 0))
+              (raise-argument-error 'context-assembly-config "positive integer" recent))
+            (unless (exact-nonnegative-integer? max-entries)
+              (raise-argument-error 'context-assembly-config "non-negative integer" max-entries))
+            (unless (exact-nonnegative-integer? max-tokens)
+              (raise-argument-error 'context-assembly-config "non-negative integer" max-tokens))
+            (unless (and (exact-nonnegative-integer? summary) (> summary 0))
+              (raise-argument-error 'context-assembly-config "positive integer" summary))
+            (values recent max-entries max-tokens summary))
   #:transparent)
 
 (define (make-context-assembly-config #:recent-tokens [recent 30000]
@@ -55,12 +46,5 @@
 
 ;; Result struct — full diagnostics for observability
 (struct context-result
-        (messages
-         total-tokens
-         pinned-count
-         recent-count
-         excluded-count
-         over-budget?
-         catalog
-         summary)
+        (messages total-tokens pinned-count recent-count excluded-count over-budget? catalog summary)
   #:transparent)

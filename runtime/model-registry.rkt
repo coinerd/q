@@ -14,7 +14,8 @@
 ;;   - session management
 
 (require racket/string
-         racket/match)
+         racket/match
+         (only-in "../llm/provider-errors.rkt" raise-provider-error))
 
 ;; ── URL Validation ──────────────────────────────────────────
 
@@ -25,7 +26,8 @@
   (cond
     [(string=? trimmed "") ""] ; empty is ok — will use provider default
     [(not (regexp-match? #rx"^https?://" trimmed))
-     (error 'validate-base-url "Invalid base-url scheme (must be http or https): ~a" trimmed)]
+     (raise-provider-error (format "Invalid base-url scheme (must be http or https): ~a" trimmed)
+                           'config)]
     [else trimmed]))
 
 (define (safe-base-url cfg)
