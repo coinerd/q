@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.30.7 — 2026-05-05
+
+### Event Payload Structs (Batch 2) + Full Adoption
+
+**Goal:** Unify event type naming and migrate core loop to typed events
+
+**W0 — Unified event type strings (30 types, 17 files):**
+- Changed all typed event struct type strings from hyphenated (`"turn-start"`)
+  to dotted convention (`"turn.started"`) to match production event names
+- Updated `agent/event-json.rkt`: dispatch-deserialize + registry
+- Updated `tui/state-events.rkt`: tool execution event name matches
+- Updated `cli/render.rkt`: tool execution event name matches
+- Updated `runtime/turn-orchestrator.rkt`: error message
+- Updated 7 test files to match new type strings
+
+**W1 — Migrated agent/loop.rkt to typed events:**
+- Replaced 6 raw `emit!` calls with `emit-typed-event!`:
+  - `turn.started` → `make-turn-start-event`
+  - `context.built` → `make-context-event`
+  - `model.request.started` → `make-provider-request-event`
+  - `model.request.blocked` → `make-model-request-blocked-event`
+  - `message.blocked` → `make-message-blocked-event`
+  - `turn.completed` (2 sites) → `make-turn-end-event`
+- Added deprecation comment to raw `emit!` helper
+- 22 raw emit! sites remain in `agent/loop-stream.rkt` (streaming events)
+
+**Coverage:** 21 typed emission sites, 22 raw remaining (loop-stream only)
+
+
 ## v0.30.6 — 2026-05-05
 
 ### Event Payload Structs (Batch 1)
