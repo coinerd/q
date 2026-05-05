@@ -1,43 +1,28 @@
-#lang racket/base
+#lang typed/racket
 
 ;; runtime/context-assembly/budgeting.rkt — config struct, token estimation, budgeting helpers
 ;;
 ;; Configuration and budget calculation for context assembly.
+;; v0.30.9: Migrated to Typed Racket.
 
-(require racket/contract)
-
-(provide context-assembly-config
-         context-assembly-config?
-         context-assembly-config-recent-tokens
-         context-assembly-config-max-catalog-entries
-         context-assembly-config-max-catalog-tokens
-         context-assembly-config-summary-window
+(provide (struct-out context-assembly-config)
          make-context-assembly-config
-         context-result
-         context-result?
-         context-result-messages
-         context-result-total-tokens
-         context-result-pinned-count
-         context-result-recent-count
-         context-result-excluded-count
-         context-result-over-budget?
-         context-result-catalog
-         context-result-summary)
+         (struct-out context-result))
 
 ;; Note: 0 is valid for max-catalog-* (disables catalog)
-(struct context-assembly-config (recent-tokens max-catalog-entries max-catalog-tokens summary-window)
-  #:guard (lambda (recent max-entries max-tokens summary _name)
-            (unless (and (exact-nonnegative-integer? recent) (> recent 0))
-              (raise-argument-error 'context-assembly-config "positive integer" recent))
-            (unless (exact-nonnegative-integer? max-entries)
-              (raise-argument-error 'context-assembly-config "non-negative integer" max-entries))
-            (unless (exact-nonnegative-integer? max-tokens)
-              (raise-argument-error 'context-assembly-config "non-negative integer" max-tokens))
-            (unless (and (exact-nonnegative-integer? summary) (> summary 0))
-              (raise-argument-error 'context-assembly-config "positive integer" summary))
-            (values recent max-entries max-tokens summary))
+(struct context-assembly-config
+        ([recent-tokens : Positive-Integer] [max-catalog-entries : Nonnegative-Integer]
+                                            [max-catalog-tokens : Nonnegative-Integer]
+                                            [summary-window : Positive-Integer])
   #:transparent)
 
+(: make-context-assembly-config
+   (->* ()
+        (#:recent-tokens Positive-Integer
+                         #:max-catalog-entries Nonnegative-Integer
+                         #:max-catalog-tokens Nonnegative-Integer
+                         #:summary-window Positive-Integer)
+        context-assembly-config))
 (define (make-context-assembly-config #:recent-tokens [recent 30000]
                                       #:max-catalog-entries [max-entries 40]
                                       #:max-catalog-tokens [max-tokens 2000]
@@ -46,5 +31,11 @@
 
 ;; Result struct — full diagnostics for observability
 (struct context-result
-        (messages total-tokens pinned-count recent-count excluded-count over-budget? catalog summary)
+        ([messages : (Listof Any)] [total-tokens : Nonnegative-Integer]
+                                   [pinned-count : Nonnegative-Integer]
+                                   [recent-count : Nonnegative-Integer]
+                                   [excluded-count : Nonnegative-Integer]
+                                   [over-budget? : Boolean]
+                                   [catalog : (Listof Any)]
+                                   [summary : (Option Any)])
   #:transparent)
