@@ -28,7 +28,6 @@
          (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state-mode)
          (prefix-in store: "../runtime/session-store.rkt")
          "../agent/event-bus.rkt"
-         "../util/cancellation.rkt"
          ;; Core SDK types
          "sdk-core.rkt")
 

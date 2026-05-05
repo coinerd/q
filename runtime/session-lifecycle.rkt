@@ -31,6 +31,7 @@
                   make-loop-result)
          "../agent/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
+         (only-in "../util/errors.rkt" raise-session-error)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
          (only-in "../extensions/message-inject.rkt" injection-event-topic)
@@ -327,17 +328,17 @@
   (define ba! (or buffer-or-append!-fn buffer-or-append!))
   ;; B4: Guard — refuse operations on closed sessions
   (unless (agent-session-active? sess)
-    (raise (exn:fail (format "run-prompt!: session ~a is closed" (agent-session-session-id sess))
-                     (current-continuation-marks))))
+    (raise-session-error (format "run-prompt!: session ~a is closed" (agent-session-session-id sess))
+                         (agent-session-session-id sess)))
   ;; Guard against concurrent prompt execution
   (when (agent-session-prompt-running? sess)
     (emit-session-event! (agent-session-event-bus sess)
                          (agent-session-session-id sess)
                          "runtime.error"
                          (hasheq 'error "Prompt already running — ignoring concurrent submission"))
-    (raise (exn:fail (format "run-prompt!: session ~a already has a prompt running"
-                             (agent-session-session-id sess))
-                     (current-continuation-marks))))
+    (raise-session-error (format "run-prompt!: session ~a already has a prompt running"
+                                 (agent-session-session-id sess))
+                         (agent-session-session-id sess)))
   (set-agent-session-prompt-running?! sess #t)
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))

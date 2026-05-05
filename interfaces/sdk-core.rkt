@@ -63,11 +63,9 @@
          (struct-out runtime)
          runtime?
 
-         ;; Cancellation token
-         make-cancellation-token
+         cancel-token!
          cancellation-token?
          cancellation-token-cancelled?
-         cancel-token!
 
          ;; Core API
          (contract-out [make-runtime
@@ -87,6 +85,9 @@
                              runtime?)]
                        [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
                        [run-prompt! (runtime? string? . -> . (values runtime? any/c))]
+                       [make-cancellation-token
+                        (->* () (#:callback (or/c (-> any/c any/c) #f)) cancellation-token?)]
+                       [make-in-memory-session-manager (-> in-memory-session-manager?)]
                        [subscribe-events!
                         (->* (runtime? procedure?) ((or/c procedure? #f)) exact-nonnegative-integer?)]
                        [interrupt! (runtime? . -> . runtime?)]
@@ -108,7 +109,6 @@
          navigate-result?
 
          ;; In-memory session manager (GC-18)
-         make-in-memory-session-manager
          in-memory-session-manager?
          in-memory-append!
          in-memory-append-entries!

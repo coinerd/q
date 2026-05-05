@@ -83,7 +83,12 @@
    (list "session-bytes-written-deprecated"
          (lambda ()
            (>= (grep-count "DEPRECATED.*session-bytes-written" "tools/builtins/write.rkt") 1))
-         "session-bytes-written missing DEPRECATED comment")))
+         "session-bytes-written missing DEPRECATED comment")
+   ;; v0.29.13 W2: session-switch must use emit-typed-event! (not raw make-event)
+   (list "session-switch-typed-events"
+         (lambda ()
+           (>= (grep-count "emit-typed-event!" "runtime/session-switch.rkt") 2))
+         "session-switch.rkt must use emit-typed-event! (≥2 calls)")))
 
 ;; ── Runner ──
 

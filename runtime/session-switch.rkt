@@ -18,6 +18,8 @@
          racket/match
          racket/runtime-path
          "../agent/event-bus.rkt"
+         "../agent/event-emitter.rkt"
+         "../agent/event-structs/session-events.rkt"
          "../util/protocol-types.rkt")
 
 ;; #704: Teardown
@@ -112,13 +114,12 @@
                     extension-registry))
   ;; Publish session.shutdown event
   (when bus
-    (define evt
-      (make-event "session.shutdown"
-                  (current-seconds)
-                  session-id
-                  #f
-                  (hasheq 'session-id session-id 'duration duration)))
-    (publish! bus evt)))
+    (emit-typed-event! bus
+                       (make-session-shutdown-event
+                        #:session-id session-id
+                        #:timestamp (current-seconds)
+                        #:turn-id #f
+                        #:reason (hasheq 'session-id session-id 'duration duration)))))
 
 ;; Full teardown: emit shutdown + close old session extensions.
 (define (teardown-session-extensions! old-session-id
@@ -198,7 +199,11 @@
               prev-id
               'session-dir
               session-dir))
-    (publish! bus (make-event "session.started" (current-seconds) session-id #f payload))))
+    (emit-typed-event! bus
+                       (make-session-start-event #:session-id session-id
+                                                 #:timestamp (current-seconds)
+                                                 #:turn-id #f
+                                                 #:model payload))))
 
 ;; ============================================================
 ;; #707: Full atomic session switch lifecycle
