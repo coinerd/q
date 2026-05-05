@@ -19,8 +19,8 @@
 - G4: `tests/test-tool-coordinator-duration.rkt` — 2 tests verifying `duration-ms` is non-zero and correlates with wall time
 - G7: `tests/test-tui-dedup.rkt` — 5 tests for TUI tool-start dedup guard
 
-**Files changed:** 16 modified, 3 new (test-iteration-integration.rkt, test-tool-coordinator-duration.rkt, test-tui-dedup.rkt), 2 deleted (transition-logic.rkt, test-iteration-transition.rkt)
-**Lines changed:** ~220 added, ~110 removed (net +110)
+**Files changed:** 19 modified, 3 new (test-iteration-integration.rkt, test-tool-coordinator-duration.rkt, test-tui-dedup.rkt), 2 deleted (transition-logic.rkt, test-iteration-transition.rkt)
+**Lines changed:** 406 added, 139 removed (net +267)
 
 ---
 

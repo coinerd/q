@@ -721,7 +721,7 @@
   (provide dispatch-loop-action
            handle-stop-action
            compute-next-counters
-           process-tool-results
+           process-tool-results ;; NOTE: requires tool-coordinator mock for isolated testing
            decide-next-action
            check-cancellation
            iteration-ctx))
