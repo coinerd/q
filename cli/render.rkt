@@ -179,6 +179,13 @@
      (if detail
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
+    [("tool-execution-end")
+     (define name (hash-ref payload 'tool-name "?"))
+     (define result-summary (hash-ref payload 'result-summary 'error))
+     (if (eq? result-summary 'completed)
+         (styled (format "[tool result: ~a]" name) '(dim))
+         (styled (format "[tool failed: ~a]" name) '(red)))]
+    ;; Backward-compatible handlers for old raw event topics
     [("tool.call.completed")
      (define name (hash-ref payload 'name "?"))
      (define result (hash-ref payload 'result #f))

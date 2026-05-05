@@ -19,7 +19,9 @@
 (require racket/contract
          "api.rkt"
          "../util/protocol-types.rkt"
-         "../util/ids.rkt")
+         "../util/ids.rkt"
+         "../agent/event-emitter.rkt"
+         "../agent/event-structs/iteration-events.rkt")
 
 (provide (contract-out [inject-system-message! (-> event-bus? string? string? any/c)]
                        [inject-user-message! (-> event-bus? string? string? any/c)]
@@ -33,7 +35,7 @@
 ;; Constants
 ;; ============================================================
 
-(define injection-event-topic "message.injected")
+(define injection-event-topic "injection")
 
 ;; ============================================================
 ;; make-injection-message : symbol? string? -> message?
@@ -59,8 +61,17 @@
 ;; text: message content
 (define (inject-system-message! bus session-id text)
   (define msg (make-injection-message 'system text))
+  (emit-typed-event! bus
+                     (make-injection-event #:session-id session-id
+                                           #:turn-id #f
+                                           #:timestamp (current-inexact-milliseconds)
+                                           #:source "extension-inject"
+                                           #:content-type "system"
+                                           #:content-length (string-length text)
+                                           #:message msg))
+  ;; Backward-compat raw event for legacy subscribers
   (publish! bus
-            (make-event injection-event-topic
+            (make-event "message.injected"
                         (current-seconds)
                         session-id
                         #f
@@ -73,12 +84,18 @@
 ;; Inject a user message into the conversation.
 (define (inject-user-message! bus session-id text)
   (define msg (make-injection-message 'user text))
-  (publish! bus
-            (make-event injection-event-topic
-                        (current-seconds)
-                        session-id
-                        #f
-                        (hasheq 'role 'user 'message msg))))
+  (emit-typed-event! bus
+                     (make-injection-event #:session-id session-id
+                                           #:turn-id #f
+                                           #:timestamp (current-inexact-milliseconds)
+                                           #:source "extension-inject"
+                                           #:content-type "user"
+                                           #:content-length (string-length text)
+                                           #:message msg))
+  ;; Backward-compat raw event for legacy subscribers
+  (publish!
+   bus
+   (make-event "message.injected" (current-seconds) session-id #f (hasheq 'role 'user 'message msg))))
 
 ;; ============================================================
 ;; inject-assistant-message! : event-bus? string? string? -> event?
@@ -87,8 +104,17 @@
 ;; Inject an assistant message into the conversation.
 (define (inject-assistant-message! bus session-id text)
   (define msg (make-injection-message 'assistant text))
+  (emit-typed-event! bus
+                     (make-injection-event #:session-id session-id
+                                           #:turn-id #f
+                                           #:timestamp (current-inexact-milliseconds)
+                                           #:source "extension-inject"
+                                           #:content-type "assistant"
+                                           #:content-length (string-length text)
+                                           #:message msg))
+  ;; Backward-compat raw event for legacy subscribers
   (publish! bus
-            (make-event injection-event-topic
+            (make-event "message.injected"
                         (current-seconds)
                         session-id
                         #f

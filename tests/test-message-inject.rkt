@@ -124,7 +124,9 @@
 (test-case "multiple injections produce separate events"
   (define bus (make-event-bus))
   (define received '())
-  (subscribe! bus (lambda (evt) (set! received (cons evt received))))
+  (subscribe! bus
+              (lambda (evt) (set! received (cons evt received)))
+              #:filter (lambda (evt) (equal? (event-ev evt) "message.injected")))
   (inject-system-message! bus "s1" "first")
   (inject-user-message! bus "s1" "second")
   (inject-assistant-message! bus "s1" "third")

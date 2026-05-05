@@ -12,6 +12,7 @@
 ;; - deactivate-extension!: remove symlink
 
 (require "../util/json-helpers.rkt")
+(require "../util/errors.rkt")
 (require racket/file
          racket/path
          json
@@ -41,10 +42,11 @@
 ;;   1. ~/.q/config.json → extensions.source_dir (if set and exists)
 ;;   2. Binary-relative: <dir-of-q-binary>/extensions/
 (define (known-extensions-dir)
-  (or (config-source-dir)
-      (binary-relative-extensions-dir)
-      ;; Should never reach here
-      (error 'known-extensions-dir "cannot find q/extensions/ directory")))
+  (or
+   (config-source-dir)
+   (binary-relative-extensions-dir)
+   ;; Should never reach here
+   (raise-extension-error "cannot find q/extensions/ directory" "extension-catalog" "missing-dir")))
 
 ;; config-source-dir : -> (or/c path? #f)
 ;; Read ~/.q/config.json for extensions.source_dir override.
@@ -170,7 +172,7 @@
 ;; Idempotent: no error if already activated.
 (define (activate-extension! name target-dir)
   (unless (valid-extension-name? name)
-    (error 'activate-extension! "invalid extension name: ~a" name))
+    (raise-extension-error (format "invalid extension name: ~a" name) "extension-catalog" "activate"))
   (define source-dir (known-extensions-dir))
   (define flat-source (build-path source-dir (format "~a.rkt" name)))
   (define subdir-source (build-path source-dir name (format "~a.rkt" name)))
@@ -178,7 +180,10 @@
     (cond
       [(file-exists? flat-source) flat-source]
       [(file-exists? subdir-source) subdir-source]
-      [else (error 'activate "extension '~a' not found in ~a" name source-dir)]))
+      [else
+       (raise-extension-error (format "extension '~a' not found in ~a" name source-dir)
+                              "extension-catalog"
+                              "activate")]))
   (define link-name (file-name-from-path actual-source))
   (define link-path (build-path target-dir link-name))
   (make-directory* target-dir)
@@ -192,7 +197,9 @@
 ;; No error if not present.
 (define (deactivate-extension! name target-dir)
   (unless (valid-extension-name? name)
-    (error 'deactivate-extension! "invalid extension name: ~a" name))
+    (raise-extension-error (format "invalid extension name: ~a" name)
+                           "extension-catalog"
+                           "deactivate"))
   (define link-path (build-path target-dir (format "~a.rkt" name)))
   (when (or (link-exists? link-path) (file-exists? link-path))
     (delete-file link-path)))
