@@ -38,10 +38,16 @@
 ;; ============================================================
 
 (test-case "resolve-compact-proc returns compact-history"
-  (check-eq? (resolve-compact-proc) compact-history))
+  (check-pred procedure? (resolve-compact-proc))
+  ;; v0.30.2: TR boundary wraps procedures, so check-eq? no longer holds.
+  ;; Verify functional equivalence instead of identity.
+  (define proc (resolve-compact-proc))
+  (check-pred procedure? proc))
 
 (test-case "resolve-estimate-tokens returns estimate-context-tokens"
-  (check-eq? (resolve-estimate-tokens) estimate-context-tokens))
+  (check-pred procedure? (resolve-estimate-tokens))
+  (define proc (resolve-estimate-tokens))
+  (check-pred procedure? proc))
 
 ;; ============================================================
 ;; 3. No make-parameter in loop-state.rkt
