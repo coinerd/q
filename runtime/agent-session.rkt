@@ -26,7 +26,7 @@
          racket/list
          racket/path
          (only-in "../util/errors.rkt" raise-session-error)
-         (only-in "../util/protocol-types.rkt" message-id message-kind make-loop-result)
+         (only-in "../util/protocol-types.rkt" message-id message-kind make-loop-result message?)
          "../agent/queue.rkt"
          "../agent/event-bus.rkt"
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
@@ -85,14 +85,14 @@
          set-agent-session-config!
          ensure-persisted!
          buffer-or-append!
-         make-agent-session
-         resume-agent-session
-         fork-session
-         run-prompt!
-         session-id
-         session-history
-         session-active?
-         close-session!
+         (contract-out [make-agent-session (-> hash? agent-session?)]
+                       [resume-agent-session (-> string? hash? agent-session?)]
+                       [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
+                       [run-prompt! (-> agent-session? (or/c string? message?) any)]
+                       [session-id (-> agent-session? string?)]
+                       [session-history (-> agent-session? list?)]
+                       [session-active? (-> agent-session? boolean?)]
+                       [close-session! (-> agent-session? void?)])
          maybe-compact-context
          ;; Thinking level control (#1153)
          thinking-levels
