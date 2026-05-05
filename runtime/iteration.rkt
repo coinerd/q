@@ -707,3 +707,16 @@
                                       ;; on-recurse: callback for recursive loop cases
                                       (lambda (new-ctx new-counters ws2)
                                         (loop new-ctx new-counters ws2)))])])))))
+
+;; ============================================================
+;; for-testing submodule: expose internals for unit testing
+;; v0.29.17 W0: exposed to support integration tests for struct refactor
+;; ============================================================
+(module+ for-testing
+  (provide dispatch-loop-action
+           handle-stop-action
+           compute-next-counters
+           process-tool-results
+           decide-next-action
+           check-cancellation
+           iteration-ctx))
