@@ -11,6 +11,9 @@
          (only-in racket/base make-semaphore call-with-semaphore)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/errors.rkt" with-logged-catch)
+         (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../runtime/settings.rkt" q-settings?)
+         (only-in "../tools/permission-gate.rkt" permission-config?)
          ;; ARCH-01: tool-call and tool-result structs from util/protocol-types.rkt
          (only-in "../util/protocol-types.rkt"
                   tool-call
@@ -77,13 +80,13 @@
          (contract-out [make-exec-context
                         (->* ()
                              (#:working-directory (or/c path-string? path? #f)
-                                                  #:cancellation-token any/c
+                                                  #:cancellation-token (or/c cancellation-token? #f)
                                                   #:event-publisher (or/c procedure? #f symbol?)
-                                                  #:runtime-settings any/c
+                                                  #:runtime-settings (or/c hash? q-settings? #f)
                                                   #:call-id string?
-                                                  #:session-metadata any/c
+                                                  #:session-metadata (or/c hash? #f)
                                                   #:progress-callback (or/c procedure? #f)
-                                                  #:permission-config any/c)
+                                                  #:permission-config (or/c permission-config? #f))
                              exec-context?)])
          exec-context?
          exec-context-working-directory
