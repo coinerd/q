@@ -31,10 +31,11 @@
 
 (struct model-request
         ([messages : (Listof Any)] [tools : (Option (Listof Any))]
-                                   [settings : (HashTable Symbol Any)])
+                                   [settings : (Option (HashTable Symbol Any))])
   #:transparent)
 
-(: make-model-request ((Listof Any) (Option (Listof Any)) (HashTable Symbol Any) -> model-request))
+(: make-model-request
+   ((Listof Any) (Option (Listof Any)) (Option (HashTable Symbol Any)) -> model-request))
 (define (make-model-request messages tools settings)
   (model-request messages tools settings))
 
@@ -43,7 +44,10 @@
   (define h
     :
     (HashTable Symbol Any)
-    (hasheq 'messages (model-request-messages req) 'settings (model-request-settings req)))
+    (hasheq 'messages
+            (model-request-messages req)
+            'settings
+            (or (model-request-settings req) (hasheq))))
   (if (model-request-tools req)
       (hash-set h 'tools (model-request-tools req))
       h))
@@ -59,12 +63,13 @@
 ;; ============================================================
 
 (struct model-response
-        ([content : (Listof Any)] [usage : (HashTable Symbol Any)]
+        ([content : (Listof Any)] [usage : (Option (HashTable Symbol Any))]
                                   [model : String]
                                   [stop-reason : (U Symbol #f)])
   #:transparent)
 
-(: make-model-response ((Listof Any) (HashTable Symbol Any) String (U Symbol #f) -> model-response))
+(: make-model-response
+   ((Listof Any) (Option (HashTable Symbol Any)) String (U Symbol #f) -> model-response))
 (define (make-model-response content usage model stop-reason)
   (model-response content usage model stop-reason))
 
@@ -73,7 +78,7 @@
   (hasheq 'content
           (model-response-content resp)
           'usage
-          (model-response-usage resp)
+          (or (model-response-usage resp) (hasheq))
           'model
           (model-response-model resp)
           'stopReason
@@ -85,7 +90,7 @@
 (: jsexpr->model-response ((HashTable Symbol Any) -> model-response))
 (define (jsexpr->model-response h)
   (make-model-response (cast (hash-ref h 'content) (Listof Any))
-                       (cast (hash-ref h 'usage) (HashTable Symbol Any))
+                       (cast (hash-ref h 'usage #f) (HashTable Symbol Any))
                        (cast (hash-ref h 'model) String)
                        (let ([sr (hash-ref h 'stopReason #f)])
                          (if sr

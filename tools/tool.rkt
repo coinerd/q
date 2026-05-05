@@ -114,7 +114,7 @@
          tool-registry?
          (contract-out [register-tool! (-> tool-registry? tool? void?)]
                        [unregister-tool! (-> tool-registry? string? void?)]
-                       [lookup-tool (-> tool-registry? string? (or/c tool? #f))]
+                       [lookup-tool (-> tool-registry? (or/c string? #f) (or/c tool? #f))]
                        [list-tools (-> tool-registry? (listof tool?))]
                        [tool->jsexpr (-> tool? hash?)])
          set-active-tools!
@@ -333,7 +333,9 @@
   (with-registry-lock reg (lambda () (hash-remove! (tool-registry-tools-box reg) name))))
 
 (define (lookup-tool reg name)
-  (with-registry-lock reg (lambda () (hash-ref (tool-registry-tools-box reg) name #f))))
+  (if (not name)
+      #f
+      (with-registry-lock reg (lambda () (hash-ref (tool-registry-tools-box reg) name #f)))))
 
 ;; tool->jsexpr : tool? -> hash?
 ;; Serialize a tool struct to the OpenAI normalized format.
