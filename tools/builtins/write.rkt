@@ -32,7 +32,8 @@
 ;; Track cumulative bytes written in current session.
 ;; v0.29.9: Migrated from make-parameter+box to exec-context field.
 ;; v0.29.11: Parameter retained for backward compat (tests, direct calls without exec-ctx).
-;; DEPRECATED: Will be removed in v0.30.x when all callers provide exec-ctx.
+;; DEPRECATED (v0.29.12): session-bytes-written will be removed in v0.30.x.
+;; Retained for backward-compat tests. Has 0 production callers outside test mocks.
 (define session-bytes-written (make-parameter (box 0)))
 
 (define (init-session-writes!)
