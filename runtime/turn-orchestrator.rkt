@@ -81,7 +81,10 @@
          ;; Mock provider detection
          (only-in "provider-factory.rkt" provider-is-mock?)
          ;; Shared helpers
-         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         ;; G4: typed event emission
+         "../agent/event-emitter.rkt"
+         "../agent/event-structs/iteration-events.rkt")
 
 (provide run-provider-turn
          build-assembled-context
@@ -102,9 +105,10 @@
   ;; v0.29.5 W3: Defer ws-message resolution
   (define ws (hash-ref config 'working-set #f))
   (define ws-messages-promise
-    (delay (if ws
-               (working-set-resolve-messages ws ctx-to-use message-id)
-               '())))
+    (delay
+      (if ws
+          (working-set-resolve-messages ws ctx-to-use message-id)
+          '())))
   (define ws-messages (force ws-messages-promise))
   (define ws-message-ids (map message-id ws-messages))
 
@@ -141,7 +145,9 @@
 
   ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
   ;; v0.29.5 W3: Defer token estimation — only computed when forced for event
-  (define ctx-token-count-promise (delay (estimate-context-tokens ctx-assembled)))
+  (define ctx-token-count-promise
+    (delay
+      (estimate-context-tokens ctx-assembled)))
   (emit-session-event! bus
                        session-id
                        "context.assembled"
@@ -302,4 +308,12 @@
                                                               'error
                                                               error-msg
                                                               'errorType
-                                                              error-type))))))
+                                                              error-type)))
+                                (emit-typed-event! bus
+                                                   (make-auto-retry-event
+                                                    #:session-id session-id
+                                                    #:turn-id turn-id
+                                                    #:timestamp (current-inexact-milliseconds)
+                                                    #:attempt attempt
+                                                    #:max-attempts max-retries
+                                                    #:error-type error-type)))))

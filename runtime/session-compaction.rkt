@@ -12,6 +12,8 @@
          (only-in "../util/protocol-types.rkt" message-role message-content content-part->jsexpr)
          (only-in "../util/hook-types.rkt" hook-result-action)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         "../agent/event-emitter.rkt"
+         "../agent/event-structs/iteration-events.rkt"
          "session-types.rkt")
 
 (provide maybe-compact-context
@@ -56,6 +58,13 @@
                              sid
                              "compaction.start"
                              (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
+        (emit-typed-event! bus
+                           (make-compaction-event #:session-id sid
+                                                  #:turn-id #f
+                                                  #:timestamp (current-inexact-milliseconds)
+                                                  #:reason "budget-exceeded"
+                                                  #:tokens-before token-count
+                                                  #:tokens-after token-count))
         (dynamic-wind
          (lambda () (void))
          (lambda ()
@@ -68,7 +77,14 @@
          (lambda ()
            (set-agent-session-compacting?! sess #f)
            (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
-           (emit-session-event! bus sid "compaction.end" (hasheq 'tokenCount token-count))))])]))
+           (emit-session-event! bus sid "compaction.end" (hasheq 'tokenCount token-count))
+           (emit-typed-event! bus
+                              (make-compaction-event #:session-id sid
+                                                     #:turn-id #f
+                                                     #:timestamp (current-inexact-milliseconds)
+                                                     #:reason "compaction-complete"
+                                                     #:tokens-before token-count
+                                                     #:tokens-after token-count))))])]))
 
 ;; Internal compaction logic (extracted for dynamic-wind)
 (define (maybe-compact-context-internal sess

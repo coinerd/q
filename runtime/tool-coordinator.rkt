@@ -197,23 +197,7 @@
       'count
       (length tool-calls-to-run))))
 
-  ;; Emit tool.call.completed / tool.call.failed events
-  (for ([tc (in-list tool-calls-to-run)]
-        [tr (in-list (scheduler-result-results sched-result))])
-    (if (tool-result-is-error? tr)
-        (emit-session-event! bus
-                             session-id
-                             "tool.call.failed"
-                             (hasheq 'name
-                                     (tool-call-name tc)
-                                     'error
-                                     (tool-result-content->string (tool-result-content tr))))
-        (emit-session-event! bus
-                             session-id
-                             "tool.call.completed"
-                             (hasheq 'name (tool-call-name tc) 'result (tool-result-content tr)))))
-
-  ;; G13: Emit typed tool-execution-end events
+  ;; G13: Emit typed tool-execution-end events (canonical — replaces raw tool.call.completed/failed)
   (for ([tc (in-list tool-calls-to-run)]
         [tr (in-list (scheduler-result-results sched-result))])
     (emit-typed-event! bus

@@ -10,6 +10,7 @@
 ;; OS keychain (secret-tool / macOS security), and chained (fallback chain).
 
 (require "../util/json-helpers.rkt")
+(require "../util/errors.rkt")
 (require json
          racket/file
          racket/string
@@ -181,23 +182,24 @@
   (format "Q_~a_API_KEY" normalized))
 
 (define (make-env-credential-backend)
-  (credential-backend "env"
-                      ;; store! — read-only, raises error
-                      (λ (be provider-name api-key)
-                        (error 'backend-store! "Environment backend is read-only"))
-                      ;; load
-                      (λ (be provider-name env-var)
-                        (define var (or env-var (provider->env-var provider-name)))
-                        (define val (getenv var))
-                        (if (and val (non-empty-string? val))
-                            (hasheq 'api-key val 'source "environment" 'provider provider-name)
-                            #f))
-                      ;; delete! — no-op
-                      (λ (be provider-name) (void))
-                      ;; list — not possible to enumerate env vars meaningfully
-                      (λ (be) '())
-                      ;; available?
-                      (λ (be) #t)))
+  (credential-backend
+   "env"
+   ;; store! — read-only, raises error
+   (λ (be provider-name api-key)
+     (raise-credential-error "Environment backend is read-only" "env" "store-disabled"))
+   ;; load
+   (λ (be provider-name env-var)
+     (define var (or env-var (provider->env-var provider-name)))
+     (define val (getenv var))
+     (if (and val (non-empty-string? val))
+         (hasheq 'api-key val 'source "environment" 'provider provider-name)
+         #f))
+   ;; delete! — no-op
+   (λ (be provider-name) (void))
+   ;; list — not possible to enumerate env vars meaningfully
+   (λ (be) '())
+   ;; available?
+   (λ (be) #t)))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Memory backend — in-memory hash (for testing)
@@ -267,7 +269,7 @@
 
 (define (keychain-store! provider-name api-key)
   (unless (secret-tool-available?)
-    (error 'keychain-store! "secret-tool not available"))
+    (raise-credential-error "secret-tool not available" "keychain" "missing-secret-tool"))
   (define attrs (keychain-attrs provider-name))
   (define args
     (append* (list "store" "--label" (keychain-label provider-name))
@@ -275,7 +277,9 @@
                (list (format "--~a" (car a)) (cdr a)))))
   (define-values (status _) (run-secret-tool args #:stdin (string-append api-key "\n")))
   (unless (= status 0)
-    (error 'keychain-store! "secret-tool store failed for ~a" provider-name)))
+    (raise-credential-error (format "secret-tool store failed for ~a" provider-name)
+                            "keychain"
+                            "store-failed")))
 
 (define (keychain-load provider-name)
   (unless (secret-tool-available?)
@@ -320,38 +324,39 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 (define (make-chained-credential-backend backends)
-  (credential-backend "chained"
-                      ;; store! — writes to first writable backend
-                      (λ (be provider-name api-key)
-                        (define stored #f)
-                        (for ([sub (in-list backends)]
-                              #:break stored)
-                          (with-handlers ([exn:fail? (λ (e) (void))])
-                            (backend-store! sub provider-name api-key)
-                            (set! stored #t)))
-                        (unless stored
-                          (error 'backend-store! "No writable backend available")))
-                      ;; load — tries each backend in order, returns first hit
-                      (λ (be provider-name env-var)
-                        (for/or ([sub (in-list backends)])
-                          (with-handlers ([exn:fail? (λ (e) #f)])
-                            (backend-load sub provider-name #:env-var (or env-var #f)))))
-                      ;; delete! — deletes from all backends
-                      (λ (be provider-name)
-                        (for ([sub (in-list backends)])
-                          (with-handlers ([exn:fail? (λ (e) (void))])
-                            (backend-delete! sub provider-name))))
-                      ;; list — merges from all backends
-                      (λ (be)
-                        (remove-duplicates (apply append
-                                                  (for/list ([sub (in-list backends)])
-                                                    (with-handlers ([exn:fail? (λ (e) '())])
-                                                      (backend-list-providers sub))))))
-                      ;; available? — true if any backend available
-                      (λ (be)
-                        (for/or ([sub (in-list backends)])
-                          (with-handlers ([exn:fail? (λ (e) #f)])
-                            (backend-available? sub))))))
+  (credential-backend
+   "chained"
+   ;; store! — writes to first writable backend
+   (λ (be provider-name api-key)
+     (define stored #f)
+     (for ([sub (in-list backends)]
+           #:break stored)
+       (with-handlers ([exn:fail? (λ (e) (void))])
+         (backend-store! sub provider-name api-key)
+         (set! stored #t)))
+     (unless stored
+       (raise-credential-error "No writable backend available" "chained" "all-backends-readonly")))
+   ;; load — tries each backend in order, returns first hit
+   (λ (be provider-name env-var)
+     (for/or ([sub (in-list backends)])
+       (with-handlers ([exn:fail? (λ (e) #f)])
+         (backend-load sub provider-name #:env-var (or env-var #f)))))
+   ;; delete! — deletes from all backends
+   (λ (be provider-name)
+     (for ([sub (in-list backends)])
+       (with-handlers ([exn:fail? (λ (e) (void))])
+         (backend-delete! sub provider-name))))
+   ;; list — merges from all backends
+   (λ (be)
+     (remove-duplicates (apply append
+                               (for/list ([sub (in-list backends)])
+                                 (with-handlers ([exn:fail? (λ (e) '())])
+                                   (backend-list-providers sub))))))
+   ;; available? — true if any backend available
+   (λ (be)
+     (for/or ([sub (in-list backends)])
+       (with-handlers ([exn:fail? (λ (e) #f)])
+         (backend-available? sub))))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Helpers

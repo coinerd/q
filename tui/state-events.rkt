@@ -74,37 +74,22 @@
            (struct-copy ui-state new-state (busy? #t))
            (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))]
 
-    [("tool.call.completed")
-     (define name (hash-ref payload 'name "?"))
-     (define result-raw (hash-ref payload 'result #f))
-     (define result-summary
-       (if result-raw
-           (string-replace (truncate-string (tool-result-content->string result-raw) 80)
-                           "\n"
-                           " \u23ce ")
-           ""))
-     (define text
-       (if (string=? result-summary "")
-           (format "[OK: ~a]" name)
-           (format "[OK: ~a] ~a" name result-summary)))
+    [("tool-execution-end")
+     (define name (hash-ref payload 'tool-name "?"))
+     (define result-summary (hash-ref payload 'result-summary 'error))
      (define ts (event-time evt))
-     (define meta (hasheq 'name name 'result (or result-raw "")))
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'tool-end text ts meta))
-                  [pending-tool-name #f])]
-
-    [("tool.call.failed")
-     (define name (hash-ref payload 'name "?"))
-     (define err (hash-ref payload 'error "unknown"))
-     (define ts (event-time evt))
-     (struct-copy
-      ui-state
-      (append-entry state
-                    (make-entry 'tool-fail
-                                (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")
-                                ts
-                                (hasheq 'name name 'error err)))
-      [pending-tool-name #f])]
+     (if (eq? result-summary 'completed)
+         (let* ([text (format "[OK: ~a]" name)]
+                [meta (hasheq 'name name)])
+           (struct-copy ui-state
+                        (append-entry state (make-entry 'tool-end text ts meta))
+                        [pending-tool-name #f]))
+         (let* ([err "tool failed"]
+                [text (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")]
+                [meta (hasheq 'name name 'error err)])
+           (struct-copy ui-state
+                        (append-entry state (make-entry 'tool-fail text ts meta))
+                        [pending-tool-name #f])))]
 
     [("runtime.error")
      (define err (hash-ref payload 'error "unknown error"))
@@ -235,10 +220,40 @@
       state
       (make-entry 'system (format "[session forked: ~a]" new-sid) (event-time evt) (hash)))]
 
-    [("compaction.started") (struct-copy ui-state state [status-message "Compacting..."])]
-    [("compaction.start") (struct-copy ui-state state [status-message "Compacting..."])]
-    [("compaction.completed") (struct-copy ui-state state [status-message #f])]
-    [("compaction.end") (struct-copy ui-state state [status-message #f])]
+    [("compaction")
+     (define reason (hash-ref payload 'reason ""))
+     (if (string=? reason "compaction-complete")
+         (struct-copy ui-state state [status-message #f])
+         (struct-copy ui-state state [status-message "Compacting..."]))]
+
+    [("auto-retry")
+     (define attempt (hash-ref payload 'attempt "?"))
+     (define max-attempts (hash-ref payload 'max-attempts "?"))
+     (define error-type (hash-ref payload 'error-type #f))
+     (define type-label
+       (case error-type
+         [(timeout) "LLM timeout"]
+         [(rate-limit) "rate limited"]
+         [(context-overflow) "context too large"]
+         [(provider-error) "server error"]
+         [else #f]))
+     (define msg
+       (if type-label
+           (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
+           (format "[retry: attempt ~a/~a]" attempt max-attempts)))
+     (struct-copy ui-state
+                  (append-entry state (make-entry 'system msg (event-time evt) (hash)))
+                  [streaming-text #f]
+                  [streaming-thinking #f])]
+
+    [("injection")
+     (define content-type (hash-ref payload 'content-type "unknown"))
+     (define msg (format "[injected ~a message]" content-type))
+     (struct-copy ui-state
+                  (append-entry state (make-entry 'system msg (event-time evt) (hash)))
+                  [streaming-text #f]
+                  [streaming-thinking #f])]
+
     [("model.request.started") (struct-copy ui-state state [busy? #t])]
 
     [("context.built")
@@ -302,6 +317,44 @@
                                (format "[context growing: ~a/~a tokens used]" estimated budget)
                                (event-time evt)
                                (hash)))]
+
+    ;; Backward-compatible handlers for old raw event topics (tests + legacy)
+    [("tool.call.completed")
+     (define name (hash-ref payload 'name "?"))
+     (define result-raw (hash-ref payload 'result #f))
+     (define result-summary
+       (if result-raw
+           (string-replace (truncate-string (tool-result-content->string result-raw) 80)
+                           "\n"
+                           " \u23ce ")
+           ""))
+     (define text
+       (if (string=? result-summary "")
+           (format "[OK: ~a]" name)
+           (format "[OK: ~a] ~a" name result-summary)))
+     (define ts (event-time evt))
+     (define meta (hasheq 'name name 'result (or result-raw "")))
+     (struct-copy ui-state
+                  (append-entry state (make-entry 'tool-end text ts meta))
+                  [pending-tool-name #f])]
+
+    [("tool.call.failed")
+     (define name (hash-ref payload 'name "?"))
+     (define err (hash-ref payload 'error "unknown"))
+     (define ts (event-time evt))
+     (struct-copy
+      ui-state
+      (append-entry state
+                    (make-entry 'tool-fail
+                                (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")
+                                ts
+                                (hasheq 'name name 'error err)))
+      [pending-tool-name #f])]
+
+    [("compaction.started") (struct-copy ui-state state [status-message "Compacting..."])]
+    [("compaction.start") (struct-copy ui-state state [status-message "Compacting..."])]
+    [("compaction.completed") (struct-copy ui-state state [status-message #f])]
+    [("compaction.end") (struct-copy ui-state state [status-message #f])]
 
     [("auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))

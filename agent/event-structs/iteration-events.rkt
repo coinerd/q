@@ -5,21 +5,20 @@
 
 (require "base.rkt")
 
-(provide
- ;; Auto-retry events
- (struct-out auto-retry-event)
- make-auto-retry-event
- auto-retry-event?
+;; Auto-retry events
+(provide (struct-out auto-retry-event)
+         make-auto-retry-event
+         auto-retry-event?
 
- ;; Compaction events
- (struct-out compaction-event)
- make-compaction-event
- compaction-event?
+         ;; Compaction events
+         (struct-out compaction-event)
+         make-compaction-event
+         compaction-event?
 
- ;; Injection events
- (struct-out injection-event)
- make-injection-event
- injection-event?)
+         ;; Injection events
+         (struct-out injection-event)
+         make-injection-event
+         injection-event?)
 
 ;; ============================================================
 ;; Auto-retry events
@@ -53,12 +52,20 @@
 ;; Injection events
 ;; ============================================================
 
-(struct injection-event typed-event (source content-type content-length) #:transparent)
+(struct injection-event typed-event (source content-type content-length message) #:transparent)
 
 (define (make-injection-event #:session-id session-id
                               #:turn-id turn-id
                               #:timestamp timestamp
                               #:source source
                               #:content-type content-type
-                              #:content-length content-length)
-  (injection-event "injection" timestamp session-id turn-id source content-type content-length))
+                              #:content-length content-length
+                              #:message [message #f])
+  (injection-event "injection"
+                   timestamp
+                   session-id
+                   turn-id
+                   source
+                   content-type
+                   content-length
+                   message))

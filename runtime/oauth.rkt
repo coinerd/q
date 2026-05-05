@@ -7,6 +7,7 @@
 ;; stub implementations pending an HTTP client library.
 
 (require "../util/json-helpers.rkt")
+(require "../util/errors.rkt")
 (require racket/string
          racket/format
          json
@@ -113,16 +114,18 @@
 ;; to perform the actual POST to the token endpoint.
 ;; W5.6 (M-03): Explicit error — callers must handle, not silently get #f
 (define (oauth-exchange-code cfg code)
-  (error 'oauth-exchange-code
-         "OAuth token exchange not yet implemented; requires HTTP client library"))
+  (raise-credential-error "OAuth token exchange not yet implemented; requires HTTP client library"
+                          "oauth"
+                          "exchange-code"))
 
 ;; Refresh an expired token.
 ;; Returns oauth-token on success, #f on failure.
 ;; STUB: Same HTTP client dependency as oauth-exchange-code.
 ;; W5.6 (M-03): Explicit error — callers must handle, not silently get #f
 (define (oauth-refresh-token cfg tok)
-  (error 'oauth-refresh-token
-         "OAuth token refresh not yet implemented; requires HTTP client library"))
+  (raise-credential-error "OAuth token refresh not yet implemented; requires HTTP client library"
+                          "oauth"
+                          "refresh-token"))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Serialization helpers

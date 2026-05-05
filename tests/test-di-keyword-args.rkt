@@ -135,7 +135,7 @@
     ;; LOW-05 (v0.22.8→v0.29.5): Verify DI resolvers work (no parameters)
     (test-case "resolve-* defaults match concrete implementations"
       ;; v0.29.5 W2: Parameters removed. Resolve functions use direct imports.
-      (check-equal? (resolve-inject-topic) "message.injected")
+      (check-equal? (resolve-inject-topic) "injection")
       (check-true (procedure? (resolve-compact-proc)))
       (check-true (procedure? (resolve-estimate-tokens))))))
 

@@ -78,7 +78,7 @@
           'compaction-event
           '(reason tokens-before tokens-after)
           'injection-event
-          '(source content-type content-length)))
+          '(source content-type content-length message)))
 
 ;; Extract struct name, stripping the struct: prefix from struct->vector
 (define (struct-name evt)
