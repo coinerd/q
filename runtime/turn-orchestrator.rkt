@@ -86,9 +86,21 @@
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt")
 
-(provide run-provider-turn
-         build-assembled-context
-         register-session-extensions!)
+(provide (contract-out
+          [run-provider-turn
+           (->* (list? any/c
+                       event-bus?
+                       (or/c any/c #f)
+                       (or/c any/c #f)
+                       string?
+                       string?
+                       (or/c any/c #f)
+                       hash?)
+                (#:tool-list-proc (or/c procedure? #f))
+                any/c)]
+          [build-assembled-context
+           (-> list? hash? (or/c any/c #f) event-bus? string? exact-nonnegative-integer? list?)]
+          [register-session-extensions! (-> any/c any/c event-bus? string? (listof hash?))]))
 
 ;; ============================================================
 ;; Context assembly

@@ -15,7 +15,8 @@
 ;;   - Provider access: convenience functions for providers section
 
 (require "../util/json-helpers.rkt")
-(require racket/file
+(require racket/contract
+         racket/file
          racket/port
          racket/hash
          racket/list
@@ -31,24 +32,30 @@
 ;; Structs
 (provide (struct-out q-settings)
 
-         ;; Loading
-         load-settings
+         ;; Loading — contracted
+         (contract-out [load-settings
+                        (->* ()
+                             (path-string? #:home-dir path-string?
+                                           #:config-path (or/c path-string? #f))
+                             q-settings?)])
+
          load-global-settings
          load-project-settings
 
-         ;; Constructor
-         make-minimal-settings
+         ;; Constructor — contracted
+         (contract-out [make-minimal-settings
+                        (->* () (#:provider any/c #:model any/c #:overrides hash?) q-settings?)])
 
          ;; Merging
          merge-settings
          deep-merge-hash
 
          ;; Query
-         setting-ref
-         setting-ref*
-         provider-config
-         provider-names
-         config-parse-error
+         (contract-out [setting-ref (->* (q-settings? any/c) (any/c) any/c)]
+                       [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
+                       [provider-config (-> q-settings? any/c (or/c hash? #f))]
+                       [provider-names (-> q-settings? list?)]
+                       [config-parse-error (-> path-string? (or/c string? #f))])
 
          ;; Parallel execution
          parallel-tools-enabled?
