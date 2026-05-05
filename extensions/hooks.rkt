@@ -31,7 +31,9 @@
          ;; Re-export extension-ctx for convenience
          (all-from-out "context.rkt")
          ;; Hook dispatch
-         (contract-out [dispatch-hooks (->* (symbol? any/c any/c) (#:ctx any/c) hook-result?)])
+         (contract-out
+          [dispatch-hooks
+           (->* (symbol? any/c extension-registry?) (#:ctx (or/c extension-ctx? #f)) hook-result?)])
          current-hook-timeout-ms
          current-hook-violation-callback
          critical-hook?

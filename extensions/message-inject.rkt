@@ -20,12 +20,13 @@
          "api.rkt"
          "../util/protocol-types.rkt"
          "../util/ids.rkt"
+         "../util/event.rkt"
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt")
 
-(provide (contract-out [inject-system-message! (-> event-bus? string? string? any/c)]
-                       [inject-user-message! (-> event-bus? string? string? any/c)]
-                       [inject-assistant-message! (-> event-bus? string? string? any/c)])
+(provide (contract-out [inject-system-message! (-> event-bus? string? string? event?)]
+                       [inject-user-message! (-> event-bus? string? string? event?)]
+                       [inject-assistant-message! (-> event-bus? string? string? event?)])
          ;; Low-level: create injection message
          make-injection-message
          ;; Event topic constant
