@@ -38,9 +38,12 @@
               (tool-coordinator.rkt . "tool execution orchestration")
               (turn-orchestrator.rkt . "context assembly + provider turn (sole boundary module)")
               (package.rkt . "package audit reads extension manifests")
-              (extension-catalog.rkt . "extension loading/discovery")))
+              (extension-catalog.rkt . "extension loading/discovery")
+              (session-switch.rkt . "dynamic-require to extensions for lazy loading (avoids circular dependency)")))
   (extensions . ((dialog-api.rkt . "TUI dialog interface")
-                 (ui-surface.rkt . "TUI UI surface interface"))))
+                 (ui-surface.rkt . "TUI UI surface interface")
+                 (context.rkt . "imports runtime/session-types.rkt for context assembly (bidirectional — fragile)")
+                 (ext-package-manager.rkt . "imports runtime/ for package lifecycle management (bidirectional — fragile)"))))
 
  ;; Module size configuration
  (module-size

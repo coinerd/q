@@ -3,7 +3,8 @@
 ;; extensions/gsd-planning-state.rkt — Thin shim over gsd/ modules
 ;; STABILITY: evolving
 ;;
-;; DEPRECATED: Use extensions/gsd/* directly. This shim will be removed in v0.25.0.
+;; DEPRECATED (v0.29.13): Will be removed in v0.30.0.
+;; Migrate all imports to extensions/gsd/* directly.
 ;; All functions are pure delegations except reset-all-gsd-state! (coordinator reset).
 ;;
 ;; v0.21.6: steering.rkt import removed (dead code).

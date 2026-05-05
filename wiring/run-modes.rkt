@@ -36,12 +36,8 @@
                   merge-extension-commands
                   make-command-registry)
          (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge)
-         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
+         (only-in "mode-helpers.rkt" wire-security-config! wire-timeouts!)
          (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
-         (only-in "../tools/builtins/bash.rkt" current-execution-policy current-allowed-commands)
-         (only-in "../sandbox/subprocess.rkt"
-                  current-secret-scrub-denylist
-                  current-secret-scrub-allowlist)
          (only-in "../runtime/project-tree.rkt" project-tree->string)
          (only-in "../util/protocol-types.rkt"
                   event-ev
@@ -182,20 +178,7 @@
   (hash-set! base-config 'templates (resource-set-templates all-resources))
   (hash-set! base-config 'verbose? (cli-config-verbose? cfg))
   ;; v0.14.2 Wave 3: Set per-model timeouts from settings
-  ;; Config schema: { "timeouts": { "models": { "glm-5.1": { "request": 900 } } } }
-  (define models-config
-    (hash-ref (hash-ref (q-settings-merged settings) 'timeouts (hash)) 'models (hash)))
-  (define model-timeouts
-    (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
-      (if (and (hash? v) (hash-has-key? v 'request))
-          (hash-set acc
-                    (if (symbol? k)
-                        (symbol->string k)
-                        k)
-                    (hash-ref v 'request))
-          acc)))
-  (current-model-timeouts model-timeouts)
-  (current-http-request-timeout (http-request-timeout settings))
+  (wire-timeouts! settings)
 
   ;; v0.15.0 Wave 2: Wire trace logger if enabled in config
   (when (trace-enabled? settings)
@@ -204,29 +187,7 @@
     (start-trace-logger! trace-log))
 
   ;; v0.25.2 (F3): Wire security config from config.json
-  (define sec-config (security-config-from-settings settings))
-  (define policy-mode (hash-ref sec-config 'execution-policy-mode #f))
-  (when policy-mode
-    (current-execution-policy (if (string? policy-mode)
-                                  (string->symbol policy-mode)
-                                  policy-mode)))
-  (define allowed-cmds (hash-ref sec-config 'execution-policy-allowed '()))
-  (when (and (pair? allowed-cmds) (eq? (current-execution-policy) 'allowlist))
-    (current-allowed-commands allowed-cmds))
-  (define extra-denylist (hash-ref sec-config 'secret-scrub-extra-denylist '()))
-  (when (pair? extra-denylist)
-    (current-secret-scrub-denylist (map (lambda (s)
-                                          (if (regexp? s)
-                                              s
-                                              (regexp s)))
-                                        extra-denylist)))
-  (define scrub-allowlist (hash-ref sec-config 'secret-scrub-allowlist '()))
-  (when (pair? scrub-allowlist)
-    (current-secret-scrub-allowlist (map (lambda (s)
-                                           (if (regexp? s)
-                                               s
-                                               (regexp s)))
-                                         scrub-allowlist)))
+  (wire-security-config! settings)
 
   base-config)
 
@@ -292,19 +253,7 @@
   (hash-set! base-config 'settings new-settings)
   (hash-set! base-config 'model-registry new-reg)
   ;; v0.14.2 Wave 3: Refresh per-model timeouts
-  (define models-config
-    (hash-ref (hash-ref (q-settings-merged new-settings) 'timeouts (hash)) 'models (hash)))
-  (define model-timeouts
-    (for/fold ([acc (hash)]) ([(k v) (in-hash models-config)])
-      (if (and (hash? v) (hash-has-key? v 'request))
-          (hash-set acc
-                    (if (symbol? k)
-                        (symbol->string k)
-                        k)
-                    (hash-ref v 'request))
-          acc)))
-  (current-model-timeouts model-timeouts)
-  (current-http-request-timeout (http-request-timeout new-settings))
+  (wire-timeouts! new-settings)
   new-reg)
 
 ;; ============================================================

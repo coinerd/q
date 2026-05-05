@@ -1,5 +1,12 @@
 #lang racket/base
 
+;; tui/renderer.rkt — Terminal UI rendering engine
+;;
+;; Layer: TUI (interface layer)
+;; Purpose: Renders styled-lines to a tui-ubuf buffer for terminal display.
+;; Manages message layout, status line, diff rendering, and theme application.
+;; Consumes runtime events via state-events.rkt and renders to virtual buffer.
+
 (require racket/keyword
          racket/list
          racket/logging

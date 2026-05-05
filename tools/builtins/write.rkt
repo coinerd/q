@@ -1,5 +1,17 @@
 #lang racket/base
 
+;; tools/builtins/write.rkt — File write tool with security guards
+;;
+;; Layer: tools (interface layer consumer)
+;; Purpose: Write content to files on disk with path canonicalization,
+;; safe-mode checks, size limits (1MB per write, 50MB cumulative),
+;; and destructive-command detection. Also manages the session write
+;; budget parameter.
+;;
+;; Security: All writes are validated against safe-mode predicates,
+;; allowed-path checks, and the destructive-command blocklist before
+;; any filesystem modification.
+
 (require racket/file
          racket/string
          (only-in "../tool.rkt"
