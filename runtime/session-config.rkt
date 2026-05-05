@@ -8,10 +8,16 @@
 ;;
 ;; v0.30.3 W0: Struct definition + gen:dict interface.
 ;;
-;; NOTE (v0.30.3 W1 discovery): Racket's hash-ref does NOT dispatch to
-;; gen:dict. All 44+ consumer sites use hash-ref, not dict-ref. Full
-;; wiring requires migrating sites to dict-ref (v0.30.4+ scope). The
-;; struct + dict interface is ready for incremental adoption.
+;; NOTE (v0.30.3–v0.30.4 discovery):
+;;   1. Racket hash-ref does NOT dispatch to gen:dict.
+;;   2. gen:dict dict-ref on known struct fields returns the actual value
+;;      even if #f, ignoring the caller's default argument.
+;;   3. All 44+ consumer sites use hash-ref with various defaults.
+;;   Migration strategy options for v0.30.5+:
+;;   A) Change all sites to dict-ref (44+ changes, safe but tedious)
+;;   B) Make session-config wrap an internal hash instead of struct fields
+;;   C) Use (or (struct-accessor cfg) default) at each site
+;;   The struct + dict interface is ready for whichever strategy is chosen.
 
 (require racket/dict
          (only-in "../agent/event-bus.rkt" event-bus?)
@@ -221,11 +227,11 @@
    (hash-ref h 'project-dir #f)
    (hash-ref h 'home-dir #f)
    (hash-ref h 'config-path #f)
-   (hash-ref h 'system-instructions #f)
-   (hash-ref h 'max-context-tokens #f)
-   (hash-ref h 'max-iterations #f)
+   (hash-ref h 'system-instructions '())     ; was #f, but consumers expect list
+   (hash-ref h 'max-context-tokens 128000)
+   (hash-ref h 'max-iterations 50)
    (hash-ref h 'max-iterations-hard #f)
-   (hash-ref h 'thinking-level #f)
+   (hash-ref h 'thinking-level 'medium)      ; was #f, default from agent-session
    (hash-ref h 'working-set #f)
    (hash-ref h 'parallel-tools #f)
    (hash-ref h 'cancellation-token #f)
