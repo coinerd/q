@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.29.16 — 2026-05-05
+
+### Audit Remediation + Struct Refactor + Completion
+
+**Scope:** 3 waves (W0: loop-state structs, W1: duration fix + error migration + struct refactor, W2: fan-in + IVG + version)
+
+**v0.29.15 audit findings resolved:**
+- W1: `duration-ms` now computed from batch start time (was hardcoded 0)
+- W2: All 13 remaining bare `(error '` calls in runtime/ migrated to domain error types (session-error, argument-error, extension-error, provider-error). Runtime/ error migration: 100% complete.
+- W3: CHANGELOG metrics verified against actual diff (no estimates)
+- W4: `dispatch-loop-action` refactored from 26→12 params using `loop-infra` + `loop-counters` structs
+- W5: run-modes.rkt fan-in reduced from 12→10 `"../` imports (consolidated trace-logger + project-tree into mode-helpers.rkt)
+- W6: Stale tool-coordinator header comment updated
+
+**Struct refactor:**
+- `loop-infra` (7 fields): ctx, ext-reg, reg, bus, session-id, log-path, token
+- `loop-counters` (9 fields): iteration, consecutive-tool-count, seen-paths, intent-retry-count, consecutive-error-count, recent-tool-names, explore-count, implement-count, stall-retry-count
+- `handle-stop-action`: 15→9 params
+- `process-tool-results`: 10→4 params
+- `compute-next-counters`: 7 individual args→2 params, returns `loop-counters` struct
+- `on-recurse` closure: 11→3 args
+- Named-let `loop`: 11→3 bindings
+
+**Event system:**
+- Added `"tool-execution-start"` handlers to TUI state-events.rkt and CLI render.rkt
+- Updated dependency policy max-require-fan-in from 16→14
+- Added `iteration-events-wired` IVG check (9→10)
+
+**Files changed:** ~15 modified, 2 new (test-iteration-loop-state.rkt, iteration-events-wired IVG), 0 deleted
+**Lines changed:** ~380 added, ~280 removed (net +100)
+
+---
+
 ## v0.29.15 — 2026-05-05
 
 ### Warning Remediation + Event Wiring + Fan-in Reduction

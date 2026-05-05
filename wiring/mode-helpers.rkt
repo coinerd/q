@@ -3,7 +3,8 @@
 ;; wiring/mode-helpers.rkt — Extracted helpers from run-modes.rkt
 ;;
 ;; Purpose: Reduce require fan-in in run-modes.rkt by bundling
-;; security configuration and timeout wiring into a single module.
+;; security configuration, timeout wiring, trace logger setup,
+;; and project tree initialization into a single module.
 ;; Layer: wiring (interface construction helpers)
 ;;
 ;; NOTE (v0.29.14): This module still imports tools/builtins/bash.rkt
@@ -20,10 +21,15 @@
          (only-in "../sandbox/subprocess.rkt"
                   current-secret-scrub-denylist
                   current-secret-scrub-allowlist)
-         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts))
+         (only-in "../llm/stream.rkt" current-http-request-timeout current-model-timeouts)
+         (only-in "../runtime/trace-logger.rkt" make-trace-logger start-trace-logger!)
+         (only-in "../runtime/project-tree.rkt" project-tree->string))
 
 (provide wire-security-config!
-         wire-timeouts!)
+         wire-timeouts!
+         make-trace-logger
+         start-trace-logger!
+         project-tree->string)
 
 ;; Apply security settings from config to current parameters.
 ;; Extracted from build-runtime-from-cli to reduce fan-in.
