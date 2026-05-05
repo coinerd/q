@@ -26,7 +26,7 @@
                                      #:model "gpt-4"
                                      #:provider "openai"))
   (define evt (typed-event->event te))
-  (check-equal? (event-ev evt) "turn-start")
+  (check-equal? (event-ev evt) "turn.started")
   (check-equal? (event-session-id evt) "s1")
   (check-equal? (event-turn-id evt) "t1"))
 
@@ -68,7 +68,7 @@
                                         #:model "test"))
   (bus-emit-typed! bus te)
   (check-pred event? (unbox received))
-  (check-equal? (event-ev (unbox received)) "session-start"))
+  (check-equal? (event-ev (unbox received)) "session.started"))
 
 ;; ============================================================
 ;; Test: JSON round-trip for typed events
@@ -81,7 +81,7 @@
                                         #:role "assistant"
                                         #:model "gpt-4"))
   (define h (typed-event->jsexpr te))
-  (check-equal? (hash-ref h 'type) "message-start")
+  (check-equal? (hash-ref h 'type) "message.started")
   (check-equal? (hash-ref h 'role) "assistant")
   ;; Round-trip
   (define te2 (jsexpr->typed-event h))
@@ -147,7 +147,7 @@
                                            #:reason "user"))
   (check-pred session-shutdown-event? te)
   (define h (typed-event->jsexpr te))
-  (check-equal? (hash-ref h 'type) "session-shutdown")
+  (check-equal? (hash-ref h 'type) "session.shutdown")
   (check-equal? (hash-ref h 'reason) "user"))
 
 (test-case "provider typed events"

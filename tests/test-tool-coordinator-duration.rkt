@@ -54,7 +54,7 @@
   (register-tool! reg (make-sleep-tool 50))
   (define collected-durations (box '()))
   (subscribe! bus (lambda (evt)
-                    (when (equal? (event-event evt) "tool-execution-end")
+                    (when (equal? (event-event evt) "tool.execution.completed")
                       (define payload (event-payload evt))
                       (set-box! collected-durations
                                 (cons (hash-ref payload 'duration-ms 0)
@@ -79,7 +79,7 @@
   (register-tool! reg (make-sleep-tool 80))
   (define collected-durations (box '()))
   (subscribe! bus (lambda (evt)
-                    (when (equal? (event-event evt) "tool-execution-end")
+                    (when (equal? (event-event evt) "tool.execution.completed")
                       (define payload (event-payload evt))
                       (set-box! collected-durations
                                 (cons (hash-ref payload 'duration-ms 0)

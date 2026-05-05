@@ -47,13 +47,13 @@
                                   #:turn-id turn-id
                                   #:timestamp timestamp
                                   #:model model)
-  (session-start-event "session-start" timestamp session-id turn-id model))
+  (session-start-event "session.started" timestamp session-id turn-id model))
 
 (define (make-session-shutdown-event #:session-id session-id
                                      #:turn-id turn-id
                                      #:timestamp timestamp
                                      #:reason reason)
-  (session-shutdown-event "session-shutdown" timestamp session-id turn-id reason))
+  (session-shutdown-event "session.shutdown" timestamp session-id turn-id reason))
 
 ;; ============================================================
 ;; Input events
@@ -79,7 +79,7 @@
                                  #:timestamp timestamp
                                  #:model model
                                  #:provider provider)
-  (model-select-event "model-select" timestamp session-id turn-id model provider))
+  (model-select-event "model.selected" timestamp session-id turn-id model provider))
 
 ;; ============================================================
 ;; Agent events
@@ -92,14 +92,14 @@
                                 #:turn-id turn-id
                                 #:timestamp timestamp
                                 #:model model)
-  (agent-start-event "agent-start" timestamp session-id turn-id model))
+  (agent-start-event "agent.started" timestamp session-id turn-id model))
 
 (define (make-agent-end-event #:session-id session-id
                               #:turn-id turn-id
                               #:timestamp timestamp
                               #:reason reason
                               #:duration-ms duration-ms)
-  (agent-end-event "agent-end" timestamp session-id turn-id reason duration-ms))
+  (agent-end-event "agent.completed" timestamp session-id turn-id reason duration-ms))
 
 ;; ============================================================
 ;; Context events
@@ -112,4 +112,4 @@
                             #:timestamp timestamp
                             #:token-count token-count
                             #:window-size window-size)
-  (context-event "context" timestamp session-id turn-id token-count window-size))
+  (context-event "context.built" timestamp session-id turn-id token-count window-size))

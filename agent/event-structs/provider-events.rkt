@@ -29,7 +29,7 @@
                                      #:timestamp timestamp
                                      #:model model
                                      #:provider provider)
-  (provider-request-event "provider-request" timestamp session-id turn-id model provider))
+  (provider-request-event "model.request.started" timestamp session-id turn-id model provider))
 
 (define (make-provider-response-event #:session-id session-id
                                       #:turn-id turn-id
@@ -37,7 +37,7 @@
                                       #:model model
                                       #:provider provider
                                       #:latency-ms latency-ms)
-  (provider-response-event "provider-response"
+  (provider-response-event "model.request.completed"
                            timestamp
                            session-id
                            turn-id

@@ -39,7 +39,7 @@
   (emit-session-shutdown! bus "old-session-1" #f #:duration 42)
   (define evts (unbox captured))
   (check-equal? (length evts) 1)
-  (check-equal? (event-ev (car evts)) "session-shutdown")
+  (check-equal? (event-ev (car evts)) "session.shutdown")
   (check-equal? (hash-ref (hash-ref (event-payload (car evts)) 'reason) 'session-id) "old-session-1")
   (check-equal? (hash-ref (hash-ref (event-payload (car evts)) 'reason) 'duration) 42))
 
@@ -53,7 +53,7 @@
   (teardown-session-extensions! "old-session-1" bus #f #:duration 100)
   (define evts (unbox captured))
   (check-equal? (length evts) 1)
-  (check-equal? (event-ev (car evts)) "session-shutdown"))
+  (check-equal? (event-ev (car evts)) "session.shutdown"))
 
 ;; ============================================================
 ;; #705: Rebind extensions to new session
@@ -94,7 +94,7 @@
   (define evts (unbox captured))
   (check-equal? (length evts) 1)
   (define evt (car evts))
-  (check-equal? (event-ev evt) "session-start")
+  (check-equal? (event-ev evt) "session.started")
   (check-equal? (hash-ref (event-payload evt) 'session-id) "session-1")
   (check-equal? (hash-ref (hash-ref (event-payload evt) 'model) 'reason) 'new))
 
@@ -150,8 +150,8 @@
 
   ;; Should have session-start event only (no teardown for new)
   (define evts (unbox captured))
-  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session-start")) evts))
-  (define shutdown-evts (filter (lambda (e) (string=? (event-ev e) "session-shutdown")) evts))
+  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session.started")) evts))
+  (define shutdown-evts (filter (lambda (e) (string=? (event-ev e) "session.shutdown")) evts))
   (check-equal? (length start-evts) 1)
   (check-equal? (length shutdown-evts) 0))
 
@@ -177,8 +177,8 @@
 
   ;; Should have both shutdown and start events
   (define evts (unbox captured))
-  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session-start")) evts))
-  (define shutdown-evts (filter (lambda (e) (string=? (event-ev e) "session-shutdown")) evts))
+  (define start-evts (filter (lambda (e) (string=? (event-ev e) "session.started")) evts))
+  (define shutdown-evts (filter (lambda (e) (string=? (event-ev e) "session.shutdown")) evts))
   (check-equal? (length shutdown-evts) 1)
   (check-equal? (length start-evts) 1)
 

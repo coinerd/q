@@ -37,7 +37,7 @@
                                           #:provider "openai"))
       (check-true (turn-start-event? tse))
       (check-true (typed-event? tse))
-      (check-equal? (typed-event-type tse) "turn-start")
+      (check-equal? (typed-event-type tse) "turn.started")
       (check-equal? (turn-start-event-model tse) "gpt-4")
 
       (define tee (make-turn-end-event #:session-id "s1"

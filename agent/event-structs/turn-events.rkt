@@ -19,11 +19,11 @@
                                #:timestamp timestamp
                                #:model model
                                #:provider provider)
-  (turn-start-event "turn-start" timestamp session-id turn-id model provider))
+  (turn-start-event "turn.started" timestamp session-id turn-id model provider))
 
 (define (make-turn-end-event #:session-id session-id
                              #:turn-id turn-id
                              #:timestamp timestamp
                              #:reason reason
                              #:duration-ms duration-ms)
-  (turn-end-event "turn-end" timestamp session-id turn-id reason duration-ms))
+  (turn-end-event "turn.completed" timestamp session-id turn-id reason duration-ms))
