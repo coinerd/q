@@ -9,13 +9,13 @@
 **Architecture:**
 - Removed dead `cmd-go` handler from `extensions/gsd/core.rkt` (inlined into `gsd-command-dispatch`)
 - Decomposed 424-line `run-iteration-loop` god function into 4 focused sub-functions (`check-cancellation`, `process-tool-results`, `compute-next-counters`, `handle-stop-action`)
-- Extracted `wire-security-config!` and `wire-timeouts!` into new `wiring/mode-helpers.rkt`, reducing `run-modes.rkt` fan-in from 22→19 requires
+- Extracted `wire-security-config!` and `wire-timeouts!` into new `wiring/mode-helpers.rkt` (fan-in unchanged at ~24 project imports; mode-helpers bundles 3 deep runtime/settings imports)
 - Wired 2 session typed events in `runtime/session-switch.rkt` (replacing raw `make-event` with `emit-typed-event!`)
 - Migrated 4 bare `exn:fail` sites to domain error types (`raise-extension-error`, `raise-session-error`)
 - Tightened SDK contracts for `make-cancellation-token` and `make-in-memory-session-manager`
 - Fixed `jsexpr→model-response` cast safety on `#f` usage key in `llm/model.rkt`
 - Created 5 new test scaffolds for uncovered modules
-- Documented 4 layer violations in `docs/architecture/dependency-policy.rktd`
+- Documented 3 layer violations in `docs/architecture/dependency-policy.rktd`
 - Added module header comments to 3 files
 
 **IVG:** 7→8 checks (added `session-switch-typed-events`)

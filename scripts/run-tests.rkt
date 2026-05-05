@@ -1,21 +1,21 @@
 #lang racket/base
 
-;; run-tests.rkt — Parallel test runner with per-file result tracking.
+;; run-tests.rkt - Parallel test runner with per-file result tracking.
 ;;
-;; Rewrites the previous system/exit-code approach with per-file process*/ports
-;; spawning, semaphore-controlled parallelism, and structured failure summary.
+;; KEY FIX: Uses `racket <file>` directly instead of `raco test -t <file>`
+;; to avoid 17-19s per-file startup overhead on some Racket installations.
 ;;
 ;; Key functions:
-;;   make-test-file-result — construct a test-file-result
-;;   parse-raco-output     — parse passed/failed counts from raco output
-;;   extract-failure-lines — extract FAILURE blocks from raco output
-;;   run-single-file       — run one test file via process*/ports
-;;   collect-test-files    — gather test files by suite
-;;   run-all-files         — parallel dispatcher with progress dots
-;;   print-summary         — formatted summary table
-;;   save-failure-logs     — write failure output to /tmp
-;;   format-duration       — ms → human-readable
-;;   summary-exit-code     — compute exit code from failures/timeouts
+;;   make-test-file-result - construct a test-file-result
+;;   parse-raco-output     - parse passed/failed counts from test stdout
+;;   extract-failure-lines - extract FAILURE blocks from test output
+;;   run-single-file       - run one test file via process*/ports
+;;   collect-test-files    - gather test files by suite
+;;   run-all-files         - parallel dispatcher with progress dots
+;;   print-summary         - formatted summary table
+;;   save-failure-logs     - write failure output to /tmp
+;;   format-duration       - ms → human-readable
+;;   summary-exit-code     - compute exit code from failures/timeouts
 
 (require racket/string
          racket/match
@@ -83,7 +83,18 @@
               "e2e-"
               "ci-local"
               "metrics-readme"
-              "bump-version"))
+              "bump-version"
+              "examples-compile" ;; compiles all examples (~60s)
+              "pre-commit" ;; runs full pre-commit pipeline (~120s)
+              "racket-tooling" ;; spawns raco commands (~90s)
+              "run-tests" ;; tests the test runner itself (spawns subprocesses)
+              "audit-script" ;; spawns racket subprocesses (~30s)
+              "test-doctor" ;; spawns raco make subprocesses (~20s)
+              "check-deps" ;; modifies info.rkt in-place
+              "self-hosting" ;; loads full runtime (slow under load)
+              "tui-terminal" ;; TUI terminal I/O tests
+              "sync-readme" ;; file I/O tests, slow under load
+              ))
 
 (define (slow-file? f)
   (define base (file-name-from-path f))
@@ -116,49 +127,69 @@
   (cond
     [(pair? extra-files) extra-files]
     [else
+     (define all-files
+       (for/list ([f (in-directory (build-path base-dir "tests"))]
+                  #:when (and (file-exists? f)
+                              (let ([s (path->string f)])
+                                (and (string-suffix? s ".rkt")
+                                     (not (string-contains? s "/compiled/"))))))
+         (path->string (find-relative-path base-dir f))))
      (case suite
-       [(all) '("tests/")]
-       [else
-        (define all-files
-          (for/list ([f (in-directory (build-path base-dir "tests"))]
-                     #:when (and (file-exists? f)
-                                 (let ([s (path->string f)])
-                                   (and (string-suffix? s ".rkt")
-                                        (not (string-contains? s "/compiled/"))))))
-            (path->string (find-relative-path base-dir f))))
-        (case suite
-          [(fast) (filter (lambda (f) (not (slow-file? f))) all-files)]
-          [(slow) (filter slow-file? all-files)]
-          [(tui) (filter tui-file? all-files)]
-          [(smoke) (filter (lambda (f) (not (smoke-excluded? f))) all-files)]
-          [else '("tests/")])])]))
+       [(all) all-files]
+       [(fast) (filter (lambda (f) (not (slow-file? f))) all-files)]
+       [(slow) (filter slow-file? all-files)]
+       [(tui) (filter tui-file? all-files)]
+       [(smoke) (filter (lambda (f) (not (smoke-excluded? f))) all-files)]
+       [else '("tests/")])]))
 
 ;; ---------------------------------------------------------------------------
-;; parse-raco-output — extract passed/failed/total from raco test stdout
+;; parse-raco-output - extract passed/failed/total from test stdout
 ;; ---------------------------------------------------------------------------
+;;
+;; Parses two output formats:
+;;
+;; 1. `racket <file>` with rackunit/text-ui:
+;;    "13 success(es) 0 failure(s) 0 error(s) 13 test(s) run"
+;;
+;; 2. Legacy `raco test` format (still supported):
+;;    "5 tests passed\n2 tests failed"
 
 (define (parse-raco-output stdout-bytes)
   (define output (bytes->string* stdout-bytes))
   (define lines (string-split output "\n"))
 
-  (define passed
-    (for/fold ([n 0]) ([line (in-list lines)])
-      (define m (regexp-match #rx"([0-9]+) tests? passed" line))
-      (if m
-          (string->number (cadr m))
-          n)))
+  ;; Try rackunit/text-ui format first
+  (define text-ui-match
+    (for/first ([line (in-list lines)])
+      (regexp-match
+       #px"([0-9]+) success\\(es\\) ([0-9]+) failure\\(s\\)(?: ([0-9]+) error\\(s\\))? ([0-9]+) test\\(s\\) run"
+       line)))
 
-  (define failed
-    (for/fold ([n 0]) ([line (in-list lines)])
-      (define m (regexp-match #rx"([0-9]+) tests? failed" line))
-      (if m
-          (string->number (cadr m))
-          n)))
+  (cond
+    [text-ui-match
+     (define passed (string->number (cadr text-ui-match)))
+     (define failed (string->number (caddr text-ui-match)))
+     (values passed failed (+ passed failed))]
+    [else
+     ;; Fall back to legacy raco test format
+     (define passed
+       (for/fold ([n 0]) ([line (in-list lines)])
+         (define m (regexp-match #rx"([0-9]+) tests? passed" line))
+         (if m
+             (string->number (cadr m))
+             n)))
 
-  (values passed failed (+ passed failed)))
+     (define failed
+       (for/fold ([n 0]) ([line (in-list lines)])
+         (define m (regexp-match #rx"([0-9]+) tests? failed" line))
+         (if m
+             (string->number (cadr m))
+             n)))
+
+     (values passed failed (+ passed failed))]))
 
 ;; ---------------------------------------------------------------------------
-;; extract-failure-lines — pull FAILURE context blocks from output
+;; extract-failure-lines - pull FAILURE context blocks from output
 ;; ---------------------------------------------------------------------------
 
 (define FAILURE-START #rx"^-+ FAILURE -+$")
@@ -183,7 +214,7 @@
     line))
 
 ;; ---------------------------------------------------------------------------
-;; run-single-file — spawn process for one test file
+;; run-single-file - spawn process for one test file
 ;; ---------------------------------------------------------------------------
 
 (define (run-single-file test-path #:timeout [timeout #f])
@@ -193,8 +224,8 @@
         (simplify-path (build-path base-dir test-path))))
   (define stdout-out (open-output-bytes))
   (define stderr-out (open-output-bytes))
-  (define raco-bin (find-executable-path "raco"))
-  (define args (list raco-bin "test" "-t" resolved-path))
+  (define racket-bin (find-executable-path "racket"))
+  (define args (list racket-bin resolved-path))
 
   (define t0 (current-inexact-milliseconds))
 
@@ -257,7 +288,7 @@
                        total)]))
 
 ;; ---------------------------------------------------------------------------
-;; run-all-files — parallel dispatcher with progress dots
+;; run-all-files - parallel dispatcher with progress dots
 ;; ---------------------------------------------------------------------------
 
 (define (run-all-files files jobs timeout)
@@ -295,7 +326,7 @@
   (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
 
 ;; ---------------------------------------------------------------------------
-;; print-summary — formatted output
+;; print-summary - formatted output
 ;; ---------------------------------------------------------------------------
 
 (define (print-summary results total-start-ms)
@@ -344,7 +375,7 @@
         (printf "    ~a~n" line)))))
 
 ;; ---------------------------------------------------------------------------
-;; save-failure-logs — write full failure output to /tmp
+;; save-failure-logs - write full failure output to /tmp
 ;; ---------------------------------------------------------------------------
 
 (define (save-failure-logs results)
@@ -371,7 +402,7 @@
                              (display (bytes->string* (test-file-result-stderr-bytes f)) out)))))
 
 ;; ---------------------------------------------------------------------------
-;; format-duration — ms → human-readable
+;; format-duration - ms → human-readable
 ;; ---------------------------------------------------------------------------
 
 (define (format-duration ms)
@@ -415,7 +446,7 @@
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
-  (displayln "  all     Entire tests/ directory (via raco test)")
+  (displayln "  all     Entire tests/ directory (per-file spawn)")
   (displayln "  fast    All tests except slow patterns (per-file spawn)")
   (displayln "  slow    Only sandbox/subprocess tests")
   (displayln "  tui     Files in tests/tui/")
@@ -457,64 +488,41 @@
     (displayln "No test files matched the selected suite.")
     (exit 1))
 
-  ;; For 'all suite with "tests/" path, fall back to raco test system call
-  ;; (preserving existing behavior for the default case)
-  (cond
-    [(and (eq? suite 'all) (not (pair? extra-files)))
-     ;; Legacy path: single raco test call for entire tests/ directory
-     (define timeout-arg
-       (if timeout
-           (list "--timeout" (number->string timeout))
-           '()))
-     (define args
-       (append '("--process" "--jobs") (list (number->string jobs)) timeout-arg '("tests/")))
-     (define cmd (string-append "raco test " (string-join args " ")))
-     (printf ";; run-tests: suite=~a files=~a jobs=~a~n" "all" "tests/" jobs)
-     (printf ";; command: ~a~n~n" cmd)
-     (define t0 (current-inexact-milliseconds))
-     (define exit-code (system/exit-code cmd))
-     (define elapsed (exact-round (- (current-inexact-milliseconds) t0)))
-     (newline)
-     (printf ";; run-tests: done elapsed=~a exit=~a~n" (format-duration elapsed) exit-code)
-     (exit exit-code)]
+  ;; Per-file spawning with result tracking
+  (define timeout-ms (and timeout (* timeout 1000)))
+  (define suite-label (symbol->string suite))
+  (define n-files (length suite-files))
 
-    [else
-     ;; New path: per-file spawning with result tracking
-     (define timeout-ms (and timeout (* timeout 1000)))
-     (define suite-label (symbol->string suite))
-     (define n-files (length suite-files))
+  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a~n"
+          suite-label
+          n-files
+          jobs
+          sequential?)
+  (newline)
 
-     (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a~n"
-             suite-label
-             n-files
-             jobs
-             sequential?)
-     (newline)
+  (define t0 (current-inexact-milliseconds))
+  (define results (run-all-files suite-files jobs timeout-ms))
+  (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
 
-     (define t0 (current-inexact-milliseconds))
-     (define results (run-all-files suite-files jobs timeout-ms))
-     (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
+  (print-summary results total-elapsed)
+  (save-failure-logs results)
 
-     (print-summary results total-elapsed)
-     (save-failure-logs results)
+  (define failed-files
+    (count (lambda (r)
+             (and (not (= (test-file-result-exit-code r) 0))
+                  (not (= (test-file-result-exit-code r) 2))))
+           results))
+  (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
 
-     (define failed-files
-       (count (lambda (r)
-                (and (not (= (test-file-result-exit-code r) 0))
-                     (not (= (test-file-result-exit-code r) 2))))
-              results))
-     (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+  (exit (summary-exit-code failed-files timeout-files)))
 
-     (exit (summary-exit-code failed-files timeout-files))]))
-
-;; Entry point — only run when executed as a script, not when required
-;; The test file calls dynamic-require which does NOT trigger main.
 ;; Entry point — only auto-run when executed directly as a script.
 ;; When dynamic-require loads this module, it won't trigger main
-;; because we check that the run-file path matches this script.
-(define this-script-path
-  (simplify-path (build-path (find-system-path (quote orig-dir)) "scripts" "run-tests.rkt")))
+;; because we check the exact filename (not just suffix).
 (define invoked-directly?
-  (regexp-match? #rx"run-tests.rkt$" (path->string (find-system-path (quote run-file)))))
+  (let ([run-file (find-system-path (quote run-file))])
+    (and (path? run-file)
+         (let ([base (file-name-from-path run-file)])
+           (and base (equal? (path->string base) "run-tests.rkt"))))))
 (when invoked-directly?
   (main (vector->list (current-command-line-arguments))))

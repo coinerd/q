@@ -112,6 +112,20 @@
   (check-equal? failed 2)
   (check-equal? total 5))
 
+(test-case "parse-raco-output: rackunit/text-ui format (successes)"
+  (define parse (runner-ref 'parse-raco-output))
+  (define-values (passed failed total) (parse #"13 success(es) 0 failure(s) 0 error(s) 13 test(s) run\n0\n"))
+  (check-equal? passed 13)
+  (check-equal? failed 0)
+  (check-equal? total 13))
+
+(test-case "parse-raco-output: rackunit/text-ui with failures"
+  (define parse (runner-ref 'parse-raco-output))
+  (define-values (passed failed total) (parse #"5 success(es) 2 failure(s) 1 error(s) 8 test(s) run\n"))
+  (check-equal? passed 5)
+  (check-equal? failed 2)
+  (check-equal? total 7))
+
 ;; ---------------------------------------------------------------------------
 ;; 13.1: extract-failure-lines
 ;; ---------------------------------------------------------------------------
@@ -217,10 +231,11 @@
 ;; 13.3: collect-test-files (suite filtering)
 ;; ---------------------------------------------------------------------------
 
-(test-case "collect-test-files: all suite returns tests/ path"
+(test-case "collect-test-files: all suite returns all files"
   (define collect (runner-ref 'collect-test-files))
   (define files (collect 'all))
-  (check-not-false (member "tests/" files)))
+  (check-true (list? files))
+  (check-true (> (length files) 400)))
 
 (test-case "collect-test-files: smoke suite returns list of files"
   (define collect (runner-ref 'collect-test-files))
