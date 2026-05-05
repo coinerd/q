@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.30.5 — 2026-05-05
+
+### Config Migration Complete
+
+**Goal:** Complete config migration — all runtime files use dict-ref for session-config access
+
+**W0 — Audit + new smart accessors:**
+- Audited all runtime/ files: zero remaining `hash-ref config` sites
+- `runtime/session-config.rkt`: Added 3 new smart accessors:
+  - `config-max-tokens` (default 8192)
+  - `config-token-budget-threshold` (default #f)
+  - `config-session-index` (default #f)
+- 27 total smart accessors now available
+- 5 new unit tests for new accessors (29 total session-config tests)
+
+**W1 — Module docs + migration notes:**
+- Updated session-config.rkt header with complete design documentation
+- Documented all 7 consumer files that use dict-ref
+- Noted wiring/ files intentionally use raw hashes (CLI-derived configs)
+- Documented key Racket limitation: `hash-ref` does NOT dispatch to `gen:dict`
+
+
 ## v0.30.4 — 2026-05-05
 
 ### Config Migration Batch 1
