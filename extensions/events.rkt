@@ -15,7 +15,8 @@
 
 (require racket/contract
          "api.rkt"
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         "../util/event.rkt")
 
 (define-logger ext-events)
 
@@ -23,7 +24,7 @@
                         (->* (event-bus? string? procedure?)
                              (#:filter (or/c procedure? #f))
                              exact-nonnegative-integer?)]
-                       [ext-publish! (-> event-bus? any/c any/c)]
+                       [ext-publish! (-> event-bus? event? event?)]
                        [ext-unsubscribe! (-> event-bus? string? exact-nonnegative-integer? void?)])
          ;; Bulk cleanup
          ext-unsubscribe-all!

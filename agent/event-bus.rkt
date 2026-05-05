@@ -13,14 +13,16 @@
 
 (require racket/contract
          "../util/protocol-types.rkt"
+         "../util/event.rkt"
          "event-types.rkt")
 
 ;; Pub/sub event bus
-(provide (contract-out [make-event-bus (-> event-bus?)]
-                       [subscribe!
-                        (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) any/c)]
-                       [unsubscribe! (-> event-bus? any/c void?)]
-                       [publish! (-> event-bus? any/c any/c)])
+(provide (contract-out
+          [make-event-bus (-> event-bus?)]
+          [subscribe!
+           (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
+          [unsubscribe! (-> event-bus? exact-nonnegative-integer? void?)]
+          [publish! (-> event-bus? event? event?)])
          event-bus?
          bus-emit-typed!
          typed-event->event
