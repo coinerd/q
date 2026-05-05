@@ -18,7 +18,8 @@
 ;;   extensions/context.rkt → make-extension-ctx (extension registration)
 ;; ───────────────────────────────────────────────────────────────
 
-(require racket/contract
+(require (only-in racket/dict dict-ref in-dict)
+         racket/contract
          racket/list
          racket/promise
          json
@@ -95,11 +96,11 @@
                        string?
                        string?
                        (or/c any/c #f)
-                       hash?)
+                       any/c)
                 (#:tool-list-proc (or/c procedure? #f))
                 any/c)]
           [build-assembled-context
-           (-> list? hash? (or/c any/c #f) event-bus? string? exact-nonnegative-integer? list?)]
+           (-> list? any/c (or/c any/c #f) event-bus? string? exact-nonnegative-integer? list?)]
           [register-session-extensions! (-> any/c any/c event-bus? string? (listof hash?))]))
 
 ;; ============================================================
@@ -110,12 +111,12 @@
 ;; Returns the assembled message list.
 (define (build-assembled-context ctx-to-use config ext-reg bus session-id iteration)
   ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
-  (define tier-b-count (hash-ref config 'tier-b-count 20))
-  (define tier-c-count (hash-ref config 'tier-c-count 4))
-  (define max-tokens (hash-ref config 'max-tokens 8192))
+  (define tier-b-count (dict-ref config 'tier-b-count 20))
+  (define tier-c-count (dict-ref config 'tier-c-count 4))
+  (define max-tokens (dict-ref config 'max-tokens 8192))
   ;; v0.26.0: Extract working set from config
   ;; v0.29.5 W3: Defer ws-message resolution
-  (define ws (hash-ref config 'working-set #f))
+  (define ws (dict-ref config 'working-set #f))
   (define ws-messages-promise
     (delay
       (if ws
@@ -267,14 +268,14 @@
   ;; Passing it to make-model-request causes hash-set contract violations
   ;; because provider.rkt's ensure-model-setting calls hash-set (immutable-only).
   (define provider-settings-raw
-    (for/hash ([(k v) (in-hash config)]
+    (for/hash ([(k v) (in-dict config)]
                #:when (memq k '(max-tokens temperature top_p frequency_penalty presence_penalty)))
       (values k v)))
   ;; v0.15.1 Wave 1: Also resolve max-tokens from config if not in flat runtime hash.
   ;; Config may have max-tokens in: top-level, providers.<name>.max-tokens, or models.default.max-tokens.
   (define provider-settings
-    (let* ([settings (hash-ref config 'settings #f)]
-           [model-name (hash-ref config 'model-name #f)]
+    (let* ([settings (dict-ref config 'settings #f)]
+           [model-name (dict-ref config 'model-name #f)]
            [resolve-max-tokens
             (lambda ()
               (or

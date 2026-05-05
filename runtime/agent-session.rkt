@@ -60,7 +60,14 @@
                   reset-shutdown-flags!)
          ;; v0.22.9: extracted from this module
          (only-in "session-lifecycle.rkt" run-prompt! ensure-persisted! buffer-or-append!)
-         (only-in "session-compaction.rkt" maybe-compact-context))
+         (only-in "session-compaction.rkt" maybe-compact-context)
+         (only-in "session-config.rkt"
+                  session-config?
+                  hash->session-config
+                  config-provider config-tool-registry config-event-bus
+                  config-extension-registry config-model-name
+                  config-system-instructions config-thinking-level
+                  config-session-dir))
 
 (provide agent-session?
          agent-session-session-dir
@@ -85,8 +92,8 @@
          set-agent-session-config!
          ensure-persisted!
          buffer-or-append!
-         (contract-out [make-agent-session (-> hash? agent-session?)]
-                       [resume-agent-session (-> string? hash? agent-session?)]
+         (contract-out [make-agent-session (-> any/c agent-session?)]
+                       [resume-agent-session (-> string? any/c agent-session?)]
                        [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
                        [run-prompt! (-> agent-session? (or/c string? message?) any)]
                        [session-id (-> agent-session? string?)]
@@ -125,8 +132,10 @@
 ;; ============================================================
 
 (define (make-agent-session config)
+  ;; v0.30.4: Convert hash to session-config for typed access
+  (define cfg (if (session-config? config) config (hash->session-config config)))
   (define sid (generate-id))
-  (define base-dir (hash-ref config 'session-dir))
+  (define base-dir (config-session-dir cfg))
   (define dir (build-path base-dir sid))
 
   (define session-created-at (now-seconds))
@@ -134,22 +143,22 @@
   (define sess
     (agent-session sid
                    dir
-                   (hash-ref config 'provider)
-                   (hash-ref config 'tool-registry)
-                   (hash-ref config 'event-bus)
-                   (hash-ref config 'extension-registry #f)
-                   (hash-ref config 'model-name #f)
-                   (hash-ref config 'system-instructions '())
+                   (config-provider cfg)
+                   (config-tool-registry cfg)
+                   (config-event-bus cfg)
+                   (config-extension-registry cfg)
+                   (config-model-name cfg)
+                   (config-system-instructions cfg)
                    #f ; index
                    (make-queue)
-                   config
+                   cfg
                    #t ; active
                    session-created-at
                    #f ; compacting?
                    #f ; last-compaction-time
                    #f ; persisted?
                    '() ; pending-entries
-                   (hash-ref config 'thinking-level 'medium)
+                   (config-thinking-level cfg)
                    #f ; shutdown-requested?
                    #f ; force-shutdown?
                    #f)) ; prompt-running?
@@ -162,7 +171,7 @@
 
   ;; Dispatch 'session-start hook
   (define-values (_start-payload _session-start-res)
-    (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
+    (maybe-dispatch-hooks (config-extension-registry cfg)
                           'session-start
                           (session-start-payload sid config 'new)))
 
@@ -170,7 +179,7 @@
   (wire-session-event-handlers! sess fork-session)
 
   ;; #668: Emit resources.discover event
-  (let ([ext-reg (hash-ref config 'extension-registry #f)])
+  (let ([ext-reg (config-extension-registry cfg)])
     (emit-session-event! (agent-session-event-bus sess)
                          sid
                          "resources.discover"
@@ -188,7 +197,9 @@
 ;; ============================================================
 
 (define (resume-agent-session session-id config)
-  (define base-dir (hash-ref config 'session-dir))
+  ;; v0.30.4: Convert hash to session-config
+  (define cfg (if (session-config? config) config (hash->session-config config)))
+  (define base-dir (config-session-dir cfg))
   (define dir (build-path base-dir session-id))
 
   (unless (directory-exists? dir)
@@ -208,7 +219,7 @@
   ;; Dispatch 'session-before-switch hook
   (define switch-payload (session-switch-payload session-id 'resume))
   (define-values (_amended-switch switch-res)
-    (maybe-dispatch-hooks (hash-ref config 'extension-registry #f)
+    (maybe-dispatch-hooks (config-extension-registry cfg)
                           'session-before-switch
                           switch-payload))
   (when (and switch-res (eq? (hook-result-action switch-res) 'block))
@@ -217,22 +228,22 @@
   (define sess
     (agent-session session-id
                    dir
-                   (hash-ref config 'provider)
-                   (hash-ref config 'tool-registry)
-                   (hash-ref config 'event-bus)
-                   (hash-ref config 'extension-registry #f)
-                   (hash-ref config 'model-name #f)
-                   (hash-ref config 'system-instructions '())
+                   (config-provider cfg)
+                   (config-tool-registry cfg)
+                   (config-event-bus cfg)
+                   (config-extension-registry cfg)
+                   (config-model-name cfg)
+                   (config-system-instructions cfg)
                    idx
                    (make-queue)
-                   config
+                   cfg
                    #t
                    (now-seconds)
                    #f
                    #f
                    #t
                    '()
-                   (hash-ref config 'thinking-level 'medium)
+                   (config-thinking-level cfg)
                    #f
                    #f
                    #f))
@@ -243,7 +254,7 @@
                        (session-id-payload session-id))
 
   (define resume-start-payload (session-start-payload session-id config 'resume))
-  (maybe-dispatch-hooks (hash-ref config 'extension-registry #f) 'session-start resume-start-payload)
+  (maybe-dispatch-hooks (config-extension-registry cfg) 'session-start resume-start-payload)
 
   (wire-session-event-handlers! sess fork-session)
 

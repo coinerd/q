@@ -7,6 +7,7 @@
 ;; Token budget checking and compaction triggering.
 
 (require racket/contract
+         (only-in racket/dict dict-ref)
          "../llm/token-budget.rkt"
          "../runtime/compactor.rkt"
          (only-in "../util/protocol-types.rkt" message-role message-content content-part->jsexpr)
@@ -137,6 +138,6 @@
 ;;; context exceeds 90% budget during tool-call loops.
 ;;; Returns compacted context or original if compaction not possible.
 (define (compact-context-mid-turn sess context)
-  (define max-tokens (hash-ref (agent-session-config sess) 'max-context-tokens 128000))
+  (define max-tokens (dict-ref (agent-session-config sess) 'max-context-tokens 128000))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (maybe-compact-context sess context budget-threshold))

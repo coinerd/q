@@ -17,7 +17,8 @@
 ;; Upward imports into tools/ and extensions/ layers. See iteration.rkt
 ;; header comment for full rationale.
 
-(require racket/contract
+(require (only-in racket/dict dict-ref)
+         racket/contract
          racket/contract
          racket/list
          racket/path
@@ -77,7 +78,7 @@
                             string? ; session-id
                             (or/c path-string? path?) ; log-path
                             (or/c cancellation-token? #f) ; token
-                            hash? ; config
+                            any/c ; config
                             (listof message?))]))
 
 ;; ============================================================
@@ -181,13 +182,13 @@
                                      #:tool-name (hash-ref payload 'tool-name)
                                      #:tool-call-id (hash-ref payload 'tool-call-id)))]
                 [else (emit-session-event! bus session-id event-type payload)]))
-            #:runtime-settings (or (hash-ref config 'settings #f)
-                                   (make-minimal-settings #:provider (hash-ref config 'provider #f)
-                                                          #:model (hash-ref config 'model-name #f)))
+            #:runtime-settings (or (dict-ref config 'settings #f)
+                                   (make-minimal-settings #:provider (dict-ref config 'provider #f)
+                                                          #:model (dict-ref config 'model-name #f)))
             #:call-id (generate-id)
             #:session-metadata
-            (hasheq 'session-id session-id 'session-index (hash-ref config 'session-index #f)))
-           #:parallel? (hash-ref config 'parallel-tools #t)))))
+            (hasheq 'session-id session-id 'session-index (dict-ref config 'session-index #f)))
+           #:parallel? (dict-ref config 'parallel-tools #t)))))
 
   ;; Dispatch 'tool.execution.end hook after tool batch
   (when (and ext-reg (not tool-call-blocked?))
