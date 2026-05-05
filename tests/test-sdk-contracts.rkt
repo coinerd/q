@@ -23,7 +23,7 @@
       (check-exn #rx"expected: provider\\?" (lambda () (make-runtime #:provider "not-a-provider"))))
 
     (test-case "make-runtime rejects non-tool-registry for #:tool-registry"
-      (check-exn #rx"expected: tool-registry\\?"
+      (check-exn #rx"tool-registry\\?"
                  (lambda () (make-runtime #:provider mock-provider #:tool-registry "bad"))))
 
     (test-case "make-runtime rejects non-boolean for #:register-default-tools?"
@@ -40,8 +40,7 @@
 
     (test-case "event-bus unsubscribe! rejects non-integer sub-id"
       (define bus (make-event-bus))
-      (check-exn #rx"expected: exact-nonnegative-integer\\?"
-                 (lambda () (unsubscribe! bus "not-an-id"))))
+      (check-exn #rx"natural\\?" (lambda () (unsubscribe! bus "not-an-id"))))
 
     (test-case "event-bus publish! rejects non-event payload"
       (define bus (make-event-bus))

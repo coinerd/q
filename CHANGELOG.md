@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.30.0 — 2026-05-05
+
+### Architecture Debt Resolution: `any/c` Predicate Tightening
+
+**Goal:** Replace all 25 actionable `any/c` with typed predicates across 10 files (zero behavioral change)
+
+**Contract tightening (W0 — Core SDK + Event Bus, 14 sites):**
+- `agent/event-bus.rkt`: `subscribe!` → `exact-nonnegative-integer?`, `unsubscribe!` → `exact-nonnegative-integer?`, `publish!` → `event?`
+- `extensions/events.rkt`: `ext-publish!` → `event?`
+- `interfaces/sdk-core.rkt`: `make-runtime` 7 kwargs tightened (`provider?`, `tool-registry?`, `extension-registry?`, `event-bus?`, `cancellation-token?`, `boolean?` ×2), `run-prompt!` return → `(or/c hash? #f 'no-active-session)`
+- `interfaces/sdk-public.rkt`: `publish!` → `event?`
+
+**Contract tightening (W1 — Provider + Tool Coordinator + Extensions, 12 sites):**
+- `llm/provider.rkt`: `provider-send` → `model-response?`, `provider-stream` → `generator?`, `provider-count-tokens` → `model-request?`, `make-mock-provider` → `model-response?`
+- `runtime/tool-coordinator.rkt`: `ext-reg` → `extension-registry?`, `bus` → `event-bus?`, `token` → `cancellation-token?`
+- `extensions/hooks.rkt`: `dispatch-hooks` registry → `extension-registry?`, ctx → `(or/c extension-ctx? #f)`
+- `extensions/message-inject.rkt`: all 3 inject fns return `event?`
+
+**Contract tightening (W2 — Tools + Version Bump, 4 sites):**
+- `tools/tool.rkt`: `make-exec-context` 4 kwargs tightened (`cancellation-token?`, `hash?` ×3)
+
+**Testing:**
+- Added `tests/test-sdk-contracts.rkt` with 9 contract-blame verification tests
+
+**Metrics:** 25/25 `any/c` replacements, 10 files changed, ~50 LOC contract annotations
+
+---
+
 ## v0.29.17 — 2026-05-05
 
 ### Audit Remediation + Test Coverage + Cleanup
