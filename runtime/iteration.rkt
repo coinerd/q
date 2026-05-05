@@ -101,7 +101,28 @@
          "working-set.rkt"
          (only-in "context-policy.rkt" estimate-message-tokens))
 
-(provide run-iteration-loop
+(provide (contract-out [run-iteration-loop
+                        (->* (list? any/c
+                                    event-bus?
+                                    (or/c any/c #f)
+                                    (or/c any/c #f)
+                                    (or/c path-string? path?)
+                                    string?
+                                    exact-nonnegative-integer?)
+                             (#:cancellation-token (or/c any/c #f)
+                              #:config hash?
+                              #:queue (or/c any/c #f)
+                              #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
+                              #:injected-box (or/c box? #f)
+                              #:shutdown-check (or/c procedure? #f)
+                              #:force-shutdown-check (or/c procedure? #f)
+                              #:compact-proc (or/c procedure? #f)
+                              #:estimate-tokens (or/c procedure? #f)
+                              #:inject-topic (or/c string? #f)
+                              #:working-set (or/c any/c #f)
+                              #:session (or/c any/c #f))
+                             any/c)]
+                       [decide-next-action (-> iteration-ctx? any/c symbol?)])
          ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
          emit-session-event!
          maybe-dispatch-hooks
@@ -126,7 +147,6 @@
          resolve-inject-topic
          ;; v0.29.1: Pure decision function exports
          iteration-ctx
-         decide-next-action
          known-termination-reasons)
 
 ;; ============================================================
