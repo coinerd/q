@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.30.9 — 2026-05-05
+
+### Further TR Migrations
+
+**Goal:** Migrate budgeting.rkt to Typed Racket, investigate selection.rkt
+
+**W0 — budgeting.rkt → Typed Racket:**
+- Migrated `runtime/context-assembly/budgeting.rkt` from `#lang racket/base` to `#lang typed/racket`
+- TR modules: 7→8
+- Key learning: `(require racket/contract)` conflicts with TR's `->*` type constructor; removed since struct type annotations provide the boundary safety
+- Removed redundant `#:guard` — TR's Positive-Integer/Nonnegative-Integer type annotations enforce at boundary
+
+**W1 — selection.rkt investigation:**
+- Blocker documented: local mutable hash `token-memo` for memoization
+- Resolution path identified: extract memo into function parameter, add thin impure shell
+- Deferred to backlog (~2 waves estimated)
+
+
 ## v0.30.8 — 2026-05-05
 
 ### Module Decomposition: tools/tool.rkt
