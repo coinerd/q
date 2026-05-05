@@ -77,8 +77,8 @@
    ;; emit-typed-event! must have NOTE comment in event-emitter.rkt (deferred dead code)
    (list "emit-typed-event-note"
          (lambda ()
-           (>= (grep-count "NOTE.*v0.29.12.*emit-typed-event" "agent/event-emitter.rkt") 1))
-         "emit-typed-event! missing NOTE comment documenting deferred status")
+           (>= (grep-count "NOTE.*v0.29.14.*emit-typed-event" "agent/event-emitter.rkt") 1))
+         "emit-typed-event! missing NOTE comment documenting production callers")
    ;; session-bytes-written must have DEPRECATED comment
    (list "session-bytes-written-deprecated"
          (lambda ()

@@ -262,9 +262,7 @@
                           (assert-payload "turn.cancelled"
                                           (hasheq 'reason "force-shutdown" 'iteration iteration)
                                           turn-cancelled-payload/c))
-     (make-loop-result (append ctx '())
-                       'cancelled
-                       (hasheq 'reason "force-shutdown" 'iteration iteration))]
+     (make-loop-result ctx 'cancelled (hasheq 'reason "force-shutdown" 'iteration iteration))]
     [(and token (cancellation-token-cancelled? token))
      (emit-session-event! bus
                           session-id
@@ -272,9 +270,7 @@
                           (assert-payload "turn.cancelled"
                                           (hasheq 'reason "cancellation-token" 'iteration iteration)
                                           turn-cancelled-payload/c))
-     (make-loop-result (append ctx '())
-                       'cancelled
-                       (hasheq 'reason "cancellation-token" 'iteration iteration))]
+     (make-loop-result ctx 'cancelled (hasheq 'reason "cancellation-token" 'iteration iteration))]
     ;; Graceful shutdown — finish after current iteration
     [(and shutdown-check (shutdown-check))
      (emit-session-event! bus
@@ -283,30 +279,13 @@
                           (assert-payload "turn.cancelled"
                                           (hasheq 'reason "graceful-shutdown" 'iteration iteration)
                                           turn-cancelled-payload/c))
-     (make-loop-result (append ctx '())
-                       'completed
-                       (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
+     (make-loop-result ctx 'completed (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
     [else #f]))
 
 ;; process-tool-results: Execute pending tool calls, update working set,
 ;; and compute new iteration counters. Shared by 'continue and 'stop-soft-limit.
 ;; Returns updated-ctx (with tool results appended).
-(define (process-tool-results new-msgs
-                              ctx
-                              ext-reg
-                              reg
-                              bus
-                              session-id
-                              log-path
-                              token
-                              config
-                              ws
-                              seen-paths
-                              explore-count
-                              implement-count
-                              consecutive-error-count
-                              recent-tool-names
-                              iteration)
+(define (process-tool-results new-msgs ctx ext-reg reg bus session-id log-path token config ws)
   (define updated-ctx
     (handle-tool-calls-pending new-msgs ctx ext-reg reg bus session-id log-path token config))
   (define current-tool-calls (extract-tool-calls-from-messages new-msgs))
@@ -395,11 +374,8 @@
                             ctx-with-injected
                             ws
                             intent-retry-count
-                            consecutive-error-count
-                            recent-tool-names
                             explore-count
                             implement-count
-                            stall-retry-count
                             followup-continuation)
   (define termination (loop-result-termination-reason result))
   (if (eq? termination 'completed)
@@ -611,6 +587,18 @@
                                                    max-iterations
                                                    max-iterations-hard)
                                     result))
+              ;; G7: local helper to deduplicate identical call sites
+              (define (call-process-tool-results)
+                (process-tool-results new-msgs
+                                      ctx-with-injected
+                                      ext-reg
+                                      reg
+                                      bus
+                                      session-id
+                                      log-path
+                                      token
+                                      config
+                                      ws))
               (match action
                 ['stop
                  (handle-stop-action result
@@ -625,11 +613,8 @@
                                      ctx-with-injected
                                      ws
                                      intent-retry-count
-                                     consecutive-error-count
-                                     recent-tool-names
                                      explore-count
                                      implement-count
-                                     stall-retry-count
                                      ;; followup-continuation: recurse into loop
                                      (lambda (new-ctx iter tc sp ws2 irc ec rt ecnt implcnt src)
                                        (loop new-ctx iter tc sp ws2 irc ec rt ecnt implcnt src)))]
@@ -662,23 +647,7 @@
                                               max-iterations-hard
                                               'remaining
                                               (- max-iterations-hard (add1 iteration))))
-                 (define updated-ctx
-                   (process-tool-results new-msgs
-                                         ctx-with-injected
-                                         ext-reg
-                                         reg
-                                         bus
-                                         session-id
-                                         log-path
-                                         token
-                                         config
-                                         ws
-                                         seen-paths
-                                         explore-count
-                                         implement-count
-                                         consecutive-error-count
-                                         recent-tool-names
-                                         iteration))
+                 (define updated-ctx (call-process-tool-results))
                  (define ctx-after-budget
                    (if sess
                        (maybe-compact-mid-turn sess updated-ctx bus session-id config)
@@ -698,23 +667,7 @@
                        stall-retry-count)]
                 ['continue
                  (append-entries! log-path new-msgs)
-                 (define updated-ctx
-                   (process-tool-results new-msgs
-                                         ctx-with-injected
-                                         ext-reg
-                                         reg
-                                         bus
-                                         session-id
-                                         log-path
-                                         token
-                                         config
-                                         ws
-                                         seen-paths
-                                         explore-count
-                                         implement-count
-                                         consecutive-error-count
-                                         recent-tool-names
-                                         iteration))
+                 (define updated-ctx (call-process-tool-results))
                  (define-values (new-seen-paths
                                  effective-tool-count
                                  new-explore-count

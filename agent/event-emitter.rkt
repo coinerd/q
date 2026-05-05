@@ -14,9 +14,8 @@
                   typed-event-session-id
                   typed-event-turn-id))
 
-;; NOTE (v0.29.12): emit-typed-event! is provided for future use but has 0 production
-;; callers outside its own module. The bridge to the event bus exists but no emit! call
-;; site in loop.rkt or loop-stream.rkt uses it. Deferred to v0.30.x.
+;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
+;; Adoption is tracked by IVG check `session-switch-typed-events`.
 (provide emit-typed-event!
          event-struct->hasheq)
 
