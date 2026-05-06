@@ -180,7 +180,13 @@
     (mark-wave-status! base-dir idx "DONE"))
   ;; Source 2: Normalize any mixed-case status markers in PLAN.md
   ;; (e.g., LLM wrote [Done] instead of [DONE])
-  (normalize-plan-status-markers! base-dir))
+  (normalize-plan-status-markers! base-dir)
+  ;; Source 3: If in executing mode with completed waves, auto-complete
+  ;; remaining [Inbox] waves. The LLM often completes all waves but
+  ;; forgets to call /wave-done for the last one or doesn't update PLAN.md.
+  ;; If at least one wave was completed via /wave-done and we're still in
+  ;; executing mode, the execution ran and remaining Inbox waves are done.
+  (auto-complete-inbox-waves! base-dir))
 
 ;; Normalize mixed-case status markers in PLAN.md to canonical forms.
 ;; The LLM often writes [Done] instead of [DONE]. This rewrites
@@ -205,6 +211,26 @@
         [(string=? upcase "FAILED") (mark-wave-status! base-dir idx "FAILED")]
         ;; Other non-canonical status — leave as-is
         [else (void)]))))
+
+;; Auto-complete remaining [Inbox] waves when in executing mode.
+;; Heuristic: if we're in executing mode and at least one wave was
+;; completed via /wave-done, the LLM ran the execution. Remaining
+;; [Inbox] waves were likely completed but the LLM forgot to mark them.
+(define (auto-complete-inbox-waves! base-dir)
+  (define mode (gsm-current))
+  (define completed (gsm-completed-waves))
+  (cond
+    [(and (eq? mode 'executing) (not (set-empty? completed)))
+     ;; In executing mode with some completions → auto-complete remaining
+     (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+     (when (file-exists? plan-path)
+       (define text (call-with-input-file plan-path port->string))
+       (define entries (parse-plan-index text))
+       (for ([e entries])
+         (define status (string-upcase (wave-index-entry-status e)))
+         (when (or (string=? status "INBOX") (string=? status "IN-PROGRESS"))
+           (mark-wave-status! base-dir (wave-index-entry-idx e) "DONE"))))]
+    [else (void)]))
 
 ;; Update all wave status markers in PLAN.md to [DONE] before archiving.
 ;; base-dir is the directory CONTAINING .planning/ (not .planning/ itself).

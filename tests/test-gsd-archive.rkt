@@ -395,6 +395,61 @@
                   (reset-gsm!)
                   (cleanup-tmp tmp))))
 
+(test-case "auto-complete-inbox-waves when in executing mode with partial completions"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Simulate: /go ran, LLM completed all 3 waves but only called
+     ;; /wave-done for W0. W1/W2 still [Inbox] in PLAN.md.
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Done] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: impl \u2192 waves/W1-impl.md\n- [Inbox] W2: test \u2192 waves/W2-test.md\n")
+     ;; Set executing mode (must go through proper transition chain)
+     (gsm-transition! 'exploring)
+     (gsm-transition! 'plan-written)
+     (gsm-transition! 'executing)
+     ;; Only W0 was marked complete via /wave-done
+     (gsm-mark-wave-complete! 0)
+     ;; Sync should:
+     ;; 1. Write [DONE] for W0 (from completed set)
+     ;; 2. Normalize [Done] \u2192 [DONE] (already [DONE] after step 1)
+     ;; 3. Auto-complete [Inbox] W1, W2 (executing mode + completions exist)
+     (sync-executor-to-plan! tmp)
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[DONE] W0:"))
+     (check-true (string-contains? plan-text "[DONE] W1:"))
+     (check-true (string-contains? plan-text "[DONE] W2:"))
+     (check-true (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+(test-case "no auto-complete in idle mode"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Done] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: impl \u2192 waves/W1-impl.md\n")
+     ;; Stay in idle mode (not executing)
+     ;; Only mark W0 complete
+     (gsm-mark-wave-complete! 0)
+     (sync-executor-to-plan! tmp)
+     ;; W0 should be [DONE], but W1 should stay [Inbox]
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[DONE] W0:"))
+     (check-true (string-contains? plan-text "[Inbox] W1:"))
+     (check-false (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
 (test-case "ensure-state-md! does not overwrite existing STATE.md"
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind void
