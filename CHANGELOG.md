@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.30.12 — 2026-05-05
+
+### Match-Driven Deconstruction
+
+**Goal:** Convert dense cond/case blocks to match patterns for readability.
+
+**W0 — Top-4 conversions:**
+- `tui/char-width.rkt` — 37-clause Unicode width table: cond → match
+- `agent/event-json.rkt` — 34-clause event type dispatch: cond → match
+- `tui/commands.rkt` — 23-clause command dispatch: case → match (×2)
+- `tui/theme.rkt` — 2×21-clause color maps: cond+case → match
+
+**W1 — Bottom-4 conversions:**
+- `util/event-codec.rkt` — 20-clause payload decode: cond+case → match
+- `cli/interactive.rkt` — 17+16-clause slash command parse: case → match
+- `tui/render/message-layout.rkt` — 13-clause markdown token dispatch: cond → match
+
+**Impact:** 8 dense dispatch blocks converted; match usage significantly increased.
+
+
 ## v0.30.11 — 2026-05-05
 
 ### Contract Expansion Wave 3 (modules 16–32)
