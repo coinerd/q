@@ -95,7 +95,7 @@
   (define ext-name (get-extension-name-from-path path))
   (define state (extension-state ext-name))
   (cond
-    [(or (eq? state 'disabled) (eq? state 'quarantined)) #f]
+    [(or (eq? state 'disabled) (eq? state 'quarantined)) (void)]
     [else
      (define timeout-secs (current-extension-startup-timeout))
      (define result
@@ -135,7 +135,7 @@
                                         (extension-load-error-message result)
                                         'category
                                         (extension-load-error-category result)))))
-        #f]
+        (void)]
        [(and result (extension? result))
         ;; Tier validation: default to 'hooks (lowest) if no manifest tier declared
         (define declared-tier 'hooks)
@@ -144,8 +144,8 @@
           (for ([msg (in-list tier-result)])
             (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
         (register-extension! registry result)
-        #t]
-       [else #f])]))
+        (void)]
+       [else (void)])]))
 
 ;; Cache infrastructure removed (#448): was never called in production
 ;; code paths (discover-extensions calls try-load-extension directly).
