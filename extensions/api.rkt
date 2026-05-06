@@ -15,7 +15,6 @@
          (only-in "../agent/event-bus.rkt"
                   publish! subscribe! unsubscribe!
                   make-event-bus event-bus?))
-         json-schema?
 
 ;; JSON Schema predicate (for extension tool schemas)
 (define json-schema? hash?)
