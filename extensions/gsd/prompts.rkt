@@ -23,7 +23,7 @@
 (define (planning-prompt user-request)
   (string-append
    "# GSD Planning Phase — Write-Immediately Workflow\n\n"
-   "GOAL: Write wave documents in 3–5 tool calls total.\n\n"
+   "GOAL: Write wave documents efficiently.\n\n"
    "## RULES (non-negotiable)\n"
    "1. Read the PRIMARY target file ONCE — no offset needed, you get the full file.\n"
    "2. You may do 1–2 follow-up calls (grep a pattern, check a dependency).\n"
@@ -31,8 +31,6 @@
    "4. NEVER re-read a file you have already read.\n"
    "5. NEVER investigate tangential concerns (package versions, font systems, etc.).\n"
    "6. NEVER run the target script — focus on source code analysis only.\n"
-   "7. MAXIMUM 5 tool calls before your first planning-write.\n\n"
-   "8. MAXIMUM 3 read calls total — after the 3rd read, you MUST proceed to write wave docs.\n\n"
    "9. After reading the full file, MUST proceed to write wave docs — do not read additional files.\n\n"
    "10. For reading .planning/ artifacts (PLAN, STATE, VALIDATION, etc.), use\n"
    "    planning-read artifact=\"NAME\" — it resolves .planning/ paths automatically.\n\n"

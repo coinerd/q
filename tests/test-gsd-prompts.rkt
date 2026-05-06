@@ -30,8 +30,7 @@
 (test-case "planning-prompt enforces write-immediately workflow"
   (define p (planning-prompt "test"))
   (check-true (string-contains? p "IMMEDIATELY write") "mentions write-immediately")
-  (check-true (string-contains? p "NEVER re-read") "mentions never re-read")
-  (check-true (string-contains? p "MAXIMUM 5 tool calls") "mentions 5-call limit"))
+  (check-true (string-contains? p "NEVER re-read") "mentions never re-read"))
 
 (test-case "W0: planning-prompt contains - File: format instruction"
   (define p (planning-prompt "test"))
