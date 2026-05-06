@@ -13,7 +13,8 @@
 ;;;   4. execute approved calls, optionally in parallel
 ;;;   5. emit final results in source order
 
-(require (only-in "tool.rkt"
+(require racket/contract
+         (only-in "tool.rkt"
                   tool?
                   tool-name
                   tool-schema
@@ -52,12 +53,13 @@
 
 ;; ── Result struct ──
 (provide (struct-out scheduler-result)
-
-         ;; ── Main entry point ──
-         run-tool-batch
-
-         ;; ── Configuration ──
-         max-parallel-tools)
+         (contract-out [run-tool-batch
+                        (->* (any/c any/c)
+                             (#:hook-dispatcher (or/c procedure? #f)
+                                                #:exec-context (or/c any/c #f)
+                                                #:parallel? (or/c boolean? #f))
+                             scheduler-result?)]
+                       [max-parallel-tools (parameter/c exact-positive-integer?)]))
 
 ;; ============================================================
 ;; Scheduler result struct

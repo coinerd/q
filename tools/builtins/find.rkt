@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require "../../util/error-helpers.rkt")
-(require racket/file
+(require racket/contract
+         racket/file
          racket/string
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
@@ -13,7 +14,7 @@
                   path-component-hidden?)
          (only-in "../../util/path-helpers.rkt" expand-home-path))
 
-(provide tool-find)
+(provide (contract-out [tool-find (->* (hash?) (any/c) any/c)]))
 
 ;; --------------------------------------------------
 ;; Core recursive walk

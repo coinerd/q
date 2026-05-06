@@ -2,7 +2,8 @@
 
 (require "../../util/error-helpers.rkt")
 (require "../../util/json-helpers.rkt")
-(require racket/string
+(require racket/contract
+         racket/string
          racket/format
          racket/port
          json
@@ -12,15 +13,15 @@
          (only-in "../../util/errors.rkt" raise-tool-error)
          (only-in "../../util/truncation.rkt" truncate-to-n-chars MAX-OUTPUT-CHARS))
 
-(provide tool-firecrawl
-         firecrawl-api-key ;; for testing
-         firecrawl-request ;; for testing
-         valid-action? ;; for testing
-         valid-formats? ;; for testing
-         truncate-string ;; backward compat alias
-         validate-url ;; for testing
-         private-host? ;; for testing
-         poll-crawl-status) ;; for testing
+(provide (contract-out [tool-firecrawl (->* (hash?) (any/c) any/c)]
+                       [firecrawl-api-key (-> (or/c string? #f))]
+                       [firecrawl-request (->* (symbol? string?) ((or/c any/c #f)) any/c)]
+                       [valid-action? (-> any/c boolean?)]
+                       [valid-formats? (-> any/c boolean?)]
+                       [truncate-string (-> string? exact-nonnegative-integer? string?)]
+                       [validate-url (-> string? (or/c string? #f))]
+                       [private-host? (-> string? boolean?)]
+                       [poll-crawl-status (-> string? string? any/c)]))
 
 ;; ============================================================
 ;; SSRF Protection (SEC-14)
