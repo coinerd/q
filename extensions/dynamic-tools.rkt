@@ -1,5 +1,9 @@
 #lang racket/base
 
+;; JSON Schema predicate (same as hash? for now, defined locally)
+(define json-schema? hash?)
+
+
 ;; extensions/dynamic-tools.rkt — dynamic tool registration from extensions
 ;;
 ;; FEAT-62: Provides the extension-facing API for dynamically registering
@@ -18,7 +22,7 @@
 (provide (contract-out [ext-register-tool!
                         (->* (extension-ctx? string? ; name
                                              string? ; description
-                                             hash? ; schema (JSON Schema)
+                                             json-schema? ; schema (JSON Schema)
                                              procedure?) ; handler (hash? -> tool-result?)
                              (#:prompt-guidelines (or/c string? #f))
                              void?)]
