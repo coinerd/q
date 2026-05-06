@@ -13,6 +13,7 @@
          racket/format
          "plan-types.rkt"
          "wave-docs.rkt"
+         "wave-executor.rkt"
          "state-machine.rkt"
          "command-types.rkt")
 
@@ -22,7 +23,8 @@
          move-to-archive!
          reset-gsd-after-archive!
          cleanup-empty-subdirs!
-         ensure-state-md!)
+         ensure-state-md!
+         sync-executor-to-plan!)
 
 ;; ============================================================
 ;; Validation
@@ -117,46 +119,74 @@
   (define current-mode (gsm-current))
   (cond
     [(not (file-exists? plan-path)) (gsd-err #:mode current-mode #:message "No PLAN.md found")]
-    [(and (not force?) (not (all-waves-complete? base-dir)))
-     (define text (call-with-input-file plan-path port->string))
-     (define entries (parse-plan-index text))
-     (define incomplete
-       (for/list ([e entries]
-                  #:when (not (member (wave-index-entry-status e) '("DONE" "DEFERRED"))))
-         (wave-index-entry-status e)))
-     (gsd-err
-      #:mode current-mode
-      #:message
-      (format
-       "Not all waves are complete (~a/~a have status: ~a). Use /done --force to archive anyway."
-       (length incomplete)
-       (length entries)
-       (string-join incomplete ", ")))]
     [else
-     (define plan-text (call-with-input-file plan-path port->string))
-     ;; Update any remaining [Inbox] markers to [DONE] before archiving
-     (update-all-wave-statuses! base-dir)
-     (define title (extract-plan-title plan-text))
-     (define archive-dir (archive-path-for-plan base-dir title))
-     (with-handlers ([exn:fail:filesystem? (lambda (e)
-                                             (gsd-err #:mode current-mode
-                                                      #:message (format "Filesystem error: ~a"
-                                                                        (exn-message e))))])
-       (move-to-archive! base-dir archive-dir)
-       (reset-gsd-after-archive!)
-       ;; Count archived files
-       (define archived-count
-         (if (directory-exists? archive-dir)
-             (length (directory-list archive-dir))
-             0))
-       (gsd-ok #:mode 'idle
-               #:message (format "Plan archived to ~a" (path->string archive-dir))
-               #:data
-               (hasheq 'archive-path (path->string archive-dir) 'files-archived archived-count)))]))
+     ;; v0.32.0: Auto-sync wave executor state to PLAN.md before checking completion.
+     ;; If the LLM completed all waves but never called /wave-done, the executor
+     ;; knows they're done but PLAN.md still shows [Inbox]. Sync now.
+     (sync-executor-to-plan! base-dir)
+     (cond
+       [(and (not force?) (not (all-waves-complete? base-dir)))
+        (define text (call-with-input-file plan-path port->string))
+        (define entries (parse-plan-index text))
+        (define incomplete
+          (for/list ([e entries]
+                     #:when (not (member (wave-index-entry-status e) '("DONE" "DEFERRED"))))
+            (wave-index-entry-status e)))
+        (gsd-err
+         #:mode current-mode
+         #:message
+         (format
+          "Not all waves are complete (~a/~a have status: ~a). Use /done --force to archive anyway."
+          (length incomplete)
+          (length entries)
+          (string-join incomplete ", ")))]
+       [else
+        (define plan-text (call-with-input-file plan-path port->string))
+        ;; Update any remaining [Inbox] markers to [DONE] before archiving
+        (update-all-wave-statuses! base-dir)
+        (define title (extract-plan-title plan-text))
+        (define archive-dir (archive-path-for-plan base-dir title))
+        (with-handlers ([exn:fail:filesystem? (lambda (e)
+                                                (gsd-err #:mode current-mode
+                                                         #:message (format "Filesystem error: ~a"
+                                                                           (exn-message e))))])
+          (move-to-archive! base-dir archive-dir)
+          (reset-gsd-after-archive!)
+          ;; Count archived files
+          (define archived-count
+            (if (directory-exists? archive-dir)
+                (length (directory-list archive-dir))
+                0))
+          (gsd-ok
+           #:mode 'idle
+           #:message (format "Plan archived to ~a" (path->string archive-dir))
+           #:data
+           (hasheq 'archive-path (path->string archive-dir) 'files-archived archived-count)))])]))
 
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
+
+;; v0.32.0: Sync wave executor in-memory state to PLAN.md status markers.
+;; When /go executes all waves but the LLM never calls /wave-done, the
+;; executor knows the waves are completed but PLAN.md still shows [Inbox].
+;; This function bridges that gap so /done works without --force.
+(define (sync-executor-to-plan! base-dir)
+  (define exec (gsm-wave-executor))
+  (when exec
+    (define statuses (wave-executor-statuses exec))
+    (for ([s statuses])
+      (define idx (wave-status-index s))
+      (define state (wave-status-state s))
+      (define status-str
+        (cond
+          [(eq? state 'completed) "DONE"]
+          [(eq? state 'failed) "FAILED"]
+          [(eq? state 'skipped) "DEFERRED"]
+          [(eq? state 'in-progress) "In-Progress"]
+          [else #f]))
+      (when status-str
+        (mark-wave-status! base-dir idx status-str)))))
 
 ;; Update all wave status markers in PLAN.md to [DONE] before archiving.
 ;; base-dir is the directory CONTAINING .planning/ (not .planning/ itself).

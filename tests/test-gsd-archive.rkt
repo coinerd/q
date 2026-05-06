@@ -10,6 +10,7 @@
          "../extensions/gsd/archive.rkt"
          "../extensions/gsd/state-machine.rkt"
          "../extensions/gsd/wave-docs.rkt"
+         "../extensions/gsd/wave-executor.rkt"
          "../extensions/gsd/plan-types.rkt"
          (only-in "../extensions/gsd/command-types.rkt"
                   gsd-command-result-success
@@ -288,6 +289,92 @@
                   (define content (file->string state-path))
                   (check-true (string-contains? content "# Project State")))
                 (lambda () (cleanup-tmp tmp))))
+
+;; ============================================================
+;; Tests: sync-executor-to-plan! (v0.32.0)
+;; ============================================================
+
+(test-case "sync-executor-to-plan! updates PLAN.md from executor state"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with all Inbox waves
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Inbox] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: implement \u2192 waves/W1-implement.md\n")
+     ;; Create a wave executor with W0 completed, W1 completed
+     (define plan
+       (gsd-plan (list (gsd-wave 0 "setup" 'pending "" '() '() "" '())
+                       (gsd-wave 1 "implement" 'pending "" '() '() "" '()))
+                 #f
+                 '()
+                 '()))
+     (define exec (make-wave-executor plan))
+     (wave-complete! exec 0)
+     (wave-complete! exec 1)
+     ;; Set executor in state machine
+     (gsm-set-wave-executor! exec)
+     ;; Sync executor state to PLAN.md
+     (sync-executor-to-plan! tmp)
+     ;; Verify PLAN.md now shows [DONE] for both waves
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[DONE] W0:"))
+     (check-true (string-contains? plan-text "[DONE] W1:"))
+     ;; Verify all-waves-complete? now returns #t
+     (check-true (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+(test-case "archive-completed-plan! auto-syncs executor before check"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with Inbox waves (simulating /go completion without /wave-done)
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Inbox] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: implement \u2192 waves/W1-implement.md\n")
+     (write-state! tmp)
+     ;; Create executor with all waves completed
+     (define plan
+       (gsd-plan (list (gsd-wave 0 "setup" 'pending "" '() '() "" '())
+                       (gsd-wave 1 "implement" 'pending "" '() '() "" '()))
+                 #f
+                 '()
+                 '()))
+     (define exec (make-wave-executor plan))
+     (wave-complete! exec 0)
+     (wave-complete! exec 1)
+     (gsm-set-wave-executor! exec)
+     ;; Archive should succeed without --force
+     (define result (archive-completed-plan! tmp))
+     (check-true (gsd-command-result-success result))
+     ;; PLAN.md should be gone from .planning/
+     (check-false (file-exists? (build-path tmp ".planning" "PLAN.md"))))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+(test-case "sync-executor-to-plan! no-ops when no executor"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind void
+                (lambda ()
+                  (write-plan-incomplete! tmp)
+                  ;; No executor set
+                  (sync-executor-to-plan! tmp)
+                  ;; PLAN.md should be unchanged
+                  (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+                  (check-true (string-contains? plan-text "[Inbox] W1:")))
+                (lambda ()
+                  (reset-gsm!)
+                  (cleanup-tmp tmp))))
 
 (test-case "ensure-state-md! does not overwrite existing STATE.md"
   (define tmp (make-tmp-planning-dir))
