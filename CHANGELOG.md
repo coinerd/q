@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.30.11 — 2026-05-05
+
+### Contract Expansion Wave 3 (modules 16–32)
+
+**Goal:** Add contracts to next 17 uncontracted modules across LLM, tools, TUI, and util layers.
+
+**W0 — LLM + tool contracts (8 modules):**
+- `llm/http-helpers.rkt` — 6 functions contracted (extract-status-code, make-provider-http-request, etc.)
+- `llm/token-budget.rkt` — 7 functions contracted + struct-out for context-usage
+- `tools/builtins/find.rkt` — tool-find contracted
+- `tools/builtins/skill-router.rkt` — tool-skill-route contracted
+- `tools/builtins/firecrawl.rkt` — 9 functions contracted
+- `tools/registry-defaults.rkt` — register-default-tools! contracted
+- `tools/scheduler.rkt` — run-tool-batch + max-parallel-tools contracted
+- `tools/middleware.rkt` — 7 middleware functions contracted
+
+**W1 — TUI + util contracts (8 modules):**
+- `tui/component.rkt` — 16 functions contracted + struct-out for q-component
+- `tui/scrollback.rkt` — 5 functions contracted
+- `tui/tui-keybindings.rkt` — 11 functions contracted + struct-out for tui-ctx
+- `tui/tui-render-loop.rkt` — 10 functions contracted
+- `util/error-sanitizer.rkt` — sanitize-error-message contracted
+- `util/shell-quote.rkt` — shell-quote contracted
+- `util/tree-entries.rkt` — 13 functions contracted
+- `util/cost-tracker.rkt` — 8 functions contracted + struct-out for cost-tracker
+
+
 ## v0.30.10 — 2026-05-05
 
 ### Contract Expansion Wave 2 (modules 6–15)
