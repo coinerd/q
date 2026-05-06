@@ -51,6 +51,30 @@
 **Impact:** Improved abstraction over event struct internals, easier future refactoring of event representation.
 
 ---
+## v0.31.2 — 2026-05-07
+
+### Typed Event Predicates
+
+**Goal:** Centralize typed event predicates and refactor event-json.rkt to use them.
+
+**W0 — Create typed-event-predicates.rkt (2 files):**
+- Created `util/typed-event-predicates.rkt` re-exporting all predicates from event-structs.
+- Created `tests/test-typed-event-predicates.rkt` with 3 tests.
+- Tests: 3/3 pass.
+
+**W1 — Refactor event-json.rkt (1 file):**
+- Changed require from `event-structs.rkt` to `typed-event-predicates.rkt`.
+- All predicates now sourced from centralized module.
+
+**W2 — Verification:**
+- Event-json.rkt compiles and passes syntax checks.
+- CI green expected.
+
+**Impact:** Improved abstraction and centralized predicate access for typed events.
+
+---
+
+
 
 
 
