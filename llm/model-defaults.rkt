@@ -1,4 +1,4 @@
-#lang racket/base
+#lang typed/racket/base
 
 ;; llm/model-defaults.rkt — centralised model name / base URL constants
 ;;
@@ -15,12 +15,17 @@
          OPENAI-DEFAULT-MODEL)
 
 ;; ── Anthropic ──────────────────────────────────────────────
+(: ANTHROPIC-DEFAULT-MODEL String)
 (define ANTHROPIC-DEFAULT-MODEL "claude-sonnet-4-20250514")
+(: ANTHROPIC-DEFAULT-BASE-URL String)
 (define ANTHROPIC-DEFAULT-BASE-URL "https://api.anthropic.com")
 
 ;; ── Google Gemini ──────────────────────────────────────────
+(: GEMINI-DEFAULT-MODEL String)
 (define GEMINI-DEFAULT-MODEL "gemini-2.5-pro")
+(: GEMINI-DEFAULT-BASE-URL String)
 (define GEMINI-DEFAULT-BASE-URL "https://generativelanguage.googleapis.com")
 
 ;; ── OpenAI / Azure OpenAI ─────────────────────────────────
+(: OPENAI-DEFAULT-MODEL String)
 (define OPENAI-DEFAULT-MODEL "gpt-4")
