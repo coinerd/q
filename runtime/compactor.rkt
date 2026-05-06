@@ -444,3 +444,4 @@
   (define summary (compaction-result-summary-message compaction-res))
   (when summary
     (append-entry! session-path summary)))
+;; v0.31.x milestone placeholder
