@@ -49,13 +49,14 @@
 ;; Turn cancelled
 ;; ============================================================
 
-(struct turn-cancelled-event typed-event (reason) #:transparent)
+(struct turn-cancelled-event typed-event (reason iteration) #:transparent)
 
 (define (make-turn-cancelled-event #:session-id session-id
                                    #:turn-id turn-id
                                    #:timestamp timestamp
-                                   #:reason reason)
-  (turn-cancelled-event "turn.cancelled" timestamp session-id turn-id reason))
+                                   #:reason reason
+                                   #:iteration [iteration #f])
+  (turn-cancelled-event "turn.cancelled" timestamp session-id turn-id reason iteration))
 
 ;; ============================================================
 ;; Assistant message completed

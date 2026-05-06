@@ -48,6 +48,10 @@
                   tool-result-part-is-error?)
          "../agent/event-bus.rkt"
          (only-in "../util/loop-result.rkt" loop-result?)
+         (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../llm/provider.rkt" provider?)
+         (only-in "../tools/registry.rkt" tool-registry?)
+         (only-in "../extensions/api.rkt" extension-registry?)
          "../agent/loop.rkt"
          ;; ARCH-01: tool registry queries for LLM tool definitions
          (only-in "../tools/tool.rkt" list-tools-jsexpr merge-tool-lists)
@@ -90,19 +94,20 @@
 
 (provide (contract-out
           [run-provider-turn
-           (->* (list? any/c
+           (->* (list?
+                       (or/c provider? #f)
                        event-bus?
-                       (or/c any/c #f)
-                       (or/c any/c #f)
+                       (or/c tool-registry? #f)
+                       (or/c extension-registry? #f)
                        string?
                        string?
-                       (or/c any/c #f)
-                       (or/c hash? any/c))
+                       (or/c cancellation-token? #f)
+                       hash?)
                 (#:tool-list-proc (or/c procedure? #f))
                 loop-result?)]
           [build-assembled-context
-           (-> list? (or/c hash? any/c) (or/c any/c #f) event-bus? string? exact-nonnegative-integer? list?)]
-          [register-session-extensions! (-> any/c any/c event-bus? string? (listof hash?))]))
+           (-> list? hash? (or/c extension-registry? #f) event-bus? string? exact-nonnegative-integer? list?)]
+          [register-session-extensions! (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]))
 
 ;; ============================================================
 ;; Context assembly
