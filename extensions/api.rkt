@@ -7,6 +7,7 @@
 ;;   - extension-registry (thread-safe, insertion-ordered)
 ;;   - register-extension!, unregister-extension!, lookup-extension
 ;;   - list-extensions, handlers-for-point
+         json-schema?
 
 (require racket/contract
          racket/list
@@ -14,6 +15,11 @@
          (only-in "../agent/event-bus.rkt"
                   publish! subscribe! unsubscribe!
                   make-event-bus event-bus?))
+         json-schema?
+
+;; JSON Schema predicate (for extension tool schemas)
+(define json-schema? hash?)
+
 
 (provide
  ;; Event bus re-exports (ARCH-04)
