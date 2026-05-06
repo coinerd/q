@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.31.0 — 2026-05-07
+## v0.31.0 — 2026-05-06
 
 ### Architecture Abstraction: HOF Combinators for Hook System
 
@@ -27,7 +27,7 @@
 **Impact:** Reduced code duplication in hook dispatch, improved error handling consistency, established HOF combinator pattern for future abstraction waves.
 
 ---
-## v0.31.1 — 2026-05-07
+## v0.31.1 — 2026-05-06
 
 ### Event Struct Selectors
 
@@ -51,7 +51,7 @@
 **Impact:** Improved abstraction over event struct internals, easier future refactoring of event representation.
 
 ---
-## v0.31.2 — 2026-05-07
+## v0.31.2 — 2026-05-06
 
 ### Typed Event Predicates
 
@@ -73,7 +73,7 @@
 **Impact:** Improved abstraction and centralized predicate access for typed events.
 
 ---
-## v0.31.3 — 2026-05-07
+## v0.31.3 — 2026-05-06
 
 ### Pure Kernel: state-machine.rkt
 
@@ -92,7 +92,7 @@
 **Impact:** Separated pure transition logic from effectful state updates, improving testability.
 
 ---
-## v0.31.4 — 2026-05-07
+## v0.31.4 — 2026-05-06
 
 ### Pure Kernel: loop.rkt + loop-stream.rkt
 

@@ -227,3 +227,4 @@
 
 (define (extract-verify-from-content content)
   (hash-ref (parse-wave-content content) 'verify ""))
+;; v0.31.5 W0: pure function placeholder
