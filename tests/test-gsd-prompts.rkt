@@ -48,6 +48,19 @@
   (check-true (string-contains? p "STEP 3") "has step 3")
   (check-true (string-contains? p "STEP 4") "has step 4"))
 
+(test-case "planning-prompt mentions planning-read tool"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "planning-read") "mentions planning-read"))
+
+(test-case "planning-prompt includes filesystem path guidance"
+  (define p (planning-prompt "test"))
+  (check-true (string-contains? p "filesystem path") "mentions filesystem path"))
+
+(test-case "planning-prompt wave template is language-agnostic"
+  (define p (planning-prompt "test"))
+  (check-false (string-contains? p "q/path/to") "no q/ hardcoded path")
+  (check-false (string-contains? p "raco test") "no raco test hardcoded"))
+
 ;; ============================================================
 ;; Executing prompt
 ;; ============================================================
