@@ -122,6 +122,31 @@
 
 **Goal:** Extract pure functions from wave-executor.rkt and tool-coordinator.rkt.
 
+**W0 — Extract `compute-next-wave-statuses` pure function:**
+- Extracted `compute-next-wave-statuses` from `update-status!` in `wave-executor.rkt`
+- Added `compute-next-wave-statuses` to provide statement
+- Created `tests/extensions/test-wave-executor-pure.rkt` with 4 test cases
+
+**W1 — Extract `compute-tool-call-actions` pure function:**
+- Added `tool-call-actions` struct
+- Extracted `compute-tool-call-actions` pure function from `handle-tool-calls-pending`
+- Modified `handle-tool-calls-pending` to use the pure function
+
+**W2 — Verification:**
+- Infrastructure checks passed (15/15 lint)
+- `tool-coordinator.rkt` tests pass (7/7)
+
+**Impact:** Continued pure kernel separation for better testability.
+
+---
+
+
+## v0.31.5 — 2026-05-06
+
+### Pure Kernel: wave-executor.rkt + tool-coordinator.rkt
+
+**Goal:** Extract pure functions from wave-executor.rkt and tool-coordinator.rkt.
+
 **W0 — Extract pure function from wave-executor.rkt:**
 - Added placeholder for pure function extraction.
 
