@@ -139,6 +139,27 @@
 **Impact:** Continued pure kernel separation for better testability.
 
 ---
+## v0.31.6 — 2026-05-06
+
+### Contract Fix: token-budget.rkt
+
+**Goal:** Replace `any/c` with proper contracts in token-budget.rkt.
+
+**W0 — Fix `any/c` in token-budget.rkt:**
+- Replaced `any/c` with `(or/c message? hash?)` in `estimate-context-tokens` and `estimate-turn-tokens` contracts
+- Changed `DEFAULT-SAFETY-MARGIN-PCT` to `1/10` (exact rational)
+- Fixed `remaining-budget` contract to accept negative integers
+- Fixed test to expect integers
+
+**W1 — Verification:**
+- Infrastructure checks passed (15/15 lint)
+- `token-budget.rkt` tests pass (10/10)
+
+**Impact:** Stronger contracts, earlier failure detection.
+
+---
+
+
 
 
 ## v0.31.5 — 2026-05-06
