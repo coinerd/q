@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.30.10 — 2026-05-05
+
+### Contract Expansion Wave 2 (modules 6–15)
+
+**Goal:** Add contracts to next 10 highest-traffic uncontracted modules
+
+**W0 — Runtime contracts (5 modules):**
+- `runtime/session-lifecycle.rkt` — 7 functions contracted (run-prompt!, build-session-context, dispatch-iteration, etc.)
+- `runtime/context-summary.rkt` — 13 functions contracted + struct-outs for catalog-entry, context-summary, summary-cache
+- `runtime/split-turn.rkt` — 5 functions contracted (find-split-turn, generate-turn-prefix, etc.)
+- `runtime/token-compaction.rkt` — 5 functions contracted (build-token-summary-window, backward-token-walk, etc.)
+- `runtime/credential-backend.rkt` — 11 functions contracted (backend-store!, backend-load, etc.)
+- Fixed `run-prompt!` contract in agent-session.rkt (keyword args needed `->*` not `->`)
+
+**W1 — Extension + interface contracts (5 modules):**
+- `extensions/dialog-api.rkt` — 8 functions contracted + struct-outs for notification, confirm-result, select-option/result, notification-state
+- `extensions/tiers.rkt` — 7 functions contracted
+- `extensions/loader.rkt` — 6 functions contracted
+- `interfaces/json-mode.rkt` — 6 functions contracted + struct-out for intent
+- `interfaces/sessions.rkt` — 10 functions contracted
+
+
 ## v0.30.9 — 2026-05-05
 
 ### Further TR Migrations
