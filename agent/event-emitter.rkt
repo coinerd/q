@@ -43,6 +43,8 @@
           '(model)
           'agent-end-event
           '(reason duration-ms)
+          'turn-cancelled-event
+          '(reason)
           'context-event
           '(token-count window-size)
           'tool-execution-start-event

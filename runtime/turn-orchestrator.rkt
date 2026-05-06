@@ -47,6 +47,7 @@
                   tool-result-part?
                   tool-result-part-is-error?)
          "../agent/event-bus.rkt"
+         (only-in "../util/loop-result.rkt" loop-result?)
          "../agent/loop.rkt"
          ;; ARCH-01: tool registry queries for LLM tool definitions
          (only-in "../tools/tool.rkt" list-tools-jsexpr merge-tool-lists)
@@ -96,11 +97,11 @@
                        string?
                        string?
                        (or/c any/c #f)
-                       any/c)
+                       (or/c hash? any/c))
                 (#:tool-list-proc (or/c procedure? #f))
-                any/c)]
+                loop-result?)]
           [build-assembled-context
-           (-> list? any/c (or/c any/c #f) event-bus? string? exact-nonnegative-integer? list?)]
+           (-> list? (or/c hash? any/c) (or/c any/c #f) event-bus? string? exact-nonnegative-integer? list?)]
           [register-session-extensions! (-> any/c any/c event-bus? string? (listof hash?))]))
 
 ;; ============================================================
