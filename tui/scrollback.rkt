@@ -1,21 +1,18 @@
 #lang racket/base
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/list
          "state.rkt"
          "../util/jsonl.rkt"
          json)
 
 ;; Conversion
-(provide transcript-entry->jsexpr
-         jsexpr->transcript-entry
-
-         ;; Persistence
-         save-scrollback
-         load-scrollback
-
-         ;; Testing support
-         reset-scrollback-id-counter!) ;; for test isolation
+(provide (contract-out [transcript-entry->jsexpr (-> any/c hash?)]
+                       [jsexpr->transcript-entry (-> hash? any/c)]
+                       [save-scrollback (-> (listof any/c) (or/c path-string? path?) void?)]
+                       [load-scrollback (-> path-string? (listof any/c))]
+                       [reset-scrollback-id-counter! (-> void?)]))
 
 ;; Maximum number of scrollback entries to keep on disk.
 (define scrollback-max-entries 500)

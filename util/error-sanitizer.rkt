@@ -5,9 +5,10 @@
 ;; Tools should use `sanitize-error-message` before returning error results
 ;; to prevent leaking full system paths to the LLM.
 
-(require racket/string)
+(require racket/contract
+         racket/string)
 
-(provide sanitize-error-message)
+(provide (contract-out [sanitize-error-message (-> string? string?)]))
 
 ;; sanitize-error-message : string? -> string?
 ;; Replaces sensitive content in error messages:

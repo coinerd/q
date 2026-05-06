@@ -18,26 +18,22 @@
 
 ;; Struct
 (provide (struct-out q-component)
-         ;; Constructor
-         make-q-component
-         ;; Operations
-         component-render
-         component-invalidate!
-         component-compose
-         ;; Cache query
-         component-cached-width
-         ;; Input handling
-         component-handle-input
-         input-consumed
-         input-bubble
-         input-action
-         input-consumed?
-         input-bubble?
-         input-action?
-         input-action-data
-         ;; Focus
-         focusable-components
-         cycle-focus)
+         (contract-out
+          [make-q-component (->* (procedure? procedure?) (#:id symbol?) q-component?)]
+          [component-render (-> q-component? any/c exact-nonnegative-integer? any/c)]
+          [component-invalidate! (-> q-component? void?)]
+          [component-compose (->* (q-component?) #:rest (listof q-component?) q-component?)]
+          [component-cached-width (-> q-component? (or/c exact-nonnegative-integer? #f))]
+          [component-handle-input (-> q-component? any/c any/c)]
+          [input-consumed (-> any/c)]
+          [input-bubble (-> any/c)]
+          [input-action (-> any/c any/c)]
+          [input-consumed? (-> any/c boolean?)]
+          [input-bubble? (-> any/c boolean?)]
+          [input-action? (-> any/c boolean?)]
+          [input-action-data (-> any/c any/c)]
+          [focusable-components (-> (listof q-component?) (listof q-component?))]
+          [cycle-focus (-> (listof q-component?) (or/c q-component? #f) (or/c q-component? #f))]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Struct

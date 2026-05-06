@@ -10,13 +10,17 @@
 ;; adversarial input. The sandbox layer provides defense-in-depth, but callers
 ;; must not rely on shell-quote alone to prevent injection from untrusted sources.
 
-(require racket/format
+(require racket/contract
+         racket/format
          racket/string)
 
-(provide shell-quote)
+(provide (contract-out [shell-quote (-> any/c string?)]))
 
 ;; POSIX single-quote escaping for command arguments.
 ;; Converts non-string inputs to string via ~a before quoting.
 (define (shell-quote s)
-  (define str (if (string? s) s (~a s)))
+  (define str
+    (if (string? s)
+        s
+        (~a s)))
   (string-append "'" (string-replace str "'" "'\\''") "'"))

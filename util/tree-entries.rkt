@@ -9,19 +9,21 @@
 (require racket/contract
          "message.rkt")
 
-(provide make-branch-entry
-         branch-entry?
-         branch-entry-parent-entry-id
-         branch-entry-name
-         make-tree-navigation-entry
-         tree-navigation-entry?
-         tree-navigation-entry-target-entry-id
-         tree-navigation-entry-from-entry-id
-         make-branch-summary-entry
-         branch-summary-entry-summary
-         branch-summary-entry-entry-range
-         branch-summary-entry-token-count
-         tree-entry?)
+(provide (contract-out [make-branch-entry (-> string? string? string? any/c)]
+                       [branch-entry? (-> any/c boolean?)]
+                       [branch-entry-parent-entry-id (-> any/c (or/c string? #f))]
+                       [branch-entry-name (-> any/c (or/c string? #f))]
+                       [make-tree-navigation-entry (-> string? string? string? any/c)]
+                       [tree-navigation-entry? (-> any/c boolean?)]
+                       [tree-navigation-entry-target-entry-id (-> any/c (or/c string? #f))]
+                       [tree-navigation-entry-from-entry-id (-> any/c (or/c string? #f))]
+                       [make-branch-summary-entry
+                        (-> string? string? string? any/c exact-nonnegative-integer? any/c)]
+                       [branch-summary-entry-summary (-> any/c (or/c string? #f))]
+                       [branch-summary-entry-entry-range (-> any/c any/c)]
+                       [branch-summary-entry-token-count
+                        (-> any/c (or/c exact-nonnegative-integer? #f))]
+                       [tree-entry? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Tree entry types (#1314)
