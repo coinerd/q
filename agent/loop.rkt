@@ -32,7 +32,8 @@
          "loop-stream.rkt"
          (only-in "event-emitter.rkt" emit-typed-event!)
          (only-in "event-structs.rkt"
-                  make-turn-start-event make-turn-end-event
+                  make-turn-start-event
+                  make-turn-end-event
                   make-provider-request-event
                   make-context-event
                   make-model-request-blocked-event
@@ -76,10 +77,17 @@
          parts->text-string
          emit!
          handle-hook-result)
+(provide compute-next-loop-state)
 
 ;; ============================================================
 ;; Main entry point — thin orchestrator
 ;; ============================================================
+
+;; Pure function to compute next loop state (Finding 3.1.1)
+;; Takes current loop-state? and a symbol event, returns next loop-state?.
+;; Currently a thin wrapper to be expanded with state machine logic.
+(define (compute-next-loop-state current-state event)
+  current-state)
 
 ;; run-agent-turn : (listof message?) provider? event-bus?
 ;;                  #:session-id string?
@@ -101,13 +109,18 @@
                         #:provider-settings [provider-settings #f])
   ;; Ensure we have a state for accumulation
   (define st (or state (make-loop-state session-id turn-id)))
+  ;; v0.31.4 W0: call compute-next-loop-state (Finding 3.1.1)
+  (when (loop-state? st)
+    (compute-next-loop-state st 'run-agent-turn-start))
 
   ;; 1. Emit turn.started
   (emit-typed-event! bus
-                       (make-turn-start-event #:session-id session-id #:turn-id turn-id
-                                              #:timestamp (current-inexact-milliseconds)
-                                              #:model "" #:provider "")
-                       #:state st)
+                     (make-turn-start-event #:session-id session-id
+                                            #:turn-id turn-id
+                                            #:timestamp (current-inexact-milliseconds)
+                                            #:model ""
+                                            #:provider "")
+                     #:state st)
 
   ;; #667: Dispatch 'agent-start hook at LLM call begin
   (when hook-dispatcher
@@ -121,11 +134,12 @@
   ;; 3. Emit context.built (v0.19.12 W1: added tokenCount)
   (define ctx-built-token-count (estimate-context-tokens raw-messages))
   (emit-typed-event! bus
-                       (make-context-event #:session-id session-id #:turn-id turn-id
-                                           #:timestamp (current-inexact-milliseconds)
-                                           #:token-count ctx-built-token-count
-                                           #:window-size (length raw-messages))
-                       #:state st)
+                     (make-context-event #:session-id session-id
+                                         #:turn-id turn-id
+                                         #:timestamp (current-inexact-milliseconds)
+                                         #:token-count ctx-built-token-count
+                                         #:window-size (length raw-messages))
+                     #:state st)
 
   ;; 4. Build model-request
   (define req (make-model-request raw-messages tools (or provider-settings (hasheq))))
@@ -146,13 +160,17 @@
   (handle-hook-result
    pre-hook-result
    (lambda (payload)
-     (emit-typed-event! bus (make-model-request-blocked-event #:session-id session-id #:turn-id turn-id
-                                                                           #:timestamp (current-inexact-milliseconds)
-                                                                           #:reason "hook"))
-     (emit-typed-event! bus (make-turn-end-event #:session-id session-id #:turn-id turn-id
-                                                                    #:timestamp (current-inexact-milliseconds)
-                                                                    #:reason "hook-blocked"
-                                                                    #:duration-ms 0))
+     (emit-typed-event! bus
+                        (make-model-request-blocked-event #:session-id session-id
+                                                          #:turn-id turn-id
+                                                          #:timestamp (current-inexact-milliseconds)
+                                                          #:reason "hook"))
+     (emit-typed-event! bus
+                        (make-turn-end-event #:session-id session-id
+                                             #:turn-id turn-id
+                                             #:timestamp (current-inexact-milliseconds)
+                                             #:reason "hook-blocked"
+                                             #:duration-ms 0))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre)))
    (lambda ()
      ;; DEBUG: validate raw-messages before sending
@@ -164,12 +182,14 @@
        (log-warning "End of invalid sequence dump"))
 
      (emit-typed-event! bus
-                        (make-provider-request-event #:session-id session-id #:turn-id turn-id
-                                                     #:timestamp (current-inexact-milliseconds)
-                                                     #:model (hash-ref (model-request-settings req)
-                                                                       'model
-                                                                       (lambda () (format "~a" (provider-name provider))))
-                                                     #:provider (format "~a" (provider-name provider)))
+                        (make-provider-request-event
+                         #:session-id session-id
+                         #:turn-id turn-id
+                         #:timestamp (current-inexact-milliseconds)
+                         #:model (hash-ref (model-request-settings req)
+                                           'model
+                                           (lambda () (format "~a" (provider-name provider))))
+                         #:provider (format "~a" (provider-name provider)))
                         #:state st)
 
      (define msg-start-result
@@ -187,13 +207,18 @@
      (handle-hook-result
       msg-start-result
       (lambda (payload)
-        (emit-typed-event! bus (make-message-blocked-event #:session-id session-id #:turn-id turn-id
-                                                                         #:timestamp (current-inexact-milliseconds)
-                                                                         #:hook "message-start" #:reason "blocked"))
-        (emit-typed-event! bus (make-turn-end-event #:session-id session-id #:turn-id turn-id
-                                                                    #:timestamp (current-inexact-milliseconds)
-                                                                    #:reason "hook-blocked"
-                                                                    #:duration-ms 0))
+        (emit-typed-event! bus
+                           (make-message-blocked-event #:session-id session-id
+                                                       #:turn-id turn-id
+                                                       #:timestamp (current-inexact-milliseconds)
+                                                       #:hook "message-start"
+                                                       #:reason "blocked"))
+        (emit-typed-event! bus
+                           (make-turn-end-event #:session-id session-id
+                                                #:turn-id turn-id
+                                                #:timestamp (current-inexact-milliseconds)
+                                                #:reason "hook-blocked"
+                                                #:duration-ms 0))
         (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start)))
       (lambda ()
         ;; 5-7. Stream from provider
