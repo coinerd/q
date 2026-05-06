@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.30.15 — 2026-05-05
+
+### Audit Remediation: Contract Safety + Version Sync + Event Cleanup
+
+- Fixed `test-sdk-ergonomics.rkt` duplicate import (471/471 tests pass)
+- Fixed 3 contract self-blames: `component-compose` return type, `input-expand-last-prompt` return type, `tui-ctx-init-terminal!` leaked value
+- Replaced 16 `any/c` pseudo-tightenings with real predicates (`provider?`, `tool-registry?`, `extension-registry?`, `cancellation-token?`, `queue?`, `working-set?`, `agent-session?`, `session-config?`)
+- Added `iteration` field to `turn-cancelled-event` struct + updated 3 callers
+- Synced version across 15 files (docs, README, info.rkt)
+- Fixed CHANGELOG v0.30.14 entry factual accuracy
+- Removed 2 dual-emission sites in `session-compaction.rkt` (typed events only)
+
+**Impact:** 471/471 tests pass, 0 contract self-blames, 0 `any/c` in iteration.rkt + turn-orchestrator.rkt (down from 16).
+
+---
+
 ## v0.30.14 — 2026-05-05
 
 ### Test Regression Fix + Contract Repair + Event Migration
