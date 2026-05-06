@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.30.13 — 2026-05-05
+
+### DSL Cleanup + Parameter Hygiene (FINAL milestone)
+
+**Goal:** Minor cleanups — macro dedup, parameter migration, HOF adoption.
+
+**W0 — Macro cleanup + HOF adoption:**
+- `extensions/github/tool-handlers.rkt` — deduplicated `with-error-result` macro (2 copies → 1 shared in helpers.rkt)
+- `extensions/define-extension.rkt` — migrated `define-q-extension` from `syntax-case` to `syntax-parse` (~45 LOC saved)
+- `runtime/credential-backend.rkt` — adopted `with-safe-fallback` HOF in 10 handler sites
+
+**W1 — Parameter hygiene:**
+- `wiring/rpc-ui-adapter.rkt` — converted `current-bridge-table` from parameter to module-level mutable hash
+- Documented why remaining 6 parameters are justified (thread-local isolation, testing)
+
+**Impact:** 45 LOC saved from syntax-parse migration; 1 duplicate macro eliminated; 10 with-handlers → with-safe-fallback.
+
+---
+
+
 ## v0.30.12 — 2026-05-05
 
 ### Match-Driven Deconstruction
