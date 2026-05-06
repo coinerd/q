@@ -55,10 +55,6 @@
        [(agent-session-compacting? sess) context-with-system] ; recursive compaction guard
        [else
         (set-agent-session-compacting?! sess #t)
-        (emit-session-event! bus
-                             sid
-                             "compaction.start"
-                             (hasheq 'tokenCount token-count 'budgetThreshold token-budget-threshold))
         (emit-typed-event! bus
                            (make-compaction-event #:session-id sid
                                                   #:turn-id #f
@@ -78,7 +74,6 @@
          (lambda ()
            (set-agent-session-compacting?! sess #f)
            (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
-           (emit-session-event! bus sid "compaction.end" (hasheq 'tokenCount token-count))
            (emit-typed-event! bus
                               (make-compaction-event #:session-id sid
                                                      #:turn-id #f
