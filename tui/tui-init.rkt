@@ -139,11 +139,8 @@
   ;; B3-C: Fallback scrollback — never silently lose transcript
   (define scrollback-path
     (cond
-      [(and sess-dir (directory-exists? sess-dir))
-       (build-path sess-dir "scrollback.jsonl")]
-      [else
-       (build-path "/tmp"
-                   (format "q-scrollback-~a.jsonl" (current-seconds)))]))
+      [(and sess-dir (directory-exists? sess-dir)) (build-path sess-dir "scrollback.jsonl")]
+      [else (build-path "/tmp" (format "q-scrollback-~a.jsonl" (current-seconds)))]))
 
   ;; First-run welcome detection
   (define q-config-dir (build-path (find-system-path 'home-dir) ".q"))
@@ -206,30 +203,36 @@
 
   ;; Initialize terminal, run main loop, cleanup on exit
   (tui-ctx-init-terminal! ctx)
-  (with-handlers ([exn:break? (lambda (e) (void))]
-                  [exn:fail? (lambda (e)
-                               ;; BUG-27 fix: Save scrollback BEFORE re-raising
-                               ;; so that crash doesn't lose the transcript.
-                               (with-handlers ([exn:fail? (lambda (_) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message _)))])
-                                 (when scrollback-path
-                                   (let* ([state (unbox (tui-ctx-ui-state-box ctx))]
-                                          [transcript (ui-state-transcript state)])
-                                     (when (not (null? transcript))
-                                       (save-scrollback transcript scrollback-path)))))
-                               ;; Cleanup terminal (BUG-56: mouse disable in close)
-                               (with-handlers ([exn:fail? (lambda (_) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message _)))])
-                                 (disable-mouse-tracking)
-                                 (tui-term-close (unbox (tui-ctx-term-box ctx))))
-                               (raise e))])
+  (with-handlers
+      ([exn:break? (lambda (e) (void))]
+       [exn:fail?
+        (lambda (e)
+          ;; BUG-27 fix: Save scrollback BEFORE re-raising
+          ;; so that crash doesn't lose the transcript.
+          (with-handlers
+              ([exn:fail? (lambda (_) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message _)))])
+            (when scrollback-path
+              (let* ([state (unbox (tui-ctx-ui-state-box ctx))]
+                     [transcript (ui-state-transcript state)])
+                (when (not (null? transcript))
+                  (save-scrollback transcript scrollback-path)))))
+          ;; Cleanup terminal (BUG-56: mouse disable in close)
+          (with-handlers
+              ([exn:fail? (lambda (_) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message _)))])
+            (disable-mouse-tracking)
+            (tui-term-close (unbox (tui-ctx-term-box ctx))))
+          (raise e))])
     (tui-main-loop ctx))
   ;; Cleanup terminal BEFORE printing Goodbye
   ;; (so newline works correctly and we're on normal screen)
-  (with-handlers ([exn:fail? (lambda (e) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
     (disable-mouse-tracking)
     (tui-term-close (unbox (tui-ctx-term-box ctx))))
   ;; Save scrollback
   (when scrollback-path
-    (with-handlers ([exn:fail? (lambda (e) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
+    (with-handlers ([exn:fail? (lambda (e)
+                                 (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
       (let* ([state (unbox (tui-ctx-ui-state-box ctx))]
              [transcript (transcript-entries state)])
         (when (not (null? transcript))
@@ -241,13 +244,17 @@
   (define ctx (make-tui-ctx #:event-bus bus #:session-runner session-runner))
   (tui-ctx-init-terminal! ctx)
   (with-handlers ([exn:break? (lambda (e) (void))]
-                  [exn:fail? (lambda (e)
-                               (with-handlers ([exn:fail? (lambda (_) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message _)))])
-                                 (disable-mouse-tracking)
-                                 (tui-term-close (unbox (tui-ctx-term-box ctx))))
-                               (raise e))])
+                  [exn:fail?
+                   (lambda (e)
+                     (with-handlers ([exn:fail? (lambda (_)
+                                                  (log-q-tui-init-warning "cleanup failed: ~a"
+                                                                          (exn-message _)))])
+                       (disable-mouse-tracking)
+                       (tui-term-close (unbox (tui-ctx-term-box ctx))))
+                     (raise e))])
     (tui-main-loop ctx))
-  (with-handlers ([exn:fail? (lambda (e) (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (log-q-tui-init-warning "cleanup failed: ~a" (exn-message e)))])
     (disable-mouse-tracking)
     (tui-term-close (unbox (tui-ctx-term-box ctx))))
   (displayln "Goodbye."))

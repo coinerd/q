@@ -23,48 +23,53 @@
 ;; ── Opaque types for untyped struct values ────────────────────
 ;; These avoid TR's any-wrap/c failure with opaque structs.
 
-(require/typed "../../agent/event-bus.rkt"
-               [#:opaque EventBus event-bus?])
+(require/typed "../../agent/event-bus.rkt" [#:opaque EventBus event-bus?])
 
-(require/typed "../../tools/tool.rkt"
-               [#:opaque ToolRegistry tool-registry?])
+(require/typed "../../tools/tool.rkt" [#:opaque ToolRegistry tool-registry?])
 
-(require/typed "../../extensions/api.rkt"
-               [#:opaque ExtRegistry extension-registry?])
+(require/typed "../../extensions/api.rkt" [#:opaque ExtRegistry extension-registry?])
 
-(require/typed "../../util/cancellation.rkt"
-               [#:opaque CancellationToken cancellation-token?])
+(require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
 (require/typed "../../runtime/compactor.rkt"
-               [compact-history (->* ((Listof Any))
-                                     (#:summarize-fn Any
-                                      #:provider Any
-                                      #:model-name Any
-                                      #:previous-summary Any
-                                      #:hook-dispatcher Any
-                                      #:token-config Any)
-                                     Any)])
+               [compact-history
+                (->* ((Listof Any))
+                     (#:summarize-fn Any
+                                     #:provider Any
+                                     #:model-name Any
+                                     #:previous-summary Any
+                                     #:hook-dispatcher Any
+                                     #:token-config Any)
+                     Any)])
 
 (require/typed "../../llm/token-budget.rkt"
                [estimate-context-tokens (-> (Listof Any) Nonnegative-Integer)])
 
-(require/typed "../../extensions/message-inject.rkt"
-               [injection-event-topic String])
+(require/typed "../../extensions/message-inject.rkt" [injection-event-topic String])
 
 ;; Direct DI resolvers — no parameter fallback, no lazy-require.
 (define (resolve-compact-proc)
-  : (->* ((Listof Any))
-        (#:summarize-fn Any #:provider Any #:model-name Any
-         #:previous-summary Any #:hook-dispatcher Any #:token-config Any)
-        Any)
+  :
+  (->* ((Listof Any))
+       (#:summarize-fn Any
+                       #:provider Any
+                       #:model-name Any
+                       #:previous-summary Any
+                       #:hook-dispatcher Any
+                       #:token-config Any)
+       Any)
   compact-history)
 
-(define (resolve-estimate-tokens) : (-> (Listof Any) Nonnegative-Integer)
+(define (resolve-estimate-tokens)
+  :
+  (-> (Listof Any) Nonnegative-Integer)
   estimate-context-tokens)
 
-(define (resolve-inject-topic) : String
+(define (resolve-inject-topic)
+  :
+  String
   injection-event-topic)
 
 ;; ── Loop state structs (v0.29.16 W0) ──────────────────────────
@@ -75,20 +80,19 @@
 
 ;; Infrastructure that doesn't change across iterations.
 (struct loop-infra
-        ([ctx : (Listof Any)]
-         [ext-reg : (U ExtRegistry #f)]
-         [reg : (U ToolRegistry #f)]
-         [bus : EventBus]
-         [session-id : String]
-         [log-path : Path-String]
-         [token : (U CancellationToken #f)])
+        ([ctx : (Listof Any)] [ext-reg : (U ExtRegistry #f)]
+                              [reg : (U ToolRegistry #f)]
+                              [bus : EventBus]
+                              [session-id : String]
+                              [log-path : Path-String]
+                              [token : (U CancellationToken #f)])
   #:transparent)
 
 ;; Counters and accumulators that evolve across iterations.
 (struct loop-counters
         ([iteration : Nonnegative-Integer]
          [consecutive-tool-count : Nonnegative-Integer]
-         [seen-paths : Any] ; racket/set — typed as Any for TR boundary
+         [seen-paths : (Listof String)] ; plain list — avoids TR boundary issues with racket/set
          [intent-retry-count : Nonnegative-Integer]
          [consecutive-error-count : Nonnegative-Integer]
          [recent-tool-names : (Listof Any)]
@@ -98,6 +102,8 @@
   #:transparent)
 
 ;; Constructor helper: create initial counters from defaults.
-;; Uses cast because racket/set is not available as typed/racket/set.
-(define (make-initial-counters) : loop-counters
-  (loop-counters 0 0 (cast (set) Any) 0 0 '() 0 0 0))
+;; Uses empty list for seen-paths (no set required).
+(define (make-initial-counters)
+  :
+  loop-counters
+  (loop-counters 0 0 '() 0 0 '() 0 0 0))

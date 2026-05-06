@@ -5,8 +5,7 @@
 ;; Helpers for working-set update, seen-paths tracking, exploration counting,
 ;; and tool-turn bridging.
 
-(require racket/set
-         racket/list
+(require racket/list
          (only-in racket/string string-join)
          (only-in "../../util/protocol-types.rkt"
                   message-role
@@ -52,24 +51,26 @@
       lst
       (take lst n)))
 
-;; Compute new seen-paths set and whether to increment the consecutive counter.
+;; Compute new seen-paths list and whether to increment the consecutive counter.
+;; Uses a plain list of strings to avoid TR boundary contract issues with racket/set.
 (define (update-seen-paths tool-calls seen-paths)
   (define read-tools '("read" "find" "grep" "ls" "planning-read"))
   (define has-non-read?
     (for/or ([tc (in-list tool-calls)])
       (not (member (tool-call-name tc) read-tools))))
   (cond
-    [has-non-read? (values (set) #f)]
+    [has-non-read? (values '() #f)]
     [else
      (define new-paths
-       (for/set ([tc (in-list tool-calls)]
-                 #:when (member (tool-call-name tc) read-tools))
+       (for/list ([tc (in-list tool-calls)]
+                  #:when (member (tool-call-name tc) read-tools))
          (define p (extract-tool-target-path tc))
-         (or p 'no-path)))
+         (or p "__no_path__")))
      (define has-new-path?
-       (for/or ([p (in-set new-paths)])
-         (not (set-member? seen-paths p))))
-     (values (set-union seen-paths new-paths) has-new-path?)]))
+       (for/or ([p (in-list new-paths)])
+         (not (member p seen-paths))))
+     (define updated (remove-duplicates (append seen-paths new-paths)))
+     (values updated has-new-path?)]))
 
 ;; Update working set after tool execution.
 ;; Returns the updated working set.

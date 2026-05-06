@@ -22,7 +22,6 @@
          racket/contract
          racket/match
          racket/list
-         racket/set
          racket/path
          json
          (only-in racket/string string-trim string-join string-contains?)
@@ -458,7 +457,7 @@
                                          counters
                                          [iteration (add1 (loop-counters-iteration counters))]
                                          [consecutive-tool-count 0]
-                                         [seen-paths (set)]
+                                         [seen-paths '()]
                                          [consecutive-error-count 0]
                                          [recent-tool-names '()]
                                          [stall-retry-count 0])

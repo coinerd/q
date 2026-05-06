@@ -59,6 +59,7 @@
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
          (only-in "session-compaction.rkt" maybe-compact-context)
+         (only-in "trace-logger.rkt" make-trace-logger start-trace-logger! stop-trace-logger!)
          (only-in "auto-retry.rkt"
                   classify-error
                   retry-exhausted?
@@ -215,6 +216,7 @@
 
 ;; dispatch-iteration — model-select hook + iteration loop dispatch.
 ;;   Runs the core agent loop with error handling. Returns a loop-result.
+;;   v0.32.0: Starts trace logger for session diagnostics.
 (define (dispatch-iteration sess context-with-system max-iterations)
   (define bus (agent-session-event-bus sess))
   (define prov (agent-session-provider sess))
@@ -237,40 +239,54 @@
     (set-agent-session-model-name! sess override-model))
 
   ;; Run the core agent loop with tool-call iteration
-  (with-handlers ([exn:fail? (lambda (e)
-                               ;; Emit runtime.error event with classified error-type
-                               (define error-type (classify-error e))
-                               ;; A3: Include retry metadata if retries were attempted
-                               (define base-payload (error-payload (exn-message e) error-type))
-                               (define payload
-                                 (if (retry-exhausted? e)
-                                     (hash-set* (payload->hash base-payload)
-                                                'retries-attempted
-                                                (retry-exhausted-attempts e)
-                                                'total-retry-delay-ms
-                                                (retry-exhausted-total-delay-ms e)
-                                                'errorHistory
-                                                (retry-exhausted-error-history e))
-                                     base-payload))
-                               (emit-session-event! bus sid "runtime.error" payload)
-                               ;; Defense-in-depth: ensure turn.completed is emitted
-                               (emit-typed-event! bus (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "error" 0))
-                               (make-loop-result context-with-system 'error payload))])
+  ;; v0.32.0: Start trace logger for diagnostics
+  (define session-dir (agent-session-session-dir sess))
+  (define tracer (make-trace-logger bus session-dir #:enabled? #t))
+  (start-trace-logger! tracer)
+  (with-handlers
+      ([exn:fail?
+        (lambda (e)
+          ;; Emit runtime.error event with classified error-type
+          (define error-type (classify-error e))
+          ;; A3: Include retry metadata if retries were attempted
+          (define base-payload (error-payload (exn-message e) error-type))
+          (define payload
+            (if (retry-exhausted? e)
+                (hash-set* (payload->hash base-payload)
+                           'retries-attempted
+                           (retry-exhausted-attempts e)
+                           'total-retry-delay-ms
+                           (retry-exhausted-total-delay-ms e)
+                           'errorHistory
+                           (retry-exhausted-error-history e))
+                base-payload))
+          (emit-session-event! bus sid "runtime.error" payload)
+          ;; Defense-in-depth: ensure turn.completed is emitted
+          (emit-typed-event!
+           bus
+           (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "error" 0))
+          ;; v0.32.0: Stop trace logger on error (flush before return)
+          (stop-trace-logger! tracer)
+          (make-loop-result context-with-system 'error payload))])
     (define ws (dict-ref cfg 'working-set #f))
-    (run-iteration-loop context-with-system
-                        prov
-                        bus
-                        reg
-                        (agent-session-extension-registry sess)
-                        log-path
-                        sid
-                        max-iterations
-                        #:cancellation-token cancellation-tok
-                        #:config cfg
-                        #:working-set ws
-                        #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
-                        #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
-                        #:session sess)))
+    (define result
+      (run-iteration-loop context-with-system
+                          prov
+                          bus
+                          reg
+                          (agent-session-extension-registry sess)
+                          log-path
+                          sid
+                          max-iterations
+                          #:cancellation-token cancellation-tok
+                          #:config cfg
+                          #:working-set ws
+                          #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
+                          #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
+                          #:session sess))
+    ;; v0.32.0: Stop trace logger on normal completion
+    (stop-trace-logger! tracer)
+    result))
 
 ;; ============================================================
 ;; run-prompt-internal
@@ -363,7 +379,8 @@
   ;; before context build + compaction. The handler in state-events.rkt
   ;; is idempotent (just sets busy? #t), so the second turn.started
   ;; from agent/loop.rkt during iteration is safe.
-  (emit-typed-event! bus (turn-start-event "turn.started" (current-inexact-milliseconds) sid #f #f #f))
+  (emit-typed-event! bus
+                     (turn-start-event "turn.started" (current-inexact-milliseconds) sid #f #f #f))
   (define base-cfg (agent-session-config sess))
   ;; #1391: Inject session index into config for session_recall tool access
   (dynamic-wind
