@@ -92,6 +92,32 @@
 **Impact:** Separated pure transition logic from effectful state updates, improving testability.
 
 ---
+## v0.31.4 — 2026-05-07
+
+### Pure Kernel: loop.rkt + loop-stream.rkt
+
+**Goal:** Extract pure functions and reuse process-chunk (Findings 3.1.1, 3.1.2).
+
+**W0 — Extract compute-next-loop-state (2 files):**
+- G1: Added `compute-next-loop-state` pure function to `loop.rkt` (Finding 3.1.1).
+- G2: Refactored `run-agent-turn` to call it.
+- Created `tests/test-loop-state.rkt` with 1 test.
+- Tests: 1/1 pass.
+
+**W1 — Refactor loop-stream.rkt to reuse process-chunk (1 file):**
+- G1: Added stream-accumulator box to `stream-from-provider`.
+- G2: Updated accumulator with `process-chunk` for each chunk.
+- Changes: `agent/loop-stream.rkt`.
+
+**W2 — Verification:**
+- All tests pass for loop.rkt and loop-stream.rkt.
+- CI green expected.
+
+**Impact:** Improved separation of pure and effectful code in agent loop.
+
+---
+
+
 
 
 
