@@ -41,6 +41,7 @@
          ;; Transition
          gsm-transition!
          gsm-reset!
+         compute-next-gsm-state
          ;; Transition result
          ok?
          ok-from
@@ -120,32 +121,50 @@
 (define (gsm-history)
   (gsd-history-snapshot))
 
+;; Pure transition kernel (Finding 3.1.3)
+;; Compute next state without side effects.
+;; Returns (or/c ok-result? err-result?).
+(define (compute-next-gsm-state current-state target)
+  (define current (gsd-runtime-state-mode current-state))
+  (cond
+    [(not (gsm-state? target)) (err-result (format "invalid state: ~a" target) current target)]
+    [(valid-transition? current target)
+     ;; Clear executor when leaving executing mode
+     (define state*
+       (if (and (eq? current 'executing) (not (eq? target 'executing)))
+           (struct-copy gsd-runtime-state current-state [wave-executor #f])
+           current-state))
+     (define new-state (struct-copy gsd-runtime-state state* [mode target]))
+     (ok-result current target)]
+    [else
+     (err-result
+      (format "invalid transition: ~a → ~a (valid: ~a)" current target (valid-targets current))
+      current
+      target)]))
+
 (define (gsm-transition! target)
   (with-gsd-lock
    (lambda ()
      (define state (current-gsd-state))
      (define current (gsd-runtime-state-mode state))
      (emit-gsd-event! 'gsd.transition.attempted (hasheq 'from current 'to target))
+     (define result (compute-next-gsm-state state target))
      (cond
-       [(not (gsm-state? target)) (err-result (format "invalid state: ~a" target) current target)]
-       [(valid-transition? current target)
-        ;; Clear executor when leaving executing mode
+       [(ok? result)
+        (define new-mode (ok-to result))
         (define state*
-          (if (and (eq? current 'executing) (not (eq? target 'executing)))
+          (if (and (eq? current 'executing) (not (eq? new-mode 'executing)))
               (struct-copy gsd-runtime-state state [wave-executor #f])
               state))
-        (set-gsd-state! (struct-copy gsd-runtime-state state* [mode target]))
-        (set-gsd-history! (cons (list current target (current-seconds)) (current-gsd-history)))
-        (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to target))
-        (ok-result current target)]
+        (set-gsd-state! (struct-copy gsd-runtime-state state* [mode new-mode]))
+        (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
+        (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to new-mode))
+        result]
        [else
         (emit-gsd-event!
          'gsd.transition.failed
          (hasheq 'from current 'to target 'reason (format "invalid: ~a → ~a" current target)))
-        (err-result
-         (format "invalid transition: ~a → ~a (valid: ~a)" current target (valid-targets current))
-         current
-         target)]))))
+        result]))))
 
 (define (gsm-reset!)
   (with-gsd-lock
