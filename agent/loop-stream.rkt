@@ -140,6 +140,7 @@
   ;; v0.15.2: Track whether a normal done chunk was received.
   ;; Used to detect silent stream EOF (BUG-SILENT-STREAM-EOF).
   (define received-done? (box #f))
+  (define acc-box (box (make-empty-accumulator)))
 
   ;; v0.12.3 Wave 0.1: Error boundary — emit cleanup events on provider crash.
   ;; Without this, a mid-stream exception leaves TUI in busy?=#t forever.
@@ -188,6 +189,7 @@
                    #:state state)))
         (unless (> (unbox chunk-count) limit)
           (streaming-message-append-chunk! sm chunk)
+          (set-box! acc-box (process-chunk chunk (unbox acc-box)))
           (when (stream-chunk-delta-text chunk)
             ;; Emit message.start on first text delta
             (unless (streaming-message-message-started? sm)
