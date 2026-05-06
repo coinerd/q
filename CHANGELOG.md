@@ -307,6 +307,27 @@
 **Impact:** Type safety for model default constants.
 
 ---
+## v0.31.12 — 2026-05-06
+
+### Macro: define-event Prototype.
+
+**Goal:** Create `define-event` macro for defining event structs.
+
+**W0 — Create define-event macro:**
+- Created `util/event-macro.rkt` with `define-event` macro
+- Macro defines struct with `#:transparent`, provides `struct-out`
+- Added tests in `tests/test-event-macro.rkt` (2/2 pass)
+
+**W1 — Verification:**
+- Infrastructure checks passed (15/15 lint)
+- `define-event` macro compiles and works correctly
+- Tests pass (2/2)
+
+**Impact:** Foundation for future event definition system.
+
+---
+
+
 
 
 
