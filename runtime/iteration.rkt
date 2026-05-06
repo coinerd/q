@@ -28,6 +28,7 @@
          (only-in racket/string string-trim string-join string-contains?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          "iteration/loop-state.rkt"
+         (only-in "../util/loop-result.rkt" loop-result?)
          "iteration/retry-policy.rkt"
          (only-in "iteration/tool-turn-bridge.rkt"
                   dequeue-all-steering!
@@ -94,6 +95,8 @@
          ;; estimate-context-tokens imported via DI parameter (see below)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "../agent/event-emitter.rkt" emit-typed-event!)
+         (only-in "../agent/event-structs/hook-events.rkt" turn-cancelled-event)
          ;; v0.22.4 (MOD-01): provider turn + context assembly + extension registration
          (only-in "turn-orchestrator.rkt"
                   run-provider-turn
@@ -103,7 +106,8 @@
          (only-in "context-policy.rkt" estimate-message-tokens))
 
 (provide (contract-out [run-iteration-loop
-                        (->* (list? any/c
+                        (->* (list?
+                                    (or/c any/c #f)
                                     event-bus?
                                     (or/c any/c #f)
                                     (or/c any/c #f)
@@ -111,7 +115,7 @@
                                     string?
                                     exact-nonnegative-integer?)
                              (#:cancellation-token (or/c any/c #f)
-                              #:config any/c
+                              #:config (or/c any/c hash?)
                               #:queue (or/c any/c #f)
                               #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
                               #:injected-box (or/c box? #f)
@@ -122,8 +126,8 @@
                               #:inject-topic (or/c string? #f)
                               #:working-set (or/c any/c #f)
                               #:session (or/c any/c #f))
-                             any/c)]
-                       [decide-next-action (-> iteration-ctx? any/c symbol?)])
+                             list?)]
+                       [decide-next-action (-> iteration-ctx? loop-result? symbol?)])
          ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
          emit-session-event!
          maybe-dispatch-hooks
@@ -283,29 +287,14 @@
   (cond
     ;; Forced shutdown (double Ctrl+C) — immediate abort
     [(and force-shutdown-check (force-shutdown-check))
-     (emit-session-event! bus
-                          session-id
-                          "turn.cancelled"
-                          (assert-payload "turn.cancelled"
-                                          (hasheq 'reason "force-shutdown" 'iteration iteration)
-                                          turn-cancelled-payload/c))
+     (emit-typed-event! bus (turn-cancelled-event "turn.cancelled" (current-inexact-milliseconds) session-id #f "force-shutdown"))
      (make-loop-result ctx 'cancelled (hasheq 'reason "force-shutdown" 'iteration iteration))]
     [(and token (cancellation-token-cancelled? token))
-     (emit-session-event! bus
-                          session-id
-                          "turn.cancelled"
-                          (assert-payload "turn.cancelled"
-                                          (hasheq 'reason "cancellation-token" 'iteration iteration)
-                                          turn-cancelled-payload/c))
+     (emit-typed-event! bus (turn-cancelled-event "turn.cancelled" (current-inexact-milliseconds) session-id #f "cancellation-token"))
      (make-loop-result ctx 'cancelled (hasheq 'reason "cancellation-token" 'iteration iteration))]
     ;; Graceful shutdown — finish after current iteration
     [(and shutdown-check (shutdown-check))
-     (emit-session-event! bus
-                          session-id
-                          "turn.cancelled"
-                          (assert-payload "turn.cancelled"
-                                          (hasheq 'reason "graceful-shutdown" 'iteration iteration)
-                                          turn-cancelled-payload/c))
+     (emit-typed-event! bus (turn-cancelled-event "turn.cancelled" (current-inexact-milliseconds) session-id #f "graceful-shutdown"))
      (make-loop-result ctx 'completed (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
     [else #f]))
 

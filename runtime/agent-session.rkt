@@ -43,6 +43,10 @@
                   session-id-payload)
          "../util/ids.rkt"
          (only-in "iteration.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "../agent/event-emitter.rkt" emit-typed-event!)
+         (only-in "../agent/event-structs/session-events.rkt"
+                  session-start-event
+                  session-shutdown-event)
          "session-types.rkt"
          (only-in "session-events.rkt" wire-session-event-handlers!)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
@@ -176,7 +180,8 @@
                    #f)) ; prompt-running?
 
   ;; Emit session.started
-  (emit-session-event! (agent-session-event-bus sess) sid "session.started" (session-id-payload sid))
+  (emit-typed-event! (agent-session-event-bus sess)
+                     (session-start-event "session.started" (current-inexact-milliseconds) sid #f #f))
 
   ;; Eagerly persist session directory and version header
   (ensure-persisted! sess)
@@ -390,10 +395,12 @@
 (define (close-session! sess)
   (when (session-active? sess)
     (ensure-persisted! sess)
-    (emit-session-event! (agent-session-event-bus sess)
-                         (agent-session-session-id sess)
-                         "session.closed"
-                         (session-id-payload (agent-session-session-id sess)))
+    (emit-typed-event! (agent-session-event-bus sess)
+                       (session-shutdown-event "session.closed"
+                                               (current-inexact-milliseconds)
+                                               (agent-session-session-id sess)
+                                               #f
+                                               "normal"))
     (define session-duration (- (now-seconds) (agent-session-start-time sess)))
     (define shutdown-payload (session-end-payload (agent-session-session-id sess) session-duration))
     (define-values (_shutdown-payload _shutdown-res)

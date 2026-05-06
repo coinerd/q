@@ -53,6 +53,8 @@
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
+         (only-in "../agent/event-emitter.rkt" emit-typed-event!)
+         (only-in "../agent/event-structs/turn-events.rkt" turn-end-event turn-start-event)
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
@@ -252,7 +254,7 @@
                                      base-payload))
                                (emit-session-event! bus sid "runtime.error" payload)
                                ;; Defense-in-depth: ensure turn.completed is emitted
-                               (emit-session-event! bus sid "turn.completed" (hasheq 'reason "error"))
+                               (emit-typed-event! bus (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "error" 0))
                                (make-loop-result context-with-system 'error payload))])
     (define ws (dict-ref cfg 'working-set #f))
     (run-iteration-loop context-with-system
@@ -361,7 +363,7 @@
   ;; before context build + compaction. The handler in state-events.rkt
   ;; is idempotent (just sets busy? #t), so the second turn.started
   ;; from agent/loop.rkt during iteration is safe.
-  (emit-session-event! bus sid "turn.started" (hasheq 'turnId #f 'sessionId sid))
+  (emit-typed-event! bus (turn-start-event "turn.started" (current-inexact-milliseconds) sid #f #f #f))
   (define base-cfg (agent-session-config sess))
   ;; #1391: Inject session index into config for session_recall tool access
   (dynamic-wind
