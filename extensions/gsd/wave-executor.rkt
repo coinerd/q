@@ -35,7 +35,8 @@
          all-waves-done?
          ;; Exposed for testing
          wave-executor-statuses
-         wave-executor-plan)
+         wave-executor-plan
+         compute-next-wave-statuses)
 
 ;; ============================================================
 ;; Wave status struct
@@ -91,13 +92,17 @@
 ;; Status transitions
 ;; ============================================================
 
+;; Pure function: compute next wave statuses without mutation
+(define (compute-next-wave-statuses statuses idx update-fn)
+  (for/list ([s statuses])
+    (if (= (wave-status-index s) idx)
+        (update-fn s)
+        s)))
+
+;; Effect wrapper: mutates the executor's status box
 (define (update-status! exec idx update-fn)
   (define statuses (wave-executor-statuses exec))
-  (define new-statuses
-    (for/list ([s statuses])
-      (if (= (wave-status-index s) idx)
-          (update-fn s)
-          s)))
+  (define new-statuses (compute-next-wave-statuses statuses idx update-fn))
   (set-executor-statuses! exec new-statuses))
 
 (define (wave-start! exec idx)
