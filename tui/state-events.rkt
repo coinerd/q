@@ -47,6 +47,15 @@
            (and (eq? (transcript-entry-kind last) 'tool-start)
                 (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
 
+  ;; v0.32.0: Dedup guard — prevent duplicate tool-end entries when parallel
+  ;; tools with the same name complete in rapid succession.
+  (define (recent-tool-end? st name)
+    (define transcript (ui-state-transcript st))
+    (and (not (null? transcript))
+         (let ([last (car transcript)])
+           (and (memq (transcript-entry-kind last) '(tool-end tool-fail))
+                (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+
   (case ev
     [("assistant.message.completed")
      (define streamed (ui-state-streaming-text state))
@@ -107,18 +116,22 @@
      (define name (hash-ref payload 'tool-name "?"))
      (define result-summary (hash-ref payload 'result-summary 'error))
      (define ts (event-time evt))
-     (if (eq? result-summary 'completed)
-         (let* ([text (format "[OK: ~a]" name)]
-                [meta (hasheq 'name name)])
-           (struct-copy ui-state
-                        (append-entry state (make-entry 'tool-end text ts meta))
-                        [pending-tool-name #f]))
-         (let* ([err "tool failed"]
-                [text (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")]
-                [meta (hasheq 'name name 'error err)])
-           (struct-copy ui-state
-                        (append-entry state (make-entry 'tool-fail text ts meta))
-                        [pending-tool-name #f])))]
+     ;; v0.32.0: Skip if a tool-end for the same name was just appended
+     ;; (parallel same-name tools produce duplicate entries without this guard).
+     (if (recent-tool-end? state name)
+         (struct-copy ui-state state [pending-tool-name #f])
+         (if (eq? result-summary 'completed)
+             (let* ([text (format "[OK: ~a]" name)]
+                    [meta (hasheq 'name name)])
+               (struct-copy ui-state
+                            (append-entry state (make-entry 'tool-end text ts meta))
+                            [pending-tool-name #f]))
+             (let* ([err "tool failed"]
+                    [text (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")]
+                    [meta (hasheq 'name name 'error err)])
+               (struct-copy ui-state
+                            (append-entry state (make-entry 'tool-fail text ts meta))
+                            [pending-tool-name #f]))))]
 
     [("runtime.error")
      (define err (hash-ref payload 'error "unknown error"))
