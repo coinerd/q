@@ -29,7 +29,7 @@
           [provider-stream (-> provider? model-request? generator?)]
           [provider-capabilities (-> provider? hash?)]
           [provider-count-tokens (-> provider? model-request? (or/c #f exact-nonnegative-integer?))]
-          [make-provider (-> procedure? procedure? procedure? procedure? provider?)]
+          [make-provider (-> (-> string?) (-> hash?) (-> model-request? model-response?) (-> model-request? generator?) provider?)]
           [make-mock-provider
            (->* (model-response?) (#:name string? #:stream-chunks (or/c #f list?)) provider?)]))
 
