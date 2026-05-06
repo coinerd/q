@@ -103,7 +103,8 @@
                           "changelog-dates"
                           "tests"
                           "deprecation"
-                          "ci-readiness")
+                          "ci-readiness"
+                          "ivg")
                ","))
 
 (define (run-lint-checks #:full? [full? #f])
