@@ -22,8 +22,10 @@
 
 (require racket/contract
          racket/list
+         racket/match
          "api.rkt"
          "context.rkt"
+         "combinators.rkt"
          "../util/hook-types.rkt")
 
 ;; Re-export hook result types
@@ -35,7 +37,6 @@
           [dispatch-hooks
            (->* (symbol? any/c extension-registry?) (#:ctx (or/c extension-ctx? #f)) hook-result?)])
          current-hook-timeout-ms
-         current-hook-violation-callback
          critical-hook?
          critical-hooks)
 
@@ -67,30 +68,19 @@
   (let loop ([remaining handlers]
              [current-payload payload]
              [amended? #f])
-    (cond
-      [(null? remaining) (hook-result (if amended? 'amend 'pass) current-payload)]
-      [else
-       (define ext-name (car (car remaining)))
-       (define handler (cdr (car remaining)))
+    (match remaining
+      ['() (hook-result (if amended? 'amend 'pass) current-payload)]
+      [(cons (cons ext-name handler) rest)
        (define result (run-hook-with-timeout ext-name hook-point handler current-payload ctx))
-       (case (hook-result-action result)
-         [(block) result]
-         [(amend) (loop (cdr remaining) (hook-result-payload result) #t)]
-         [(pass) (loop (cdr remaining) current-payload amended?)]
-         [else (loop (cdr remaining) current-payload amended?)])])))
+       (match (hook-result-action result)
+         ['block result]
+         ['amend (loop rest (hook-result-payload result) #t)]
+         ['pass (loop rest current-payload amended?)]
+         [_ (loop rest current-payload amended?)])])))
 
-;; Per-hook timeout in milliseconds (default: 100ms for streaming hooks).
+;; Per-hook timeout in milliseconds (default: 500ms).
 ;; Set to #f to disable timeout.
 (define current-hook-timeout-ms (make-parameter 500))
-
-;; Violation callback — called when a hook handler returns an invalid action.
-;; Receives (ext-name hook-point action schema-version).
-;; Default: #f (no callback). Set to a procedure to enable structured violation reporting.
-;; Example: (current-hook-violation-callback
-;;           (lambda (ext hp act sv)
-;;             (emit-session-event! bus sid "hook.violation"
-;;               (hasheq 'extension ext 'action act 'hook-point hp 'schema-version sv))))
-(define current-hook-violation-callback (make-parameter #f))
 
 ;; Internal: call handler with or without ctx based on arity.
 ;; If ctx is provided and handler accepts 2 args, call (handler ctx payload).
@@ -104,57 +94,22 @@
 (define (run-hook-with-timeout ext-name hook-point handler payload ctx)
   (define timeout-ms (current-hook-timeout-ms))
   ;; #671: Error default depends on hook criticality.
-  (define error-default
-    (if (critical-hook? hook-point)
-        (hook-block (format "handler ~a failed for critical hook ~a" ext-name hook-point))
-        (hook-pass payload)))
-  (with-handlers
-      ([exn:fail?
-        (lambda (e)
-          (log-debug "hook handler ~a failed for ~a: ~a" ext-name hook-point (exn-message e))
-          error-default)])
-    (define raw-result
-      (if timeout-ms
-          ;; Run with timeout
-          (let ([chan (make-channel)])
-            (define thd
-              (thread (lambda ()
-                        (channel-put chan
-                                     (with-handlers ([exn:fail? (lambda (e) (cons 'error e))])
-                                       (cons 'ok (call-handler handler payload ctx)))))))
-            (define maybe (sync/timeout (/ timeout-ms 1000.0) chan))
-            (unless maybe
-              (kill-thread thd)) ; #447: prevent thread leak
-            (cond
-              [(not maybe)
-               (log-debug "hook ~a/~a timed out after ~ams" ext-name hook-point timeout-ms)
-               error-default]
-              [(eq? (car maybe) 'error)
-               (log-debug "hook ~a/~a error: ~a" ext-name hook-point (exn-message (cdr maybe)))
-               error-default]
-              [else (cdr maybe)]))
-          ;; No timeout — direct call
-          (call-handler handler payload ctx)))
-    (if (hook-result? raw-result)
-        ;; FEAT-63: Validate action is valid for this hook-point
-        (let ([valid? (validate-hook-result hook-point raw-result)])
-          (if valid?
-              raw-result
-              ;; E2: Invalid action — log violation with extension-error metadata
-              (begin
-                (log-warning "Hook violation: ~a returned invalid action '~a' for ~a (schema v~a)"
-                             ext-name
-                             (hook-result-action raw-result)
-                             hook-point
-                             (hook-schema-version))
-                (let ([cb (current-hook-violation-callback)])
-                  (when cb
-                    (cb ext-name hook-point (hook-result-action raw-result) (hook-schema-version))))
-                (hook-pass payload))))
-        (begin
-          (log-warning "Hook handler ~a for ~a returned non-hook-result: ~v [~a]"
-                       ext-name
-                       hook-point
-                       raw-result
-                       (if (critical-hook? hook-point) "CRITICAL->block" "advisory->pass"))
-          error-default))))
+  (define error-default-thunk
+    (lambda ()
+      (if (critical-hook? hook-point)
+          (hook-block (format "handler ~a failed for critical hook ~a" ext-name hook-point))
+          (hook-pass payload))))
+  ;; Compute raw result with timeout + call-handler
+  (define raw-result
+    (with-timeout
+     (or timeout-ms 1000)
+     (lambda () (call-handler handler payload ctx))
+     #:on-timeout
+     (lambda ()
+       (log-debug "hook ~a/~a timed out after ~ams" ext-name hook-point (or timeout-ms 1000))
+       (error-default-thunk))
+     #:on-error (lambda (e)
+                  (log-debug "hook ~a/~a error: ~a" ext-name hook-point (exn-message e))
+                  (error-default-thunk))))
+  ;; Validate hook result
+  (with-hook-validation (if (symbol? ext-name) ext-name (string->symbol ext-name)) hook-point raw-result error-default-thunk))
