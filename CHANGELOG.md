@@ -27,6 +27,32 @@
 **Impact:** Reduced code duplication in hook dispatch, improved error handling consistency, established HOF combinator pattern for future abstraction waves.
 
 ---
+## v0.31.1 — 2026-05-07
+
+### Event Struct Selectors
+
+**Goal:** Introduce selector functions to abstract direct struct field access for events.
+
+**W0 — Create event-access.rkt (2 files):**
+- Created `util/event-access.rkt` with selector functions:
+  - `event-type-ref`, `event-timestamp-ref`, `event-session-id-ref`
+  - `event-turn-id-ref`, `event-payload-ref`
+- Created `tests/test-event-access.rkt` with 7 tests (TDD)
+- Tests: 7/7 pass
+
+**W1 — Refactor event-types.rkt (1 file):**
+- Integrated `event-access.rkt` into `agent/event-types.rkt` facade
+- Re-provided selectors for downstream use
+
+**W2 — Verification:**
+- All tests pass for event-access and event-types
+- CI green expected
+
+**Impact:** Improved abstraction over event struct internals, easier future refactoring of event representation.
+
+---
+
+
 
 
 ## v0.30.16 — 2026-05-06
