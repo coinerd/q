@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.31.0 — 2026-05-07
+
+### Architecture Abstraction: HOF Combinators for Hook System
+
+**Goal:** Introduce higher-order function combinators to reduce inline pattern repetition in hook dispatch and event handling.
+
+**W0 — Create HOF combinators (2 files):**
+- Created `extensions/combinators.rkt` with 3 combinators:
+  - `with-timeout`: wraps computation with timeout + thread management
+  - `with-error-policy`: wraps computation with criticality-based error handling
+  - `with-hook-validation`: validates hook results + handles violations
+- Added `current-hook-violation-callback` parameter (moved from hooks.rkt)
+- Tests: 12/12 pass in `tests/test-hof-combinators.rkt`
+
+**W1 — Refactor hooks.rkt (2 files):**
+- Refactored `extensions/hooks.rkt` to use HOF combinators
+- Replaced inline timeout/error/validation patterns with combinator calls
+- Replaced `case`+`cond` in `dispatch-hooks` with `match`
+- Fixed contract to accept `(or/c symbol? string?)` for extension names
+
+**W2 — Refactor event-bus.rkt (1 file):**
+- Replaced `cond` in `publish!` with `match` for pattern consistency
+- All 18/18 event-bus tests pass
+
+**Impact:** Reduced code duplication in hook dispatch, improved error handling consistency, established HOF combinator pattern for future abstraction waves.
+
+---
+
+
 ## v0.30.16 — 2026-05-06
 
 ### Audit Remediation: Version Sync + Contract Safety

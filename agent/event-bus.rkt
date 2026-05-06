@@ -12,6 +12,7 @@
 ;;   - publish! returns the event for chaining
 
 (require racket/contract
+         racket/match
          "../util/protocol-types.rkt"
          "../util/event.rkt"
          "event-types.rkt")
@@ -175,15 +176,15 @@
     (for ([s (in-list subs)])
       (define sub-id (subscription-id s))
       (define pred (subscription-filter s))
-      (cond
-        [(circuit-broken? sub-id) (void)]
-        [(or (not pred) (pred evt))
+      (match (cons (circuit-broken? sub-id) (or (not pred) (pred evt)))
+        [(cons #t _) (void)] ; circuit broken
+        [(cons #f #t) ; not broken and predicate true (or no predicate)
          (with-handlers ([exn:fail? (lambda (exn)
                                       (record-failure! sub-id)
                                       (err-handler evt (subscription-handler s) exn))])
            ((subscription-handler s) evt)
            (record-success! sub-id))]
-        [else (void)])))
+        [_ (void)]))) ; not broken but predicate false
   evt)
 
 ;; ============================================================
