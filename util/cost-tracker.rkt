@@ -5,18 +5,24 @@
 ;; Tracks input/output tokens and calculates dollar cost using
 ;; standard model pricing. Thread-safe via a semaphore.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string)
 
 (provide (struct-out cost-tracker)
-         make-cost-tracker
-         calculate-cost
-         format-cost
-         cost-tracker-update!
-         cost-tracker-total
-         cost-tracker-reset!
-         cost-tracker-input-tokens-total
-         cost-tracker-output-tokens-total)
+         (contract-out
+          [make-cost-tracker (->* () ((or/c string? #f)) cost-tracker?)]
+          [calculate-cost
+           (-> exact-nonnegative-integer? exact-nonnegative-integer? (or/c string? #f) real?)]
+          [format-cost (-> real? string?)]
+          [cost-tracker-update!
+           (->* (cost-tracker? exact-nonnegative-integer? exact-nonnegative-integer?)
+                ((or/c string? #f))
+                void?)]
+          [cost-tracker-total (-> cost-tracker? real?)]
+          [cost-tracker-reset! (-> cost-tracker? void?)]
+          [cost-tracker-input-tokens-total (-> cost-tracker? exact-nonnegative-integer?)]
+          [cost-tracker-output-tokens-total (-> cost-tracker? exact-nonnegative-integer?)]))
 
 ;; ============================================================
 ;; Struct

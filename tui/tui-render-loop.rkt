@@ -18,7 +18,8 @@
 ;;   Re-exports: fix-sgr-bg-black, decode-mouse-x10
 
 (require "../util/error-helpers.rkt")
-(require racket/bytes
+(require racket/contract
+         racket/bytes
          racket/string
          "../tui/terminal.rkt"
          "../tui/state.rkt"
@@ -41,23 +42,19 @@
   (or (guarded-real-output-port) (current-output-port)))
 
 ;; ── Ubuf/terminal lifecycle ──
-(provide render-ubuf-to-terminal!
-         tui-ctx-init-terminal!
-         tui-ctx-resize-ubuf!
-         tui-ctx-ubuf
-         tui-ctx-term
-         ;; ── Frame rendering ──
-         render-frame!
-         draw-frame
-         ;; ── Message adapter ──
-         next-message
-         ;; ── Main loop ──
-         tui-main-loop
-         drain-events!
-         ;; ── Re-exports ──
-         fix-sgr-bg-black
+(provide fix-sgr-bg-black
          decode-mouse-x10
-         decode-mouse-tui-term)
+         decode-mouse-tui-term
+         (contract-out [render-ubuf-to-terminal! (-> any/c any/c void?)]
+                       [tui-ctx-init-terminal! (-> any/c void?)]
+                       [tui-ctx-resize-ubuf! (-> any/c void?)]
+                       [tui-ctx-ubuf (-> any/c any/c)]
+                       [tui-ctx-term (-> any/c any/c)]
+                       [render-frame! (-> any/c any/c void?)]
+                       [draw-frame (-> any/c any/c any/c void?)]
+                       [next-message (-> any/c (or/c any/c #f))]
+                       [tui-main-loop (-> any/c void?)]
+                       [drain-events! (-> any/c void?)]))
 
 ;; ============================================================
 ;; Ubuf FFI/stubs
@@ -331,8 +328,7 @@
                     ;; Not busy (or no queue) — submit to runtime (non-blocking)
                     ;; B2-D: Double-submit debounce — ignore rapid identical submits
                     (define entries (ui-state-transcript cur-state))
-                    (define last-entry
-                      (and (pair? entries) (car entries)))
+                    (define last-entry (and (pair? entries) (car entries)))
                     (define is-duplicate
                       (and last-entry
                            (eq? (transcript-entry-kind last-entry) 'user)

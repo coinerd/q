@@ -16,7 +16,8 @@
 ;;   Re-exports: copy-text!, copy-selection!, current-clipboard-mode,
 ;;              clipboard-backend-available?, styled-line->text
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/match
          racket/list
          racket/async-channel
@@ -37,25 +38,13 @@
 
 ;; ── tui-ctx struct ──
 (provide (struct-out tui-ctx)
-         make-tui-ctx
-         ;; ── Key/mouse handling ──
-         mark-dirty!
-         handle-key
-         handle-mouse
-         ;; ── Selection ──
-         selection-text
-         ;; ── Slash commands ──
-         process-slash-command
-         tui-ctx->cmd-ctx
-         ;; ── Re-exports from tui/terminal.rkt ──
+         ;; Re-exports (no contract needed — re-exported from other modules)
          copy-text!
          copy-selection!
          current-clipboard-mode
          clipboard-backend-available?
          clipboard-paste
-         ;; ── Re-exports from tui/render.rkt ──
          styled-line->text
-         ;; ── Re-exports from tui/input.rkt ──
          input-undo
          input-redo
          input-kill-word-backward
@@ -65,18 +54,28 @@
          input-cursor-word-left
          input-cursor-word-right
          input-insert-string
-         ;; ── Keybindings config (#1117) ──
-         reload-keymap!
-         current-keybindings-path
-         ;; ── Re-exports from keybindings/default-map.rkt ──
          default-keymap
          load-user-keymap
          load-keybindings
-         ;; ── Re-exports from keybindings/mode-map.rkt ──
          make-mode-keymap
          mode-overlay->keymap
-         ;; ── Inline bash expansion (G3.3) ──
-         input-expand-last-prompt)
+         (contract-out [make-tui-ctx
+                        (->* (any/c any/c any/c procedure? any/c any/c any/c)
+                             (#:session-dir (or/c path-string? #f)
+                                            #:model-registry-box (or/c any/c #f)
+                                            #:extension-registry-box (or/c any/c #f)
+                                            #:previous-frame-box (or/c any/c #f)
+                                            #:last-prompt-box (or/c any/c #f))
+                             tui-ctx?)]
+                       [mark-dirty! (-> tui-ctx? void?)]
+                       [handle-key (-> tui-ctx? any/c any/c)]
+                       [handle-mouse (-> tui-ctx? any/c any/c)]
+                       [selection-text (-> tui-ctx? (or/c string? #f))]
+                       [process-slash-command (-> tui-ctx? string? any/c)]
+                       [tui-ctx->cmd-ctx (-> tui-ctx? any/c)]
+                       [reload-keymap! (-> void?)]
+                       [current-keybindings-path (-> (or/c path-string? #f))]
+                       [input-expand-last-prompt (-> tui-ctx? void?)]))
 
 ;; ============================================================
 ;; TUI context
@@ -331,9 +330,8 @@
           [(? input-slash-command)
            (define cmd (parse-tui-slash-command text))
            (list 'command (or cmd 'unknown) text)]
-          [_
-           ;; User entry added by submit handler in tui-render-loop.rkt
-           (list 'submit text)])]
+          ;; User entry added by submit handler in tui-render-loop.rkt
+          [_ (list 'submit text)])]
        [(#\newline)
         ;; Ctrl+J → insert newline (multi-line input)
         (set-box! (tui-ctx-input-state-box ctx) (input-insert-newline inp))
@@ -364,9 +362,8 @@
           [(? input-slash-command)
            (define cmd (parse-tui-slash-command text))
            (list 'command (or cmd 'unknown) text)]
-          [_
-           ;; User entry added by submit handler in tui-render-loop.rkt
-           (list 'submit text)])]
+          ;; User entry added by submit handler in tui-render-loop.rkt
+          [_ (list 'submit text)])]
        [(left kp-left)
         (set-box! (tui-ctx-input-state-box ctx) (input-cursor-left inp))
         'continue]
