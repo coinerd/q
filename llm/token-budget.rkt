@@ -10,18 +10,19 @@
          racket/string
          (only-in "../util/protocol-types.rkt" message? message-content text-part? text-part-text))
 
-(provide estimate-context-tokens
-         estimate-turn-tokens
-         should-compact?
-         remaining-budget
-         estimate-text-tokens
-         ;; Constants (for reuse in SDK and agent-session defaults)
-         DEFAULT-TOKEN-BUDGET-THRESHOLD
+(provide DEFAULT-TOKEN-BUDGET-THRESHOLD
          DEFAULT-SAFETY-MARGIN-PCT
-         ;; Context usage API (#1154)
          (struct-out context-usage)
-         get-context-usage
-         context-usage-near-threshold?)
+         (contract-out
+          [estimate-context-tokens (-> (listof any/c) exact-nonnegative-integer?)]
+          [estimate-turn-tokens (-> (listof any/c) string? exact-nonnegative-integer?)]
+          [should-compact? (-> exact-nonnegative-integer? exact-nonnegative-integer? boolean?)]
+          [remaining-budget
+           (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [estimate-text-tokens (-> string? exact-nonnegative-integer?)]
+          [get-context-usage
+           (-> exact-nonnegative-integer? exact-nonnegative-integer? context-usage?)]
+          [context-usage-near-threshold? (->* (context-usage?) (real?) boolean?)]))
 
 ;; ============================================================
 ;; estimate-context-tokens

@@ -15,7 +15,8 @@
 ;;       (make-block-middleware block-fn)))
 ;;   (pipeline tool-call exec-ctx base-executor)
 
-(require (only-in "../util/protocol-types.rkt" tool-call? tool-call-name tool-call-arguments))
+(require racket/contract
+         (only-in "../util/protocol-types.rkt" tool-call? tool-call-name tool-call-arguments))
 
 ;; ============================================================
 ;; Middleware type
@@ -140,13 +141,20 @@
 ;; Provide
 ;; ============================================================
 
-(provide compose-middleware
-         make-hook-middleware
-         make-safe-mode-middleware
-         make-validation-middleware
-         make-permission-middleware
-         make-mutation-queue-middleware
-         ;; NOTE (v0.29.11): make-default-pipeline has 0 production callers.
-         ;; Not wired into existing scheduler — provides composable pipeline for future use.
-         ;; Deferred to v0.30.x — see AUDIT-v0.29.10 for details.
-         make-default-pipeline)
+(provide (contract-out [compose-middleware (->* () #:rest (listof procedure?) procedure?)]
+                       [make-hook-middleware (-> (or/c procedure? #f) symbol? procedure?)]
+                       [make-safe-mode-middleware (-> procedure? procedure? procedure?)]
+                       [make-validation-middleware (-> procedure? procedure? procedure?)]
+                       [make-permission-middleware (-> procedure? procedure?)]
+                       [make-mutation-queue-middleware (-> procedure? procedure? procedure?)]
+                       [make-default-pipeline
+                        (->* ()
+                             (#:hook-dispatcher (or/c procedure? #f)
+                                                #:safe-mode? procedure?
+                                                #:allowed-tool? procedure?
+                                                #:validate-fn procedure?
+                                                #:lookup-fn procedure?
+                                                #:permission-check procedure?
+                                                #:is-mutation? procedure?
+                                                #:enqueue! procedure?)
+                             procedure?)]))

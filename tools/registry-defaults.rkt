@@ -5,9 +5,11 @@
 ;; Delegates to registry-table.rkt for the declarative spec table.
 ;; All tool schemas, descriptions, and handlers are defined there.
 
-(require "registry-table.rkt")
+(require racket/contract
+         "registry-table.rkt")
 
-(provide register-default-tools!)
+(provide (contract-out [register-default-tools!
+                        (->* (any/c) (#:only (or/c (listof string?) #f)) void?)]))
 
 ;; Register the built-in tools into the given tool registry.
 ;; #:only — optional list of tool name strings to register; #f means all.

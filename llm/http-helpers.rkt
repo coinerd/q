@@ -18,14 +18,16 @@
          "provider-errors.rkt"
          "stream.rkt")
 
-(provide extract-status-code
-         http-error?
-         raise-http-error!
-         ;; Consolidated HTTP helpers (QUAL-02)
-         make-provider-http-request
-         check-provider-status!
-         ;; Provider stop-reason dispatch (Finding A9)
-         translate-stop-reason)
+(provide (contract-out
+          [extract-status-code (-> (or/c bytes? string?) exact-nonnegative-integer?)]
+          [http-error? (-> exact-nonnegative-integer? boolean?)]
+          [raise-http-error! (->* (string?) ((or/c exact-nonnegative-integer? #f)) any)]
+          [make-provider-http-request
+           (->* (string? (listof string?) bytes?)
+                (#:timeout (or/c exact-positive-integer? #f) #:status-checker (or/c procedure? #f))
+                jsexpr?)]
+          [check-provider-status! (-> string? (or/c bytes? string?) (or/c bytes? string?) void?)]
+          [translate-stop-reason (-> (or/c symbol? #f) (or/c string? symbol?) symbol?)]))
 
 ;; ============================================================
 ;; Contracts

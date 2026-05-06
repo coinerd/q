@@ -14,7 +14,8 @@
 ;; This is a read-only discovery tool — no modification.
 
 (require "../../util/error-helpers.rkt")
-(require racket/file
+(require racket/contract
+         racket/file
          racket/string
          racket/list
          json
@@ -23,7 +24,7 @@
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          "../../tools/tool.rkt")
 
-(provide tool-skill-route)
+(provide (contract-out [tool-skill-route (->* (hash?) (any/c) any/c)]))
 
 ;; ============================================================
 ;; Skill discovery helpers
