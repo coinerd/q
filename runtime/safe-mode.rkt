@@ -11,13 +11,20 @@
                   current-safe-mode
                   current-safe-mode-config
                   project-root
-                  safe-mode-config safe-mode-config?
-                  safe-mode-config-active safe-mode-config-allowed-tools
-                  safe-mode-config-allowed-paths safe-mode-config-locked
-                  safe-mode-config-project-root-path make-safe-mode-config
+                  safe-mode-config
+                  safe-mode-config?
+                  safe-mode-config-active
+                  safe-mode-config-allowed-tools
+                  safe-mode-config-allowed-paths
+                  safe-mode-config-locked
+                  safe-mode-config-project-root-path
+                  make-safe-mode-config
                   blocked-tools
-                  safe-mode? allowed-tool? allowed-path?
-                  safe-mode-project-root trust-level))
+                  safe-mode?
+                  allowed-tool?
+                  allowed-path?
+                  safe-mode-project-root
+                  trust-level))
 
 ;; ============================================================
 ;; Re-export everything from safe-mode-state
@@ -63,6 +70,8 @@
 ;; ============================================================
 
 (define safe-mode-lock-one-shot (box #f))
+;; Parameter justified: tests use `parameterize` for isolation;
+;; production sets #t once on lock activation.
 (define safe-mode-locked? (make-parameter #f))
 
 (define (locked?)

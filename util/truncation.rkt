@@ -12,6 +12,7 @@
 ;;;   output-exceeds-limits? — check if output exceeds limits
 ;;;   truncate-output-with-overflow — truncate + save full output to temp file
 ;;;   output-overflow-dir — parameter for overflow temp-file directory
+;;;   Parameter justified: tests use `parameterize` to redirect to temp dirs.
 ;;;
 ;;; #774, #1115, G5.2
 

@@ -59,6 +59,7 @@
     [else (zero? (raw-kill pid 0))]))
 
 ;; Lock directory — ~/.q/locks/ (parameterized for testing)
+;; Parameter justified: tests use `parameterize` to isolate lock dirs.
 (define current-locks-dir (make-parameter #f (lambda (v) v)))
 
 (define (locks-dir)

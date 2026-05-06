@@ -45,8 +45,8 @@
 (define GEMINI-DEFAULT-MAX-TOKENS 4096)
 
 ;; Per-request tool call ID counter (Issue #200)
-;; Uses a parameter so concurrent requests don't share/collide on IDs.
-;; The parameter is bound fresh in each send/stream call.
+;; Parameter justified: thread-local isolation via `parameterize` in stream/send calls;
+;; concurrent requests must not share or collide on IDs.
 (define gemini-tool-id-counter-param (make-parameter 0))
 
 ;; Generate a unique tool call ID within the current request.

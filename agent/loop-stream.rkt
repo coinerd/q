@@ -25,7 +25,8 @@
 
 ;; Maximum number of chunks to process from a provider stream.
 ;; Prevents infinite loops from misbehaving providers.
-;; Parameterized for testing (set to small value in tests).
+;; Parameter justified: tests use `parameterize` to set small values;
+;; production uses default.
 (define MAX-STREAM-CHUNKS (make-parameter 10000))
 
 ;; ============================================================
