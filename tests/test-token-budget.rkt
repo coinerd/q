@@ -77,10 +77,10 @@
 (test-case
  "remaining-budget applies safety margin (#450)"
  ;; With 10% safety margin: effective-budget = 1000 * 0.9 = 900
- (check-equal? (remaining-budget 0 1000) 900.0)
- (check-equal? (remaining-budget 500 1000) 400.0)
- (check-equal? (remaining-budget 900 1000) 0.0)
- (check-equal? (remaining-budget 1500 1000) -600.0))
+ (check-equal? (remaining-budget 0 1000) 900)
+ (check-equal? (remaining-budget 500 1000) 400)
+ (check-equal? (remaining-budget 900 1000) 0)
+ (check-equal? (remaining-budget 1500 1000) -600))
 
 ;; ------------------------------------------------------------
 ;; 4. estimate-context-tokens heuristic is reasonable

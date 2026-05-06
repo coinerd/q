@@ -14,11 +14,11 @@
          DEFAULT-SAFETY-MARGIN-PCT
          (struct-out context-usage)
          (contract-out
-          [estimate-context-tokens (-> (listof any/c) exact-nonnegative-integer?)]
-          [estimate-turn-tokens (-> (listof any/c) string? exact-nonnegative-integer?)]
+          [estimate-context-tokens (-> (listof (or/c message? hash?)) exact-nonnegative-integer?)]
+          [estimate-turn-tokens (-> (listof (or/c message? hash?)) string? exact-nonnegative-integer?)]
           [should-compact? (-> exact-nonnegative-integer? exact-nonnegative-integer? boolean?)]
           [remaining-budget
-           (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-nonnegative-integer?)]
+           (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-integer?)]
           [estimate-text-tokens (-> string? exact-nonnegative-integer?)]
           [get-context-usage
            (-> exact-nonnegative-integer? exact-nonnegative-integer? context-usage?)]
@@ -122,7 +122,7 @@
 
 ;; Safety margin percentage added to estimates to prevent overflow.
 ;; Default: 10% safety margin.
-(define DEFAULT-SAFETY-MARGIN-PCT 0.10)
+(define DEFAULT-SAFETY-MARGIN-PCT 1/10)
 
 ;; ============================================================
 ;; should-compact?
