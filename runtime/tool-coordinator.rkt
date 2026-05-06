@@ -81,6 +81,9 @@
                             any/c ; config
                             (listof message?))]))
 
+;; v0.31.5 W1: export struct
+(provide (struct-out tool-call-actions))
+
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks
 ;;           now imported from runtime-helpers.rkt)
@@ -91,6 +94,14 @@
 ;; ============================================================
 ;; Exported functions
 ;; ============================================================
+
+;; v0.31.5 W1: Pure function for tool-call actions
+(struct tool-call-actions (calls-to-run blocked? final-calls) #:transparent)
+
+(define (compute-tool-call-actions tool-calls amended hook-res)
+  (if (and hook-res (eq? (hook-result-action hook-res) 'block))
+      (tool-call-actions '() #t tool-calls)
+      (tool-call-actions amended #f '())))
 
 ;; Extract tool-call structs from assistant messages.
 (define (extract-tool-calls-from-messages messages)
@@ -139,11 +150,10 @@
           (message-id (last asst-msgs)))))
 
   ;; Dispatch 'tool-call hook
-  (define-values (tool-calls-to-run tool-call-blocked?)
-    (let-values ([(amended hook-res) (maybe-dispatch-hooks ext-reg 'tool-call tool-calls)])
-      (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-          (values '() #t)
-          (values amended #f))))
+  (define-values (amended hook-res) (maybe-dispatch-hooks ext-reg 'tool-call tool-calls))
+  (define actions (compute-tool-call-actions tool-calls amended hook-res))
+  (define tool-calls-to-run (tool-call-actions-calls-to-run actions))
+  (define tool-call-blocked? (tool-call-actions-blocked? actions))
 
   ;; Dispatch 'tool.execution.start hook before tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
