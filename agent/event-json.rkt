@@ -45,38 +45,38 @@
 
 ;; Collect extra fields for each concrete event type
 (define (event-extra-fields evt)
-  (cond
-    [(turn-start-event? evt)
+  (match evt
+    [(? turn-start-event?)
      (hasheq 'model (turn-start-event-model evt) 'provider (turn-start-event-provider evt))]
-    [(turn-end-event? evt)
+    [(? turn-end-event?)
      (hasheq 'reason (turn-end-event-reason evt) 'durationMs (turn-end-event-duration-ms evt))]
-    [(message-start-event? evt)
+    [(? message-start-event?)
      (hasheq 'role (message-start-event-role evt) 'model (message-start-event-model evt))]
-    [(message-update-event? evt)
+    [(? message-update-event?)
      (hasheq 'content (message-update-event-content evt) 'delta (message-update-event-delta evt))]
-    [(message-end-event? evt)
+    [(? message-end-event?)
      (hasheq 'role
              (message-end-event-role evt)
              'contentLength
              (message-end-event-content-length evt))]
-    [(tool-execution-start-event? evt)
+    [(? tool-execution-start-event?)
      (hasheq 'toolName
              (tool-execution-start-event-tool-name evt)
              'toolCallId
              (tool-execution-start-event-tool-call-id evt))]
-    [(tool-execution-update-event? evt)
+    [(? tool-execution-update-event?)
      (hasheq 'toolName
              (tool-execution-update-event-tool-name evt)
              'progress
              (tool-execution-update-event-progress evt))]
-    [(tool-execution-end-event? evt)
+    [(? tool-execution-end-event?)
      (hasheq 'toolName
              (tool-execution-end-event-tool-name evt)
              'durationMs
              (tool-execution-end-event-duration-ms evt)
              'resultSummary
              (tool-execution-end-event-result-summary evt))]
-    [(bash-tool-call-event? evt)
+    [(? bash-tool-call-event?)
      (hasheq 'toolName
              "bash"
              'toolCallId
@@ -87,7 +87,7 @@
              (bash-tool-call-event-timeout evt)
              'cwd
              (bash-tool-call-event-cwd evt))]
-    [(edit-tool-call-event? evt)
+    [(? edit-tool-call-event?)
      (hasheq 'toolName
              "edit"
              'toolCallId
@@ -96,7 +96,7 @@
              (edit-tool-call-event-path evt)
              'edits
              (edit-tool-call-event-edits evt))]
-    [(write-tool-call-event? evt)
+    [(? write-tool-call-event?)
      (hasheq 'toolName
              "write"
              'toolCallId
@@ -105,7 +105,7 @@
              (write-tool-call-event-path evt)
              'content
              (write-tool-call-event-content evt))]
-    [(read-tool-call-event? evt)
+    [(? read-tool-call-event?)
      (hasheq 'toolName
              "read"
              'toolCallId
@@ -116,7 +116,7 @@
              (read-tool-call-event-offset evt)
              'limit
              (read-tool-call-event-limit evt))]
-    [(grep-tool-call-event? evt)
+    [(? grep-tool-call-event?)
      (hasheq 'toolName
              "grep"
              'toolCallId
@@ -127,7 +127,7 @@
              (grep-tool-call-event-path evt)
              'glob
              (grep-tool-call-event-glob evt))]
-    [(find-tool-call-event? evt)
+    [(? find-tool-call-event?)
      (hasheq 'toolName
              "find"
              'toolCallId
@@ -136,33 +136,33 @@
              (find-tool-call-event-pattern evt)
              'path
              (find-tool-call-event-path evt))]
-    [(custom-tool-call-event? evt)
+    [(? custom-tool-call-event?)
      (hasheq 'toolName
              (tool-call-event-tool-name evt)
              'toolCallId
              (tool-call-event-tool-call-id evt)
              'arguments
              (tool-call-event-arguments evt))]
-    [(tool-call-event? evt)
+    [(? tool-call-event?)
      (hasheq 'toolName
              (tool-call-event-tool-name evt)
              'arguments
              (tool-call-event-arguments evt)
              'toolCallId
              (tool-call-event-tool-call-id evt))]
-    [(tool-result-event? evt)
+    [(? tool-result-event?)
      (hasheq 'toolCallId
              (tool-result-event-tool-call-id evt)
              'content
              (tool-result-event-content evt)
              'isError
              (tool-result-event-is-error? evt))]
-    [(provider-request-event? evt)
+    [(? provider-request-event?)
      (hasheq 'model
              (provider-request-event-model evt)
              'provider
              (provider-request-event-provider evt))]
-    [(provider-response-event? evt)
+    [(? provider-response-event?)
      (hasheq 'model
              (provider-response-event-model evt)
              'provider
@@ -170,43 +170,45 @@
              'latencyMs
              (provider-response-event-latency-ms evt))]
     ;; Streaming events
-    [(model-stream-delta-event? evt)
-     (hasheq 'delta (model-stream-delta-event-delta evt)
-             'model (model-stream-delta-event-model evt))]
-    [(model-stream-thinking-event? evt)
-     (hasheq 'thinking (model-stream-thinking-event-thinking evt)
-             'model (model-stream-thinking-event-model evt))]
-    [(model-stream-completed-event? evt)
-     (hasheq 'model (model-stream-completed-event-model evt)
-             'provider (model-stream-completed-event-provider evt))]
+    [(? model-stream-delta-event?)
+     (hasheq 'delta (model-stream-delta-event-delta evt) 'model (model-stream-delta-event-model evt))]
+    [(? model-stream-thinking-event?)
+     (hasheq 'thinking
+             (model-stream-thinking-event-thinking evt)
+             'model
+             (model-stream-thinking-event-model evt))]
+    [(? model-stream-completed-event?)
+     (hasheq 'model
+             (model-stream-completed-event-model evt)
+             'provider
+             (model-stream-completed-event-provider evt))]
     ;; Blocked events
-    [(model-request-blocked-event? evt)
-     (hasheq 'reason (model-request-blocked-event-reason evt))]
-    [(message-blocked-event? evt)
-     (hasheq 'hook (message-blocked-event-hook evt)
-             'reason (message-blocked-event-reason evt))]
-    [(turn-cancelled-event? evt)
-     (hasheq 'reason (turn-cancelled-event-reason evt))]
-    [(assistant-message-completed-event? evt)
+    [(? model-request-blocked-event?) (hasheq 'reason (model-request-blocked-event-reason evt))]
+    [(? message-blocked-event?)
+     (hasheq 'hook (message-blocked-event-hook evt) 'reason (message-blocked-event-reason evt))]
+    [(? turn-cancelled-event?) (hasheq 'reason (turn-cancelled-event-reason evt))]
+    [(? assistant-message-completed-event?)
      (hasheq 'contentLength (assistant-message-completed-event-content-length evt))]
-    [(session-start-event? evt) (hasheq 'model (session-start-event-model evt))]
-    [(session-shutdown-event? evt) (hasheq 'reason (session-shutdown-event-reason evt))]
-    [(input-event? evt)
+    [(? session-start-event?) (hasheq 'model (session-start-event-model evt))]
+    [(? session-shutdown-event?) (hasheq 'reason (session-shutdown-event-reason evt))]
+    [(? input-event?)
      (hasheq 'inputType (input-event-input-type evt) 'content (input-event-content evt))]
-    [(model-select-event? evt)
+    [(? model-select-event?)
      (hasheq 'model (model-select-event-model evt) 'provider (model-select-event-provider evt))]
-    [(agent-start-event? evt) (hasheq 'model (agent-start-event-model evt))]
-    [(agent-end-event? evt)
+    [(? agent-start-event?) (hasheq 'model (agent-start-event-model evt))]
+    [(? agent-end-event?)
      (hasheq 'reason (agent-end-event-reason evt) 'durationMs (agent-end-event-duration-ms evt))]
-    [(context-event? evt)
+    [(? context-event?)
      (hasheq 'tokenCount (context-event-token-count evt) 'windowSize (context-event-window-size evt))]
-    [else (hasheq)]))
+    [_ (hasheq)]))
 
 ;; Dispatch deserialization by type string
 (define (dispatch-deserialize type ts sid tid h)
   (match type
-    ["turn.started" (turn-start-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["turn.completed" (turn-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
+    ["turn.started"
+     (turn-start-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
+    ["turn.completed"
+     (turn-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
     ["message.started"
      (message-start-event type ts sid tid (hash-ref h 'role "") (hash-ref h 'model ""))]
     ["message.updated"
@@ -338,8 +340,10 @@
     ["model.selected"
      (model-select-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
     ["agent.started" (agent-start-event type ts sid tid (hash-ref h 'model ""))]
-    ["agent.completed" (agent-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
-    ["context.built" (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
+    ["agent.completed"
+     (agent-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
+    ["context.built"
+     (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
     ;; Streaming events
     ["model.stream.delta"
      (model-stream-delta-event type ts sid tid (hash-ref h 'delta "") (hash-ref h 'model ""))]
@@ -348,12 +352,10 @@
     ["model.stream.completed"
      (model-stream-completed-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
     ;; Blocked events
-    ["model.request.blocked"
-     (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
+    ["model.request.blocked" (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
     ["message.blocked"
      (message-blocked-event type ts sid tid (hash-ref h 'hook "") (hash-ref h 'reason ""))]
-    ["turn.cancelled"
-     (turn-cancelled-event type ts sid tid (hash-ref h 'reason ""))]
+    ["turn.cancelled" (turn-cancelled-event type ts sid tid (hash-ref h 'reason ""))]
     ["assistant.message.completed"
      (assistant-message-completed-event type ts sid tid (hash-ref h 'contentLength 0))]
     [_ (typed-event type ts sid tid)]))
@@ -364,37 +366,37 @@
 
 (define (all-known-event-types)
   '("turn.started" "turn.completed"
-                 "message.started"
-                 "message.updated"
-                 "message.completed"
-                 "tool.execution.started"
-                 "tool.execution.updated"
-                 "tool.execution.completed"
-                 "tool.called"
-                 "tool.result"
-                 "tool.bash.called"
-                 "tool.edit.called"
-                 "tool.write.called"
-                 "tool.read.called"
-                 "tool.grep.called"
-                 "tool.find.called"
-                 "tool.custom.called"
-                 "model.request.started"
-                 "model.request.completed"
-                 "session.started"
-                 "session.shutdown"
-                 "input"
-                 "model.selected"
-                 "agent.started"
-                 "agent.completed"
-                 "context.built"
-                 "model.stream.delta"
-                 "model.stream.thinking"
-                 "model.stream.completed"
-                 "model.request.blocked"
-                 "message.blocked"
-                 "turn.cancelled"
-                 "assistant.message.completed"))
+                   "message.started"
+                   "message.updated"
+                   "message.completed"
+                   "tool.execution.started"
+                   "tool.execution.updated"
+                   "tool.execution.completed"
+                   "tool.called"
+                   "tool.result"
+                   "tool.bash.called"
+                   "tool.edit.called"
+                   "tool.write.called"
+                   "tool.read.called"
+                   "tool.grep.called"
+                   "tool.find.called"
+                   "tool.custom.called"
+                   "model.request.started"
+                   "model.request.completed"
+                   "session.started"
+                   "session.shutdown"
+                   "input"
+                   "model.selected"
+                   "agent.started"
+                   "agent.completed"
+                   "context.built"
+                   "model.stream.delta"
+                   "model.stream.thinking"
+                   "model.stream.completed"
+                   "model.request.blocked"
+                   "message.blocked"
+                   "turn.cancelled"
+                   "assistant.message.completed"))
 
 (define (event-name->tool-name type)
   (match type
