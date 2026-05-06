@@ -14,7 +14,8 @@
 (require racket/contract
          racket/list
          "render.rkt"
-         "state.rkt")
+         "state.rkt"
+         (only-in "render/message-layout.rkt" styled-line?))
 
 ;; Struct
 (provide (struct-out q-component)
@@ -27,7 +28,7 @@
                              q-component?)]
                        [component-render (-> q-component? any/c exact-nonnegative-integer? any/c)]
                        [component-invalidate! (-> q-component? void?)]
-                       [component-compose (-> any/c any/c any/c q-component?)]
+                       [component-compose (-> any/c any/c any/c (listof styled-line?))]
                        [component-cached-width (-> q-component? (or/c exact-nonnegative-integer? #f))]
                        [component-handle-input (-> q-component? any/c any/c (values any/c any/c))]
                        [input-consumed (-> any/c)]

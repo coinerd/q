@@ -23,13 +23,7 @@
                   thinking-levels
                   session-id)
          (only-in "../llm/token-budget.rkt"
-                  context-usage
-                  context-usage?
-                  context-usage-total-tokens
-                  context-usage-max-tokens
-                  context-usage-usage-percent
-                  context-usage-compaction-threshold
-                  get-context-usage)
+                  context-usage)
          "../interfaces/sdk.rkt")
 
 ;; ============================================================

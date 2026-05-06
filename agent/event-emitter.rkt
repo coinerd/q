@@ -44,7 +44,7 @@
           'agent-end-event
           '(reason duration-ms)
           'turn-cancelled-event
-          '(reason)
+          '(reason iteration)
           'context-event
           '(token-count window-size)
           'tool-execution-start-event

@@ -77,7 +77,7 @@
                        [tui-ctx->cmd-ctx (-> tui-ctx? any/c)]
                        [reload-keymap! (-> void?)]
                        [current-keybindings-path (-> (or/c path-string? #f))]
-                       [input-expand-last-prompt (-> string? tui-ctx? void?)]))
+                       [input-expand-last-prompt (-> string? tui-ctx? string?)]))
 
 ;; ============================================================
 ;; TUI context

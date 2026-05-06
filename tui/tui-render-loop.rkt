@@ -134,7 +134,7 @@
   (enable-mouse-tracking)
   ;; Detect synchronized output support
   (detect-sync-mode-support!)
-  term)
+  (void))
 
 ;; Resize ubuf when terminal size changes
 (define (tui-ctx-resize-ubuf! ctx)
