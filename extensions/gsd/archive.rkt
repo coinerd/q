@@ -9,11 +9,11 @@
 (require racket/file
          racket/path
          racket/port
+         racket/set
          racket/string
          racket/format
          "plan-types.rkt"
          "wave-docs.rkt"
-         "wave-executor.rkt"
          "state-machine.rkt"
          "command-types.rkt")
 
@@ -31,6 +31,7 @@
 ;; ============================================================
 
 ;; Check if all waves in PLAN.md are complete (DONE or DEFERRED).
+;; Case-insensitive to handle LLM-written "Done" vs canonical "DONE".
 (define (all-waves-complete? base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (cond
@@ -42,7 +43,7 @@
        [(null? entries) #f]
        [else
         (for/and ([e entries])
-          (define status (wave-index-entry-status e))
+          (define status (string-upcase (wave-index-entry-status e)))
           (or (string=? status "DONE") (string=? status "DEFERRED")))])]))
 
 ;; ============================================================
@@ -167,26 +168,43 @@
 ;; Helpers
 ;; ============================================================
 
-;; v0.32.0: Sync wave executor in-memory state to PLAN.md status markers.
-;; When /go executes all waves but the LLM never calls /wave-done, the
-;; executor knows the waves are completed but PLAN.md still shows [Inbox].
-;; This function bridges that gap so /done works without --force.
+;; v0.32.0: Sync state machine completed-waves to PLAN.md status markers.
+;; When /go executes all waves but the LLM never calls /wave-done for all
+;; of them, the state machine's completed-waves set knows about waves that
+;; were marked complete (via /wave-done) but PLAN.md might have mixed-case
+;; "Done" or still show [Inbox]. This normalizes everything to [DONE].
 (define (sync-executor-to-plan! base-dir)
-  (define exec (gsm-wave-executor))
-  (when exec
-    (define statuses (wave-executor-statuses exec))
-    (for ([s statuses])
-      (define idx (wave-status-index s))
-      (define state (wave-status-state s))
-      (define status-str
-        (cond
-          [(eq? state 'completed) "DONE"]
-          [(eq? state 'failed) "FAILED"]
-          [(eq? state 'skipped) "DEFERRED"]
-          [(eq? state 'in-progress) "In-Progress"]
-          [else #f]))
-      (when status-str
-        (mark-wave-status! base-dir idx status-str)))))
+  ;; Source 1: gsm-completed-waves (updated by /wave-done calls)
+  (define completed (gsm-completed-waves))
+  (for ([idx (set->list completed)])
+    (mark-wave-status! base-dir idx "DONE"))
+  ;; Source 2: Normalize any mixed-case status markers in PLAN.md
+  ;; (e.g., LLM wrote [Done] instead of [DONE])
+  (normalize-plan-status-markers! base-dir))
+
+;; Normalize mixed-case status markers in PLAN.md to canonical forms.
+;; The LLM often writes [Done] instead of [DONE]. This rewrites
+;; all recognized variants to their canonical form.
+(define (normalize-plan-status-markers! base-dir)
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
+  (when (file-exists? plan-path)
+    (define text (call-with-input-file plan-path port->string))
+    (define entries (parse-plan-index text))
+    (for ([e entries])
+      (define status (wave-index-entry-status e))
+      (define idx (wave-index-entry-idx e))
+      (define upcase (string-upcase status))
+      (cond
+        ;; Already canonical — skip
+        [(member status '("DONE" "DEFERRED" "FAILED" "Inbox" "In-Progress")) (void)]
+        ;; Case variant of DONE (Done, done, Done, etc.)
+        [(string=? upcase "DONE") (mark-wave-status! base-dir idx "DONE")]
+        ;; Case variant of DEFERRED
+        [(string=? upcase "DEFERRED") (mark-wave-status! base-dir idx "DEFERRED")]
+        ;; Case variant of FAILED
+        [(string=? upcase "FAILED") (mark-wave-status! base-dir idx "FAILED")]
+        ;; Other non-canonical status — leave as-is
+        [else (void)]))))
 
 ;; Update all wave status markers in PLAN.md to [DONE] before archiving.
 ;; base-dir is the directory CONTAINING .planning/ (not .planning/ itself).

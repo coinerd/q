@@ -10,7 +10,6 @@
          "../extensions/gsd/archive.rkt"
          "../extensions/gsd/state-machine.rkt"
          "../extensions/gsd/wave-docs.rkt"
-         "../extensions/gsd/wave-executor.rkt"
          "../extensions/gsd/plan-types.rkt"
          (only-in "../extensions/gsd/command-types.rkt"
                   gsd-command-result-success
@@ -294,7 +293,7 @@
 ;; Tests: sync-executor-to-plan! (v0.32.0)
 ;; ============================================================
 
-(test-case "sync-executor-to-plan! updates PLAN.md from executor state"
+(test-case "sync-executor-to-plan! updates PLAN.md from gsm-completed-waves"
   (reset-gsm!)
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind
@@ -305,19 +304,10 @@
       tmp
       #:status-lines
       "- [Inbox] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: implement \u2192 waves/W1-implement.md\n")
-     ;; Create a wave executor with W0 completed, W1 completed
-     (define plan
-       (gsd-plan (list (gsd-wave 0 "setup" 'pending "" '() '() "" '())
-                       (gsd-wave 1 "implement" 'pending "" '() '() "" '()))
-                 #f
-                 '()
-                 '()))
-     (define exec (make-wave-executor plan))
-     (wave-complete! exec 0)
-     (wave-complete! exec 1)
-     ;; Set executor in state machine
-     (gsm-set-wave-executor! exec)
-     ;; Sync executor state to PLAN.md
+     ;; Mark waves complete in state machine (simulating /wave-done calls)
+     (gsm-mark-wave-complete! 0)
+     (gsm-mark-wave-complete! 1)
+     ;; Sync state to PLAN.md
      (sync-executor-to-plan! tmp)
      ;; Verify PLAN.md now shows [DONE] for both waves
      (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
@@ -329,30 +319,46 @@
      (reset-gsm!)
      (cleanup-tmp tmp))))
 
-(test-case "archive-completed-plan! auto-syncs executor before check"
+(test-case "sync-executor-to-plan! normalizes mixed-case Done to DONE"
   (reset-gsm!)
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind
    void
    (lambda ()
-     ;; Create plan with Inbox waves (simulating /go completion without /wave-done)
+     ;; Create plan with mixed-case [Done] markers (LLM-written)
      (write-plan!
       tmp
       #:status-lines
-      "- [Inbox] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: implement \u2192 waves/W1-implement.md\n")
+      "- [Done] W0: setup \u2192 waves/W0-setup.md\n- [Done] W1: implement \u2192 waves/W1-implement.md\n")
+     ;; Sync should still normalize [Done] \u2192 [DONE]
+     (sync-executor-to-plan! tmp)
+     ;; Verify PLAN.md now shows [DONE]
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[DONE] W0:"))
+     (check-true (string-contains? plan-text "[DONE] W1:"))
+     ;; Verify all-waves-complete? now returns #t
+     (check-true (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+(test-case "archive-completed-plan! auto-syncs before check"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with mixed-case [Done] + [Inbox] (simulating LLM execution)
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Done] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: implement \u2192 waves/W1-implement.md\n")
      (write-state! tmp)
-     ;; Create executor with all waves completed
-     (define plan
-       (gsd-plan (list (gsd-wave 0 "setup" 'pending "" '() '() "" '())
-                       (gsd-wave 1 "implement" 'pending "" '() '() "" '()))
-                 #f
-                 '()
-                 '()))
-     (define exec (make-wave-executor plan))
-     (wave-complete! exec 0)
-     (wave-complete! exec 1)
-     (gsm-set-wave-executor! exec)
-     ;; Archive should succeed without --force
+     ;; Mark W1 as complete in state machine (simulating /wave-done for W1 only)
+     (gsm-mark-wave-complete! 1)
+     ;; Archive should succeed without --force:
+     ;; - W0: [Done] normalized to [DONE] by normalize-plan-status-markers!
+     ;; - W1: [Inbox] \u2192 [DONE] by gsm-completed-waves sync
      (define result (archive-completed-plan! tmp))
      (check-true (gsd-command-result-success result))
      ;; PLAN.md should be gone from .planning/
@@ -361,17 +367,30 @@
      (reset-gsm!)
      (cleanup-tmp tmp))))
 
-(test-case "sync-executor-to-plan! no-ops when no executor"
+(test-case "all-waves-complete? is case-insensitive"
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Mixed-case Done should be treated as DONE
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Done] W0: setup \u2192 waves/W0-setup.md\n- [done] W1: implement \u2192 waves/W1-implement.md\n")
+     (check-true (all-waves-complete? tmp)))
+   (lambda () (cleanup-tmp tmp))))
+
+(test-case "sync-executor-to-plan! no-ops when nothing to sync"
   (reset-gsm!)
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind void
                 (lambda ()
-                  (write-plan-incomplete! tmp)
-                  ;; No executor set
+                  (write-plan! tmp)
+                  ;; No completed waves, no mixed-case markers
                   (sync-executor-to-plan! tmp)
-                  ;; PLAN.md should be unchanged
+                  ;; PLAN.md unchanged
                   (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
-                  (check-true (string-contains? plan-text "[Inbox] W1:")))
+                  (check-true (string-contains? plan-text "[DONE] W0:")))
                 (lambda ()
                   (reset-gsm!)
                   (cleanup-tmp tmp))))
