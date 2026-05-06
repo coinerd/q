@@ -272,7 +272,7 @@ q/
 |--------|-------|
 | Test files | 524 |
 | Source modules | 398 |
-| Source lines | 63439 |
+| Source lines | 63433 |
 | Test lines | 95575 |
 | Test assertions | 14738 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |

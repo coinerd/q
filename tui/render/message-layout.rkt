@@ -68,7 +68,7 @@
     [(system)
      (list (styled-line (list (styled-segment (format "[SYS] ~a" raw-text) '(bright-black)))))]
     [(tool tool-result)
-     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name #f))
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'name #f))
      (define renderer (and tool-name (lookup-custom-renderer-for-tool tool-name 'call)))
      (define text
        (cond
@@ -77,7 +77,7 @@
          [else (format "  [tool] ~a" raw-text)]))
      (list (styled-line (list (styled-segment text (theme->style 'tool)))))]
     [(tool-start)
-     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'name "tool"))
      (define renderer (lookup-custom-renderer-for-tool tool-name 'call))
      (if renderer
          (renderer (hash-ref (transcript-entry-meta entry) 'args entry))
@@ -85,7 +85,7 @@
            (list (styled-line (list (styled-segment (format "[TOOL] ~a: ~a" tool-name sanitized)
                                                     '(cyan)))))))]
     [(tool-end)
-     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'name "tool"))
      (define renderer (lookup-custom-renderer-for-tool tool-name 'result))
      (if renderer
          (renderer raw-text)
@@ -93,7 +93,7 @@
            (list (styled-line (list (styled-segment (format "[OK] ~a: ~a" tool-name sanitized)
                                                     '(green)))))))]
     [(tool-fail)
-     (define tool-name (hash-ref (transcript-entry-meta entry) 'tool-name "tool"))
+     (define tool-name (hash-ref (transcript-entry-meta entry) 'name "tool"))
      (define sanitized (string-replace raw-text "\n" " "))
      (list (styled-line (list (styled-segment (format "[FAIL] ~a: ~a" tool-name sanitized) '(red)))))]
     [(error) (list (styled-line (list (styled-segment (format "[ERR] ~a" raw-text) '(bold red)))))]

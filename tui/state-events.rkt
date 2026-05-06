@@ -84,9 +84,7 @@
                   [arg-summary (if args-raw
                                    (extract-arg-summary args-raw)
                                    "")]
-                  [text (if (string=? arg-summary "")
-                            (format "[TOOL: ~a]" name)
-                            (format "[TOOL: ~a] ~a" name arg-summary))]
+                  [text arg-summary]
                   [ts (event-time evt)]
                   [meta (hasheq 'name name 'arguments (or args-raw ""))]
                   [new-state (append-entry state (make-entry 'tool-start text ts meta))])
@@ -102,9 +100,7 @@
                   [arg-summary (if args-raw
                                    (extract-arg-summary args-raw)
                                    "")]
-                  [text (if (string=? arg-summary "")
-                            (format "[TOOL: ~a]" name)
-                            (format "[TOOL: ~a] ~a" name arg-summary))]
+                  [text arg-summary]
                   [ts (event-time evt)]
                   [meta (hasheq 'name name 'arguments (or args-raw ""))]
                   [new-state (append-entry state (make-entry 'tool-start text ts meta))])
@@ -121,16 +117,14 @@
      (if (recent-tool-end? state name)
          (struct-copy ui-state state [pending-tool-name #f])
          (if (eq? result-summary 'completed)
-             (let* ([text (format "[OK: ~a]" name)]
-                    [meta (hasheq 'name name)])
+             (let* ([meta (hasheq 'name name)])
                (struct-copy ui-state
-                            (append-entry state (make-entry 'tool-end text ts meta))
+                            (append-entry state (make-entry 'tool-end "" ts meta))
                             [pending-tool-name #f]))
              (let* ([err "tool failed"]
-                    [text (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")]
                     [meta (hasheq 'name name 'error err)])
                (struct-copy ui-state
-                            (append-entry state (make-entry 'tool-fail text ts meta))
+                            (append-entry state (make-entry 'tool-fail err ts meta))
                             [pending-tool-name #f]))))]
 
     [("runtime.error")
