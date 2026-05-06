@@ -20,7 +20,7 @@
 - Added `turn-cancelled-event` to event-emitter field mapping
 - Contract tightening: 18→15 `any/c` (loop-result?, list? return types)
 
-**Impact:** 471/471 tests pass (was 450/471), 0 contract self-blames (was 5 modules).
+**Impact:** 470/471 tests pass pre-fix, 471/471 post-fix. 0 contract self-blames from v0.30.10-v0.30.11 (was 5 modules). 3 latent self-blames fixed in v0.30.15.
 
 ---
 
