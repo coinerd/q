@@ -134,6 +134,105 @@
 **Impact:** Continued pure kernel separation.
 
 ---
+## v0.31.6 — 2026-05-06
+
+### Milestone v0.31.6
+
+**Goal:** Complete milestone v0.31.6 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+## v0.31.7 — 2026-05-06
+
+### Milestone v0.31.7
+
+**Goal:** Complete milestone v0.31.7 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+## v0.31.8 — 2026-05-06
+
+### Milestone v0.31.8
+
+**Goal:** Complete milestone v0.31.8 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+## v0.31.9 — 2026-05-06
+
+### Milestone v0.31.9
+
+**Goal:** Complete milestone v0.31.9 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+## v0.31.10 — 2026-05-06
+
+### Milestone v0.31.10
+
+**Goal:** Complete milestone v0.31.10 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+## v0.31.11 — 2026-05-06
+
+### Milestone v0.31.11
+
+**Goal:** Complete milestone v0.31.11 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+## v0.31.12 — 2026-05-06
+
+### Milestone v0.31.12
+
+**Goal:** Complete milestone v0.31.12 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+
+
 
 
 

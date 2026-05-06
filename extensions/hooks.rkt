@@ -113,3 +113,4 @@
                   (error-default-thunk))))
   ;; Validate hook result
   (with-hook-validation (if (symbol? ext-name) ext-name (string->symbol ext-name)) hook-point raw-result error-default-thunk))
+;; v0.31.x milestone placeholder

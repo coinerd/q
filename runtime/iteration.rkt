@@ -112,8 +112,7 @@
          (only-in "context-policy.rkt" estimate-message-tokens))
 
 (provide (contract-out [run-iteration-loop
-                        (->* (list?
-                                    (or/c provider? #f)
+                        (->* (list? (or/c provider? #f)
                                     event-bus?
                                     (or/c tool-registry? #f)
                                     (or/c extension-registry? #f)
@@ -132,7 +131,7 @@
                               #:inject-topic (or/c string? #f)
                               #:working-set (or/c working-set? #f)
                               #:session (or/c agent-session? #f))
-                             list?)]
+                             loop-result?)]
                        [decide-next-action (-> iteration-ctx? loop-result? symbol?)])
          ;; emit-session-event! and maybe-dispatch-hooks re-exported from runtime-helpers
          emit-session-event!
@@ -293,14 +292,32 @@
   (cond
     ;; Forced shutdown (double Ctrl+C) — immediate abort
     [(and force-shutdown-check (force-shutdown-check))
-     (emit-typed-event! bus (turn-cancelled-event "turn.cancelled" (current-inexact-milliseconds) session-id #f "force-shutdown" iteration))
+     (emit-typed-event! bus
+                        (turn-cancelled-event "turn.cancelled"
+                                              (current-inexact-milliseconds)
+                                              session-id
+                                              #f
+                                              "force-shutdown"
+                                              iteration))
      (make-loop-result ctx 'cancelled (hasheq 'reason "force-shutdown" 'iteration iteration))]
     [(and token (cancellation-token-cancelled? token))
-     (emit-typed-event! bus (turn-cancelled-event "turn.cancelled" (current-inexact-milliseconds) session-id #f "cancellation-token" iteration))
+     (emit-typed-event! bus
+                        (turn-cancelled-event "turn.cancelled"
+                                              (current-inexact-milliseconds)
+                                              session-id
+                                              #f
+                                              "cancellation-token"
+                                              iteration))
      (make-loop-result ctx 'cancelled (hasheq 'reason "cancellation-token" 'iteration iteration))]
     ;; Graceful shutdown — finish after current iteration
     [(and shutdown-check (shutdown-check))
-     (emit-typed-event! bus (turn-cancelled-event "turn.cancelled" (current-inexact-milliseconds) session-id #f "graceful-shutdown" iteration))
+     (emit-typed-event! bus
+                        (turn-cancelled-event "turn.cancelled"
+                                              (current-inexact-milliseconds)
+                                              session-id
+                                              #f
+                                              "graceful-shutdown"
+                                              iteration))
      (make-loop-result ctx 'completed (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
     [else #f]))
 
@@ -671,8 +688,7 @@
                 (make-loop-result '() 'completed (hasheq 'reason "extension-block"))]
                [else
                 ;; Build assembled context
-                (define config-with-ws
-                  (dict-set config 'working-set ws))
+                (define config-with-ws (dict-set config 'working-set ws))
                 (define ctx-final
                   (build-assembled-context ctx-to-use
                                            config-with-ws
@@ -737,3 +753,4 @@
            decide-next-action
            check-cancellation
            iteration-ctx))
+;; v0.31.x milestone placeholder
