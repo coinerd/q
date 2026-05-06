@@ -7,7 +7,6 @@
 ;;   - extension-registry (thread-safe, insertion-ordered)
 ;;   - register-extension!, unregister-extension!, lookup-extension
 ;;   - list-extensions, handlers-for-point
-         json-schema?
 
 (require racket/contract
          racket/list
