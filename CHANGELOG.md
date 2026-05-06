@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.30.16 — 2026-05-06
+
+### Audit Remediation: Version Sync + Contract Safety
+
+**Goal:** Address all actionable findings from v0.30.15 audit (6.5/10 → 8.0/10).
+
+**W0 — Version sync (15 files):**
+- Fixed 17 version mismatches: `info.rkt`, `README.md`, 12 doc files, wiki
+- All files now at `0.30.15` (matching `util/version.rkt`)
+- Lint 18/18 restored (was 15/18)
+
+**W1 — Contract fix (1 file):**
+- Fixed latent contract violation in `turn-orchestrator.rkt`
+- Added `session-config?` import
+- Changed 2× `hash?` → `(or/c hash? session-config?)` for config parameters
+- `session-config` structs now pass contracts without blame
+
+**W2 — Infrastructure + version bump:**
+- 471/471 tests pass, 18/18 lint, 10/10 IVG
+- Version bumped to 0.30.16
+- All downstream files synced to 0.30.16
+
+**Impact:** 471/471 tests pass, 18/18 lint, 0 contract self-blames, 0 latent violations, 0 version drift.
+
+---
+
 ## v0.30.15 — 2026-05-05
 
 ### Audit Remediation: Contract Safety + Version Sync + Event Cleanup
