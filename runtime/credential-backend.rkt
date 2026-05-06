@@ -24,12 +24,10 @@
 ;; Backend struct
 (provide (struct-out credential-backend)
          (contract-out
-          [make-file-credential-backend
-           (->* (path-string?) (#:create-if-missing? boolean?) credential-backend?)]
-          [make-env-credential-backend (->* () (#:prefix string?) credential-backend?)]
+          [make-file-credential-backend (->* () ((or/c path-string? #f)) credential-backend?)]
+          [make-env-credential-backend (-> credential-backend?)]
           [make-memory-credential-backend (-> credential-backend?)]
-          [make-keychain-credential-backend
-           (->* () (#:tool-path (or/c path-string? #f)) credential-backend?)]
+          [make-keychain-credential-backend (-> credential-backend?)]
           [make-chained-credential-backend (-> (listof credential-backend?) credential-backend?)]
           [backend-name (-> credential-backend? string?)]
           [backend-store! (-> credential-backend? string? string? void?)]

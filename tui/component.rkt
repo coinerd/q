@@ -18,22 +18,30 @@
 
 ;; Struct
 (provide (struct-out q-component)
-         (contract-out
-          [make-q-component (->* (procedure? procedure?) (#:id symbol?) q-component?)]
-          [component-render (-> q-component? any/c exact-nonnegative-integer? any/c)]
-          [component-invalidate! (-> q-component? void?)]
-          [component-compose (->* (q-component?) #:rest (listof q-component?) q-component?)]
-          [component-cached-width (-> q-component? (or/c exact-nonnegative-integer? #f))]
-          [component-handle-input (-> q-component? any/c any/c)]
-          [input-consumed (-> any/c)]
-          [input-bubble (-> any/c)]
-          [input-action (-> any/c any/c)]
-          [input-consumed? (-> any/c boolean?)]
-          [input-bubble? (-> any/c boolean?)]
-          [input-action? (-> any/c boolean?)]
-          [input-action-data (-> any/c any/c)]
-          [focusable-components (-> (listof q-component?) (listof q-component?))]
-          [cycle-focus (-> (listof q-component?) (or/c q-component? #f) (or/c q-component? #f))]))
+         (contract-out [make-q-component
+                        (->* (procedure?)
+                             (#:id symbol?
+                                   #:invalidate-fn procedure?
+                                   #:handle-input (or/c procedure? #f)
+                                   #:wants-focus? boolean?)
+                             q-component?)]
+                       [component-render (-> q-component? any/c exact-nonnegative-integer? any/c)]
+                       [component-invalidate! (-> q-component? void?)]
+                       [component-compose (-> any/c any/c any/c q-component?)]
+                       [component-cached-width (-> q-component? (or/c exact-nonnegative-integer? #f))]
+                       [component-handle-input (-> q-component? any/c any/c (values any/c any/c))]
+                       [input-consumed (-> any/c)]
+                       [input-bubble (-> any/c)]
+                       [input-action (-> any/c any/c)]
+                       [input-consumed? (-> any/c boolean?)]
+                       [input-bubble? (-> any/c boolean?)]
+                       [input-action? (-> any/c boolean?)]
+                       [input-action-data (-> any/c any/c)]
+                       [focusable-components (-> (listof q-component?) (listof q-component?))]
+                       [cycle-focus
+                        (->* ((listof q-component?) (or/c symbol? #f))
+                             (exact-integer?)
+                             (or/c symbol? #f))]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Struct

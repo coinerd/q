@@ -12,7 +12,8 @@
          "../tui/tui-init.rkt"
          "../tui/tui-keybindings.rkt"
          "../tui/state.rkt"
-         "../agent/event-bus.rkt")
+         "../agent/event-bus.rkt"
+         (only-in "../util/event.rkt" make-event))
 
 (define test-tui-init
   (test-suite "tui/tui-init"
@@ -36,7 +37,7 @@
       (define bus (make-event-bus))
       (define ctx (make-tui-ctx #:event-bus bus))
       (subscribe-runtime-events! ctx)
-      (define test-event (hasheq 'ev "test.event" 'payload (hasheq 'x 1)))
+      (define test-event (make-event "test.event" (current-inexact-milliseconds) #f #f (hasheq 'x 1)))
       (publish! bus test-event)
       ;; publish! calls subscribers synchronously, so event is already on channel
       (define ch (tui-ctx-event-ch ctx))
@@ -69,8 +70,8 @@
       (define ctx (make-tui-ctx #:event-bus bus))
       (subscribe-runtime-events! ctx)
       (define ch (tui-ctx-event-ch ctx))
-      (publish! bus (hasheq 'ev "first" 'payload (hasheq)))
-      (publish! bus (hasheq 'ev "second" 'payload (hasheq)))
+      (publish! bus (make-event "first" (current-inexact-milliseconds) #f #f (hasheq)))
+      (publish! bus (make-event "second" (current-inexact-milliseconds) #f #f (hasheq)))
       ;; Drain both
       (define e1 (sync/timeout 0.5 ch))
       (define e2 (sync/timeout 0.5 ch))

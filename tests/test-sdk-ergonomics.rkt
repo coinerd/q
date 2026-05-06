@@ -29,8 +29,7 @@
                   context-usage-max-tokens
                   context-usage-usage-percent
                   context-usage-compaction-threshold
-                  get-context-usage
-                  context-usage-near-threshold?)
+                  get-context-usage)
          "../interfaces/sdk.rkt")
 
 ;; ============================================================

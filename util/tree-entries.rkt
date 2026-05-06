@@ -18,7 +18,7 @@
                        [tree-navigation-entry-target-entry-id (-> any/c (or/c string? #f))]
                        [tree-navigation-entry-from-entry-id (-> any/c (or/c string? #f))]
                        [make-branch-summary-entry
-                        (-> string? string? string? any/c exact-nonnegative-integer? any/c)]
+                        (-> string? (or/c string? #f) string? any/c exact-nonnegative-integer? any/c)]
                        [branch-summary-entry-summary (-> any/c (or/c string? #f))]
                        [branch-summary-entry-entry-range (-> any/c any/c)]
                        [branch-summary-entry-token-count

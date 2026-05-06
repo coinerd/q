@@ -5,6 +5,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/iteration/loop-state.rkt"
+         "../agent/event-bus.rkt"
          racket/set)
 
 (define suite
@@ -35,14 +36,14 @@
       (check-equal? (loop-counters-stall-retry-count c) 6))
 
     (test-case "loop-infra accessor round-trip"
-      (define infra (loop-infra 'ctx 'ext-reg 'reg 'bus "sid-1" "/tmp/log" 'token))
-      (check-equal? (loop-infra-ctx infra) 'ctx)
-      (check-equal? (loop-infra-ext-reg infra) 'ext-reg)
-      (check-equal? (loop-infra-reg infra) 'reg)
-      (check-equal? (loop-infra-bus infra) 'bus)
+      (define infra (loop-infra '(ctx) #f #f (make-event-bus) "sid-1" "/tmp/log" #f))
+      (check-equal? (loop-infra-ctx infra) '(ctx))
+      (check-false (loop-infra-ext-reg infra))
+      (check-false (loop-infra-reg infra))
+      (check-true (event-bus? (loop-infra-bus infra)))
       (check-equal? (loop-infra-session-id infra) "sid-1")
       (check-equal? (loop-infra-log-path infra) "/tmp/log")
-      (check-equal? (loop-infra-token infra) 'token))
+      (check-false (loop-infra-token infra)))
 
     (test-case "loop-counters is transparent"
       (define c (loop-counters 1 2 (set) 0 0 '() 0 0 0))
@@ -50,7 +51,7 @@
       (check-false (loop-counters? 42)))
 
     (test-case "loop-infra is transparent"
-      (define infra (loop-infra 'a 'b 'c 'd 'e 'f 'g))
+      (define infra (loop-infra '(a) #f #f (make-event-bus) "s" "/tmp" #f))
       (check-true (loop-infra? infra))
       (check-false (loop-infra? 'not-infra)))
 
@@ -61,10 +62,10 @@
       (check-equal? (loop-counters-consecutive-tool-count c2) 0))
 
     (test-case "struct-copy loop-infra"
-      (define infra (loop-infra 'ctx 'ext-reg 'reg 'bus "sid" "/log" 'tok))
+      (define infra (loop-infra '(ctx) #f #f (make-event-bus) "sid" "/log" #f))
       (define infra2 (struct-copy loop-infra infra [session-id "sid-2"]))
       (check-equal? (loop-infra-session-id infra2) "sid-2")
-      (check-equal? (loop-infra-ctx infra2) 'ctx))))
+      (check-equal? (loop-infra-ctx infra2) '(ctx)))))
 
 (module+ test
   (run-tests suite))

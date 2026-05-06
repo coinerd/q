@@ -33,9 +33,11 @@
                 confirm-result?)]
           [ctx-select
            (->* ((listof select-option?))
-                (#:default (or/c string? #f) #:timeout exact-nonnegative-integer?)
-                select-result?)]
-          [apply-notification (-> notification-state? notification? notification-state?)]
+                (#:prompt string?
+                          #:timeout exact-nonnegative-integer?
+                          #:max-visible exact-nonnegative-integer?)
+                (or/c select-result? #f))]
+          [apply-notification (-> (or/c any/c box?) notification? any/c)]
           [expired-notification? (-> notification-state? boolean?)]
           [notification-state-add (-> notification-state? notification? notification-state?)]
           [notification-state-pop (-> notification-state? notification-state?)]
