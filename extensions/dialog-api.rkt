@@ -19,45 +19,27 @@
          NOTIFY-ERROR
          NOTIFY-SUCCESS
          notify-level?
-
-         ;; #721: ctx-notify
-         ctx-notify
-         notification
-         notification?
-         notification-level
-         notification-message
-         notification-timestamp
-         notification-duration
-
-         ;; #722: ctx-confirm
-         ctx-confirm
-         confirm-result
-         confirm-result?
-         confirm-result-value
-         confirm-result-timed-out?
-
-         ;; #723: ctx-select
-         ctx-select
-         select-option
-         select-option?
-         select-option-id
-         select-option-label
-         select-option-description
-         select-result
-         select-result?
-         select-result-selected-id
-         select-result-timed-out?
-
-         ;; #724: State integration
-         apply-notification
-         expired-notification?
-         notification-state
-         notification-state?
-         notification-state-active
-         notification-state-queue
-         notification-state-add
-         notification-state-pop
-         notification-state-clear-expired)
+         (struct-out notification)
+         (struct-out confirm-result)
+         (struct-out select-option)
+         (struct-out select-result)
+         (struct-out notification-state)
+         (contract-out
+          [ctx-notify
+           (->* (notify-level? string?) (#:duration exact-nonnegative-integer?) notification?)]
+          [ctx-confirm
+           (->* (string?)
+                (#:default (or/c boolean? #f) #:timeout exact-nonnegative-integer?)
+                confirm-result?)]
+          [ctx-select
+           (->* ((listof select-option?))
+                (#:default (or/c string? #f) #:timeout exact-nonnegative-integer?)
+                select-result?)]
+          [apply-notification (-> notification-state? notification? notification-state?)]
+          [expired-notification? (-> notification-state? boolean?)]
+          [notification-state-add (-> notification-state? notification? notification-state?)]
+          [notification-state-pop (-> notification-state? notification-state?)]
+          [notification-state-clear-expired (-> notification-state? notification-state?)]))
 
 ;; ============================================================
 ;; Constants
@@ -188,6 +170,5 @@
     [(box? state)
      (ui-set-status-message! state msg)
      (unbox state)]
-    [else
-     ;; Plain state: return a new state with the status message set
-     (struct-copy ui-state state [status-message msg])]))
+    ;; Plain state: return a new state with the status message set
+    [else (struct-copy ui-state state [status-message msg])]))
