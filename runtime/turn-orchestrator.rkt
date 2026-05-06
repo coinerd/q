@@ -90,7 +90,8 @@
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          ;; G4: typed event emission
          "../agent/event-emitter.rkt"
-         "../agent/event-structs/iteration-events.rkt")
+         "../agent/event-structs/iteration-events.rkt"
+         (only-in "../runtime/session-config.rkt" session-config?))
 
 (provide (contract-out
           [run-provider-turn
@@ -102,11 +103,11 @@
                        string?
                        string?
                        (or/c cancellation-token? #f)
-                       hash?)
+                       (or/c hash? session-config?))
                 (#:tool-list-proc (or/c procedure? #f))
                 loop-result?)]
           [build-assembled-context
-           (-> list? hash? (or/c extension-registry? #f) event-bus? string? exact-nonnegative-integer? list?)]
+           (-> list? (or/c hash? session-config?) (or/c extension-registry? #f) event-bus? string? exact-nonnegative-integer? list?)]
           [register-session-extensions! (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]))
 
 ;; ============================================================
