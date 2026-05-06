@@ -26,6 +26,7 @@
  make-event-bus event-bus?
 
  ;; Extension struct and registry
+         json-schema?
  (struct-out extension)
  extension-registry?
  (contract-out
