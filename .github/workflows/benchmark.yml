@@ -28,13 +28,34 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-racket
 
+      - name: Check API keys
+        id: check-keys
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ] || [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "keys-available=true" >> $GITHUB_OUTPUT
+          else
+            echo "keys-available=false" >> $GITHUB_OUTPUT
+            echo "WARNING: No API keys available, skipping benchmark"
+          fi
+
       - name: Run benchmark suite
+        if: steps.check-keys.outputs.keys-available == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           Q_BENCHMARK_PROVIDER: ${{ github.event.inputs.provider || 'openai' }}
         run: |
           racket scripts/run-benchmark.rkt --live --task-dir scripts/benchmark/tasks/ --output-dir traces/ --json --provider $Q_BENCHMARK_PROVIDER
+
+      - name: Skip benchmark (no keys)
+        if: steps.check-keys.outputs.keys-available == 'false'
+        run: |
+          echo "Benchmark skipped: No API keys available"
+          echo "## Benchmark Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "No API keys configured" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload traces
         uses: actions/upload-artifact@v7
