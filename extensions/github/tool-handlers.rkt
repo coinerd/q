@@ -12,7 +12,12 @@
          "../hooks.rkt"
          "../tool-api.rkt"
          "../ext-commands.rkt"
-         (only-in "helpers.rkt" gh-binary gh-unavailable-error gh-exec-result git-exec-result)
+         (only-in "helpers.rkt"
+                  gh-binary
+                  gh-unavailable-error
+                  gh-exec-result
+                  git-exec-result
+                  with-error-result)
          "tool-schemas.rkt"
          "handlers/issue-ops.rkt"
          "handlers/pr-ops.rkt"
@@ -27,12 +32,7 @@
          register-github-tools
          register-github-commands)
 
-;; Local macro: execute body, returning error result on failure
-(define-syntax-rule (with-error-result ctx-msg body ...)
-  (with-handlers ([exn:fail? (lambda (e)
-                               (log-warning (format "~a: ~a" ctx-msg (exn-message e)))
-                               (make-error-result (exn-message e)))])
-    body ...))
+;; with-error-result imported from helpers.rkt
 
 ;; ============================================================
 ;; Wave handlers
