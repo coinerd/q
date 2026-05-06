@@ -12,7 +12,9 @@
 ;;   - event-json.rkt     — JSON serialization and registry
 
 (require "event-structs.rkt"
-         "event-json.rkt")
+         "event-json.rkt"
+         "../util/event-access.rkt")
 
 (provide (all-from-out "event-structs.rkt")
-         (all-from-out "event-json.rkt"))
+         (all-from-out "event-json.rkt")
+         (all-from-out "../util/event-access.rkt"))
