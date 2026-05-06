@@ -241,3 +241,4 @@
 
   ;; Return updated context for next iteration
   (append ctx-with-steering new-msgs validated-msgs))
+;; v0.31.5 W1: placeholder for pure function extraction

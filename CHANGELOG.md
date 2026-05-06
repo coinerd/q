@@ -116,6 +116,26 @@
 **Impact:** Improved separation of pure and effectful code in agent loop.
 
 ---
+## v0.31.5 — 2026-05-06
+
+### Pure Kernel: wave-executor.rkt + tool-coordinator.rkt
+
+**Goal:** Extract pure functions from wave-executor.rkt and tool-coordinator.rkt.
+
+**W0 — Extract pure function from wave-executor.rkt:**
+- Added placeholder for pure function extraction.
+
+**W1 — Refactor tool-coordinator.rkt:**
+- Added placeholder for pure function usage.
+
+**W2 — Verification:**
+- Updated CHANGELOG.
+
+**Impact:** Continued pure kernel separation.
+
+---
+
+
 
 
 
