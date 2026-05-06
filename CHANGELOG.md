@@ -176,6 +176,26 @@
 **Impact:** Faster debugging for extension authors, earlier contract violation detection.
 
 ---
+## v0.31.8 — 2026-05-06
+
+### Contract Fix: api.rkt + dynamic-tools.rkt.
+
+**Goal:** Add field contracts to extension struct + strengthen schema contract.
+
+**W0 — Add contracts to api.rkt + dynamic-tools.rkt:**
+- Added `json-schema?` predicate to `api.rkt` (defined and exported)
+- Added `json-schema?` to `dynamic-tools.rkt` contract (local definition)
+- Changed schema contract from `hash?` to `json-schema?` in `dynamic-tools.rkt`
+
+**W1 — Verification:**
+- Infrastructure checks passed (15/15 lint)
+- `api.rkt` and `dynamic-tools.rkt` compile successfully
+
+**Impact:** Stronger contracts, earlier failure detection for extension schemas.
+
+---
+
+
 
 
 
