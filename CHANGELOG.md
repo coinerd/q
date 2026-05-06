@@ -158,6 +158,26 @@
 **Impact:** Stronger contracts, earlier failure detection.
 
 ---
+## v0.31.7 — 2026-05-06
+
+### Contract Fix: provider.rkt
+
+**Goal:** Strengthen procedure contracts for provider constructors.
+
+**W0 — Strengthen procedure contracts in provider.rkt:**
+- Replaced `procedure?` with specific contracts in `make-provider`
+- New contract: `(-> (-> string?) (-> hash?) (-> model-request? model-response?) (-> model-request? generator?) provider?)`
+- Documents expected procedure signatures
+
+**W1 — Verification:**
+- Infrastructure checks passed (15/15 lint)
+- provider.rkt tests pass (28/28)
+
+**Impact:** Faster debugging for extension authors, earlier contract violation detection.
+
+---
+
+
 
 
 
