@@ -289,6 +289,26 @@
 **Impact:** Progress on architecture abstraction roadmap.
 
 ---
+## v0.31.11 — 2026-05-06
+
+### TR Migration: model-defaults.rkt.
+
+**Goal:** Migrate model-defaults.rkt to Typed Racket.
+
+**W0 — Migrate to TR:**
+- Changed `#lang racket/base` to `#lang typed/racket/base`
+- Added `: String` type annotations to all model/default constants
+- `llm/model-defaults.rkt` compiles successfully with TR
+
+**W1 — Verification:**
+- Infrastructure checks passed (15/15 lint)
+- TR migration complete
+
+**Impact:** Type safety for model default constants.
+
+---
+
+
 
 ## v0.31.11 — 2026-05-06
 
