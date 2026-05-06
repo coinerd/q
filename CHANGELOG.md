@@ -73,6 +73,27 @@
 **Impact:** Improved abstraction and centralized predicate access for typed events.
 
 ---
+## v0.31.3 — 2026-05-07
+
+### Pure Kernel: state-machine.rkt
+
+**Goal:** Extract pure `compute-next-gsm-state` (Finding 3.1.3).
+
+**W0 — Extract pure transition kernel (2 files):**
+- G1: Extracted `compute-next-gsm-state` pure function from `state-machine.rkt`.
+- G2: Refactored `gsm-transition!` to use the pure function.
+- Created `tests/extensions/test-gsd-state-machine.rkt` with 7 tests.
+- Tests: 7/7 pass.
+
+**W1 — Verification:**
+- All tests pass for state-machine.rkt.
+- CI green expected.
+
+**Impact:** Separated pure transition logic from effectful state updates, improving testability.
+
+---
+
+
 
 
 
