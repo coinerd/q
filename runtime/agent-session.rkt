@@ -64,9 +64,13 @@
          (only-in "session-config.rkt"
                   session-config?
                   hash->session-config
-                  config-provider config-tool-registry config-event-bus
-                  config-extension-registry config-model-name
-                  config-system-instructions config-thinking-level
+                  config-provider
+                  config-tool-registry
+                  config-event-bus
+                  config-extension-registry
+                  config-model-name
+                  config-system-instructions
+                  config-thinking-level
                   config-session-dir))
 
 (provide agent-session?
@@ -95,7 +99,12 @@
          (contract-out [make-agent-session (-> any/c agent-session?)]
                        [resume-agent-session (-> string? any/c agent-session?)]
                        [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
-                       [run-prompt! (-> agent-session? (or/c string? message?) any)]
+                       [run-prompt!
+                        (->* (agent-session? (or/c string? message?))
+                             (#:max-iterations (or/c exact-nonnegative-integer? #f)
+                                               #:ensure-persisted! (or/c procedure? #f)
+                                               #:buffer-or-append! (or/c procedure? #f))
+                             any)]
                        [session-id (-> agent-session? string?)]
                        [session-history (-> agent-session? list?)]
                        [session-active? (-> agent-session? boolean?)]
@@ -133,7 +142,10 @@
 
 (define (make-agent-session config)
   ;; v0.30.4: Convert hash to session-config for typed access
-  (define cfg (if (session-config? config) config (hash->session-config config)))
+  (define cfg
+    (if (session-config? config)
+        config
+        (hash->session-config config)))
   (define sid (generate-id))
   (define base-dir (config-session-dir cfg))
   (define dir (build-path base-dir sid))
@@ -198,7 +210,10 @@
 
 (define (resume-agent-session session-id config)
   ;; v0.30.4: Convert hash to session-config
-  (define cfg (if (session-config? config) config (hash->session-config config)))
+  (define cfg
+    (if (session-config? config)
+        config
+        (hash->session-config config)))
   (define base-dir (config-session-dir cfg))
   (define dir (build-path base-dir session-id))
 
@@ -219,9 +234,7 @@
   ;; Dispatch 'session-before-switch hook
   (define switch-payload (session-switch-payload session-id 'resume))
   (define-values (_amended-switch switch-res)
-    (maybe-dispatch-hooks (config-extension-registry cfg)
-                          'session-before-switch
-                          switch-payload))
+    (maybe-dispatch-hooks (config-extension-registry cfg) 'session-before-switch switch-payload))
   (when (and switch-res (eq? (hook-result-action switch-res) 'block))
     (raise-session-error 'resume-agent-session "session resume blocked by extension" session-id))
 

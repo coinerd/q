@@ -11,7 +11,8 @@
 
 (require "../util/json-helpers.rkt")
 (require "../util/errors.rkt")
-(require json
+(require racket/contract
+         json
          racket/file
          racket/string
          racket/path
@@ -21,21 +22,21 @@
 
 ;; Backend struct
 (provide (struct-out credential-backend)
-
-         ;; Constructors
-         make-file-credential-backend
-         make-env-credential-backend
-         make-memory-credential-backend
-         make-keychain-credential-backend
-         make-chained-credential-backend
-
-         ;; Generic operations
-         backend-name
-         backend-store!
-         backend-load
-         backend-delete!
-         backend-list-providers
-         backend-available?)
+         (contract-out
+          [make-file-credential-backend
+           (->* (path-string?) (#:create-if-missing? boolean?) credential-backend?)]
+          [make-env-credential-backend (->* () (#:prefix string?) credential-backend?)]
+          [make-memory-credential-backend (-> credential-backend?)]
+          [make-keychain-credential-backend
+           (->* () (#:tool-path (or/c path-string? #f)) credential-backend?)]
+          [make-chained-credential-backend (-> (listof credential-backend?) credential-backend?)]
+          [backend-name (-> credential-backend? string?)]
+          [backend-store! (-> credential-backend? string? string? void?)]
+          [backend-load
+           (->* (credential-backend? string?) (#:env-var (or/c string? #f)) (or/c hash? #f))]
+          [backend-delete! (-> credential-backend? string? void?)]
+          [backend-list-providers (-> credential-backend? (listof string?))]
+          [backend-available? (-> credential-backend? boolean?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Backend struct
