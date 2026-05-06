@@ -4,7 +4,8 @@
 ;;
 ;; Entry formatting, markdown rendering, styled-line construction.
 
-(require racket/string
+(require racket/match
+         racket/string
          racket/list
          racket/function
          "../state.rkt"
@@ -116,15 +117,15 @@
 (define (md-token->segments tok)
   (define type (md-token-type tok))
   (define content (md-token-content tok))
-  (cond
-    [(eq? type 'text) (list (styled-segment content '()))]
-    [(eq? type 'bold) (list (styled-segment content '(bold)))]
-    [(eq? type 'italic) (list (styled-segment content '(italic)))]
-    [(eq? type 'code) (list (styled-segment content (theme->style 'md-code)))]
-    [(eq? type 'header)
+  (match type
+    ['text (list (styled-segment content '()))]
+    ['bold (list (styled-segment content '(bold)))]
+    ['italic (list (styled-segment content '(italic)))]
+    ['code (list (styled-segment content (theme->style 'md-code)))]
+    ['header
      (define hstyle (theme->style 'md-heading '(bold)))
      (list (styled-segment (cdr content) hstyle))]
-    [(eq? type 'code-block)
+    ['code-block
      (define lang (car content))
      (define code-text (cdr content))
      (define code-lines (string-split code-text "\n"))
@@ -133,21 +134,21 @@
                  '())
              (for/list ([cl (in-list code-lines)])
                (styled-segment (format "  ~a" cl) (theme->style 'md-code '(dim)))))]
-    [(eq? type 'link) (list (styled-segment (cdr content) (theme->style 'md-link '(underline))))]
-    [(eq? type 'hr) (list (styled-segment (make-string 40 #\-) '(dim)))]
-    [(eq? type 'unordered-list)
+    ['link (list (styled-segment (cdr content) (theme->style 'md-link '(underline))))]
+    ['hr (list (styled-segment (make-string 40 #\-) '(dim)))]
+    ['unordered-list
      (define prefix (format "~a- " (make-string (* (car content) 2) #\space)))
      (cons (styled-segment prefix '()) (apply append (map md-token->segments (cdr content))))]
-    [(eq? type 'ordered-list)
+    ['ordered-list
      (define indent (car content))
      (define num (cadr content))
      (define prefix (format "~a~a. " (make-string (* indent 2) #\space) num))
      (cons (styled-segment prefix '()) (apply append (map md-token->segments (cddr content))))]
-    [(eq? type 'blockquote)
+    ['blockquote
      (define prefix (format "~a> " (make-string (car content) #\space)))
      (cons (styled-segment prefix '(dim)) (apply append (map md-token->segments (cdr content))))]
-    [(eq? type 'newline) (list (styled-segment "\n" '()))]
-    [else (list (styled-segment (format "~a" content) '()))]))
+    ['newline (list (styled-segment "\n" '()))]
+    [_ (list (styled-segment (format "~a" content) '()))]))
 
 ;; Backward compat wrapper
 (define (md-token->segment tok)

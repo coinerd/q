@@ -7,7 +7,8 @@
 ;;
 ;; STABILITY: stable
 
-(require "event-payloads.rkt")
+(require racket/match
+         "event-payloads.rkt")
 (provide payload->hash
          hash->payload
          payload-type-tag)
@@ -37,21 +38,21 @@
     [(not (hash? h)) h]
     ;; Type-tagged decode (reliable, v0.28.11+)
     [(hash-has-key? h '__type)
-     (case (hash-ref h '__type)
-       [(error) (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
-       [(input) (input-payload (hash-ref h 'session-id) (hash-ref h 'message))]
-       [(session-start)
+     (match (hash-ref h '__type)
+       ['error (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
+       ['input (input-payload (hash-ref h 'session-id) (hash-ref h 'message))]
+       ['session-start
         (session-start-payload (hash-ref h 'session-id) (hash-ref h 'config) (hash-ref h 'reason))]
-       [(session-end) (session-end-payload (hash-ref h 'session-id) (hash-ref h 'duration))]
-       [(session-switch) (session-switch-payload (hash-ref h 'session-id) (hash-ref h 'operation))]
-       [(tool-call)
+       ['session-end (session-end-payload (hash-ref h 'session-id) (hash-ref h 'duration))]
+       ['session-switch (session-switch-payload (hash-ref h 'session-id) (hash-ref h 'operation))]
+       ['tool-call
         (tool-call-event-payload (hash-ref h 'session-id)
                                  (hash-ref h 'turn-id)
                                  (hash-ref h 'tool-name)
                                  (hash-ref h 'tool-call-id))]
-       [(gsd-mode) (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
-       [(session-id) (session-id-payload (hash-ref h 'sessionId))]
-       [else h])]
+       ['gsd-mode (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
+       ['session-id (session-id-payload (hash-ref h 'sessionId))]
+       [_ h])]
     ;; Legacy heuristic decode (backward compatible with pre-v0.28.11 data)
     [(and (hash-has-key? h 'error) (hash-has-key? h 'errorType))
      (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]

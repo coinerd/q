@@ -50,32 +50,32 @@
      (define parts (string-split trimmed))
      (define cmd (car parts))
      (define args (cdr parts))
-     (case cmd
-       [("/help") '(help)]
-       [("/quit" "/exit") '(quit)]
-       [("/compact") '(compact)]
-       [("/history") '(history)]
-       [("/model")
+     (match cmd
+       ["/help" '(help)]
+       [(or "/quit" "/exit") '(quit)]
+       ["/compact" '(compact)]
+       ["/history" '(history)]
+       ["/model"
         (if (null? args)
             '(model)
             (list 'model (car args)))]
-       [("/fork")
+       ["/fork"
         (if (null? args)
             '(fork)
             (list 'fork (car args)))]
-       [("/clear") '(clear)]
-       [("/interrupt") '(interrupt)]
-       [("/branches") '(branches)]
-       [("/leaves") '(leaves)]
-       [("/switch")
+       ["/clear" '(clear)]
+       ["/interrupt" '(interrupt)]
+       ["/branches" '(branches)]
+       ["/leaves" '(leaves)]
+       ["/switch"
         (if (null? args)
             '(switch)
             (list 'switch (car args)))]
-       [("/children")
+       ["/children"
         (if (null? args)
             '(children)
             (list 'children (car args)))]
-       [("/sessions")
+       ["/sessions"
         (cond
           [(null? args) '(sessions)]
           [(equal? (car args) "list") '(sessions list)]
@@ -88,7 +88,7 @@
                (list 'sessions 'delete (cadr args))
                '(sessions delete))]
           [else '(sessions)])]
-       [else #f])]))
+       [_ #f])]))
 
 ;; ============================================================
 ;; I/O: run-cli-interactive
