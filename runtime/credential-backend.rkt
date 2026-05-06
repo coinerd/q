@@ -9,7 +9,8 @@
 ;; different backends: file (JSON), environment variables, memory (testing),
 ;; OS keychain (secret-tool / macOS security), and chained (fallback chain).
 
-(require "../util/json-helpers.rkt")
+(require "../util/json-helpers.rkt"
+         "../util/error-helpers.rkt")
 (require "../util/errors.rkt")
 (require racket/contract
          json
@@ -100,16 +101,16 @@
   (cond
     [(not (file-exists? path)) (hash)]
     [else
-     (with-handlers ([exn:fail? (λ (e) (hash))])
-       (define content (read-json-file path))
-       (if (eof-object? content)
-           (hash)
-           (let ([providers (hash-ref content 'providers (hash))])
-             (for/hash ([(k v) (in-hash providers)])
-               (values (if (symbol? k)
-                           (symbol->string k)
-                           k)
-                       v)))))]))
+     (with-safe-fallback (hash)
+                         (define content (read-json-file path))
+                         (if (eof-object? content)
+                             (hash)
+                             (let ([providers (hash-ref content 'providers (hash))])
+                               (for/hash ([(k v) (in-hash providers)])
+                                 (values (if (symbol? k)
+                                             (symbol->string k)
+                                             k)
+                                         v)))))]))
 
 (define (file-store! path provider-name api-key)
   (define existing (file-load-raw path))
@@ -154,11 +155,7 @@
     [(file-exists? path) #t]
     [else
      (define dir (path-only path))
-     (and dir
-          (or (directory-exists? dir)
-              (with-handlers ([exn:fail? (λ (e) #f)])
-                (make-directory* dir)
-                #t)))]))
+     (and dir (or (directory-exists? dir) (with-safe-fallback #f (make-directory* dir) #t)))]))
 
 (define (file-write-atomic! path data)
   (define dir (path-only path))
@@ -166,8 +163,7 @@
     (make-directory* dir))
   (define tmp (make-temporary-file "credential-~a.tmp" #f (or dir (find-system-path 'temp-dir))))
   (with-handlers ([exn:fail? (λ (e)
-                               (with-handlers ([exn:fail? void])
-                                 (delete-file tmp))
+                               (with-safe-fallback (void) (delete-file tmp))
                                (raise e))])
     (write-json-file tmp data)
     (rename-file-or-directory tmp path #t)
@@ -238,22 +234,20 @@
 ;; Run secret-tool with argument vector (no shell interpolation).
 ;; Returns (values exit-code stdout-string).
 (define (run-secret-tool args #:stdin [stdin-str #f])
-  (with-handlers ([exn:fail? (λ (e) (values 1 ""))])
-    (define-values (sp out-port in-port err-port)
-      (subprocess #f #f #f (find-executable-path "secret-tool") args))
-    (when stdin-str
-      (display stdin-str in-port)
-      (close-output-port in-port))
-    (define out (open-output-string))
-    (copy-port out-port out)
-    (close-input-port out-port)
-    (close-input-port err-port)
-    (values (subprocess-status sp) (get-output-string out))))
+  (with-safe-fallback (values 1 "")
+                      (define-values (sp out-port in-port err-port)
+                        (subprocess #f #f #f (find-executable-path "secret-tool") args))
+                      (when stdin-str
+                        (display stdin-str in-port)
+                        (close-output-port in-port))
+                      (define out (open-output-string))
+                      (copy-port out-port out)
+                      (close-input-port out-port)
+                      (close-input-port err-port)
+                      (values (subprocess-status sp) (get-output-string out))))
 
 (define (secret-tool-available?)
-  (with-handlers ([exn:fail? (λ (e) #f)])
-    (define-values (status _) (run-secret-tool '("--version")))
-    (= status 0)))
+  (with-safe-fallback #f (define-values (status _) (run-secret-tool '("--version"))) (= status 0)))
 
 (define (make-keychain-credential-backend)
   (credential-backend "keychain"
@@ -332,32 +326,26 @@
      (define stored #f)
      (for ([sub (in-list backends)]
            #:break stored)
-       (with-handlers ([exn:fail? (λ (e) (void))])
-         (backend-store! sub provider-name api-key)
-         (set! stored #t)))
+       (with-safe-fallback (void) (backend-store! sub provider-name api-key) (set! stored #t)))
      (unless stored
        (raise-credential-error "No writable backend available" "chained" "all-backends-readonly")))
    ;; load — tries each backend in order, returns first hit
    (λ (be provider-name env-var)
      (for/or ([sub (in-list backends)])
-       (with-handlers ([exn:fail? (λ (e) #f)])
-         (backend-load sub provider-name #:env-var (or env-var #f)))))
+       (with-safe-fallback #f (backend-load sub provider-name #:env-var (or env-var #f)))))
    ;; delete! — deletes from all backends
    (λ (be provider-name)
      (for ([sub (in-list backends)])
-       (with-handlers ([exn:fail? (λ (e) (void))])
-         (backend-delete! sub provider-name))))
+       (with-safe-fallback (void) (backend-delete! sub provider-name))))
    ;; list — merges from all backends
    (λ (be)
      (remove-duplicates (apply append
                                (for/list ([sub (in-list backends)])
-                                 (with-handlers ([exn:fail? (λ (e) '())])
-                                   (backend-list-providers sub))))))
+                                 (with-safe-fallback '() (backend-list-providers sub))))))
    ;; available? — true if any backend available
    (λ (be)
      (for/or ([sub (in-list backends)])
-       (with-handlers ([exn:fail? (λ (e) #f)])
-         (backend-available? sub))))))
+       (with-safe-fallback #f (backend-available? sub))))))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Helpers
