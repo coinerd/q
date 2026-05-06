@@ -5,50 +5,50 @@
 ;; Contains tool execution lifecycle, generic tool call/result,
 ;; and all per-tool typed events (bash, edit, write, read, grep, find, custom).
 
-(require "base.rkt")
+(require "base.rkt"
+         "../../util/event-macro.rkt")
 
-(provide
- ;; Tool execution lifecycle
- (struct-out tool-execution-start-event)
- (struct-out tool-execution-update-event)
- (struct-out tool-execution-end-event)
- make-tool-execution-start-event
- make-tool-execution-update-event
- make-tool-execution-end-event
- tool-execution-start-event?
- tool-execution-update-event?
- tool-execution-end-event?
+;; Tool execution lifecycle
+(provide (struct-out tool-execution-start-event)
+         (struct-out tool-execution-update-event)
+         (struct-out tool-execution-end-event)
+         make-tool-execution-start-event
+         make-tool-execution-update-event
+         make-tool-execution-end-event
+         tool-execution-start-event?
+         tool-execution-update-event?
+         tool-execution-end-event?
 
- ;; Generic tool call/result
- (struct-out tool-call-event)
- (struct-out tool-result-event)
- make-tool-call-event
- make-tool-result-event
- tool-call-event?
- tool-result-event?
+         ;; Generic tool call/result
+         (struct-out tool-call-event)
+         (struct-out tool-result-event)
+         make-tool-call-event
+         make-tool-result-event
+         tool-call-event?
+         tool-result-event?
 
- ;; Per-tool typed events
- (struct-out bash-tool-call-event)
- (struct-out edit-tool-call-event)
- (struct-out write-tool-call-event)
- (struct-out read-tool-call-event)
- (struct-out grep-tool-call-event)
- (struct-out find-tool-call-event)
- (struct-out custom-tool-call-event)
- make-bash-tool-call-event
- make-edit-tool-call-event
- make-write-tool-call-event
- make-read-tool-call-event
- make-grep-tool-call-event
- make-find-tool-call-event
- make-custom-tool-call-event
- bash-tool-call-event?
- edit-tool-call-event?
- write-tool-call-event?
- read-tool-call-event?
- grep-tool-call-event?
- find-tool-call-event?
- custom-tool-call-event?)
+         ;; Per-tool typed events
+         (struct-out bash-tool-call-event)
+         (struct-out edit-tool-call-event)
+         (struct-out write-tool-call-event)
+         (struct-out read-tool-call-event)
+         (struct-out grep-tool-call-event)
+         (struct-out find-tool-call-event)
+         (struct-out custom-tool-call-event)
+         make-bash-tool-call-event
+         make-edit-tool-call-event
+         make-write-tool-call-event
+         make-read-tool-call-event
+         make-grep-tool-call-event
+         make-find-tool-call-event
+         make-custom-tool-call-event
+         bash-tool-call-event?
+         edit-tool-call-event?
+         write-tool-call-event?
+         read-tool-call-event?
+         grep-tool-call-event?
+         find-tool-call-event?
+         custom-tool-call-event?)
 
 ;; ============================================================
 ;; Tool execution lifecycle
