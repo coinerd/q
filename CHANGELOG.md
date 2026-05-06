@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.30.14 — 2026-05-05
+
+### Test Regression Fix + Contract Repair + Event Migration
+
+**Goal:** Fix 21 test regressions from contract self-blame, migrate event emissions, tighten contracts.
+
+**W0 — Contract self-blame fix (11 files):**
+- `tui/component.rkt` — fixed 6 contracts: `make-q-component`, `component-compose`, `component-handle-input`, `cycle-focus`
+- `tui/tui-keybindings.rkt` — fixed 4 contracts: `make-tui-ctx`, `selection-text`, `process-slash-command`, `input-expand-last-prompt`
+- `tui/tui-render-loop.rkt` — fixed 4 contracts: `render-ubuf-to-terminal!`, `render-frame!`, `draw-frame`, `next-message`
+- `runtime/credential-backend.rkt` — fixed 3 credential backend contracts
+- `extensions/dialog-api.rkt` — fixed `ctx-select` and `apply-notification` contracts
+- `util/tree-entries.rkt` — relaxed `make-branch-summary-entry` parent-id to `(or/c string? #f)`
+- 4 test files fixed: TR boundary, duplicate identifiers, event struct usage
+
+**W1 — Event migration + contract tightening (5 files):**
+- 7 new typed event emissions (turn.cancelled, turn.completed, turn.started, session.started, session.closed)
+- Added `turn-cancelled-event` to event-emitter field mapping
+- Contract tightening: 18→15 `any/c` (loop-result?, list? return types)
+
+**Impact:** 471/471 tests pass (was 450/471), 0 contract self-blames (was 5 modules).
+
+---
+
 ## v0.30.13 — 2026-05-05
 
 ### DSL Cleanup + Parameter Hygiene (FINAL milestone)
