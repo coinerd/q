@@ -9,8 +9,7 @@
          "../../util/event-macro.rkt")
 
 ;; Tool execution lifecycle
-(provide (struct-out tool-execution-start-event)
-         (struct-out tool-execution-update-event)
+(provide (struct-out tool-execution-update-event)
          (struct-out tool-execution-end-event)
          make-tool-execution-start-event
          make-tool-execution-update-event
@@ -54,7 +53,7 @@
 ;; Tool execution lifecycle
 ;; ============================================================
 
-(struct tool-execution-start-event typed-event (tool-name tool-call-id) #:transparent)
+(define-event tool-execution-start-event typed-event (tool-name tool-call-id))
 (struct tool-execution-update-event typed-event (tool-name progress) #:transparent)
 (struct tool-execution-end-event typed-event (tool-name duration-ms result-summary) #:transparent)
 
