@@ -12,35 +12,51 @@
          racket/list
          ;; ARCH-04 (v0.22.0): event bus re-exports for extensions
          (only-in "../agent/event-bus.rkt"
-                  publish! subscribe! unsubscribe!
-                  make-event-bus event-bus?))
+                  publish!
+                  subscribe!
+                  unsubscribe!
+                  make-event-bus
+                  event-bus?))
 
 ;; JSON Schema predicate (for extension tool schemas)
-(define json-schema? hash?)
+(define (json-schema? v)
+  (and (hash? v)
+       (or (hash-has-key? v 'type) (hash-has-key? v 'properties) (hash-has-key? v 'schema))))
 
+;; Event bus re-exports (ARCH-04)
+(provide publish!
+         subscribe!
+         unsubscribe!
+         make-event-bus
+         event-bus?
 
-(provide
- ;; Event bus re-exports (ARCH-04)
- publish! subscribe! unsubscribe!
- make-event-bus event-bus?
-
- ;; Extension struct and registry
+         ;; Extension struct and registry
          json-schema?
- (struct-out extension)
- extension-registry?
- (contract-out
-  [make-extension-registry (-> extension-registry?)]
-  [register-extension!     (-> extension-registry? extension? void?)]
-  [unregister-extension!   (-> extension-registry? string? void?)]
-  [lookup-extension        (-> extension-registry? string? (or/c #f extension?))]
-  [list-extensions         (-> extension-registry? (listof extension?))]
-  [handlers-for-point      (-> extension-registry? symbol? (listof pair?))]))
+         (struct-out extension)
+         extension-registry?
+         (contract-out [make-extension-registry (-> extension-registry?)]
+                       [register-extension! (-> extension-registry? extension? void?)]
+                       [unregister-extension! (-> extension-registry? string? void?)]
+                       [lookup-extension (-> extension-registry? string? (or/c #f extension?))]
+                       [list-extensions (-> extension-registry? (listof extension?))]
+                       [handlers-for-point (-> extension-registry? symbol? (listof pair?))]))
 
 ;; ============================================================
 ;; Extension struct
 ;; ============================================================
 
-(struct extension (name version api-version hooks) #:transparent)
+(struct extension (name version api-version hooks)
+  #:transparent
+  #:guard (lambda (name version api-version hooks type)
+            (unless (string? name)
+              (raise-argument-error 'extension "string?" name))
+            (unless (string? version)
+              (raise-argument-error 'extension "string?" version))
+            (unless (string? api-version)
+              (raise-argument-error 'extension "string?" api-version))
+            (unless (hash? hooks)
+              (raise-argument-error 'extension "hash?" hooks))
+            (values name version api-version hooks)))
 ;; name       : string?
 ;; version    : string?
 ;; api-version: string?
@@ -55,8 +71,7 @@
 ;;   - list for ordered iteration (insertion order)
 ;; Both are stored in a box and protected by a semaphore.
 
-(struct extension-registry (data-box semaphore)
-  #:constructor-name make-extension-registry-internal)
+(struct extension-registry (data-box semaphore) #:constructor-name make-extension-registry-internal)
 
 ;; Internal: data is (cons ordered-list hash)
 ;;   ordered-list : (listof extension?) in registration order
@@ -78,18 +93,18 @@
 ;;; insertion order. Thread-safe.
 (define (register-extension! registry ext)
   (call-with-semaphore (extension-registry-semaphore registry)
-    (λ ()
-      (define data (unbox (extension-registry-data-box registry)))
-      (define old-list (car data))
-      (define old-hash (cdr data))
-      ;; Remove old entry if same name exists (overwrite semantics)
-      (define filtered-list
-        (filter (λ (e) (not (equal? (extension-name e) (extension-name ext))))
-                old-list))
-      ;; Append new extension at end (preserves insertion order)
-      (set-box! (extension-registry-data-box registry)
-                (cons (append filtered-list (list ext))
-                      (hash-set old-hash (extension-name ext) ext))))))
+                       (λ ()
+                         (define data (unbox (extension-registry-data-box registry)))
+                         (define old-list (car data))
+                         (define old-hash (cdr data))
+                         ;; Remove old entry if same name exists (overwrite semantics)
+                         (define filtered-list
+                           (filter (λ (e) (not (equal? (extension-name e) (extension-name ext))))
+                                   old-list))
+                         ;; Append new extension at end (preserves insertion order)
+                         (set-box! (extension-registry-data-box registry)
+                                   (cons (append filtered-list (list ext))
+                                         (hash-set old-hash (extension-name ext) ext))))))
 
 ;; ============================================================
 ;; unregister-extension! : extension-registry? string? -> void?
@@ -100,14 +115,14 @@
 ;;; Thread-safe.
 (define (unregister-extension! registry name)
   (call-with-semaphore (extension-registry-semaphore registry)
-    (λ ()
-      (define data (unbox (extension-registry-data-box registry)))
-      (define old-list (car data))
-      (define old-hash (cdr data))
-      (set-box! (extension-registry-data-box registry)
-                (cons (filter (λ (e) (not (equal? (extension-name e) name)))
-                              old-list)
-                      (hash-remove old-hash name))))))
+                       (λ ()
+                         (define data (unbox (extension-registry-data-box registry)))
+                         (define old-list (car data))
+                         (define old-hash (cdr data))
+                         (set-box! (extension-registry-data-box registry)
+                                   (cons (filter (λ (e) (not (equal? (extension-name e) name)))
+                                                 old-list)
+                                         (hash-remove old-hash name))))))
 
 ;; ============================================================
 ;; lookup-extension : extension-registry? string? -> (or/c extension? #f)
@@ -117,9 +132,9 @@
 ;;; O(1) lookup by name. Returns the extension or #f. Thread-safe.
 (define (lookup-extension registry name)
   (call-with-semaphore (extension-registry-semaphore registry)
-    (lambda ()
-      (define data (unbox (extension-registry-data-box registry)))
-      (hash-ref (cdr data) name #f))))
+                       (lambda ()
+                         (define data (unbox (extension-registry-data-box registry)))
+                         (hash-ref (cdr data) name #f))))
 
 ;; ============================================================
 ;; list-extensions : extension-registry? -> (listof extension?)
@@ -129,8 +144,7 @@
 ;;; Returns all extensions in registration (insertion) order. Thread-safe.
 (define (list-extensions registry)
   (call-with-semaphore (extension-registry-semaphore registry)
-    (lambda ()
-      (car (unbox (extension-registry-data-box registry))))))
+                       (lambda () (car (unbox (extension-registry-data-box registry))))))
 
 ;; ============================================================
 ;; handlers-for-point : extension-registry? symbol? -> (listof (cons/c string? procedure?))
@@ -146,5 +160,4 @@
   (define exts (list-extensions registry))
   (for*/list ([ext exts]
               #:when (hash-has-key? (extension-hooks ext) hook-point))
-    (cons (extension-name ext)
-          (hash-ref (extension-hooks ext) hook-point))))
+    (cons (extension-name ext) (hash-ref (extension-hooks ext) hook-point))))
