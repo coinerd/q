@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.31.12 — 2026-05-06
+
+### Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
+
+**Goal:** Fix version mismatch (0.30.16 → 0.31.12) + update all 14 files with old version references.
+
+**Changes:**
+- Bumped version from 0.30.16 to 0.31.12 in `util/version.rkt`
+- Propagated to `info.rkt` and `README.md` via `sync-version.rkt --write`
+- Fixed 14 files with 0.30.16 → 0.31.12 (docs/*.md, wiki-src/*.md)
+- Updated README Status section to match v0.31.0 base entry
+- Lint: 18/18 pass, 0 version errors
+- Tests: 471/471 pass, 2092/2092 tests pass
+
 ## v0.31.0 — 2026-05-06
 
 ### Architecture Abstraction: HOF Combinators for Hook System

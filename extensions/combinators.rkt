@@ -29,7 +29,8 @@
                              any/c)]
                        [with-error-policy (-> boolean? (-> any/c) (-> any/c) any/c)]
                        [with-hook-validation
-                        (-> (or/c symbol? string?) symbol? any/c (-> hook-result?) hook-result?)]))
+                        (-> (or/c symbol? string?) symbol? any/c (-> hook-result?) hook-result?)])
+         current-hook-violation-callback)
 
 ;; ============================================================
 ;; with-timeout combinator

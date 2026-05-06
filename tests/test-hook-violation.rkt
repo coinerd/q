@@ -2,6 +2,7 @@
 
 (require rackunit
          "../extensions/hooks.rkt"
+         "../extensions/combinators.rkt"
          "../extensions/api.rkt"
          "../util/hook-types.rkt")
 
