@@ -126,8 +126,7 @@
   (check-equal? (select-option-description opt) "A description"))
 
 (test-case "ctx-select: returns select-result with first option"
-  (define options (list (select-option "a" "Alpha" "")
-                        (select-option "b" "Beta" "")))
+  (define options (list (select-option "a" "Alpha" "") (select-option "b" "Beta" "")))
   (define result (ctx-select options))
   (check-true (select-result? result))
   (check-equal? (select-result-selected-id result) "a")

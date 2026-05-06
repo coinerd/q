@@ -60,22 +60,24 @@
          make-mode-keymap
          mode-overlay->keymap
          (contract-out [make-tui-ctx
-                        (->* (any/c any/c any/c procedure? any/c any/c any/c)
-                             (#:session-dir (or/c path-string? #f)
-                                            #:model-registry-box (or/c any/c #f)
-                                            #:extension-registry-box (or/c any/c #f)
-                                            #:previous-frame-box (or/c any/c #f)
-                                            #:last-prompt-box (or/c any/c #f))
+                        (->* ()
+                             (#:event-bus any/c
+                                          #:session-runner procedure?
+                                          #:session-dir (or/c path-string? #f)
+                                          #:model-registry any/c
+                                          #:extension-registry any/c
+                                          #:session-queue any/c
+                                          #:session-factory-runner any/c)
                              tui-ctx?)]
                        [mark-dirty! (-> tui-ctx? void?)]
                        [handle-key (-> tui-ctx? any/c any/c)]
                        [handle-mouse (-> tui-ctx? any/c any/c)]
-                       [selection-text (-> tui-ctx? (or/c string? #f))]
-                       [process-slash-command (-> tui-ctx? string? any/c)]
+                       [selection-text (-> tui-ctx? any/c (or/c string? #f))]
+                       [process-slash-command (->* (tui-ctx? (or/c string? symbol?)) (string?) any/c)]
                        [tui-ctx->cmd-ctx (-> tui-ctx? any/c)]
                        [reload-keymap! (-> void?)]
                        [current-keybindings-path (-> (or/c path-string? #f))]
-                       [input-expand-last-prompt (-> tui-ctx? void?)]))
+                       [input-expand-last-prompt (-> string? tui-ctx? void?)]))
 
 ;; ============================================================
 ;; TUI context

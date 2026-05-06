@@ -7,9 +7,12 @@
          racket/file
          racket/path
          "../runtime/working-set.rkt"
-         "../runtime/session-lifecycle.rkt"
+         (only-in "../runtime/session-lifecycle.rkt"
+                  run-prompt!
+                  build-session-context
+                  run-prompt-internal)
          "../runtime/session-types.rkt"
-         "../runtime/agent-session.rkt"
+         (except-in "../runtime/agent-session.rkt" run-prompt!)
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../util/ids.rkt"

@@ -45,14 +45,14 @@
 (provide fix-sgr-bg-black
          decode-mouse-x10
          decode-mouse-tui-term
-         (contract-out [render-ubuf-to-terminal! (-> any/c any/c void?)]
+         (contract-out [render-ubuf-to-terminal! (-> any/c void?)]
                        [tui-ctx-init-terminal! (-> any/c void?)]
                        [tui-ctx-resize-ubuf! (-> any/c void?)]
                        [tui-ctx-ubuf (-> any/c any/c)]
                        [tui-ctx-term (-> any/c any/c)]
-                       [render-frame! (-> any/c any/c void?)]
-                       [draw-frame (-> any/c any/c any/c void?)]
-                       [next-message (-> any/c (or/c any/c #f))]
+                       [render-frame! (-> any/c void?)]
+                       [draw-frame (-> any/c void?)]
+                       [next-message (->* (any/c) (#:timeout any/c) (or/c any/c #f))]
                        [tui-main-loop (-> any/c void?)]
                        [drain-events! (-> any/c void?)]))
 
