@@ -19,22 +19,14 @@
 (require racket/contract
          "api.rkt")
 
-(provide
- ;; Tier predicate and queries
- tier?
- tier-capabilities
- capability-allowed?
-
- ;; API version validation
- valid-api-version?
- supported-api-versions
-
- ;; Extension tier validation
- validate-extension-tier
- extension-tier-valid?
-
- ;; Hook-point → tier mapping (exposed for introspection)
- hook-point-tier)
+(provide supported-api-versions
+         (contract-out [tier? (-> any/c boolean?)]
+                       [tier-capabilities (-> symbol? (listof symbol?))]
+                       [capability-allowed? (-> symbol? symbol? boolean?)]
+                       [valid-api-version? (-> any/c boolean?)]
+                       [validate-extension-tier (-> any/c symbol? (or/c symbol? #f))]
+                       [extension-tier-valid? (-> any/c symbol? boolean?)]
+                       [hook-point-tier (-> symbol? symbol?)]))
 
 ;; ============================================================
 ;; Tier ordering and capability map
@@ -47,17 +39,21 @@
 ;; Cumulative capability map: each tier has all listed capabilities
 ;; plus those of lower tiers.
 (define capabilities-map
-  (hasheq 'hooks      '(hook-dispatch)
-          'commands   '(hook-dispatch command-register)
-          'session    '(hook-dispatch command-register
-                        session-lifecycle compaction-hooks)
-          'providers  '(hook-dispatch command-register
-                        session-lifecycle compaction-hooks
-                        provider-register)
-          'tui        '(hook-dispatch command-register
-                        session-lifecycle compaction-hooks
-                        provider-register
-                        tui-panels tui-keybindings)))
+  (hasheq 'hooks
+          '(hook-dispatch)
+          'commands
+          '(hook-dispatch command-register)
+          'session
+          '(hook-dispatch command-register session-lifecycle compaction-hooks)
+          'providers
+          '(hook-dispatch command-register session-lifecycle compaction-hooks provider-register)
+          'tui
+          '(hook-dispatch command-register
+                          session-lifecycle
+                          compaction-hooks
+                          provider-register
+                          tui-panels
+                          tui-keybindings)))
 
 ;; ============================================================
 ;; Hook point → tier mapping
@@ -67,26 +63,43 @@
 ;; Unknown hook points default to 'hooks (the lowest tier).
 
 (define hook-point-map
-  (hasheq 'context-assembly  'hooks
-          'tool-pre-exec     'hooks
-          'tool-post-exec    'hooks
-          'command-dispatch  'commands
-          'command-register  'commands
-          'command-list      'commands
-          'session-start     'session
-          'session-end       'session
-          'pre-compact       'session
-          'post-compact      'session
-          'provider-register 'providers
-          'tui-panel         'tui
-          'tui-panels        'tui
-          'tui-keybindings   'tui
-          'tui-keybinding-help 'tui
-          'tui-render        'tui))
+  (hasheq 'context-assembly
+          'hooks
+          'tool-pre-exec
+          'hooks
+          'tool-post-exec
+          'hooks
+          'command-dispatch
+          'commands
+          'command-register
+          'commands
+          'command-list
+          'commands
+          'session-start
+          'session
+          'session-end
+          'session
+          'pre-compact
+          'session
+          'post-compact
+          'session
+          'provider-register
+          'providers
+          'tui-panel
+          'tui
+          'tui-panels
+          'tui
+          'tui-keybindings
+          'tui
+          'tui-keybinding-help
+          'tui
+          'tui-render
+          'tui))
 
 ;; Tier precedence for comparison: lower index = lower privilege
 (define tier-index
-  (for/hasheq ([t tier-order] [i (in-naturals)])
+  (for/hasheq ([t tier-order]
+               [i (in-naturals)])
     (values t i)))
 
 ;; ============================================================
@@ -139,8 +152,7 @@
 ;; Returns #t if required-tier is at or below declared-tier.
 
 (define (tier<=? required-tier declared-tier)
-  (<= (hash-ref tier-index required-tier)
-      (hash-ref tier-index declared-tier)))
+  (<= (hash-ref tier-index required-tier) (hash-ref tier-index declared-tier)))
 
 ;; ============================================================
 ;; validate-extension-tier : extension? symbol? -> (or/c #t (listof string?))

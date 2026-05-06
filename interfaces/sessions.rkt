@@ -8,7 +8,8 @@
 ;; Sessions are stored as <session-dir>/<session-id>/session.jsonl
 ;; where session-dir defaults to ~/.q/sessions/.
 
-(require "../util/error-helpers.rkt")
+(require racket/contract
+         "../util/error-helpers.rkt")
 (require racket/match
          racket/string
          racket/format
@@ -26,21 +27,19 @@
                   cli-config-session-dir))
 
 ;; Listing
-(provide sessions-list
-         sessions-list->strings
-         ;; Info
-         sessions-info
-         sessions-info->string
-         ;; Delete
-         sessions-delete
-         ;; CLI dispatch
-         run-sessions-command
-         ;; Internal helpers (for testing)
-         scan-session-dirs
-         read-session-metadata
-         ;; Trace display (v0.15.0)
-         read-trace-entries
-         display-trace-summary)
+(provide (contract-out [sessions-list
+                        (->* (path-string?)
+                             (#:limit exact-nonnegative-integer? #:sort (or/c 'by-date 'by-name))
+                             (listof hash?))]
+                       [sessions-list->strings (-> (listof hash?) (listof string?))]
+                       [sessions-info (-> path-string? string? (or/c hash? #f))]
+                       [sessions-info->string (-> hash? string?)]
+                       [sessions-delete (->* (path-string? string?) (#:confirm? boolean?) boolean?)]
+                       [run-sessions-command (-> hash? void?)]
+                       [scan-session-dirs (-> path-string? (listof list?))]
+                       [read-session-metadata (-> string? (or/c path-string? #f) (or/c hash? #f))]
+                       [read-trace-entries (-> path-string? (listof any/c))]
+                       [display-trace-summary (-> path-string? void?)]))
 
 ;; ============================================================
 ;; Session scanning

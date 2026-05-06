@@ -1,26 +1,21 @@
 #lang racket/base
 
-(require racket/string
+(require racket/contract
+         racket/string
          json
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt")
 
-(provide
- ;; Subscription management
- start-json-mode!
- stop-json-mode!
-
- ;; Pure functions
- event->json-line
- message->json
- json-mode-event-filter
-
- ;; Input parsing
- parse-json-intent
- intent
- intent?
- intent-type
- intent-payload)
+(provide (struct-out intent)
+         (contract-out [start-json-mode!
+                        (->* (any/c #:session-id string?)
+                             (#:output-port (or/c output-port? #f))
+                             exact-nonnegative-integer?)]
+                       [stop-json-mode! (-> any/c exact-nonnegative-integer? void?)]
+                       [event->json-line (->* (any/c) ((or/c string? #f)) string?)]
+                       [message->json (-> any/c any/c)]
+                       [json-mode-event-filter (-> any/c boolean?)]
+                       [parse-json-intent (-> string? (or/c intent? #f))]))
 
 ;; ============================================================
 ;; Intent struct
@@ -81,8 +76,7 @@
 (define (parse-json-intent line)
   (with-handlers ([exn:fail? (λ (_) #f)])
     (cond
-      [(or (not (string? line)) (string=? (string-trim line) ""))
-       #f]
+      [(or (not (string? line)) (string=? (string-trim line) "")) #f]
       [else
        (define js (string->jsexpr line))
        (define intent-str (hash-ref js 'intent #f))
@@ -103,8 +97,7 @@
              (if entry-id
                  (intent 'fork (hasheq 'entryId entry-id))
                  (intent 'fork (hasheq)))]
-            [(interrupt compact quit)
-             (intent intent-sym #f)]
+            [(interrupt compact quit) (intent intent-sym #f)]
             [else #f])])])))
 
 ;; ============================================================
@@ -113,25 +106,22 @@
 
 ;; Subscribe to all events on the bus and write each as a JSON line
 ;; to the output port. Returns a subscription ID for unsubscribe.
-(define (start-json-mode! event-bus
-                          #:session-id session-id
-                          #:output-port [out (current-output-port)])
-  (subscribe! event-bus
-              (λ (evt)
-                (with-handlers ([exn:fail?
-                                 (λ (exn)
-                                   ;; Write an error JSON line instead of crashing
-                                   (displayln
-                                    (jsexpr->string
-                                     (hasheq 'type "error"
-                                             'error (exn-message exn)
-                                             'sessionId session-id))
-                                    out)
-                                   (newline out))])
-                  (when (json-mode-event-filter evt)
-                    (display (event->json-line evt session-id) out)
-                    (flush-output out))))
-              #:filter (λ (_) #t)))
+(define (start-json-mode! event-bus #:session-id session-id #:output-port [out (current-output-port)])
+  (subscribe!
+   event-bus
+   (λ (evt)
+     (with-handlers ([exn:fail?
+                      (λ (exn)
+                        ;; Write an error JSON line instead of crashing
+                        (displayln
+                         (jsexpr->string
+                          (hasheq 'type "error" 'error (exn-message exn) 'sessionId session-id))
+                         out)
+                        (newline out))])
+       (when (json-mode-event-filter evt)
+         (display (event->json-line evt session-id) out)
+         (flush-output out))))
+   #:filter (λ (_) #t)))
 
 ;; ============================================================
 ;; stop-json-mode! — unsubscribe
