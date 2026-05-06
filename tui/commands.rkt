@@ -12,6 +12,7 @@
 ;; This module re-exports everything and contains the main dispatcher.
 
 (require racket/base
+         racket/match
          racket/string
          racket/list
          "state.rkt"
@@ -83,24 +84,24 @@
   ;; Handle structured commands (lists)
   (cond
     [(list? cmd)
-     (case (car cmd)
-       [(switch) (handle-switch-command cctx (cadr cmd))]
-       [(children) (handle-children-command cctx (cadr cmd))]
-       [(model) (handle-model-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
-       [(name) (handle-name-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
-       [(fork) (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
-       [(sessions) (handle-sessions-tui-command cctx cmd)]
-       [(switch-error children-error)
+     (match (car cmd)
+       ['switch (handle-switch-command cctx (cadr cmd))]
+       ['children (handle-children-command cctx (cadr cmd))]
+       ['model (handle-model-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
+       ['name (handle-name-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
+       ['fork (handle-fork-command cctx (and (>= (length cmd) 2) (cadr cmd)))]
+       ['sessions (handle-sessions-tui-command cctx cmd)]
+       [(or 'switch-error 'children-error)
         (define entry (make-entry 'error (cadr cmd) 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
-       [else 'continue])]
+       [_ 'continue])]
     ;; Handle simple symbol commands
     [else
-     (case cmd
-       [(model) (handle-model-command cctx)]
-       [(history) (handle-history-command cctx)]
-       [(help)
+     (match cmd
+       ['model (handle-model-command cctx)]
+       ['history (handle-history-command cctx)]
+       ['help
         ;; Generate help from palette registry
         (define reg (make-command-registry))
         (define cmds (all-commands reg))
@@ -126,10 +127,10 @@
             (add-transcript-entry s e)))
         (set-box! (cmd-ctx-state-box cctx) new-state)
         'continue]
-       [(clear)
+       ['clear
         (set-box! (cmd-ctx-state-box cctx) (struct-copy ui-state state [transcript '()]))
         'continue]
-       [(compact)
+       ['compact
         ;; Compact: add status message and notify runtime
         (define entry (make-entry 'system "[compact requested]" 0 (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
@@ -141,7 +142,7 @@
                                 #f
                                 (hash))))
         'continue]
-       [(status)
+       ['status
         ;; Show session and provider status
         (define sid (ui-state-session-id state))
         (define model-name (ui-state-model-name state))
@@ -159,7 +160,7 @@
             (add-transcript-entry s (make-entry 'system (format "[STATUS] ~a" line) 0 (hash)))))
         (set-box! (cmd-ctx-state-box cctx) new-state)
         'continue]
-       [(interrupt)
+       ['interrupt
         ;; Interrupt: notify runtime
         (when (cmd-ctx-event-bus cctx)
           (publish! (cmd-ctx-event-bus cctx)
@@ -172,12 +173,12 @@
           (make-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
-       [(tree) (handle-tree-command cctx)]
-       [(branches) (handle-branches-command cctx)]
-       [(leaves) (handle-leaves-command cctx)]
-       [(name) (handle-name-command cctx)]
-       [(sessions) (handle-sessions-tui-command cctx #f)]
-       [(retry)
+       ['tree (handle-tree-command cctx)]
+       ['branches (handle-branches-command cctx)]
+       ['leaves (handle-leaves-command cctx)]
+       ['name (handle-name-command cctx)]
+       ['sessions (handle-sessions-tui-command cctx #f)]
+       ['retry
         ;; /retry: resubmit last prompt, enriched with previous turn context
         (define last-prompt (unbox (cmd-ctx-last-prompt-box cctx)))
         (cond
@@ -223,13 +224,13 @@
              (make-entry 'error "No previous prompt to retry." (current-inexact-milliseconds) (hash)))
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
         'continue]
-       [(activate) (handle-activate-command cctx)]
-       [(deactivate) (handle-deactivate-command cctx)]
-       [(reload) (handle-reload-command cctx)]
-       [(quit)
+       ['activate (handle-activate-command cctx)]
+       ['deactivate (handle-deactivate-command cctx)]
+       ['reload (handle-reload-command cctx)]
+       ['quit
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]
-       [(unknown)
+       ['unknown
         ;; Try extension command dispatch before showing error
         (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
         (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
