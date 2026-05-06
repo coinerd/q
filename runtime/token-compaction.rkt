@@ -22,15 +22,19 @@
          "context-policy.rkt")
 
 (provide (struct-out token-compaction-config)
-         ;; Token-based window split
-         build-token-summary-window
-         ;; Backward token walk
-         backward-token-walk
-         ;; Token estimation for message lists
-         estimate-messages-tokens
-         ;; Configuration helpers
-         default-token-compaction-config
-         make-token-compaction-config)
+         (contract-out
+          [build-token-summary-window
+           (-> (listof any/c) token-compaction-config? (values (listof any/c) (listof any/c)))]
+          [backward-token-walk
+           (-> (listof any/c) exact-nonnegative-integer? (values (listof any/c) (listof any/c)))]
+          [estimate-messages-tokens (-> (listof any/c) exact-nonnegative-integer?)]
+          [default-token-compaction-config (-> token-compaction-config?)]
+          [make-token-compaction-config
+           (->* ()
+                (#:keep-recent-tokens exact-nonnegative-integer?
+                                      #:reserve-tokens exact-nonnegative-integer?
+                                      #:max-context-tokens exact-nonnegative-integer?)
+                token-compaction-config?)]))
 
 ;; ============================================================
 ;; #687: Token compaction configuration

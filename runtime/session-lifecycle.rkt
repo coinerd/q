@@ -13,7 +13,8 @@
 ;;   dispatch-iteration      — model-select hook + iteration loop dispatch
 ;;   run-prompt-internal     — internal prompt execution (after input hook)
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/file
          racket/list
          (only-in racket/dict dict-ref dict-set)
@@ -51,10 +52,7 @@
          (only-in "../runtime/working-set.rkt" make-working-set working-set-reset!)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
-         (only-in "iteration.rkt"
-                  run-iteration-loop
-                  emit-session-event!
-                  maybe-dispatch-hooks)
+         (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
          "session-types.rkt"
          (only-in "session-controls.rkt" set-model! shutdown-requested? force-shutdown-requested?)
          (only-in "../llm/token-budget.rkt" DEFAULT-TOKEN-BUDGET-THRESHOLD)
@@ -66,13 +64,31 @@
                   retry-exhausted-total-delay-ms
                   retry-exhausted-error-history))
 
-(provide run-prompt!
-         run-prompt-internal
-         build-session-context
-         dispatch-iteration
-         ensure-persisted!
-         buffer-or-append!
-         write-crash-log!)
+(provide (contract-out [run-prompt!
+                        (->* (agent-session? (or/c string? any/c))
+                             (#:max-iterations (or/c exact-nonnegative-integer? #f)
+                                               #:ensure-persisted! (or/c procedure? #f)
+                                               #:buffer-or-append! (or/c procedure? #f))
+                             any)]
+                       [run-prompt-internal
+                        (-> agent-session?
+                            (or/c string? any/c)
+                            (or/c exact-nonnegative-integer? #f)
+                            (or/c exact-nonnegative-integer? #f)
+                            (or/c procedure? #f)
+                            (or/c procedure? #f)
+                            any)]
+                       [build-session-context
+                        (-> agent-session?
+                            (or/c string? any/c)
+                            (or/c procedure? #f)
+                            (or/c procedure? #f)
+                            (listof any/c))]
+                       [dispatch-iteration
+                        (-> agent-session? (listof any/c) exact-nonnegative-integer? any)]
+                       [ensure-persisted! (-> agent-session? void?)]
+                       [buffer-or-append! (-> agent-session? any/c void?)]
+                       [write-crash-log! (-> (or/c string? #f) string? string? void?)]))
 
 ;; ============================================================
 ;; Helpers

@@ -6,7 +6,8 @@
 ;; Provides summary cache (LRU), catalog entry generation, context summary
 ;; prompting/generation, and related helpers. Extracted from context-assembly.rkt.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string
          racket/list
          "../util/protocol-types.rkt"
@@ -16,40 +17,34 @@
          (only-in "../llm/provider.rkt" provider?))
 
 ;; Summary cache
-(provide summary-cache
-         summary-cache?
-         summary-cache-table
-         summary-cache-order
-         summary-cache-max-entries
-         make-summary-cache
-         summary-cache-lookup
-         summary-cache-store!
-         summary-cache-count
+(provide (struct-out catalog-entry)
+         (struct-out context-summary)
+         (struct-out summary-cache)
          DEFAULT-CACHE-MAX-ENTRIES
-         ;; Catalog
-         catalog-entry
-         catalog-entry?
-         catalog-entry-id
-         catalog-entry-role
-         catalog-entry-summary
-         generate-catalog
-         collapse-consecutive-tools
-         message->catalog-entry
-         tool-group->catalog-entry
-         ;; Context summary
-         context-summary
-         context-summary?
-         context-summary-from-id
-         context-summary-to-id
-         context-summary-text
-         context-summary-entry-count
-         context-summary-prompt
-         generate-context-summary
-         simple-summary-text
-         simple-summary-count
-         ;; Helpers
-         extract-message-text
-         truncate-string)
+         (contract-out [make-summary-cache
+                        (->* () (#:max-entries exact-nonnegative-integer?) summary-cache?)]
+                       [summary-cache-lookup (-> summary-cache? any/c any/c (or/c string? #f))]
+                       [summary-cache-store! (-> summary-cache? any/c any/c string? void?)]
+                       [summary-cache-count (-> summary-cache? exact-nonnegative-integer?)]
+                       [generate-catalog
+                        (->* ((listof any/c))
+                             (#:max-entries exact-nonnegative-integer?
+                                            #:max-tokens exact-nonnegative-integer?
+                                            #:estimate-text (-> string? exact-nonnegative-integer?))
+                             (listof catalog-entry?))]
+                       [collapse-consecutive-tools (-> (listof any/c) (listof any/c))]
+                       [message->catalog-entry (-> any/c (or/c catalog-entry? #f))]
+                       [tool-group->catalog-entry (-> (listof any/c) (or/c catalog-entry? #f))]
+                       [context-summary-prompt
+                        (->* ((listof any/c)) (#:previous-summary (or/c string? #f)) string?)]
+                       [generate-context-summary
+                        (->* ((listof any/c) (or/c provider? #f) (or/c string? #f))
+                             (#:cache (or/c summary-cache? #f))
+                             (or/c context-summary? #f))]
+                       [simple-summary-text (-> (listof any/c) string?)]
+                       [simple-summary-count (-> (listof any/c) exact-nonnegative-integer?)]
+                       [extract-message-text (-> any/c string?)]
+                       [truncate-string (-> string? exact-nonnegative-integer? string?)]))
 
 ;; ============================================================
 ;; Catalog entry struct

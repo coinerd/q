@@ -23,20 +23,15 @@
          racket/string
          "../util/protocol-types.rkt")
 
-(provide
- ;; #690: Split-turn detection
- split-turn-result?
- find-split-turn
- split-turn-result-split-index
- split-turn-result-turn-start-index
- split-turn-result-turn-messages
- split-turn-result-is-split?
- ;; #691: Turn-prefix generation
- generate-turn-prefix
- ;; Turn boundary helpers
- find-turn-start
- messages-at-turn-boundary
- turn-start-index)
+(provide (struct-out split-turn-result)
+         (contract-out
+          [find-split-turn (-> (listof any/c) exact-nonnegative-integer? split-turn-result?)]
+          [generate-turn-prefix (-> (listof any/c) string?)]
+          [find-turn-start (-> (listof any/c) exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [messages-at-turn-boundary
+           (-> (listof any/c) exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [turn-start-index
+           (-> (listof any/c) exact-nonnegative-integer? exact-nonnegative-integer?)]))
 
 ;; ============================================================
 ;; #690: Split-turn detection
@@ -47,16 +42,11 @@
 ;; turn-start-index: index of the start of the turn containing the cut
 ;; turn-messages   : messages in the partial turn (from turn-start to split-index)
 ;; is-split?       : #t if the cut falls mid-turn (turn-start != split-index)
-(struct split-turn-result (split-index
-                           turn-start-index
-                           turn-messages
-                           is-split?)
-  #:transparent)
+(struct split-turn-result (split-index turn-start-index turn-messages is-split?) #:transparent)
 
 ;; Check if a message is a turn-start (user role or system-instruction kind).
 (define (turn-start? msg)
-  (or (eq? (message-role msg) 'user)
-      (eq? (message-kind msg) 'system-instruction)))
+  (or (eq? (message-role msg) 'user) (eq? (message-kind msg) 'system-instruction)))
 
 ;; Find the index of the start of the turn containing the given index.
 ;; Walks backward from index to find the nearest turn-start message.
@@ -82,16 +72,14 @@
     [(or (null? messages) (>= split-index (length messages)))
      (split-turn-result split-index split-index '() #f)]
     ;; Split at index 0 = everything is recent, no split
-    [(= split-index 0)
-     (split-turn-result 0 0 '() #f)]
+    [(= split-index 0) (split-turn-result 0 0 '() #f)]
     [else
      ;; Check if the first "recent" message starts a new turn
      (define first-recent (list-ref messages split-index))
      (define at-turn-boundary? (turn-start? first-recent))
      (cond
-       [at-turn-boundary?
-        ;; Clean split — no turn is truncated
-        (split-turn-result split-index split-index '() #f)]
+       ;; Clean split — no turn is truncated
+       [at-turn-boundary? (split-turn-result split-index split-index '() #f)]
        [else
         ;; Mid-turn split — find where this partial turn starts
         (define ts-idx (turn-start-index messages split-index))
@@ -127,14 +115,14 @@
        (for/list ([msg (in-list turn-messages)])
          (define role (message-role msg))
          (define text (extract-message-text msg))
-         (define truncated (if (> (string-length text) 500)
-                               (string-append (substring text 0 500) "...")
-                               text))
+         (define truncated
+           (if (> (string-length text) 500)
+               (string-append (substring text 0 500) "...")
+               text))
          (format "[~a] ~a" role truncated)))
-     (string-append
-      "--- TURN PREFIX (partial turn before compaction) ---\n"
-      (string-join parts "\n")
-      "\n--- END TURN PREFIX ---")]))
+     (string-append "--- TURN PREFIX (partial turn before compaction) ---\n"
+                    (string-join parts "\n")
+                    "\n--- END TURN PREFIX ---")]))
 
 ;; Extract text from a single message
 (define (extract-message-text msg)
@@ -142,8 +130,7 @@
   (cond
     [(string? content) content]
     [(list? content)
-     (string-append*
-      (for/list ([part (in-list content)]
-                 #:when (text-part? part))
-        (text-part-text part)))]
+     (string-append* (for/list ([part (in-list content)]
+                                #:when (text-part? part))
+                       (text-part-text part)))]
     [else ""]))
