@@ -69,7 +69,7 @@
 ;; Internal helpers (must be defined before use)
 ;; ============================================================
 
-(define (non-empty? s)
+(define (non-empty-string? s)
   (and (string? s) (> (string-length s) 0)))
 
 ;; Normalize a file path: collapse .. and . components.
@@ -136,7 +136,7 @@
            (define result (gsm-transition! 'executing))
            (if (ok? result)
                (gsd-ok #:mode 'executing
-                       #:message (if (non-empty? wave-arg)
+                       #:message (if (non-empty-string? wave-arg)
                                      (format "Executing from wave ~a" wave-arg)
                                      "Execution started. Follow the plan."))
                (gsd-err #:mode (gsm-current)
@@ -167,7 +167,7 @@
   (define result (gsm-transition! 'exploring))
   (if (ok? result)
       (gsd-ok #:mode 'exploring
-              #:message (if (non-empty? user-text)
+              #:message (if (non-empty-string? user-text)
                             (format "Planning: ~a" user-text)
                             "Planning phase started. Explore freely."))
       (gsd-err #:mode (gsm-current)

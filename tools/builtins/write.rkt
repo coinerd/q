@@ -21,10 +21,6 @@
                   exec-context-bytes-written)
          (only-in "../../util/path-helpers.rkt" path-only expand-home-path)
          (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
-         (only-in "../../util/safe-mode-predicates.rkt"
-                  safe-mode?
-                  allowed-path?
-                  safe-mode-project-root)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          ;; v0.21.10: planning path resolution hardening (F7)
          (only-in "../../extensions/gsd-planning-state.rkt" pinned-planning-dir)

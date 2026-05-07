@@ -81,7 +81,7 @@
    "Tell the user: 'Use /go to start implementing.'\n"
    "Do NOT implement — only plan.\n\n"
    "IMPORTANT: [SYSTEM NOTICE: ...] messages are from the runtime, not the user.\n\n"
-   (if (and (string? user-request) (non-empty? user-request))
+   (if (and (string? user-request) (non-empty-string? user-request))
        (format "User request: ~a\n" user-request)
        "")))
 
@@ -156,7 +156,7 @@
 ;; Internal helpers
 ;; ============================================================
 
-(define (non-empty? s)
+(define (non-empty-string? s)
   (and (string? s) (> (string-length s) 0)))
 
 (define (format-wave-list waves)
@@ -171,7 +171,7 @@
   (string-join (for/list ([w waves])
                  (format "- Wave ~a: ~a"
                          (gsd-wave-index w)
-                         (if (non-empty? (gsd-wave-verify w))
+                         (if (non-empty-string? (gsd-wave-verify w))
                              (gsd-wave-verify w)
                              "(no verify command)")))
                "\n"))

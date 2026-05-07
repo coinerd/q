@@ -74,7 +74,8 @@
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
 ;; Adoption is tracked by IVG check `session-switch-typed-events`.
 (provide emit-typed-event!
-         event-struct->hasheq)
+         event-struct->hasheq
+         struct-field-names)
 
 ;; Field name mappings: auto-synced from *-event-fields constants.
 ;; Per-tool events append tool-call-event-fields to include parent fields.

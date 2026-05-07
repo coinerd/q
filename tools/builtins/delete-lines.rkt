@@ -21,11 +21,8 @@
          racket/string
          (only-in racket/list last drop take)
          (only-in "../tool.rkt" make-success-result make-error-result)
-         (only-in "../../util/safe-mode-predicates.rkt"
-                  safe-mode?
-                  allowed-path?
-                  safe-mode-project-root)
          (only-in "../../util/path-helpers.rkt" expand-home-path)
+         (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
 
 (provide tool-delete-lines)
@@ -61,9 +58,14 @@
     (path->string backup-path)))
 
 (define (file-name-from-path p)
-  (define fname (if (string? p) p (path->string p)))
+  (define fname
+    (if (string? p)
+        p
+        (path->string p)))
   (define parts (regexp-split #rx"/" fname))
-  (if (null? parts) "unknown" (last parts)))
+  (if (null? parts)
+      "unknown"
+      (last parts)))
 
 (define (prune-old-backups dir basename)
   (with-handlers ([exn:fail? (lambda (e)
@@ -95,16 +97,13 @@
   (define raw-path (hash-ref args 'path #f))
   (define path-str (and raw-path (expand-home-path raw-path)))
   (cond
-    [(not path-str)
-     (make-error-result "Missing required argument: path")]
+    [(not path-str) (make-error-result "Missing required argument: path")]
     [else
      (define start-line (hash-ref args 'start-line #f))
      (define end-line (hash-ref args 'end-line #f))
      (cond
-       [(not start-line)
-        (make-error-result "Missing required argument: start-line")]
-       [(not end-line)
-        (make-error-result "Missing required argument: end-line")]
+       [(not start-line) (make-error-result "Missing required argument: start-line")]
+       [(not end-line) (make-error-result "Missing required argument: end-line")]
        [(not (exact-integer? start-line))
         (make-error-result (format "start-line must be an integer, got: ~v" start-line))]
        [(not (exact-integer? end-line))
@@ -112,12 +111,10 @@
        [else
         ;; Defense-in-depth: safe-mode path check (same as edit tool)
         (cond
-          [(and (safe-mode?) (not (allowed-path? path-str)))
-           (make-error-result (format "delete-lines: path '~a' outside project root (~a)"
-                                      path-str
-                                      (safe-mode-project-root)))]
-          [(not (file-exists? path-str))
-           (make-error-result (format "File not found: ~a" path-str))]
+          [(require-safe-path! path-str "delete-lines")
+           =>
+           (lambda (err) (make-error-result err))]
+          [(not (file-exists? path-str)) (make-error-result (format "File not found: ~a" path-str))]
 
           [else
            (define content (file->string path-str))
@@ -127,21 +124,21 @@
            (cond
              ;; Validate line range
              [(< start-line 1)
-              (make-error-result
-               (format "start-line ~a is out of range. File has ~a lines (1-based)."
-                       start-line total-lines))]
+              (make-error-result (format "start-line ~a is out of range. File has ~a lines (1-based)."
+                                         start-line
+                                         total-lines))]
              [(> end-line total-lines)
               (make-error-result
                (format "end-line ~a exceeds file length. File has ~a lines (1-based)."
-                       end-line total-lines))]
+                       end-line
+                       total-lines))]
              [(> start-line end-line)
               (make-error-result
                (format "start-line (~a) must be ≤ end-line (~a)" start-line end-line))]
 
              [else
               ;; Extract preview of deleted lines
-              (define deleted-lines (take (drop lines (sub1 start-line))
-                                         (- end-line start-line -1)))
+              (define deleted-lines (take (drop lines (sub1 start-line)) (- end-line start-line -1)))
               (define preview
                 (if (<= (length deleted-lines) 5)
                     (string-join deleted-lines "\n")
@@ -166,14 +163,15 @@
                 [(not (= actual-deleted expected-deleted))
                  ;; Auto-revert
                  (with-handlers ([exn:fail? (lambda (e)
-                                              (log-warning
-                                               (format "delete-lines/auto-revert: ~a"
-                                                       (exn-message e)))
+                                              (log-warning (format "delete-lines/auto-revert: ~a"
+                                                                   (exn-message e)))
                                               (void))])
                    (display-to-file content path-str #:exists 'replace))
                  (make-error-result
-                  (format "Delete reverted: line count mismatch (expected to delete ~a, actually deleted ~a). File restored."
-                          expected-deleted actual-deleted))]
+                  (format
+                   "Delete reverted: line count mismatch (expected to delete ~a, actually deleted ~a). File restored."
+                   expected-deleted
+                   actual-deleted))]
 
                 [else
                  ;; Write new content
@@ -185,13 +183,25 @@
                    (display-to-file new-content path-str #:exists 'replace)
 
                    (make-success-result
-                    (list (hasheq 'type "text"
-                                  'text (format "Deleted lines ~a-~a from ~a (~a lines removed)\nPreview:\n~a"
-                                                start-line end-line path-str
-                                                expected-deleted preview)))
-                    (hasheq 'path path-str
-                            'lines-deleted expected-deleted
-                            'start-line start-line
-                            'end-line end-line
-                            'remaining-lines (length new-lines)
-                            'backup (or backup-path ""))))])])])])]))
+                    (list (hasheq
+                           'type
+                           "text"
+                           'text
+                           (format "Deleted lines ~a-~a from ~a (~a lines removed)\nPreview:\n~a"
+                                   start-line
+                                   end-line
+                                   path-str
+                                   expected-deleted
+                                   preview)))
+                    (hasheq 'path
+                            path-str
+                            'lines-deleted
+                            expected-deleted
+                            'start-line
+                            start-line
+                            'end-line
+                            end-line
+                            'remaining-lines
+                            (length new-lines)
+                            'backup
+                            (or backup-path ""))))])])])])]))

@@ -3,8 +3,7 @@
 ;; agent/loop-messages.rkt — Message handling helpers
 ;;
 ;; Pure and near-pure utilities for building, validating, and
-;; transforming messages for the agent loop.  Also provides the
-;; shared emit! helper used by loop.rkt and loop-stream.rkt.
+;; transforming messages for the agent loop.
 ;;
 ;; Extracted from loop.rkt (decomposition step).
 
@@ -13,21 +12,15 @@
          racket/set
          racket/match
          "../util/protocol-types.rkt"
-         "event-bus.rkt"
-         "state.rkt"
-         "../util/ids.rkt"
          (only-in "../util/content-helpers.rkt" result-content->string)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
 (provide usage-empty?
          parts->text-string
-         emit!
          valid-api-message-sequence?
          merge-consecutive-roles
          build-raw-messages
-         classify-hook-result
-         handle-hook-result)
-
+         classify-hook-result)
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
@@ -48,17 +41,6 @@
                     (text-part-text p))
                   "")]
     [else (format "~a" parts)]))
-
-;; Emit an event on the bus and optionally record in state
-;; DEPRECATED (v0.32.3): Use emit-typed-event! with typed event structs instead.
-;; Zero production callers remain. Kept for backward compatibility only.
-;; Safe to remove in v0.33.x.
-(define (emit! bus session-id turn-id event-name payload #:state [state #f])
-  (define evt (make-event event-name (now-seconds) session-id turn-id payload))
-  (publish! bus evt)
-  (when state
-    (state-add-event! state evt))
-  evt)
 
 ;; ============================================================
 ;; Message sequence validation
@@ -196,14 +178,3 @@
        ['block (list 'block (hook-result-payload result))]
        ['amend (list 'amend (hook-result-payload result))]
        [_ 'pass])]))
-
-;; DEPRECATED (v0.32.4): CPS-style hook dispatch. Use classify-hook-result + match instead.
-;; Kept for backward compatibility with loop-stream.rkt migration.
-(define (handle-hook-result result on-block on-continue #:on-amend [on-amend #f])
-  (match (classify-hook-result result)
-    [(list 'block payload) (on-block payload)]
-    [(list 'amend payload)
-     (when on-amend
-       (on-amend payload))
-     (on-continue)]
-    ['pass (on-continue)]))
