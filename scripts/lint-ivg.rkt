@@ -56,14 +56,14 @@
    (list "decide-next-action-wired"
          (lambda () (>= (grep-count "decide-next-action" "runtime/iteration.rkt") 2))
          "decide-next-action has fewer than 2 references in iteration.rkt")
-   ;; handle-hook-result must be used in loop-stream.rkt (≥3 calls)
-   (list "handle-hook-result-stream"
-         (lambda () (>= (grep-count "handle-hook-result" "agent/loop-stream.rkt") 3))
-         "handle-hook-result has fewer than 3 calls in loop-stream.rkt")
-   ;; handle-hook-result must be used in loop.rkt (≥3 calls)
-   (list "handle-hook-result-loop"
-         (lambda () (>= (grep-count "handle-hook-result" "agent/loop.rkt") 3))
-         "handle-hook-result has fewer than 3 calls in loop.rkt")
+   ;; v0.32.4: classify-hook-result (replaced handle-hook-result) in loop-stream.rkt (≥3 calls)
+   (list "classify-hook-result-stream"
+         (lambda () (>= (grep-count "classify-hook-result" "agent/loop-stream.rkt") 3))
+         "classify-hook-result has fewer than 3 calls in loop-stream.rkt")
+   ;; v0.32.4: classify-hook-result (replaced handle-hook-result) in loop.rkt (≥3 calls)
+   (list "classify-hook-result-loop"
+         (lambda () (>= (grep-count "classify-hook-result" "agent/loop.rkt") 2))
+         "classify-hook-result has fewer than 2 calls in loop.rkt")
    ;; emit-typed-event! must have NOTE comment in event-emitter.rkt (deferred dead code)
    (list "emit-typed-event-note"
          (lambda () (>= (grep-count "NOTE.*v0.29.14.*emit-typed-event" "agent/event-emitter.rkt") 1))

@@ -4,6 +4,7 @@
 ;;
 ;; Re-exports from loop-messages.rkt and loop-stream.rkt.
 ;; This module is the public API surface for the agent loop.
+;; v0.32.4: Flattened CPS hook dispatch to data-return classify-hook-result + match.
 ;;
 ;; Architecture (v0.25.0 decomposition):
 ;;   loop-messages.rkt — message helpers (build-raw-messages, emit!, etc.)
@@ -75,7 +76,7 @@
          MAX-STREAM-CHUNKS
          usage-empty?
          parts->text-string
-         handle-hook-result)
+         classify-hook-result)
 (provide compute-next-loop-state)
 
 ;; ============================================================
@@ -92,7 +93,7 @@
 ;;                  #:session-id string?
 ;;                  #:turn-id string?
 ;;                  #:state (or/c loop-state? #f)
-;;                  #:tools (or/c (listof hash?) #f)  -- pre-formatted OpenAI tool schemas
+;;                  #:tools (or/c (listof hash?) #f)
 ;;                  #:cancellation-token (or/c cancellation-token? #f)
 ;;                  #:hook-dispatcher (or/c procedure? #f)
 ;;               -> loop-result?
@@ -156,9 +157,9 @@
                                   'settings
                                   (model-request-settings req)))))
 
-  (handle-hook-result
-   pre-hook-result
-   (lambda (payload)
+  ;; v0.32.4: Flat match instead of nested CPS callbacks
+  (match (classify-hook-result pre-hook-result)
+    [(list 'block _)
      (emit-typed-event! bus
                         (make-model-request-blocked-event #:session-id session-id
                                                           #:turn-id turn-id
@@ -170,8 +171,8 @@
                                              #:timestamp (current-inexact-milliseconds)
                                              #:reason "hook-blocked"
                                              #:duration-ms 0))
-     (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre)))
-   (lambda ()
+     (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
+    [_
      ;; DEBUG: validate raw-messages before sending
      (unless (valid-api-message-sequence? raw-messages)
        (log-warning "INVALID message sequence detected! Dumping raw messages:")
@@ -203,9 +204,9 @@
                                      'message-count
                                      (length raw-messages)))))
 
-     (handle-hook-result
-      msg-start-result
-      (lambda (payload)
+     ;; v0.32.4: Second hook — flat match, no nesting
+     (match (classify-hook-result msg-start-result)
+       [(list 'block _)
         (emit-typed-event! bus
                            (make-message-blocked-event #:session-id session-id
                                                        #:turn-id turn-id
@@ -218,8 +219,8 @@
                                                 #:timestamp (current-inexact-milliseconds)
                                                 #:reason "hook-blocked"
                                                 #:duration-ms 0))
-        (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start)))
-      (lambda ()
+        (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
+       [_
         ;; 5-7. Stream from provider
         (define stream-data
           (stream-from-provider provider
@@ -243,4 +244,4 @@
                                 st
                                 tools
                                 provider
-                                hook-dispatcher)]))))))
+                                hook-dispatcher)])])]))
