@@ -12,6 +12,7 @@
          racket/exn
          "../runtime/auto-retry.rkt"
          "../runtime/iteration.rkt"
+         "../runtime/runtime-helpers.rkt"
          "../runtime/compactor.rkt"
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt")
@@ -85,7 +86,7 @@
     (test-case "call-with-overflow-recovery: succeeds when no overflow"
       (define bus (make-event-bus))
       (define ctx (list (make-test-msg)))
-      (define result (call-with-overflow-recovery (lambda () 'success) ctx bus "test-session"))
+      (define result (call-with-overflow-recovery (lambda () 'success) ctx "test-session"))
       (check-equal? result 'success))
 
     (test-case "call-with-overflow-recovery: recovers from overflow error"
@@ -102,7 +103,6 @@
                                                             (current-continuation-marks)))
                                            'recovered))
                                      ctx
-                                     bus
                                      "test-session"))
       (check-equal? result 'recovered)
       (check-equal? (unbox attempt-box) 2))
@@ -115,7 +115,6 @@
                    (call-with-overflow-recovery
                     (lambda () (raise (exn:fail "unrelated error" (current-continuation-marks))))
                     ctx
-                    bus
                     "test-session"))))
 
     ;; -------------------------------------------------------
@@ -125,21 +124,19 @@
       (define bus (make-event-bus))
       (define recorded-events '())
       (define sub-id
-        (subscribe! bus
-                    (lambda (evt) (set! recorded-events (append recorded-events (list evt))))
-))
+        (subscribe! bus (lambda (evt) (set! recorded-events (append recorded-events (list evt))))))
       (define ctx
         (for/list ([i (in-range 20)])
           (make-test-msg 'user (format "msg ~a" i))))
       (define attempt-box (box 0))
-      (call-with-overflow-recovery (lambda ()
-                                     (set-box! attempt-box (add1 (unbox attempt-box)))
-                                     (when (= (unbox attempt-box) 1)
-                                       (raise (exn:fail "too many tokens"
-                                                        (current-continuation-marks)))))
-                                   ctx
-                                   bus
-                                   "test-session")
+      (call-with-overflow-recovery
+       (lambda ()
+         (set-box! attempt-box (add1 (unbox attempt-box)))
+         (when (= (unbox attempt-box) 1)
+           (raise (exn:fail "too many tokens" (current-continuation-marks)))))
+       ctx
+       "test-session"
+       #:emit-event (lambda (name payload) (emit-session-event! bus "test-session" name payload)))
       (unsubscribe! bus sub-id)
       ;; Should have emitted detected + compacted events
       (define event-names (map event-ev recorded-events))
@@ -150,11 +147,9 @@
       (define bus (make-event-bus))
       (define recorded-events '())
       (define sub-id
-        (subscribe! bus
-                    (lambda (evt) (set! recorded-events (append recorded-events (list evt))))
-))
+        (subscribe! bus (lambda (evt) (set! recorded-events (append recorded-events (list evt))))))
       (define ctx (list (make-test-msg)))
-      (call-with-overflow-recovery (lambda () 'ok) ctx bus "test-session")
+      (call-with-overflow-recovery (lambda () 'ok) ctx "test-session")
       (unsubscribe! bus sub-id)
       ;; No overflow events
       (define overflow-events

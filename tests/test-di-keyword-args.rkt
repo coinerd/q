@@ -10,6 +10,7 @@
          rackunit/text-ui
          "../runtime/iteration.rkt"
          "../runtime/turn-orchestrator.rkt"
+         "../runtime/runtime-helpers.rkt"
          "../runtime/compactor.rkt"
          "../runtime/auto-retry.rkt"
          "../agent/event-bus.rkt"
@@ -44,15 +45,15 @@
       ;; First call raises overflow, retry (after compact) succeeds
       (with-check-info
        (['msg "compact-proc should be called"])
-       (call-with-overflow-recovery (lambda ()
-                                      (set-box! retry-count (add1 (unbox retry-count)))
-                                      (when (= (unbox retry-count) 1)
-                                        (raise (exn:fail "context_length_exceeded"
-                                                         (current-continuation-marks)))))
-                                    ctx
-                                    bus
-                                    "test-session"
-                                    #:compact-proc mock-compact)
+       (call-with-overflow-recovery
+        (lambda ()
+          (set-box! retry-count (add1 (unbox retry-count)))
+          (when (= (unbox retry-count) 1)
+            (raise (exn:fail "context_length_exceeded" (current-continuation-marks)))))
+        ctx
+        "test-session"
+        #:emit-event (lambda (name payload) (emit-session-event! bus "test-session" name payload))
+        #:compact-proc mock-compact)
        (check-true (unbox compact-called?) "mock compact-proc was called")))
 
     ;; -------------------------------------------------------
@@ -61,7 +62,7 @@
     (test-case "call-with-overflow-recovery default works (no overflow)"
       (define bus (make-event-bus))
       (define ctx (list (make-test-msg)))
-      (define result (call-with-overflow-recovery (lambda () 'success) ctx bus "test-session"))
+      (define result (call-with-overflow-recovery (lambda () 'success) ctx "test-session"))
       (check-equal? result 'success "no-overflow case returns thunk result"))
 
     ;; -------------------------------------------------------
@@ -75,7 +76,7 @@
         5000)
       ;; Use the default (real) estimate for comparison
       (define result
-        (check-mid-turn-budget! ctx bus "test-session" (hash) #:estimate-tokens (lambda (msgs) 5000)))
+        (check-mid-turn-budget! ctx "test-session" (hash) #:estimate-tokens (lambda (msgs) 5000)))
       (check-equal? result 5000 "mock estimate-tokens was used"))
 
     ;; -------------------------------------------------------
@@ -91,9 +92,10 @@
       ;; Set budget very low, mock estimate very high
       (define result
         (check-mid-turn-budget! ctx
-                                bus
                                 "test-session"
                                 (hash 'max-context-tokens 1000)
+                                #:emit-event (lambda (name payload)
+                                               (emit-session-event! bus "test-session" name payload))
                                 #:estimate-tokens (lambda (msgs) 50000)))
       (check-equal? result 50000 "returns mock estimate")
       (check-not-false (member "context.mid-turn-over-budget" (unbox events-received))
@@ -130,8 +132,6 @@
                            (hash)
                            #:tool-list-proc mock-tool-list))
       (check-pred values result "run-provider-turn returns with mock tool-list-proc")
-      (check-not-false (unbox tool-called-with) "mock tool-list-proc was called"))
-
-))
+      (check-not-false (unbox tool-called-with) "mock tool-list-proc was called"))))
 
 (run-tests di-keyword-args-tests)

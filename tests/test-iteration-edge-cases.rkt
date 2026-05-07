@@ -47,12 +47,12 @@
 (test-case "check-mid-turn-budget! passes when well under limit"
   (define bus (make-event-bus))
   (define config (hasheq 'max-context-tokens 1000))
-  (check-not-exn (lambda () (check-mid-turn-budget! '() bus "test-session" config))))
+  (check-not-exn (lambda () (check-mid-turn-budget! '() "test-session" config))))
 
 (test-case "check-mid-turn-budget! uses default when no config key"
   (define bus (make-event-bus))
   (define config (hasheq))
-  (check-not-exn (lambda () (check-mid-turn-budget! '() bus "test-session" config))))
+  (check-not-exn (lambda () (check-mid-turn-budget! '() "test-session" config))))
 
 ;; ============================================================
 ;; update-seen-paths / steering counter reset tests

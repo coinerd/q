@@ -12,6 +12,7 @@
          "../runtime/session-compaction.rkt"
          "../runtime/compactor.rkt"
          "../runtime/iteration/retry-policy.rkt"
+         "../runtime/runtime-helpers.rkt"
          "../llm/token-budget.rkt"
          "../agent/event-bus.rkt")
 
@@ -66,7 +67,12 @@
       (subscribe! bus (lambda (evt) (set! events (cons evt events))))
       (define ctx (make-mock-context 50))
       (define config (hasheq 'max-context-tokens 100))
-      (define result (check-mid-turn-budget! ctx bus "test-session" config))
+      (define result
+        (check-mid-turn-budget!
+         ctx
+         "test-session"
+         config
+         #:emit-event (lambda (name payload) (emit-session-event! bus "test-session" name payload))))
       (check-true (integer? result))
       ;; Should have emitted context.mid-turn-over-budget event
       (check-true (> (length events) 0) "emitted event when over budget"))))

@@ -98,6 +98,7 @@
          ;; estimate-context-tokens imported via DI parameter (see below)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "session-compaction.rkt" compact-context-mid-turn)
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../llm/provider.rkt" provider?)
          (only-in "../tools/registry.rkt" tool-registry?)
@@ -205,10 +206,10 @@
 ;; ============================================================
 
 (struct step-result
-  (action        ; symbol: 'continue | 'stop | 'stop-hard-limit | 'stop-soft-limit
-   termination   ; symbol?: termination reason (symbol for stop actions, #f for continue)
-   new-counters  ; loop-counters? — updated counters after this step
-   metadata)     ; hash? — metadata for result construction
+        (action ; symbol: 'continue | 'stop | 'stop-hard-limit | 'stop-soft-limit
+         termination ; symbol?: termination reason (symbol for stop actions, #f for continue)
+         new-counters ; loop-counters? — updated counters after this step
+         metadata) ; hash? — metadata for result construction
   #:transparent)
 
 ;; compute-termination : iteration-ctx? loop-result? → symbol?
@@ -549,9 +550,12 @@
                           (loop-infra-session-id infra)
                           "runtime.error"
                           (assert-payload "runtime.error"
-                                          (hasheq 'error "max-iterations-exceeded"
-                                                  'iteration (loop-counters-iteration counters)
-                                                  'maxIterations max-iterations-hard)
+                                          (hasheq 'error
+                                                  "max-iterations-exceeded"
+                                                  'iteration
+                                                  (loop-counters-iteration counters)
+                                                  'maxIterations
+                                                  max-iterations-hard)
                                           error-detail-payload/c))
      (make-loop-result new-msgs
                        'max-iterations-exceeded
@@ -561,28 +565,39 @@
      (emit-session-event! (loop-infra-bus infra)
                           (loop-infra-session-id infra)
                           "iteration.soft-warning"
-                          (hasheq 'iteration (add1 (loop-counters-iteration counters))
-                                  'soft-limit max-iterations
-                                  'hard-limit max-iterations-hard
-                                  'remaining (- max-iterations-hard
-                                               (add1 (loop-counters-iteration counters)))))
+                          (hasheq 'iteration
+                                  (add1 (loop-counters-iteration counters))
+                                  'soft-limit
+                                  max-iterations
+                                  'hard-limit
+                                  max-iterations-hard
+                                  'remaining
+                                  (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
      (define updated-ctx (process-tool-results new-msgs infra config ws))
+     (define budget-config (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+     (define emit-fn
+       (lambda (name payload)
+         (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload)))
      (define ctx-after-budget
        (if sess
-           (maybe-compact-mid-turn sess updated-ctx
-                                   (loop-infra-bus infra)
+           (maybe-compact-mid-turn sess
+                                   updated-ctx
                                    (loop-infra-session-id infra)
-                                   (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+                                   budget-config
+                                   #:emit-event emit-fn
+                                   #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx)))
            (begin
              (estimate-mid-turn-tokens updated-ctx
-                                       (loop-infra-bus infra)
                                        (loop-infra-session-id infra)
-                                       (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+                                       budget-config
+                                       #:emit-event emit-fn)
              updated-ctx)))
      (on-recurse ctx-after-budget
-                 (struct-copy loop-counters counters
+                 (struct-copy loop-counters
+                              counters
                               [iteration (add1 (loop-counters-iteration counters))]
-                              [consecutive-tool-count (add1 (loop-counters-consecutive-tool-count counters))]
+                              [consecutive-tool-count
+                               (add1 (loop-counters-consecutive-tool-count counters))]
                               [stall-retry-count 0])
                  ws)]
     ['continue
@@ -590,18 +605,24 @@
      (define updated-ctx (process-tool-results new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
      ;; v0.28.22 W1: exploration loop detection
-     (define loop-warning (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
+     (define loop-warning
+       (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
      (when loop-warning
        (emit-session-event! (loop-infra-bus infra)
                             (loop-infra-session-id infra)
                             "iteration.exploration-loop"
-                            (hasheq 'pattern loop-warning
-                                    'recent-tools (loop-counters-recent-tool-names new-counters)
-                                    'iteration (loop-counters-iteration counters))))
+                            (hasheq 'pattern
+                                    loop-warning
+                                    'recent-tools
+                                    (loop-counters-recent-tool-names new-counters)
+                                    'iteration
+                                    (loop-counters-iteration counters))))
      (on-recurse updated-ctx
-                 (struct-copy loop-counters new-counters
+                 (struct-copy loop-counters
+                              new-counters
                               [iteration (add1 (loop-counters-iteration counters))]
-                              [consecutive-tool-count (add1 (loop-counters-consecutive-tool-count counters))]
+                              [consecutive-tool-count
+                               (add1 (loop-counters-consecutive-tool-count counters))]
                               [stall-retry-count 0])
                  ws)]))
 
@@ -667,18 +688,23 @@
                                   'remaining
                                   (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
      (define updated-ctx (call-process-tool-results))
+     (define budget-config (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+     (define emit-fn
+       (lambda (name payload)
+         (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload)))
      (define ctx-after-budget
        (if sess
            (maybe-compact-mid-turn sess
                                    updated-ctx
-                                   (loop-infra-bus infra)
                                    (loop-infra-session-id infra)
-                                   (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+                                   budget-config
+                                   #:emit-event emit-fn
+                                   #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx)))
            (begin
              (estimate-mid-turn-tokens updated-ctx
-                                       (loop-infra-bus infra)
                                        (loop-infra-session-id infra)
-                                       (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+                                       budget-config
+                                       #:emit-event emit-fn)
              updated-ctx)))
      (on-recurse ctx-after-budget
                  (struct-copy loop-counters
@@ -693,7 +719,8 @@
      (define updated-ctx (call-process-tool-results))
      (define new-counters (compute-next-counters counters new-msgs))
      ;; v0.28.22 W1: exploration loop detection
-     (define loop-warning (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
+     (define loop-warning
+       (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
      (when loop-warning
        (emit-session-event! (loop-infra-bus infra)
                             (loop-infra-session-id infra)
