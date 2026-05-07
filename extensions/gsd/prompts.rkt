@@ -156,8 +156,7 @@
 ;; Internal helpers
 ;; ============================================================
 
-(define (non-empty-string? s)
-  (and (string? s) (> (string-length s) 0)))
+
 
 (define (format-wave-list waves)
   (string-join (for/list ([w waves])

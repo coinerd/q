@@ -116,6 +116,7 @@
                            (write-json state p)
                            (newline p))
                          #:exists 'truncate/replace)
+  (file-or-directory-permissions tmp #o600)
   (rename-file-or-directory tmp sf #t))
 
 ;; Helper: convert string name to symbol for use as quarantined hash key

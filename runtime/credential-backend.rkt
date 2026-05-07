@@ -349,8 +349,7 @@
 ;; Helpers
 ;; ═══════════════════════════════════════════════════════════════════
 
-(define (non-empty-string? v)
-  (and (string? v) (> (string-length (string-trim v)) 0)))
+
 
 (define (shell-escape s)
   (string-replace s "'" "'\\''"))

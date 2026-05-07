@@ -94,8 +94,7 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; Helper: non-empty string? — string that is not empty and not only whitespace
-(define (non-empty-string? v)
-  (and (string? v) (> (string-length (string-trim v)) 0)))
+
 
 ;; Helper: get a value from a hash by either symbol or string key
 ;; Returns the first found value, or #f if neither key exists
