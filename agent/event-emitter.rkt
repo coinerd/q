@@ -2,6 +2,7 @@
 
 ;; agent/event-emitter.rkt -- typed event emission bridge
 ;; v0.29.2: Bridge between typed event structs and raw event bus.
+;; v0.32.2: Replace manual field-name registry with macro-generated constants.
 
 (require (only-in racket/string string-prefix?)
          (only-in "../util/event.rkt" make-event)
@@ -12,75 +13,132 @@
                   typed-event-type
                   typed-event-timestamp
                   typed-event-session-id
-                  typed-event-turn-id))
+                  typed-event-turn-id)
+         ;; Import event-struct modules for *-event-fields constants
+         (only-in "../agent/event-structs/turn-events.rkt"
+                  turn-start-event-fields
+                  turn-end-event-fields)
+         (only-in "../agent/event-structs/message-events.rkt"
+                  message-start-event-fields
+                  message-update-event-fields
+                  message-end-event-fields)
+         (only-in "../agent/event-structs/iteration-events.rkt"
+                  auto-retry-event-fields
+                  compaction-event-fields
+                  injection-event-fields)
+         (only-in "../agent/event-structs/provider-events.rkt"
+                  provider-request-event-fields
+                  provider-response-event-fields
+                  model-stream-delta-event-fields
+                  model-stream-thinking-event-fields
+                  model-stream-completed-event-fields)
+         (only-in "../agent/event-structs/session-events.rkt"
+                  session-start-event-fields
+                  session-shutdown-event-fields
+                  input-event-fields
+                  model-select-event-fields
+                  agent-start-event-fields
+                  agent-end-event-fields
+                  context-event-fields)
+         (only-in "../agent/event-structs/tool-events.rkt"
+                  tool-execution-start-event-fields
+                  tool-execution-update-event-fields
+                  tool-execution-end-event-fields
+                  tool-call-event-fields
+                  tool-result-event-fields
+                  bash-tool-call-event-fields
+                  edit-tool-call-event-fields
+                  write-tool-call-event-fields
+                  read-tool-call-event-fields
+                  grep-tool-call-event-fields
+                  find-tool-call-event-fields
+                  custom-tool-call-event-fields)
+         (only-in "../agent/event-structs/hook-events.rkt"
+                  model-request-blocked-event-fields
+                  message-blocked-event-fields
+                  turn-cancelled-event-fields
+                  assistant-message-completed-event-fields))
 
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
 ;; Adoption is tracked by IVG check `session-switch-typed-events`.
 (provide emit-typed-event!
          event-struct->hasheq)
 
-;; Field name mappings: sub-struct fields after typed-event base (type timestamp session-id turn-id)
+;; Field name mappings: auto-synced from *-event-fields constants.
+;; Per-tool events append tool-call-event-fields to include parent fields.
 (define struct-field-names
   (hasheq 'message-start-event
-          '(role model)
+          message-start-event-fields
           'message-update-event
-          '(content delta)
+          message-update-event-fields
           'message-end-event
-          '(role content-length)
+          message-end-event-fields
           'provider-request-event
-          '(model provider)
+          provider-request-event-fields
           'provider-response-event
-          '(model provider latency-ms)
+          provider-response-event-fields
+          'model-stream-delta-event
+          model-stream-delta-event-fields
+          'model-stream-thinking-event
+          model-stream-thinking-event-fields
+          'model-stream-completed-event
+          model-stream-completed-event-fields
           'session-start-event
-          '(model)
+          session-start-event-fields
           'session-shutdown-event
-          '(reason)
+          session-shutdown-event-fields
           'input-event
-          '(input-type content)
+          input-event-fields
           'model-select-event
-          '(model provider)
+          model-select-event-fields
           'agent-start-event
-          '(model)
+          agent-start-event-fields
           'agent-end-event
-          '(reason duration-ms)
+          agent-end-event-fields
           'turn-cancelled-event
-          '(reason iteration)
+          turn-cancelled-event-fields
           'context-event
-          '(token-count window-size)
+          context-event-fields
           'tool-execution-start-event
-          '(tool-name tool-call-id)
+          tool-execution-start-event-fields
           'tool-execution-update-event
-          '(tool-name progress)
+          tool-execution-update-event-fields
           'tool-execution-end-event
-          '(tool-name duration-ms result-summary)
+          tool-execution-end-event-fields
           'tool-call-event
-          '(tool-name arguments tool-call-id)
+          tool-call-event-fields
           'tool-result-event
-          '(tool-call-id content is-error?)
+          tool-result-event-fields
           'bash-tool-call-event
-          '(command timeout cwd)
+          bash-tool-call-event-fields
           'edit-tool-call-event
-          '(path edits)
+          edit-tool-call-event-fields
           'write-tool-call-event
-          '(path content)
+          write-tool-call-event-fields
           'read-tool-call-event
-          '(path offset limit)
+          read-tool-call-event-fields
           'grep-tool-call-event
-          '(pattern path)
+          grep-tool-call-event-fields
           'find-tool-call-event
-          '(pattern path)
+          find-tool-call-event-fields
           'custom-tool-call-event
-          '()
+          custom-tool-call-event-fields
           'turn-start-event
-          '(model provider)
+          turn-start-event-fields
           'turn-end-event
-          '(reason duration-ms)
+          turn-end-event-fields
           'auto-retry-event
-          '(attempt max-attempts error-type)
+          auto-retry-event-fields
           'compaction-event
-          '(reason tokens-before tokens-after)
+          compaction-event-fields
           'injection-event
-          '(source content-type content-length message)))
+          injection-event-fields
+          'model-request-blocked-event
+          model-request-blocked-event-fields
+          'message-blocked-event
+          message-blocked-event-fields
+          'assistant-message-completed-event
+          assistant-message-completed-event-fields))
 
 ;; Extract struct name, stripping the struct: prefix from struct->vector
 (define (struct-name evt)

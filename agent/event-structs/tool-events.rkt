@@ -4,30 +4,43 @@
 ;;
 ;; Contains tool execution lifecycle, generic tool call/result,
 ;; and all per-tool typed events (bash, edit, write, read, grep, find, custom).
+;;
+;; Simple events (typed-event parent) use define-typed-event macro.
+;; Per-tool events (tool-call-event parent with complex constructors) remain manual.
 
 (require "base.rkt"
          "../../util/event-macro.rkt")
 
-;; Tool execution lifecycle
-(provide (struct-out tool-execution-update-event)
-         (struct-out tool-execution-end-event)
-         make-tool-execution-start-event
-         make-tool-execution-update-event
-         make-tool-execution-end-event
-         tool-execution-start-event?
-         tool-execution-update-event?
-         tool-execution-end-event?
+;; ============================================================
+;; Tool execution lifecycle (typed-event parent)
+;; ============================================================
 
-         ;; Generic tool call/result
-         (struct-out tool-call-event)
-         (struct-out tool-result-event)
-         make-tool-call-event
-         make-tool-result-event
-         tool-call-event?
-         tool-result-event?
+(define-typed-event tool-execution-start-event "tool.execution.started"
+  (tool-name tool-call-id))
 
-         ;; Per-tool typed events
-         (struct-out bash-tool-call-event)
+(define-typed-event tool-execution-update-event "tool.execution.updated"
+  (tool-name progress))
+
+(define-typed-event tool-execution-end-event "tool.execution.completed"
+  (tool-name duration-ms result-summary))
+
+;; ============================================================
+;; Generic tool call/result (typed-event parent)
+;; ============================================================
+
+(define-typed-event tool-call-event "tool.called"
+  (tool-name arguments tool-call-id))
+
+(define-typed-event tool-result-event "tool.result"
+  (tool-call-id content is-error?))
+
+;; ============================================================
+;; Per-tool typed events (tool-call-event parent — manual)
+;; These inherit from tool-call-event and have complex constructors
+;; that compute arguments from specific fields.
+;; ============================================================
+
+(provide (struct-out bash-tool-call-event)
          (struct-out edit-tool-call-event)
          (struct-out write-tool-call-event)
          (struct-out read-tool-call-event)
@@ -47,80 +60,15 @@
          read-tool-call-event?
          grep-tool-call-event?
          find-tool-call-event?
-         custom-tool-call-event?)
-
-;; ============================================================
-;; Tool execution lifecycle
-;; ============================================================
-
-(define-event tool-execution-start-event typed-event (tool-name tool-call-id))
-(struct tool-execution-update-event typed-event (tool-name progress) #:transparent)
-(struct tool-execution-end-event typed-event (tool-name duration-ms result-summary) #:transparent)
-
-(define (make-tool-execution-start-event #:session-id session-id
-                                         #:turn-id turn-id
-                                         #:timestamp timestamp
-                                         #:tool-name tool-name
-                                         #:tool-call-id tool-call-id)
-  (tool-execution-start-event "tool.execution.started"
-                              timestamp
-                              session-id
-                              turn-id
-                              tool-name
-                              tool-call-id))
-
-(define (make-tool-execution-update-event #:session-id session-id
-                                          #:turn-id turn-id
-                                          #:timestamp timestamp
-                                          #:tool-name tool-name
-                                          #:progress progress)
-  (tool-execution-update-event "tool.execution.updated"
-                               timestamp
-                               session-id
-                               turn-id
-                               tool-name
-                               progress))
-
-(define (make-tool-execution-end-event #:session-id session-id
-                                       #:turn-id turn-id
-                                       #:timestamp timestamp
-                                       #:tool-name tool-name
-                                       #:duration-ms duration-ms
-                                       #:result-summary result-summary)
-  (tool-execution-end-event "tool.execution.completed"
-                            timestamp
-                            session-id
-                            turn-id
-                            tool-name
-                            duration-ms
-                            result-summary))
-
-;; ============================================================
-;; Generic tool call/result
-;; ============================================================
-
-(struct tool-call-event typed-event (tool-name arguments tool-call-id) #:transparent)
-(struct tool-result-event typed-event (tool-call-id content is-error?) #:transparent)
-
-(define (make-tool-call-event #:session-id session-id
-                              #:turn-id turn-id
-                              #:timestamp timestamp
-                              #:tool-name tool-name
-                              #:arguments arguments
-                              #:tool-call-id tool-call-id)
-  (tool-call-event "tool.called" timestamp session-id turn-id tool-name arguments tool-call-id))
-
-(define (make-tool-result-event #:session-id session-id
-                                #:turn-id turn-id
-                                #:timestamp timestamp
-                                #:tool-call-id tool-call-id
-                                #:content content
-                                #:is-error? is-error?)
-  (tool-result-event "tool.result" timestamp session-id turn-id tool-call-id content is-error?))
-
-;; ============================================================
-;; Per-tool typed events (Issue #1311)
-;; ============================================================
+         custom-tool-call-event?
+         ;; Field lists for per-tool events (for event serialization)
+         bash-tool-call-event-fields
+         edit-tool-call-event-fields
+         write-tool-call-event-fields
+         read-tool-call-event-fields
+         grep-tool-call-event-fields
+         find-tool-call-event-fields
+         custom-tool-call-event-fields)
 
 ;; bash-tool-call-event
 (struct bash-tool-call-event tool-call-event (command timeout cwd) #:transparent)
@@ -143,6 +91,9 @@
                         timeout
                         cwd))
 
+(define bash-tool-call-event-fields
+  (append tool-call-event-fields '(command timeout cwd)))
+
 ;; edit-tool-call-event
 (struct edit-tool-call-event tool-call-event (path edits) #:transparent)
 
@@ -162,6 +113,9 @@
                         path
                         edits))
 
+(define edit-tool-call-event-fields
+  (append tool-call-event-fields '(path edits)))
+
 ;; write-tool-call-event
 (struct write-tool-call-event tool-call-event (path content) #:transparent)
 
@@ -180,6 +134,9 @@
                          tool-call-id
                          path
                          content))
+
+(define write-tool-call-event-fields
+  (append tool-call-event-fields '(path content)))
 
 ;; read-tool-call-event
 (struct read-tool-call-event tool-call-event (path offset limit) #:transparent)
@@ -202,12 +159,11 @@
                         offset
                         limit))
 
+(define read-tool-call-event-fields
+  (append tool-call-event-fields '(path offset limit)))
+
 ;; grep-tool-call-event
-(struct grep-tool-call-event
-        tool-call-event
-        (pattern path
-          glob)
-  #:transparent)
+(struct grep-tool-call-event tool-call-event (pattern path glob) #:transparent)
 
 (define (make-grep-tool-call-event #:session-id session-id
                                    #:turn-id turn-id
@@ -226,6 +182,9 @@
                         pattern
                         path
                         glob))
+
+(define grep-tool-call-event-fields
+  (append tool-call-event-fields '(pattern path glob)))
 
 ;; find-tool-call-event
 (struct find-tool-call-event tool-call-event (pattern path) #:transparent)
@@ -246,6 +205,9 @@
                         pattern
                         path))
 
+(define find-tool-call-event-fields
+  (append tool-call-event-fields '(pattern path)))
+
 ;; custom-tool-call-event — fallback for unknown tools
 (struct custom-tool-call-event tool-call-event () #:transparent)
 
@@ -262,3 +224,5 @@
                           tool-name
                           arguments
                           tool-call-id))
+
+(define custom-tool-call-event-fields tool-call-event-fields)
