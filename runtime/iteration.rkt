@@ -154,8 +154,12 @@
          ;; v0.20.5 W3: pre-registration on session open (now from turn-orchestrator)
          register-session-extensions!
          ;; v0.29.1: Pure decision function exports
-         iteration-ctx
-         known-termination-reasons)
+         (struct-out iteration-ctx)
+         known-termination-reasons
+         ;; v0.33.1 W0: Pure transition functions (RA-03)
+         (struct-out step-result)
+         compute-step-result
+         compute-termination)
 
 ;; ============================================================
 ;; Pure decision function (v0.29.1: §10 Match Dispatch, §2 Pure/Effect)
@@ -191,6 +195,44 @@
        [(>= next-iter (iteration-ctx-max-iterations ctx)) 'stop-soft-limit]
        [else 'continue])]
     [_ 'stop]))
+
+;; ============================================================
+;; Pure transition functions (v0.33.1 W0 — RA-03)
+;;
+;; These functions compute the next loop state without performing
+;; any I/O or mutation. They enable property testing and replay.
+;; ============================================================
+
+(struct step-result
+  (action        ; symbol: 'continue | 'stop | 'stop-hard-limit | 'stop-soft-limit
+   termination   ; symbol?: termination reason (symbol for stop actions, #f for continue)
+   new-counters  ; loop-counters? — updated counters after this step
+   metadata)     ; hash? — metadata for result construction
+  #:transparent)
+
+;; compute-termination : iteration-ctx? loop-result? → symbol?
+;; Pure function that computes the termination reason from context + result.
+;; For stop actions, returns the loop-result-termination-reason.
+;; For continue/soft-limit, returns the raw termination (tool-calls-pending).
+(define (compute-termination ctx result)
+  (define action (decide-next-action ctx result))
+  (match action
+    [(or 'stop 'stop-hard-limit) (loop-result-termination-reason result)]
+    [_ (loop-result-termination-reason result)]))
+
+;; compute-step-result : iteration-ctx? loop-result? loop-counters? → step-result?
+;; Pure function that computes what the loop should do next.
+;; Returns a step-result with action, termination, new-counters, and metadata.
+(define (compute-step-result ctx result counters)
+  (define action (decide-next-action ctx result))
+  (define termination (compute-termination ctx result))
+  (define new-msgs (loop-result-messages result))
+  (define new-counters (compute-next-counters counters new-msgs))
+  (define metadata
+    (match action
+      ['stop-hard-limit (hash 'maxIterationsReached #t)]
+      [_ (hasheq)]))
+  (step-result action termination new-counters metadata))
 
 ;; ============================================================
 ;; DI parameters (DI-01, v0.22.7; DI-04, v0.22.8)
