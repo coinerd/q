@@ -4,11 +4,11 @@
 ;;
 ;; Provides contracts needed by both runtime/ and extensions/,
 ;; eliminating upward imports from runtime/ to extensions/.
+;;
+;; NOTE: extension-registry? was previously re-exported here from
+;; extensions/api.rkt, but that created a circular upward import.
+;; Consumers now import directly from extensions/api.rkt.
 
-(require racket/contract
-         (only-in "../extensions/api.rkt" extension-registry?))
+(require racket/base)
 
-(provide extension-registry?)
-
-;; extension-registry? is re-exported from extensions/api.rkt.
-;; Defined here so runtime/ can reference it without importing extensions/api.rkt.
+(provide)
