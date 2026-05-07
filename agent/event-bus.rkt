@@ -23,10 +23,10 @@
           [subscribe!
            (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
           [unsubscribe! (-> event-bus? exact-nonnegative-integer? void?)]
-          [publish! (-> event-bus? event? event?)])
+          [publish! (-> event-bus? event? event?)]
+          [typed-event->event (-> typed-event? event?)]
+          [bus-emit-typed! (-> event-bus? typed-event? event?)])
          event-bus?
-         bus-emit-typed!
-         typed-event->event
          ;; Error handler parameter — reserved for SDK consumers
          current-event-bus-error-handler
          ;; Circuit breaker configuration
