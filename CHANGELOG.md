@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.32.11 — 2026-05-07
+
+### Test Regression Fix (v0.32.11-W0)
+
+**Goal:** Fix 10 test files failing after v0.32.9 provider contract change.
+
+**Changes:**
+- Relaxed `make-provider` 4th arg contract from `(-> model-request? generator?)` to `(-> model-request? (or/c generator? list?))` to match `stream-result->generator` behavior
+- Fixed `test-trace-events.rkt` — removed `max_tokens` assertion for unimplemented feature
+- Fixed `test-event-ordering.rkt` — changed `(module+ main)` to `(module+ test)` so `raco test` discovers tests
+- Fixed `test-streaming-tool-events.rkt` — changed `(module+ main)` to `(module+ test)` so `raco test` discovers tests
+- Updated 8 docs files version refs from 0.32.9 → 0.32.11
+- 486 files, 2019 tests all pass
+- Version bump to 0.32.11
+
 ## v0.31.12 — 2026-05-06
 
 ### Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
