@@ -27,7 +27,8 @@
                   safe-mode-project-root)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          ;; v0.21.10: planning path resolution hardening (F7)
-         (only-in "../../extensions/gsd-planning-state.rkt" pinned-planning-dir))
+         (only-in "../../extensions/gsd-planning-state.rkt" pinned-planning-dir)
+         (only-in "builtin-helpers.rkt" require-safe-path!))
 
 (provide tool-write
          current-max-write-bytes
@@ -77,10 +78,9 @@
              (path->string (simplify-path (resolve-path p)))))))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
-    [(and (safe-mode?) (not (allowed-path? path-str)))
-     ;; Defense-in-depth: verify path even if scheduler already checked (SEC-09)
-     (make-error-result
-      (format "write: path '~a' outside project root (~a)" path-str (safe-mode-project-root)))]
+    [(require-safe-path! path-str "write")
+     =>
+     (lambda (err) (make-error-result err))]
     [else
      (define content-str (hash-ref args 'content ""))
      (with-handlers ([exn:fail:filesystem? (lambda (e)
