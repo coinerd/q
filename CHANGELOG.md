@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.33.5 — 2026-05-07
+
+### Audit Remediation (v0.33.5)
+
+**Goal:** Fix all 9 findings from the v0.33.0–v0.33.4 audit series.
+
+**W0a — Fix TR boundary regression:**
+- Replaced direct `event-bus?`/`session-config?` passing across Typed Racket boundary with callback pattern
+- `retry-policy.rkt`: all functions now accept `#:emit-event (-> String Any Any)` callback instead of raw bus
+- `maybe-compact-mid-turn`: accepts `#:compact-proc` to avoid passing opaque session struct across TR boundary
+- Removed `emit-session-event!` import from TR module (was source of `any-wrap/c` failure)
+- Updated 8 test files to use new callback-based API
+- Fixes 2 test failures in `test-di-keyword-args.rkt`
+
+**W0b — Remove dead keyword args:**
+- Removed `#:compact-proc`, `#:estimate-tokens`, `#:inject-topic` from `run-iteration-loop`
+- These DI parameters were accepted but the bound variables were never used
+- Removed dead imports: `compact-history`, `injection-event-topic`
+
+**W0c — Cleanup imports + dedup:**
+- Removed duplicate `injection-event-topic` definition from `message-inject.rkt`
+- Removed circular dependency in `util/contracts.rkt` (was importing from `extensions/api.rkt`)
+- `loop-state.rkt` now imports `extension-registry?` directly from `extensions/api.rkt`
+
+**Verification:** 488/488 test files, 2077 tests, 0 failures
+
+---
+
 ## v0.32.11 — 2026-05-07
 
 ### Test Regression Fix (v0.32.11-W0)
