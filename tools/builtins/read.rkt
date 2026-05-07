@@ -21,7 +21,8 @@
                   safe-mode?
                   allowed-path?
                   safe-mode-project-root)
-         (only-in "../../util/truncation.rkt" truncate-output MAX-OUTPUT-BYTES MAX-OUTPUT-LINES))
+         (only-in "../../util/truncation.rkt" truncate-output MAX-OUTPUT-BYTES MAX-OUTPUT-LINES)
+         (only-in "builtin-helpers.rkt" require-safe-path!))
 
 (provide tool-read)
 
@@ -43,11 +44,9 @@
      (define limit (hash-ref args 'limit #f))
 
      ;; 1. Safe-mode defense-in-depth path check (SEC-01)
+     (define safe-err (require-safe-path! path-str "read"))
      (cond
-       [(and (safe-mode?) (not (allowed-path? path-str)))
-        (make-error-result (format "read: path '~a' outside project root (~a)"
-                                   path-str
-                                   (safe-mode-project-root)))]
+       [safe-err (make-error-result safe-err)]
        [(not (file-exists? path-str)) (make-error-result (format "File not found: ~a" path-str))]
 
        [else

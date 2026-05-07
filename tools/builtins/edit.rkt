@@ -25,7 +25,8 @@
                   allowed-path?
                   safe-mode-project-root)
          (only-in "../../util/path-helpers.rkt" expand-home-path)
-         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
+         (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
+         (only-in "builtin-helpers.rkt" require-safe-path!))
 
 (provide tool-edit
          current-max-old-text-len
@@ -221,9 +222,9 @@
     [(list (? string? path) (? string? old-text) (? string? new-text))
      (cond
        ;; Defense-in-depth: verify path even if scheduler already checked (SEC-09)
-       [(and (safe-mode?) (not (allowed-path? path)))
-        (make-error-result
-         (format "edit: path '~a' outside project root (~a)" path (safe-mode-project-root)))]
+       [(require-safe-path! path "edit")
+        =>
+        (lambda (err) (make-error-result err))]
        [(not (file-exists? path)) (make-error-result (format "File not found: ~a" path))]
        [else
         (define content (file->string path))
