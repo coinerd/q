@@ -78,6 +78,11 @@
                   config-session-dir))
 
 (provide agent-session?
+         ;; v0.32.8: Convenience accessors (stable API)
+         session-provider
+         session-tool-registry
+         session-event-bus
+         session-extension-registry
          agent-session-session-dir
          agent-session-queue
          agent-session-index
