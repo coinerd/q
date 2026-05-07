@@ -660,6 +660,8 @@
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "Say hi to Alice"))
+    (when (eq? (loop-result-termination-reason result) 'error)
+      (displayln (format "DEBUG error metadata: ~a" (loop-result-metadata result))))
     (check-equal? (loop-result-termination-reason result) 'completed)
     ;; Log should have: user, assistant(tool-call), tool-result, assistant(text)
     (define sid (hash-ref (sdk:session-info rt3) 'session-id))
@@ -910,6 +912,8 @@
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg #:max-iterations 1))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "loop test"))
+    (when (eq? (loop-result-termination-reason result) 'error)
+      (displayln (format "DEBUG max-iter error metadata: ~a" (loop-result-metadata result))))
     (check-equal? (loop-result-termination-reason result) 'max-iterations-exceeded)
     (cleanup-dir dir)))
 

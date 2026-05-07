@@ -56,11 +56,7 @@
   #:description "Returns the current date and time. Use this tool to learn today's date before answering time-dependent questions."
   #:required ()
   #:properties
-    [(format
-      "string"
-      "Output format: 'iso' (default, ISO 8601), 'date' (YYYY-MM-DD),"
-      " 'time' (HH:MM:SS), 'unix' (epoch), 'weekday' (day name),"
-      " 'iso-full' (date + weekday + time)")]
+    [(format "string" "Output format: iso, date, time, unix, weekday, iso-full")]
   date-handler)
 
 (provide date)

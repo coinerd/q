@@ -57,6 +57,7 @@
                   in-memory-load
                   in-memory-list-sessions
                   in-memory-fork!)
+         (only-in "../util/loop-result.rkt" loop-result?)
          "../util/cancellation.rkt")
 
 (provide (struct-out runtime-config)
@@ -85,7 +86,7 @@
                                #:project-dir (or/c path-string? path? #f))
                 runtime?)]
           [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
-          [run-prompt! (runtime? string? . -> . (values runtime? (or/c hash? #f 'no-active-session)))]
+          [run-prompt! (runtime? string? . -> . (values runtime? (or/c loop-result? hash? #f 'no-active-session)))]
           [make-cancellation-token
            (->* () (#:callback (or/c (-> any/c any/c) #f)) cancellation-token?)]
           [make-in-memory-session-manager (-> in-memory-session-manager?)]

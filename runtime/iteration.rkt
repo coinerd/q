@@ -434,7 +434,7 @@
                 (if (tool-result-part-is-error? tr) 1 0))))
   (define new-recent-tools
     (take-at-most (append (loop-counters-recent-tool-names counters)
-                          (map tool-call-name current-tool-calls))
+                          (filter string? (map tool-call-name current-tool-calls)))
                   20))
   (struct-copy loop-counters
                counters
@@ -572,12 +572,12 @@
            (maybe-compact-mid-turn sess updated-ctx
                                    (loop-infra-bus infra)
                                    (loop-infra-session-id infra)
-                                   config)
+                                   (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
            (begin
              (estimate-mid-turn-tokens updated-ctx
                                        (loop-infra-bus infra)
                                        (loop-infra-session-id infra)
-                                       config)
+                                       (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
              updated-ctx)))
      (on-recurse ctx-after-budget
                  (struct-copy loop-counters counters
@@ -590,7 +590,7 @@
      (define updated-ctx (process-tool-results new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
      ;; v0.28.22 W1: exploration loop detection
-     (define loop-warning (detect-exploration-loop (loop-counters-recent-tool-names new-counters)))
+     (define loop-warning (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
      (when loop-warning
        (emit-session-event! (loop-infra-bus infra)
                             (loop-infra-session-id infra)
@@ -673,12 +673,12 @@
                                    updated-ctx
                                    (loop-infra-bus infra)
                                    (loop-infra-session-id infra)
-                                   config)
+                                   (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
            (begin
              (estimate-mid-turn-tokens updated-ctx
                                        (loop-infra-bus infra)
                                        (loop-infra-session-id infra)
-                                       config)
+                                       (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
              updated-ctx)))
      (on-recurse ctx-after-budget
                  (struct-copy loop-counters
@@ -693,7 +693,7 @@
      (define updated-ctx (call-process-tool-results))
      (define new-counters (compute-next-counters counters new-msgs))
      ;; v0.28.22 W1: exploration loop detection
-     (define loop-warning (detect-exploration-loop (loop-counters-recent-tool-names new-counters)))
+     (define loop-warning (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
      (when loop-warning
        (emit-session-event! (loop-infra-bus infra)
                             (loop-infra-session-id infra)
