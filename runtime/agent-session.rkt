@@ -32,9 +32,10 @@
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         (only-in "../extensions/message-inject.rkt" injection-event-topic)
+         (only-in "../util/event-types.rkt" injection-event-topic)
          "../runtime/compactor.rkt"
-         (only-in "../extensions/api.rkt" extension-name list-extensions)
+         (only-in "../util/extensions.rkt" extension-name)
+         (only-in "../extensions/api.rkt" list-extensions)
          ;; TR BOUNDARY: event-payloads.rkt is #lang typed/racket.
          (only-in "../util/event-payloads.rkt"
                   session-start-payload

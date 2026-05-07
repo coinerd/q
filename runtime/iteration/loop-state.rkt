@@ -27,7 +27,7 @@
 
 (require/typed "../../tools/tool.rkt" [#:opaque ToolRegistry tool-registry?])
 
-(require/typed "../../extensions/api.rkt" [#:opaque ExtRegistry extension-registry?])
+(require/typed "../../util/contracts.rkt" [#:opaque ExtRegistry extension-registry?])
 
 (require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
 
@@ -47,7 +47,7 @@
 (require/typed "../../llm/token-budget.rkt"
                [estimate-context-tokens (-> (Listof Any) Nonnegative-Integer)])
 
-(require/typed "../../extensions/message-inject.rkt" [injection-event-topic String])
+(require/typed "../../util/event-types.rkt" [injection-event-topic String])
 
 ;; Direct DI resolvers — no parameter fallback, no lazy-require.
 (define (resolve-compact-proc)

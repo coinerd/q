@@ -36,7 +36,7 @@
          (only-in "../util/errors.rkt" raise-session-error)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         (only-in "../extensions/message-inject.rkt" injection-event-topic)
+         (only-in "../util/event-types.rkt" injection-event-topic)
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../util/error-helpers.rkt" with-telemetry)
          (only-in "../runtime/context-assembly.rkt"
