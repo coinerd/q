@@ -45,8 +45,8 @@
 (require/typed "../session-compaction.rkt"
                [compact-context-mid-turn (-> Any (Listof Any) (Listof Any))])
 
-(require/typed "loop-state.rkt"
-               [resolve-estimate-tokens (-> (-> (Listof Any) Nonnegative-Integer))])
+(require/typed "../../llm/token-budget.rkt"
+               [estimate-context-tokens (-> (Listof Any) Nonnegative-Integer)])
 
 ;; ── Shared token estimation logic ──
 ;; Returns (values estimated budget-threshold max-tokens).
@@ -89,7 +89,7 @@
                                   bus
                                   session-id
                                   config
-                                  #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
+                                  #:estimate-tokens [estimate-tokens estimate-context-tokens])
   (define-values (estimated budget-threshold max-tokens)
     (compute-mid-turn-estimate ctx config estimate-tokens))
   (when (and (> estimated budget-threshold) bus session-id)
@@ -112,7 +112,7 @@
                                 bus
                                 session-id
                                 config
-                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)])
+                                #:estimate-tokens [estimate-tokens estimate-context-tokens])
   (define-values (estimated budget-threshold max-tokens)
     (compute-mid-turn-estimate ctx config estimate-tokens))
   (cond
@@ -138,7 +138,7 @@
                                 bus
                                 session-id
                                 config
-                                #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
+                                #:estimate-tokens [estimate-tokens estimate-context-tokens]
                                 #:session [sess #f])
   (if sess
       (maybe-compact-mid-turn sess ctx bus session-id config

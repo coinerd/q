@@ -14,8 +14,7 @@
          "../runtime/compactor.rkt"
          "../runtime/agent-session.rkt"
          "../runtime/iteration/retry-policy.rkt"
-         (only-in "../runtime/iteration/loop-state.rkt" resolve-estimate-tokens)
-         "../llm/token-budget.rkt"
+                  "../llm/token-budget.rkt"
          "../agent/event-bus.rkt")
 
 (define integration-suite
@@ -209,7 +208,7 @@
                  (current-seconds) (hasheq))))
     (define config (hasheq 'max-context-tokens 1000))
     (define-values (estimated threshold max-tok)
-      (compute-mid-turn-estimate ctx config (resolve-estimate-tokens)))
+      (compute-mid-turn-estimate ctx config estimate-context-tokens))
     (check-true (exact-positive-integer? estimated) "estimate is positive integer")
     (check-equal? max-tok 1000 "max-tokens from config")
     (check-equal? threshold 900 "threshold is 90% of max"))))

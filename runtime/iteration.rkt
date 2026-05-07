@@ -70,6 +70,7 @@
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/compactor.rkt"
+                  compact-history
                   compaction-result-removed-count
                   compaction-result-kept-messages)
          ;; tool-coordinator re-exports these:
@@ -78,6 +79,8 @@
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
+         (only-in "../llm/token-budget.rkt" estimate-context-tokens)
+         (only-in "../util/event-types.rkt" injection-event-topic)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
@@ -150,10 +153,6 @@
          maybe-compact-mid-turn
          ;; v0.20.5 W3: pre-registration on session open (now from turn-orchestrator)
          register-session-extensions!
-         ;; DI resolve functions (v0.29.5: simplified, no parameters)
-         resolve-compact-proc
-         resolve-estimate-tokens
-         resolve-inject-topic
          ;; v0.29.1: Pure decision function exports
          iteration-ctx
          known-termination-reasons)
@@ -593,9 +592,9 @@
                             #:shutdown-check [shutdown-check #f]
                             #:force-shutdown-check [force-shutdown-check #f]
                             ;; MOD-02 (v0.22.6 W4): DI keyword args for testability
-                            #:compact-proc [compact-proc (resolve-compact-proc)]
-                            #:estimate-tokens [estimate-tokens (resolve-estimate-tokens)]
-                            #:inject-topic [inject-topic (resolve-inject-topic)]
+                            #:compact-proc [compact-proc compact-history]
+                            #:estimate-tokens [estimate-tokens estimate-context-tokens]
+                            #:inject-topic [inject-topic injection-event-topic]
                             ;; v0.26.0: working set memory
                             #:working-set [initial-ws #f]
                             ;; v0.28.22 W0: session for mid-turn compaction

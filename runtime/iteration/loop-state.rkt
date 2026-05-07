@@ -1,11 +1,11 @@
 #lang typed/racket
 
-;; runtime/iteration/loop-state.rkt — DI resolvers for iteration loop
+;; runtime/iteration/loop-state.rkt — loop state structs
 ;;
 ;; v0.29.5 W2: Removed parameter indirection and lazy-require.
-;; DI resolvers now directly reference concrete implementations.
-;; Callers pass these explicitly via keyword arguments.
+;; v0.29.16 W0: Introduced loop-infra and loop-counters structs.
 ;; v0.30.2 W0: Migrated to Typed Racket (TR beachhead).
+;; v0.33.0 W3: Removed dead DI resolve functions (RA-06).
 ;;
 ;; TR BOUNDARY:
 ;; This is a #lang typed/racket module. Untyped consumers receive
@@ -13,10 +13,7 @@
 ;; Opaque types (EventBus, ToolRegistry, ExtRegistry, CancellationToken)
 ;; are defined via #:opaque to avoid any-wrap/c issues with TR boundaries.
 
-(provide resolve-compact-proc
-         resolve-estimate-tokens
-         resolve-inject-topic
-         (struct-out loop-infra)
+(provide (struct-out loop-infra)
          (struct-out loop-counters)
          make-initial-counters)
 
@@ -33,44 +30,6 @@
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
-(require/typed "../../runtime/compactor.rkt"
-               [compact-history
-                (->* ((Listof Any))
-                     (#:summarize-fn Any
-                                     #:provider Any
-                                     #:model-name Any
-                                     #:previous-summary Any
-                                     #:hook-dispatcher Any
-                                     #:token-config Any)
-                     Any)])
-
-(require/typed "../../llm/token-budget.rkt"
-               [estimate-context-tokens (-> (Listof Any) Nonnegative-Integer)])
-
-(require/typed "../../util/event-types.rkt" [injection-event-topic String])
-
-;; Direct DI resolvers — no parameter fallback, no lazy-require.
-(define (resolve-compact-proc)
-  :
-  (->* ((Listof Any))
-       (#:summarize-fn Any
-                       #:provider Any
-                       #:model-name Any
-                       #:previous-summary Any
-                       #:hook-dispatcher Any
-                       #:token-config Any)
-       Any)
-  compact-history)
-
-(define (resolve-estimate-tokens)
-  :
-  (-> (Listof Any) Nonnegative-Integer)
-  estimate-context-tokens)
-
-(define (resolve-inject-topic)
-  :
-  String
-  injection-event-topic)
 
 ;; ── Loop state structs (v0.29.16 W0) ──────────────────────────
 ;;

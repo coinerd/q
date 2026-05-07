@@ -6,11 +6,9 @@
 ;; eliminating upward imports from runtime/ to extensions/.
 
 (require racket/contract
-         "../extensions/api.rkt")
+         (only-in "../extensions/api.rkt" extension-registry?))
 
 (provide extension-registry?)
 
-;; Contract predicate for extension-registry structs.
+;; extension-registry? is re-exported from extensions/api.rkt.
 ;; Defined here so runtime/ can reference it without importing extensions/api.rkt.
-;; The actual struct remains in extensions/api.rkt.
-(define extension-registry? extension-registry?)
