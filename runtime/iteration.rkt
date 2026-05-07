@@ -70,7 +70,6 @@
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/compactor.rkt"
-                  compact-history
                   compaction-result-removed-count
                   compaction-result-kept-messages)
          ;; tool-coordinator re-exports these:
@@ -80,7 +79,6 @@
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
-         (only-in "../util/event-types.rkt" injection-event-topic)
          "../util/ids.rkt"
          (only-in "../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?)
          ;; R2-6: Import hook-result accessors
@@ -95,7 +93,6 @@
                   turn-cancelled-payload/c)
          (only-in "../runtime/auto-retry.rkt" context-overflow-error?)
          ;; v0.14.1: mid-turn token budget check
-         ;; estimate-context-tokens imported via DI parameter (see below)
          ;; QUAL-01 (v0.22.0): shared runtime helpers
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "session-compaction.rkt" compact-context-mid-turn)
@@ -129,9 +126,6 @@
                               #:injected-box (or/c box? #f)
                               #:shutdown-check (or/c procedure? #f)
                               #:force-shutdown-check (or/c procedure? #f)
-                              #:compact-proc (or/c procedure? #f)
-                              #:estimate-tokens (or/c procedure? #f)
-                              #:inject-topic (or/c string? #f)
                               #:working-set (or/c working-set? #f)
                               #:session (or/c agent-session? #f))
                              loop-result?)]
@@ -757,10 +751,6 @@
                             ;; #1158: shutdown check thunks (avoid circular dep on agent-session)
                             #:shutdown-check [shutdown-check #f]
                             #:force-shutdown-check [force-shutdown-check #f]
-                            ;; MOD-02 (v0.22.6 W4): DI keyword args for testability
-                            #:compact-proc [compact-proc compact-history]
-                            #:estimate-tokens [estimate-tokens estimate-context-tokens]
-                            #:inject-topic [inject-topic injection-event-topic]
                             ;; v0.26.0: working set memory
                             #:working-set [initial-ws #f]
                             ;; v0.28.22 W0: session for mid-turn compaction
