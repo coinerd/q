@@ -6,6 +6,7 @@
          racket/list
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/glob.rkt" glob->regexp)
          (only-in "../../util/path-helpers.rkt"
                   contains-null-bytes?
@@ -135,10 +136,12 @@
   (define pattern (hash-ref args 'pattern #f))
   (define raw-path (hash-ref args 'path #f))
   (define path-str (and raw-path (expand-home-path raw-path)))
-
   (cond
     [(not pattern) (make-error-result "Missing required argument: pattern")]
     [(not path-str) (make-error-result "Missing required argument: path")]
+    [(require-safe-path! path-str "grep")
+     =>
+     (lambda (err) (make-error-result err))]
     [else
      (define glob-pattern (hash-ref args 'glob DEFAULT-GLOB))
      (define case-insensitive? (hash-ref args 'case-insensitive? DEFAULT-CASE-INSENSITIVE))

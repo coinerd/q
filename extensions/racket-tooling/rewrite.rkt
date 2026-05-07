@@ -8,14 +8,25 @@
 (require racket/string
          racket/list
          (only-in "../racket-tooling-helpers.rkt"
-                  raco-fmt raco-make
-                  read-file-string write-file-string!
-                  backup-file restore-backup!
-                  read-all-forms form->string
-                  pattern-matches? apply-template)
+                  raco-fmt
+                  raco-make
+                  read-file-string
+                  write-file-string!
+                  backup-file
+                  restore-backup!
+                  read-all-forms
+                  form->string
+                  pattern-matches?
+                  apply-template)
          (only-in "../tool-api.rkt" make-success-result make-error-result))
 
 (provide handle-racket-codemod)
+
+;; Validate string before read - reject #reader or #lang injections
+(define (safe-read-string s context)
+  (when (or (regexp-match? #rx"#reader" s) (regexp-match? #rx"#lang" s))
+    (error 'racket-codemod (format "~a contains forbidden #reader or #lang directive" context)))
+  (read (open-input-string s)))
 
 (define (handle-racket-codemod args [exec-ctx #f])
   (define path (hash-ref args 'file ""))
@@ -39,8 +50,8 @@
           (string-append (car lines) "\n\n")
           "")))
   (define forms (read-all-forms content))
-  (define pat-form (read (open-input-string pattern)))
-  (define tmpl-form (read (open-input-string template)))
+  (define pat-form (safe-read-string pattern "pattern"))
+  (define tmpl-form (safe-read-string template "template"))
 
   (define matches
     (for/list ([f (in-list forms)]
@@ -60,8 +71,10 @@
                               (form->string (apply-template pat-form tmpl-form (cdr m)))))
                     "\n"))
      (make-success-result
-      (list (hasheq 'type "text"
-                    'text (format "Dry run: ~a matches.\n~a" (length matches) preview-text))))]
+      (list (hasheq 'type
+                    "text"
+                    'text
+                    (format "Dry run: ~a matches.\n~a" (length matches) preview-text))))]
     [else
      (define new-forms
        (for/list ([f (in-list forms)]
@@ -82,9 +95,10 @@
        [(and (zero? fmt-ec) (zero? make-ec))
         (delete-file bak)
         (make-success-result
-         (list (hasheq 'type "text"
-                       'text (format "Codemod applied: ~a forms replaced in ~a"
-                                     (length matches) path))))]
+         (list (hasheq 'type
+                       "text"
+                       'text
+                       (format "Codemod applied: ~a forms replaced in ~a" (length matches) path))))]
        [else
         (restore-backup! bak path)
         (make-error-result (format "Validation failed after codemod. Reverted.\n~a" make-err))])]))
