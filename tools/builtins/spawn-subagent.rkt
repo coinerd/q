@@ -14,8 +14,7 @@
          racket/string
          "../../tools/tool.rkt"
          "../../agent/event-bus.rkt"
-         "../../llm/provider.rkt"
-         "../../llm/model.rkt"
+         "../model-bridge.rkt"
          "../../util/ids.rkt"
          (only-in "../../util/protocol-types.rkt"
                   make-message
