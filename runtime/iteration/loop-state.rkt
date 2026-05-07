@@ -24,12 +24,11 @@
 
 (require/typed "../../tools/tool.rkt" [#:opaque ToolRegistry tool-registry?])
 
-(require/typed "../../util/contracts.rkt" [#:opaque ExtRegistry extension-registry?])
+(require/typed "../../extensions/api.rkt" [#:opaque ExtRegistry extension-registry?])
 
 (require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
 
 ;; ── Typed imports from untyped modules ──────────────────────────
-
 
 ;; ── Loop state structs (v0.29.16 W0) ──────────────────────────
 ;;
