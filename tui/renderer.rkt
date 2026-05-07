@@ -130,10 +130,6 @@
     [(bright-white) 15]
     [else 7]))
 
-;; FEAT-68: Resolve a theme color value to a ubuf color number.
-(define (theme-color-name->number c)
-  (color-name->number c))
-
 ;; Resolve a list of style symbols into ubuf keyword arguments.
 ;; Returns (values kw-list val-list) for keyword-apply.
 ;; IMPORTANT: keyword-apply requires keywords in SORTED (alphabetical) order.
