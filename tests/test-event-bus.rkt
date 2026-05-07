@@ -236,3 +236,31 @@
   (for ([name '("session.started" "turn.started" "model.stream.delta")])
     (define evt (test-event #:name name))
     (check-eq? (publish! bus evt) evt)))
+
+;; ============================================================
+;; 10. subscribe-map! transforms events (v0.33.4 RA-11)
+;; ============================================================
+
+(test-case "subscribe-map! transforms events before delivery"
+  (define bus (make-event-bus))
+  (define received (box '()))
+  (subscribe-map! bus
+                  (λ (evt) (struct-copy event evt [ev (string-append "mapped:" (event-ev evt))]))
+                  (λ (evt) (set-box! received (cons (event-ev evt) (unbox received)))))
+  (publish! bus (test-event #:name "original"))
+  (check-equal? (car (unbox received)) "mapped:original"))
+
+;; ============================================================
+;; 11. subscribe-filter! is a convenience for filter + subscribe (v0.33.4 RA-11)
+;; ============================================================
+
+(test-case "subscribe-filter! only delivers matching events"
+  (define bus (make-event-bus))
+  (define received (box '()))
+  (subscribe-filter! bus
+                     (λ (evt) (string-prefix? (event-ev evt) "model."))
+                     (λ (evt) (set-box! received (cons (event-ev evt) (unbox received)))))
+  (publish! bus (test-event #:name "session.started"))
+  (publish! bus (test-event #:name "model.stream.delta"))
+  (publish! bus (test-event #:name "turn.completed"))
+  (check-equal? (reverse (unbox received)) '("model.stream.delta")))

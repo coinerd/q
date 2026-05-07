@@ -22,6 +22,10 @@
           [make-event-bus (-> event-bus?)]
           [subscribe!
            (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
+          [subscribe-map!
+           (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]
+          [subscribe-filter!
+           (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]
           [unsubscribe! (-> event-bus? exact-nonnegative-integer? void?)]
           [publish! (-> event-bus? event? event?)]
           [typed-event->event (-> typed-event? event?)]
@@ -152,6 +156,22 @@
                                    (cons (subscription id handler filter)
                                          (unbox (event-bus-subscriptions-box bus))))
                          id)))
+
+;; ============================================================
+;; subscribe-map! : event-bus? (event? -> event?) handler -> sub-id
+;; v0.33.4 W0: Transform events before delivering to handler (RA-11)
+;; ============================================================
+
+(define (subscribe-map! bus transform handler)
+  (subscribe! bus (lambda (evt) (handler (transform evt)))))
+
+;; ============================================================
+;; subscribe-filter! : event-bus? (event? -> boolean?) handler -> sub-id
+;; v0.33.4 W0: Subscribe with predicate filter (RA-11)
+;; ============================================================
+
+(define (subscribe-filter! bus pred handler)
+  (subscribe! bus handler #:filter pred))
 
 ;; ============================================================
 ;; unsubscribe! : event-bus? exact-nonnegative-integer? -> void?
