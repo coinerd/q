@@ -2,7 +2,7 @@
 
 ;; tests/test-define-event-macro.rkt — tests for define-typed-event macro
 ;;
-;; v0.32.2 Wave 0: Comprehensive expansion tests.
+;; v0.32.2 Wave 0+1: Comprehensive expansion and integration tests.
 
 (require rackunit
          racket/base
@@ -106,6 +106,41 @@
   (check-equal? (vector-ref vec 6) "openai"))
 
 ;; ============================================================
+;; Test: optional field with default
+;; ============================================================
+(define-typed-event test-optional-event "test.optional" (required-field) #:optional ([opt-field #f]))
+
+(test-case "define-typed-event: optional field defaults"
+  (define evt (make-test-optional-event #:session-id "s1" #:turn-id "t1" #:required-field "hello"))
+  (check-true (test-optional-event? evt))
+  (check-equal? (test-optional-event-required-field evt) "hello")
+  (check-equal? (test-optional-event-opt-field evt) #f)
+  (check-equal? test-optional-event-fields '(required-field opt-field)))
+
+(test-case "define-typed-event: optional field with explicit value"
+  (define evt
+    (make-test-optional-event #:session-id "s1"
+                              #:turn-id "t1"
+                              #:required-field "hello"
+                              #:opt-field "world"))
+  (check-equal? (test-optional-event-opt-field evt) "world"))
+
+(test-case "define-typed-event: optional fields included in field list"
+  (check-equal? test-optional-event-fields '(required-field opt-field)))
+
+;; ============================================================
+;; Test: multiple optional fields
+;; ============================================================
+(define-typed-event test-multi-opt-event "test.multi-opt" (x) #:optional ([y 0] [z 'none]))
+
+(test-case "define-typed-event: multiple optional fields"
+  (define evt (make-test-multi-opt-event #:session-id "s1" #:turn-id "t1" #:x 5))
+  (check-equal? (test-multi-opt-event-x evt) 5)
+  (check-equal? (test-multi-opt-event-y evt) 0)
+  (check-equal? (test-multi-opt-event-z evt) 'none)
+  (check-equal? test-multi-opt-event-fields '(x y z)))
+
+;; ============================================================
 ;; Test: deprecated define-event still works
 ;; ============================================================
 (define-event test-legacy-event (x y))
@@ -115,3 +150,34 @@
   (check-true (test-legacy-event? evt))
   (check-equal? (test-legacy-event-x evt) 1)
   (check-equal? (test-legacy-event-y evt) 2))
+
+;; ============================================================
+;; Integration: verify real event-struct modules
+;; ============================================================
+(require "../agent/event-structs/turn-events.rkt"
+         "../agent/event-structs/iteration-events.rkt"
+         "../agent/event-structs/hook-events.rkt")
+
+(test-case "integration: turn-start-event uses macro"
+  (define evt
+    (make-turn-start-event #:session-id "s1" #:turn-id "t1" #:model "gpt-4" #:provider "openai"))
+  (check-true (turn-start-event? evt))
+  (check-equal? turn-start-event-type "turn.started")
+  (check-equal? turn-start-event-fields '(model provider)))
+
+(test-case "integration: injection-event with optional message"
+  (define evt
+    (make-injection-event #:session-id "s1"
+                          #:turn-id "t1"
+                          #:source "test"
+                          #:content-type "text"
+                          #:content-length 42))
+  (check-true (injection-event? evt))
+  (check-equal? (injection-event-message evt) #f)
+  (check-equal? injection-event-fields '(source content-type content-length message)))
+
+(test-case "integration: turn-cancelled-event with optional iteration"
+  (define evt (make-turn-cancelled-event #:session-id "s1" #:turn-id "t1" #:reason "timeout"))
+  (check-true (turn-cancelled-event? evt))
+  (check-equal? (turn-cancelled-event-iteration evt) #f)
+  (check-equal? turn-cancelled-event-fields '(reason iteration)))
