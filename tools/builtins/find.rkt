@@ -6,6 +6,7 @@
          racket/string
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/glob.rkt" glob->regexp)
          (only-in "../../util/path-filters.rkt"
                   hidden-name?

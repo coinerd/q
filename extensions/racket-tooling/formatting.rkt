@@ -9,14 +9,26 @@
 (require racket/string
          racket/list
          (only-in "../racket-tooling-helpers.rkt"
-                  raco-fmt raco-make
-                  read-file-string write-file-string!
-                  backup-file restore-backup!
-                  read-all-forms form->string find-form-end
-                  pattern-matches? apply-template)
+                  raco-fmt
+                  raco-make
+                  read-file-string
+                  write-file-string!
+                  backup-file
+                  restore-backup!
+                  read-all-forms
+                  form->string
+                  find-form-end
+                  pattern-matches?
+                  apply-template)
          (only-in "../tool-api.rkt" make-success-result make-error-result))
 
 (provide handle-racket-edit)
+
+;; Validate string before read - reject #reader or #lang injections
+(define (safe-read-string s context)
+  (when (or (regexp-match? #rx"#reader" s) (regexp-match? #rx"#lang" s))
+    (error 'racket-edit (format "~a contains forbidden #reader or #lang directive" context)))
+  (read (open-input-string s)))
 
 (define (handle-racket-edit args [exec-ctx #f])
   (define path (hash-ref args 'file (hash-ref args 'path "")))
@@ -67,10 +79,12 @@
   (cond
     [(and (zero? fmt-ec) (zero? make-ec))
      (delete-file bak)
-     (make-success-result (list (hasheq 'type "text" 'text (format "Replaced in ~a. Format+compile passed." path))))]
+     (make-success-result
+      (list (hasheq 'type "text" 'text (format "Replaced in ~a. Format+compile passed." path))))]
     [else
      (restore-backup! bak path)
-     (make-error-result (format "Validation failed after edit. Reverted.\nfmt: ~a\ncompile: ~a" fmt-err make-err))]))
+     (make-error-result
+      (format "Validation failed after edit. Reverted.\nfmt: ~a\ncompile: ~a" fmt-err make-err))]))
 
 (define (handle-edit-form path args)
   (define pattern (hash-ref args 'pattern ""))
@@ -79,7 +93,7 @@
     (error 'racket-edit "pattern is required for form mode"))
   (define content (read-file-string path))
   (define forms (read-all-forms content))
-  (define pattern-form (read (open-input-string pattern)))
+  (define pattern-form (safe-read-string pattern "pattern"))
   (define match-idx
     (for/first ([i (in-range (length forms))]
                 #:when (equal? (list-ref forms i) pattern-form))
@@ -88,7 +102,7 @@
     (error 'racket-edit "Pattern form not found in file"))
   (when (string=? template "")
     (error 'racket-edit "template is required for form mode"))
-  (define template-form (read (open-input-string template)))
+  (define template-form (safe-read-string template "template"))
   (define new-forms (list-set forms match-idx template-form))
   (define new-content
     (string-join (map (lambda (f) (string-append (form->string f) "\n\n")) new-forms) ""))
@@ -99,10 +113,13 @@
   (cond
     [(and (zero? fmt-ec) (zero? make-ec))
      (delete-file bak)
-     (make-success-result (list (hasheq 'type "text" 'text (format "Form replaced in ~a. Format+compile passed." path))))]
+     (make-success-result
+      (list (hasheq 'type "text" 'text (format "Form replaced in ~a. Format+compile passed." path))))]
     [else
      (restore-backup! bak path)
-     (make-error-result (format "Validation failed after form edit. Reverted.\nfmt: ~a\ncompile: ~a" fmt-err make-err))]))
+     (make-error-result (format "Validation failed after form edit. Reverted.\nfmt: ~a\ncompile: ~a"
+                                fmt-err
+                                make-err))]))
 
 (define (handle-edit-skeleton path args)
   (define lang (hash-ref args 'lang "racket"))
@@ -130,11 +147,13 @@
   (write-file-string! path content)
   (define-values (fmt-ec _1 _2) (raco-fmt path))
   (define-values (make-ec _3 _4) (raco-make path))
-  (make-success-result (list (hasheq 'type "text"
-                                     'text (format "Skeleton created: ~a (fmt: ~a, compile: ~a)"
-                                                   path
-                                                   (if (zero? fmt-ec) "pass" "fail")
-                                                   (if (zero? make-ec) "pass" "fail"))))))
+  (make-success-result (list (hasheq 'type
+                                     "text"
+                                     'text
+                                     (format "Skeleton created: ~a (fmt: ~a, compile: ~a)"
+                                             path
+                                             (if (zero? fmt-ec) "pass" "fail")
+                                             (if (zero? make-ec) "pass" "fail"))))))
 
 (define (handle-edit-struct-add-field path args)
   (define struct-name (hash-ref args 'structName ""))
@@ -152,7 +171,9 @@
     (error 'racket-edit (format "Struct ~a not found" struct-name)))
   (define default-expr (hash-ref args 'defaultExpr #f))
   (define field-text
-    (if default-expr (format "  [~a ~a]" field-name default-expr) (format "  ~a" field-name)))
+    (if default-expr
+        (format "  [~a ~a]" field-name default-expr)
+        (format "  ~a" field-name)))
   (define-values (end-idx _) (find-form-end lines struct-line-idx))
   (define new-lines (append (take lines end-idx) (list field-text) (drop lines end-idx)))
   (define new-content (string-join new-lines "\n"))
@@ -163,9 +184,11 @@
   (cond
     [(and (zero? fmt-ec) (zero? make-ec))
      (delete-file bak)
-     (make-success-result (list (hasheq 'type "text"
-                                         'text (format "Added field ~a to ~a in ~a"
-                                                       field-name struct-name path))))]
+     (make-success-result
+      (list (hasheq 'type
+                    "text"
+                    'text
+                    (format "Added field ~a to ~a in ~a" field-name struct-name path))))]
     [else
      (restore-backup! bak path)
      (make-error-result (format "Validation failed after struct edit. Reverted.\n~a" make-err))]))
@@ -194,7 +217,8 @@
   (cond
     [(and (zero? fmt-ec) (zero? make-ec))
      (delete-file bak)
-     (make-success-result (list (hasheq 'type "text" 'text (format "Appended to provide in ~a: ~a" path ids-str))))]
+     (make-success-result
+      (list (hasheq 'type "text" 'text (format "Appended to provide in ~a: ~a" path ids-str))))]
     [else
      (restore-backup! bak path)
      (make-error-result (format "Validation failed after provide-append. Reverted.\n~a" make-err))]))
@@ -224,7 +248,10 @@
       i))
   (unless anchor-idx
     (error 'racket-edit (format "Anchor clause not found: ~a" anchor)))
-  (define insert-idx (if (string=? position "after") (+ anchor-idx 1) anchor-idx))
+  (define insert-idx
+    (if (string=? position "after")
+        (+ anchor-idx 1)
+        anchor-idx))
   (define clause-lines (string-split clause "\n"))
   (define new-lines (append (take lines insert-idx) clause-lines (drop lines insert-idx)))
   (define new-content (string-join new-lines "\n"))
@@ -235,7 +262,8 @@
   (cond
     [(and (zero? fmt-ec) (zero? make-ec))
      (delete-file bak)
-     (make-success-result (list (hasheq 'type "text" 'text (format "Inserted clause in ~a. Validation passed." path))))]
+     (make-success-result
+      (list (hasheq 'type "text" 'text (format "Inserted clause in ~a. Validation passed." path))))]
     [else
      (restore-backup! bak path)
      (make-error-result (format "Validation failed after clause insert. Reverted.\n~a" make-err))]))
@@ -258,9 +286,12 @@
   (cond
     [(and (zero? fmt-ec) (zero? make-ec))
      (delete-file bak)
-     (make-success-result (list (hasheq 'type "text"
-                                         'text (format "Rewrote lines ~a-~a in ~a. Validation passed."
-                                                       start-line end-line path))))]
+     (make-success-result
+      (list (hasheq
+             'type
+             "text"
+             'text
+             (format "Rewrote lines ~a-~a in ~a. Validation passed." start-line end-line path))))]
     [else
      (restore-backup! bak path)
      (make-error-result (format "Validation failed after rewrite. Reverted.\n~a" make-err))]))

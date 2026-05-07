@@ -4,6 +4,7 @@
          racket/format
          racket/list
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/path-filters.rkt" hidden-name?)
          (only-in "../../util/path-helpers.rkt" expand-home-path))
 
@@ -78,6 +79,9 @@
   (define path-str (and raw-path (expand-home-path raw-path)))
   (cond
     [(not path-str) (make-error-result "Missing required argument: path")]
+    [(require-safe-path! path-str "ls")
+     =>
+     (lambda (err) (make-error-result err))]
 
     ;; 2. Path must exist
     [(not (directory-exists? path-str))
