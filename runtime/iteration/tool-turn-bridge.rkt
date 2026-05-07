@@ -24,7 +24,8 @@
          (only-in "../../agent/queue.rkt" dequeue-steering! dequeue-followup! dequeue-all-followups!)
          "../working-set.rkt"
          (only-in "../context-policy.rkt" estimate-message-tokens)
-         (only-in "../../extensions/message-inject.rkt" injection-event-topic))
+         (only-in "../../extensions/message-inject.rkt" injection-event-topic)
+         (only-in "../../util/shared.rkt" take-at-most))
 
 (provide extract-tool-target-path
          take-at-most
@@ -45,11 +46,7 @@
     [(hash? args) (or (hash-ref args 'path #f) (hash-ref args 'file #f))]
     [else #f]))
 
-;; Keep at most n elements from the front of a list.
-(define (take-at-most lst n)
-  (if (<= (length lst) n)
-      lst
-      (take lst n)))
+;; take-at-most: imported from util/shared.rkt (v0.32.1 Wave 1 DRY)
 
 ;; Compute new seen-paths list and whether to increment the consecutive counter.
 ;; Uses a plain list of strings to avoid TR boundary contract issues with racket/set.

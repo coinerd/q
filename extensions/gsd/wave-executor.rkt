@@ -14,7 +14,8 @@
          racket/file
          racket/port
          "plan-types.rkt"
-         "../gsd/wave-docs.rkt")
+         "../gsd/wave-docs.rkt"
+         (only-in "shared.rkt" extract-plan-title))
 
 (provide wave-status
          wave-status?
@@ -212,11 +213,7 @@
                                       '()))])
               (gsd-plan waves #f '() '()))))))
 
-(define (extract-plan-title text)
-  (define lines (string-split text "\n"))
-  (for/first ([line lines]
-              #:when (string-prefix? line "# Plan:"))
-    (string-trim (substring line 7))))
+;; extract-plan-title: imported from shared.rkt (v0.32.1 Wave 1 DRY)
 
 (define (string->wave-status-from-entry e)
   (define s (wave-index-entry-status e))

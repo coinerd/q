@@ -15,7 +15,8 @@
          "plan-types.rkt"
          "wave-docs.rkt"
          "state-machine.rkt"
-         "command-types.rkt")
+         "command-types.rkt"
+         (only-in "shared.rkt" extract-plan-title))
 
 (provide archive-completed-plan!
          all-waves-complete?
@@ -243,19 +244,7 @@
           #:when (not (string=? (wave-index-entry-status e) "DONE")))
       (update-wave-in-index! base-dir (wave-index-entry-idx e) "DONE"))))
 
-(define (extract-plan-title plan-text)
-  (define lines (string-split plan-text "\n"))
-  (define title-line
-    (for/first ([line lines]
-                #:when (regexp-match? #rx"^# +Plan:" line))
-      line))
-  (cond
-    [(not title-line) "archived-plan"]
-    [else
-     (define m (regexp-match #rx"^# +Plan: +(.+)$" title-line))
-     (if m
-         (string-trim (cadr m))
-         "archived-plan")]))
+;; extract-plan-title: imported from shared.rkt (v0.32.1 Wave 1 DRY))
 
 ;; Remove empty subdirectories under .planning/ after archive (#2160).
 ;; Does NOT delete the archive/ subdir itself.

@@ -11,7 +11,8 @@
          racket/string
          racket/file
          racket/path
-         racket/port)
+         racket/port
+         (only-in "shared.rkt" slugify))
 
 (provide wave-doc-path
          write-wave-doc!
@@ -54,33 +55,7 @@
 ;; Slug generation
 ;; ============================================================
 
-(define (slugify title)
-  (define s (string-trim title))
-  (define slug-chars
-    (for/list ([c (in-string s)])
-      (cond
-        [(char-alphabetic? c) (char-downcase c)]
-        [(char-numeric? c) c]
-        [(char=? c #\-) #\-]
-        [(char=? c #\space) #\-]
-        [else #f])))
-  (define cleaned (collapse-hyphens (filter values slug-chars)))
-  (define result (list->string cleaned))
-  (define truncated
-    (if (> (string-length result) 40)
-        (let ([s40 (substring result 0 40)]) (string-trim s40 "-" #:right? #t))
-        result))
-  (if (string=? truncated "") "wave" truncated))
-
-(define (collapse-hyphens chars)
-  (let loop ([cs chars]
-             [prev-hyphen? #f]
-             [acc '()])
-    (cond
-      [(null? cs) (reverse acc)]
-      [(and prev-hyphen? (char=? (car cs) #\-)) (loop (cdr cs) #t acc)]
-      [(char=? (car cs) #\-) (loop (cdr cs) #t (cons #\- acc))]
-      [else (loop (cdr cs) #f (cons (car cs) acc))])))
+;; slugify + collapse-hyphens: imported from shared.rkt (v0.32.1 Wave 1 DRY)
 
 ;; ============================================================
 ;; Wave document path

@@ -8,7 +8,8 @@
 (require racket/list
          racket/string
          "component.rkt"
-         "state.rkt")
+         "state.rkt"
+         (only-in "../util/shared.rkt" take-at-most))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Provides
@@ -47,8 +48,6 @@
       (string-append (substring s 0 (max 0 (- max-len 3))) "...")
       s))
 
-(define (take-at-most lst n)
-  (take lst (min n (length lst))))
 (define (drop-at-most lst n)
   (drop lst (min n (length lst))))
 
