@@ -47,35 +47,65 @@
          )
   #:transparent)
 
-;; The complete UI state
+;; The complete UI state (27 fields, grouped by domain)
+;;
+;; Field groups (v0.32.6 documentation):
+;;   Transcript:  transcript, scroll-offset, next-entry-id
+;;   Streaming:   busy?, status-message, pending-tool-name, streaming-text,
+;;                streaming-thinking, busy-since
+;;   Selection:   sel-anchor, sel-end
+;;   Branch:      current-branch, visible-branches
+;;   Cache:       rendered-cache, rendered-cache-width
+;;   Overlay:     active-overlay
+;;   Extension:   extension-widgets, custom-header, custom-footer
+;;   Input:       focused-component, editor-component
+;;   Session:     session-id, model-name, mode, mock-provider?
+;;   Queue:       queue-counts
+;;   Budget:      context-tokens, cost-tracker
+;;
+;; --- Transcript group ---
 (struct ui-state
         (transcript ; (listof transcript-entry) — newest LAST
          scroll-offset ; integer — 0 = bottom, positive = scrolled up
+         ;; --- Streaming group ---
          busy? ; boolean — is the agent currently processing?
+         ;; --- Session group ---
          session-id ; string or #f
          model-name ; string or #f
          mode ; symbol: 'chat | 'single | etc.
+         ;; --- Streaming group (cont.) ---
          status-message ; string or #f — temporary status
          pending-tool-name ; string or #f — name of tool currently executing
          streaming-text ; string or #f — partial streaming text (during model.stream.delta)
          streaming-thinking ; string or #f — accumulated thinking text (during model.stream.thinking)
+         ;; --- Branch group ---
          current-branch ; string or #f — current branch node id
          visible-branches ; (listof branch-info) — cached branch list for display
+         ;; --- Selection group ---
          sel-anchor ; (cons col row) or #f — mouse selection start
          sel-end ; (cons col row) or #f — mouse selection end
+         ;; --- Cache group ---
          rendered-cache ; hash — maps entry-id → (listof styled-line)
          rendered-cache-width ; integer or #f — width used for cache
+         ;; --- Transcript group (cont.) ---
          next-entry-id ; integer — monotonic counter
+         ;; --- Overlay group ---
          active-overlay ; (or/c #f overlay-state) — currently displayed overlay
+         ;; --- Queue group ---
          queue-counts ; hash or #f — steering/followup counts from queue.status-update
+         ;; --- Extension group ---
          extension-widgets ; hash — maps (cons ext-name key) → (listof styled-line)
          custom-header ; (or/c #f (listof styled-line)) — extension-provided header
          custom-footer ; (or/c #f (listof styled-line)) — extension-provided footer
+         ;; --- Session group (cont.) ---
          mock-provider? ; boolean — #t when using mock/fallback provider (BUG-55)
+         ;; --- Input group ---
          focused-component ; (or/c #f symbol?) — id of component with focus
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
+         ;; --- Budget group ---
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
          cost-tracker ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
+         ;; --- Streaming group (cont.) ---
          busy-since)
   #:transparent)
 
