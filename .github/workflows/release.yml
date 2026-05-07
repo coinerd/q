@@ -28,7 +28,7 @@ jobs:
         run: racket scripts/lint-version.rkt
 
       - name: Run tests
-        run: racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
+        run: racket scripts/run-tests.rkt --jobs 4 2>&1 | tee test-output.log
 
       - name: Test failure summary
         if: failure()
@@ -183,4 +183,4 @@ jobs:
       - name: Run test suite
         run: |
           cd /tmp/q
-          racket scripts/run-tests.rkt --suite fast --jobs 4
+          racket scripts/run-tests.rkt --jobs 4

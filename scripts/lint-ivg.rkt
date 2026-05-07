@@ -88,7 +88,13 @@
     (lambda ()
       (and (>= (grep-count-dir "make-compaction-event" "runtime/") 1)
            (>= (grep-count-dir "make-injection-event" "extensions/") 1)))
-    "make-compaction-event and make-injection-event must each have ≥1 call site in runtime/ and extensions/")))
+    "make-compaction-event and make-injection-event must each have ≥1 call site in runtime/ and extensions/")
+
+   ;; v0.32.10 W1: safe-read-string must exist in racket-tooling/ (defense-in-depth)
+   (list "safe-read-string-defined"
+         (lambda () (and (>= (grep-count "define.*safe-read-string" "extensions/racket-tooling/rewrite.rkt") 1)
+                            (>= (grep-count "define.*safe-read-string" "extensions/racket-tooling/formatting.rkt") 1)))
+         "safe-read-string must be defined in both rewrite.rkt and formatting.rkt")))
 
 ;; ── Runner ──
 
