@@ -12,7 +12,14 @@
          racket/file
          racket/path
          racket/port
-         (only-in "shared.rkt" slugify))
+         (only-in "shared.rkt" slugify)
+         (only-in "wave-status.rkt"
+                  STATUS-INBOX
+                  STATUS-DONE
+                  STATUS-DEFERRED
+                  STATUS-FAILED
+                  done-or-deferred?
+                  active-status?))
 
 (provide wave-doc-path
          write-wave-doc!
@@ -37,10 +44,11 @@
 ;; ============================================================
 
 (define WAVE-STATUS-MARKERS
-  '(("Inbox" . "[Inbox]") ("In-Progress" . "[In-Progress]")
-                          ("DONE" . "[DONE]")
-                          ("DEFERRED" . "[DEFERRED]")
-                          ("FAILED" . "[FAILED]")))
+  (list (cons STATUS-INBOX "[Inbox]")
+        (cons "In-Progress" "[In-Progress]")
+        (cons STATUS-DONE "[DONE]")
+        (cons STATUS-DEFERRED "[DEFERRED]")
+        (cons STATUS-FAILED "[FAILED]")))
 
 (define (wave-status-markers)
   WAVE-STATUS-MARKERS)
@@ -182,8 +190,8 @@
      (define text (call-with-input-file plan-path port->string))
      (define entries (parse-plan-index text))
      (for/first ([e entries]
-                 #:when (or (string=? (wave-index-entry-status e) "Inbox")
-                            (string=? (wave-index-entry-status e) "FAILED")))
+                 #:when (or (string=? (wave-index-entry-status e) STATUS-INBOX)
+                            (string=? (wave-index-entry-status e) STATUS-FAILED)))
        e)]))
 
 ;; ============================================================
@@ -230,14 +238,11 @@
         (define statuses (map wave-index-entry-status entries))
         (define all-done?
           (for/and ([s statuses])
-            (or (string=? s "DONE") (string=? s "DEFERRED"))))
-        (define any-done?
+            (done-or-deferred? s)))
+        (define any-progress?
           (for/or ([s statuses])
-            (or (string=? s "DONE")
-                (string=? s "DEFERRED")
-                (string=? s "FAILED")
-                (string=? s "In-Progress"))))
+            (not (string=? s STATUS-INBOX))))
         (cond
           [all-done? 'all-done]
-          [any-done? 'partly-done]
+          [any-progress? 'partly-done]
           [else 'in-progress])])]))
