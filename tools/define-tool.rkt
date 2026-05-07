@@ -41,6 +41,7 @@
 
      #'(begin
          (define tool-id handler)
+         (provide tool-id)
          (define name
            (make-tool tool-name-str
                       desc

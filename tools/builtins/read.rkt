@@ -6,6 +6,8 @@
 ;; Purpose: Read file contents with encoding detection, line range support,
 ;; and safe-mode path validation. Handles text files, images, and binary
 ;; content with appropriate encoding. Primary tool for source exploration.
+;;
+;; v0.33.2 W0: Converted to define-tool macro.
 
 (require racket/port
          racket/string
@@ -13,6 +15,7 @@
          racket/list
          racket/dict
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../define-tool.rkt" define-tool)
          (only-in "../../util/path-helpers.rkt"
                   contains-null-bytes?
                   bytes->display-lines
@@ -20,17 +23,15 @@
          (only-in "../../util/truncation.rkt" truncate-output MAX-OUTPUT-BYTES MAX-OUTPUT-LINES)
          (only-in "builtin-helpers.rkt" require-safe-path!))
 
-(provide tool-read)
-
 ;; Format a single numbered line
 (define (format-line n text)
   (format "~a| ~a" n text))
 
 ;; --------------------------------------------------
-;; Main tool function
+;; Handler function
 ;; --------------------------------------------------
 
-(define (tool-read args [exec-ctx #f])
+(define (read-handler args [exec-ctx #f])
   (define raw-path (hash-ref args 'path #f))
   (define path-str (and raw-path (expand-home-path raw-path)))
   (cond
@@ -101,3 +102,18 @@
                                               (car (last sliced))
                                               'path
                                               path-str))])])])])]))
+
+;; --------------------------------------------------
+;; Tool definition via define-tool macro
+;; --------------------------------------------------
+
+(define-tool read
+  #:description "Read file contents with line numbers. Supports offset/limit for large files. Detects binary content."
+  #:required ("path")
+  #:properties
+    [(path "string" "Path to the file to read")
+     (offset "integer" "Starting line number (1-indexed, default 1)")
+     (limit "integer" "Maximum number of lines to read (default all)")]
+  read-handler)
+
+(provide read)

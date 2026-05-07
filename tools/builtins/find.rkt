@@ -1,11 +1,15 @@
 #lang racket/base
 
-(require "../../util/error-helpers.rkt")
-(require racket/contract
+;; tools/builtins/find.rkt — File/directory search tool
+;;
+;; v0.33.2 W0: Converted to define-tool macro.
+
+(require "../../util/error-helpers.rkt"
          racket/file
          racket/string
          racket/path
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../define-tool.rkt" define-tool)
          (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/glob.rkt" glob->regexp)
          (only-in "../../util/path-filters.rkt"
@@ -14,8 +18,6 @@
                   skip-dirs
                   path-component-hidden?)
          (only-in "../../util/path-helpers.rkt" expand-home-path))
-
-(provide (contract-out [tool-find (->* (hash?) (any/c) any/c)]))
 
 ;; --------------------------------------------------
 ;; Core recursive walk
@@ -69,10 +71,10 @@
   (values (unbox results) (unbox total)))
 
 ;; --------------------------------------------------
-;; Main tool function
+;; Handler function
 ;; --------------------------------------------------
 
-(define (tool-find args [exec-ctx #f])
+(define (find-handler args [exec-ctx #f])
   ;; (safe-mode path check is done by scheduler, not here)
   (cond
     [(not (hash-has-key? args 'path)) (make-error-result "Missing required argument: path")]
@@ -116,3 +118,20 @@
         (make-success-result
          results
          (hasheq 'total-found total-found 'truncated? truncated? 'search-root path-str))])]))
+
+;; --------------------------------------------------
+;; Tool definition via define-tool macro
+;; --------------------------------------------------
+
+(define-tool find
+  #:description "Recursively list files and directories matching a name pattern. Supports glob patterns and type filtering."
+  #:required ("path")
+  #:properties
+    [(path "string" "Root directory to search")
+     (name "string" "Name pattern (glob, optional)")
+     (type "string" "Type filter: 'file', 'dir', or 'any' (default)")
+     (max-depth "integer" "Maximum directory depth to search (default 10)")
+     (max-results "integer" "Maximum results to return (default 100)")]
+  find-handler)
+
+(provide find)
