@@ -57,7 +57,19 @@
                   model-request-blocked-event-fields
                   message-blocked-event-fields
                   turn-cancelled-event-fields
-                  assistant-message-completed-event-fields))
+                  assistant-message-completed-event-fields)
+         (only-in "../agent/event-structs/stream-events.rkt"
+                  stream-completed-event-fields
+                  stream-delta-event-fields
+                  stream-tool-call-delta-event-fields
+                  stream-thinking-event-fields
+                  stream-message-start-event-fields
+                  stream-message-delta-event-fields
+                  stream-message-end-event-fields
+                  stream-turn-completed-event-fields
+                  stream-turn-cancelled-event-fields
+                  stream-tool-call-started-event-fields
+                  stream-assistant-msg-completed-event-fields))
 
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
 ;; Adoption is tracked by IVG check `session-switch-typed-events`.
@@ -138,7 +150,29 @@
           'message-blocked-event
           message-blocked-event-fields
           'assistant-message-completed-event
-          assistant-message-completed-event-fields))
+          assistant-message-completed-event-fields
+          'stream-completed-event
+          stream-completed-event-fields
+          'stream-delta-event
+          stream-delta-event-fields
+          'stream-tool-call-delta-event
+          stream-tool-call-delta-event-fields
+          'stream-thinking-event
+          stream-thinking-event-fields
+          'stream-message-start-event
+          stream-message-start-event-fields
+          'stream-message-delta-event
+          stream-message-delta-event-fields
+          'stream-message-end-event
+          stream-message-end-event-fields
+          'stream-turn-completed-event
+          stream-turn-completed-event-fields
+          'stream-turn-cancelled-event
+          stream-turn-cancelled-event-fields
+          'stream-tool-call-started-event
+          stream-tool-call-started-event-fields
+          'stream-assistant-msg-completed-event
+          stream-assistant-msg-completed-event-fields))
 
 ;; Extract struct name, stripping the struct: prefix from struct->vector
 (define (struct-name evt)

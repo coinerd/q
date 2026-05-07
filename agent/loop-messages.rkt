@@ -49,8 +49,9 @@
     [else (format "~a" parts)]))
 
 ;; Emit an event on the bus and optionally record in state
-;; DEPRECATED: Use emit-typed-event! with typed event structs instead.
-;; This raw helper is kept for loop-stream.rkt migration (22 remaining sites).
+;; DEPRECATED (v0.32.3): Use emit-typed-event! with typed event structs instead.
+;; Zero production callers remain. Kept for backward compatibility only.
+;; Safe to remove in v0.33.x.
 (define (emit! bus session-id turn-id event-name payload #:state [state #f])
   (define evt (make-event event-name (now-seconds) session-id turn-id payload))
   (publish! bus evt)
