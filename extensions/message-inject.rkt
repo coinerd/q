@@ -17,12 +17,11 @@
 ;;   (inject-user-message! (ctx-event-bus ctx) "session-id" "User note")
 
 (require racket/contract
+         "event-api.rkt"
          "api.rkt"
          "../util/protocol-types.rkt"
          "../util/ids.rkt"
-         "../util/event.rkt"
-         "../agent/event-emitter.rkt"
-         "../agent/event-structs/iteration-events.rkt")
+         "../util/event.rkt")
 
 (provide (contract-out [inject-system-message! (-> event-bus? string? string? event?)]
                        [inject-user-message! (-> event-bus? string? string? event?)]
