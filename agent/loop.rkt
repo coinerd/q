@@ -75,7 +75,6 @@
          MAX-STREAM-CHUNKS
          usage-empty?
          parts->text-string
-         emit!
          handle-hook-result)
 (provide compute-next-loop-state)
 
