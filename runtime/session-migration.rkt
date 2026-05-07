@@ -95,14 +95,12 @@
            "Session migrated v1 -> v~a: ~a entries. Backup: ~a\n"
            current-session-version (length entries) bak-path))
 
-;; Load session log entries (re-export helper)
-(require (only-in "../runtime/session-store.rkt" load-session-log))
+;; Load session log entries and version header writer (re-export helpers)
+(require (only-in "../runtime/session-store.rkt"
+                  load-session-log
+                  write-session-version-header!))
 
 ;; Ensure session has a version header (write if missing)
 (define (ensure-session-version! path)
   (unless (and (file-exists? path) (> (file-size path) 0))
     (write-session-version-header! path)))
-
-;; Re-export writer from session-store
-(require (only-in "../runtime/session-store.rkt"
-                  write-session-version-header!))

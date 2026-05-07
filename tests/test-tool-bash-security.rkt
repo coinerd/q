@@ -10,7 +10,11 @@
                   destructive-command?
                   destructive-patterns
                   current-block-destructive
-                  current-warn-on-destructive)
+                  current-warn-on-destructive
+                  current-execution-policy
+                  current-allowed-commands
+                  execution-policy-allows?
+                  high-risk-command?)
          (only-in "../runtime/safe-mode.rkt"
                   safe-mode?
                   current-safe-mode-config
@@ -115,11 +119,6 @@
 
 ;; ── RA-1a: Allowlist execution policy (v0.24.7) ──
 
-(require (only-in "../tools/builtins/bash.rkt"
-                  current-execution-policy
-                  current-allowed-commands
-                  execution-policy-allows?))
-
 (test-case "RA-1a: allowlist blocks disallowed command"
   (parameterize ([current-execution-policy 'allowlist]
                  [current-allowed-commands '("git" "ls" "grep")])
@@ -144,8 +143,6 @@
     (check-true (execution-policy-allows? "rm -rf /tmp"))))
 
 ;; ── RA-1b: High-risk pattern detection (v0.24.7) ──
-
-(require (only-in "../tools/builtins/bash.rkt" high-risk-command?))
 
 (test-case "RA-1b: rm -rf is high-risk"
   (check-true (high-risk-command? "rm -rf /tmp/test")))
