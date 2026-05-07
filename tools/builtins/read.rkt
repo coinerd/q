@@ -17,10 +17,6 @@
                   contains-null-bytes?
                   bytes->display-lines
                   expand-home-path)
-         (only-in "../../util/safe-mode-predicates.rkt"
-                  safe-mode?
-                  allowed-path?
-                  safe-mode-project-root)
          (only-in "../../util/truncation.rkt" truncate-output MAX-OUTPUT-BYTES MAX-OUTPUT-LINES)
          (only-in "builtin-helpers.rkt" require-safe-path!))
 

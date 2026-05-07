@@ -20,10 +20,6 @@
          (only-in "../../extensions/gsd-planning-state.rkt"
                   current-max-old-text-len
                   set-current-max-old-text-len!)
-         (only-in "../../util/safe-mode-predicates.rkt"
-                  safe-mode?
-                  allowed-path?
-                  safe-mode-project-root)
          (only-in "../../util/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          (only-in "builtin-helpers.rkt" require-safe-path!))

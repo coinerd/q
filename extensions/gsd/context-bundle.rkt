@@ -54,10 +54,10 @@
   (define project-context (hash-ref artifacts 'project-context ""))
   (define parts
     (filter-string (list "## Your Task"
-                         (if (non-empty? user-request)
+                         (if (non-empty-string? user-request)
                              (format "Understand and plan a solution for:\n~a" user-request)
                              "Explore the codebase and understand the problem.")
-                         (if (non-empty? project-context)
+                         (if (non-empty-string? project-context)
                              (format "## Project Context\n~a" project-context)
                              #f))))
   (string-join parts "\n\n"))
@@ -76,14 +76,14 @@
   (define referenced-files (format-referenced-files files))
   (define parts
     (filter-string (list (format "## Current Wave (W~a)" wave-index)
-                         (if (non-empty? wave-doc) wave-doc "(no wave document loaded)")
-                         (if (non-empty? plan-index)
+                         (if (non-empty-string? wave-doc) wave-doc "(no wave document loaded)")
+                         (if (non-empty-string? plan-index)
                              (format "## Plan Index\n~a" plan-index)
                              #f)
-                         (if (non-empty? state-text)
+                         (if (non-empty-string? state-text)
                              (format "## Current State\n~a" state-text)
                              #f)
-                         (if (non-empty? referenced-files)
+                         (if (non-empty-string? referenced-files)
                              (format "## Referenced Files\n~a" referenced-files)
                              #f))))
   (string-join parts "\n\n"))
@@ -99,11 +99,11 @@
   (define verify-commands (extract-verify-commands plan-text))
   (define parts
     (filter-string (list "## Plan Summary"
-                         (if (non-empty? plan-text) plan-text "(no plan)")
-                         (if (non-empty? summaries)
+                         (if (non-empty-string? plan-text) plan-text "(no plan)")
+                         (if (non-empty-string? summaries)
                              (format "## Wave Summaries\n~a" summaries)
                              #f)
-                         (if (non-empty? verify-commands)
+                         (if (non-empty-string? verify-commands)
                              (format "## Verification Commands\n~a"
                                      (string-join verify-commands "\n"))
                              "## Verification\nRun your test suite to verify all changes."))))
@@ -113,21 +113,21 @@
 ;; Internal helpers
 ;; ============================================================
 
-(define (non-empty? s)
+(define (non-empty-string? s)
   (and (string? s) (> (string-length s) 0)))
 
 (define (filter-string parts)
   (filter values parts))
 
 (define (extract-wave-context plan-text wave-index)
-  (if (non-empty? plan-text)
+  (if (non-empty-string? plan-text)
       (let ([waves (parse-waves-from-markdown plan-text)])
         (define w (plan-wave-ref (gsd-plan waves "" '() '()) wave-index))
         (if w
             (format "Wave ~a: ~a\n~a"
                     (gsd-wave-index w)
                     (gsd-wave-title w)
-                    (if (non-empty? (gsd-wave-root-cause w))
+                    (if (non-empty-string? (gsd-wave-root-cause w))
                         (format "Root cause: ~a" (gsd-wave-root-cause w))
                         ""))
             ""))
@@ -141,9 +141,9 @@
                    "\n\n")))
 
 (define (extract-verify-commands plan-text)
-  (if (non-empty? plan-text)
+  (if (non-empty-string? plan-text)
       (let ([waves (parse-waves-from-markdown plan-text)])
         (for/list ([w waves]
-                   #:when (non-empty? (gsd-wave-verify w)))
+                   #:when (non-empty-string? (gsd-wave-verify w)))
           (format "- Wave ~a: ~a" (gsd-wave-index w) (gsd-wave-verify w))))
       '()))

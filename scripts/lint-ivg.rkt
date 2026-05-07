@@ -44,10 +44,11 @@
 
 (define checks
   (list
-   ;; No inline hook block patterns in loop-stream.rkt (must use handle-hook-result)
-   (list "no-inline-hook-block"
-         (lambda () (zero? (grep-count "eq\\?.*hook-result-action.*'block" "agent/loop-stream.rkt")))
-         "inline hook block patterns remain in loop-stream.rkt — use handle-hook-result instead")
+   ;; No inline hook block patterns in loop-stream.rkt (must use classify-hook-result + match)
+   (list
+    "no-inline-hook-block"
+    (lambda () (zero? (grep-count "eq\\?.*hook-result-action.*'block" "agent/loop-stream.rkt")))
+    "inline hook block patterns remain in loop-stream.rkt — use classify-hook-result + match instead")
    ;; No termination-decision references in runtime/
    (list "no-termination-decision"
          (lambda () (zero? (grep-count-dir "termination-decision" "runtime/")))

@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.32.8
+v0.32.9
 
 ## Layer Diagram
 
@@ -64,7 +64,7 @@ See `docs/architecture/dependency-policy.rktd` for layering rules and known viol
 
 Two tiers:
 1. **Raw events**: `make-event` + `emit-event!` (legacy, being phased out)
-2. **Typed events**: 27 structs in `agent/event-structs/` + `emit-typed-event!` (v0.32.8+)
+2. **Typed events**: 27 structs in `agent/event-structs/` + `emit-typed-event!` (v0.32.9+)
 
 ## Testing
 
