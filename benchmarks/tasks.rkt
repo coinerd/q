@@ -35,8 +35,7 @@
 ;; ============================================================
 
 ;; Default validation: check that output is a non-empty string
-(define (non-empty-string? output)
-  (and (string? output) (> (string-length output) 0)))
+
 
 ;; Check output contains a substring (case-insensitive)
 (define ((contains-any . keywords) output)

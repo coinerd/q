@@ -14,6 +14,138 @@
 - Lint: 18/18 pass, 0 version errors
 - Tests: 471/471 pass, 2092/2092 tests pass
 
+
+
+## v0.32.9 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.9 Wave 0)
+
+**Goal:** Audit remediation — dead code removal, import cleanup, DRY fixes.
+
+**Changes:**
+- Removed dead `emit!` from `loop-messages.rkt` + 3 dead imports
+- Removed dead `handle-hook-result`, updated `lint-ivg.rkt` to `classify-hook-result`
+- Added `stream-events.rkt` to `event-structs.rkt` facade + test coverage
+- Replaced `non-empty?` with `non-empty-string?` in 3 GSD files
+- Converted `delete-lines.rkt` to use `require-safe-path!`
+- Removed dead `safe-mode-predicates` imports from edit/read/write
+- Added `struct-field-names` to `event-emitter.rkt` provide + test
+- Version bump to 0.32.9
+- 2 new test files, 6 new tests; 485 files, 2035 tests all pass
+
+## v0.32.8 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.8 Wave 0)
+
+**Goal:** Document agent-session struct field groupings + add convenience accessors.
+
+**Changes:**
+- Documented 21-field agent-session with 5 logical groupings
+- Added convenience accessors for session fields
+- 7 new tests for session struct accessors
+- Version bump to 0.32.8
+
+## v0.32.7 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.7 Wave 0)
+
+**Goal:** Tool pipeline unification — middleware returns tool-result structs, model-bridge facade.
+
+**Changes:**
+- Middleware returns `tool-result` structs on all error/blocked paths
+- Created `tools/model-bridge.rkt` facade re-exporting from llm/
+- Created `tools/define-tool.rkt` macro for tool definition
+- Updated `spawn-subagent.rkt` to use model-bridge
+- 3 new test files, 15 new tests
+- Version bump to 0.32.7
+
+## v0.32.6 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.6 Wave 0)
+
+**Goal:** TUI state decomposition + TUI↔GSD decoupling.
+
+**Changes:**
+- Documented 27-field ui-state with 9 logical groupings
+- Fixed TUI→GSD circular import via injectable parameter
+- `current-gsd-mode-query` parameter in `state-events.rkt`
+- Wired in `tui-init.rkt` at startup
+- Fixed exploration.progress format bug
+- Version bump to 0.32.6
+
+## v0.32.5 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.5 Wave 0)
+
+**Goal:** GSD enum + DRY — wave status constants, session-ctx struct.
+
+**Changes:**
+- Unified wave status constants (`'pending`, `'in-progress'`, etc.)
+- Replaced session-state closure with `gsd-session-ctx` struct
+- Added `extract-plan-title` with default "archived-plan"
+- Converted `wave-status.rkt` to use typed `plan-types.rkt`
+- 4 new test files, 18 new tests
+- Version bump to 0.32.5
+
+## v0.32.4 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.4 Wave 0)
+
+**Goal:** Replace CPS hook dispatch with data-return `classify-hook-result`.
+
+**Changes:**
+- `classify-hook-result` returns `(list 'block payload)`, `(list 'amend payload)`, or `'pass`
+- Removed CPS `handle-hook-result` from `loop-messages.rkt`
+- `build-final-stream-result` extracted to avoid duplication
+- Fixed `loop-stream.rkt` scoping bug (3 helpers promoted to top-level)
+- Updated `lint-ivg.rkt` with classify-hook-result checks
+- 3 new test files, 12 new tests
+- Version bump to 0.32.4
+
+## v0.32.3 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.3 Wave 0)
+
+**Goal:** Complete typed event migration for all event structs.
+
+**Changes:**
+- Applied `define-typed-event` macro to all 8 event struct files
+- Removed raw `emit!` calls from `loop-stream.rkt`
+- TUI consumes events by type string (transparent migration)
+- All event structs now inherit from `typed-event`
+- 5 new test files, 25 new tests
+- Version bump to 0.32.3
+
+## v0.32.2 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.2 Wave 0)
+
+**Goal:** Create `define-typed-event` macro for event struct generation.
+
+**Changes:**
+- Created `util/event-macro.rkt` with `define-typed-event` macro
+- Macro generates struct + predicate + type string + helper accessors
+- Supports `#:optional` fields with defaults
+- Per-tool events left manual (complex constructors)
+- 3 new test files, 20 new tests
+- Version bump to 0.32.2
+
+## v0.32.1 — 2026-05-06
+
+### Architecture Abstraction Remediation (v0.32.1 Wave 0)
+
+**Goal:** Quick wins — DRY helpers, dead code removal.
+
+**Changes:**
+- Extracted `working-set-enforce-budget!` single-pass (fix O(n²))
+- Removed dead `acc-box` from `loop-stream.rkt`
+- Removed dead `build-path*`, `resolve-provider-log-file!` from `runtime/`
+- Fixed `cutpoint.rkt`+'`working-set.rkt` import cycles
+- Created `test/test-iteration-tool-bridge.rkt`
+- 4 new test files, 22 new tests
+- Version bump to 0.32.1
+
+
 ## v0.31.0 — 2026-05-06
 
 ### Architecture Abstraction: HOF Combinators for Hook System

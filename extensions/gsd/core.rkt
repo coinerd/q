@@ -69,8 +69,7 @@
 ;; Internal helpers (must be defined before use)
 ;; ============================================================
 
-(define (non-empty-string? s)
-  (and (string? s) (> (string-length s) 0)))
+
 
 ;; Normalize a file path: collapse .. and . components.
 ;; Canonical path comparison for write guard.

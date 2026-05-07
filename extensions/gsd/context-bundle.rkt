@@ -113,8 +113,7 @@
 ;; Internal helpers
 ;; ============================================================
 
-(define (non-empty-string? s)
-  (and (string? s) (> (string-length s) 0)))
+
 
 (define (filter-string parts)
   (filter values parts))
