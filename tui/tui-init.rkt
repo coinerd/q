@@ -28,7 +28,8 @@
          "../tui/tui-keybindings.rkt"
          "../tui/tui-render-loop.rkt"
          "../cli/args.rkt"
-         "../extensions/ui-surface.rkt")
+         "../extensions/ui-surface.rkt"
+         (only-in "../extensions/gsd/state-machine.rkt" gsm-current))
 
 (provide run-tui
          run-tui-with-runtime
@@ -66,6 +67,9 @@
 
   ;; Determine session dir before creating TUI context (Fix #513)
   (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+
+  ;; Wire GSD mode query callback to avoid TUI→extensions circular import (v0.32.6)
+  (current-gsd-mode-query (lambda () (gsm-current)))
 
   (define ctx
     (make-tui-ctx

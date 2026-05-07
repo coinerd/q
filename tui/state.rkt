@@ -75,4 +75,5 @@
          clear-editor-component
          get-last-turn-tool-summary
          truncate-string
-         extract-arg-summary)
+         extract-arg-summary
+         current-gsd-mode-query)

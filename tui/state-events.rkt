@@ -10,10 +10,14 @@
          "../util/protocol-types.rkt"
          "../util/cost-tracker.rkt"
          "../util/content-helpers.rkt"
-         (only-in "../extensions/gsd/state-machine.rkt" gsm-current)
          "state-types.rkt")
 
-(provide apply-event-to-state)
+(provide apply-event-to-state
+         current-gsd-mode-query)
+
+;; Injected callback to query GSD mode without direct import.
+;; Set during TUI initialization to avoid tui→extensions circular dependency.
+(define current-gsd-mode-query (make-parameter (lambda () 'idle)))
 
 ;; Local helper (avoids circular dependency with state-ui)
 (define (ui-model-label state)
@@ -314,7 +318,7 @@
     [("iteration.soft-warning")
      (define iter (hash-ref payload 'iteration "?"))
      (define remaining (hash-ref payload 'remaining "?"))
-     (define label (if (eq? (gsm-current) 'executing) "executing" "exploring"))
+     (define label (if (eq? ((current-gsd-mode-query)) 'executing) "executing" "exploring"))
      (append-entry
       state
       (make-entry 'system
@@ -325,11 +329,12 @@
     [("exploration.progress")
      (define count (hash-ref payload 'consecutive-tools "?"))
      (define tool-names (hash-ref payload 'tool-names '()))
-     (define label (if (eq? (gsm-current) 'executing) "executing" "exploring"))
+     (define label (if (eq? ((current-gsd-mode-query)) 'executing) "executing" "exploring"))
      (append-entry state
                    (make-entry 'system
                                (format "[~a... ~a tool calls: ~a]"
                                        label
+                                       count
                                        (string-join (map (lambda (s)
                                                            (if (string? s)
                                                                s
