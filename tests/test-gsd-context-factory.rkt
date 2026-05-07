@@ -1,29 +1,36 @@
 #lang racket/base
 
-;; tests/test-gsd-context-factory.rkt — Tests for closure-encapsulated GSD context
+;; tests/test-gsd-context-factory.rkt — Tests for struct-based GSD context
 ;;
-;; W0 scaffolding for v0.29.4: Runtime State Encapsulation.
-;; These tests define the expected API for make-gsd-context, a closure
-;; factory that replaces module-level boxes in extensions/gsd/session-state.rkt.
+;; v0.29.4 W0: Original tests for closure-encapsulated context.
+;; v0.32.5 W1: Rewritten for struct-based gsd-session-ctx.
 
 (require rackunit
-         racket/set)
-
-;; Import the real closure factory from session-state.rkt (W1)
-(require (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state?))
-(require (only-in "../extensions/gsd/session-state.rkt" make-gsd-context))
+         racket/set
+         (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state?)
+         (only-in "../extensions/gsd/session-state.rkt"
+                  make-gsd-context
+                  gsd-session-ctx?
+                  gsd-session-ctx-state-box
+                  gsd-session-ctx-plan-box
+                  gsd-session-ctx-pinned-dir-box
+                  gsd-session-ctx-edit-limit-box
+                  gsd-session-ctx-event-bus-box
+                  gsd-session-ctx-history-box
+                  gsd-session-ctx-busy-box
+                  gsd-session-ctx-correlation-id-box
+                  gsd-session-ctx-transaction-box
+                  ctx-read
+                  ctx-write!
+                  ctx-update!))
 
 ;; ============================================================
-;; 1. Factory returns a callable dispatch function
+;; 1. Factory returns a struct
 ;; ============================================================
 
-(test-case "make-gsd-context returns a procedure"
+(test-case "make-gsd-context returns a gsd-session-ctx"
   (define ctx (make-gsd-context))
-  (check-pred procedure? ctx))
-
-(test-case "context dispatch rejects unknown actions"
-  (define ctx (make-gsd-context))
-  (check-exn exn:fail? (lambda () (ctx 'unknown-action))))
+  (check-pred gsd-session-ctx? ctx))
 
 ;; ============================================================
 ;; 2. State get/set roundtrip
@@ -31,16 +38,17 @@
 
 (test-case "state get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-pred gsd-runtime-state? (ctx 'get-state) "initial state is gsd-runtime-state")
-  (ctx 'set-state 'idle)
-  (check-equal? (ctx 'get-state) 'idle))
+  (check-pred gsd-runtime-state?
+              (ctx-read ctx gsd-session-ctx-state-box)
+              "initial state is gsd-runtime-state")
+  (ctx-write! ctx gsd-session-ctx-state-box 'idle)
+  (check-equal? (ctx-read ctx gsd-session-ctx-state-box) 'idle))
 
-(test-case "state supports gsd-runtime-state structs"
+(test-case "state supports arbitrary values"
   (define ctx (make-gsd-context))
-  ;; Simulate a full state struct (using a hasheq for now)
   (define fake-state (hasheq 'mode 'executing 'wave 2))
-  (ctx 'set-state fake-state)
-  (check-equal? (ctx 'get-state) fake-state))
+  (ctx-write! ctx gsd-session-ctx-state-box fake-state)
+  (check-equal? (ctx-read ctx gsd-session-ctx-state-box) fake-state))
 
 ;; ============================================================
 ;; 3. Plan data get/set roundtrip
@@ -48,144 +56,123 @@
 
 (test-case "plan get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-plan) #f "initial plan is #f")
-  (ctx 'set-plan '((wave 1 "do stuff")))
-  (check-equal? (ctx 'get-plan) '((wave 1 "do stuff"))))
+  (check-equal? (ctx-read ctx gsd-session-ctx-plan-box) #f "initial plan is #f")
+  (ctx-write! ctx gsd-session-ctx-plan-box '((wave 1 "do stuff")))
+  (check-equal? (ctx-read ctx gsd-session-ctx-plan-box) '((wave 1 "do stuff"))))
 
 ;; ============================================================
-;; 4. Workflow get/set roundtrip
-;; ============================================================
-
-(test-case "workflow state accessible via get-state"
-  (define ctx (make-gsd-context))
-  ;; get-workflow/set-workflow actions were removed in v0.29.9 (dead code)
-  ;; Workflow state is stored in gsd-runtime-state, accessed via get-state
-  (check-not-false (ctx 'get-state) "state is accessible"))
-
-;; ============================================================
-;; 5. Busy flag get/set roundtrip
+;; 4. Busy flag get/set roundtrip
 ;; ============================================================
 
 (test-case "busy? get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-false (ctx 'busy?) "initial busy is #f")
-  (ctx 'set-busy! #t)
-  (check-true (ctx 'busy?)))
+  (check-false (ctx-read ctx gsd-session-ctx-busy-box) "initial busy is #f")
+  (ctx-write! ctx gsd-session-ctx-busy-box #t)
+  (check-true (ctx-read ctx gsd-session-ctx-busy-box)))
 
 ;; ============================================================
-;; 6. Correlation ID get/set roundtrip
+;; 5. Correlation ID get/set roundtrip
 ;; ============================================================
 
 (test-case "correlation-id get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-correlation-id) #f)
-  (ctx 'set-correlation-id! "abc-123")
-  (check-equal? (ctx 'get-correlation-id) "abc-123"))
+  (check-equal? (ctx-read ctx gsd-session-ctx-correlation-id-box) #f)
+  (ctx-write! ctx gsd-session-ctx-correlation-id-box "abc-123")
+  (check-equal? (ctx-read ctx gsd-session-ctx-correlation-id-box) "abc-123"))
 
 ;; ============================================================
-;; 7. Transaction ref/set roundtrip
+;; 6. Transaction ref/set roundtrip
 ;; ============================================================
 
-(test-case "transaction-ref/set! roundtrip"
+(test-case "transaction update roundtrip"
   (define ctx (make-gsd-context))
-  (check-exn exn:fail?
-             (lambda () (ctx 'transaction-ref 'missing))
-             "transaction-ref on missing key should fail")
-  (ctx 'transaction-set! 'edit-count 42)
-  (check-equal? (ctx 'transaction-ref 'edit-count) 42))
+  ;; Set a value
+  (ctx-update! ctx gsd-session-ctx-transaction-box (lambda (h) (hash-set h 'edit-count 42)))
+  (check-equal? (hash-ref (ctx-read ctx gsd-session-ctx-transaction-box) 'edit-count) 42))
 
 ;; ============================================================
-;; 8. Two independent contexts don't interfere
+;; 7. Two independent contexts don't interfere
 ;; ============================================================
 
 (test-case "two independent contexts are isolated"
   (define ctx-a (make-gsd-context))
   (define ctx-b (make-gsd-context))
-  (ctx-a 'set-state 'executing)
-  (ctx-b 'set-state 'idle)
-  (check-equal? (ctx-a 'get-state) 'executing)
-  (check-equal? (ctx-b 'get-state) 'idle)
+  (ctx-write! ctx-a gsd-session-ctx-state-box 'executing)
+  (ctx-write! ctx-b gsd-session-ctx-state-box 'idle)
+  (check-equal? (ctx-read ctx-a gsd-session-ctx-state-box) 'executing)
+  (check-equal? (ctx-read ctx-b gsd-session-ctx-state-box) 'idle)
   ;; Plans also isolated
-  (ctx-a 'set-plan '((wave 1)))
-  (ctx-b 'set-plan '((wave 2)))
-  (check-equal? (ctx-a 'get-plan) '((wave 1)))
-  (check-equal? (ctx-b 'get-plan) '((wave 2))))
+  (ctx-write! ctx-a gsd-session-ctx-plan-box '((wave 1)))
+  (ctx-write! ctx-b gsd-session-ctx-plan-box '((wave 2)))
+  (check-equal? (ctx-read ctx-a gsd-session-ctx-plan-box) '((wave 1)))
+  (check-equal? (ctx-read ctx-b gsd-session-ctx-plan-box) '((wave 2))))
 
 (test-case "transaction isolation between contexts"
   (define ctx-a (make-gsd-context))
   (define ctx-b (make-gsd-context))
-  (ctx-a 'transaction-set! 'key 'val-a)
-  (ctx-b 'transaction-set! 'key 'val-b)
-  (check-equal? (ctx-a 'transaction-ref 'key) 'val-a)
-  (check-equal? (ctx-b 'transaction-ref 'key) 'val-b))
+  (ctx-update! ctx-a gsd-session-ctx-transaction-box (lambda (h) (hash-set h 'key 'val-a)))
+  (ctx-update! ctx-b gsd-session-ctx-transaction-box (lambda (h) (hash-set h 'key 'val-b)))
+  (check-equal? (hash-ref (ctx-read ctx-a gsd-session-ctx-transaction-box) 'key) 'val-a)
+  (check-equal? (hash-ref (ctx-read ctx-b gsd-session-ctx-transaction-box) 'key) 'val-b))
 
 ;; ============================================================
-;; 9. Thread safety (basic check)
+;; 8. Thread safety (basic check)
 ;; ============================================================
 
 (test-case "concurrent mutations don't corrupt state"
   (define ctx (make-gsd-context))
-  (define sem (make-semaphore 0))
   (define iterations 100)
-  (define results (box '()))
   ;; Spawn threads that race to set state
   (for ([i (in-range iterations)])
-    (thread (lambda ()
-              (semaphore-wait sem)
-              (ctx 'set-state i)
-              ;; Don't check value — just ensure no crash
-              (semaphore-post sem))))
-  ;; Release all threads
-  (for ([_ (in-range iterations)])
-    (semaphore-post sem))
+    (thread (lambda () (ctx-write! ctx gsd-session-ctx-state-box i))))
   ;; Give threads time to finish
   (sleep 0.1)
   ;; State should be an integer (one of the racers won)
-  (check-pred integer? (ctx 'get-state)))
+  (check-pred integer? (ctx-read ctx gsd-session-ctx-state-box)))
 
 ;; ============================================================
-;; 10. History operations
+;; 9. History operations
 ;; ============================================================
 
 (test-case "history get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-history) '() "initial history is empty")
-  (ctx 'set-history! '(a b c))
-  (check-equal? (ctx 'get-history) '(a b c)))
+  (check-equal? (ctx-read ctx gsd-session-ctx-history-box) '() "initial history is empty")
+  (ctx-write! ctx gsd-session-ctx-history-box '(a b c))
+  (check-equal? (ctx-read ctx gsd-session-ctx-history-box) '(a b c)))
 
 (test-case "history update appends correctly"
   (define ctx (make-gsd-context))
-  (ctx 'set-history! '(a))
-  (ctx 'set-history! (append (ctx 'get-history) '(b)))
-  (check-equal? (ctx 'get-history) '(a b)))
+  (ctx-write! ctx gsd-session-ctx-history-box '(a))
+  (ctx-update! ctx gsd-session-ctx-history-box (lambda (h) (append h '(b))))
+  (check-equal? (ctx-read ctx gsd-session-ctx-history-box) '(a b)))
 
 ;; ============================================================
-;; 11. Edit limit get/set roundtrip
+;; 10. Edit limit get/set roundtrip
 ;; ============================================================
 
 (test-case "edit-limit get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-edit-limit) 500 "default edit limit")
-  (ctx 'set-edit-limit! 1000)
-  (check-equal? (ctx 'get-edit-limit) 1000))
+  (check-equal? (ctx-read ctx gsd-session-ctx-edit-limit-box) 500 "default edit limit")
+  (ctx-write! ctx gsd-session-ctx-edit-limit-box 1000)
+  (check-equal? (ctx-read ctx gsd-session-ctx-edit-limit-box) 1000))
 
 ;; ============================================================
-;; 12. Pinned dir get/set roundtrip
+;; 11. Pinned dir get/set roundtrip
 ;; ============================================================
 
 (test-case "pinned-dir get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-pinned-dir) #f)
-  (ctx 'set-pinned-dir! "/tmp/planning")
-  (check-equal? (ctx 'get-pinned-dir) "/tmp/planning"))
+  (check-equal? (ctx-read ctx gsd-session-ctx-pinned-dir-box) #f)
+  (ctx-write! ctx gsd-session-ctx-pinned-dir-box "/tmp/planning")
+  (check-equal? (ctx-read ctx gsd-session-ctx-pinned-dir-box) "/tmp/planning"))
 
 ;; ============================================================
-;; 13. Event bus get/set roundtrip
+;; 12. Event bus get/set roundtrip
 ;; ============================================================
 
 (test-case "event-bus get/set roundtrip"
   (define ctx (make-gsd-context))
-  (check-equal? (ctx 'get-event-bus) #f)
+  (check-equal? (ctx-read ctx gsd-session-ctx-event-bus-box) #f)
   (define fake-bus (hasheq 'type 'event-bus))
-  (ctx 'set-event-bus! fake-bus)
-  (check-equal? (ctx 'get-event-bus) fake-bus))
+  (ctx-write! ctx gsd-session-ctx-event-bus-box fake-bus)
+  (check-equal? (ctx-read ctx gsd-session-ctx-event-bus-box) fake-bus))

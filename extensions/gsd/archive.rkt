@@ -16,7 +16,8 @@
          "wave-docs.rkt"
          "state-machine.rkt"
          "command-types.rkt"
-         (only-in "shared.rkt" extract-plan-title))
+         (only-in "shared.rkt" extract-plan-title)
+         "wave-status.rkt")
 
 (provide archive-completed-plan!
          all-waves-complete?
@@ -44,8 +45,7 @@
        [(null? entries) #f]
        [else
         (for/and ([e entries])
-          (define status (string-upcase (wave-index-entry-status e)))
-          (or (string=? status "DONE") (string=? status "DEFERRED")))])]))
+          (done-or-deferred? (wave-index-entry-status e)))])]))
 
 ;; ============================================================
 ;; Archive path
@@ -132,7 +132,7 @@
         (define entries (parse-plan-index text))
         (define incomplete
           (for/list ([e entries]
-                     #:when (not (member (wave-index-entry-status e) '("DONE" "DEFERRED"))))
+                     #:when (not (done-or-deferred? (wave-index-entry-status e))))
             (wave-index-entry-status e)))
         (gsd-err
          #:mode current-mode
@@ -178,7 +178,7 @@
   ;; Source 1: gsm-completed-waves (updated by /wave-done calls)
   (define completed (gsm-completed-waves))
   (for ([idx (set->list completed)])
-    (mark-wave-status! base-dir idx "DONE"))
+    (mark-wave-status! base-dir idx STATUS-DONE))
   ;; Source 2: Normalize any mixed-case status markers in PLAN.md
   ;; (e.g., LLM wrote [Done] instead of [DONE])
   (normalize-plan-status-markers! base-dir)
@@ -200,18 +200,9 @@
     (for ([e entries])
       (define status (wave-index-entry-status e))
       (define idx (wave-index-entry-idx e))
-      (define upcase (string-upcase status))
-      (cond
-        ;; Already canonical — skip
-        [(member status '("DONE" "DEFERRED" "FAILED" "Inbox" "In-Progress")) (void)]
-        ;; Case variant of DONE (Done, done, Done, etc.)
-        [(string=? upcase "DONE") (mark-wave-status! base-dir idx "DONE")]
-        ;; Case variant of DEFERRED
-        [(string=? upcase "DEFERRED") (mark-wave-status! base-dir idx "DEFERRED")]
-        ;; Case variant of FAILED
-        [(string=? upcase "FAILED") (mark-wave-status! base-dir idx "FAILED")]
-        ;; Other non-canonical status — leave as-is
-        [else (void)]))))
+      (define canonical (normalize-status! status))
+      (when (and canonical (not (string=? status canonical)))
+        (mark-wave-status! base-dir idx canonical)))))
 
 ;; Auto-complete remaining [Inbox] waves when in executing mode.
 ;; Heuristic: if we're in executing mode and at least one wave was
@@ -241,8 +232,8 @@
     (define plan-text (call-with-input-file plan-path port->string))
     (define entries (parse-plan-index plan-text))
     (for ([e entries]
-          #:when (not (string=? (wave-index-entry-status e) "DONE")))
-      (update-wave-in-index! base-dir (wave-index-entry-idx e) "DONE"))))
+          #:when (not (string=? (wave-index-entry-status e) STATUS-DONE)))
+      (update-wave-in-index! base-dir (wave-index-entry-idx e) STATUS-DONE))))
 
 ;; extract-plan-title: imported from shared.rkt (v0.32.1 Wave 1 DRY))
 
