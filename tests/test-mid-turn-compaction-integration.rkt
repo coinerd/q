@@ -10,11 +10,12 @@
          "../util/message.rkt"
          "../util/content-parts.rkt"
          "../util/event.rkt"
-         "../runtime/session-compaction.rkt"
+         (only-in "../runtime/session-compaction.rkt" compact-context-mid-turn)
          "../runtime/compactor.rkt"
          "../runtime/agent-session.rkt"
+         "../runtime/runtime-helpers.rkt"
          "../runtime/iteration/retry-policy.rkt"
-                  "../llm/token-budget.rkt"
+         "../llm/token-budget.rkt"
          "../agent/event-bus.rkt")
 
 (define integration-suite
@@ -37,7 +38,12 @@
       ;; Very tight budget to trigger compaction
       (define config (hasheq 'max-context-tokens 100))
       ;; Call with session=#f — should return integer (token estimate)
-      (define result-no-sess (check-mid-turn-budget! ctx bus "test-session" config))
+      (define result-no-sess
+        (check-mid-turn-budget!
+         ctx
+         "test-session"
+         config
+         #:emit-event (lambda (name payload) (emit-session-event! bus "test-session" name payload))))
       (check-true (integer? result-no-sess) "without session returns integer"))
 
     (test-case "compact-history returns valid result structure"
@@ -69,7 +75,11 @@
                    (current-seconds)
                    (hasheq))))
       (define config (hasheq 'max-context-tokens 100))
-      (check-mid-turn-budget! ctx bus "test-session" config)
+      (check-mid-turn-budget! ctx
+                              "test-session"
+                              config
+                              #:emit-event (lambda (name payload)
+                                             (emit-session-event! bus "test-session" name payload)))
       (check-true (> (length events) 0) "event emitted"))
 
     (test-case "under-budget context returns unchanged estimate"
@@ -83,7 +93,7 @@
                    (current-seconds)
                    (hasheq))))
       (define config (hasheq 'max-context-tokens 128000))
-      (define result (check-mid-turn-budget! ctx #f #f config))
+      (define result (check-mid-turn-budget! ctx #f config))
       (check-true (integer? result) "returns integer for under-budget")
       (check-true (> result 0) "positive token estimate"))
 
@@ -101,7 +111,12 @@
                    (current-seconds)
                    (hasheq))))
       (define config (hasheq 'max-context-tokens 128000))
-      (define result (estimate-mid-turn-tokens ctx bus "test-session" config))
+      (define result
+        (estimate-mid-turn-tokens
+         ctx
+         "test-session"
+         config
+         #:emit-event (lambda (name payload) (emit-session-event! bus "test-session" name payload))))
       (check-true (exact-positive-integer? result)
                   "estimate-mid-turn-tokens returns exact positive integer"))
 
@@ -119,7 +134,11 @@
                    (current-seconds)
                    (hasheq))))
       (define config (hasheq 'max-context-tokens 100))
-      (estimate-mid-turn-tokens ctx bus "test-session" config)
+      (estimate-mid-turn-tokens ctx
+                                "test-session"
+                                config
+                                #:emit-event (lambda (name payload)
+                                               (emit-session-event! bus "test-session" name payload)))
       (define budget-events
         (filter (lambda (e)
                   (and (event? e)
@@ -160,7 +179,13 @@
                    (current-seconds)
                    (hasheq))))
       (define result
-        (maybe-compact-mid-turn sess ctx bus "test-session" (hasheq 'max-context-tokens 100)))
+        (maybe-compact-mid-turn sess
+                                ctx
+                                "test-session"
+                                (hasheq 'max-context-tokens 100)
+                                #:emit-event (lambda (name payload)
+                                               (emit-session-event! bus "test-session" name payload))
+                                #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx))))
       (check-true (list? result) "maybe-compact-mid-turn returns list")
       (check-true (<= (length result) (length ctx)) "compaction returns at most original count")
       (check-true (andmap message? result) "all results are messages"))
@@ -194,23 +219,32 @@
                    (current-seconds)
                    (hasheq))))
       (define result
-        (maybe-compact-mid-turn sess ctx bus "test-session" (hasheq 'max-context-tokens 128000)))
+        (maybe-compact-mid-turn sess
+                                ctx
+                                "test-session"
+                                (hasheq 'max-context-tokens 128000)
+                                #:emit-event (lambda (name payload)
+                                               (emit-session-event! bus "test-session" name payload))
+                                #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx))))
       (check-equal? (length result) (length ctx) "under-budget returns original context unchanged"))
 
-   ;; v0.28.24 W0: test shared token estimation helper
+    ;; v0.28.24 W0: test shared token estimation helper
 
-   (test-case
-    "compute-mid-turn-estimate returns correct triple"
-    (define ctx
-      (for/list ([i (in-range 5)])
-        (message (format "id~a" i) #f 'user 'message
-                 (list (text-part "text" (format "Msg ~a" i)))
-                 (current-seconds) (hasheq))))
-    (define config (hasheq 'max-context-tokens 1000))
-    (define-values (estimated threshold max-tok)
-      (compute-mid-turn-estimate ctx config estimate-context-tokens))
-    (check-true (exact-positive-integer? estimated) "estimate is positive integer")
-    (check-equal? max-tok 1000 "max-tokens from config")
-    (check-equal? threshold 900 "threshold is 90% of max"))))
+    (test-case "compute-mid-turn-estimate returns correct triple"
+      (define ctx
+        (for/list ([i (in-range 5)])
+          (message (format "id~a" i)
+                   #f
+                   'user
+                   'message
+                   (list (text-part "text" (format "Msg ~a" i)))
+                   (current-seconds)
+                   (hasheq))))
+      (define config (hasheq 'max-context-tokens 1000))
+      (define-values (estimated threshold max-tok)
+        (compute-mid-turn-estimate ctx config estimate-context-tokens))
+      (check-true (exact-positive-integer? estimated) "estimate is positive integer")
+      (check-equal? max-tok 1000 "max-tokens from config")
+      (check-equal? threshold 900 "threshold is 90% of max"))))
 
 (run-tests integration-suite)

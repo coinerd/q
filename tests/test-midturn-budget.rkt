@@ -27,42 +27,46 @@
 ;; Test suite
 ;; ============================================================
 
-(test-case
- "check-mid-turn-budget: no event when under budget"
- (define bus (make-event-bus))
- (define events '())
- (subscribe! bus (lambda (evt) (set! events (cons evt events))))
- ;; Small context, large budget → no event
- (define ctx (list (make-test-message "hello")))
- (define config (hash 'max-context-tokens 128000))
- (define result (check-mid-turn-budget! ctx bus "test-session" config))
- (check-true (> result 0))
- (check-equal? (length events) 0))
+(test-case "check-mid-turn-budget: no event when under budget"
+  (define bus (make-event-bus))
+  (define events '())
+  (subscribe! bus (lambda (evt) (set! events (cons evt events))))
+  ;; Small context, large budget → no event
+  (define ctx (list (make-test-message "hello")))
+  (define config (hash 'max-context-tokens 128000))
+  (define result (check-mid-turn-budget! ctx "test-session" config))
+  (check-true (> result 0))
+  (check-equal? (length events) 0))
 
-(test-case
- "check-mid-turn-budget: event emitted when over 90% budget"
- (define bus (make-event-bus))
- (define events '())
- (subscribe! bus (lambda (evt) (set! events (cons evt events))))
- ;; Create a large context that exceeds 90% of a tiny budget
- (define big-text (make-string 5000 #\x))
- (define ctx (for/list ([_ (in-range 10)]) (make-test-message big-text)))
- ;; Budget = 500 tokens → 90% = 450 → definitely over
- (define config (hash 'max-context-tokens 500))
- (define result (check-mid-turn-budget! ctx bus "test-session" config))
- (check-true (> result 0))
- (check-equal? (length events) 1)
- (define evt (car events))
- (check-equal? (event-ev evt) "context.mid-turn-over-budget")
- (define payload (event-payload evt))
- (check-true (hash-has-key? payload 'estimated-tokens))
- (check-true (hash-has-key? payload 'budget)))
+(test-case "check-mid-turn-budget: event emitted when over 90% budget"
+  (define bus (make-event-bus))
+  (define events '())
+  (subscribe! bus (lambda (evt) (set! events (cons evt events))))
+  ;; Create a large context that exceeds 90% of a tiny budget
+  (define big-text (make-string 5000 #\x))
+  (define ctx
+    (for/list ([_ (in-range 10)])
+      (make-test-message big-text)))
+  ;; Budget = 500 tokens → 90% = 450 → definitely over
+  (define config (hash 'max-context-tokens 500))
+  (define result
+    (check-mid-turn-budget! ctx
+                            "test-session"
+                            config
+                            #:emit-event (lambda (name payload)
+                                           (emit-session-event! bus "test-session" name payload))))
+  (check-true (> result 0))
+  (check-equal? (length events) 1)
+  (define evt (car events))
+  (check-equal? (event-ev evt) "context.mid-turn-over-budget")
+  (define payload (event-payload evt))
+  (check-true (hash-has-key? payload 'estimated-tokens))
+  (check-true (hash-has-key? payload 'budget)))
 
-(test-case
- "check-mid-turn-budget: estimated tokens returned correctly"
- (define bus (make-event-bus))
- (define ctx (list (make-test-message "test message")))
- (define config (hash 'max-context-tokens 128000))
- (define result (check-mid-turn-budget! ctx bus "test-session" config))
- ;; Should return positive integer
- (check-true (and (integer? result) (positive? result))))
+(test-case "check-mid-turn-budget: estimated tokens returned correctly"
+  (define bus (make-event-bus))
+  (define ctx (list (make-test-message "test message")))
+  (define config (hash 'max-context-tokens 128000))
+  (define result (check-mid-turn-budget! ctx "test-session" config))
+  ;; Should return positive integer
+  (check-true (and (integer? result) (positive? result))))
