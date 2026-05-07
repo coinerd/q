@@ -29,87 +29,10 @@
 ;; production uses default.
 (define MAX-STREAM-CHUNKS (make-parameter 10000))
 
-;; ============================================================
-;; Pure stream accumulator (v0.29.5 W1)
-;; ============================================================
-
-;; Pure accumulator for stream chunk processing.
-;; No I/O, no mutation — just functional state transitions.
-(struct stream-accumulator
-        (text-parts tool-calls thinking-parts usage chunk-count finish-reason done?)
-  #:transparent)
-
-(define (make-empty-accumulator)
-  (stream-accumulator '() '() '() #f 0 #f #f))
-
-;; Pure: process a single chunk and return the next accumulator state.
-;; Returns a new stream-accumulator; never mutates.
-;; Handles: text delta, tool-call delta, thinking delta, done, usage.
-;; Ignores malformed chunks gracefully (returns acc unchanged).
-(define (process-chunk chunk acc)
-  (cond
-    [(not chunk) acc] ; EOF / #f
-    [(not (stream-chunk? chunk)) acc] ; malformed
-    [else
-     (define text-parts (stream-accumulator-text-parts acc))
-     (define tool-calls (stream-accumulator-tool-calls acc))
-     (define thinking-parts (stream-accumulator-thinking-parts acc))
-     (define usage (stream-accumulator-usage acc))
-     (define chunk-count (stream-accumulator-chunk-count acc))
-     (define finish-reason (stream-accumulator-finish-reason acc))
-     (define done? (stream-accumulator-done? acc))
-     ;; Extract fields
-     (define delta-text (stream-chunk-delta-text chunk))
-     (define delta-tc (stream-chunk-delta-tool-call chunk))
-     (define delta-thinking (stream-chunk-delta-thinking chunk))
-     (define chunk-usage (stream-chunk-usage chunk))
-     (define chunk-done? (stream-chunk-done? chunk))
-     (define chunk-finish (stream-chunk-finish-reason chunk))
-     ;; Update fields based on chunk content
-     (define new-text-parts
-       (if delta-text
-           (append text-parts (list delta-text))
-           text-parts))
-     (define new-tool-calls
-       (if delta-tc
-           (append tool-calls (list delta-tc))
-           tool-calls))
-     (define new-thinking-parts
-       (if delta-thinking
-           (append thinking-parts (list delta-thinking))
-           thinking-parts))
-     (define new-usage (or chunk-usage usage))
-     (define new-chunk-count (add1 chunk-count))
-     (define new-finish-reason (or chunk-finish finish-reason))
-     (define new-done? (or chunk-done? done?))
-     (stream-accumulator new-text-parts
-                         new-tool-calls
-                         new-thinking-parts
-                         new-usage
-                         new-chunk-count
-                         new-finish-reason
-                         new-done?)]))
-
 (provide MAX-STREAM-CHUNKS
          stream-from-provider
          handle-cancellation
-         build-stream-result
-         ;; Pure stream accumulator (v0.29.5)
-         stream-accumulator
-         stream-accumulator?
-         stream-accumulator-text-parts
-         stream-accumulator-tool-calls
-         stream-accumulator-thinking-parts
-         stream-accumulator-usage
-         stream-accumulator-chunk-count
-         stream-accumulator-finish-reason
-         stream-accumulator-done?
-         make-empty-accumulator
-         ;; NOTE (v0.29.11): process-chunk and stream-accumulator are provided for
-         ;; future use but have 0 production callers. process-chunk is blocked by
-         ;; mutable streaming-message vs immutable stream-accumulator gap.
-         ;; Deferred to v0.30.x — see AUDIT-v0.29.10 for details.
-         process-chunk)
+         build-stream-result)
 
 ;; ============================================================
 ;; stream-from-provider
@@ -140,7 +63,6 @@
   ;; v0.15.2: Track whether a normal done chunk was received.
   ;; Used to detect silent stream EOF (BUG-SILENT-STREAM-EOF).
   (define received-done? (box #f))
-  (define acc-box (box (make-empty-accumulator)))
 
   ;; v0.12.3 Wave 0.1: Error boundary — emit cleanup events on provider crash.
   ;; Without this, a mid-stream exception leaves TUI in busy?=#t forever.
@@ -189,7 +111,6 @@
                    #:state state)))
         (unless (> (unbox chunk-count) limit)
           (streaming-message-append-chunk! sm chunk)
-          (set-box! acc-box (process-chunk chunk (unbox acc-box)))
           (when (stream-chunk-delta-text chunk)
             ;; Emit message.start on first text delta
             (unless (streaming-message-message-started? sm)

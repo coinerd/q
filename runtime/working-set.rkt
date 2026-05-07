@@ -76,13 +76,23 @@
 (define (working-set-enforce-budget! ws)
   (define max-e (working-set-max-entries ws))
   (define max-t (working-set-max-tokens ws))
-  (let loop ([entries (working-set-entries ws)])
-    (define count (length entries))
-    (define tokens (for/sum ([e (in-list entries)]) (ws-entry-token-estimate e)))
+  ;; Single-pass: find the largest prefix that fits both budgets.
+  ;; Previous version used drop-right in a loop — O(n²).
+  (let loop ([entries (working-set-entries ws)]
+             [acc '()]
+             [count 0]
+             [tokens 0])
     (cond
-      ;; Evict oldest (last in list)
-      [(or (> count max-e) (> tokens max-t)) (loop (drop-right entries 1))]
-      [else (set-working-set-entries! ws entries)])))
+      [(null? entries) (set-working-set-entries! ws (reverse acc))]
+      [else
+       (define e (car entries))
+       (define new-count (add1 count))
+       (define new-tokens (+ tokens (ws-entry-token-estimate e)))
+       (cond
+         [(and (<= new-count max-e) (<= new-tokens max-t))
+          (loop (cdr entries) (cons e acc) new-count new-tokens)]
+         ;; Budget would be exceeded — stop here
+         [else (set-working-set-entries! ws (reverse acc))])])))
 
 ;; ────────────────────────────────────────────────────────────
 ;; Tool call processing
