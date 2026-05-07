@@ -25,6 +25,7 @@
          valid-api-message-sequence?
          merge-consecutive-roles
          build-raw-messages
+         classify-hook-result
          handle-hook-result)
 
 ;; ============================================================
@@ -184,14 +185,25 @@
 ;; Match-based hook dispatch (v0.29.1: §10 Match Dispatch)
 ;; ============================================================
 
-(define (handle-hook-result result on-block on-continue #:on-amend [on-amend #f])
+;; v0.32.4: Data-return replacement for CPS handle-hook-result.
+;; Returns a discriminated union: (list 'block payload), (list 'amend payload), or 'pass.
+;; Callers use `match` instead of callbacks.
+(define (classify-hook-result result)
   (cond
-    [(not (hook-result? result)) (on-continue)]
+    [(not (hook-result? result)) 'pass]
     [else
      (match (hook-result-action result)
-       ['block (on-block (hook-result-payload result))]
-       ['amend
-        (when on-amend
-          (on-amend (hook-result-payload result)))
-        (on-continue)]
-       [_ (on-continue)])]))
+       ['block (list 'block (hook-result-payload result))]
+       ['amend (list 'amend (hook-result-payload result))]
+       [_ 'pass])]))
+
+;; DEPRECATED (v0.32.4): CPS-style hook dispatch. Use classify-hook-result + match instead.
+;; Kept for backward compatibility with loop-stream.rkt migration.
+(define (handle-hook-result result on-block on-continue #:on-amend [on-amend #f])
+  (match (classify-hook-result result)
+    [(list 'block payload) (on-block payload)]
+    [(list 'amend payload)
+     (when on-amend
+       (on-amend payload))
+     (on-continue)]
+    ['pass (on-continue)]))
