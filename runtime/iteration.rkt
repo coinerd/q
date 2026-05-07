@@ -156,10 +156,11 @@
          ;; v0.29.1: Pure decision function exports
          (struct-out iteration-ctx)
          known-termination-reasons
-         ;; v0.33.1 W0: Pure transition functions (RA-03)
+         ;; v0.33.1: Pure transition functions + interpreter (RA-03)
          (struct-out step-result)
          compute-step-result
-         compute-termination)
+         compute-termination
+         interpret-step)
 
 ;; ============================================================
 ;; Pure decision function (v0.29.1: §10 Match Dispatch, §2 Pure/Effect)
@@ -510,8 +511,104 @@
         result)))
 
 ;; ============================================================
+;; interpret-step (v0.33.1 W1 — RA-03)
+;;
+;; Effectful interpreter that executes a step-result from compute-step-result.
+;; This is the "do it" half of the interpreter pattern — all I/O, mutation,
+;; and event emission happens here. The pure "what to do" is compute-step-result.
+;; ============================================================
+
+(define (interpret-step step-res
+                        result
+                        new-msgs
+                        infra
+                        counters
+                        ws
+                        config
+                        sess
+                        max-iterations
+                        max-iterations-hard
+                        steering-queue
+                        follow-up-mode
+                        on-recurse)
+  (define action (step-result-action step-res))
+  (match action
+    ['stop
+     (handle-stop-action result
+                         new-msgs
+                         infra
+                         counters
+                         ws
+                         config
+                         steering-queue
+                         follow-up-mode
+                         on-recurse)]
+    ['stop-hard-limit
+     (append-entries! (loop-infra-log-path infra) new-msgs)
+     (emit-session-event! (loop-infra-bus infra)
+                          (loop-infra-session-id infra)
+                          "runtime.error"
+                          (assert-payload "runtime.error"
+                                          (hasheq 'error "max-iterations-exceeded"
+                                                  'iteration (loop-counters-iteration counters)
+                                                  'maxIterations max-iterations-hard)
+                                          error-detail-payload/c))
+     (make-loop-result new-msgs
+                       'max-iterations-exceeded
+                       (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
+    ['stop-soft-limit
+     (append-entries! (loop-infra-log-path infra) new-msgs)
+     (emit-session-event! (loop-infra-bus infra)
+                          (loop-infra-session-id infra)
+                          "iteration.soft-warning"
+                          (hasheq 'iteration (add1 (loop-counters-iteration counters))
+                                  'soft-limit max-iterations
+                                  'hard-limit max-iterations-hard
+                                  'remaining (- max-iterations-hard
+                                               (add1 (loop-counters-iteration counters)))))
+     (define updated-ctx (process-tool-results new-msgs infra config ws))
+     (define ctx-after-budget
+       (if sess
+           (maybe-compact-mid-turn sess updated-ctx
+                                   (loop-infra-bus infra)
+                                   (loop-infra-session-id infra)
+                                   config)
+           (begin
+             (estimate-mid-turn-tokens updated-ctx
+                                       (loop-infra-bus infra)
+                                       (loop-infra-session-id infra)
+                                       config)
+             updated-ctx)))
+     (on-recurse ctx-after-budget
+                 (struct-copy loop-counters counters
+                              [iteration (add1 (loop-counters-iteration counters))]
+                              [consecutive-tool-count (add1 (loop-counters-consecutive-tool-count counters))]
+                              [stall-retry-count 0])
+                 ws)]
+    ['continue
+     (append-entries! (loop-infra-log-path infra) new-msgs)
+     (define updated-ctx (process-tool-results new-msgs infra config ws))
+     (define new-counters (step-result-new-counters step-res))
+     ;; v0.28.22 W1: exploration loop detection
+     (define loop-warning (detect-exploration-loop (loop-counters-recent-tool-names new-counters)))
+     (when loop-warning
+       (emit-session-event! (loop-infra-bus infra)
+                            (loop-infra-session-id infra)
+                            "iteration.exploration-loop"
+                            (hasheq 'pattern loop-warning
+                                    'recent-tools (loop-counters-recent-tool-names new-counters)
+                                    'iteration (loop-counters-iteration counters))))
+     (on-recurse updated-ctx
+                 (struct-copy loop-counters new-counters
+                              [iteration (add1 (loop-counters-iteration counters))]
+                              [consecutive-tool-count (add1 (loop-counters-consecutive-tool-count counters))]
+                              [stall-retry-count 0])
+                 ws)]))
+
+;; ============================================================
 ;; dispatch-loop-action: extracted match block from run-iteration-loop
 ;; v0.29.16: Refactored from 26→13 params using loop-infra + loop-counters structs
+;; v0.33.1 W1: Now delegates to interpret-step for effectful operations
 ;; ============================================================
 
 (define (dispatch-loop-action action
@@ -758,28 +855,30 @@
                                          'max_iterations_hard
                                          max-iterations-hard)
                                  iteration-decision-payload/c))
-                (define action
-                  (decide-next-action (iteration-ctx (loop-counters-iteration counters)
-                                                     (loop-counters-consecutive-tool-count counters)
-                                                     (loop-counters-explore-count counters)
-                                                     max-iterations
-                                                     max-iterations-hard)
-                                      result))
-                (dispatch-loop-action action
-                                      result
-                                      new-msgs
-                                      (struct-copy loop-infra infra [ctx ctx-with-injected])
-                                      counters
-                                      ws
-                                      config
-                                      sess
-                                      max-iterations
-                                      max-iterations-hard
-                                      steering-queue
-                                      follow-up-mode
-                                      ;; on-recurse: callback for recursive loop cases
-                                      (lambda (new-ctx new-counters ws2)
-                                        (loop new-ctx new-counters ws2)))])])))))
+                ;; Compute next step (pure) then interpret it (effectful)
+                (define step-res
+                  (compute-step-result (iteration-ctx (loop-counters-iteration counters)
+                                                      (loop-counters-consecutive-tool-count counters)
+                                                      (loop-counters-explore-count counters)
+                                                      max-iterations
+                                                      max-iterations-hard)
+                                       result
+                                       counters))
+                (interpret-step step-res
+                                result
+                                new-msgs
+                                (struct-copy loop-infra infra [ctx ctx-with-injected])
+                                counters
+                                ws
+                                config
+                                sess
+                                max-iterations
+                                max-iterations-hard
+                                steering-queue
+                                follow-up-mode
+                                ;; on-recurse: callback for recursive loop cases
+                                (lambda (new-ctx new-counters ws2)
+                                  (loop new-ctx new-counters ws2)))])])))))
 
 ;; ============================================================
 ;; for-testing submodule: expose internals for unit testing
@@ -788,9 +887,13 @@
 (module+ for-testing
   (provide dispatch-loop-action
            handle-stop-action
+           interpret-step
            compute-next-counters
            process-tool-results ;; NOTE: requires tool-coordinator mock for isolated testing
            decide-next-action
            check-cancellation
-           iteration-ctx))
+           compute-step-result
+           compute-termination
+           iteration-ctx
+           step-result))
 ;; v0.31.x milestone placeholder
