@@ -9,7 +9,7 @@
 (require rackunit
          racket/hash
          ;; Import the registry
-         (only-in "../agent/event-emitter.rkt" struct-field-names)
+         (only-in "../agent/event-emitter.rkt" get-struct-field-names)
          ;; Import all *-event-fields constants from each sub-module
          (only-in "../agent/event-structs/turn-events.rkt"
                   turn-start-event-fields
@@ -124,29 +124,20 @@
                      stream-tool-call-started-event
                      stream-assistant-msg-completed-event))
 
-(test-case "all event types registered in struct-field-names"
+(test-case "all event types registered in get-struct-field-names"
   (define missing
     (for/list ([name (in-list expected-event-names)]
-               #:unless (hash-has-key? struct-field-names name))
+               #:unless (not (null? (get-struct-field-names name))))
       name))
   (check-equal?
    missing
    '()
-   (format "Missing ~a event types from struct-field-names registry: ~a" (length missing) missing)))
+   (format "Missing ~a event types from get-struct-field-names: ~a" (length missing) missing)))
 
-(test-case "registry has no extra unknown event types"
-  (define registry-keys (hash-keys struct-field-names))
-  (define extra
-    (for/list ([key (in-list registry-keys)]
-               #:unless (member key expected-event-names))
-      key))
-  ;; Extra keys are not an error (forward-compat), just informational
-  ;; Uncomment the following to enforce exact match:
-  ;; (check-equal? extra '() (format "Extra event types in registry: ~a" extra))
-  (void))
+(test-case "get-struct-field-names returns non-empty for all known types"
+  (for ([name (in-list expected-event-names)])
+    (check-true (not (null? (get-struct-field-names name)))
+                (format "~a should have field names" name))))
 
-(test-case "registry count matches expected count"
-  (check >=
-         (hash-count struct-field-names)
-         (length expected-event-names)
-         "Registry should have at least as many entries as known event types"))
+(test-case "get-struct-field-names returns empty for unknown types"
+  (check-equal? (get-struct-field-names 'unknown-event-type) '()))
