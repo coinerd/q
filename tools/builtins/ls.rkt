@@ -1,14 +1,17 @@
 #lang racket/base
 
+;; tools/builtins/ls.rkt — Directory listing tool
+;;
+;; v0.33.2 W1: Converted to define-tool macro.
+
 (require racket/file
          racket/format
          racket/list
          (only-in "../tool.rkt" make-success-result make-error-result)
+         (only-in "../define-tool.rkt" define-tool)
          (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/path-filters.rkt" hidden-name?)
          (only-in "../../util/path-helpers.rkt" expand-home-path))
-
-(provide tool-ls)
 
 ;; --------------------------------------------------
 ;; Entry classification
@@ -70,10 +73,10 @@
   (format "~a ~a ~a" (type-indicator type) size-str name))
 
 ;; --------------------------------------------------
-;; Main tool function
+;; Handler function
 ;; --------------------------------------------------
 
-(define (tool-ls args [exec-ctx #f])
+(define (ls-handler args [exec-ctx #f])
   ;; (safe-mode path check is done by scheduler, not here)
   (define raw-path (hash-ref args 'path #f))
   (define path-str (and raw-path (expand-home-path raw-path)))
@@ -131,3 +134,19 @@
                                   dir-count
                                   'files
                                   file-count))]))
+
+;; --------------------------------------------------
+;; Tool definition via define-tool macro
+;; --------------------------------------------------
+
+(define-tool ls
+  #:description "List directory contents with optional long format, hidden files, and sorting."
+  #:required ("path")
+  #:properties
+    [(path "string" "Directory to list")
+     (all? "boolean" "Show hidden files")
+     (long? "boolean" "Long format with size/type")
+     (sort-by "string" "Sort by: name, size, or date")]
+  ls-handler)
+
+(provide ls)
