@@ -19,21 +19,12 @@
          racket/port
          json
          (only-in racket/string string-join)
-         "../skills/types.rkt")
+         "../skills/types.rkt"
+         "helpers/fixtures.rkt")
 
 ;; ============================================================
-;; Helpers — temp directory fixtures
+;; Helpers — .q/ directory tree setup
 ;; ============================================================
-
-(define (make-temp-dir)
-  (make-temporary-file "q-resload-~a" 'directory))
-
-(define (with-temp-dir thunk)
-  (define dir (make-temp-dir))
-  (dynamic-wind
-    void
-    (λ () (thunk dir))
-    (λ () (delete-directory/files dir #:must-exist? #f))))
 
 ;; Create a .q/ directory tree inside parent with optional resources
 (define (setup-q-dir! parent

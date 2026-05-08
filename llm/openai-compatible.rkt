@@ -131,32 +131,6 @@
                               (lambda (sl rb) (check-provider-status! "OpenAI" sl rb))))
 
 ;; ============================================================
-;; HTTP status check helper
-;; ============================================================
-
-(define (extract-error-message jsexpr)
-  ;; Extract a readable error message from a JSON error response.
-  ;; Tries error.message, then error.code, then message, falls back to #f.
-  (cond
-    [(not (hash? jsexpr)) #f]
-    [(hash-has-key? jsexpr 'error)
-     (define err (hash-ref jsexpr 'error))
-     (cond
-       [(hash? err)
-        (cond
-          [(hash-has-key? err 'message)
-           (define msg (hash-ref err 'message))
-           (if (string? msg) msg #f)]
-          [(hash-has-key? err 'code) (format "Error code: ~a" (hash-ref err 'code))]
-          [else #f])]
-       [(string? err) err]
-       [else #f])]
-    [(hash-has-key? jsexpr 'message)
-     (define msg (hash-ref jsexpr 'message))
-     (if (string? msg) msg #f)]
-    [else #f]))
-
-;; ============================================================
 ;; Provider constructor
 ;; ============================================================
 

@@ -141,17 +141,6 @@
   (check-equal? test-multi-opt-event-fields '(x y z)))
 
 ;; ============================================================
-;; Test: deprecated define-event still works
-;; ============================================================
-(define-event test-legacy-event (x y))
-
-(test-case "define-event (deprecated): still works"
-  (define evt (test-legacy-event 1 2))
-  (check-true (test-legacy-event? evt))
-  (check-equal? (test-legacy-event-x evt) 1)
-  (check-equal? (test-legacy-event-y evt) 2))
-
-;; ============================================================
 ;; Integration: verify real event-struct modules
 ;; ============================================================
 (require "../agent/event-structs/turn-events.rkt"
