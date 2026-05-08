@@ -18,6 +18,11 @@ Each ADR describes a decision that was made, the context that led to it, and its
 | [0008](0008-safe-mode-enforcement.md) | Safe-mode enforcement | Accepted |
 | [0009](0009-credential-redaction.md) | Credential redaction | Accepted |
 | [0010](0010-streaming-port-lifecycle.md) | Streaming port lifecycle | Accepted |
+| [0011](0011-gsd-state-machine-rewrite.md) | GSD state machine & architecture | Accepted |
+| [0012](0012-context-manager-strategy.md) | Context manager strategy | Accepted |
+| [0013](0013-typed-racket-optional-args.md) | Typed Racket optional positional arguments | Accepted |
+| [0014](0014-typed-racket-migration-strategy.md) | Typed Racket migration strategy | Active |
+| [0015](0015-tr-boundary-callback-pattern.md) | TR boundary callback pattern for opaque values | Accepted |
 
 ## Conventions
 
