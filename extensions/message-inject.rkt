@@ -26,8 +26,7 @@
 (provide (contract-out [inject-system-message! (-> event-bus? string? string? event?)]
                        [inject-user-message! (-> event-bus? string? string? event?)]
                        [inject-assistant-message! (-> event-bus? string? string? event?)])
-         ;; Low-level: create injection message
-         make-injection-message
+         ;; v0.33.7 W0a (N-S01): unexported make-injection-message — zero external callers
          ;; Event topic constant
          injection-event-topic)
 
