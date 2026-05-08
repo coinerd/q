@@ -39,12 +39,9 @@
 ;; cross TR boundary as Any (any-wrap/c limitation). Instead, callers pass an
 ;; emit-event callback that wraps the event bus internally.
 
-(require/typed "../session-compaction.rkt"
-               [compact-context-mid-turn (-> Any (Listof Any) (Listof Any))])
-
-;; v0.33.5 W0a NOTE: compact-context-mid-turn is imported but only used as default
-;; for #:compact-proc. Callers from untyped code should pass #:compact-proc explicitly
-;; to avoid TR any-wrap/c issues with opaque session structs.
+;; v0.33.7 W0a (N-A01): Removed dead compact-context-mid-turn import.
+;; Was only used as default for #:compact-proc before v0.33.5 W0a replaced
+;; the default with raise-arguments-error. No callers reference it.
 
 (require/typed "../../llm/token-budget.rkt"
                [estimate-context-tokens (-> (Listof Any) Nonnegative-Integer)])
@@ -132,27 +129,33 @@
          (raise-arguments-error
           'maybe-compact-mid-turn
           "#:compact-proc is required; default fallback removed to avoid any-wrap/c issues"
-          "sess" sess))]))
+          "sess"
+          sess))]))
 
 ;; ── Backward-compat wrapper ──
+;; v0.33.7 W0a (N-A02): Added #:compact-proc passthrough so the #:session
+;; path doesn't silently fail when compact-proc is needed.
 (: check-mid-turn-budget!
    (->* ((Listof Any) (U String #f) (HashTable Symbol Any))
         (#:emit-event (U (-> String Any Any) #f)
                       #:estimate-tokens (-> (Listof Any) Nonnegative-Integer)
-                      #:session (U Any #f))
+                      #:session (U Any #f)
+                      #:compact-proc (U (-> (Listof Any) (Listof Any)) #f))
         Any))
 (define (check-mid-turn-budget! ctx
                                 session-id
                                 config
                                 #:emit-event [emit-event #f]
                                 #:estimate-tokens [estimate-tokens estimate-context-tokens]
-                                #:session [sess #f])
+                                #:session [sess #f]
+                                #:compact-proc [compact-proc #f])
   (if sess
       (maybe-compact-mid-turn sess
                               ctx
                               session-id
                               config
                               #:emit-event emit-event
+                              #:compact-proc compact-proc
                               #:estimate-tokens estimate-tokens)
       (estimate-mid-turn-tokens ctx
                                 session-id
