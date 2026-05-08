@@ -31,7 +31,7 @@
     ;; T7-1: Under budget — returns token estimate
     (test-case "under budget returns estimated token count"
       (define ctx (make-mock-context 3))
-      (define result (check-mid-turn-budget! ctx #f #f (hasheq 'max-context-tokens 128000)))
+      (define result (check-mid-turn-budget! ctx #f (hasheq 'max-context-tokens 128000)))
       (check-true (integer? result) "returns estimated token count")
       (check-true (> result 0) "has positive token estimate"))
 

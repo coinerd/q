@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.33.6 — 2026-05-07
+
+### Hotfix — Critical Audit Findings from v0.33.5
+
+**Goal:** Fix 6 critical findings from `.planning/AUDIT-v0.33.5-IMPLEMENTATION.md`.
+
+**T-01 — Fix `test-mid-turn-compaction.rkt` API mismatch:**
+- Changed 4-arg `check-mid-turn-budget!` call to 3-arg (removed extra `#f` positional arg)
+
+**T-02 — Fix `test-iteration-edge-cases.rkt` set/list mismatch:**
+- Replaced `racket/set` usage with plain lists (`'()` instead of `(set)`)
+- Changed `set-member?` → `member` (with correct argument order)
+- Changed `set-count` → `length`
+- Changed `check-true` → `check-not-false` for `member` returns (list is truthy, not `#t`)
+
+**S-01 — Fix `event-bus.rkt` truthiness filter bug:**
+- Changed `(cons #f #t)` pattern to `(cons #f (not #f))` in `publish!`
+- Previously, filter predicates returning truthy non-`#t` values (e.g. numbers, strings) silently dropped events
+
+**A-02 — Remove `any-wrap/c` footgun in `maybe-compact-mid-turn`:**
+- Replaced default `#:compact-proc` fallback with explicit error
+- Callers must now always pass `#:compact-proc`; avoids opaque struct crossing TR boundary
+
+**Q-01 — Delete dead module `util/contracts.rkt`:**
+- Module was empty (only `(provide)`) with zero consumers
+
+**Infrastructure:**
+- Git tag `v0.33.5` created for the release
+- Planning artifacts (`PLAN.md`, `STATE.md`) updated to reflect v0.33.5 completion
+- Version bumped to 0.33.6
+
+**Verification:** 488/488 test files, 2086 tests, 0 failures. Lint: 18/18 pass.
+
+---
+
 ## v0.33.5 — 2026-05-07
 
 ### Audit Remediation (v0.33.5)

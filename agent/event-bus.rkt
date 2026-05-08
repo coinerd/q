@@ -198,7 +198,7 @@
       (define pred (subscription-filter s))
       (match (cons (circuit-broken? sub-id) (or (not pred) (pred evt)))
         [(cons #t _) (void)] ; circuit broken
-        [(cons #f #t) ; not broken and predicate true (or no predicate)
+        [(cons #f (not #f)) ; not broken and predicate truthy (or no predicate)
          (with-handlers ([exn:fail? (lambda (exn)
                                       (record-failure! sub-id)
                                       (err-handler evt (subscription-handler s) exn))])

@@ -127,7 +127,12 @@
        (emit-event
         "context.mid-turn-over-budget"
         (hasheq 'estimated-tokens estimated 'budget budget-threshold 'max-tokens max-tokens)))
-     ((or compact-proc (lambda ([msgs : (Listof Any)]) (compact-context-mid-turn sess msgs))) ctx)]))
+     (if compact-proc
+         (compact-proc ctx)
+         (raise-arguments-error
+          'maybe-compact-mid-turn
+          "#:compact-proc is required; default fallback removed to avoid any-wrap/c issues"
+          "sess" sess))]))
 
 ;; ── Backward-compat wrapper ──
 (: check-mid-turn-budget!

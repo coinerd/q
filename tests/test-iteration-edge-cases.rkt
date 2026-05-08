@@ -9,7 +9,6 @@
 ;; - v0.19.10: spiral breaker event structure
 
 (require rackunit
-         racket/set
          "../runtime/iteration.rkt"
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt")
@@ -60,37 +59,37 @@
 
 (test-case "update-seen-paths resets counter on write tool"
   (define-values (seen inc?)
-    (update-seen-paths (list (make-tool-call "tc1" "write" (hasheq 'path "/tmp/x"))) (set)))
-  (check-equal? (set-count seen) 0 "seen-paths reset on write")
+    (update-seen-paths (list (make-tool-call "tc1" "write" (hasheq 'path "/tmp/x"))) '()))
+  (check-equal? (length seen) 0 "seen-paths reset on write")
   (check-false inc? "should not increment on write"))
 
 (test-case "update-seen-paths resets counter on planning-write (extension tool)"
   (define-values (seen inc?)
-    (update-seen-paths (list (make-tool-call "tc2" "planning-write" (hasheq))) (set)))
-  (check-equal? (set-count seen) 0 "seen-paths reset on planning-write")
+    (update-seen-paths (list (make-tool-call "tc2" "planning-write" (hasheq))) '()))
+  (check-equal? (length seen) 0 "seen-paths reset on planning-write")
   (check-false inc? "should not increment on planning-write"))
 
 (test-case "update-seen-paths resets counter on bash tool"
   (define-values (seen inc?)
-    (update-seen-paths (list (make-tool-call "tc3" "bash" (hasheq 'command "mkdir"))) (set)))
-  (check-equal? (set-count seen) 0 "seen-paths reset on bash")
+    (update-seen-paths (list (make-tool-call "tc3" "bash" (hasheq 'command "mkdir"))) '()))
+  (check-equal? (length seen) 0 "seen-paths reset on bash")
   (check-false inc? "should not increment on bash"))
 
 (test-case "update-seen-paths increments on read tool with new path"
   (define-values (seen inc?)
-    (update-seen-paths (list (make-tool-call "tc4" "read" (hasheq 'path "/tmp/new.rkt"))) (set)))
-  (check-true (set-member? seen "/tmp/new.rkt") "path added to seen set")
+    (update-seen-paths (list (make-tool-call "tc4" "read" (hasheq 'path "/tmp/new.rkt"))) '()))
+  (check-not-false (member "/tmp/new.rkt" seen) "path added to seen set")
   (check-true inc? "should increment on new read path"))
 
 (test-case "update-seen-paths resets counter on edit tool"
-  (define-values (seen inc?) (update-seen-paths (list (make-tool-call "tc5" "edit" (hasheq))) (set)))
-  (check-equal? (set-count seen) 0 "seen-paths reset on edit")
+  (define-values (seen inc?) (update-seen-paths (list (make-tool-call "tc5" "edit" (hasheq))) '()))
+  (check-equal? (length seen) 0 "seen-paths reset on edit")
   (check-false inc? "should not increment on edit"))
 
 (test-case "update-seen-paths resets counter on gh-issue (extension tool)"
   (define-values (seen inc?)
-    (update-seen-paths (list (make-tool-call "tc6" "gh-issue" (hasheq))) (set)))
-  (check-equal? (set-count seen) 0 "seen-paths reset on gh-issue")
+    (update-seen-paths (list (make-tool-call "tc6" "gh-issue" (hasheq))) '()))
+  (check-equal? (length seen) 0 "seen-paths reset on gh-issue")
   (check-false inc? "should not increment on gh-issue"))
 
 ;; ============================================================
@@ -122,14 +121,14 @@
   (define-values (seen inc?)
     (update-seen-paths (list (make-tool-call "tc1" "read" (hasheq 'path "/tmp/a.rkt"))
                              (make-tool-call "tc2" "read" (hasheq 'path "/tmp/b.rkt")))
-                       (set)))
-  (check-true (set-member? seen "/tmp/a.rkt"))
-  (check-true (set-member? seen "/tmp/b.rkt"))
+                       '()))
+  (check-not-false (member "/tmp/a.rkt" seen))
+  (check-not-false (member "/tmp/b.rkt" seen))
   (check-true inc? "should increment when any new read path"))
 
 (test-case "update-seen-paths: read of already-seen path does not increment"
   (define-values (seen inc?)
     (update-seen-paths (list (make-tool-call "tc1" "read" (hasheq 'path "/tmp/old.rkt")))
-                       (set "/tmp/old.rkt")))
-  (check-true (set-member? seen "/tmp/old.rkt"))
+                       '("/tmp/old.rkt")))
+  (check-not-false (member "/tmp/old.rkt" seen))
   (check-false inc? "should not increment for already-seen path"))
