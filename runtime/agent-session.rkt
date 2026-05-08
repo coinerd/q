@@ -94,16 +94,10 @@
          cycle-model!
          agent-session-system-instructions
          agent-session-compacting?
-         set-agent-session-compacting?!
          agent-session-last-compaction-time
-         set-agent-session-last-compaction-time!
          agent-session-persisted?
-         set-agent-session-persisted?!
          agent-session-pending-entries
-         set-agent-session-pending-entries!
          agent-session-prompt-running?
-         set-agent-session-prompt-running?!
-         set-agent-session-config!
          ensure-persisted!
          buffer-or-append!
          (contract-out [make-agent-session (-> any/c agent-session?)]

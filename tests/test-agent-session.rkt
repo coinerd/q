@@ -9,6 +9,7 @@
 (require rackunit
          racket/file
          "../runtime/agent-session.rkt"
+         "../runtime/session-types.rkt"
          "../agent/event-bus.rkt"
          "../tools/tool.rkt")
 
