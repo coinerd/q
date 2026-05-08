@@ -38,7 +38,9 @@
            (->* (symbol? any/c extension-registry?) (#:ctx (or/c extension-ctx? #f)) hook-result?)])
          current-hook-timeout-ms
          critical-hook?
-         critical-hooks)
+         critical-hooks
+         ;; Hook block guard helper (RA-31)
+         with-hook-block-guard)
 
 ;; ============================================================
 ;; Hook criticality classification (#670, #671)
@@ -113,4 +115,23 @@
                   (error-default-thunk))))
   ;; Validate hook result
   (with-hook-validation (if (symbol? ext-name) ext-name (string->symbol ext-name)) hook-point raw-result error-default-thunk))
+;; ============================================================
+;; with-hook-block-guard helper (RA-31)
+;; ============================================================
+
+;; with-hook-block-guard :
+;;   extension-registry? symbol? any/c (-> any/c any) (-> any) -> any
+;;
+;; Dispatches a hook and branches on the result action.
+;; If the hook returns 'block, calls on-block with the block payload.
+;; Otherwise calls on-pass with no arguments.
+;;
+;; This extracts the repeated hook-dispatch/classify/match pattern
+;; that appears in 3+ sites across the codebase.
+(define (with-hook-block-guard registry hook-point payload on-block on-pass)
+  (define result (dispatch-hooks hook-point payload registry))
+  (match (hook-result-action result)
+    ['block (on-block (hook-result-payload result))]
+    [_ (on-pass)]))
+
 ;; v0.31.x milestone placeholder
