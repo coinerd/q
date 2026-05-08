@@ -8,7 +8,7 @@
   (define state (make-initial-gsd-state))
   ;; set mode to current-mode
   (define state2 (struct-copy gsd-runtime-state state [mode current-mode]))
-  (define result (compute-next-gsm-state state2 target))
+  (define-values (result _) (compute-next-gsm-state state2 target))
   (check-eq? (ok? result) expected-ok?))
 
 (test-case "idle -> exploring is valid"
