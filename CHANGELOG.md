@@ -1,5 +1,82 @@
 # Changelog
 
+
+## v0.34.4 — 2026-05-08
+
+### Session Boundary Encapsulation (RA-05)
+
+**Goal:** Fix leaky session boundary between façade and execution pipeline.
+
+- Removed 6 raw `set-agent-session-*!` mutators from `runtime/agent-session.rkt` public API:
+  - `set-agent-session-compacting?!`, `set-agent-session-last-compaction-time!`
+  - `set-agent-session-persisted?!`, `set-agent-session-pending-entries!`
+  - `set-agent-session-prompt-running?!`, `set-agent-session-config!`
+- Internal modules continue accessing mutators via `session-types.rkt` `struct-out`
+- Test files updated to import `session-types.rkt` directly for internal mutator access
+
+**Verification:** 488/488 test files, 2088 tests pass. Lint: 18/18 pass.
+
+## v0.34.3 — 2026-05-08
+
+### State Machine Purity Fix (RA-04)
+
+**Goal:** Make `compute-next-gsm-state` actually return its computed state.
+
+- `compute-next-gsm-state` now returns `(values result new-state)` instead of discarding state
+- `gsm-transition!` consumes returned `new-state` directly, eliminating duplicate logic
+- Invalid transitions return `(values err-result current-state)` preserving unchanged state
+- Added 4 new tests verifying returned state has correct mode/executor
+
+**Verification:** 488/488 test files, 2088 tests pass.
+
+## v0.34.2 — 2026-05-08
+
+### Error Fixes + Structured Errors + Test Coverage (RA-02, RA-08, RA-14, RA-16, RA-17, RA-26)
+
+**W0a — Error fixes + structured errors (#3954):**
+- RA-02: `ensure-hash-args` raises `tool-error` on parse failure; added `#:graceful?` parameter
+- RA-14: Migrated 20 bare `(error ...)` calls across 12 extension files to `raise-extension-error`
+- RA-16: `validate-api-key!` now uses `raise-credential-error`
+- RA-17: Fixed O(n²) `in-memory-append!` by prepending with `cons`; `in-memory-load` reverses
+
+**W0b — Test coverage + dedup elimination (#3955):**
+- RA-08: Removed `dispatch-loop-action` duplicate (~114 lines) from `runtime/iteration.rkt`
+- RA-26: Added 15 pure FSM tests to `tests/test-state-machine-pure.rkt`
+
+**Verification:** 488/488 test files, 2088 tests pass.
+
+## v0.34.1 — 2026-05-08
+
+### Tool + Message Contracts + Macro Tests + Hook Helper (RA-01, RA-06, RA-13, RA-25, RA-31)
+
+**W0a — Tool + message constructor contracts (#3952):**
+- RA-01: Tightened `make-tool-result` contract in `tools/tool-struct.rkt`
+- RA-06: Added `make-message` contract-out in `util/message.rkt`
+- RA-13: Tightened `run-iteration-loop` input contract to `(listof message?)`
+
+**W0b — Macro expansion tests + hook helper (#3953):**
+- RA-25: Added `define-typed-event` and `define-tool` macro expansion structure tests
+- RA-31: Extracted `with-hook-block-guard` to `extensions/hooks.rkt`
+
+**Verification:** 488/488 test files, 2088 tests pass.
+
+## v0.34.0 — 2026-05-08
+
+### Dead Code Removal + Trivial Contracts (RA-03, RA-07, RA-10, RA-22, RA-23, RA-24, RA-33, RA-37, RA-39)
+
+**W0a — Dead code removal + trivial contracts (#3950):**
+- RA-03: Extracted pure transition functions + interpreter pattern refactor
+- RA-07: Removed duplicate requires across 8 files
+- RA-10: Removed dead `define-event` macro and `util/event-macro.rkt` cleanup
+
+**W0b — Dedup, deprecation removal, contract fixes (#3951):**
+- RA-22: Removed `translate-stop-reason` contract tautology
+- RA-23: Consolidated `with-temp-dir` into `tests/helpers/fixtures.rkt`
+- RA-24: Removed deprecated `define-event` macro fully
+- RA-33, RA-37, RA-39: Various contract tightenings and doc fixes
+
+**Verification:** 488/488 test files, 2088 tests pass.
+
 ## v0.33.7 — 2026-05-08
 
 ### Deep Audit Remediation

@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.33.7
+v0.34.4
 
 ## Layer Diagram
 
@@ -34,7 +34,7 @@ v0.33.7
 └─────────────────────────────────────────────┘
 ```
 
-## Module Counts (387 source modules, ~52,400 LOC)
+## Module Counts (409 source modules, ~64,100 LOC)
 
 | Layer | Modules | Key Files |
 |-------|---------|-----------|
@@ -63,8 +63,8 @@ See `docs/architecture/dependency-policy.rktd` for layering rules and known viol
 ## Event System
 
 Two tiers:
-1. **Raw events**: `make-event` + `emit-event!` (legacy, being phased out)
-2. **Typed events**: 27 structs in `agent/event-structs/` + `emit-typed-event!` (v0.33.7+)
+1. **Raw events**: `make-event` + `emit-event!` (legacy, stable for interop)
+2. **Typed events**: 27 structs in `agent/event-structs/` + `emit-typed-event!` (introduced v0.33.7, stable)
 
 ## Testing
 
