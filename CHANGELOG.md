@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.33.7 — 2026-05-08
+
+### Deep Audit Remediation
+
+**Goal:** Address 12 actionable findings from 2nd-pass deep audit of v0.33.5/v0.33.6.
+
+**Source cleanup (W0a):**
+- N-A01: Removed dead `compact-context-mid-turn` import from `retry-policy.rkt`
+- N-A02: Added `#:compact-proc` passthrough to `check-mid-turn-budget!` backward-compat wrapper
+- N-S01: Unexported `make-injection-message` (zero external callers)
+
+**Test coverage (W0b):**
+- N-T01: Test `maybe-compact-mid-turn` error path when `#:compact-proc` is `#f`
+- N-T02: Test `check-mid-turn-budget!` emit-event callback exception propagation
+- N-T03: Event-bus regression test for non-boolean truthy filter predicates
+
+**Docs sync (W0c):**
+- N-D01: Updated README metrics table (source modules 408→409, lines 63889→64055)
+
+**Planning hygiene (W0d):**
+- N-M03: Git tag v0.33.6 created at `c1d402e`
+- N-M01/N-M02/N-M04/N-M06: Planning artifacts updated
+
 ## v0.33.6 — 2026-05-07
 
 ### Hotfix — Critical Audit Findings from v0.33.5
