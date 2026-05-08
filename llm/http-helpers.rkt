@@ -27,7 +27,8 @@
                 (#:timeout (or/c exact-positive-integer? #f) #:status-checker (or/c procedure? #f))
                 jsexpr?)]
           [check-provider-status! (-> string? (or/c bytes? string?) (or/c bytes? string?) void?)]
-          [translate-stop-reason (-> (or/c symbol? #f) (or/c string? symbol?) symbol?)]))
+          [extract-error-message (-> jsexpr? (or/c string? #f))]
+          [translate-stop-reason (-> (or/c symbol? #f) any/c symbol?)]))
 
 ;; ============================================================
 ;; Contracts

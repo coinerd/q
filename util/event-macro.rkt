@@ -20,23 +20,7 @@
                      syntax/parse)
          (only-in "../agent/event-structs/base.rkt" typed-event))
 
-(provide define-event
-         define-typed-event)
-
-;; ===========================================================
-;; define-event macro (DEPRECATED — use define-typed-event)
-;; ===========================================================
-
-(define-syntax (define-event stx)
-  (syntax-case stx ()
-    [(_ event-name (field ...))
-     #'(begin
-         (struct event-name (field ...) #:transparent)
-         (provide (struct-out event-name)))]
-    [(_ event-name parent (field ...))
-     #'(begin
-         (struct event-name parent (field ...) #:transparent)
-         (provide (struct-out event-name)))]))
+(provide define-typed-event)
 
 ;; ===========================================================
 ;; define-typed-event macro

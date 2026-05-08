@@ -22,7 +22,7 @@
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
-(require/typed racket/dict [dict-ref (->* (Any Symbol) (Any) Any)])
+(require/typed racket/dict [dict-ref (->* ((HashTable Symbol Any) Symbol) (Any) Any)])
 (require/typed "../auto-retry.rkt" [context-overflow-error? (-> Any Boolean)])
 
 (require/typed "../compactor.rkt"
@@ -31,7 +31,7 @@
                                                    [kept-messages : (Listof Any)])])
 
 (require/typed "../../util/protocol-types.rkt"
-               [message-content (-> Any Any)]
+               [message-content (-> Any (U String (Listof Any)))]
                [text-part? (-> Any Boolean)]
                [text-part-text (-> Any String)])
 

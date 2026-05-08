@@ -12,16 +12,15 @@
          with-env-var
          filter-session-info)
 
-;; Create a temporary directory, pass it to body, guarantee cleanup.
+;; Create a temporary directory, pass it to thunk, guarantee cleanup.
 ;; Uses dynamic-wind so cleanup runs even if the test throws.
-(define-syntax-rule (with-temp-dir dir-id body ...)
-  (let ([dir-id (make-temporary-file "q-test-~a" 'directory)])
-    (dynamic-wind void
-                  (lambda ()
-                    body ...)
-                  (lambda ()
-                    (when (directory-exists? dir-id)
-                      (delete-directory/files dir-id #:must-exist? #f))))))
+(define (with-temp-dir thunk)
+  (define dir (make-temporary-file "q-test-~a" 'directory))
+  (dynamic-wind void
+                (lambda () (thunk dir))
+                (lambda ()
+                  (when (directory-exists? dir)
+                    (delete-directory/files dir #:must-exist? #f)))))
 
 ;; Save current env var value, set new value, restore on exit.
 ;; Uses dynamic-wind so restoration happens even if the test throws.

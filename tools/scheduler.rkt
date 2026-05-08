@@ -21,6 +21,7 @@
                   tool-execute
                   make-tool
                   make-tool-registry
+                  tool-registry?
                   make-exec-context
                   register-tool!
                   lookup-tool

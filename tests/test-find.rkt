@@ -17,7 +17,8 @@
 ;; ============================================================
 
 (require (only-in "../tools/tool.rkt"
-                  tool-result-content tool-result-details tool-result-is-error?))
+                  tool-result-content tool-result-details tool-result-is-error?)
+         "helpers/fixtures.rkt")
 
 (define (result-content r)
   (define parts (tool-result-content r))
@@ -29,15 +30,6 @@
 
 (define (result-details r)    (tool-result-details r))
 (define (result-is-error? r)  (tool-result-is-error? r))
-
-(define (with-temp-dir thunk)
-  (define dir (make-temporary-file "q-find-test-~a" 'directory))
-  (dynamic-wind
-    void
-    (λ () (thunk dir))
-    (λ ()
-      (with-handlers ([exn:fail? void])
-        (delete-directory/files dir)))))
 
 (define (create-file dir name [content ""])
   (define f (build-path dir name))
