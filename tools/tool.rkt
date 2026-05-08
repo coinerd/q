@@ -49,7 +49,7 @@
 
          ;; ── Tool result (re-exported from agent/types.rkt) ──
          tool-result?
-         (contract-out [make-tool-result (-> any/c any/c any/c tool-result?)]
+         (contract-out [make-tool-result (-> any/c (or/c hash? #f) boolean? tool-result?)]
                        [make-error-result (-> string? tool-result?)]
                        [make-success-result (->* (any/c) (any/c) tool-result?)])
          tool-result-content

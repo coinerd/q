@@ -112,7 +112,7 @@
          (only-in "context-policy.rkt" estimate-message-tokens))
 
 (provide (contract-out [run-iteration-loop
-                        (->* (list? (or/c provider? #f)
+                        (->* ((listof message?) (or/c provider? #f)
                                     event-bus?
                                     (or/c tool-registry? #f)
                                     (or/c extension-registry? #f)
