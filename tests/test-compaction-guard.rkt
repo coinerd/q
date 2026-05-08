@@ -13,6 +13,7 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          "../runtime/agent-session.rkt"
+         "../runtime/session-types.rkt"
          "../runtime/session-store.rkt"
          "../runtime/compactor.rkt")
 

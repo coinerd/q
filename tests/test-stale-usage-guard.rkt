@@ -9,7 +9,8 @@
          rackunit/text-ui
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
-         "../runtime/agent-session.rkt")
+         "../runtime/agent-session.rkt"
+         "../runtime/session-types.rkt")
 
 (define (make-temp-dir)
   (make-temporary-file "q-stale-test-~a" 'directory))
