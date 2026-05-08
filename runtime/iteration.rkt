@@ -357,10 +357,10 @@
      (make-loop-result ctx 'completed (hasheq 'reason "graceful-shutdown" 'iteration iteration))]
     [else #f]))
 
-;; process-tool-results: Execute pending tool calls, update working set,
+;; execute-pending-tool-calls: Execute pending tool calls, update working set,
 ;; and compute new iteration counters. Shared by 'continue and 'stop-soft-limit.
 ;; Returns updated-ctx (with tool results appended).
-(define (process-tool-results new-msgs infra config ws)
+(define (execute-pending-tool-calls new-msgs infra config ws)
   (define updated-ctx
     (handle-tool-calls-pending new-msgs
                                (loop-infra-ctx infra)
@@ -567,7 +567,7 @@
                                   max-iterations-hard
                                   'remaining
                                   (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
-     (define updated-ctx (process-tool-results new-msgs infra config ws))
+     (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
      (define budget-config (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
      (define emit-fn
        (lambda (name payload)
@@ -596,7 +596,7 @@
                  ws)]
     ['continue
      (append-entries! (loop-infra-log-path infra) new-msgs)
-     (define updated-ctx (process-tool-results new-msgs infra config ws))
+     (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
      ;; v0.28.22 W1: exploration loop detection
      (define loop-warning
@@ -639,8 +639,8 @@
                               steering-queue
                               follow-up-mode
                               on-recurse)
-  (define (call-process-tool-results)
-    (process-tool-results new-msgs infra config ws))
+  (define (call-execute-pending-tool-calls)
+    (execute-pending-tool-calls new-msgs infra config ws))
   (match action
     ['stop
      (handle-stop-action result
@@ -681,7 +681,7 @@
                                   max-iterations-hard
                                   'remaining
                                   (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
-     (define updated-ctx (call-process-tool-results))
+     (define updated-ctx (call-execute-pending-tool-calls))
      (define budget-config (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
      (define emit-fn
        (lambda (name payload)
@@ -710,7 +710,7 @@
                  ws)]
     ['continue
      (append-entries! (loop-infra-log-path infra) new-msgs)
-     (define updated-ctx (call-process-tool-results))
+     (define updated-ctx (call-execute-pending-tool-calls))
      (define new-counters (compute-next-counters counters new-msgs))
      ;; v0.28.22 W1: exploration loop detection
      (define loop-warning
@@ -906,7 +906,7 @@
            handle-stop-action
            interpret-step
            compute-next-counters
-           process-tool-results ;; NOTE: requires tool-coordinator mock for isolated testing
+           execute-pending-tool-calls ;; NOTE: requires tool-coordinator mock for isolated testing
            decide-next-action
            check-cancellation
            compute-step-result

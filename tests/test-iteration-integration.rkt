@@ -212,7 +212,7 @@
   (define ws (make-working-set))
   (define msgs (list (make-msg-with-tool-call "read" (hasheq 'path "/tmp/test.rkt"))))
   (define result (make-loop-result msgs 'tool-calls-pending (hasheq)))
-  ;; process-tool-results needs tool-coordinator; use empty msg list
+  ;; execute-pending-tool-calls needs tool-coordinator; use empty msg list
   ;; to avoid calling handle-tool-calls-pending with real tools
   (define result-no-msgs (make-loop-result '() 'tool-calls-pending (hasheq)))
   (define recurse-args-box (box #f))
