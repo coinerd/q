@@ -42,7 +42,7 @@
                                                #:render-result (or/c procedure? #f)
                                                #:prompt-guidelines (or/c string? #f))
                              tool?)]
-                       [validate-tool-args (-> tool? hash? any/c)])
+                       [validate-tool-args (-> tool? hash? boolean?)])
          merge-tool-lists
          validate-tool-schema
          format-tool-schema-hint
@@ -90,7 +90,7 @@
          make-tool-call
 
          ;; ── Tool-call argument validation ──
-         (all-from-out "../util/json-helpers.rkt")
+         ensure-hash-args
          json-serializable?
          validate-tool-result
 
@@ -115,7 +115,6 @@
 
 (define (emit-progress! ctx percentage message)
   (define cb (exec-context-progress-callback ctx))
-  exec-context-permission-config
   (when cb
     (cb percentage message)))
 
