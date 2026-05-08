@@ -9,7 +9,7 @@
 ;;   - all-known-event-types / event-name->tool-name (registry)
 
 (require racket/match
-         "../util/typed-event-predicates.rkt")
+         "event-structs/typed-event-predicates.rkt")
 
 (provide typed-event->jsexpr
          jsexpr->typed-event

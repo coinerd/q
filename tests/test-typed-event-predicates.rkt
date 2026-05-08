@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require rackunit
-         "../util/typed-event-predicates.rkt"
+         "../agent/event-structs/typed-event-predicates.rkt"
          "../agent/event-structs/turn-events.rkt"
          "../agent/event-structs/hook-events.rkt")
 

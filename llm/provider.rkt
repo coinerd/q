@@ -90,9 +90,9 @@
                   (yield ch))
                 (yield #f))]
     [else
-     (error 'stream-result->generator
-            "expected generator or list of stream-chunks, got: ~a"
-            result)]))
+     (raise-arguments-error 'stream-result->generator
+                            "expected generator or list of stream-chunks"
+                            "got" result)]))
 
 ;; ============================================================
 ;; Internal struct implementing gen:provider

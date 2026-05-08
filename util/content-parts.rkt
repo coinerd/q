@@ -63,7 +63,9 @@
              (tool-result-part-content cp)
              'isError
              (tool-result-part-is-error? cp))]
-    [else (error 'content-part->jsexpr "unknown content part type: ~a" cp)]))
+    [else (raise-arguments-error 'content-part->jsexpr
+                                 "unknown content part type"
+                                 "type" cp)]))
 
 ;; Deserialization
 (define (jsexpr->content-part h)
@@ -73,6 +75,8 @@
     [("tool-call") (make-tool-call-part (hash-ref h 'id) (hash-ref h 'name) (hash-ref h 'arguments))]
     [("tool-result")
      (make-tool-result-part (hash-ref h 'toolCallId) (hash-ref h 'content) (hash-ref h 'isError))]
-    [else (error 'jsexpr->content-part "unknown content part type: ~a" tp)]))
+    [else (raise-arguments-error 'jsexpr->content-part
+                                 "unknown content part type"
+                                 "type" tp)]))
 
 ;; Get the type tag from a content part (struct accessor from content-part)
