@@ -13,7 +13,8 @@
 ;; Extracted from github-integration.rkt to reduce its size (Q01).
 ;; Provides shell quoting, input validation, gh/git execution, and repo info.
 
-(require "../../util/error-helpers.rkt")
+(require "../../util/error-helpers.rkt"
+         (only-in "../../util/errors.rkt" raise-extension-error))
 (require racket/format
          racket/port
          racket/string
@@ -106,7 +107,7 @@
 (define (gh-exec-result . args)
   (define bin (gh-binary))
   (unless bin
-    (error 'gh "GitHub CLI not found"))
+    (raise-extension-error "GitHub CLI not found" 'github 'cli-check))
   (apply run-command bin args))
 
 (define (git-exec-result . args)

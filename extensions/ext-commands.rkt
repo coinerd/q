@@ -7,6 +7,7 @@
 ;; Extensions register commands which appear in the TUI command palette.
 
 (require racket/contract
+         (only-in "../util/errors.rkt" raise-extension-error)
          racket/list
          "context.rkt"
          "../util/command-types.rkt")
@@ -38,7 +39,7 @@
 (define (ext-register-command! ctx name summary category args-spec aliases)
   (define reg-hash (get-reg-hash ctx))
   (unless reg-hash
-    (error 'ext-register-command!
+    (raise-extension-error "ext-register-command!" 'ext-commands 'register
            "no command-registry in extension context. Set #:command-registry."))
   (define entry (cmd-entry name summary category args-spec aliases))
   (define new-hash (register-command! reg-hash entry))
@@ -47,7 +48,7 @@
 (define (ext-unregister-command! ctx name)
   (define reg-hash (get-reg-hash ctx))
   (unless reg-hash
-    (error 'ext-unregister-command! "no command-registry in extension context"))
+    (raise-extension-error "no command-registry in extension context" 'ext-commands 'unregister))
   ;; Rebuild hash without the named command
   (define new-hash
     (for/hash ([(k v) (in-hash reg-hash)]

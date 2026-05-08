@@ -6,6 +6,7 @@
 ;; handle-racket-check: format, syntax, test, expand, and all-mode checks.
 
 (require racket/string
+         (only-in "../../util/errors.rkt" raise-extension-error)
          racket/list
          json
          (only-in "../racket-tooling-helpers.rkt"
@@ -18,9 +19,9 @@
   (define path (hash-ref args 'path ""))
   (define mode (hash-ref args 'mode "syntax"))
   (when (string=? path "")
-    (error 'racket-check "path is required"))
+    (raise-extension-error "path is required" 'racket-tooling 'check))
   (unless (file-exists? path)
-    (error 'racket-check (format "File not found: ~a" path)))
+    (raise-extension-error (format "File not found: ~a" path) 'racket-tooling 'check))
 
   (define results '())
 

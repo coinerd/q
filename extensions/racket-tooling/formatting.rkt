@@ -7,6 +7,7 @@
 ;; cond-insert-clause, match-insert-clause, rewrite-form.
 
 (require racket/string
+         (only-in "../../util/errors.rkt" raise-extension-error)
          racket/list
          (only-in "../racket-tooling-helpers.rkt"
                   raco-fmt
@@ -27,16 +28,16 @@
 ;; Validate string before read - reject #reader or #lang injections
 (define (safe-read-string s context)
   (when (or (regexp-match? #rx"#reader" s) (regexp-match? #rx"#lang" s))
-    (error 'racket-edit (format "~a contains forbidden #reader or #lang directive" context)))
+    (raise-extension-error (format "~a contains forbidden #reader or #lang directive" context) 'racket-tooling 'edit))
   (read (open-input-string s)))
 
 (define (handle-racket-edit args [exec-ctx #f])
   (define path (hash-ref args 'file (hash-ref args 'path "")))
   (define mode (hash-ref args 'mode "replace"))
   (when (string=? path "")
-    (error 'racket-edit "file is required"))
+    (raise-extension-error "file is required" 'racket-tooling 'edit))
   (unless (or (string=? mode "skeleton") (file-exists? path))
-    (error 'racket-edit (format "File not found: ~a" path)))
+    (raise-extension-error (format "File not found: ~a" path) 'racket-tooling 'edit))
   (with-handlers ([exn:fail? (lambda (e)
                                (make-error-result (format "racket-edit error: ~a" (exn-message e))))])
     (cond

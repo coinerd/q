@@ -13,6 +13,7 @@
 ;; natural layer for code that interacts with the extension API.
 
 (require racket/list
+         (only-in "../util/errors.rkt" raise-extension-error)
          "api.rkt"
          "hooks.rkt")
 
@@ -27,7 +28,7 @@
 ;; paths that extensions want scanned for skills, prompts, etc.
 (define (discover-extension-resources registry)
   (unless registry
-    (error 'discover-extension-resources "registry is required, got #f"))
+    (raise-extension-error "registry is required, got #f" 'resource-discovery 'discover))
   ;; Dispatch 'resources-discover hook on all extensions
   (define hook-result (dispatch-hooks 'resources-discover (hasheq) registry))
   ;; Extract paths from hook result payload

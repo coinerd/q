@@ -6,6 +6,7 @@
 ;; via SSH + tmux. Actions: status, start, send, capture, wait, interrupt, stop.
 
 (require racket/contract
+         (only-in "../../util/errors.rkt" raise-extension-error)
          racket/string
          racket/port
          "../define-extension.rkt"
@@ -32,7 +33,7 @@
 ;; Build a remote command that wraps tmux operations via SSH
 (define (remote-tmux host session action args)
   (unless (valid-session-name? session)
-    (error 'remote-q "invalid session name: ~a" session))
+    (raise-extension-error (format "invalid session name: ~a" session) 'remote-collab 'validate))
   (case action
     [(status)
      (format "tmux has-session -t ~a 2>/dev/null && echo 'running' || echo 'stopped'" session)]
@@ -64,7 +65,7 @@
       session)]
     [(interrupt) (format "tmux send-keys -t ~a Escape" session)]
     [(stop) (format "tmux kill-session -t ~a 2>/dev/null; echo 'stopped'" session)]
-    [else (error 'remote-q "unknown action: ~a" action)]))
+    [else (raise-extension-error (format "unknown action: ~a" action) 'remote-collab 'dispatch)]))
 
 ;; ============================================================
 ;; Tool handler
@@ -78,7 +79,7 @@
   (define opts (hash-ref args 'ssh_options '()))
 
   (when (string=? host "")
-    (error 'remote-q "host is required"))
+    (raise-extension-error "host is required" 'remote-collab 'config))
 
   (define cmd (remote-tmux host session action args))
 

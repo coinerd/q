@@ -6,7 +6,8 @@
 ;; F6 fix: Stable event names + correlation IDs for GSD lifecycle.
 ;; All events follow: gsd.<category>.<action>
 
-(require racket/match)
+(require racket/match
+         (only-in "../../util/errors.rkt" raise-extension-error))
 
 (provide gsd-event-names
          emit-gsd-event!
@@ -59,7 +60,7 @@
 
 (define (emit-gsd-event! event-name data)
   (unless (memq event-name gsd-event-names)
-    (error 'emit-gsd-event! "Unknown event: ~a" event-name))
+    (raise-extension-error (format "Unknown event: ~a" event-name) 'gsd 'emit-event))
   (define bus (unbox gsd-event-bus-box))
   (bus event-name
        (hasheq 'event
