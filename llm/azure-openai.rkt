@@ -13,6 +13,8 @@
 ;; #1195: Additional LLM Provider Adapters
 
 (require "../util/error-helpers.rkt")
+(require "../util/errors.rkt")
+(require "provider-errors.rkt")
 (require racket/contract
          (only-in "model-defaults.rkt" OPENAI-DEFAULT-MODEL)
          racket/string
@@ -59,10 +61,10 @@
       (if (bytes? body-bytes)
           (bytes->string/utf-8 body-bytes #:error-replacement "?")
           ""))
-    (error 'azure-openai
-           "HTTP ~a: ~a"
-           status-code
-           (substring body-str 0 (min (string-length body-str) 200)))))
+    (raise-provider-error
+     (format "HTTP ~a: ~a" status-code (substring body-str 0 (min (string-length body-str) 200)))
+     (classify-http-status status-code)
+     status-code)))
 
 ;; ============================================================
 ;; Provider constructor
@@ -74,7 +76,7 @@
   (define base-url (hash-ref config 'base-url ""))
   (define api-version (hash-ref config 'api-version "2024-02-15-preview"))
   (when (string=? api-key "")
-    (error 'azure-openai "api-key is required in config"))
+    (raise-credential-error "api-key is required in config" "azure-openai"))
 
   (make-provider (lambda () "Azure OpenAI")
                  (lambda () (hasheq 'streaming #t))

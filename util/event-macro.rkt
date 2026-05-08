@@ -3,7 +3,6 @@
 ;; util/event-macro.rkt — event struct definition macros
 ;;
 ;; Provides:
-;;   define-event        — basic struct+provide (DEPRECATED, kept for compat)
 ;;   define-typed-event  — full code generation: struct, constructor, type, fields, provide
 ;;
 ;; Usage:

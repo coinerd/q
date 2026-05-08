@@ -32,8 +32,6 @@
 ;; Base error type for all q domain errors
 (struct q-error exn:fail (context) #:transparent)
 
-;; LLM provider errors — REMOVED (duplicate of llm/provider-errors.rkt canonical)
-;; Use (require "../llm/provider-errors.rkt") for provider-error
 
 ;; Tool execution errors
 (struct tool-error q-error (tool-name) #:transparent)
