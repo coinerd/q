@@ -1,7 +1,7 @@
 #lang racket/base
 
 ;; tests/test-iteration-integration.rkt — integration tests for struct refactor
-;; v0.29.17 W0: Tests for dispatch-loop-action internals via (module+ for-testing)
+;; v0.29.17 W0: Tests for interpret-step internals via (module+ for-testing)
 
 (require rackunit
          racket/set
@@ -37,6 +37,7 @@
                   cancel-token!
                   cancellation-token-cancelled?)
          (only-in "../util/event.rkt" event-ev)
+         (only-in "../runtime/iteration.rkt" step-result)
          "../agent/event-bus.rkt"
          "../runtime/working-set.rkt")
 
@@ -157,7 +158,7 @@
   (check-equal? (loop-result-termination-reason result) 'completed))
 
 ;; ============================================================
-;; dispatch-loop-action tests
+;; interpret-step tests
 ;; ============================================================
 
 ;; Helper: create a temp log file for append-entries!
@@ -172,7 +173,7 @@
               #:filter (lambda (e) (equal? (event-ev e) event-name)))
   events-box)
 
-(test-case "dispatch-loop-action: 'stop-hard-limit emits runtime.error event"
+(test-case "interpret-step: 'stop-hard-limit emits runtime.error event"
   (define bus (make-event-bus))
   (define log-path (make-temp-log-path))
   (define infra (loop-infra '() #f #f bus "test-session" log-path #f))
@@ -184,8 +185,9 @@
   (define max-hard 10)
   ;; on-recurse should NOT be called for hard-limit
   (define on-recurse (lambda args (fail "on-recurse should not be called for hard-limit")))
+  (define step-res (step-result 'stop-hard-limit 'max-iterations-exceeded (make-initial-counters) (hasheq)))
   (define out
-    (dispatch-loop-action 'stop-hard-limit
+    (interpret-step step-res
                           result
                           '()
                           infra
@@ -204,7 +206,7 @@
   (check-true (pair? (unbox events-box)) "runtime.error event was emitted")
   (delete-file log-path))
 
-(test-case "dispatch-loop-action: 'continue calls on-recurse with updated counters"
+(test-case "interpret-step: 'continue calls on-recurse with updated counters"
   (define bus (make-event-bus))
   (define log-path (make-temp-log-path))
   (define infra (loop-infra '() #f #f bus "test-session" log-path #f))
@@ -220,8 +222,9 @@
     (lambda (ctx new-counters ws2)
       (set-box! recurse-args-box (list ctx new-counters ws2))
       (make-loop-result ctx 'completed (hasheq))))
+  (define step-res (step-result 'continue 'tool-calls-pending (compute-next-counters counters '()) (hasheq)))
   (define out
-    (dispatch-loop-action 'continue
+    (interpret-step step-res
                           result-no-msgs
                           '()
                           infra
@@ -240,7 +243,7 @@
   (check-equal? (loop-counters-iteration new-counters) 1 "iteration incremented on continue")
   (delete-file log-path))
 
-(test-case "dispatch-loop-action: 'stop delegates to handle-stop-action"
+(test-case "interpret-step: 'stop delegates to handle-stop-action"
   (define bus (make-event-bus))
   (define log-path (make-temp-log-path))
   (define infra (loop-infra '() #f #f bus "test-session" log-path #f))
@@ -249,12 +252,13 @@
   (define result (make-loop-result '() 'completed (hasheq)))
   ;; on-recurse used as followup-continuation — should NOT be called for simple completed stop
   (define on-recurse (lambda args (fail "followup should not trigger without followup queue")))
+  (define step-res (step-result 'stop 'completed (make-initial-counters) (hasheq)))
   (define out
-    (dispatch-loop-action 'stop result '() infra counters ws (hash) #f 5 10 #f 'all on-recurse))
+    (interpret-step step-res result '() infra counters ws (hash) #f 5 10 #f 'all on-recurse))
   (check-true (loop-result? out))
   (delete-file log-path))
 
-(test-case "dispatch-loop-action: 'stop-soft-limit emits warning and recurses"
+(test-case "interpret-step: 'stop-soft-limit emits warning and recurses"
   (define bus (make-event-bus))
   (define log-path (make-temp-log-path))
   (define infra (loop-infra '() #f #f bus "test-session" log-path #f))
@@ -267,8 +271,9 @@
     (lambda (ctx new-counters ws2)
       (set-box! recurse-args-box (list ctx new-counters ws2))
       (make-loop-result ctx 'completed (hasheq))))
+  (define step-res (step-result 'stop-soft-limit 'tool-calls-pending (make-initial-counters) (hasheq)))
   (define out
-    (dispatch-loop-action 'stop-soft-limit
+    (interpret-step step-res
                           result
                           '()
                           infra

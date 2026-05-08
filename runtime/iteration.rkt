@@ -621,116 +621,9 @@
                  ws)]))
 
 ;; ============================================================
-;; dispatch-loop-action: extracted match block from run-iteration-loop
-;; v0.29.16: Refactored from 26→13 params using loop-infra + loop-counters structs
-;; v0.33.1 W1: Now delegates to interpret-step for effectful operations
+;; RA-08: dispatch-loop-action removed — interpret-step is the canonical
+;; effectful interpreter. Tests updated to call interpret-step directly.
 ;; ============================================================
-
-(define (dispatch-loop-action action
-                              result
-                              new-msgs
-                              infra
-                              counters
-                              ws
-                              config
-                              sess
-                              max-iterations
-                              max-iterations-hard
-                              steering-queue
-                              follow-up-mode
-                              on-recurse)
-  (define (call-execute-pending-tool-calls)
-    (execute-pending-tool-calls new-msgs infra config ws))
-  (match action
-    ['stop
-     (handle-stop-action result
-                         new-msgs
-                         infra
-                         counters
-                         ws
-                         config
-                         steering-queue
-                         follow-up-mode
-                         on-recurse)]
-    ['stop-hard-limit
-     (append-entries! (loop-infra-log-path infra) new-msgs)
-     (emit-session-event! (loop-infra-bus infra)
-                          (loop-infra-session-id infra)
-                          "runtime.error"
-                          (assert-payload "runtime.error"
-                                          (hasheq 'error
-                                                  "max-iterations-exceeded"
-                                                  'iteration
-                                                  (loop-counters-iteration counters)
-                                                  'maxIterations
-                                                  max-iterations-hard)
-                                          error-detail-payload/c))
-     (make-loop-result new-msgs
-                       'max-iterations-exceeded
-                       (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
-    ['stop-soft-limit
-     (append-entries! (loop-infra-log-path infra) new-msgs)
-     (emit-session-event! (loop-infra-bus infra)
-                          (loop-infra-session-id infra)
-                          "iteration.soft-warning"
-                          (hasheq 'iteration
-                                  (add1 (loop-counters-iteration counters))
-                                  'soft-limit
-                                  max-iterations
-                                  'hard-limit
-                                  max-iterations-hard
-                                  'remaining
-                                  (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
-     (define updated-ctx (call-execute-pending-tool-calls))
-     (define budget-config (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
-     (define emit-fn
-       (lambda (name payload)
-         (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload)))
-     (define ctx-after-budget
-       (if sess
-           (maybe-compact-mid-turn sess
-                                   updated-ctx
-                                   (loop-infra-session-id infra)
-                                   budget-config
-                                   #:emit-event emit-fn
-                                   #:compact-proc (lambda (ctx) (compact-context-mid-turn sess ctx)))
-           (begin
-             (estimate-mid-turn-tokens updated-ctx
-                                       (loop-infra-session-id infra)
-                                       budget-config
-                                       #:emit-event emit-fn)
-             updated-ctx)))
-     (on-recurse ctx-after-budget
-                 (struct-copy loop-counters
-                              counters
-                              [iteration (add1 (loop-counters-iteration counters))]
-                              [consecutive-tool-count
-                               (add1 (loop-counters-consecutive-tool-count counters))]
-                              [stall-retry-count 0])
-                 ws)]
-    ['continue
-     (append-entries! (loop-infra-log-path infra) new-msgs)
-     (define updated-ctx (call-execute-pending-tool-calls))
-     (define new-counters (compute-next-counters counters new-msgs))
-     ;; v0.28.22 W1: exploration loop detection
-     (define loop-warning
-       (detect-exploration-loop (filter string? (loop-counters-recent-tool-names new-counters))))
-     (when loop-warning
-       (emit-session-event! (loop-infra-bus infra)
-                            (loop-infra-session-id infra)
-                            "iteration.exploration-loop"
-                            (hasheq 'pattern
-                                    loop-warning
-                                    'recent-tools
-                                    (loop-counters-recent-tool-names new-counters)
-                                    'iteration
-                                    (loop-counters-iteration counters))))
-     (on-recurse updated-ctx
-                 (struct-copy loop-counters
-                              new-counters
-                              [iteration (add1 (loop-counters-iteration counters))]
-                              [stall-retry-count 0])
-                 ws)]))
 
 ;; ============================================================
 
@@ -902,8 +795,7 @@
 ;; v0.29.17 W0: exposed to support integration tests for struct refactor
 ;; ============================================================
 (module+ for-testing
-  (provide dispatch-loop-action
-           handle-stop-action
+  (provide handle-stop-action
            interpret-step
            compute-next-counters
            execute-pending-tool-calls ;; NOTE: requires tool-coordinator mock for isolated testing
