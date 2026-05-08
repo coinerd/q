@@ -272,7 +272,7 @@ q/
 |--------|-------|
 | Test files | 533 |
 | Source modules | 407 |
-| Source lines | 63125 |
+| Source lines | 63158 |
 | Test lines | 96880 |
 | Test assertions | 14972 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -345,6 +345,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.34.4** — Session Boundary Encapsulation (RA-05)
 
 **v0.34.0** — Deep Audit Remediation
 

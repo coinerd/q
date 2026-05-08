@@ -473,11 +473,44 @@
       [(list arg rest ...) (loop rest jobs sequential? timeout suite (cons arg extra))])))
 
 ;; ---------------------------------------------------------------------------
+;; Pre-flight: stale bytecode cleanup
+;; ---------------------------------------------------------------------------
+
+(define (clean-stale-bytecode! root)
+  "Delete compiled/ directories when any .zo is older than its source .rkt.
+  This prevents instantiate-linklet mismatches after module moves or renames."
+  (define cleaned 0)
+  (for ([d (in-directory root)])
+    (when (and (directory-exists? d) (equal? (path->string (file-name-from-path d)) "compiled"))
+      (define zo-files (directory-list d #:build? #t))
+      (define stale?
+        (for/or ([zo (in-list zo-files)])
+          (and (file-exists? zo)
+               (let* ([base (path-replace-suffix zo "")]
+                      [rkt (path-replace-extension base #".rkt")]
+                      [rktl (path-replace-extension base #".rktl")]
+                      [src (or (and (file-exists? rkt) rkt) (and (file-exists? rktl) rktl) #f)])
+                 (and src
+                      (> (file-or-directory-modify-seconds src)
+                         (file-or-directory-modify-seconds zo)))))))
+      (when stale?
+        (delete-directory/files d)
+        (set! cleaned (add1 cleaned)))))
+  cleaned)
+
+;; ---------------------------------------------------------------------------
 ;; Main entry point
 ;; ---------------------------------------------------------------------------
 
 (define (main args)
   (define-values (jobs sequential? timeout suite extra-files) (parse-args args))
+
+  ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
+  (define cleaned-dirs (clean-stale-bytecode! (build-path (current-directory) "..")))
+  (when (> cleaned-dirs 0)
+    (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
+            cleaned-dirs
+            (if (= cleaned-dirs 1) "y" "ies")))
 
   (define suite-files
     (if (pair? extra-files)
