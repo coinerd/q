@@ -64,12 +64,12 @@
   (cleanup-path path))
 
 (test-case "racket-check on non-existent file errors"
-  (with-handlers ([exn:fail? (lambda (e) (check-true #t))])
+  (with-handlers ([exn:fail? (lambda (e) (check-true (exn:fail? e)))])
     (handle-racket-check (hasheq 'path "/nonexistent/file.rkt"))
     (check-false "Should have raised an error" #t)))
 
 (test-case "racket-check missing path errors"
-  (with-handlers ([exn:fail? (lambda (e) (check-true #t))])
+  (with-handlers ([exn:fail? (lambda (e) (check-true (exn:fail? e)))])
     (handle-racket-check (hasheq))
     (check-false "Should have raised an error" #t)))
 
@@ -104,7 +104,7 @@
   (cleanup-path path))
 
 (test-case "racket-edit replace missing oldText errors"
-  (with-handlers ([exn:fail? (lambda (e) (check-true #t))])
+  (with-handlers ([exn:fail? (lambda (e) (check-true (exn:fail? e)))])
     (handle-racket-edit (hasheq 'file "/tmp/test.rkt" 'mode "replace"))
     (check-false "Should have raised error" #t)))
 

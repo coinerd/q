@@ -144,11 +144,11 @@
 (test-case "publish-compaction-start!: handles #f bus gracefully"
   ;; Should not crash when bus is #f
   (publish-compaction-start! #f 'threshold 50 3000 "sess-1" "turn-1")
-  (check-true #t))
+  (void))
 
 (test-case "publish-compaction-end!: handles #f bus gracefully"
   (publish-compaction-end! #f 'overflow 30 5000 2000 "sess-1" "turn-1")
-  (check-true #t))
+  (void))
 
 (test-case "compaction events: topic constants are strings"
   (check-true (string? compaction-start-topic))

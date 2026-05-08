@@ -78,7 +78,7 @@
 ;; ===========================================================================
 
 ;; placeholder check — real validation below
-(check-true #t "placeholder — real checks follow")
+(void)
 
 (check-false (extract-version-block valid-entry "99.99.99") "version not present returns #f")
 
@@ -199,7 +199,7 @@
 ;; (The CLI module+main handles exit 1; we verify the logic it depends on.)
 
 ;; placeholder — the real exit-code test follows below
-(check-true #t "placeholder — exit code tests follow")
+(void)
 
 ;; A bad block should produce errors that would trigger exit 1
 (let ([bad-block (changelog "### Features" "- only features, nothing else")]

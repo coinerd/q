@@ -100,7 +100,7 @@
          agent-session-prompt-running?
          ensure-persisted!
          buffer-or-append!
-         (contract-out [make-agent-session (-> any/c agent-session?)]
+         (contract-out [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
                        [resume-agent-session (-> string? any/c agent-session?)]
                        [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
                        [run-prompt!

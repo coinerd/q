@@ -45,7 +45,7 @@
 
 (test-case "emit-session-shutdown!: handles #f bus gracefully"
   (emit-session-shutdown! #f "old-session-1" #f)
-  (check-true #t))
+  (void))
 
 (test-case "teardown-session-extensions!: calls emit-session-shutdown"
   (define bus (make-event-bus))
@@ -118,7 +118,7 @@
 
 (test-case "emit-session-start!: handles #f bus"
   (emit-session-start! #f "s1" 'new)
-  (check-true #t))
+  (void))
 
 (test-case "session-start-reason?: accepts valid reasons"
   (check-true (session-start-reason? 'new))

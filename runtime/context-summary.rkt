@@ -27,7 +27,7 @@
                        [summary-cache-store! (-> summary-cache? any/c any/c string? void?)]
                        [summary-cache-count (-> summary-cache? exact-nonnegative-integer?)]
                        [generate-catalog
-                        (->* ((listof any/c))
+                        (->* ((listof message?))
                              (#:max-entries exact-nonnegative-integer?
                                             #:max-tokens exact-nonnegative-integer?
                                             #:estimate-text (-> string? exact-nonnegative-integer?))
@@ -36,13 +36,13 @@
                        [message->catalog-entry (-> any/c (or/c catalog-entry? #f))]
                        [tool-group->catalog-entry (-> (listof any/c) (or/c catalog-entry? #f))]
                        [context-summary-prompt
-                        (->* ((listof any/c)) (#:previous-summary (or/c string? #f)) string?)]
+                        (->* ((listof message?)) (#:previous-summary (or/c string? #f)) string?)]
                        [generate-context-summary
-                        (->* ((listof any/c) (or/c provider? #f) (or/c string? #f))
+                        (->* ((listof message?) (or/c provider? #f) (or/c string? #f))
                              (#:cache (or/c summary-cache? #f))
                              (or/c context-summary? #f))]
-                       [simple-summary-text (-> (listof any/c) string?)]
-                       [simple-summary-count (-> (listof any/c) exact-nonnegative-integer?)]
+                       [simple-summary-text (-> (listof message?) string?)]
+                       [simple-summary-count (-> (listof message?) exact-nonnegative-integer?)]
                        [extract-message-text (-> any/c string?)]
                        [truncate-string (-> string? exact-nonnegative-integer? string?)]))
 

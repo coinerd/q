@@ -91,4 +91,4 @@
                                                        "/tmp/q-test-write-budget-s2.txt"))])
     (when (file-exists? f)
       (delete-file f)))
-  (check-true #t))
+  (void))

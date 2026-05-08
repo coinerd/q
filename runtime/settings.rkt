@@ -51,7 +51,7 @@
          deep-merge-hash
 
          ;; Query
-         (contract-out [setting-ref (->* (q-settings? any/c) (any/c) any/c)]
+         (contract-out [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
                        [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
                        [provider-config (-> q-settings? any/c (or/c hash? #f))]
                        [provider-names (-> q-settings? list?)]
