@@ -264,3 +264,19 @@
   (publish! bus (test-event #:name "model.stream.delta"))
   (publish! bus (test-event #:name "turn.completed"))
   (check-equal? (reverse (unbox received)) '("model.stream.delta")))
+
+;; ============================================================
+;; v0.33.7 W0b (N-T03): Regression test for non-boolean truthy filter
+;; The v0.33.6 fix changed (match ... [(cons #f #t) ...]) to
+;; [(cons #f (not #f)) ...] so truthy non-boolean filter results fire.
+;; ============================================================
+
+(test-case "publish! dispatches to subscriber with non-boolean truthy filter result"
+  (define bus (make-event-bus))
+  (define received (box #f))
+  ;; Filter returns a positive integer (truthy, not #t)
+  (subscribe! bus (lambda (evt) (set-box! received evt)) #:filter (lambda (e) 42))
+  (publish! bus (test-event #:name "test.type"))
+  (check-not-false (unbox received)
+                   "subscriber should fire when filter returns non-boolean truthy value")
+  (check-equal? (event-ev (unbox received)) "test.type"))

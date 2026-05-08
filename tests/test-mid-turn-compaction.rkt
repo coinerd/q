@@ -104,3 +104,20 @@
       (check-true (string? result) "ls-read loop detected"))))
 
 (run-tests exploration-loop-suite)
+
+;; ============================================================
+;; v0.33.7 W0b (N-T01): maybe-compact-mid-turn error path
+;; ============================================================
+
+(test-case "maybe-compact-mid-turn raises when #:compact-proc is #f and over budget"
+  (define ctx (make-mock-context 50))
+  (define config (hasheq 'max-context-tokens 100))
+  (check-exn exn:fail?
+             (lambda ()
+               (maybe-compact-mid-turn 'mock-session
+                                       ctx
+                                       "test-session"
+                                       config
+                                       #:compact-proc #f
+                                       #:estimate-tokens (lambda (msgs) 999999)))
+             "should raise when #:compact-proc is #f and context exceeds budget"))

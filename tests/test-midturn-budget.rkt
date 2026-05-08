@@ -70,3 +70,21 @@
   (define result (check-mid-turn-budget! ctx "test-session" config))
   ;; Should return positive integer
   (check-true (and (integer? result) (positive? result))))
+
+;; ============================================================
+;; v0.33.7 W0b (N-T02): emit-event callback exception propagation
+;; ============================================================
+
+(test-case "check-mid-turn-budget! propagates emit-event callback exception"
+  (define big-text (make-string 5000 #\x))
+  (define ctx
+    (for/list ([_ (in-range 10)])
+      (make-test-message big-text)))
+  (define config (hash 'max-context-tokens 500))
+  (define exn-msg "deliberate callback failure")
+  (check-exn (lambda (e) (and (exn:fail? e) (string-contains? (exn-message e) exn-msg)))
+             (lambda ()
+               (check-mid-turn-budget! ctx
+                                       "test-session"
+                                       config
+                                       #:emit-event (lambda (name payload) (error exn-msg))))))
