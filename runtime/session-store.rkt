@@ -292,7 +292,8 @@
   (define box (in-memory-session-manager-sessions-box mgr))
   (define sessions (unbox box))
   (define existing (hash-ref sessions session-id '()))
-  (set-box! box (hash-set sessions session-id (append existing (list msg)))))
+  ;; RA-17: prepend (O(1)) instead of append (O(n)) to avoid quadratic growth
+  (set-box! box (hash-set sessions session-id (cons msg existing))))
 
 (define (in-memory-append-entries! mgr session-id msgs)
   (for ([msg (in-list msgs)])
@@ -300,7 +301,8 @@
 
 (define (in-memory-load mgr session-id)
   (define sessions (unbox (in-memory-session-manager-sessions-box mgr)))
-  (hash-ref sessions session-id '()))
+  ;; Reverse to restore chronological order (entries are stored newest-first)
+  (reverse (hash-ref sessions session-id '())))
 
 (define (in-memory-list-sessions mgr)
   (hash-keys (unbox (in-memory-session-manager-sessions-box mgr))))
@@ -318,7 +320,8 @@
         entries))
   (define box (in-memory-session-manager-sessions-box mgr))
   (define sessions (unbox box))
-  (set-box! box (hash-set sessions dest-id to-copy))
+  ;; Store in reverse-chronological order to match internal representation
+  (set-box! box (hash-set sessions dest-id (reverse to-copy)))
   dest-id)
 
 ;; ============================================================

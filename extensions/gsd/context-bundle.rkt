@@ -8,6 +8,7 @@
 ;; current phase needs.
 
 (require racket/string
+         (only-in "../../util/errors.rkt" raise-extension-error)
          racket/match
          "plan-types.rkt")
 
@@ -41,7 +42,7 @@
     [(explorer) (explorer-bundle artifacts files)]
     [(executor) (executor-bundle artifacts files)]
     [(verifier) (verifier-bundle artifacts files)]
-    [else (error 'assemble-context "unknown role: ~a" role)]))
+    [else (raise-extension-error (format "unknown role: ~a" role) 'gsd 'assemble-context)]))
 
 ;; ============================================================
 ;; Explorer bundle

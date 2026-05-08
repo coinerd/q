@@ -16,6 +16,7 @@
 ;; This delegates to the tool-registry stored in the extension-ctx.
 
 (require racket/contract
+         (only-in "../util/errors.rkt" raise-extension-error)
          "context.rkt"
          "tool-api.rkt")
 
@@ -67,7 +68,7 @@
 (define (ext-unregister-tool! ctx name)
   (define reg (ctx-tool-registry ctx))
   (unless reg
-    (error 'ext-unregister-tool! "no tool-registry available in extension context"))
+    (raise-extension-error "no tool-registry available in extension context" 'dynamic-tools 'unregister))
   (unregister-tool! reg name))
 
 ;; ============================================================
@@ -89,5 +90,5 @@
 (define (ext-set-active-tools! ctx active-names)
   (define reg (ctx-tool-registry ctx))
   (unless reg
-    (error 'ext-set-active-tools! "no tool-registry available in extension context"))
+    (raise-extension-error "no tool-registry available in extension context" 'dynamic-tools 'set-active))
   (set-active-tools! reg active-names))

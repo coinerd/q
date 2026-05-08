@@ -6,6 +6,7 @@
 ;; Includes host validation to prevent injection via malformed host strings.
 
 (require racket/contract
+         (only-in "../../util/errors.rkt" raise-extension-error)
          racket/string
          racket/port
          racket/match)
@@ -45,7 +46,7 @@
 ;; Returns (values exit-code stdout-string stderr-string)
 (define (ssh-execute host command #:options [opts (default-ssh-options)])
   (unless (valid-ssh-host? host)
-    (error 'ssh-execute "Invalid SSH host: ~a" host))
+    (raise-extension-error (format "Invalid SSH host: ~a" host) 'remote-collab 'ssh-execute))
   (define ssh-path (find-executable-path "ssh"))
   (define all-args (append opts (list host command)))
   (define-values (sp out-in in-out err-in) (apply subprocess #f #f #f ssh-path all-args))

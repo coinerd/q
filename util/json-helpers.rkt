@@ -7,7 +7,8 @@
 
 (require racket/format
          racket/string
-         json)
+         json
+         (only-in "errors.rkt" raise-tool-error))
 
 ;; JSON argument normalization
 (provide ensure-hash-args
@@ -17,7 +18,9 @@
 
 ;; Parse tool-call arguments from string to hash if needed.
 ;; Streaming produces arguments as JSON strings; tools expect hashes.
-(define (ensure-hash-args args)
+;; RA-02: On parse failure, raises tool-error instead of returning poisoned hash.
+;; #:graceful? #t returns empty hash on failure for backward-compatible callers.
+(define (ensure-hash-args args #:graceful? [graceful? #f])
   (cond
     [(hash? args) args]
     [(string? args)
@@ -26,15 +29,28 @@
          (hash)
          (with-handlers ([exn:fail?
                           (lambda (e)
-                            (fprintf (current-error-port)
-                                     "warning: ensure-hash-args: failed to parse JSON args: ~a~n"
-                                     args)
-                            (hasheq '_parse_failed #t '_raw_args args))])
+                            (if graceful?
+                                (hash)
+                                (raise-tool-error
+                                 (format "Failed to parse tool arguments JSON: ~a" args)
+                                 "ensure-hash-args"
+                                 (hasheq 'raw args 'error (exn-message e)))))])
            (define parsed (string->jsexpr cleaned))
            (if (hash? parsed)
                parsed
-               (hasheq '_parse_failed #t '_raw_args args))))]
-    [else (hasheq '_parse_failed #t '_raw_args (format "~a" args))]))
+               (if graceful?
+                   (hash)
+                   (raise-tool-error
+                    (format "Tool arguments parsed to non-hash: ~a" args)
+                    "ensure-hash-args"
+                    (hasheq 'raw args 'parsed parsed))))))]
+    [else
+     (if graceful?
+         (hash)
+         (raise-tool-error
+          (format "Tool arguments must be hash or JSON string, got: ~a" args)
+          "ensure-hash-args"
+          (hasheq 'raw (format "~a" args))))]))
 
 ;; Read and parse a JSON file, returning the parsed value.
 (define (read-json-file path)

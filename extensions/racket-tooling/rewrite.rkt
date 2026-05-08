@@ -6,6 +6,7 @@
 ;; handle-racket-codemod: pattern/template-based structural rewrites.
 
 (require racket/string
+         (only-in "../../util/errors.rkt" raise-extension-error)
          racket/list
          (only-in "../racket-tooling-helpers.rkt"
                   raco-fmt
@@ -25,7 +26,7 @@
 ;; Validate string before read - reject #reader or #lang injections
 (define (safe-read-string s context)
   (when (or (regexp-match? #rx"#reader" s) (regexp-match? #rx"#lang" s))
-    (error 'racket-codemod (format "~a contains forbidden #reader or #lang directive" context)))
+    (raise-extension-error (format "~a contains forbidden #reader or #lang directive" context) 'racket-tooling 'codemod))
   (read (open-input-string s)))
 
 (define (handle-racket-codemod args [exec-ctx #f])
@@ -35,13 +36,13 @@
   (define write? (hash-ref args 'write #f))
 
   (when (string=? path "")
-    (error 'racket-codemod "file is required"))
+    (raise-extension-error "file is required" 'racket-tooling 'codemod))
   (when (string=? pattern "")
-    (error 'racket-codemod "pattern is required"))
+    (raise-extension-error "pattern is required" 'racket-tooling 'codemod))
   (when (string=? template "")
-    (error 'racket-codemod "template is required"))
+    (raise-extension-error "template is required" 'racket-tooling 'codemod))
   (unless (file-exists? path)
-    (error 'racket-codemod (format "File not found: ~a" path)))
+    (raise-extension-error (format "File not found: ~a" path) 'racket-tooling 'codemod))
 
   (define content (read-file-string path))
   (define lang-line

@@ -17,7 +17,8 @@
          racket/generator
          racket/generic
          racket/string
-         "model.rkt")
+         "model.rkt"
+         (only-in "../util/errors.rkt" raise-credential-error))
 
 (provide provider?
          validate-api-key!
@@ -56,13 +57,12 @@
 (define (validate-api-key! provider-name env-var config)
   (define api-key (hash-ref config 'api-key ""))
   (when (or (not api-key) (not (string? api-key)) (string=? (string-trim api-key) ""))
-    (raise
-     (exn:fail
-      (format
-       "~a API key not set. Set ~a environment variable or add 'api-key' to config.json. Run 'q config' for setup."
-       provider-name
-       env-var)
-      (current-continuation-marks)))))
+    (raise-credential-error
+     (format
+      "~a API key not set. Set ~a environment variable or add 'api-key' to config.json. Run 'q config' for setup."
+      provider-name
+      env-var)
+     provider-name)))
 
 ;; ============================================================
 ;; Generic provider interface
