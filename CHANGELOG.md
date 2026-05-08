@@ -86,6 +86,109 @@
 
 ---
 
+## v0.33.4 — 2026-05-07
+
+### Event Operators + Cleanup (RA-11, RA-12)
+
+**Goal:** Add event-bus stream operators and remove dead code.
+
+**W0 — Event operators:**
+- Added `subscribe-map!` — transforms events before delivery to subscriber
+- Added `subscribe-filter!` — convenience wrapper over `subscribe!` with `#:filter`
+- Both have `contract-out` boundaries
+- 2 new tests in `test-event-bus.rkt`
+
+**W1 — Dead code removal:**
+- Removed `theme-color-name->number` from `tui/renderer.rkt` — trivial wrapper with zero callers
+
+**Verification:** 488/488 test files, 2065 tests, 0 failures
+
+---
+
+## v0.33.3 — 2026-05-07
+
+### Module Hygiene (RA-07, RA-09, RA-14)
+
+**Goal:** Clean up imports and add contracts to event-bus bridge.
+
+**W0 — Remove duplicate requires:**
+- Merged 2 separate `only-in` requires in `session-migration.rkt`
+- Merged 3 separate `only-in` requires in `test-tool-bash-security.rkt`
+
+**W1 — Event-bus typed-event bridge contracts:**
+- Added `contract-out` to `bus-emit-typed!` and `typed-event->event` in `agent/event-bus.rkt`
+
+**Scope deviation:** Planned work (token-memo purity, directory reorg, loop-result-metadata struct) deferred to backlog.
+
+**Verification:** 488/488 test files, 2065 tests, 0 failures
+
+---
+
+## v0.33.2 — 2026-05-07
+
+### Macro Adoption + Tests (RA-04, RA-08)
+
+**Goal:** Pilot `define-tool` macro adoption and add macro expansion tests.
+
+**W0 — Pilot `define-tool`:**
+- Converted 3 builtins to `define-tool`: `read.rkt`, `date.rkt`, `find.rkt`
+- Updated `define-tool.rkt` to provide `tool-id` binding for backward compat
+
+**W1 — Macro expansion tests + `ls` conversion:**
+- Added `tests/test-macro-expansion.rkt` — 8 tests covering schema structure, handler callable, tool-id binding, hygiene, `define-typed-event` expansion
+- Converted `ls.rkt` to `define-tool` (4th total)
+
+**Verification:** 488/488 test files, 2065 tests, 0 failures
+
+---
+
+## v0.33.1 — 2026-05-07
+
+### Iteration Loop Purity (RA-03)
+
+**Goal:** Extract pure transition functions from iteration loop.
+
+**W0 — Extract pure transition functions:**
+- Added `step-result` struct: `(action termination new-counters metadata)`
+- Added `compute-step-result` — pure function deciding next loop action
+- Added `compute-termination` — pure function computing termination reason
+- Added `tests/test-iteration-pure.rkt` — 18 property tests
+
+**W1 — Interpreter pattern refactor:**
+- Extracted `interpret-step` — effectful executor of `step-result`
+- `run-iteration-loop` now uses: `compute-step-result` (pure) → `interpret-step` (effectful)
+- `dispatch-loop-action` preserved for backward compat
+
+**Verification:** 488/488 test files, 2065 tests, 0 failures
+
+---
+
+## v0.33.0 — 2026-05-07
+
+### Boundary Hardening (RA-01, RA-02, RA-05, RA-06)
+
+**Goal:** Fix layer boundary violations and eliminate manual registry maintenance.
+
+**W0 — Auto-derive struct-field-names:**
+- Replaced 30+ entry manual `struct-field-names` hash in `event-emitter.rkt` with `case`-based auto-derivation from `* -event-fields` constants
+
+**W1 — Fix upward imports:**
+- Moved `injection-event-topic` to `util/event-types.rkt`
+- Created `util/extensions.rkt` and `util/contracts.rkt` for foundation-layer symbols
+- 5 of 6 upward imports eliminated; `list-extensions` deferred
+
+**W2 — Add contracts to event emitter:**
+- Added `contract-out` to `emit-typed-event!` and `event-struct->hasheq`
+- Introduced TR boundary regression (fixed in v0.33.5)
+
+**W3 — Remove dead DI parameter infrastructure:**
+- Removed `resolve-compact-proc`, `resolve-estimate-tokens`, `resolve-inject-topic`
+- Dead keyword args deferred to v0.33.5
+
+**Verification:** 488/488 test files, 2065 tests, 0 failures
+
+---
+
 ## v0.32.11 — 2026-05-07
 
 ### Test Regression Fix (v0.32.11-W0)
