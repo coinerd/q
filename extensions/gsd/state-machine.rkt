@@ -127,7 +127,9 @@
 (define (compute-next-gsm-state current-state target)
   (define current (gsd-runtime-state-mode current-state))
   (cond
-    [(not (gsm-state? target)) (err-result (format "invalid state: ~a" target) current target)]
+    [(not (gsm-state? target))
+     (values (err-result (format "invalid state: ~a" target) current target)
+             current-state)]
     [(valid-transition? current target)
      ;; Clear executor when leaving executing mode
      (define state*
@@ -135,12 +137,14 @@
            (struct-copy gsd-runtime-state current-state [wave-executor #f])
            current-state))
      (define new-state (struct-copy gsd-runtime-state state* [mode target]))
-     (ok-result current target)]
+     (values (ok-result current target) new-state)]
     [else
-     (err-result
-      (format "invalid transition: ~a → ~a (valid: ~a)" current target (valid-targets current))
-      current
-      target)]))
+     (values
+      (err-result
+       (format "invalid transition: ~a → ~a (valid: ~a)" current target (valid-targets current))
+       current
+       target)
+      current-state)]))
 
 (define (gsm-transition! target)
   (with-gsd-lock
@@ -148,15 +152,11 @@
      (define state (current-gsd-state))
      (define current (gsd-runtime-state-mode state))
      (emit-gsd-event! 'gsd.transition.attempted (hasheq 'from current 'to target))
-     (define result (compute-next-gsm-state state target))
+     (define-values (result new-state) (compute-next-gsm-state state target))
      (cond
        [(ok? result)
-        (define new-mode (ok-to result))
-        (define state*
-          (if (and (eq? current 'executing) (not (eq? new-mode 'executing)))
-              (struct-copy gsd-runtime-state state [wave-executor #f])
-              state))
-        (set-gsd-state! (struct-copy gsd-runtime-state state* [mode new-mode]))
+        (define new-mode (gsd-runtime-state-mode new-state))
+        (set-gsd-state! new-state)
         (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
         (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to new-mode))
         result]

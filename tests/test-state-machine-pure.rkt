@@ -22,48 +22,48 @@
 ;; ============================================================
 
 (test-case "idle → exploring: valid"
-  (define r (compute-next-gsm-state (make-state 'idle) 'exploring))
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'exploring))
   (check-true (ok? r))
   (check-equal? (ok-from r) 'idle)
   (check-equal? (ok-to r) 'exploring))
 
 (test-case "exploring → plan-written: valid"
-  (define r (compute-next-gsm-state (make-state 'exploring) 'plan-written))
+  (define-values (r _) (compute-next-gsm-state (make-state 'exploring) 'plan-written))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'plan-written))
 
 (test-case "exploring → idle: valid (cancel)"
-  (define r (compute-next-gsm-state (make-state 'exploring) 'idle))
+  (define-values (r _) (compute-next-gsm-state (make-state 'exploring) 'idle))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'idle))
 
 (test-case "plan-written → executing: valid"
-  (define r (compute-next-gsm-state (make-state 'plan-written) 'executing))
+  (define-values (r _) (compute-next-gsm-state (make-state 'plan-written) 'executing))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'executing))
 
 (test-case "plan-written → idle: valid (cancel)"
-  (define r (compute-next-gsm-state (make-state 'plan-written) 'idle))
+  (define-values (r _) (compute-next-gsm-state (make-state 'plan-written) 'idle))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'idle))
 
 (test-case "executing → verifying: valid"
-  (define r (compute-next-gsm-state (make-state 'executing) 'verifying))
+  (define-values (r _) (compute-next-gsm-state (make-state 'executing) 'verifying))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'verifying))
 
 (test-case "executing → idle: valid (wave complete)"
-  (define r (compute-next-gsm-state (make-state 'executing) 'idle))
+  (define-values (r _) (compute-next-gsm-state (make-state 'executing) 'idle))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'idle))
 
 (test-case "verifying → idle: valid"
-  (define r (compute-next-gsm-state (make-state 'verifying) 'idle))
+  (define-values (r _) (compute-next-gsm-state (make-state 'verifying) 'idle))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'idle))
 
 (test-case "verifying → executing: valid (re-plan)"
-  (define r (compute-next-gsm-state (make-state 'verifying) 'executing))
+  (define-values (r _) (compute-next-gsm-state (make-state 'verifying) 'executing))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'executing))
 
@@ -72,24 +72,24 @@
 ;; ============================================================
 
 (test-case "idle → idle: valid via self-loop"
-  (define r (compute-next-gsm-state (make-state 'idle) 'idle))
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'idle))
   (check-true (ok? r)))
 
 (test-case "idle → executing: invalid"
-  (define r (compute-next-gsm-state (make-state 'idle) 'executing))
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'executing))
   (check-true (err? r))
   (check-equal? (err-reason r) "invalid transition: idle → executing (valid: (exploring))"))
 
 (test-case "executing → plan-written: invalid"
-  (define r (compute-next-gsm-state (make-state 'executing) 'plan-written))
+  (define-values (r _) (compute-next-gsm-state (make-state 'executing) 'plan-written))
   (check-true (err? r)))
 
 (test-case "verifying → plan-written: invalid"
-  (define r (compute-next-gsm-state (make-state 'verifying) 'plan-written))
+  (define-values (r _) (compute-next-gsm-state (make-state 'verifying) 'plan-written))
   (check-true (err? r)))
 
 (test-case "plan-written → exploring: invalid"
-  (define r (compute-next-gsm-state (make-state 'plan-written) 'exploring))
+  (define-values (r _) (compute-next-gsm-state (make-state 'plan-written) 'exploring))
   (check-true (err? r)))
 
 ;; ============================================================
@@ -98,20 +98,49 @@
 
 (test-case "executor cleared on executing → idle"
   (define state (make-state 'executing #:executor (lambda () 'work)))
-  (define r (compute-next-gsm-state state 'idle))
+  (define-values (r _) (compute-next-gsm-state state 'idle))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'idle))
 
 (test-case "executor preserved on executing → verifying"
-  (define r (compute-next-gsm-state (make-state 'executing) 'verifying))
+  (define-values (r _) (compute-next-gsm-state (make-state 'executing) 'verifying))
   (check-true (ok? r))
   (check-equal? (ok-to r) 'verifying))
+
+;; ============================================================
+;; Returned state verification (RA-04)
+;; ============================================================
+
+(test-case "returned state has correct mode on valid transition"
+  (define-values (r new-state) (compute-next-gsm-state (make-state 'idle) 'exploring))
+  (check-true (ok? r))
+  (check-equal? (gsd-runtime-state-mode new-state) 'exploring))
+
+(test-case "returned state clears executor on executing → idle"
+  (define-values (r new-state) (compute-next-gsm-state (make-state 'executing #:executor (lambda () 'work)) 'idle))
+  (check-true (ok? r))
+  (check-equal? (gsd-runtime-state-mode new-state) 'idle)
+  (check-false (gsd-runtime-state-wave-executor new-state)))
+
+(test-case "returned state clears executor on executing → verifying"
+  (define exec (lambda () 'work))
+  (define-values (r new-state) (compute-next-gsm-state (make-state 'executing #:executor exec) 'verifying))
+  (check-true (ok? r))
+  (check-equal? (gsd-runtime-state-mode new-state) 'verifying)
+  (check-false (gsd-runtime-state-wave-executor new-state)))
+
+(test-case "returned state is unchanged on invalid transition"
+  (define state (make-state 'idle #:executor (lambda () 'work)))
+  (define-values (r new-state) (compute-next-gsm-state state 'executing))
+  (check-true (err? r))
+  (check-equal? (gsd-runtime-state-mode new-state) 'idle)
+  (check-equal? (gsd-runtime-state-wave-executor new-state) (gsd-runtime-state-wave-executor state)))
 
 ;; ============================================================
 ;; Invalid state values
 ;; ============================================================
 
 (test-case "invalid state value returns err-result"
-  (define r (compute-next-gsm-state (make-state 'idle) 'nonexistent))
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'nonexistent))
   (check-true (err? r))
   (check-equal? (err-reason r) "invalid state: nonexistent"))
