@@ -11,11 +11,45 @@
          "wave-executor.rkt")
 
 (provide planning-prompt
+         planning-implement-prompt
          executing-prompt
          wave-failure-prompt
          verifying-prompt
          status-prompt)
 
+
+;; ============================================================
+;; Planning implement prompt
+;; ============================================================
+
+(define planning-implement-prompt
+  (string-append "[gsd-planning] EXECUTE the plan below. IMPLEMENT NOW — do NOT explore.
+"
+                 "
+"
+                 "CRITICAL RULES:
+"
+                 "1. Do NOT re-read the plan. It is provided below in full.
+"
+                 "2. Do NOT write a new plan. Execute the existing one.
+"
+                 "3. Do NOT use planning-write during implementation.
+"
+                 "   planning-read is allowed to check STATE or VALIDATION.
+"
+                 "4. Read each target file BEFORE editing it. You need the current content
+"
+                 "   to apply edits correctly. Read is necessary and expected.
+"
+                 "5. After reading, apply the edits specified in the wave doc actions.
+"
+                 "6. After completing each wave, run its verify command.
+"
+                 "
+"
+                 "The plan follows. Start implementing immediately.
+
+"))
 ;; ============================================================
 ;; Exploring prompt
 ;; ============================================================
