@@ -16,7 +16,7 @@
   ;;   tui/input.rkt:283 — input history (user input only)
   ;;   tui/tree-view.rkt:211 — render lines (batch render)
   ;; Not a performance issue at current scale. Revisit if transcripts >5000 entries.
-  (check-true #t "documented"))
+  (void))
 
 ;; ── Test 2: Verify cons-based append is O(1) ──
 (test-case "cons-based append is O(1)"

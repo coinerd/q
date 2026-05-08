@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.34.5 — 2026-05-08
+
+### Docs/Lint Remediation + Contract Quick Wins + Test Hygiene
+
+**Goal:** Fix stale docs, tighten contracts, remove dead code, and clean tautological tests.
+
+- **Docs sync (D-01–D-04):** Backfilled CHANGELOG for v0.34.0–v0.34.4; synced 16 version refs in docs/wiki; updated architecture overview metrics; synced README status block
+- **Stale bytecode fix (T-01/T-02):** Added `clean-stale-bytecode!` to `scripts/run-tests.rkt` — pre-flight deletion of stale `.zo` files to prevent `instantiate-linklet` mismatches
+- **Dead code removal (A-03):** Removed `compute-next-loop-state` no-op stub from `agent/loop.rkt`; deleted 2 obsolete test files
+- **Upward import fix (A-04):** Moved `typed-event-predicates.rkt` from `util/` to `agent/event-structs/`
+- **Legacy comment cleanup (A-05, A-06):** Removed stale comments from `errors.rkt` and `event-macro.rkt`
+- **Bare error → structured exceptions (E-01–E-03):** Replaced 6 bare `(error ...)` calls in `llm/provider.rkt`, `llm/azure-openai.rkt`, `util/content-parts.rkt` with `raise-arguments-error`, `raise-provider-error`, `raise-credential-error`
+- **Contract quick wins (C-01, C-04–C-07):**
+  - `make-agent-session`: `any/c` → `(or/c hash? session-config?)`
+  - `run-tool-batch`: `any/c any/c` → `(listof tool-call?) tool-registry?`
+  - `load-extension!`/`reload-extensions!`: `any/c` → `extension-registry?`
+  - `setting-ref`: `any/c` key → `(or/c symbol? string?)`
+  - `context-summary` functions: `(listof any/c)` → `(listof message?)` where messages
+- **Test hygiene (T-04):** Replaced 11 tautological `(check-true #t)` assertions with meaningful checks or `(void)` across 6 test files
+
+**Verification:** 486/486 fast test files, 2088 tests pass. Lint: 18/18 pass.
+
 
 ## v0.34.4 — 2026-05-08
 

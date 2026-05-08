@@ -55,7 +55,7 @@
 ;; ── Result struct ──
 (provide (struct-out scheduler-result)
          (contract-out [run-tool-batch
-                        (->* (any/c any/c)
+                        (->* ((listof tool-call?) tool-registry?)
                              (#:hook-dispatcher (or/c procedure? #f)
                                                 #:exec-context (or/c any/c #f)
                                                 #:parallel? (or/c boolean? #f))
