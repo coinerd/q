@@ -8,8 +8,17 @@
 (require racket/contract
          "content-parts.rkt")
 
-(provide (struct-out message)
-         make-message
+(provide message
+         message?
+         message-id
+         message-parent-id
+         message-role
+         message-kind
+         message-content
+         message-timestamp
+         message-meta
+         (contract-out [make-message
+                        (-> any/c (or/c string? symbol? #f) symbol? symbol? (listof any/c) any/c any/c message?)])
          message->jsexpr
          jsexpr->message)
 
