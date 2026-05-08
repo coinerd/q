@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.34.6 — 2026-05-08
+
+### Architecture Decomposition (A-01, A-02)
+
+**Goal:** Decompose monolithic god modules into focused sub-modules.
+
+**W0a — iteration.rkt decomposition (#3972):**
+- Extracted 808-line runtime/iteration.rkt into 4 sub-modules:
+  - runtime/iteration/counters.rkt (110 lines) — compute-next-counters, check-cancellation
+  - runtime/iteration/decision.rkt (91 lines) — iteration-ctx, step-result, decide-next-action, compute-termination, compute-step-result
+  - runtime/iteration/step-interpreter.rkt (314 lines) — interpret-step, handle-stop-action, execute-pending-tool-calls
+  - runtime/iteration/main-loop.rkt (244 lines) — run-iteration-loop
+- Converted iteration.rkt into 110-line re-export facade
+- Fixed tool-coordinator.rkt to guard run-tool-batch against #f registry
+
+**W0b — gsd-planning.rkt decomposition (#3973):**
+- Extracted 670-line extensions/gsd-planning.rkt into 2 sub-modules:
+  - extensions/gsd/tool-handlers.rkt (219 lines) — handle-planning-read, handle-planning-write, artifact I/O, tool schemas
+  - extensions/gsd/command-handlers.rkt (326 lines) — slash-command registration and dispatch, /go, /gsd, /plan handlers
+- Converted gsd-planning.rkt into 184-line re-export facade
+- Moved planning-implement-prompt into gsd/prompts.rkt for centralized prompt management
+
+**Verification:** 486/486 fast test files, 2088 tests pass. Lint: 18/18 pass.
+
 ## v0.34.5 — 2026-05-08
 
 ### Docs/Lint Remediation + Contract Quick Wins + Test Hygiene
