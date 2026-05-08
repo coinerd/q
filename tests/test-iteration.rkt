@@ -164,10 +164,10 @@
   (check-pred hash? result)
   (check-equal? (hash-ref result 'key #f) "val"))
 
-(test-case "ensure-hash-args with invalid JSON string returns hash with _parse_failed key"
-  (define result (ensure-hash-args "not json"))
-  (check-pred hash? result)
-  (check-true (hash-ref result '_parse_failed #f)))
+(test-case "ensure-hash-args with invalid JSON string raises tool-error"
+  (check-exn exn:fail?
+             (lambda () (ensure-hash-args "not json"))
+             "should raise tool-error for invalid JSON"))
 
 (test-case "ensure-hash-args with hash returns same hash"
   (define h (hasheq 'foo 'bar))

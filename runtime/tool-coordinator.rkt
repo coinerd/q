@@ -165,11 +165,13 @@
   ;; Capture batch start time for per-batch duration (v0.29.16)
   (define batch-start-ms (current-inexact-milliseconds))
 
-  ;; Run tool batch through scheduler (skip if blocked)
+  ;; Run tool batch through scheduler (skip if blocked or no registry)
   (define sched-result
-    (if tool-call-blocked?
-        (scheduler-result '() '() #f)
-        (let ([hook-dispatcher-fn (and ext-reg
+    (cond
+      [tool-call-blocked? (scheduler-result '() (hasheq))]
+      [(not reg) (scheduler-result '() (hasheq))]
+      [else
+       (let ([hook-dispatcher-fn (and ext-reg
                                        (lambda (hook-point payload)
                                          (dispatch-hooks hook-point payload ext-reg)))])
           (run-tool-batch
@@ -198,7 +200,7 @@
             #:call-id (generate-id)
             #:session-metadata
             (hasheq 'session-id session-id 'session-index (dict-ref config 'session-index #f)))
-           #:parallel? (dict-ref config 'parallel-tools #t)))))
+           #:parallel? (dict-ref config 'parallel-tools #t)))]))
 
   ;; Dispatch 'tool.execution.end hook after tool batch
   (when (and ext-reg (not tool-call-blocked?))
