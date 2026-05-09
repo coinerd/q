@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.34.9] — 2026-05-09
+
+### Goal: Documentation integrity fixes (v0.34.8 findings)
+
+### W0 — Stale File Cleanup + Documentation Accuracy
+- **N-02**: Removed stale `FUNCTION-QUALITY-AUDIT.md` (was already absent, confirmed)
+- **N-01**: Removed stale inner `q/.planning/` directory (464 files, frozen at v0.32.11; canonical is outer `.planning/`)
+- **N-03**: Merged duplicate CHANGELOG v0.34.8 sections
+- **N-04**: Fixed README v0.34.7 description ("Architecture Decomposition" → "Deep Audit Remediation")
+- **N-05**: Added README v0.34.8 description ("Deep Audit Remediation Round 2")
+- **N-06/N-07**: Metrics already match canonical values (414 modules, 63,297 LOC)
+
+**Verification**: lint-all 18/18, smoke test suite green
+
 ## [0.34.8] — 2026-05-09
 
 ### Goal: Deep audit remediation round 2 (v0.34.7 findings)
@@ -23,17 +37,6 @@
 
 **Verification**: lint-all 18/18, fast test suite green
 
----
-
-## v0.34.8 — 2026-05-09
-
-**10 findings addressed** (2 Critical + 6 Warning + 2 Info):
-- D-01: Inner planning sync (was 15+ versions stale)
-- D-02: FUNCTION-QUALITY-AUDIT.md removal (confirmed absent)
-- T-01–T-06: Test quality fixes (field mapping, dead imports, stubs, assertions, tautology)
-- D-03–D-04: Metrics sync (wiki-src + overview.md)
-
-**Lint**: 18/18 | **Tests**: fast suite green | **Version**: 0.34.8
 
 
 ## [0.34.7] — 2026-05-09
