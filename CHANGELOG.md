@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.35.1 — 2026-05-07
+
+### Goal: Global State Isolation (v0.35.1 milestone)
+
+### W0 — Per-Session GSD Context (C-01)
+- **C-01**: Added 15 per-session accessors (`gsd-ctx-*`) with explicit ctx argument
+- **C-01**: Added `gsd-ctx` field to `extension-ctx` struct (backward-compat, defaults #f)
+- Fixed semaphore deadlock in `gsd-ctx-state-update!` and `gsd-ctx-history-update!` (direct box access inside locked section)
+- Deprecated backward-compat global accessors (removal v0.37.0)
+- 13 new tests for context isolation and extension-ctx integration
+
+### W1 — GSD Facade Public/Private Split & State Machine Assertion (W-17, I-16, I-18, I-24)
+- **W-17**: Split `gsd-planning.rkt` provides into public API and internal sections
+- **I-16**: Added assertion that all TRANSITIONS states ⊆ GSD-STATES (validated at module load)
+- **I-18**: Replaced unsafe `cast` in `plan-types.rkt` with validated accessors (`expect-natural`, `expect-string`, `expect-string-list`)
+- **I-24**: Documented dual-write invariant in `wave-docs.rkt`
+- 11 new tests for state machine transitions and plan parsing validation
+
+**Verification**: lint-all 18/18, smoke 2031/2031 green
+
 ## v0.35.0 — 2026-05-07
 
 ### Goal: Event System Integrity (v0.35.0 milestone)

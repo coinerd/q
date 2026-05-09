@@ -10,4 +10,4 @@
 (provide q-version)
 
 (: q-version String)
-(define q-version "0.35.0")
+(define q-version "0.35.1")
