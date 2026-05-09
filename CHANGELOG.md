@@ -9,6 +9,14 @@
 - **D-02**: Confirmed FUNCTION-QUALITY-AUDIT.md absent (already removed)
 - Corrected false claims in v0.34.7 CHANGELOG entry (D-01, D-04 were not actually performed)
 
+### W0b — Test Quality Fixes (T-01–T-06)
+- **T-02**: Fixed `make-test-counters` field mapping (stall↔intent collision)
+- **T-05**: Removed dead `take-at-most` import from counters test
+- **T-03**: Renamed misleading "returns result" test to "raises exception"
+- **T-04**: Strengthened "continue action" assertion in step-interpreter test
+- **T-01**: Removed 11 empty stub headers from GSD integration tests (15→4)
+- **T-06**: Replaced remaining `check-true #t` in turn-compaction test
+
 
 ## [0.34.7] — 2026-05-09
 
