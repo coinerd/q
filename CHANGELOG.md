@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.35.2 — 2026-05-07
+
+### Goal: Runtime Config Struct & Scheduler Types (v0.35.2 milestone)
+
+### W0 — Runtime Config Struct (W-03)
+- **W-03**: `build-runtime-from-cli` returns `session-config?` instead of mutable hash
+- **W-03**: `cli-config->runtime-config` builds immutable hash (no more `hash-set!`)
+- All `rt-config` consumers switched from `hash-ref` to `dict-ref`
+- `reload-config!` returns new `session-config` (no mutation)
+- Fixed non-ASCII characters in `cli/args.rkt` (em dashes, arrows, box-drawing)
+- 7 new tests for session-config construction and accessors
+
+### W1 — Preflight Entry Struct & Scheduler Cleanup (W-10, I-07, I-08)
+- **W-10**: Typed `preflight-entry` struct replaces ad-hoc `hasheq` in scheduler
+- **I-08**: `dequeue-all-steering!` uses cons+reverse instead of append
+- 5 new tests for preflight-entry construction and predicates
+
+**Verification**: lint-all 18/18, smoke 2010/2010 green
+
 ## v0.35.1 — 2026-05-07
 
 ### Goal: Global State Isolation (v0.35.1 milestone)
