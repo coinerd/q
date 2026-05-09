@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.35.0 — 2026-05-07
+
+### Goal: Event System Integrity (v0.35.0 milestone)
+
+### W0 — Circuit Breaker Isolation (C-02, I-03)
+- **C-02**: Refactored `circuit-broken?`, `record-failure!`, `record-success!` to take explicit `breaker-state` hash arg
+- **I-03**: Replaced `match` on `(cons ...)` in `publish!` with readable `cond`
+- 7 new tests (28 total for event bus)
+
+### W1 — Duplicate Event Type String Resolution (W-01)
+- **W-01**: Renamed provider-stream event type strings from `model.stream.*` to `provider.stream.*`
+- 5 new tests verifying type string distinction between provider-stream and iteration-stream events
+
+### W2 — Event Registry Auto-Population (W-05, W-13, I-12, I-23)
+- **I-23**: Unified two duplicate `define-typed-event` syntax-parse clauses into one
+- **I-12**: Auto-registration of field names into global hash at module load time
+- **W-05**: Replaced 48-clause manual `case` in `get-struct-field-names` with single `lookup-event-fields` call (-87 lines)
+- Registered 7 per-tool events in auto-populated registry
+
+### W3 — Codec Unification & Round-Trip Safety (W-14, W-15, W-21, I-11)
+- **W-15/W-21**: 38 round-trip tests for typed-event JSON codec covering all 32 event types
+- Fixed `turn-cancelled-event` serialization to include `iteration` field
+- **I-11**: 5 value-type payload contracts: `delta-payload/c`, `model-name-payload/c`, `tool-name-payload/c`, `duration-payload/c`, `error-type-payload/c`
+- 18 value-type contract tests
+
+**Verification**: lint-all 18/18, smoke 2031/2031 green
+
 ## v0.34.9 — 2026-05-09
 
 ### Goal: Documentation integrity fixes (v0.34.8 findings)
