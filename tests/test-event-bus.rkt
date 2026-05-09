@@ -266,9 +266,70 @@
   (check-equal? (reverse (unbox received)) '("model.stream.delta")))
 
 ;; ============================================================
+;; 12. Circuit breaker per-bus isolation (C-02)
+;; ============================================================
+
+(test-case "circuit-broken? returns #f for unknown sub-id"
+  (define state (make-hash))
+  (check-false (circuit-broken? state 42)))
+
+(test-case "record-failure! increments failure count correctly"
+  (define state (make-hash))
+  (record-failure! state 1)
+  (check-equal? (car (hash-ref state 1)) 1)
+  (record-failure! state 1)
+  (check-equal? (car (hash-ref state 1)) 2))
+
+(test-case "record-success! resets failure count"
+  (define state (make-hash))
+  (record-failure! state 1)
+  (check-true (hash-has-key? state 1))
+  (record-success! state 1)
+  (check-false (hash-has-key? state 1)))
+
+(test-case "two buses with separate breaker states don't interfere"
+  (define bus-a (make-event-bus))
+  (define bus-b (make-event-bus))
+  (define received-a (box 0))
+  (define received-b (box 0))
+  (subscribe! bus-a (lambda (evt) (set-box! received-a (add1 (unbox received-a)))))
+  (subscribe! bus-b (lambda (evt) (set-box! received-b (add1 (unbox received-b)))))
+  (parameterize ([current-circuit-breaker-threshold 1])
+    (subscribe! bus-a (lambda (evt) (error 'test "deliberate failure")))
+    (publish! bus-a (test-event))
+    (check-equal? (unbox received-a) 1)
+    (publish! bus-b (test-event))
+    (check-equal? (unbox received-b) 1)))
+
+(test-case "publish! uses bus's own breaker state for isolation"
+  (define bus-a (make-event-bus))
+  (define bus-b (make-event-bus))
+  (define count-a (box 0))
+  (define count-b (box 0))
+  (subscribe! bus-a (lambda (evt) (set-box! count-a (add1 (unbox count-a)))))
+  (subscribe! bus-b (lambda (evt) (set-box! count-b (add1 (unbox count-b)))))
+  (publish! bus-a (test-event))
+  (publish! bus-b (test-event))
+  (check-equal? (unbox count-a) 1)
+  (check-equal? (unbox count-b) 1))
+
+(test-case "circuit breaker fires after threshold failures"
+  (define state (make-hash))
+  (parameterize ([current-circuit-breaker-threshold 3])
+    (record-failure! state 1)
+    (record-failure! state 1)
+    (record-failure! state 1)
+    (check-true (circuit-broken? state 1))))
+
+(test-case "circuit breaker does not fire below threshold"
+  (define state (make-hash))
+  (parameterize ([current-circuit-breaker-threshold 5])
+    (record-failure! state 1)
+    (record-failure! state 1)
+    (check-false (circuit-broken? state 1))))
+
+;; ============================================================
 ;; v0.33.7 W0b (N-T03): Regression test for non-boolean truthy filter
-;; The v0.33.6 fix changed (match ... [(cons #f #t) ...]) to
-;; [(cons #f (not #f)) ...] so truthy non-boolean filter results fire.
 ;; ============================================================
 
 (test-case "publish! dispatches to subscriber with non-boolean truthy filter result"

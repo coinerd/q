@@ -22,10 +22,8 @@
           [make-event-bus (-> event-bus?)]
           [subscribe!
            (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
-          [subscribe-map!
-           (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]
-          [subscribe-filter!
-           (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]
+          [subscribe-map! (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]
+          [subscribe-filter! (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]
           [unsubscribe! (-> event-bus? exact-nonnegative-integer? void?)]
           [publish! (-> event-bus? event? event?)]
           [typed-event->event (-> typed-event? event?)]
@@ -36,7 +34,12 @@
          ;; Circuit breaker configuration
          current-circuit-breaker-threshold
          current-circuit-breaker-cooldown-secs
-         circuit-breaker-state)
+         ;; Deprecated: use explicit breaker-state argument instead
+         circuit-breaker-state
+         ;; New per-bus isolated circuit breaker functions
+         circuit-broken?
+         record-failure!
+         record-success!)
 
 ;; ============================================================
 ;; Error handler parameter
@@ -66,8 +69,8 @@
 (define current-circuit-breaker-cooldown-secs (make-parameter 60))
 
 ;; Per-subscriber circuit breaker state: hash of sub-id -> (cons failure-count last-failure-secs)
-;; Kept as a parameter for backward compatibility. Each event-bus binds its own
-;; per-bus breaker hash via parameterize in publish! so concurrent buses don't share state.
+;; Deprecated global parameter — kept for backward compatibility only.
+;; New code should use the explicit breaker-state hash argument.
 (define circuit-breaker-state (make-parameter (make-hash)))
 
 ;; Dedicated semaphore for circuit breaker state mutations (#444).
@@ -76,44 +79,45 @@
 (define circuit-breaker-semaphore (make-semaphore 1))
 
 ;; Check if a subscriber is circuit-broken (thread-safe)
-(define (circuit-broken? sub-id)
+;; breaker-state: hash of sub-id -> (cons failure-count last-failure-secs)
+(define (circuit-broken? breaker-state sub-id)
   (define threshold (current-circuit-breaker-threshold))
   (if (not threshold)
       #f
       (with-circuit-breaker-lock (lambda ()
-                                   (let ([entry (hash-ref (circuit-breaker-state) sub-id #f)])
-                                     (and entry
-                                          (>= (car entry) threshold)
-                                          (let ([cooldown (current-circuit-breaker-cooldown-secs)])
-                                            (if (and cooldown
-                                                     (> (- (current-seconds) (cdr entry)) cooldown))
-                                                (begin
-                                                  ;; Cooldown elapsed, reset
-                                                  (hash-remove! (circuit-breaker-state) sub-id)
-                                                  #f)
-                                                #t))))))))
+                                   (define entry (hash-ref breaker-state sub-id #f))
+                                   (and entry
+                                        (>= (car entry) threshold)
+                                        (let ([cooldown (current-circuit-breaker-cooldown-secs)])
+                                          (if (and cooldown
+                                                   (> (- (current-seconds) (cdr entry)) cooldown))
+                                              (begin
+                                                ;; Cooldown elapsed, reset
+                                                (hash-remove! breaker-state sub-id)
+                                                #f)
+                                              #t)))))))
 
 ;; Record a failure for a subscriber (thread-safe)
-(define (record-failure! sub-id)
+;; breaker-state: hash of sub-id -> (cons failure-count last-failure-secs)
+(define (record-failure! breaker-state sub-id)
   (define threshold (current-circuit-breaker-threshold))
   (when threshold
     (with-circuit-breaker-lock
      (lambda ()
-       (define state (circuit-breaker-state))
-       (define entry (hash-ref state sub-id (cons 0 0)))
+       (define entry (hash-ref breaker-state sub-id (cons 0 0)))
        (define new-count (add1 (car entry)))
-       (hash-set! state sub-id (cons new-count (current-seconds)))
+       (hash-set! breaker-state sub-id (cons new-count (current-seconds)))
        (when (= new-count threshold)
          (log-warning "event-bus: subscriber ~a circuit-broken after ~a consecutive failures"
                       sub-id
                       threshold))))))
 
 ;; Reset failure count on success (thread-safe)
-(define (record-success! sub-id)
+;; breaker-state: hash of sub-id -> (cons failure-count last-failure-secs)
+(define (record-success! breaker-state sub-id)
   (with-circuit-breaker-lock (lambda ()
-                               (define state (circuit-breaker-state))
-                               (when (hash-has-key? state sub-id)
-                                 (hash-remove! state sub-id)))))
+                               (when (hash-has-key? breaker-state sub-id)
+                                 (hash-remove! breaker-state sub-id)))))
 
 ;; ============================================================
 ;; Internal subscription record
@@ -191,20 +195,20 @@
 (define (publish! bus evt)
   (define subs
     (with-event-bus-lock bus (lambda () (reverse (unbox (event-bus-subscriptions-box bus))))))
-  (parameterize ([circuit-breaker-state (event-bus-breaker-state bus)])
-    (define err-handler (current-event-bus-error-handler))
-    (for ([s (in-list subs)])
-      (define sub-id (subscription-id s))
-      (define pred (subscription-filter s))
-      (match (cons (circuit-broken? sub-id) (or (not pred) (pred evt)))
-        [(cons #t _) (void)] ; circuit broken
-        [(cons #f (not #f)) ; not broken and predicate truthy (or no predicate)
-         (with-handlers ([exn:fail? (lambda (exn)
-                                      (record-failure! sub-id)
-                                      (err-handler evt (subscription-handler s) exn))])
-           ((subscription-handler s) evt)
-           (record-success! sub-id))]
-        [_ (void)]))) ; not broken but predicate false
+  (define breaker-state (event-bus-breaker-state bus))
+  (define err-handler (current-event-bus-error-handler))
+  (for ([s (in-list subs)])
+    (define sub-id (subscription-id s))
+    (define pred (subscription-filter s))
+    (cond
+      [(circuit-broken? breaker-state sub-id) (void)]
+      [(and pred (not (pred evt))) (void)] ; predicate filter rejected
+      [else
+       (with-handlers ([exn:fail? (lambda (exn)
+                                    (record-failure! breaker-state sub-id)
+                                    (err-handler evt (subscription-handler s) exn))])
+         ((subscription-handler s) evt)
+         (record-success! breaker-state sub-id))]))
   evt)
 
 ;; ============================================================
