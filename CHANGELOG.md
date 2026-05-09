@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.34.9] — 2026-05-09
+## v0.34.9 — 2026-05-09
 
 ### Goal: Documentation integrity fixes (v0.34.8 findings)
 
@@ -14,7 +14,7 @@
 
 **Verification**: lint-all 18/18, smoke test suite green
 
-## [0.34.8] — 2026-05-09
+## v0.34.8 — 2026-05-09
 
 ### Goal: Deep audit remediation round 2 (v0.34.7 findings)
 
@@ -39,7 +39,7 @@
 
 
 
-## [0.34.7] — 2026-05-09
+## v0.34.7 — 2026-05-09
 
 ### Goal: Deep audit remediation (v0.34.5+v0.34.6 findings)
 

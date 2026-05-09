@@ -352,7 +352,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.34.9** — Architecture Decomposition (A-01, A-02)
+**v0.34.9** — Goal: Documentation integrity fixes (v0.34.8 findings)
 
 **v0.34.8** — Deep Audit Remediation Round 2
 
