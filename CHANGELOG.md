@@ -10,7 +10,7 @@
 - **N-03**: Merged duplicate CHANGELOG v0.34.8 sections
 - **N-04**: Fixed README v0.34.7 description ("Architecture Decomposition" → "Deep Audit Remediation")
 - **N-05**: Added README v0.34.8 description ("Deep Audit Remediation Round 2")
-- **N-06/N-07**: Metrics already match canonical values (414 modules, 63,297 LOC)
+- **N-06/N-07**: Verified metrics match canonical `metrics.rkt` output (414 modules, 63,297 LOC). Audit's 415/63,481 was from a stale run; current canonical is 414/63,297.
 
 **Verification**: lint-all 18/18, smoke test suite green
 
