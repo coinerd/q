@@ -102,15 +102,62 @@
   (check-equal? (assistant-message-completed-event-content-length rt) 42))
 
 ;; ============================================================
+;; W-01: Provider-stream vs iteration-stream type string disambiguation
+;; ============================================================
+
+(test-case "model-stream-delta-event has distinct type from stream-delta-event"
+  (check-not-equal?
+   (typed-event-type
+    (make-model-stream-delta-event #:session-id #f #:turn-id #f #:delta "" #:model ""))
+   (typed-event-type (make-stream-delta-event #:session-id #f #:turn-id #f #:delta ""))))
+
+(test-case "model-stream-thinking-event has distinct type from stream-thinking-event"
+  (check-not-equal?
+   (typed-event-type
+    (make-model-stream-thinking-event #:session-id #f #:turn-id #f #:thinking "" #:model ""))
+   (typed-event-type (make-stream-thinking-event #:session-id #f #:turn-id #f #:delta ""))))
+
+(test-case "model-stream-completed-event has distinct type from stream-completed-event"
+  (check-not-equal?
+   (typed-event-type
+    (make-model-stream-completed-event #:session-id #f #:turn-id #f #:model "" #:provider ""))
+   (typed-event-type
+    (make-stream-completed-event #:session-id #f #:turn-id #f #:usage (hasheq) #:finish_reason ""))))
+
+(test-case "provider-stream events use provider.stream prefix"
+  (check-equal? (typed-event-type
+                 (make-model-stream-delta-event #:session-id #f #:turn-id #f #:delta "" #:model ""))
+                "provider.stream.delta")
+  (check-equal?
+   (typed-event-type
+    (make-model-stream-thinking-event #:session-id #f #:turn-id #f #:thinking "" #:model ""))
+   "provider.stream.thinking")
+  (check-equal?
+   (typed-event-type
+    (make-model-stream-completed-event #:session-id #f #:turn-id #f #:model "" #:provider ""))
+   "provider.stream.completed"))
+
+(test-case "iteration-stream events keep model.stream prefix"
+  (check-equal? (typed-event-type (make-stream-delta-event #:session-id #f #:turn-id #f #:delta ""))
+                "model.stream.delta")
+  (check-equal?
+   (typed-event-type (make-stream-thinking-event #:session-id #f #:turn-id #f #:delta ""))
+   "model.stream.thinking")
+  (check-equal?
+   (typed-event-type
+    (make-stream-completed-event #:session-id #f #:turn-id #f #:usage (hasheq) #:finish_reason ""))
+   "model.stream.completed"))
+
+;; ============================================================
 ;; Registry check
 ;; ============================================================
 
 (test-case "all-known-event-types includes new types"
   (define types (all-known-event-types))
-  (for ([t '("model.stream.delta" "model.stream.thinking"
-                                  "model.stream.completed"
-                                  "model.request.blocked"
-                                  "message.blocked"
-                                  "turn.cancelled"
-                                  "assistant.message.completed")])
+  (for ([t '("provider.stream.delta" "provider.stream.thinking"
+                                     "provider.stream.completed"
+                                     "model.request.blocked"
+                                     "message.blocked"
+                                     "turn.cancelled"
+                                     "assistant.message.completed")])
     (check-not-false (member t types) (format "~a not in registry" t))))
