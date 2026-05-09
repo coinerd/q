@@ -9,30 +9,28 @@
 ;; Per-tool events (tool-call-event parent with complex constructors) remain manual.
 
 (require "base.rkt"
-         "../../util/event-macro.rkt")
+         "../../util/event-macro.rkt"
+         (only-in "../../util/event-macro.rkt" register-event-fields!))
 
 ;; ============================================================
 ;; Tool execution lifecycle (typed-event parent)
 ;; ============================================================
 
-(define-typed-event tool-execution-start-event "tool.execution.started"
-  (tool-name tool-call-id))
+(define-typed-event tool-execution-start-event "tool.execution.started" (tool-name tool-call-id))
 
-(define-typed-event tool-execution-update-event "tool.execution.updated"
-  (tool-name progress))
+(define-typed-event tool-execution-update-event "tool.execution.updated" (tool-name progress))
 
-(define-typed-event tool-execution-end-event "tool.execution.completed"
-  (tool-name duration-ms result-summary))
+(define-typed-event tool-execution-end-event
+                    "tool.execution.completed"
+                    (tool-name duration-ms result-summary))
 
 ;; ============================================================
 ;; Generic tool call/result (typed-event parent)
 ;; ============================================================
 
-(define-typed-event tool-call-event "tool.called"
-  (tool-name arguments tool-call-id))
+(define-typed-event tool-call-event "tool.called" (tool-name arguments tool-call-id))
 
-(define-typed-event tool-result-event "tool.result"
-  (tool-call-id content is-error?))
+(define-typed-event tool-result-event "tool.result" (tool-call-id content is-error?))
 
 ;; ============================================================
 ;; Per-tool typed events (tool-call-event parent — manual)
@@ -91,8 +89,8 @@
                         timeout
                         cwd))
 
-(define bash-tool-call-event-fields
-  (append tool-call-event-fields '(command timeout cwd)))
+(define bash-tool-call-event-fields (append tool-call-event-fields '(command timeout cwd)))
+(register-event-fields! 'bash-tool-call-event bash-tool-call-event-fields)
 
 ;; edit-tool-call-event
 (struct edit-tool-call-event tool-call-event (path edits) #:transparent)
@@ -113,8 +111,8 @@
                         path
                         edits))
 
-(define edit-tool-call-event-fields
-  (append tool-call-event-fields '(path edits)))
+(define edit-tool-call-event-fields (append tool-call-event-fields '(path edits)))
+(register-event-fields! 'edit-tool-call-event edit-tool-call-event-fields)
 
 ;; write-tool-call-event
 (struct write-tool-call-event tool-call-event (path content) #:transparent)
@@ -135,8 +133,8 @@
                          path
                          content))
 
-(define write-tool-call-event-fields
-  (append tool-call-event-fields '(path content)))
+(define write-tool-call-event-fields (append tool-call-event-fields '(path content)))
+(register-event-fields! 'write-tool-call-event write-tool-call-event-fields)
 
 ;; read-tool-call-event
 (struct read-tool-call-event tool-call-event (path offset limit) #:transparent)
@@ -159,11 +157,15 @@
                         offset
                         limit))
 
-(define read-tool-call-event-fields
-  (append tool-call-event-fields '(path offset limit)))
+(define read-tool-call-event-fields (append tool-call-event-fields '(path offset limit)))
+(register-event-fields! 'read-tool-call-event read-tool-call-event-fields)
 
 ;; grep-tool-call-event
-(struct grep-tool-call-event tool-call-event (pattern path glob) #:transparent)
+(struct grep-tool-call-event
+        tool-call-event
+        (pattern path
+          glob)
+  #:transparent)
 
 (define (make-grep-tool-call-event #:session-id session-id
                                    #:turn-id turn-id
@@ -184,7 +186,10 @@
                         glob))
 
 (define grep-tool-call-event-fields
-  (append tool-call-event-fields '(pattern path glob)))
+  (append tool-call-event-fields
+          '(pattern path
+             glob)))
+(register-event-fields! 'grep-tool-call-event grep-tool-call-event-fields)
 
 ;; find-tool-call-event
 (struct find-tool-call-event tool-call-event (pattern path) #:transparent)
@@ -205,8 +210,8 @@
                         pattern
                         path))
 
-(define find-tool-call-event-fields
-  (append tool-call-event-fields '(pattern path)))
+(define find-tool-call-event-fields (append tool-call-event-fields '(pattern path)))
+(register-event-fields! 'find-tool-call-event find-tool-call-event-fields)
 
 ;; custom-tool-call-event — fallback for unknown tools
 (struct custom-tool-call-event tool-call-event () #:transparent)
@@ -226,3 +231,4 @@
                           tool-call-id))
 
 (define custom-tool-call-event-fields tool-call-event-fields)
+(register-event-fields! 'custom-tool-call-event custom-tool-call-event-fields)
