@@ -60,7 +60,7 @@
                             (void))
                           #:redirect-to (open-output-string))
   ;; No error means the null sink handled the writes
-  (check-true #t))
+  (void))
 
 (test-case "#1181: guard can redirect to stderr"
   ;; This just verifies the #:redirect-to option works

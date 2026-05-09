@@ -59,16 +59,13 @@
 ;; Test 1: /go sets mode to executing, resets budget and read counts
 ;; ============================================================
 
-
 ;; ============================================================
 ;; Test 2: Budget decrements correctly across tool-guard + read-tracker
 ;; ============================================================
 
-
 ;; ============================================================
 ;; Test 3: Budget warning appears in result, not in args
 ;; ============================================================
-
 
 ;; ============================================================
 ;; Test 4: planning-write blocked during executing mode
@@ -86,7 +83,6 @@
 ;; ============================================================
 ;; Test 5: session-shutdown resets all state
 ;; ============================================================
-
 
 ;; ============================================================
 ;; Test 6: planning-read allowed during executing (I1 fix)
@@ -109,16 +105,13 @@
 ;; Test 7: Concurrent budget decrement — no lost updates (C1)
 ;; ============================================================
 
-
 ;; ============================================================
 ;; Test 8: Read hint + budget warning both appear in result
 ;; ============================================================
 
-
 ;; ============================================================
 ;; Test 9: Hard block at GO-READ-BLOCK-THRESHOLD
 ;; ============================================================
-
 
 ;; ============================================================
 ;; Test 10: Edit limit raised during /go
@@ -129,9 +122,10 @@
    (lambda ()
      (with-temp-planning-dir
       (lambda (dir)
-        (call-with-output-file (build-path dir ".planning" "PLAN.md")
-                               (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
-                               #:exists 'truncate)
+        (call-with-output-file
+         (build-path dir ".planning" "PLAN.md")
+         (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
+         #:exists 'truncate)
         (check-equal? (current-max-old-text-len) 500 "default should be 500")
         (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
         (handler (hasheq 'command "/go" 'input "/go"))
@@ -141,23 +135,32 @@
 ;; Test 11: State module re-exports work (backward compat)
 ;; ============================================================
 
-
 ;; ============================================================
 ;; Test 12: Non-read tools don't affect read count tracking
 ;; ============================================================
-
 
 ;; ============================================================
 ;; Test 13: reset-all-gsd-state! is idempotent
 ;; ============================================================
 
+(test-case "reset-all-gsd-state! is idempotent"
+  (with-clean-state (lambda ()
+                      ;; Set some state
+                      (set-gsd-mode! 'executing)
+                      (set-total-waves! 5)
+                      (mark-wave-complete! 1)
+                      ;; Reset twice
+                      (reset-all-gsd-state!)
+                      (reset-all-gsd-state!)
+                      ;; State should be clean
+                      (check-false (gsd-mode))
+                      (check-equal? (total-waves) 0)
+                      (check-false (wave-complete? 1)))))
 
 ;; ============================================================
 ;; Test 14: Budget warning text for non-read read-only tools
 ;; ============================================================
 
-
 ;; ============================================================
 ;; Test 15: Full lifecycle — /plan → /go → session-shutdown
 ;; ============================================================
-
