@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.34.8] — 2026-05-09
+
+### Goal: Deep audit remediation round 2 (v0.34.7 findings)
+
+### W0a — Critical Documentation Fixes (D-01, D-02)
+- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.34.8 (was stale at v0.34.6)
+- **D-02**: Confirmed FUNCTION-QUALITY-AUDIT.md absent (already removed)
+- Corrected false claims in v0.34.7 CHANGELOG entry (D-01, D-04 were not actually performed)
+
+
 ## [0.34.7] — 2026-05-09
 
 ### Goal: Deep audit remediation (v0.34.5+v0.34.6 findings)
@@ -10,13 +20,13 @@
 - **A-03**: Removed dead `compute-termination` + eliminated redundant `decide-next-action` call
 - **A-04**: Normalized `hash` → `hasheq` in `decision.rkt`
 
-### W0b — Documentation + Planning Sync (D-01–06)
-- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.34.7
+### W0b — Documentation + Planning Sync (D-02, D-03, D-05, D-06)
 - **D-02**: Updated `dependency-policy.rktd` with iteration/gsd decomposition
 - **D-03**: Synced module counts across README, overview, wiki-src (414 modules, 63,297 LOC)
-- **D-04**: Removed stale `FUNCTION-QUALITY-AUDIT.md` (already absent)
 - **D-05**: Fixed `errors.rkt` header comment for provider-error
 - **D-06**: Verified outer `.planning/` current
+- **D-01**: Inner `.planning/` sync deferred to v0.34.8 (was stale at v0.34.6)
+- **D-04**: FUNCTION-QUALITY-AUDIT.md verified absent (already removed earlier)
 
 ### W0c — Test Coverage + Contracts (T-01–03, C-01)
 - **T-01**: Created `test-iteration-counters.rkt` (8 tests), `test-iteration-main-loop.rkt` (3 tests), `test-iteration-step-interpreter.rkt` (3 tests)
