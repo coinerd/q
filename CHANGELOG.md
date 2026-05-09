@@ -17,6 +17,24 @@
 - **T-01**: Removed 11 empty stub headers from GSD integration tests (15→4)
 - **T-06**: Replaced remaining `check-true #t` in turn-compaction test
 
+### W0c — Metrics Sync + Version Bump (D-03, D-04)
+- **D-03**: Synced wiki-src/Architecture-Overview.md metrics (531→534 test files, 96796→97086 test lines, 14952→14977 assertions)
+- **D-04**: Fixed docs/architecture/overview.md LOC (63300→63297)
+
+**Verification**: lint-all 18/18, fast test suite green
+
+---
+
+## v0.34.8 — 2026-05-09
+
+**10 findings addressed** (2 Critical + 6 Warning + 2 Info):
+- D-01: Inner planning sync (was 15+ versions stale)
+- D-02: FUNCTION-QUALITY-AUDIT.md removal (confirmed absent)
+- T-01–T-06: Test quality fixes (field mapping, dead imports, stubs, assertions, tautology)
+- D-03–D-04: Metrics sync (wiki-src + overview.md)
+
+**Lint**: 18/18 | **Tests**: fast suite green | **Version**: 0.34.8
+
 
 ## [0.34.7] — 2026-05-09
 

@@ -35,12 +35,12 @@ User input → Interface (CLI/TUI/RPC)
     → Events emitted to bus
 ```
 
-## Metrics (0.34.7)
+## Metrics (0.34.8)
 > _See `racket scripts/metrics.rkt` for current numbers._
 
-- 414 source modules, 531 test files
-- 63,297 source lines, 96,796 test lines
-- 14,952 assertions (test:source ratio 1.53:1)
+- 414 source modules, 534 test files
+- 63,297 source lines, 97,086 test lines
+- 14,977 assertions (test:source ratio 1.53:1)
 - 10/10 lint checks enforced in CI
 
 For the canonical architecture description, see the [repository README](https://github.com/coinerd/q/blob/main/README.md) and [docs/adr/README.md](https://github.com/coinerd/q/blob/main/q/docs/adr/README.md).

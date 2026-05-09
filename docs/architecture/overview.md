@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.34.7
+v0.34.8
 
 ## Layer Diagram
 
@@ -34,7 +34,7 @@ v0.34.7
 └─────────────────────────────────────────────┘
 ```
 
-## Module Counts (414 source modules, ~63,300 LOC)
+## Module Counts (414 source modules, ~63,297 LOC)
 
 | Layer | Modules | Key Files |
 |-------|---------|-----------|
