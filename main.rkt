@@ -8,6 +8,7 @@
 ;; stable, contracted public API. This module exports everything for
 ;; backward compatibility but includes many internal symbols.
 
+(require racket/dict)
 (require "interfaces/cli.rkt"
          "interfaces/json-mode.rkt"
          "interfaces/rpc-mode.rkt"
@@ -127,7 +128,7 @@
      (exit 0)]
     [(interactive)
      (define rt-config (build-runtime-from-cli cfg))
-     (define prov (hash-ref rt-config 'provider #f))
+     (define prov (dict-ref rt-config 'provider #f))
      (define prov-name (and (provider? prov) (provider-name prov)))
      (if (eq? (cli-config-command cfg) 'resume)
          (run-resume cfg rt-config)

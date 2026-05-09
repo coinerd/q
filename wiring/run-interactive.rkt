@@ -9,6 +9,8 @@
 ;;   - make-terminal-subscriber: streaming Markdown event renderer
 ;;   - handle-sessions-interactive-command: /sessions command handler
 
+(require racket/dict)
+
 (require racket/string
          "../interfaces/cli.rkt"
          "../interfaces/sessions.rkt"
@@ -103,7 +105,7 @@
 
 (define (run-interactive cfg rt-config #:provider-name [prov-name #f])
   (define sess (make-agent-session rt-config))
-  (define bus (hash-ref rt-config 'event-bus))
+  (define bus (dict-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
   (run-cli-interactive
    cfg
@@ -121,7 +123,7 @@
                (displayln (format "[forked session: ~a]" (session-id new-sess))))
    #:model-fn
    (lambda (arg)
-     (define reg (hash-ref rt-config 'model-registry #f))
+     (define reg (dict-ref rt-config 'model-registry #f))
      (cond
        [(not reg) (displayln "[model registry not available]")]
        [(not arg)
@@ -138,20 +140,20 @@
                                (model-resolution-provider-name resolution)))
             (displayln (format "Model not found: ~a. Use /model to list." arg)))]))
    #:sessions-fn (lambda (cmd out)
-                   (define sdir (hash-ref rt-config 'session-dir #f))
+                   (define sdir (dict-ref rt-config 'session-dir #f))
                    (handle-sessions-interactive-command cmd out sdir))
    #:provider-name prov-name))
 
 (define (run-single-shot cfg rt-config)
   (define sess (make-agent-session rt-config))
-  (define bus (hash-ref rt-config 'event-bus))
+  (define bus (dict-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
   (run-cli-single cfg #:session-fn (lambda (prompt) (run-prompt! sess prompt))))
 
 (define (run-resume cfg rt-config)
   (define sid (cli-config-session-id cfg))
   (define sess (resume-agent-session sid rt-config))
-  (define bus (hash-ref rt-config 'event-bus))
+  (define bus (dict-ref rt-config 'event-bus))
   (subscribe! bus (make-terminal-subscriber))
   (run-cli-interactive
    cfg
@@ -169,7 +171,7 @@
                (displayln (format "[forked session: ~a]" (session-id new-sess))))
    #:model-fn
    (lambda (arg)
-     (define reg (hash-ref rt-config 'model-registry #f))
+     (define reg (dict-ref rt-config 'model-registry #f))
      (cond
        [(not reg) (displayln "[model registry not available]")]
        [(not arg)
@@ -186,7 +188,7 @@
                                (model-resolution-provider-name resolution)))
             (displayln (format "Model not found: ~a. Use /model to list." arg)))]))
    #:sessions-fn (lambda (cmd out)
-                   (define sdir (hash-ref rt-config 'session-dir #f))
+                   (define sdir (dict-ref rt-config 'session-dir #f))
                    (handle-sessions-interactive-command cmd out sdir))))
 
 ;; ============================================================
@@ -211,7 +213,7 @@
        (when (> (string-length delta) 0)
          (set-box! accumulated-text (string-append (unbox accumulated-text) delta)))]
       [else (void)]))
-  (define bus (hash-ref rt-config 'event-bus))
+  (define bus (dict-ref rt-config 'event-bus))
   (subscribe! bus print-subscriber)
   ;; Run the prompt
   (with-handlers ([exn:fail? (lambda (e)

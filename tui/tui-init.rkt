@@ -1,5 +1,7 @@
 #lang racket/base
 
+(require racket/dict)
+
 (require racket/logging)
 (define-logger q-tui-init)
 
@@ -56,7 +58,7 @@
 (define (run-tui-with-runtime rt-config cli-cfg)
   ;; rt-config is a hash from build-runtime-from-cli
   ;; cli-cfg is a cli-config struct
-  (define bus (hash-ref rt-config 'event-bus #f))
+  (define bus (dict-ref rt-config 'event-bus #f))
   (define sess (make-agent-session rt-config))
 
   ;; Wire custom keybindings path if specified (#1118)
@@ -66,7 +68,7 @@
     (reload-keymap!))
 
   ;; Determine session dir before creating TUI context (Fix #513)
-  (define sess-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+  (define sess-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
 
   ;; Wire GSD mode query callback to avoid TUI→extensions circular import (v0.32.6)
   (current-gsd-mode-query (lambda () (gsm-current)))
@@ -76,8 +78,8 @@
      #:event-bus bus
      #:session-runner (lambda (prompt) (run-prompt! sess prompt))
      #:session-dir sess-dir
-     #:model-registry (hash-ref rt-config 'model-registry #f)
-     #:extension-registry (hash-ref rt-config 'extension-registry #f)
+     #:model-registry (dict-ref rt-config 'model-registry #f)
+     #:extension-registry (dict-ref rt-config 'extension-registry #f)
      #:session-queue (agent-session-queue sess)
      #:session-factory-runner
      (lambda (prompt)
@@ -93,20 +95,20 @@
          ;; v0.21.4: /go creates fresh session with no planning history
          (define new-sess (make-agent-session rt-config))
          (define new-sid (session-id new-sess))
-         (define new-dir (or (hash-ref rt-config 'session-dir #f) (hash-ref rt-config 'store-dir #f)))
+         (define new-dir (or (dict-ref rt-config 'session-dir #f) (dict-ref rt-config 'store-dir #f)))
          ;; Switch extensions: teardown old, rebind to new
          (switch-session! #:old-session-id (session-id sess)
                           #:old-bus bus
-                          #:old-extension-registry (hash-ref rt-config 'extension-registry #f)
+                          #:old-extension-registry (dict-ref rt-config 'extension-registry #f)
                           #:new-session-id new-sid
                           #:new-session-dir new-dir
                           #:new-bus bus
-                          #:new-extension-registry (hash-ref rt-config 'extension-registry #f)
+                          #:new-extension-registry (dict-ref rt-config 'extension-registry #f)
                           #:reason 'fork)
          ;; Clear TUI transcript for new session
          (set-box! (tui-ctx-ui-state-box ctx)
                    (initial-ui-state #:session-id new-sid
-                                     #:model-name (hash-ref rt-config 'model-name #f)))
+                                     #:model-name (dict-ref rt-config 'model-name #f)))
          (set-box! (tui-ctx-needs-redraw-box ctx) #t)
          ;; Run prompt in new session
          (run-prompt! new-sess prompt)))))
@@ -155,9 +157,9 @@
   ;; Set initial session info, loading scrollback if available
   (define base-state
     (initial-ui-state #:session-id (session-id sess)
-                      #:model-name (hash-ref rt-config 'model-name #f)))
+                      #:model-name (dict-ref rt-config 'model-name #f)))
   ;; BUG-55: Detect mock provider and set warning flag
-  (define prov (hash-ref rt-config 'provider #f))
+  (define prov (dict-ref rt-config 'provider #f))
   (define mock? (provider-is-mock? prov))
   (define base-state-with-mock
     (if mock?
@@ -198,7 +200,7 @@
       (make-entry 'system
                   (format "Provider: ~a | Model: ~a"
                           (provider-name prov)
-                          (or (hash-ref rt-config 'model-name #f) "unknown"))
+                          (or (dict-ref rt-config 'model-name #f) "unknown"))
                   (current-inexact-milliseconds)
                   (hash)))
     (set-box! (tui-ctx-ui-state-box ctx) (add-transcript-entry init-state prov-info-entry)))
