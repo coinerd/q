@@ -77,17 +77,9 @@
          usage-empty?
          parts->text-string
          classify-hook-result)
-(provide compute-next-loop-state)
-
 ;; ============================================================
 ;; Main entry point — thin orchestrator
 ;; ============================================================
-
-;; Pure function to compute next loop state (Finding 3.1.1)
-;; Takes current loop-state? and a symbol event, returns next loop-state?.
-;; Currently a thin wrapper to be expanded with state machine logic.
-(define (compute-next-loop-state current-state event)
-  current-state)
 
 ;; run-agent-turn : (listof message?) provider? event-bus?
 ;;                  #:session-id string?
@@ -109,9 +101,6 @@
                         #:provider-settings [provider-settings #f])
   ;; Ensure we have a state for accumulation
   (define st (or state (make-loop-state session-id turn-id)))
-  ;; v0.31.4 W0: call compute-next-loop-state (Finding 3.1.1)
-  (when (loop-state? st)
-    (compute-next-loop-state st 'run-agent-turn-start))
 
   ;; 1. Emit turn.started
   (emit-typed-event! bus

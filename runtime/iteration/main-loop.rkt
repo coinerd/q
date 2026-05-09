@@ -62,7 +62,8 @@
          (only-in "decision.rkt"
                   iteration-ctx
                   compute-step-result)
-         (only-in "step-interpreter.rkt" interpret-step))
+         (only-in "step-interpreter.rkt" interpret-step)
+         (only-in "internal.rkt" assert-payload))
 
 (provide (contract-out [run-iteration-loop
                         (->* ((listof message?) (or/c provider? #f)
@@ -82,15 +83,6 @@
                               #:working-set (or/c working-set? #f)
                               #:session (or/c agent-session? #f))
                              loop-result?)]))
-
-;; ============================================================
-;; Event payload contract assertions
-;; ============================================================
-
-(define (assert-payload topic-name payload ctrct)
-  (unless (ctrct payload)
-    (raise-argument-error topic-name "valid event payload" payload))
-  payload)
 
 ;; ============================================================
 ;; run-iteration-loop
