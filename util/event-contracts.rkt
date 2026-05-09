@@ -21,7 +21,12 @@
          error-detail-payload/c
          injection-count-payload/c
          turn-cancelled-payload/c
-         iteration-decision-payload/c)
+         iteration-decision-payload/c
+         delta-payload/c
+         model-name-payload/c
+         tool-name-payload/c
+         duration-payload/c
+         error-type-payload/c)
 
 ;; Simple reason payloads: (hasheq 'reason String ...)
 (define reason-payload/c
@@ -71,3 +76,39 @@
   (and/c hash?
          (hash/c symbol? any/c #:immutable #t)
          (lambda (h) (and (hash-has-key? h 'iteration) (hash-has-key? h 'termination)))))
+
+;; ============================================================
+;; Value-type contracts for top-5 event types (I-11, v0.35.0)
+;; ============================================================
+
+;; delta-payload/c: delta must be string when present
+(define delta-payload/c
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'delta) (string? (hash-ref h 'delta #f))))))
+
+;; model-name-payload/c: model field must be string
+(define model-name-payload/c
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'model) (string? (hash-ref h 'model #f))))))
+
+;; tool-name-payload/c: toolName field must be string
+(define tool-name-payload/c
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'toolName) (string? (hash-ref h 'toolName #f))))))
+
+;; duration-payload/c: durationMs must be non-negative number
+(define duration-payload/c
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h)
+           (and (hash-has-key? h 'durationMs)
+                (let ([v (hash-ref h 'durationMs #f)]) (and (number? v) (>= v 0)))))))
+
+;; error-type-payload/c: error must be string when present
+(define error-type-payload/c
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'error) (string? (hash-ref h 'error #f))))))
