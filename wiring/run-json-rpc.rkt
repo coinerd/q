@@ -6,6 +6,8 @@
 ;;   - run-json: JSON mode (stdin/stdout intents)
 ;;   - run-rpc: RPC mode (structured request/response over stdio)
 
+(require racket/dict)
+
 (require json
          racket/hash
          "../interfaces/cli.rkt"
@@ -35,7 +37,7 @@
 
 (define (run-json cfg rt-config)
   (define sess (make-agent-session rt-config))
-  (define bus (hash-ref rt-config 'event-bus))
+  (define bus (dict-ref rt-config 'event-bus))
   (define sid (session-id sess))
   (define sub-id (start-json-mode! bus #:session-id sid))
   ;; Simple JSON mode: read intents from stdin, submit prompts
@@ -51,7 +53,7 @@
              (run-prompt! sess text))]
           [(interrupt)
            ;; R2-4: Cancel the cancellation token if available
-           (define cancel-tok (hash-ref rt-config 'cancellation-token #f))
+           (define cancel-tok (dict-ref rt-config 'cancellation-token #f))
            (when (and cancel-tok (cancellation-token? cancel-tok))
              (cancel-token! cancel-tok))
            (displayln (jsexpr->string (hasheq 'type "interrupt" 'status "acknowledged")))]
@@ -76,7 +78,7 @@
 ;; ============================================================
 
 (define (run-rpc cfg rt-config)
-  (define bus (hash-ref rt-config 'event-bus))
+  (define bus (dict-ref rt-config 'event-bus))
   ;; Forward events as RPC notifications
   (start-rpc-event-forwarding! bus (current-output-port))
   ;; Sessions table: session-id → agent-session
@@ -88,7 +90,7 @@
   (define core-deps
     (hasheq 'cancel-token
             (lambda ()
-              (define tok (hash-ref rt-config 'cancellation-token #f))
+              (define tok (dict-ref rt-config 'cancellation-token #f))
               (when (and tok (cancellation-token? tok))
                 (cancel-token! tok)))
             'session-info-fn
@@ -137,7 +139,7 @@
                              (hasheq 'sessionId (session-id sess))))
                      (cons 'session.list
                            (lambda (params)
-                             (define session-dir (hash-ref rt-config 'session-dir))
+                             (define session-dir (dict-ref rt-config 'session-dir))
                              (define session-ids
                                (if (directory-exists? session-dir)
                                    (for/list ([e (in-list (directory-list session-dir))]
@@ -174,7 +176,6 @@
 
   ;; ---- Merge core + session + UI handlers ----
   (define ui-handlers
-    (make-hash (list (cons 'ui.respond ui-response-handler)
-                     (cons 'ui_response ui-response-handler))))
+    (make-hash (list (cons 'ui.respond ui-response-handler) (cons 'ui_response ui-response-handler))))
   (define handlers (hash-union core-handlers session-handlers ui-handlers #:combine (lambda (a b) b)))
   (run-rpc-loop handlers))

@@ -1,17 +1,17 @@
 #lang racket/base
 
-;; q/cli/args.rkt — CLI argument parsing, config conversion, usage/version display
+;; q/cli/args.rkt -- CLI argument parsing, config conversion, usage/version display
 ;;
 ;; Extracted from interfaces/cli.rkt for modularity (Issue #193).
-;; Refactored: cond branches → data-driven flag table (QUAL-12, Issue #302).
+;; Refactored: cond branches -> data-driven flag table (QUAL-12, Issue #302).
 ;;
 ;; Provides:
 ;;   cli-config struct + accessors
-;;   parse-cli-args      — pure argument parsing
-;;   cli-config->runtime-config — config hash conversion
-;;   print-usage         — usage display (generated from flag table)
-;;   print-version       — version display
-;;   q-version           — version constant
+;;   parse-cli-args      -- pure argument parsing
+;;   cli-config->runtime-config -- config hash conversion
+;;   print-usage         -- usage display (generated from flag table)
+;;   print-version       -- version display
+;;   q-version           -- version constant
 
 (require racket/string
          racket/format
@@ -44,8 +44,8 @@
          session-dir ; path-string or #f
          sessions-subcommand ; symbol: 'list | 'info | 'delete | 'verify | #f
          sessions-args ; list of string (subcommand args)
-         keybindings-path ; path-string or #f — custom keybindings file (#1118)
-         print-mode? ; boolean — -p/--print flag (G9.3)
+         keybindings-path ; path-string or #f -- custom keybindings file (#1118)
+         print-mode? ; boolean -- -p/--print flag (G9.3)
          )
   #:transparent)
 
@@ -58,19 +58,19 @@
 ;; ============================================================
 
 ;; A flag definition describes one CLI option.
-;;   name      — internal identifier (string)
-;;   short     — short option character or #f
-;;   long      — long option string (e.g. "--help")
-;;   type      — 'boolean, 'string, 'integer, 'mode, 'accumulate, 'command
+;;   name      -- internal identifier (string)
+;;   short     -- short option character or #f
+;;   long      -- long option string (e.g. "--help")
+;;   type      -- 'boolean, 'string, 'integer, 'mode, 'accumulate, 'command
 ;;               'boolean   : no argument, sets a field to #t
 ;;               'string    : consumes next arg as a string value
 ;;               'integer   : consumes next arg, must be exact-positive-integer
 ;;               'mode      : no argument, sets mode field to a symbol
 ;;               'accumulate: consumes next arg, accumulates into a list
 ;;               'command   : no argument, sets command/produces immediate result
-;;   help      — help text for usage display
-;;   default   — default value (informational, used in usage generation)
-;;   apply-fn  — procedure: (val acc-alist) → acc-alist
+;;   help      -- help text for usage display
+;;   default   -- default value (informational, used in usage generation)
+;;   apply-fn  -- procedure: (val acc-alist) -> acc-alist
 ;;               Returns a new accumulator alist with the flag applied.
 ;;               val is #t for booleans, the string/int value for others.
 
@@ -149,11 +149,11 @@
               (acc-ref acc 'print-mode?)))
 
 ;; ============================================================
-;; Flag table — all option definitions
+;; Flag table -- all option definitions
 ;; ============================================================
 
 (define FLAG-DEFINITIONS
-  ;; --help / -h → immediate help
+  ;; --help / -h -> immediate help
   (list (flag-def "help"
                   #\h
                   "help"
@@ -161,9 +161,9 @@
                   "Show this help message"
                   #f
                   (lambda (val acc)
-                    ;; Returning 'help immediately — handled specially in the parser
+                    ;; Returning 'help immediately -- handled specially in the parser
                     'help))
-        ;; --version → immediate version
+        ;; --version -> immediate version
         (flag-def "version" #f "version" 'boolean "Show version" #f (lambda (val acc) 'version))
         ;; --session <id>
         (flag-def "session"
@@ -269,7 +269,7 @@
                   "Path to custom keybindings JSON file"
                   #f
                   (lambda (val acc) (acc-set acc 'keybindings-path val)))
-        ;; -p / --print — plain-text stdout output (G9.3)
+        ;; -p / --print -- plain-text stdout output (G9.3)
         (flag-def "print"
                   #\p
                   "print"
@@ -305,16 +305,16 @@
   (let loop ([i 0]
              [acc (make-initial-acc)])
     (cond
-      ;; ── Done ──
+      ;; -- Done --
       [(>= i n)
        ;; Handle sessions subcommand finalization
        (define cmd (acc-ref acc 'command))
        (cond
-         ;; sessions was set — subcommand was already consumed inline
+         ;; sessions was set -- subcommand was already consumed inline
          [(eq? cmd 'sessions) acc]
          [else (acc->cli-config acc)])]
 
-      ;; ── Known flag? ──
+      ;; -- Known flag? --
       [(hash-ref long-flag-table (vector-ref vec i) #f)
        =>
        (lambda (fd) (apply-flag fd vec n i acc loop))]
@@ -323,8 +323,8 @@
        =>
        (lambda (fd) (apply-flag fd vec n i acc loop))]
 
-      ;; ── Positional argument (prompt) or subcommand ──
-      ;; Unknown flag → help
+      ;; -- Positional argument (prompt) or subcommand --
+      ;; Unknown flag -> help
       [(string-prefix? (vector-ref vec i) "--") (make-help-config)]
 
       [else (handle-positional vec n i acc loop)])))
@@ -364,7 +364,7 @@
     [(equal? arg "doctor") (loop (add1 i) (acc-set acc 'command 'doctor))]
     ;; "init" subcommand
     [(equal? arg "init") (loop (add1 i) (acc-set acc 'command 'init))]
-    ;; "sessions" subcommand — q sessions <list|info|delete|verify> [args...]
+    ;; "sessions" subcommand -- q sessions <list|info|delete|verify> [args...]
     [(equal? arg "sessions")
      (if (< (add1 i) n)
          (let ([sub (vector-ref vec (add1 i))])
@@ -396,7 +396,7 @@
                              #f))
                (make-help-config)))
          (make-help-config))]
-    ;; "verify-session" top-level command — q verify-session <path> [--repair]
+    ;; "verify-session" top-level command -- q verify-session <path> [--repair]
     [(equal? arg "verify-session")
      (if (< (add1 i) n)
          (let* ([path-arg (vector-ref vec (add1 i))]
@@ -420,7 +420,7 @@
                        #f))
          (make-help-config))]
     ;; Default: treat as prompt
-    ;; Second positional — ignore
+    ;; Second positional -- ignore
     [(acc-ref acc 'prompt #f) (loop (add1 i) acc)]
     [else (loop (add1 i) (acc-set (acc-set acc 'prompt arg) 'command 'prompt))]))
 
@@ -429,28 +429,34 @@
 ;; ============================================================
 
 ;; Convert cli-config to a hash suitable for make-agent-session / resume-agent-session.
-;; Does NOT include 'provider or 'tool-registry or 'event-bus — those are
+;; Does NOT include 'provider or 'tool-registry or 'event-bus -- those are
 ;; filled in by the runner or the caller.
 
 (define (cli-config->runtime-config cfg)
+  ;; v0.35.2 (W-03): Build immutable hash instead of mutable
   (define base
-    (make-hash (list (cons 'max-iterations (cli-config-max-turns cfg))
-                     (cons 'no-tools? (cli-config-no-tools? cfg))
-                     (cons 'tools (cli-config-tools cfg)))))
-  ;; Optionally add fields that are set
-  (when (cli-config-model cfg)
-    (hash-set! base 'model (cli-config-model cfg)))
-  (when (cli-config-project-dir cfg)
-    (hash-set! base 'project-dir (cli-config-project-dir cfg)))
-  (when (cli-config-config-path cfg)
-    (hash-set! base 'config-path (cli-config-config-path cfg)))
-  (when (cli-config-session-id cfg)
-    (hash-set! base 'session-id (cli-config-session-id cfg)))
-  (when (cli-config-session-dir cfg)
-    (hash-set! base 'session-dir (cli-config-session-dir cfg)))
-  (when (cli-config-print-mode? cfg)
-    (hash-set! base 'print-mode #t))
-  base)
+    (make-immutable-hash (list (cons 'max-iterations (cli-config-max-turns cfg))
+                               (cons 'no-tools? (cli-config-no-tools? cfg))
+                               (cons 'tools (cli-config-tools cfg)))))
+  (let* ([h (if (cli-config-model cfg)
+                (hash-set base 'model (cli-config-model cfg))
+                base)]
+         [h (if (cli-config-project-dir cfg)
+                (hash-set h 'project-dir (cli-config-project-dir cfg))
+                h)]
+         [h (if (cli-config-config-path cfg)
+                (hash-set h 'config-path (cli-config-config-path cfg))
+                h)]
+         [h (if (cli-config-session-id cfg)
+                (hash-set h 'session-id (cli-config-session-id cfg))
+                h)]
+         [h (if (cli-config-session-dir cfg)
+                (hash-set h 'session-dir (cli-config-session-dir cfg))
+                h)]
+         [h (if (cli-config-print-mode? cfg)
+                (hash-set h 'print-mode #t)
+                h)])
+    h))
 
 ;; ============================================================
 ;; I/O: print-usage (generated from flag table)
@@ -524,7 +530,7 @@
 ;; ============================================================
 
 ;; q-version imported from util/version.rkt (Issue #203)
-;; Single source of truth — do not redefine here.
+;; Single source of truth -- do not redefine here.
 
 (define (print-version [port (current-output-port)])
   (displayln (format "q version ~a" q-version) port))
