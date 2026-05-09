@@ -8,6 +8,7 @@
 
 (require rackunit
          rackunit/text-ui
+         "../util/event-contracts.rkt"
          "../util/event-contracts.rkt")
 
 (define event-contract-tests

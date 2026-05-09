@@ -186,7 +186,11 @@
     [(? model-request-blocked-event?) (hasheq 'reason (model-request-blocked-event-reason evt))]
     [(? message-blocked-event?)
      (hasheq 'hook (message-blocked-event-hook evt) 'reason (message-blocked-event-reason evt))]
-    [(? turn-cancelled-event?) (hasheq 'reason (turn-cancelled-event-reason evt))]
+    [(? turn-cancelled-event?)
+     (hasheq 'reason
+             (turn-cancelled-event-reason evt)
+             'iteration
+             (turn-cancelled-event-iteration evt))]
     [(? assistant-message-completed-event?)
      (hasheq 'contentLength (assistant-message-completed-event-content-length evt))]
     [(? session-start-event?) (hasheq 'model (session-start-event-model evt))]
@@ -355,7 +359,8 @@
     ["model.request.blocked" (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
     ["message.blocked"
      (message-blocked-event type ts sid tid (hash-ref h 'hook "") (hash-ref h 'reason ""))]
-    ["turn.cancelled" (turn-cancelled-event type ts sid tid (hash-ref h 'reason ""))]
+    ["turn.cancelled"
+     (turn-cancelled-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'iteration #f))]
     ["assistant.message.completed"
      (assistant-message-completed-event type ts sid tid (hash-ref h 'contentLength 0))]
     [_ (typed-event type ts sid tid)]))
