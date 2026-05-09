@@ -43,7 +43,7 @@
                              (or/c context-summary? #f))]
                        [simple-summary-text (-> (listof message?) string?)]
                        [simple-summary-count (-> (listof message?) exact-nonnegative-integer?)]
-                       [extract-message-text (-> any/c string?)]
+                       [extract-message-text (-> message? string?)]
                        [truncate-string (-> string? exact-nonnegative-integer? string?)]))
 
 ;; ============================================================

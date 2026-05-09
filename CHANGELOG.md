@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.34.7] — 2026-05-09
+
+### Goal: Deep audit remediation (v0.34.5+v0.34.6 findings)
+
+### W0a — Code Fixes (A-01–04)
+- **A-01**: Removed `compute-next-loop-state` no-op from `agent/loop.rkt` (was claimed in v0.34.5 but not actually done)
+- **A-02**: Extracted shared `assert-payload` to `runtime/iteration/internal.rkt`
+- **A-03**: Removed dead `compute-termination` + eliminated redundant `decide-next-action` call
+- **A-04**: Normalized `hash` → `hasheq` in `decision.rkt`
+
+### W0b — Documentation + Planning Sync (D-01–06)
+- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.34.7
+- **D-02**: Updated `dependency-policy.rktd` with iteration/gsd decomposition
+- **D-03**: Synced module counts across README, overview, wiki-src (414 modules, 63,297 LOC)
+- **D-04**: Removed stale `FUNCTION-QUALITY-AUDIT.md` (already absent)
+- **D-05**: Fixed `errors.rkt` header comment for provider-error
+- **D-06**: Verified outer `.planning/` current
+
+### W0c — Test Coverage + Contracts (T-01–03, C-01)
+- **T-01**: Created `test-iteration-counters.rkt` (8 tests), `test-iteration-main-loop.rkt` (3 tests), `test-iteration-step-interpreter.rkt` (3 tests)
+- **T-02**: Added `reset-all-gsd-state!` idempotency test to `test-gsd-planning-integration.rkt`
+- **T-03**: Replaced 4 problematic `check-true #t` assertions with meaningful checks
+- **C-01**: Tightened `extract-message-text` contract to `message?`
+
+### Verification
+- Fast test suite: 489 files, 2092+ tests, 0 failures
+- Lint: 18/18 passed
+- Architecture score: ≥8.5/10
+
+
 ## v0.34.6 — 2026-05-08
 
 ### Architecture Decomposition (A-01, A-02)

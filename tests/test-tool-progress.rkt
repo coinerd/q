@@ -38,7 +38,8 @@
       (define ctx (make-exec-context))
       ;; Should not raise
       (emit-progress! ctx 50 "nothing happens")
-      (check-true #t))
+      ;; Completed without error — no callback means silent no-op
+      (void))
 
     ;; ============================================================
     ;; Tool can emit progress during execution

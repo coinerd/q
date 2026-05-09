@@ -38,10 +38,10 @@
       (check-equal? (key-spec-name ks) 'return)
       (check-false (key-spec-ctrl ks)))
 
-    (test-case "reload-keymap! clears cache"
+    (test-case "reload-keymap! clears cache and get-active-keymap returns fresh keymap"
       (reload-keymap!)
-      ;; Should not error — just resets cached keymap
-      (check-true #t))
+      (define km (get-active-keymap))
+      (check-not-false km "get-active-keymap should return a keymap after reload"))
 
     (test-case "get-active-keymap returns keymap"
       (reload-keymap!)
