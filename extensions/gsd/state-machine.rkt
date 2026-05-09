@@ -50,6 +50,7 @@
          err-reason
          ;; Valid transitions query
          gsm-valid-next-states
+         TRANSITIONS
          ;; Tool access
          gsm-tool-allowed?
          ;; Snapshot / reset
@@ -128,8 +129,7 @@
   (define current (gsd-runtime-state-mode current-state))
   (cond
     [(not (gsm-state? target))
-     (values (err-result (format "invalid state: ~a" target) current target)
-             current-state)]
+     (values (err-result (format "invalid state: ~a" target) current target) current-state)]
     [(valid-transition? current target)
      ;; Clear executor when leaving executing mode
      (define state*

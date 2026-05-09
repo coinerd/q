@@ -57,6 +57,7 @@
          "gsd/tool-handlers.rkt"
          "gsd/command-handlers.rkt")
 
+;; --- Public API (stable) ---
 (provide the-extension
          gsd-planning-extension
          planning-system-prompt
@@ -70,7 +71,11 @@
          gsd-mode
          set-gsd-mode!
          gsd-tool-guard
-         ;; Re-export state module accessors for backward compat
+         gsd-session-cleanup
+         gsd-event-bus
+         set-gsd-event-bus!
+         emit-gsd-event!
+         ;; --- Internal (subject to change, backward compat) ---
          pinned-planning-dir
          set-pinned-planning-dir!
          current-max-old-text-len
@@ -85,11 +90,7 @@
          wave-complete?
          next-pending-wave
          current-wave-index
-         set-current-wave-index!
-         gsd-session-cleanup
-         gsd-event-bus
-         set-gsd-event-bus!
-         emit-gsd-event!)
+         set-current-wave-index!)
 
 ;; planning-system-prompt is an alias for planning-prompt from prompts.rkt
 (define planning-system-prompt planning-prompt)
