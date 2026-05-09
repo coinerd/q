@@ -112,8 +112,8 @@
   (let loop ([acc '()])
     (define msg (dequeue-steering! q))
     (if msg
-        (loop (append acc (list msg)))
-        acc)))
+        (loop (cons msg acc))
+        (reverse acc))))
 
 ;; Drain all pending injected messages from the event bus.
 (define (drain-injected-messages! bus injected-box session-id)
