@@ -54,6 +54,8 @@
 
 ;; ── Result struct ──
 (provide (struct-out scheduler-result)
+         (struct-out preflight-entry)
+         run-preflight
          (contract-out [run-tool-batch
                         (->* ((listof tool-call?) tool-registry?)
                              (#:hook-dispatcher (or/c procedure? #f)
@@ -82,11 +84,11 @@
 ;;   - 'blocked + tool-call + #f           → hook blocked it
 ;;   - 'error   + tool-call + error-msg    → post-hook validation failed / not found
 
-;; Represented as a hash for simplicity
-;;   hasheq 'status 'ready|'blocked|'error
-;;          'tool-call <tool-call>
-;;          'tool <tool|#f>        (only for 'ready)
-;;          'error-message <str>   (only for 'blocked/'error)
+;; v0.35.2 (W-10): Typed struct replaces ad-hoc hasheq
+(struct preflight-entry (status tool-call tool error-message) #:transparent)
+;; status: 'ready | 'blocked | 'error
+;; tool: tool? (#f for blocked/error)
+;; error-message: string? (#f for ready)
 
 ;; ============================================================
 ;; Internal: extract path argument from tool call args
@@ -107,7 +109,7 @@
           (with-handlers ([exn:fail? (lambda (e)
                                        ;; Hook itself threw → treat as block with error
                                        (define msg (format "hook error: ~a" (exn-message e)))
-                                       (hasheq 'status 'error 'tool-call tc 'error-message msg))])
+                                       (preflight-entry 'error tc #f msg))])
             (define result (hook-dispatcher 'tool-call tc))
             (cond
               [(not result) tc] ; no handler → pass through
@@ -121,47 +123,38 @@
     (cond
       ;; Hook returned 'blocked
       [(eq? tc-after-hook 'blocked)
-       (hasheq 'status
-               'blocked
-               'tool-call
-               tc
-               'error-message
-               (format "tool call '~a' blocked by hook" (tool-call-name tc)))]
+       (preflight-entry 'blocked tc #f (format "tool call '~a' blocked by hook" (tool-call-name tc)))]
       ;; Hook threw an exception (returned as list)
-      [(and (hash? tc-after-hook) (eq? (hash-ref tc-after-hook 'status #f) 'error)) tc-after-hook]
+      [(and (preflight-entry? tc-after-hook) (eq? (preflight-entry-status tc-after-hook) 'error))
+       tc-after-hook]
       ;; Hook returned a (possibly modified) tool-call
       [(tool-call? tc-after-hook)
        (define t (lookup-tool registry (tool-call-name tc-after-hook)))
        (cond
          [(not t)
           ;; Tool not found in registry
-          (hasheq 'status
-                  'error
-                  'tool-call
-                  tc-after-hook
-                  'error-message
-                  (format "unknown tool: '~a'" (tool-call-name tc-after-hook)))]
+          (preflight-entry 'error
+                           tc-after-hook
+                           #f
+                           (format "unknown tool: '~a'" (tool-call-name tc-after-hook)))]
          [else
           ;; Check safe-mode tool restrictions (SEC-01)
           (cond
             [(and (safe-mode?) (not (allowed-tool? (tool-call-name tc-after-hook))))
-             (hasheq 'status
-                     'blocked
-                     'tool-call
-                     tc-after-hook
-                     'error-message
-                     (format "tool '~a' blocked by safe-mode" (tool-call-name tc-after-hook)))]
+             (preflight-entry 'blocked
+                              tc-after-hook
+                              #f
+                              (format "tool '~a' blocked by safe-mode"
+                                      (tool-call-name tc-after-hook)))]
             ;; Check safe-mode path restrictions (ARCH-02)
             [(and (safe-mode?)
                   (let ([path-arg (extract-path-arg (tool-call-arguments tc-after-hook))])
                     (and path-arg (not (allowed-path? path-arg)))))
              (define path-arg (extract-path-arg (tool-call-arguments tc-after-hook)))
-             (hasheq
-              'status
+             (preflight-entry
               'blocked
-              'tool-call
               tc-after-hook
-              'error-message
+              #f
               (format
                "Access denied: ~a is outside project root (~a). Safe mode restricts file access to the project directory."
                path-arg
@@ -174,23 +167,15 @@
                  (validate-tool-args t (tool-call-arguments tc-after-hook))
                  #f))
              (if (not validation-result)
-                 (hasheq 'status 'ready 'tool-call tc-after-hook 'tool t)
-                 (hasheq 'status
-                         'error
-                         'tool-call
-                         tc-after-hook
-                         'error-message
-                         (format "~a. Usage: ~a"
-                                 (exn-message validation-result)
-                                 (format-tool-schema-hint t))))])])]
-      [else
-       ;; Unexpected hook return value — treat as error
-       (hasheq 'status
-               'error
-               'tool-call
-               tc
-               'error-message
-               (format "unexpected hook return: ~v" tc-after-hook))])))
+                 (preflight-entry 'ready tc-after-hook t #f)
+                 (preflight-entry 'error
+                                  tc-after-hook
+                                  #f
+                                  (format "~a. Usage: ~a"
+                                          (exn-message validation-result)
+                                          (format-tool-schema-hint t))))])])]
+      ;; Unexpected hook return value — treat as error
+      [else (preflight-entry 'error tc #f (format "unexpected hook return: ~v" tc-after-hook))])))
 
 ;; ============================================================
 ;; Execute a single tool call (with exception handling)
@@ -296,7 +281,7 @@
   (define indexed-ready
     (for/list ([entry (in-list preflight-entries)]
                [idx (in-naturals)]
-               #:when (eq? (hash-ref entry 'status) 'ready))
+               #:when (eq? (preflight-entry-status entry) 'ready))
       (cons idx entry)))
 
   ;; Execute ready calls
@@ -308,8 +293,8 @@
                            (define ch (make-channel))
                            (define idx (car ie))
                            (define entry (cdr ie))
-                           (define tc (hash-ref entry 'tool-call))
-                           (define t (hash-ref entry 'tool))
+                           (define tc (preflight-entry-tool-call entry))
+                           (define t (preflight-entry-tool entry))
                            (thread (lambda ()
                                      (semaphore-wait sem)
                                      (define result
@@ -328,8 +313,8 @@
         (for/list ([ie (in-list indexed-ready)])
           (define idx (car ie))
           (define entry (cdr ie))
-          (define tc (hash-ref entry 'tool-call))
-          (define t (hash-ref entry 'tool))
+          (define tc (preflight-entry-tool-call entry))
+          (define t (preflight-entry-tool entry))
           (cons idx (execute-single tc t exec-ctx hook-dispatcher)))))
 
   ;; Build a map from index → result
@@ -340,14 +325,14 @@
   ;; Build final ordered list
   (for/list ([entry (in-list preflight-entries)]
              [idx (in-naturals)])
-    (define status (hash-ref entry 'status))
+    (define status (preflight-entry-status entry))
     (case status
       [(ready)
        (hash-ref results-by-idx
                  idx
                  (lambda () (make-error-result "internal: missing execution result")))]
-      [(blocked) (make-error-result (hash-ref entry 'error-message "blocked"))]
-      [(error) (make-error-result (hash-ref entry 'error-message "error"))])))
+      [(blocked) (make-error-result (preflight-entry-error-message entry "blocked"))]
+      [(error) (make-error-result (preflight-entry-error-message entry "error"))])))
 
 ;; ============================================================
 ;; Compute metadata
@@ -356,12 +341,13 @@
 (define (compute-metadata results preflight-entries)
   (define total (length results))
   (define blocked
-    (for/sum ([entry (in-list preflight-entries)]) (if (eq? (hash-ref entry 'status) 'blocked) 1 0)))
+    (for/sum ([entry (in-list preflight-entries)])
+             (if (eq? (preflight-entry-status entry) 'blocked) 1 0)))
   ;; Count errors that are NOT from blocked entries
   (define blocked-indices
     (for/list ([entry (in-list preflight-entries)]
                [idx (in-naturals)]
-               #:when (eq? (hash-ref entry 'status) 'blocked))
+               #:when (eq? (preflight-entry-status entry) 'blocked))
       idx))
   (define errors
     (for/sum ([r (in-list results)] [idx (in-naturals)]
