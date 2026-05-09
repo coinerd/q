@@ -21,16 +21,18 @@
 
 ;; A turn: user → assistant → tool-result → assistant
 (define (make-turn prefix n)
-  (list
-   (msg (format "~a-user" prefix) 'user (format "Turn ~a request" n))
-   (msg (format "~a-asst" prefix) 'assistant (format "Turn ~a response with enough text to consume tokens" n))
-   (msg (format "~a-tool" prefix) 'assistant (format "Tool result ~a with substantial content for token budget" n) 'tool-result)
-   (msg (format "~a-asst2" prefix) 'assistant (format "Turn ~a followup" n))))
+  (list (msg (format "~a-user" prefix) 'user (format "Turn ~a request" n))
+        (msg (format "~a-asst" prefix)
+             'assistant
+             (format "Turn ~a response with enough text to consume tokens" n))
+        (msg (format "~a-tool" prefix)
+             'assistant
+             (format "Tool result ~a with substantial content for token budget" n)
+             'tool-result)
+        (msg (format "~a-asst2" prefix) 'assistant (format "Turn ~a followup" n))))
 
 (test-case "split-turn detection finds mid-turn cut"
-  (define msgs
-    (append (make-turn "a" 1)
-            (make-turn "b" 2)))
+  (define msgs (append (make-turn "a" 1) (make-turn "b" 2)))
   ;; total = 8 msgs, tiny-tc keeps ~5 tokens worth
   ;; With backward walk, cut should fall somewhere in the messages
   (define result (find-split-turn msgs 4))
@@ -49,8 +51,7 @@
 (test-case "compact-history includes turn prefix when split-turn detected"
   (define msgs
     (append (make-turn "a" 1)
-            (list (msg "b-user" 'user "Turn 2 start")
-                  (msg "b-asst" 'assistant "Turn 2 partial"))))
+            (list (msg "b-user" 'user "Turn 2 start") (msg "b-asst" 'assistant "Turn 2 partial"))))
   ;; Use tiny config to force compaction
   (define result (compact-history msgs #:token-config tiny-tc))
   (define summary (compaction-result-summary-message result))
@@ -58,10 +59,12 @@
     (define summary-text
       (string-join (for/list ([part (in-list (message-content summary))]
                               #:when (text-part? part))
-                     (text-part-text part)) ""))
+                     (text-part-text part))
+                   ""))
     ;; If split-turn was detected, summary should contain turn prefix marker
     (when (string-contains? summary-text "TURN PREFIX")
-      (check-true #t "Turn prefix included in summary"))))
+      (check-not-false (string-contains? summary-text "TURN PREFIX")
+                       "Turn prefix included in summary"))))
 
 (test-case "compact-history works without split-turn"
   (define msgs
@@ -74,9 +77,7 @@
   (check-true (compaction-result? result)))
 
 (test-case "turn prefix contains role annotations"
-  (define turn-msgs
-    (list (msg "t1" 'user "Start of turn")
-          (msg "t2" 'assistant "Partial response")))
+  (define turn-msgs (list (msg "t1" 'user "Start of turn") (msg "t2" 'assistant "Partial response")))
   (define prefix (generate-turn-prefix turn-msgs))
   (check-not-false (string-contains? prefix "[user]"))
   (check-not-false (string-contains? prefix "[assistant]"))

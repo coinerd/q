@@ -9,17 +9,14 @@
          rackunit/text-ui
          racket/match
          "../runtime/iteration/loop-state.rkt"
-         (only-in "../runtime/iteration/counters.rkt"
-                  compute-next-counters)
+         (only-in "../runtime/iteration/counters.rkt" compute-next-counters)
          (only-in "../util/protocol-types.rkt"
                   make-message
                   make-text-part
                   make-tool-call-part
                   make-tool-result-part
                   message-role
-                  message-content)
-         (only-in "../runtime/iteration/tool-turn-bridge.rkt"
-                  take-at-most))
+                  message-content))
 
 ;; ============================================================
 ;; Helpers
@@ -32,13 +29,18 @@
                             #:implement-count [ic 0]
                             #:consecutive-error-count [cec 0]
                             #:recent-tool-names [rtn '()]
+                            #:intent-retry-count [irc 0]
                             #:stall-retry-count [src 0])
-  (loop-counters iter tc sp src cec rtn ec ic src))
+  (loop-counters iter tc sp irc cec rtn ec ic src))
 
 (define (make-assistant-msg text)
-  (make-message "test-id" #f 'assistant 'message
+  (make-message "test-id"
+                #f
+                'assistant
+                'message
                 (list (make-text-part text))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 (define (make-tool-call-msg . tool-specs)
   (define parts
@@ -48,9 +50,13 @@
   (make-message "test-id" #f 'assistant 'message parts (current-seconds) (hasheq)))
 
 (define (make-tool-result-msg name is-error? text)
-  (make-message "test-id" name 'tool 'message
+  (make-message "test-id"
+                name
+                'tool
+                'message
                 (list (make-tool-result-part name text is-error?))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 ;; ============================================================
 ;; compute-next-counters tests
@@ -60,9 +66,7 @@
   (test-suite "iteration/counters"
 
     (test-case "empty message list preserves counters"
-      (define c (make-test-counters #:consecutive-tool-count 5
-                                    #:explore-count 3
-                                    #:implement-count 2))
+      (define c (make-test-counters #:consecutive-tool-count 5 #:explore-count 3 #:implement-count 2))
       (define result (compute-next-counters c '()))
       (check-equal? (loop-counters-consecutive-tool-count result) 5)
       (check-equal? (loop-counters-explore-count result) 3)
@@ -79,18 +83,15 @@
     (test-case "explore tools increment explore-count"
       (define c (make-test-counters))
       (define msgs
-        (list (make-tool-call-msg (list "read" (hasheq))
-                                  (list "grep" (hasheq))
-                                  (list "find" (hasheq)))))
+        (list
+         (make-tool-call-msg (list "read" (hasheq)) (list "grep" (hasheq)) (list "find" (hasheq)))))
       (define result (compute-next-counters c msgs))
       ;; read, grep, find are all explore tools
       (check-equal? (loop-counters-explore-count result) 3))
 
     (test-case "implement tools increment implement-count"
       (define c (make-test-counters))
-      (define msgs
-        (list (make-tool-call-msg (list "edit" (hasheq))
-                                  (list "write" (hasheq)))))
+      (define msgs (list (make-tool-call-msg (list "edit" (hasheq)) (list "write" (hasheq)))))
       (define result (compute-next-counters c msgs))
       ;; edit + write = 2 implement tools
       (check-equal? (loop-counters-implement-count result) 2))
@@ -98,9 +99,8 @@
     (test-case "mixed tools increment both counts"
       (define c (make-test-counters))
       (define msgs
-        (list (make-tool-call-msg (list "read" (hasheq))
-                                  (list "edit" (hasheq))
-                                  (list "grep" (hasheq)))))
+        (list
+         (make-tool-call-msg (list "read" (hasheq)) (list "edit" (hasheq)) (list "grep" (hasheq)))))
       (define result (compute-next-counters c msgs))
       (check-equal? (loop-counters-explore-count result) 2)
       (check-equal? (loop-counters-implement-count result) 1))
@@ -115,15 +115,13 @@
 
     (test-case "successful tool results do not increment error count"
       (define c (make-test-counters))
-      (define msgs
-        (list (make-tool-result-msg "read" #f "file contents here")))
+      (define msgs (list (make-tool-result-msg "read" #f "file contents here")))
       (define result (compute-next-counters c msgs))
       (check-equal? (loop-counters-consecutive-error-count result) 0))
 
     (test-case "new tools are appended to recent-tool-names"
       (define c (make-test-counters #:recent-tool-names '("old-tool")))
-      (define msgs
-        (list (make-tool-call-msg (list "new-tool" (hasheq)))))
+      (define msgs (list (make-tool-call-msg (list "new-tool" (hasheq)))))
       (define result (compute-next-counters c msgs))
       (define recent (loop-counters-recent-tool-names result))
       (check-not-false (member "new-tool" recent))

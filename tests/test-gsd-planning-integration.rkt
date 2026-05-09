@@ -56,19 +56,9 @@
                     (delete-directory/files dir)))))
 
 ;; ============================================================
-;; Test 1: /go sets mode to executing, resets budget and read counts
-;; ============================================================
 
 ;; ============================================================
-;; Test 2: Budget decrements correctly across tool-guard + read-tracker
-;; ============================================================
-
-;; ============================================================
-;; Test 3: Budget warning appears in result, not in args
-;; ============================================================
-
-;; ============================================================
-;; Test 4: planning-write blocked during executing mode
+;; Test 1: planning-write blocked during executing mode
 ;; ============================================================
 
 (test-case "planning-write blocked during executing mode"
@@ -81,11 +71,7 @@
      (set-gsd-mode! #f))))
 
 ;; ============================================================
-;; Test 5: session-shutdown resets all state
-;; ============================================================
-
-;; ============================================================
-;; Test 6: planning-read allowed during executing (I1 fix)
+;; Test 2: planning-read allowed during executing mode
 ;; ============================================================
 
 (test-case "planning-read allowed during executing mode (I1 fix)"
@@ -102,19 +88,7 @@
                          (set-gsd-mode! #f))))))
 
 ;; ============================================================
-;; Test 7: Concurrent budget decrement — no lost updates (C1)
-;; ============================================================
-
-;; ============================================================
-;; Test 8: Read hint + budget warning both appear in result
-;; ============================================================
-
-;; ============================================================
-;; Test 9: Hard block at GO-READ-BLOCK-THRESHOLD
-;; ============================================================
-
-;; ============================================================
-;; Test 10: Edit limit raised during /go
+;; Test 3: /go raises edit limit from default to 1200
 ;; ============================================================
 
 (test-case "/go raises edit limit from default to 1200"
@@ -132,15 +106,7 @@
         (check-equal? (current-max-old-text-len) 1200 "should be raised to 1200 during /go"))))))
 
 ;; ============================================================
-;; Test 11: State module re-exports work (backward compat)
-;; ============================================================
-
-;; ============================================================
-;; Test 12: Non-read tools don't affect read count tracking
-;; ============================================================
-
-;; ============================================================
-;; Test 13: reset-all-gsd-state! is idempotent
+;; Test 4: reset-all-gsd-state! is idempotent
 ;; ============================================================
 
 (test-case "reset-all-gsd-state! is idempotent"
@@ -156,11 +122,3 @@
                       (check-false (gsd-mode))
                       (check-equal? (total-waves) 0)
                       (check-false (wave-complete? 1)))))
-
-;; ============================================================
-;; Test 14: Budget warning text for non-read read-only tools
-;; ============================================================
-
-;; ============================================================
-;; Test 15: Full lifecycle — /plan → /go → session-shutdown
-;; ============================================================

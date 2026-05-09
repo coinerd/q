@@ -54,7 +54,7 @@
       (check-not-false result)
       (check-equal? (loop-result-termination-reason result) 'completed))
 
-    (test-case "run-iteration-loop with nil provider returns result"
+    (test-case "run-iteration-loop with nil provider raises exception"
       ;; With #f provider, run-provider-turn should still return something
       ;; (graceful degradation)
       (define bus (make-event-bus))
