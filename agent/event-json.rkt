@@ -345,11 +345,11 @@
     ["context.built"
      (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
     ;; Streaming events
-    ["model.stream.delta"
+    ["provider.stream.delta"
      (model-stream-delta-event type ts sid tid (hash-ref h 'delta "") (hash-ref h 'model ""))]
-    ["model.stream.thinking"
+    ["provider.stream.thinking"
      (model-stream-thinking-event type ts sid tid (hash-ref h 'thinking "") (hash-ref h 'model ""))]
-    ["model.stream.completed"
+    ["provider.stream.completed"
      (model-stream-completed-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
     ;; Blocked events
     ["model.request.blocked" (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
@@ -390,9 +390,9 @@
                    "agent.started"
                    "agent.completed"
                    "context.built"
-                   "model.stream.delta"
-                   "model.stream.thinking"
-                   "model.stream.completed"
+                   "provider.stream.delta"
+                   "provider.stream.thinking"
+                   "provider.stream.completed"
                    "model.request.blocked"
                    "message.blocked"
                    "turn.cancelled"
