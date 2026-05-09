@@ -64,6 +64,64 @@
                          (set-box! (box-accessor ctx) (update-fn (unbox (box-accessor ctx)))))))
 
 ;; ============================================================
+;; Per-session accessors (explicit ctx argument) — C-01 v0.35.1
+;; ============================================================
+
+(define (gsd-ctx-state ctx)
+  (ctx-read ctx gsd-session-ctx-state-box))
+(define (gsd-ctx-set-state! ctx v)
+  (ctx-write! ctx gsd-session-ctx-state-box v))
+(define (gsd-ctx-mode ctx)
+  (gsd-runtime-state-mode (gsd-ctx-state ctx)))
+(define (gsd-ctx-wave-number ctx)
+  (gsd-runtime-state-current-wave (gsd-ctx-state ctx)))
+(define (gsd-ctx-plan ctx)
+  (ctx-read ctx gsd-session-ctx-plan-box))
+(define (gsd-ctx-set-plan! ctx v)
+  (ctx-write! ctx gsd-session-ctx-plan-box v))
+(define (gsd-ctx-pinned-dir ctx)
+  (ctx-read ctx gsd-session-ctx-pinned-dir-box))
+(define (gsd-ctx-set-pinned-dir! ctx v)
+  (ctx-write! ctx gsd-session-ctx-pinned-dir-box v))
+(define (gsd-ctx-edit-limit ctx)
+  (ctx-read ctx gsd-session-ctx-edit-limit-box))
+(define (gsd-ctx-set-edit-limit! ctx v)
+  (ctx-write! ctx gsd-session-ctx-edit-limit-box v))
+(define (gsd-ctx-event-bus ctx)
+  (ctx-read ctx gsd-session-ctx-event-bus-box))
+(define (gsd-ctx-set-event-bus! ctx v)
+  (ctx-write! ctx gsd-session-ctx-event-bus-box v))
+(define (gsd-ctx-history ctx)
+  (ctx-read ctx gsd-session-ctx-history-box))
+(define (gsd-ctx-set-history! ctx v)
+  (ctx-write! ctx gsd-session-ctx-history-box v))
+(define (gsd-ctx-correlation-id ctx)
+  (ctx-read ctx gsd-session-ctx-correlation-id-box))
+(define (gsd-ctx-set-correlation-id! ctx v)
+  (ctx-write! ctx gsd-session-ctx-correlation-id-box v))
+
+;; Thread-safe transaction with explicit ctx
+(define (with-gsd-transaction ctx thunk)
+  (call-with-semaphore (gsd-session-ctx-sem ctx) thunk))
+
+;; Atomic state operations with explicit ctx
+(define (gsd-ctx-state-snapshot ctx)
+  (gsd-ctx-state ctx))
+
+(define (gsd-ctx-state-update! ctx update-thunk)
+  (call-with-semaphore (gsd-session-ctx-sem ctx)
+                       (lambda ()
+
+                         (set-box! (gsd-session-ctx-state-box ctx)
+                                   (update-thunk (unbox (gsd-session-ctx-state-box ctx)))))))
+
+(define (gsd-ctx-history-update! ctx update-thunk)
+  (call-with-semaphore (gsd-session-ctx-sem ctx)
+                       (lambda ()
+
+                         (set-box! (gsd-session-ctx-history-box ctx)
+                                   (update-thunk (unbox (gsd-session-ctx-history-box ctx)))))))
+;; ============================================================
 ;; Default global context (backward compatibility)
 ;; ============================================================
 
@@ -76,7 +134,7 @@
 (define gsd-state-sem (make-semaphore 1))
 
 ;; ============================================================
-;; Convenience accessors for default context
+;; Convenience accessors for default context (DEPRECATED: use gsd-ctx-* per-session accessors)
 ;; ============================================================
 
 (define (current-gsd-state)
@@ -163,7 +221,28 @@
          ctx-read
          ctx-write!
          ctx-update!
-         ;; Backward-compatible accessors
+         ;; Per-session accessors (C-01, v0.35.1)
+         gsd-ctx-state
+         gsd-ctx-set-state!
+         gsd-ctx-mode
+         gsd-ctx-wave-number
+         gsd-ctx-plan
+         gsd-ctx-set-plan!
+         gsd-ctx-pinned-dir
+         gsd-ctx-set-pinned-dir!
+         gsd-ctx-edit-limit
+         gsd-ctx-set-edit-limit!
+         gsd-ctx-event-bus
+         gsd-ctx-set-event-bus!
+         gsd-ctx-history
+         gsd-ctx-set-history!
+         gsd-ctx-correlation-id
+         gsd-ctx-set-correlation-id!
+         with-gsd-transaction
+         gsd-ctx-state-snapshot
+         gsd-ctx-state-update!
+         gsd-ctx-history-update!
+         ;; Backward-compatible accessors (deprecated, removal v0.37.0)
          current-gsd-state
          set-gsd-state!
          current-gsd-mode
@@ -178,10 +257,12 @@
          set-gsd-event-bus!
          current-gsd-history
          set-gsd-history!
-         ;; Atomic operations
+         ;; Atomic operations (deprecated global)
          gsd-state-sem
          gsd-state-snapshot
          gsd-state-update!
          gsd-history-snapshot
          gsd-history-update!
-         with-gsd-lock)
+         with-gsd-lock
+         ;; Global default context (for migration only)
+         gsd-default-ctx)
