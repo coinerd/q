@@ -6,6 +6,13 @@
 ;; v0.21.1 W0: Per-wave document files in .planning/waves/.
 ;; PLAN.md index with status markers ([Inbox], [DONE], [DEFERRED], [FAILED]).
 ;; Dual-write: wave doc + PLAN.md index on status transitions.
+;;
+;; DUAL-WRITE INVARIANT (I-24, v0.35.1):
+;; Every wave status change must update BOTH:
+;;   1. The per-wave document file (.planning/waves/W*.md)
+;;   2. The PLAN.md index table (status column)
+;; The sync-wave-status! helper enforces this. Direct file writes
+;; that update only one of the two are a bug.
 
 (require racket/format
          racket/string

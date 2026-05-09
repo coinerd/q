@@ -323,19 +323,38 @@
       default))
 
 ;; Wrap raw parsed data into gsd-wave structs
+;; I-18 (v0.35.1): Validated accessors replace unsafe casts
+(: expect-natural : Any -> Natural)
+(define (expect-natural v)
+  (cond
+    [(exact-nonnegative-integer? v) v]
+    [else (error 'parse-waves "expected Natural for index, got ~a" v)]))
+
+(: expect-string : Any -> String)
+(define (expect-string v)
+  (cond
+    [(string? v) v]
+    [else (error 'parse-waves "expected String, got ~a" v)]))
+
+(: expect-string-list : Any -> (Listof String))
+(define (expect-string-list v)
+  (cond
+    [(and (list? v) (andmap string? v)) v]
+    [else (error 'parse-waves "expected (Listof String), got ~a" v)]))
+
 (: parse-waves-from-markdown : String -> (Listof gsd-wave))
 (define (parse-waves-from-markdown md-text)
   (for/list :
     (Listof gsd-wave)
     ([raw : (HashTable Symbol Any) (parse-waves-from-markdown-raw md-text)])
-    (gsd-wave (cast (raw-ref raw 'index 0) Natural)
-              (cast (raw-ref raw 'title "") String)
+    (gsd-wave (expect-natural (raw-ref raw 'index 0))
+              (expect-string (raw-ref raw 'title ""))
               'pending
-              (cast (raw-ref raw 'root-cause "") String)
-              (cast (raw-ref raw 'files '()) (Listof String))
+              (expect-string (raw-ref raw 'root-cause ""))
+              (expect-string-list (raw-ref raw 'files '()))
               '()
-              (cast (raw-ref raw 'verify "") String)
-              (cast (raw-ref raw 'done '()) (Listof String)))))
+              (expect-string (raw-ref raw 'verify ""))
+              (expect-string-list (raw-ref raw 'done '())))))
 
 ;; ============================================================
 ;; Provide
@@ -386,4 +405,9 @@
          NormWaveStatus
 
          ;; Type alias
-         WaveStatus)
+         WaveStatus
+
+         ;; I-18 (v0.35.1): Validated accessors
+         expect-natural
+         expect-string
+         expect-string-list)
