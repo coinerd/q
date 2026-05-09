@@ -6,7 +6,7 @@
 ;; Thin re-export facade over runtime/iteration/*. Sub-modules:
 ;;   counters.rkt          -- compute-next-counters, check-cancellation
 ;;   decision.rkt          -- iteration-ctx, step-result, decide-next-action,
-;;                           compute-termination, compute-step-result
+;;                           compute-step-result
 ;;   step-interpreter.rkt  -- interpret-step, handle-stop-action,
 ;;                           execute-pending-tool-calls
 ;;   main-loop.rkt         -- run-iteration-loop
@@ -91,7 +91,6 @@
          known-termination-reasons
          (struct-out step-result)
          compute-step-result
-         compute-termination
          interpret-step)
 
 ;; ============================================================
@@ -105,6 +104,5 @@
            decide-next-action
            check-cancellation
            compute-step-result
-           compute-termination
            iteration-ctx
            step-result))

@@ -79,20 +79,12 @@
          (only-in "decision.rkt"
                   step-result
                   step-result-action
-                  step-result-new-counters))
+                  step-result-new-counters)
+         (only-in "internal.rkt" assert-payload))
 
 (provide interpret-step
          handle-stop-action
          execute-pending-tool-calls)
-
-;; ============================================================
-;; Event payload contract assertions
-;; ============================================================
-
-(define (assert-payload topic-name payload ctrct)
-  (unless (ctrct payload)
-    (raise-argument-error topic-name "valid event payload" payload))
-  payload)
 
 ;; ============================================================
 ;; execute-pending-tool-calls

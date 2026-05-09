@@ -3,14 +3,13 @@
 ;; tests/test-iteration-pure.rkt — Property tests for pure iteration functions
 ;;
 ;; v0.33.1 W0: Test pure transition functions extracted from iteration loop.
-;; These tests verify that compute-step-result and compute-termination
-;; produce correct outputs for given inputs, without any I/O.
+;; These tests verify that compute-step-result produces correct outputs
+;; for given inputs, without any I/O.
 
 (require rackunit
          rackunit/text-ui
          (only-in "../runtime/iteration.rkt"
                   compute-step-result
-                  compute-termination
                   step-result
                   step-result?
                   step-result-action
@@ -56,64 +55,6 @@
                             #:implement-count [ic 0]
                             #:stall-retry-count [src 0])
   (loop-counters iter tc sp irc cec rtn ec ic src))
-
-;; ============================================================
-;; compute-termination tests
-;; ============================================================
-
-(define compute-termination-tests
-  (test-suite "compute-termination"
-
-    (test-case "completed → 'completed"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'completed))
-      (check-equal? (compute-termination ctx result) 'completed))
-
-    (test-case "cancelled → 'cancelled"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'cancelled))
-      (check-equal? (compute-termination ctx result) 'cancelled))
-
-    (test-case "force-shutdown → 'force-shutdown"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'force-shutdown))
-      (check-equal? (compute-termination ctx result) 'force-shutdown))
-
-    (test-case "shutdown → 'shutdown"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'shutdown))
-      (check-equal? (compute-termination ctx result) 'shutdown))
-
-    (test-case "hook-blocked → 'hook-blocked"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'hook-blocked))
-      (check-equal? (compute-termination ctx result) 'hook-blocked))
-
-    (test-case "max-iterations-exceeded → 'max-iterations-exceeded"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'max-iterations-exceeded))
-      (check-equal? (compute-termination ctx result) 'max-iterations-exceeded))
-
-    (test-case "error → 'error"
-      (define ctx (make-test-ctx))
-      (define result (make-test-result #:termination 'error))
-      (check-equal? (compute-termination ctx result) 'error))
-
-    (test-case "tool-calls-pending below soft limit → 'tool-calls-pending"
-      (define ctx (make-test-ctx #:iteration 5 #:max-iterations 10))
-      (define result (make-test-result #:termination 'tool-calls-pending))
-      (check-equal? (compute-termination ctx result) 'tool-calls-pending))
-
-    (test-case "tool-calls-pending at soft limit → 'tool-calls-pending"
-      (define ctx (make-test-ctx #:iteration 10 #:max-iterations 10))
-      (define result (make-test-result #:termination 'tool-calls-pending))
-      ;; At soft limit, action is 'stop-soft-limit but termination is still tool-calls-pending
-      (check-equal? (compute-termination ctx result) 'tool-calls-pending))
-
-    (test-case "tool-calls-pending at hard limit → 'tool-calls-pending"
-      (define ctx (make-test-ctx #:iteration 16 #:max-iterations-hard 16))
-      (define result (make-test-result #:termination 'tool-calls-pending))
-      (check-equal? (compute-termination ctx result) 'tool-calls-pending))))
 
 ;; ============================================================
 ;; compute-step-result tests
@@ -197,7 +138,6 @@
 
 (define all-tests
   (test-suite "Iteration Pure Functions (v0.33.1 W0)"
-    compute-termination-tests
     compute-step-result-tests))
 
 (run-tests all-tests)

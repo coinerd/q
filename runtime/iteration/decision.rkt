@@ -8,7 +8,7 @@
 ;;   iteration-ctx     — struct capturing pure subset of loop state
 ;;   step-result       — struct describing what the loop should do next
 ;;   decide-next-action — pure decision function
-;;   compute-termination — pure termination reason computation
+;;;;   (removed in v0.34.7 — inlined into compute-step-result)
 ;;   compute-step-result — pure step computation
 ;;   known-termination-reasons — list of valid termination reason symbols
 
@@ -26,7 +26,6 @@
 (provide (struct-out iteration-ctx)
          (struct-out step-result)
          decide-next-action
-         compute-termination
          compute-step-result
          known-termination-reasons)
 
@@ -73,19 +72,14 @@
        [else 'continue])]
     [_ 'stop]))
 
-(define (compute-termination ctx result)
-  (define action (decide-next-action ctx result))
-  (match action
-    [(or 'stop 'stop-hard-limit) (loop-result-termination-reason result)]
-    [_ (loop-result-termination-reason result)]))
-
 (define (compute-step-result ctx result counters)
   (define action (decide-next-action ctx result))
-  (define termination (compute-termination ctx result))
+  ;; Inline termination — both branches returned (loop-result-termination-reason result)
+  (define termination (loop-result-termination-reason result))
   (define new-msgs (loop-result-messages result))
   (define new-counters (compute-next-counters counters new-msgs))
   (define metadata
     (match action
-      ['stop-hard-limit (hash 'maxIterationsReached #t)]
+      ['stop-hard-limit (hasheq 'maxIterationsReached #t)]
       [_ (hasheq)]))
   (step-result action termination new-counters metadata))
