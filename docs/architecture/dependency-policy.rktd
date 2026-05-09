@@ -72,9 +72,9 @@
    (convention . "Keymap resolution and default maps."))
   (runtime/iteration
    (parent . "runtime/iteration.rkt")
-   (sub-modules . (loop-state retry-policy tool-turn-bridge transition-logic))
-   (budget . 350)
-   (convention . "Iteration loop decomposition. Recursive core stays in parent."))
+   (sub-modules . (loop-state retry-policy tool-turn-bridge counters decision step-interpreter main-loop internal))
+   (budget . 450)
+   (convention . "Iteration loop decomposition. Pure logic in counters/decision, effectful in step-interpreter, orchestration in main-loop."))
   (runtime/session-index
    (parent . "runtime/session-index.rkt")
    (sub-modules . (schema query mutations))
@@ -90,6 +90,11 @@
    (sub-modules . (command-normalization execution-policy plan-diff))
    (budget . 130)
    (convention . "Pure logic extracted from GSD planning."))
+  (extensions/gsd
+   (parent . "extensions/gsd-planning.rkt")
+   (sub-modules . (command-handlers tool-handlers))
+   (budget . 350)
+   (convention . "GSD command/tool dispatch extracted from gsd-planning facade."))
   (extensions/github/handlers
    (parent . "extensions/github/tool-handlers.rkt")
    (sub-modules . (issue-ops pr-ops milestone-ops))

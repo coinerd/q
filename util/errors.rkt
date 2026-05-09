@@ -4,7 +4,7 @@
 ;;
 ;; Provides structured error types for different error domains:
 ;;   - q-error: base error with message and optional context hash
-;;   - provider-error: LLM provider failures (provider name, status-code)
+;;   - provider-error: → canonical definition in llm/provider-errors.rkt
 ;;   - tool-error: tool execution failures (tool-name)
 ;;   - session-error: session lifecycle errors (session-id)
 

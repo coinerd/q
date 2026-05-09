@@ -34,7 +34,7 @@ v0.34.6
 └─────────────────────────────────────────────┘
 ```
 
-## Module Counts (409 source modules, ~64,100 LOC)
+## Module Counts (414 source modules, ~63,300 LOC)
 
 | Layer | Modules | Key Files |
 |-------|---------|-----------|
