@@ -76,7 +76,55 @@
          MAX-STREAM-CHUNKS
          usage-empty?
          parts->text-string
-         classify-hook-result)
+         classify-hook-result
+         emit-turn-start!
+         build-turn-context)
+;; ============================================================
+;; Extracted helpers (I-01)
+;; ============================================================
+
+;; Phase 1: Emit turn-started event and dispatch agent-start hook
+(define (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
+  (emit-typed-event! bus
+                     (make-turn-start-event #:session-id session-id
+                                            #:turn-id turn-id
+                                            #:timestamp (current-inexact-milliseconds)
+                                            #:model ""
+                                            #:provider "")
+                     #:state st)
+  (when hook-dispatcher
+    (hook-dispatcher
+     'agent-start
+     (hasheq 'session-id session-id 'turn-id turn-id 'message-count (length context)))))
+
+;; Phase 2: Build normalized context and emit context.built event
+(define (build-turn-context bus session-id turn-id st context)
+  (define raw-messages (build-raw-messages context))
+  (define token-count (estimate-context-tokens raw-messages))
+  (emit-typed-event! bus
+                     (make-context-event #:session-id session-id
+                                         #:turn-id turn-id
+                                         #:timestamp (current-inexact-milliseconds)
+                                         #:token-count token-count
+                                         #:window-size (length raw-messages))
+                     #:state st)
+  raw-messages)
+
+;; Phase 3: Build model-request and dispatch pre hook
+(define (make-model-request-with-hook req provider hook-dispatcher)
+  (define pre-hook-result
+    (and hook-dispatcher
+         (hook-dispatcher 'model-request-pre
+                          (hasheq 'model-name
+                                  (provider-name provider)
+                                  'message-count
+                                  (length (model-request-messages req))
+                                  'messages
+                                  (model-request-messages req)
+                                  'settings
+                                  (model-request-settings req)))))
+  pre-hook-result)
+
 ;; ============================================================
 ;; Main entry point — thin orchestrator
 ;; ============================================================
@@ -102,35 +150,13 @@
   ;; Ensure we have a state for accumulation
   (define st (or state (make-loop-state session-id turn-id)))
 
-  ;; 1. Emit turn.started
-  (emit-typed-event! bus
-                     (make-turn-start-event #:session-id session-id
-                                            #:turn-id turn-id
-                                            #:timestamp (current-inexact-milliseconds)
-                                            #:model ""
-                                            #:provider "")
-                     #:state st)
+  ;; Phase 1: Emit turn-started + agent-start hook (I-01)
+  (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
 
-  ;; #667: Dispatch 'agent-start hook at LLM call begin
-  (when hook-dispatcher
-    (hook-dispatcher
-     'agent-start
-     (hasheq 'session-id session-id 'turn-id turn-id 'message-count (length context))))
+  ;; Phase 2: Build context + emit context.built (I-01)
+  (define raw-messages (build-turn-context bus session-id turn-id st context))
 
-  ;; 2. Build normalized model context (pure function)
-  (define raw-messages (build-raw-messages context))
-
-  ;; 3. Emit context.built (v0.19.12 W1: added tokenCount)
-  (define ctx-built-token-count (estimate-context-tokens raw-messages))
-  (emit-typed-event! bus
-                     (make-context-event #:session-id session-id
-                                         #:turn-id turn-id
-                                         #:timestamp (current-inexact-milliseconds)
-                                         #:token-count ctx-built-token-count
-                                         #:window-size (length raw-messages))
-                     #:state st)
-
-  ;; 4. Build model-request
+  ;; Phase 3: Build model-request
   (define req (make-model-request raw-messages tools (or provider-settings (hasheq))))
 
   ;; R2-7: model-request-pre hook
