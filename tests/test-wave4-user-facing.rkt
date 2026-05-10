@@ -35,8 +35,7 @@
   ;; All actions should be namespaced (contain at least one dot)
   (for ([e (in-list entries)])
     (define action (cdr e))
-    (check-true (namespaced-action? action)
-                (format "expected namespaced action, got: ~a" action))))
+    (check-true (namespaced-action? action) (format "expected namespaced action, got: ~a" action))))
 
 (test-case "#1189: namespaced-action? detects dot-namespaced symbols"
   (check-true (namespaced-action? 'tui.editor.copy))
@@ -60,26 +59,40 @@
 
 (test-case "#1189: flat keybinding JSON auto-migrates to namespaced"
   ;; Simulate loading a flat keybinding file
-  (define json-content "[{\"key\": \"C-x\", \"action\": \"cut\"}]")
+  (define json-content "[{\"key\": \"C-v\", \"action\": \"paste\"}]")
   (define bindings (parse-keybindings-content json-content))
   (check-not-false bindings)
   (define action (cdar bindings))
-  (check-equal? action 'tui.editor.cut))
+  (check-equal? action 'tui.editor.paste))
 
 (test-case "#1189: namespaced keybinding JSON passes through"
-  (define json-content "[{\"key\": \"C-x\", \"action\": \"tui.editor.cut\"}]")
+  (define json-content "[{\"key\": \"C-v\", \"action\": \"tui.editor.paste\"}]")
   (define bindings (parse-keybindings-content json-content))
   (check-not-false bindings)
   (define action (cdar bindings))
-  (check-equal? action 'tui.editor.cut))
+  (check-equal? action 'tui.editor.paste))
 
 (test-case "#1189: backward compat — flat actions still resolve in dispatch"
   ;; The dispatch-keymap-action case handles both namespaced and flat
   ;; This test just verifies the migration table is complete
-  (define all-flat '(history-up history-down page-up page-down home end
-                     scroll-up scroll-down submit backspace delete cancel
-                     word-left word-right copy cut paste select-all
-                     clear-input clear-screen))
+  (define all-flat
+    '(history-up history-down
+                 page-up
+                 page-down
+                 home
+                 end
+                 scroll-up
+                 scroll-down
+                 submit
+                 backspace
+                 delete
+                 cancel
+                 word-left
+                 word-right
+                 copy
+                 paste
+                 clear-input
+                 clear-screen))
   (for ([flat (in-list all-flat)])
     (define migrated (migrate-action flat))
     (check-true (namespaced-action? migrated)
@@ -99,8 +112,10 @@
   (make-msg "turn" 'assistant 'message tool-calls))
 
 (define (make-summary-msg tracker-meta)
-  (make-msg "sum" 'assistant 'compaction-summary
-            "summary text"
+  (make-msg "sum"
+            'assistant
+            'compaction-summary
+            '("summary text")
             (hasheq 'fileTracker tracker-meta)))
 
 ;; Helper: wrap tool-calls in a message for extract-file-tracker
@@ -122,39 +137,39 @@
 
 (test-case "#1190: 5-round cumulative tracking — no loss"
   ;; Round 1: read a.rkt, edit b.rkt
-  (define ft1 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "a.rkt")
-                                (make-tool-call "edit" "b.rkt")))))
+  (define ft1
+    (extract-file-tracker (list (make-turn (make-tool-call "read" "a.rkt")
+                                           (make-tool-call "edit" "b.rkt")))))
   (define sum1 (make-summary-msg ft1))
 
   ;; Round 2: read c.rkt, edit a.rkt (a.rkt appears in both lists now)
-  (define ft2 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "c.rkt")
-                                (make-tool-call "edit" "a.rkt")))))
+  (define ft2
+    (extract-file-tracker (list (make-turn (make-tool-call "read" "c.rkt")
+                                           (make-tool-call "edit" "a.rkt")))))
   (define prev2 (find-previous-file-tracker (list sum1)))
   (define cum2 (merge-file-trackers ft2 prev2))
   (define sum2 (make-summary-msg cum2))
 
   ;; Round 3: read d.rkt, edit e.rkt
-  (define ft3 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "d.rkt")
-                                (make-tool-call "edit" "e.rkt")))))
+  (define ft3
+    (extract-file-tracker (list (make-turn (make-tool-call "read" "d.rkt")
+                                           (make-tool-call "edit" "e.rkt")))))
   (define prev3 (find-previous-file-tracker (list sum2)))
   (define cum3 (merge-file-trackers ft3 prev3))
   (define sum3 (make-summary-msg cum3))
 
   ;; Round 4: read f.rkt, edit g.rkt
-  (define ft4 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "f.rkt")
-                                (make-tool-call "edit" "g.rkt")))))
+  (define ft4
+    (extract-file-tracker (list (make-turn (make-tool-call "read" "f.rkt")
+                                           (make-tool-call "edit" "g.rkt")))))
   (define prev4 (find-previous-file-tracker (list sum3)))
   (define cum4 (merge-file-trackers ft4 prev4))
   (define sum4 (make-summary-msg cum4))
 
   ;; Round 5: read h.rkt, edit a.rkt
-  (define ft5 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "h.rkt")
-                                (make-tool-call "edit" "a.rkt")))))
+  (define ft5
+    (extract-file-tracker (list (make-turn (make-tool-call "read" "h.rkt")
+                                           (make-tool-call "edit" "a.rkt")))))
   (define prev5 (find-previous-file-tracker (list sum4)))
   (define cum5 (merge-file-trackers ft5 prev5))
 
@@ -165,8 +180,7 @@
   (check-equal? all-writes '("a.rkt" "b.rkt" "e.rkt" "g.rkt")))
 
 (test-case "#1190: file read in round 1 appears in readFiles throughout"
-  (define ft1 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "round1-file.rkt")))))
+  (define ft1 (extract-file-tracker (list (make-turn (make-tool-call "read" "round1-file.rkt")))))
   (define sum1 (make-summary-msg ft1))
   ;; Simulate 3 more empty rounds
   (define ft2 (extract-file-tracker (list (make-turn))))
@@ -181,18 +195,15 @@
   (check-equal? (hash-ref cum4 'readFiles '()) '("round1-file.rkt")))
 
 (test-case "#1190: file read in round 1, modified in round 3 — in both lists"
-  (define ft1 (extract-file-tracker
-               (list (make-turn (make-tool-call "read" "shared.rkt")))))
+  (define ft1 (extract-file-tracker (list (make-turn (make-tool-call "read" "shared.rkt")))))
   (define sum1 (make-summary-msg ft1))
   (define ft2 (extract-file-tracker (list (make-turn))))
   (define cum2 (merge-file-trackers ft2 (find-previous-file-tracker (list sum1))))
   (define sum2 (make-summary-msg cum2))
-  (define ft3 (extract-file-tracker
-               (list (make-turn (make-tool-call "edit" "shared.rkt")))))
+  (define ft3 (extract-file-tracker (list (make-turn (make-tool-call "edit" "shared.rkt")))))
   (define cum3 (merge-file-trackers ft3 (find-previous-file-tracker (list sum2))))
   ;; shared.rkt should be in both read and modified lists
-  (check-not-false (member "shared.rkt" (hash-ref cum3 'readFiles '()))
-                   "shared.rkt in readFiles")
+  (check-not-false (member "shared.rkt" (hash-ref cum3 'readFiles '())) "shared.rkt in readFiles")
   (check-not-false (member "shared.rkt" (hash-ref cum3 'modifiedFiles '()))
                    "shared.rkt in modifiedFiles"))
 
@@ -219,7 +230,8 @@
                          #:author "test"
                          #:compat ">=0.10.0"
                          #:files '("main.rkt")))
-    (define main-rkt "(module test racket/base (provide the-extension (define the-extension 'hello)))")
+    (define main-rkt
+      "(module test racket/base (provide the-extension (define the-extension 'hello)))")
     (with-output-to-file (build-path tmp-source "main.rkt") (lambda () (display main-rkt)))
     (write-qpm-manifest manifest (build-path tmp-source "qpm.json"))
     ;; Install
@@ -306,8 +318,7 @@
       (write-qpm-manifest manifest (build-path dir "qpm.json")))
     (define pkgs (list-packages))
     (check-equal? (length pkgs) 2)
-    (check-equal? (sort (map (lambda (p) (qpm-manifest-name (qpm-package-manifest p))) pkgs)
-                        string<?)
+    (check-equal? (sort (map (lambda (p) (qpm-manifest-name (qpm-package-manifest p))) pkgs) string<?)
                   '("pkg-a" "pkg-b")))
   (delete-directory/files tmp-pkgs))
 

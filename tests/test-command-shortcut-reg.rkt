@@ -133,14 +133,14 @@
 
 (test-case "extension shortcuts override base keymap"
   (define base (default-keymap))
-  ;; Ctrl-A is "select-all" by default
-  (define orig-spec (parse-key-string "C-a"))
-  (check-eq? (keymap-lookup base orig-spec) 'tui.editor.select-all)
+  ;; Ctrl-C is "copy" by default
+  (define orig-spec (parse-key-string "C-c"))
+  (check-eq? (keymap-lookup base orig-spec) 'tui.editor.copy)
   ;; Override via extension
-  (define ext-specs (list (hasheq 'key "C-a" 'action "ext-select-all")))
+  (define ext-specs (list (hasheq 'key "C-c" 'action "ext-copy-action")))
   (define ext-km (shortcut-specs->keymap ext-specs))
   (keymap-merge base ext-km)
-  (check-eq? (keymap-lookup base orig-spec) 'ext-select-all))
+  (check-eq? (keymap-lookup base orig-spec) 'ext-copy-action))
 
 (test-case "extension can register shortcuts via register-shortcuts hook"
   (define ext-reg (make-extension-registry))
