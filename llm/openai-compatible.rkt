@@ -161,8 +161,8 @@
     (define raw (do-http-request base-url api-key "/chat/completions" body))
     (openai-parse-response raw))
 
-  (define (stream req)
-    (define _stream-t0 (current-inexact-milliseconds))
+  ;; W-06: Extracted stream request — returns (values response-port cleanup-thunk)
+  (define (openai-stream-request req)
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model #:stream? #t))
     (define url-str (string-append (string-trim base-url "/") "/chat/completions"))
@@ -175,15 +175,11 @@
     (define headers
       (list (format "Authorization: Bearer ~a" api-key) "Content-Type: application/json"))
     (define body-bytes (jsexpr->bytes body))
-    ;; v0.14.2 Wave 3: per-model timeout for streaming requests
     (define stream-model-name (and (hash? body) (hash-ref body 'model #f)))
     (define stream-timeout
       (if stream-model-name
           (effective-request-timeout-for stream-model-name)
           (current-http-request-timeout)))
-    ;; Wrap initial HTTP request in overall timeout (SEC-11)
-    ;; call-with-request-timeout returns a single value,
-    ;; so we capture the 3 http-sendrecv values in a vector.
     (define result-vec
       (call-with-request-timeout (lambda ()
                                    (define-values (sl rh rp)
@@ -206,8 +202,7 @@
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
-    ;; Check HTTP status from status-line BEFORE reading body.
-    ;; For error responses (4xx/5xx), read the full body to include in error message.
+    ;; Check HTTP status
     (define status-str
       (if (bytes? status-line)
           (bytes->string/utf-8 status-line)
@@ -218,10 +213,15 @@
             (string->number (cadr m))
             0)))
     (when (>= status-code 300)
-      ;; Error/redirect — read full body, then raise
       (define err-body (read-response-body/timeout response-port))
       (close-input-port response-port)
       (check-provider-status! "OpenAI" status-line err-body))
+    (values response-port stream-timeout (lambda () (close-input-port response-port))))
+
+  (define (stream req)
+    (define _stream-t0 (current-inexact-milliseconds))
+    (define-values (response-port stream-timeout cleanup-thunk) (openai-stream-request req))
+    ;; Response port and timeout from openai-stream-request (W-06)
     ;; Status OK — return an incremental generator that reads SSE lines
     ;; from the response port, yielding stream-chunk values as they arrive.
     ;; v0.15.1 Wave 2: Increased stream timeout scaling from /4 to /2.
