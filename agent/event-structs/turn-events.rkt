@@ -5,8 +5,6 @@
 (require "base.rkt"
          "../../util/event-macro.rkt")
 
-(define-typed-event turn-start-event "turn.started"
-  (model provider))
+(define-typed-event turn-start-event "turn.started" (model provider))
 
-(define-typed-event turn-end-event "turn.completed"
-  (reason duration-ms))
+(define-typed-event turn-end-event "turn.completed" (reason duration-ms) #:defaults (duration-ms 0))
