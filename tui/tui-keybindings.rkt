@@ -338,9 +338,7 @@
         ;; Ctrl+J → insert newline (multi-line input)
         (set-box! (tui-ctx-input-state-box ctx) (input-insert-newline inp))
         'continue]
-       [(#\backspace #\rubout)
-        (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
-        'continue]
+
        [(#\tab)
         ;; Tab — expand @ file reference at cursor (G3.2)
         (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
@@ -366,30 +364,7 @@
            (list 'command (or cmd 'unknown) text)]
           ;; User entry added by submit handler in tui-render-loop.rkt
           [_ (list 'submit text)])]
-       [(left kp-left)
-        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-left inp))
-        'continue]
-       [(right kp-right)
-        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-right inp))
-        'continue]
-       [(up kp-up)
-        (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp))
-        'continue]
-       [(down kp-down)
-        (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp))
-        'continue]
-       [(backspace)
-        (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
-        'continue]
-       [(delete kp-delete)
-        (set-box! (tui-ctx-input-state-box ctx) (input-delete inp))
-        'continue]
-       [(home kp-home)
-        (set-box! (tui-ctx-input-state-box ctx) (input-home inp))
-        'continue]
-       [(end kp-end)
-        (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
-        'continue]
+
        [(tab)
         ;; Tab — expand @ file reference at cursor (G3.2)
         (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
@@ -425,20 +400,7 @@
        [(ctrl-right)
         (set-box! (tui-ctx-input-state-box ctx) (input-cursor-word-right inp))
         'continue]
-       [(page-up pgup kp-pgup)
-        ;; Page up: scroll by one viewport height (page)
-        (define-values (_cols rows) (tui-screen-size))
-        (define layout (compute-layout _cols rows))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (scroll-up state (max 1 (tui-layout-transcript-height layout))))
-        'continue]
-       [(page-down pgdn kp-pgdn)
-        ;; Page down: scroll by one viewport height (page)
-        (define-values (_cols2 rows2) (tui-screen-size))
-        (define layout2 (compute-layout _cols2 rows2))
-        (set-box! (tui-ctx-ui-state-box ctx)
-                  (scroll-down state (max 1 (tui-layout-transcript-height layout2))))
-        'continue]
+
        [(ctrl-c)
         (if (has-selection? state)
             ;; Selection active → copy to clipboard

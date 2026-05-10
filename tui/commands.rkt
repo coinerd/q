@@ -69,7 +69,99 @@
 
          ;; Main command dispatcher
          process-slash-command
+         process-extension-command
          cmd-ctx-session-factory-runner)
+
+;; ============================================================
+;; Extension command dispatch (extracted W-09)
+;; ============================================================
+
+(define (process-extension-command cctx state)
+  ;; Try extension command dispatch before showing error
+  (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
+  (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
+  (define input-text (unbox (cmd-ctx-input-text-box cctx)))
+  (define cmd-name
+    (let ([trimmed (string-trim input-text)])
+      (and (> (string-length trimmed) 0)
+           (char=? (string-ref trimmed 0) #\/)
+           (let ([parts (string-split trimmed)]) (and (pair? parts) (car parts))))))
+  (log-debug "command dispatch: cmd=~a has-ext-reg=~a" cmd-name (and ext-reg #t))
+  (define ext-result
+    (and ext-reg
+         cmd-name
+         (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
+  (log-debug "command dispatch result: action=~a" (and ext-result (hook-result-action ext-result)))
+  (cond
+    [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
+     ;; Extension handled the command
+     (define payload (hook-result-payload ext-result))
+     (define new-session-text (hash-ref payload 'new-session #f))
+     (define submit-text (hash-ref payload 'submit #f))
+     (define display-text (hash-ref payload 'text #f))
+     (cond
+       [new-session-text
+        (when display-text
+          (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+          (set-box! (cmd-ctx-state-box cctx)
+                    (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
+        (define factory (cmd-ctx-session-factory-runner cctx))
+        (cond
+          [factory
+           (thread (lambda ()
+                     (with-handlers
+                         ([exn:fail?
+                           (lambda (e)
+                             (define err-msg (format "[ERROR] /go failed: ~a" (exn-message e)))
+                             (define entry
+                               (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                             (set-box! (cmd-ctx-state-box cctx)
+                                       (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                             (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                       (factory new-session-text))))]
+          [else
+           (define runner (cmd-ctx-session-runner cctx))
+           (when runner
+             (thread
+              (lambda ()
+                (with-handlers
+                    ([exn:fail?
+                      (lambda (e)
+                        (define err-msg (format "[ERROR] Session runner failed: ~a" (exn-message e)))
+                        (define entry
+                          (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                        (set-box! (cmd-ctx-state-box cctx)
+                                  (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                        (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                  (runner new-session-text)))))])]
+       [submit-text
+        (when display-text
+          (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+          (set-box! (cmd-ctx-state-box cctx)
+                    (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
+        (define runner (cmd-ctx-session-runner cctx))
+        (when runner
+          (thread (lambda ()
+                    (with-handlers
+                        ([exn:fail?
+                          (lambda (e)
+                            (define err-msg (format "[ERROR] Prompt failed: ~a" (exn-message e)))
+                            (define entry
+                              (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                            (set-box! (cmd-ctx-state-box cctx)
+                                      (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                            (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                      (runner submit-text)))))]
+       [display-text
+        (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+        (set-box! (cmd-ctx-state-box cctx)
+                  (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))])
+     'continue]
+    [else
+     (log-debug "command fell through: cmd=~a" cmd-name)
+     (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]))
 
 ;; ============================================================
 ;; Main command dispatcher
@@ -230,100 +322,5 @@
        ['quit
         (set-box! (cmd-ctx-running-box cctx) #f)
         'quit]
-       ['unknown
-        ;; Try extension command dispatch before showing error
-        (define ext-reg-box (cmd-ctx-extension-registry-box cctx))
-        (define ext-reg (and ext-reg-box (unbox ext-reg-box)))
-        (define input-text (unbox (cmd-ctx-input-text-box cctx)))
-        (define cmd-name
-          (let ([trimmed (string-trim input-text)])
-            (and (> (string-length trimmed) 0)
-                 (char=? (string-ref trimmed 0) #\/)
-                 (let ([parts (string-split trimmed)]) (and (pair? parts) (car parts))))))
-        (log-debug "command dispatch: cmd=~a has-ext-reg=~a" cmd-name (and ext-reg #t))
-        (define ext-result
-          (and
-           ext-reg
-           cmd-name
-           (dispatch-hooks 'execute-command (hasheq 'command cmd-name 'input input-text) ext-reg)))
-        (log-debug "command dispatch result: action=~a"
-                   (and ext-result (hook-result-action ext-result)))
-        (cond
-          [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
-           ;; Extension handled the command
-           (define payload (hook-result-payload ext-result))
-           (define new-session-text (hash-ref payload 'new-session #f))
-           (define submit-text (hash-ref payload 'submit #f))
-           (define display-text (hash-ref payload 'text #f))
-           (cond
-             [new-session-text
-              ;; Extension wants a fresh session (e.g. /go)
-              (when display-text
-                (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
-                (set-box! (cmd-ctx-state-box cctx)
-                          (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
-              (define factory (cmd-ctx-session-factory-runner cctx))
-              (cond
-                ;; Fresh session: call factory with the prompt
-                [factory
-                 (thread
-                  (lambda ()
-                    (with-handlers
-                        ([exn:fail?
-                          (lambda (e)
-                            (define err-msg (format "[ERROR] /go failed: ~a" (exn-message e)))
-                            (define entry
-                              (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
-                            (set-box! (cmd-ctx-state-box cctx)
-                                      (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
-                            (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
-                      (factory new-session-text))))]
-                [else
-                 ;; Fallback: append to existing session
-                 (define runner (cmd-ctx-session-runner cctx))
-                 (when runner
-                   (thread
-                    (lambda ()
-                      (with-handlers
-                          ([exn:fail?
-                            (lambda (e)
-                              (define err-msg
-                                (format "[ERROR] Session runner failed: ~a" (exn-message e)))
-                              (define entry
-                                (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
-                              (set-box! (cmd-ctx-state-box cctx)
-                                        (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
-                              (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
-                        (runner new-session-text)))))])]
-             [submit-text
-              ;; Extension wants to submit text as a prompt to the agent
-              (when display-text
-                (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
-                (set-box! (cmd-ctx-state-box cctx)
-                          (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
-              (define runner (cmd-ctx-session-runner cctx))
-              (when runner
-                (thread
-                 (lambda ()
-                   (with-handlers
-                       ([exn:fail?
-                         (lambda (e)
-                           (define err-msg (format "[ERROR] Prompt failed: ~a" (exn-message e)))
-                           (define entry
-                             (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
-                           (set-box! (cmd-ctx-state-box cctx)
-                                     (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
-                           (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
-                     (runner submit-text)))))]
-             [display-text
-              ;; Extension provided display text
-              (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
-              (set-box! (cmd-ctx-state-box cctx)
-                        (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))])
-           'continue]
-          [else
-           (log-debug "command fell through: cmd=~a" cmd-name)
-           (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
-           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-           'continue])]
+       ['unknown (process-extension-command cctx state)]
        [else 'continue])]))
