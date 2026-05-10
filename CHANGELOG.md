@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.35.4 — 2026-05-07
+
+### Goal: TUI Dispatcher Refactoring (v0.35.4 milestone)
+
+### W0 — Event Reducer Registry (W-07, I-20)
+- **W-07**: Registry-based event reducers replace monolithic 25+ clause `case` dispatch
+- `register-event-reducer!` + `apply-event-to-state` dispatch via hash lookup
+- Named handler functions for each event type
+- `event-reducer-registered?` predicate for introspection
+- 11 new tests for registry infrastructure and dispatch correctness
+
+### W1 — Keymap Unification & Command Extraction (W-08, W-09)
+- **W-08**: Removed 11 hardcoded fallback key bindings (keymap handles them)
+- Only ctrl-c (interrupt) and return (submit) remain in hardcoded fallback
+- **W-09**: Extracted `process-extension-command` from `commands.rkt` 'unknown branch
+- 3 new keymap unification tests
+
+### W2 — TUI Init Phase Extraction (W-19)
+- **W-19**: `run-tui-with-runtime` decomposed into 4 named phases:
+  - `create-tui-session` — session + context creation
+  - `load-tui-scrollback` — scrollback loading + welcome messages
+  - `init-tui-terminal` — UI callbacks + event subscription + terminal setup
+  - `run-tui-loop` — main render loop with crash handling and cleanup
+- 5 new tests for phase exports
+
+**Verification**: lint 16/18 (2 pre-existing version-sync), 2010 tests green
+
 ## v0.35.3 — 2026-05-07
 
 ### Goal: Iteration Loop Decomposition (v0.35.3 milestone)
