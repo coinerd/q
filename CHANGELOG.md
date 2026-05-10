@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.35.3 — 2026-05-07
+
+### Goal: Iteration Loop Decomposition (v0.35.3 milestone)
+
+### W0 — Step Directive Type & Phase Extraction (W-02, I-05)
+- **W-02**: Defined `step-directive?` union type: `directive-recurse`, `directive-stop`, `directive-yield`
+- **I-05**: `interpret-step` returns directives instead of calling `on-recurse` callback
+- Main loop dispatches on directive type via `match`
+- `handle-stop-action` simplified: returns result directly
+- New module `runtime/iteration/directive.rkt`
+- 6 new tests for directive construction and predicates
+
+### W1 — Retry Policy Purity & Counters Refinement (I-06)
+- **I-06**: `count-occurrences` uses pure `for/fold` + `hash-set` instead of mutable `make-hash`
+- Returns immutable hash (pure function)
+- 2 new purity tests
+
+**Verification**: lint-all 18/18, smoke 2010/2010 green
+
 ## v0.35.2 — 2026-05-07
 
 ### Goal: Runtime Config Struct & Scheduler Types (v0.35.2 milestone)
