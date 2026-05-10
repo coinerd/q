@@ -18,7 +18,8 @@
          estimate-mid-turn-tokens
          maybe-compact-mid-turn
          call-with-overflow-recovery
-         detect-exploration-loop)
+         detect-exploration-loop
+         count-occurrences)
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
@@ -231,15 +232,15 @@
        [else #f])]))
 
 ;; Helper: count occurrences in a list of items
-(: count-occurrences (-> (Listof Any) (HashTable Any Nonnegative-Integer)))
+(: count-occurrences (-> (Listof Any) (Immutable-HashTable Any Nonnegative-Integer)))
 (define (count-occurrences items)
-  (define counts
-    :
-    (HashTable Any Nonnegative-Integer)
-    (make-hash))
-  (for ([item (in-list items)])
-    (hash-set! counts item (add1 (hash-ref counts item (lambda () 0)))))
-  counts)
+  ;; v0.35.3 (I-06): Pure for/fold replaces mutable hash
+  (for/fold ([counts
+              :
+              (Immutable-HashTable Any Nonnegative-Integer)
+              (hash)])
+            ([item (in-list items)])
+    (hash-set counts item (add1 (hash-ref counts item (lambda () 0))))))
 
 ;; Helper: take at most N from list
 (: take-at-most (All (A) (-> (Listof A) Nonnegative-Integer (Listof A))))
