@@ -356,8 +356,7 @@
 ;; Registration from specs
 ;; ============================================================
 
-;; Register tools from a spec list.
-;; Accepts both new tool-spec structs and legacy list format for migration.
+;; Register tools from tool-spec structs.
 (define (register-tools-from-specs! registry specs #:only [only #f])
   (for ([spec (in-list specs)])
     (cond
@@ -376,17 +375,5 @@
                              (make-tool name
                                         (tool-spec-description spec)
                                         (tool-spec-schema spec)
-                                        (tool-spec-handler spec)))))]
-      [(list? spec)
-       ;; Legacy format: (list name description schema handler [prompt-guidelines])
-       (define name (car spec))
-       (when (or (not only) (member name only))
-         (define description (cadr spec))
-         (define schema (caddr spec))
-         (define handler (cadddr spec))
-         (define pg (and (>= (length spec) 5) (list-ref spec 4)))
-         (if pg
-             (register-tool! registry
-                             (make-tool name description schema handler #:prompt-guidelines pg))
-             (register-tool! registry (make-tool name description schema handler))))]))
+                                        (tool-spec-handler spec)))))]))
   (void))

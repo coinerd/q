@@ -29,7 +29,8 @@
            (->* (string? string? #:provider-config hash?)
                 (#:config-path (or/c path-string? #f))
                 hash?)]
-          [resolve-provider-credentials (-> hash? hash?)]
+          [resolve-provider-credentials
+           (-> (hash/c string? hash?) (hash/c string? (or/c credential? #f)))]
           [mask-api-key (-> any/c string?)]
           [cred->redacted (-> credential? redacted-credential?)]
           [validate-credential-format (-> any/c any/c (or/c #f #t string?))]
