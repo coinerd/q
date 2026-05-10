@@ -99,9 +99,9 @@
 ;; ============================================================
 
 (struct q-settings
-        (global ; hash — parsed from ~/.q/config.json (or (hash) if missing)
-         project ; hash — parsed from .q/config.json (or (hash) if missing)
-         merged ; hash — deep-merged with project overriding global
+        (global ; #:INTERNAL — hash from ~/.q/config.json; use `merged' for access
+         project ; #:INTERNAL — hash from .q/config.json; use `merged' for access
+         merged ; PUBLIC — deep-merged settings (project overrides global)
          )
   #:transparent)
 

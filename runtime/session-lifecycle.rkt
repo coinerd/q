@@ -14,6 +14,7 @@
 ;;   run-prompt-internal     — internal prompt execution (after input hook)
 
 (require racket/contract
+         "session-mutation.rkt"
          racket/string
          racket/file
          racket/list
@@ -372,7 +373,7 @@
     (raise-session-error (format "run-prompt!: session ~a already has a prompt running"
                                  (agent-session-session-id sess))
                          (agent-session-session-id sess)))
-  (set-agent-session-prompt-running?! sess #t)
+  (guarded-set-prompt-running! sess #t)
   (define bus (agent-session-event-bus sess))
   (define sid (agent-session-session-id sess))
   ;; F2: Emit turn.started immediately so TUI shows activity
@@ -415,7 +416,7 @@
    ;; Cleanup: always reset prompt-running? even on error
    ;; B3-A: Emergency persist — defense-in-depth if session not yet persisted
    (lambda ()
-     (set-agent-session-prompt-running?! sess #f)
+     (guarded-set-prompt-running! sess #f)
      (unless (agent-session-persisted? sess)
        (with-handlers ([exn:fail? void])
          (ensure-persisted! sess))))))
