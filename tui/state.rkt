@@ -20,6 +20,8 @@
          (struct-out tree-browser-state)
          initial-ui-state
          make-entry
+         make-system-entry
+         make-error-entry
          assign-entry-id
          next-entry-id
          rendered-cache-ref

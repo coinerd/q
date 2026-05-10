@@ -22,6 +22,8 @@
 
          ;; Entry helpers
          make-entry
+         make-system-entry
+         make-error-entry
          assign-entry-id
          next-entry-id
 
@@ -146,6 +148,13 @@
 
 (define (make-entry kind text timestamp meta)
   (transcript-entry kind text timestamp meta #f))
+
+;; L-01: Convenience constructors for common entry patterns
+(define (make-system-entry text)
+  (make-entry 'system text (current-inexact-milliseconds) (hash)))
+
+(define (make-error-entry text)
+  (make-entry 'error text (current-inexact-milliseconds) (hash)))
 
 (define (assign-entry-id entry state)
   (define id (ui-state-next-entry-id state))

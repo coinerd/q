@@ -16,7 +16,10 @@
 (provide apply-event-to-state
          current-gsd-mode-query
          register-event-reducer!
-         event-reducer-registered?)
+         event-reducer-registered?
+         ;; M-09: Extracted error classification
+         classify-error-type
+         format-error-hint)
 
 ;; Injected callback to query GSD mode without direct import.
 (define current-gsd-mode-query (make-parameter (lambda () 'idle)))
@@ -143,54 +146,58 @@
                          (append-entry state (make-entry 'tool-fail err ts meta))
                          [pending-tool-name #f])))))
 
+;; M-09: Extracted error classification (pure function)
+(define (classify-error-type err payload)
+  (hash-ref
+   payload
+   'errorType
+   (lambda ()
+     (cond
+       [(regexp-match? #rx"[Tt]imeout|timed out" err) 'timeout]
+       [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) 'rate-limit]
+       [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err) 'auth]
+       [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
+       [else 'provider-error]))))
+
+;; M-09: Extracted error hint generation (pure function)
+(define (format-error-hint error-type retries-attempted history-types)
+  (cond
+    [(and retries-attempted (> retries-attempted 0))
+     (cond
+       [(and (member 'timeout history-types) (member 'rate-limit history-types))
+        (format "Provider timed out, then rate limited (~a retries). Wait 30s, then type /retry."
+                retries-attempted)]
+       [(> (length history-types) 1)
+        (format "Mixed errors after ~a retries. Wait a moment, then type /retry." retries-attempted)]
+       [else
+        (case error-type
+          [(rate-limit)
+           (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
+                   retries-attempted)]
+          [(timeout)
+           (format "Provider timed out after ~a retries. Type /retry to resubmit." retries-attempted)]
+          [else
+           (format "Error persisted after ~a retries. Type /retry to resubmit."
+                   retries-attempted)])])]
+    [else
+     (case error-type
+       [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
+       [(rate-limit) "Rate limited. Will retry automatically."]
+       [(auth) "API key error. Check ~/.q/config.json"]
+       [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
+       [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
+       [(internal-error) "Internal error occurred. Type /retry to resubmit your prompt."]
+       [else "Type /retry to resubmit your prompt."])]))
+
 (define (handle-runtime-error state evt)
   (define payload (event-payload evt))
   (define err (hash-ref payload 'error "unknown error"))
   (define ts (event-time evt))
-  (define error-type
-    (hash-ref
-     payload
-     'errorType
-     (lambda ()
-       (cond
-         [(regexp-match? #rx"[Tt]imeout|timed out" err) 'timeout]
-         [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) 'rate-limit]
-         [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err) 'auth]
-         [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
-         [else 'provider-error]))))
+  (define error-type (classify-error-type err payload))
   (define retries-attempted (hash-ref payload 'retries-attempted #f))
   (define error-history (hash-ref payload 'errorHistory '()))
   (define history-types (remove-duplicates error-history))
-  (define hint
-    (cond
-      [(and retries-attempted (> retries-attempted 0))
-       (cond
-         [(and (member 'timeout history-types) (member 'rate-limit history-types))
-          (format "Provider timed out, then rate limited (~a retries). Wait 30s, then type /retry."
-                  retries-attempted)]
-         [(> (length history-types) 1)
-          (format "Mixed errors after ~a retries. Wait a moment, then type /retry."
-                  retries-attempted)]
-         [else
-          (case error-type
-            [(rate-limit)
-             (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
-                     retries-attempted)]
-            [(timeout)
-             (format "Provider timed out after ~a retries. Type /retry to resubmit."
-                     retries-attempted)]
-            [else
-             (format "Error persisted after ~a retries. Type /retry to resubmit."
-                     retries-attempted)])])]
-      [else
-       (case error-type
-         [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
-         [(rate-limit) "Rate limited. Will retry automatically."]
-         [(auth) "API key error. Check ~/.q/config.json"]
-         [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
-         [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
-         [(internal-error) "Internal error occurred. Type /retry to resubmit your prompt."]
-         [else "Type /retry to resubmit your prompt."])]))
+  (define hint (format-error-hint error-type retries-attempted history-types))
   (define streamed (ui-state-streaming-text state))
   (define s0
     (if (and streamed (> (string-length (string-trim streamed)) 0))

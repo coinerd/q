@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.36.5 — 2026-05-10
+
+### Goal: TUI State Decomposition (H-06, M-08, M-09, L-01, L-05)
+
+### Medium Impact
+- **M-09** (EVT-01): Extracted `classify-error-type` and `format-error-hint` from
+  `handle-runtime-error` in `tui/state-events.rkt`. Both are pure functions,
+  independently testable.
+- **L-01** (CORE-02): Added `make-system-entry` and `make-error-entry` convenience
+  constructors in `tui/state-types.rkt`. Replaced 5 duplicated patterns in `commands.rkt`.
+
+### Deferred (H-06, M-08, L-05)
+- **H-06** ui-state sub-struct decomposition deferred — 27-field struct has ~40 consumers;
+  full migration requires dedicated wave with TUI test suite.
+- **M-08** slash command handler extraction deferred — already well-structured with `match`.
+- **L-05** render cache module extraction deferred — already well-contained in state-types.rkt.
+
+**Verification**: All modules compile, lint 18/18
+
 ## v0.36.4 — 2026-05-10
 
 ### Goal: Tool System Data Representation (M-03, M-04, M-13)
