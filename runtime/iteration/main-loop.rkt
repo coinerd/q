@@ -30,26 +30,18 @@
          (only-in "../../agent/event-structs/hook-events.rkt" turn-cancelled-event)
          (only-in "../../agent/queue.rkt"
                   queue-status
-                  queue?)
-         (only-in "tool-turn-bridge.rkt"
-                  dequeue-all-steering!
-                  drain-injected-messages!)
-         (only-in "../../runtime/runtime-helpers.rkt"
-                  emit-session-event!
-                  maybe-dispatch-hooks)
-         (only-in "../../util/hook-types.rkt"
-                  hook-result-action
-                  hook-result?)
+                  queue?
+                  dequeue-followup!
+                  dequeue-all-followups!)
+         (only-in "tool-turn-bridge.rkt" dequeue-all-steering! drain-injected-messages!)
+         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../util/event-contracts.rkt"
                   injection-count-payload/c
                   iteration-decision-payload/c
                   reason-payload/c)
-         (only-in "../../runtime/turn-orchestrator.rkt"
-                  run-provider-turn
-                  build-assembled-context)
-         (only-in "../../runtime/working-set.rkt"
-                  working-set?
-                  make-working-set)
+         (only-in "../../runtime/turn-orchestrator.rkt" run-provider-turn build-assembled-context)
+         (only-in "../../runtime/working-set.rkt" working-set? make-working-set)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
          (only-in "../../runtime/session-types.rkt" agent-session?)
          (only-in "../../runtime/session-config.rkt" session-config?)
@@ -59,20 +51,19 @@
          (only-in "../../agent/event-bus.rkt" event-bus?)
          (only-in "../../util/loop-result.rkt" loop-result?)
          (only-in "counters.rkt" check-cancellation)
-         (only-in "decision.rkt"
-                  iteration-ctx
-                  compute-step-result)
+         (only-in "decision.rkt" iteration-ctx compute-step-result)
          (only-in "step-interpreter.rkt" interpret-step)
+         (only-in "directive.rkt" directive-recurse directive-stop directive-yield)
          (only-in "internal.rkt" assert-payload))
 
 (provide (contract-out [run-iteration-loop
                         (->* ((listof message?) (or/c provider? #f)
-                                    event-bus?
-                                    (or/c tool-registry? #f)
-                                    (or/c extension-registry? #f)
-                                    (or/c path-string? path?)
-                                    string?
-                                    exact-nonnegative-integer?)
+                                                event-bus?
+                                                (or/c tool-registry? #f)
+                                                (or/c extension-registry? #f)
+                                                (or/c path-string? path?)
+                                                string?
+                                                exact-nonnegative-integer?)
                              (#:cancellation-token (or/c cancellation-token? #f)
                               #:config (or/c hash? session-config?)
                               #:queue (or/c queue? #f)
@@ -220,17 +211,18 @@
                                                       max-iterations-hard)
                                        result
                                        counters))
-                (interpret-step step-res
-                                result
-                                new-msgs
-                                (struct-copy loop-infra infra [ctx ctx-with-injected])
-                                counters
-                                ws
-                                config
-                                sess
-                                max-iterations
-                                max-iterations-hard
-                                steering-queue
-                                follow-up-mode
-                                (lambda (new-ctx new-counters ws2)
-                                  (loop new-ctx new-counters ws2)))])])))))
+                (define directive
+                  (interpret-step step-res
+                                  result
+                                  new-msgs
+                                  (struct-copy loop-infra infra [ctx ctx-with-injected])
+                                  counters
+                                  ws
+                                  config
+                                  sess
+                                  max-iterations
+                                  max-iterations-hard))
+                (match directive
+                  [(directive-stop final-result) final-result]
+                  [(directive-recurse new-ctx new-counters ws2)
+                   (loop new-ctx new-counters ws2)])])])))))
