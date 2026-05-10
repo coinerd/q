@@ -10,16 +10,12 @@
 ;;; to maintain sort order (ULID spec behavior).
 
 (provide generate-id
-         id?
-         id->string
-         string->id
          now-seconds)
 
 ;; ── Crockford Base32 encoding ──
 ;; Characters: 0-9, A-Z excluding I, L, O, U = 32 symbols
 
-(define encoding-chars
-  (string->list "0123456789ABCDEFGHJKMNPQRSTVWXYZ"))
+(define encoding-chars (string->list "0123456789ABCDEFGHJKMNPQRSTVWXYZ"))
 
 (define encoding-table
   (for/hash ([c (in-list encoding-chars)]
@@ -28,16 +24,13 @@
 
 (define (encode-base32 n digits)
   ;; Encode integer n into `digits` Base32 characters (most significant first)
-  (list->string
-   (for/list ([shift (in-range (* 5 (sub1 digits)) -1 -5)])
-     (list-ref encoding-chars (bitwise-and (arithmetic-shift n (- shift)) #x1F)))))
+  (list->string (for/list ([shift (in-range (* 5 (sub1 digits)) -1 -5)])
+                  (list-ref encoding-chars (bitwise-and (arithmetic-shift n (- shift)) #x1F)))))
 
 (define (decode-base32 str)
   ;; Decode a Base32 string into an integer
-  (for/fold ([acc 0])
-            ([c (in-string str)])
-    (bitwise-ior (arithmetic-shift acc 5)
-                 (hash-ref encoding-table (char-upcase c)))))
+  (for/fold ([acc 0]) ([c (in-string str)])
+    (bitwise-ior (arithmetic-shift acc 5) (hash-ref encoding-table (char-upcase c)))))
 
 (define (char-valid-base32? c)
   (hash-has-key? encoding-table (char-upcase c)))
@@ -58,10 +51,8 @@
 
 (define (generate-random-component)
   ;; Generate an 80-bit random number (16 base32 chars = 80 bits)
-  (for/fold ([acc 0])
-            ([_ (in-range rnd-chars)])
-    (bitwise-ior (arithmetic-shift acc 5)
-                 (random 32))))
+  (for/fold ([acc 0]) ([_ (in-range rnd-chars)])
+    (bitwise-ior (arithmetic-shift acc 5) (random 32))))
 
 (define (random-component->string n)
   (encode-base32 n rnd-chars))
@@ -73,25 +64,23 @@
   ;; Generate a ULID-compatible ID with monotonic guarantee.
   ;; Thread-safe: read/write of shared state protected by semaphore (#115).
   (call-with-semaphore id-semaphore
-    (lambda ()
-      (define ts (inexact->exact (truncate (current-inexact-milliseconds))))
-      (define prev-ts (unbox last-ts))
-      (define rnd
-        (cond
-          [(> ts prev-ts)
-           ;; New millisecond: fresh random
-           (generate-random-component)]
-          [else
-           ;; Same or earlier millisecond: increment previous random
-           (define new-rnd (add1 (unbox last-rnd)))
-           ;; Guard against overflow (80 bits)
-           (if (> new-rnd (sub1 (expt 2 80)))
-               (generate-random-component)
-               new-rnd)]))
-      (set-box! last-ts ts)
-      (set-box! last-rnd rnd)
-      (string-append (encode-base32 ts ts-chars)
-                     (random-component->string rnd)))))
+                       (lambda ()
+                         (define ts (inexact->exact (truncate (current-inexact-milliseconds))))
+                         (define prev-ts (unbox last-ts))
+                         (define rnd
+                           (cond
+                             ;; New millisecond: fresh random
+                             [(> ts prev-ts) (generate-random-component)]
+                             [else
+                              ;; Same or earlier millisecond: increment previous random
+                              (define new-rnd (add1 (unbox last-rnd)))
+                              ;; Guard against overflow (80 bits)
+                              (if (> new-rnd (sub1 (expt 2 80)))
+                                  (generate-random-component)
+                                  new-rnd)]))
+                         (set-box! last-ts ts)
+                         (set-box! last-rnd rnd)
+                         (string-append (encode-base32 ts ts-chars) (random-component->string rnd)))))
 
 ;; ── Predicates and conversions ──
 

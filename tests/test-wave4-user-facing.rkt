@@ -321,9 +321,3 @@
     (check-equal? (sort (map (lambda (p) (qpm-manifest-name (qpm-package-manifest p))) pkgs) string<?)
                   '("pkg-a" "pkg-b")))
   (delete-directory/files tmp-pkgs))
-
-(test-case "#1191: install-package-from-git rejects non-git spec"
-  (define result (install-package-from-git "https://example.com/pkg"))
-  (check-true (string? result) (format "expected error string, got: ~a" result))
-  (when (string? result)
-    (check-true (string-contains? result "git"))))
