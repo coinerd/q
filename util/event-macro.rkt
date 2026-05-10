@@ -39,7 +39,12 @@
 (define (register-event-fields! name fields)
   (hash-set! *event-field-registry* name fields))
 
+(define lookup-event-fields-logged? #f)
 (define (lookup-event-fields name)
+  (unless lookup-event-fields-logged?
+    (set! lookup-event-fields-logged? #t)
+    (log-warning
+     "lookup-event-fields is deprecated (v0.38.0). Use per-struct *-event-fields constants."))
   (hash-ref *event-field-registry* name '()))
 
 ;; ===========================================================

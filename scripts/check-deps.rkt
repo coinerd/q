@@ -75,6 +75,7 @@
             "iteration"
             "session-index"
             "context-assembly"
+            "assemble-context"
             "gsd-planning"
             "github/handlers"
             "racket-tooling"))

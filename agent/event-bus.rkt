@@ -19,7 +19,11 @@
 
 ;; Pub/sub event bus
 (provide (contract-out
-          [make-event-bus (-> event-bus?)]
+          [make-event-bus
+           (->* ()
+                (#:threshold (or/c exact-nonnegative-integer? #f)
+                             #:cooldown-secs (or/c exact-nonnegative-integer? #f))
+                event-bus?)]
           [subscribe!
            (->* (event-bus? procedure?) (#:filter (or/c procedure? #f)) exact-nonnegative-integer?)]
           [subscribe-map! (-> event-bus? procedure? procedure? exact-nonnegative-integer?)]

@@ -45,7 +45,7 @@
 (define tool-specs
   (list
    ;; read
-   (list
+   (tool-spec
     "read"
     "Read file contents"
     (hasheq 'type
@@ -62,20 +62,20 @@
     tool-read
     "When making parallel read calls, include the 'path' parameter in EVERY call. Never pass a bare line number without a path.")
    ;; write
-   (list "write"
-         "Write content to a file"
-         (hasheq 'type
-                 "object"
-                 'required
-                 '("path" "content")
-                 'properties
-                 (hasheq 'path
-                         (hasheq 'type "string" 'description "Path to file to write")
-                         'content
-                         (hasheq 'type "string" 'description "Content to write")))
-         tool-write)
+   (tool-spec "write"
+              "Write content to a file"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("path" "content")
+                      'properties
+                      (hasheq 'path
+                              (hasheq 'type "string" 'description "Path to file to write")
+                              'content
+                              (hasheq 'type "string" 'description "Content to write")))
+              tool-write)
    ;; edit
-   (list
+   (tool-spec
     "edit"
     "Edit a file by replacing exact text. old-text MUST be copied verbatim from a prior read result — do not guess."
     (hasheq
@@ -101,79 +101,79 @@
      "Keep old-text short — ideally under 500 chars (~20 lines). "
      "If you need to change a large block, split into multiple smaller edits."))
    ;; bash
-   (list "bash"
-         "Execute a shell command"
-         (hasheq 'type
-                 "object"
-                 'required
-                 '("command")
-                 'properties
-                 (hasheq 'command
-                         (hasheq 'type "string" 'description "Shell command to run")
-                         'timeout
-                         (hasheq 'type "number" 'description "Timeout in seconds")
-                         'working-directory
-                         (hasheq 'type "string" 'description "Working directory")))
-         tool-bash)
+   (tool-spec "bash"
+              "Execute a shell command"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("command")
+                      'properties
+                      (hasheq 'command
+                              (hasheq 'type "string" 'description "Shell command to run")
+                              'timeout
+                              (hasheq 'type "number" 'description "Timeout in seconds")
+                              'working-directory
+                              (hasheq 'type "string" 'description "Working directory")))
+              tool-bash)
    ;; grep
-   (list "grep"
-         "Search for text patterns in files"
-         (hasheq 'type
-                 "object"
-                 'required
-                 '("pattern" "path")
-                 'properties
-                 (hasheq 'pattern
-                         (hasheq 'type "string" 'description "Regex pattern to search for")
-                         'path
-                         (hasheq 'type "string" 'description "File or directory to search")
-                         'glob
-                         (hasheq 'type "string" 'description "File glob filter")
-                         'case-insensitive?
-                         (hasheq 'type "boolean" 'description "Case insensitive match")
-                         'max-results
-                         (hasheq 'type "integer" 'description "Max matches")
-                         'context-lines
-                         (hasheq 'type "integer" 'description "Context lines around match")))
-         tool-grep)
+   (tool-spec "grep"
+              "Search for text patterns in files"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("pattern" "path")
+                      'properties
+                      (hasheq 'pattern
+                              (hasheq 'type "string" 'description "Regex pattern to search for")
+                              'path
+                              (hasheq 'type "string" 'description "File or directory to search")
+                              'glob
+                              (hasheq 'type "string" 'description "File glob filter")
+                              'case-insensitive?
+                              (hasheq 'type "boolean" 'description "Case insensitive match")
+                              'max-results
+                              (hasheq 'type "integer" 'description "Max matches")
+                              'context-lines
+                              (hasheq 'type "integer" 'description "Context lines around match")))
+              tool-grep)
    ;; find
-   (list "find"
-         "Find files and directories by name or type"
-         (hasheq 'type
-                 "object"
-                 'required
-                 '("path")
-                 'properties
-                 (hasheq 'path
-                         (hasheq 'type "string" 'description "Root directory")
-                         'name
-                         (hasheq 'type "string" 'description "Filename glob pattern")
-                         'type
-                         (hasheq 'type "string" 'description "\"file\", \"dir\", or \"any\"")
-                         'max-depth
-                         (hasheq 'type "integer" 'description "Max recursion depth")
-                         'max-results
-                         (hasheq 'type "integer" 'description "Max results")))
-         tool-find)
+   (tool-spec "find"
+              "Find files and directories by name or type"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("path")
+                      'properties
+                      (hasheq 'path
+                              (hasheq 'type "string" 'description "Root directory")
+                              'name
+                              (hasheq 'type "string" 'description "Filename glob pattern")
+                              'type
+                              (hasheq 'type "string" 'description "\"file\", \"dir\", or \"any\"")
+                              'max-depth
+                              (hasheq 'type "integer" 'description "Max recursion depth")
+                              'max-results
+                              (hasheq 'type "integer" 'description "Max results")))
+              tool-find)
    ;; ls
-   (list "ls"
-         "List directory contents"
-         (hasheq 'type
-                 "object"
-                 'required
-                 '("path")
-                 'properties
-                 (hasheq 'path
-                         (hasheq 'type "string" 'description "Directory to list")
-                         'all?
-                         (hasheq 'type "boolean" 'description "Show hidden files")
-                         'long?
-                         (hasheq 'type "boolean" 'description "Long format with size/type")
-                         'sort-by
-                         (hasheq 'type "string" 'description "\"name\", \"size\", or \"date\"")))
-         tool-ls)
+   (tool-spec "ls"
+              "List directory contents"
+              (hasheq 'type
+                      "object"
+                      'required
+                      '("path")
+                      'properties
+                      (hasheq 'path
+                              (hasheq 'type "string" 'description "Directory to list")
+                              'all?
+                              (hasheq 'type "boolean" 'description "Show hidden files")
+                              'long?
+                              (hasheq 'type "boolean" 'description "Long format with size/type")
+                              'sort-by
+                              (hasheq 'type "string" 'description "\"name\", \"size\", or \"date\"")))
+              tool-ls)
    ;; date
-   (list
+   (tool-spec
     "date"
     "Returns the current date and time. Use this tool to learn today's date before answering time-dependent questions."
     (hasheq 'type
@@ -188,7 +188,7 @@
                             "Output format: iso (default), date, time, unix, weekday, iso-full")))
     tool-date)
    ;; firecrawl
-   (list
+   (tool-spec
     "firecrawl"
     (string-append "Search the web, scrape/crawl/map websites via Firecrawl. "
                    "Actions: search (web search with query), scrape (extract content from URL), "
@@ -222,31 +222,32 @@
       (hasheq 'type "integer" 'description "Timeout in seconds for crawl polling (default 30)")))
     tool-firecrawl)
    ;; spawn-subagent
-   (list "spawn-subagent"
-         "Spawn an isolated child agent to execute a delegated task"
-         (hasheq 'type
-                 "object"
-                 'required
-                 '("task")
-                 'properties
-                 (hasheq 'task
-                         (hasheq 'type "string" 'description "Task description for the child agent")
-                         'role
-                         (hasheq 'type "string" 'description "Role prompt to load")
-                         'model
-                         (hasheq 'type "string" 'description "Model override for child")
-                         'max-turns
-                         (hasheq 'type "integer" 'description "Max turns (default 5)")
-                         'tools
-                         (hasheq 'type
-                                 "array"
-                                 'items
-                                 (hasheq 'type "string")
-                                 'description
-                                 "Allowed tool names for child")))
-         tool-spawn-subagent)
+   (tool-spec
+    "spawn-subagent"
+    "Spawn an isolated child agent to execute a delegated task"
+    (hasheq 'type
+            "object"
+            'required
+            '("task")
+            'properties
+            (hasheq 'task
+                    (hasheq 'type "string" 'description "Task description for the child agent")
+                    'role
+                    (hasheq 'type "string" 'description "Role prompt to load")
+                    'model
+                    (hasheq 'type "string" 'description "Model override for child")
+                    'max-turns
+                    (hasheq 'type "integer" 'description "Max turns (default 5)")
+                    'tools
+                    (hasheq 'type
+                            "array"
+                            'items
+                            (hasheq 'type "string")
+                            'description
+                            "Allowed tool names for child")))
+    tool-spawn-subagent)
    ;; spawn-subagents
-   (list
+   (tool-spec
     "spawn-subagents"
     "Run multiple subagent tasks in parallel with bounded concurrency."
     (hasheq
@@ -269,7 +270,7 @@
       (hasheq 'type "boolean" 'description "Include aggregated summary in response (default true)")))
     tool-spawn-subagents)
    ;; session_recall
-   (list
+   (tool-spec
     "session_recall"
     (string-append
      "Retrieve earlier session entries that are not in your current context. "
@@ -302,7 +303,7 @@
                             "Retrieve a range of entries by ID (inclusive)")))
     tool-session-recall)
    ;; delete-lines
-   (list
+   (tool-spec
     "delete-lines"
     "Delete a range of lines from a file by line number. Use instead of edit for removing 3+ consecutive lines."
     (hasheq 'type
@@ -319,25 +320,26 @@
     tool-delete-lines
     "Prefer delete-lines over edit for removing 3+ consecutive lines. Read the file first to identify exact line numbers.")
    ;; skill-route
-   (list "skill-route"
-         "Discover, search, and load skill instructions by name or description."
-         (hasheq
-          'type
-          "object"
-          'required
-          '()
-          'properties
-          (hasheq
-           'action
-           (hasheq 'type
-                   "string"
-                   'description
-                   "Action: list (all skills), match (search by query), load (full content by name)")
-           'query
-           (hasheq 'type "string" 'description "Search query for match action")
-           'name
-           (hasheq 'type "string" 'description "Skill name for load action")))
-         tool-skill-route)))
+   (tool-spec
+    "skill-route"
+    "Discover, search, and load skill instructions by name or description."
+    (hasheq
+     'type
+     "object"
+     'required
+     '()
+     'properties
+     (hasheq
+      'action
+      (hasheq 'type
+              "string"
+              'description
+              "Action: list (all skills), match (search by query), load (full content by name)")
+      'query
+      (hasheq 'type "string" 'description "Search query for match action")
+      'name
+      (hasheq 'type "string" 'description "Skill name for load action")))
+    tool-skill-route)))
 
 ;; ============================================================
 ;; Registration from specs
