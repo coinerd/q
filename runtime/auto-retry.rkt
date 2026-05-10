@@ -77,25 +77,33 @@
   (match (permanent-tool-error? exn)
     [#t #f]
     [_
-     (define msg (exn-message exn))
-     (define retryable-patterns
-       '("429" "rate"
-               "overloaded"
-               "quota"
-               "too many"
-               "500"
-               "502"
-               "503"
-               "504"
-               "server error"
-               "timeout"
-               "timed out"
-               "connection"
-               "network"
-               "retry"
-               "backoff"))
-     (for/or ([pattern (in-list retryable-patterns)])
-       (string-contains? (string-downcase msg) pattern))]))
+     ;; M-11: Use structured provider-error-category as primary classification.
+     ;; Falls back to string matching only for unknown/non-structured errors.
+     (match (provider-error? exn)
+       [#t
+        (define cat (provider-error-category exn))
+        (memq cat '(rate-limit timeout server-error network))]
+       [_
+        ;; String fallback for non-structured errors
+        (define msg (exn-message exn))
+        (define retryable-patterns
+          '("429" "rate"
+                  "overloaded"
+                  "quota"
+                  "too many"
+                  "500"
+                  "502"
+                  "503"
+                  "504"
+                  "server error"
+                  "timeout"
+                  "timed out"
+                  "connection"
+                  "network"
+                  "retry"
+                  "backoff"))
+        (for/or ([pattern (in-list retryable-patterns)])
+          (string-contains? (string-downcase msg) pattern))])]))
 
 ;; FEAT-66: Check if an error is a context overflow / token limit error.
 ;; These errors indicate the context was too long for the model.
