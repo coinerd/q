@@ -2,8 +2,7 @@
 
 ;; tools/registry-table.rkt — Declarative tool spec table
 ;;
-;; Encodes all 14 built-in tools as data specs. Each spec is a list:
-;;   (name description schema handler [prompt-guidelines])
+;; Encodes all 14 built-in tools as tool-spec structs.
 ;;
 ;; register-tools-from-specs! converts specs → make-tool calls.
 
@@ -41,7 +40,7 @@
 ;; Tool spec table
 ;; ============================================================
 
-;; Each entry: (list name description schema handler [prompt-guidelines])
+;; Each entry is a (tool-spec ...) struct — see tool-specs below.
 (define tool-specs
   (list
    ;; read

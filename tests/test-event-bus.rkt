@@ -377,12 +377,12 @@
   (check-equal? (unbox call-count) 3))
 
 (test-case "W-07c: cooldown-secs allows circuit recovery after wait"
-  (define bus (make-event-bus #:threshold 1 #:cooldown-secs 1))
+  (define bus (make-event-bus #:threshold 1 #:cooldown-secs 0))
   (define state (make-hash))
   (record-failure! state 1 #:bus bus)
   (check-true (circuit-broken? state 1 #:bus bus))
-  ;; Wait for cooldown to elapse
-  (sleep 2.0)
+  ;; current-seconds has 1s granularity; sleep to ensure elapsed > 0
+  (sleep 1.1)
   (check-false (circuit-broken? state 1 #:bus bus)))
 
 (test-case "W-07d: cooldown-secs #f keeps circuit permanently broken"

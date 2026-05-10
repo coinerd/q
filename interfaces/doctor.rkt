@@ -17,25 +17,27 @@
          racket/file
          json
          "../runtime/settings.rkt"
-         "../runtime/auth-store.rkt"
+         (only-in "../runtime/auth-store.rkt"
+                  credential-file-path
+                  lookup-credential
+                  credential-provider-name)
          "../runtime/model-registry.rkt"
          "../util/config-paths.rkt")
 
-(provide
- ;; Struct
- (struct-out check-result)
+;; Struct
+(provide (struct-out check-result)
 
- ;; Main entry
- run-doctor
+         ;; Main entry
+         run-doctor
 
- ;; Individual checks (exported for testing)
- check-racket-version
- check-packages
- check-config-dir
- check-config-file
- check-credentials
- check-session-dir
- check-tui-packages)
+         ;; Individual checks (exported for testing)
+         check-racket-version
+         check-packages
+         check-config-dir
+         check-config-file
+         check-credentials
+         check-session-dir
+         check-tui-packages)
 
 ;; ============================================================
 ;; Struct
@@ -51,7 +53,9 @@
 ;; Run a shell command and capture its stdout as a string.
 ;; Returns #f if the command fails or is not found.
 (define (shell-command-output cmd)
-  (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: shell command failed: ~a" (exn-message e)) #f)])
+  (with-handlers ([exn:fail? (λ (e)
+                               (log-warning "doctor: shell command failed: ~a" (exn-message e))
+                               #f)])
     (define port (open-output-string))
     (define result
       (parameterize ([current-output-port port]
@@ -63,14 +67,20 @@
 
 ;; Try to write a small file to a directory to verify writability.
 (define (directory-writable? dir)
-  (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: directory not writable ~a: ~a" dir (exn-message e)) #f)])
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (log-warning "doctor: directory not writable ~a: ~a" dir (exn-message e))
+                     #f)])
     (define tmp (make-temporary-file "q-doctor-~a.tmp" #f dir))
     (delete-file tmp)
     #t))
 
 ;; Parse a version string like "8.12.0.4" into a list of integers.
 (define (parse-version-string s)
-  (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: failed to parse version ~a: ~a" s (exn-message e)) '())])
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (log-warning "doctor: failed to parse version ~a: ~a" s (exn-message e))
+                     '())])
     (map string->number (string-split (or s "") "."))))
 
 ;; Compare two version lists lexicographically.
@@ -95,8 +105,7 @@
 (define (check-racket-version)
   (define output (shell-command-output "racket --version 2>/dev/null"))
   (cond
-    [(not output)
-     (check-result "Racket" 'error "not found — install Racket >= 8.10")]
+    [(not output) (check-result "Racket" 'error "not found — install Racket >= 8.10")]
     [else
      ;; Parse version from output like "Welcome to Racket v8.12.0.4 [cs]."
      (define m (regexp-match #rx"v([0-9]+\\.[0-9]+(\\.[0-9]+)*)" output))
@@ -123,13 +132,10 @@
   (define dir (global-config-dir))
   (cond
     [(not (directory-exists? dir))
-     (check-result "Config dir" 'warning
-                   (format "~a does not exist" dir))]
+     (check-result "Config dir" 'warning (format "~a does not exist" dir))]
     [(not (directory-writable? dir))
-     (check-result "Config dir" 'error
-                   (format "~a exists but is not writable" dir))]
-    [else
-     (check-result "Config dir" 'ok (format "~a exists, writable" dir))]))
+     (check-result "Config dir" 'error (format "~a exists but is not writable" dir))]
+    [else (check-result "Config dir" 'ok (format "~a exists, writable" dir))]))
 
 ;; ============================================================
 ;; Check: config file (~/.q/config.json)
@@ -140,27 +146,21 @@
   (define cfg-path (build-path dir "config.json"))
   (cond
     [(not (file-exists? cfg-path))
-     (check-result "Config file" 'warning
-                   (format "~a not found (run q once to create)" cfg-path))]
+     (check-result "Config file" 'warning (format "~a not found (run q once to create)" cfg-path))]
     [else
      (define content
-       (with-handlers ([exn:fail? (λ (e)
-                                    (log-warning "doctor: failed to read config ~a: ~a" cfg-path (exn-message e))
-                                    #f)])
-         (call-with-input-file cfg-path
-           (λ (in) (read-json in)))))
+       (with-handlers
+           ([exn:fail? (λ (e)
+                         (log-warning "doctor: failed to read config ~a: ~a" cfg-path (exn-message e))
+                         #f)])
+         (call-with-input-file cfg-path (λ (in) (read-json in)))))
      (cond
        [(not content)
-        (check-result "Config file" 'error
-                      (format "~a — failed to parse JSON" cfg-path))]
-       [(eof-object? content)
-        (check-result "Config file" 'error
-                      (format "~a — empty file" cfg-path))]
+        (check-result "Config file" 'error (format "~a — failed to parse JSON" cfg-path))]
+       [(eof-object? content) (check-result "Config file" 'error (format "~a — empty file" cfg-path))]
        [(not (hash? content))
-        (check-result "Config file" 'error
-                      (format "~a — top-level value is not an object" cfg-path))]
-       [else
-        (check-result "Config file" 'ok (format "~a — valid JSON" cfg-path))])]))
+        (check-result "Config file" 'error (format "~a — top-level value is not an object" cfg-path))]
+       [else (check-result "Config file" 'ok (format "~a — valid JSON" cfg-path))])]))
 
 ;; ============================================================
 ;; Check: credentials (API keys)
@@ -174,11 +174,12 @@
   (define anthropic-key (getenv "ANTHROPIC_API_KEY"))
   (define openai-key (getenv "OPENAI_API_KEY"))
   (define env-keys-found
-    (append
-     (if (and anthropic-key (> (string-length (string-trim anthropic-key)) 0))
-         '("ANTHROPIC_API_KEY") '())
-     (if (and openai-key (> (string-length (string-trim openai-key)) 0))
-         '("OPENAI_API_KEY") '())))
+    (append (if (and anthropic-key (> (string-length (string-trim anthropic-key)) 0))
+                '("ANTHROPIC_API_KEY")
+                '())
+            (if (and openai-key (> (string-length (string-trim openai-key)) 0))
+                '("OPENAI_API_KEY")
+                '())))
   ;; Check credential file
   (define cred-file (credential-file-path))
   (define cred-file-exists? (file-exists? cred-file))
@@ -196,37 +197,52 @@
       (define prov-cfg (provider-config settings name))
       (define cred (lookup-credential name prov-cfg))
       (and cred (credential-provider-name cred))))
-  (define providers-with-keys
-    (filter (lambda (x) x) configured-providers))
+  (define providers-with-keys (filter (lambda (x) x) configured-providers))
   ;; Separate local vs remote providers
   (define local-provs (filter local-provider? prov-names))
   (define remote-provs (filter (lambda (n) (not (local-provider? n))) prov-names))
   ;; Providers that have keys (normalize to strings)
-  (define key-names (map (lambda (x) (if (symbol? x) (symbol->string x) x)) providers-with-keys))
+  (define key-names
+    (map (lambda (x)
+           (if (symbol? x)
+               (symbol->string x)
+               x))
+         providers-with-keys))
   ;; Local provider names for display
-  (define local-names (map (lambda (x) (if (symbol? x) (symbol->string x) x)) local-provs))
+  (define local-names
+    (map (lambda (x)
+           (if (symbol? x)
+               (symbol->string x)
+               x))
+         local-provs))
 
   (cond
     [(not (null? env-keys-found))
-     (check-result "Credentials" 'ok
-                   (format "env: ~a" (string-join env-keys-found ", ")))]
+     (check-result "Credentials" 'ok (format "env: ~a" (string-join env-keys-found ", ")))]
     [(not (null? key-names))
-     (check-result "Credentials" 'ok
-                   (format "configured: ~a" (string-join key-names ", ")))]
+     (check-result "Credentials" 'ok (format "configured: ~a" (string-join key-names ", ")))]
     [(and cred-file-exists?)
-     (check-result "Credentials" 'warning
-                   "credentials file exists but no keys resolved")]
+     (check-result "Credentials" 'warning "credentials file exists but no keys resolved")]
     [(null? prov-names)
-     (check-result "Credentials" 'warning
-                   "no providers configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY, or edit ~/.q/config.json")]
+     (check-result
+      "Credentials"
+      'warning
+      "no providers configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY, or edit ~/.q/config.json")]
     ;; All providers are local — no keys needed
     [(null? remote-provs)
-     (check-result "Credentials" 'ok
+     (check-result "Credentials"
+                   'ok
                    (format "local-only: ~a (no API keys needed)" (string-join local-names ", ")))]
     [else
-     (check-result "Credentials" 'error
+     (check-result "Credentials"
+                   'error
                    (format "remote providers (~a) need API keys; local: ~a"
-                           (string-join (map (lambda (x) (if (symbol? x) (symbol->string x) x)) remote-provs) ", ")
+                           (string-join (map (lambda (x)
+                                               (if (symbol? x)
+                                                   (symbol->string x)
+                                                   x))
+                                             remote-provs)
+                                        ", ")
                            (string-join local-names ", ")))]))
 
 ;; ============================================================
@@ -238,18 +254,16 @@
   (cond
     [(not (directory-exists? dir))
      ;; Try to create it
-     (with-handlers ([exn:fail?
-                      (λ (e)
-                        (check-result "Session dir" 'error
-                                      (format "~a does not exist and cannot be created"
-                                              dir)))])
+     (with-handlers ([exn:fail? (λ (e)
+                                  (check-result "Session dir"
+                                                'error
+                                                (format "~a does not exist and cannot be created"
+                                                        dir)))])
        (make-directory* dir)
        (check-result "Session dir" 'ok (format "~a created" dir)))]
     [(not (directory-writable? dir))
-     (check-result "Session dir" 'error
-                   (format "~a exists but is not writable" dir))]
-    [else
-     (check-result "Session dir" 'ok (format "~a exists, writable" dir))]))
+     (check-result "Session dir" 'error (format "~a exists but is not writable" dir))]
+    [else (check-result "Session dir" 'ok (format "~a exists, writable" dir))]))
 
 ;; ============================================================
 ;; Check: TUI packages (optional)
@@ -260,14 +274,17 @@
   ;; They may be installed but fail to compile on some Racket versions.
   ;; Use dynamic-require for pkg/lib to avoid hard dependency.
   (define table
-    (with-handlers ([exn:fail? (λ (e) (log-warning "doctor: failed to load pkg-table: ~a" (exn-message e)) #f)])
+    (with-handlers ([exn:fail? (λ (e)
+                                 (log-warning "doctor: failed to load pkg-table: ~a" (exn-message e))
+                                 #f)])
       ((dynamic-require 'pkg/lib 'installed-pkg-table))))
   (define (pkg-installed? name)
     (and table (hash-has-key? table name)))
   (define (mod-loadable? mod-path)
-    (with-handlers ([exn:fail? (λ (e)
-                                 (log-warning "doctor: module ~a not loadable: ~a" mod-path (exn-message e))
-                                 #f)])
+    (with-handlers ([exn:fail?
+                     (λ (e)
+                       (log-warning "doctor: module ~a not loadable: ~a" mod-path (exn-message e))
+                       #f)])
       (dynamic-require mod-path #f)
       #t))
   (define tui-term-installed? (pkg-installed? "tui-term"))
@@ -277,21 +294,24 @@
   (cond
     [(and tui-term-loadable? tui-ubuf-loadable?)
      (check-result "TUI" 'ok "tui-term + tui-ubuf available")]
-    [(and tui-term-installed? tui-ubuf-installed?
-          (not tui-term-loadable?) (not tui-ubuf-loadable?))
-     (check-result "TUI" 'warning
-                   "tui-term + tui-ubuf installed but broken (may need newer Racket)")]
+    [(and tui-term-installed? tui-ubuf-installed? (not tui-term-loadable?) (not tui-ubuf-loadable?))
+     (check-result "TUI" 'warning "tui-term + tui-ubuf installed but broken (may need newer Racket)")]
     [(or tui-term-loadable? tui-ubuf-loadable?)
-     (check-result "TUI" 'warning
+     (check-result "TUI"
+                   'warning
                    (format "~a loadable, ~anot — TUI may be degraded"
                            (if tui-term-loadable? "tui-term" "")
                            (if tui-ubuf-loadable? "tui-ubuf " "tui-term ")))]
     [(or tui-term-installed? tui-ubuf-installed?)
-     (check-result "TUI" 'warning
+     (check-result "TUI"
+                   'warning
                    (format "~a installed but broken (may need newer Racket)"
                            (if tui-term-installed? "tui-term" "tui-ubuf")))]
     [else
-     (check-result "TUI" 'warning "tui-term/tui-ubuf not installed — TUI mode will not work (raco pkg install tui-term tui-ubuf)")]))
+     (check-result
+      "TUI"
+      'warning
+      "tui-term/tui-ubuf not installed — TUI mode will not work (raco pkg install tui-term tui-ubuf)")]))
 
 ;; ============================================================
 ;; run-doctor — main entry point
@@ -302,17 +322,20 @@
 (define (run-doctor)
   (displayln "q doctor — checking your setup...\n")
   (define results
-    (list
-     (check-racket-version)
-     (check-packages)
-     (check-config-dir)
-     (check-config-file)
-     (check-credentials)
-     (check-session-dir)
-     (check-tui-packages)))
+    (list (check-racket-version)
+          (check-packages)
+          (check-config-dir)
+          (check-config-file)
+          (check-credentials)
+          (check-session-dir)
+          (check-tui-packages)))
   (for ([r results])
     (match-define (check-result name status message) r)
-    (define icon (case status [(ok) "\u2713"] [(warning) "\u26A0"] [(error) "\u2717"]))
+    (define icon
+      (case status
+        [(ok) "\u2713"]
+        [(warning) "\u26A0"]
+        [(error) "\u2717"]))
     (printf "  ~a ~a: ~a\n" icon name message))
   (define errors (filter (λ (r) (eq? (check-result-status r) 'error)) results))
   (define warnings (filter (λ (r) (eq? (check-result-status r) 'warning)) results))
