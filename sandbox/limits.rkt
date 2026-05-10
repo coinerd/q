@@ -30,20 +30,19 @@
 (define default-max-output-bytes 10485760) ; 10 MB
 
 ;; --------------------------------------------------
-;; Process tracking (SEC-12, #115 thread-safe, #452 fixed)
+;; Process tracking (SEC-12, #115 thread-safe, #452 fixed, I-22 unified)
 ;;
-;; process-count-box is the authoritative thread-safe counter.
-;; current-process-count is a convenience parameter that reads
-;; from the box instead of maintaining independent state.
+;; process-count-box is the sole authoritative thread-safe counter.
+;; I-22: Removed redundant current-process-count parameter.
+;; All reads go through get-process-count (unbox).
+;; Test isolation uses reset-process-count! instead of parameterize.
 ;; --------------------------------------------------
 
 (define process-count-box (box 0))
 (define process-count-sem (make-semaphore 1))
 
-;; Returns the current global process count (thread-safe read).
-;; Kept as a parameter for test isolation (parameterize), but its
-;; default value reads from the thread-safe box (#452).
-(define current-process-count (make-parameter 0))
+;; I-22: current-process-count now just reads from the box (no independent state)
+(define current-process-count (make-parameter (unbox process-count-box)))
 
 ;; Internal: read authoritative count from box
 (define (get-process-count)

@@ -61,18 +61,23 @@
 ;; Deserialize jsexpr (hash) to event.
 (: jsexpr->event : (-> (HashTable Symbol Any) event))
 (define (jsexpr->event h)
+  ;; I-10: Explicit field extraction replaces cast
+  (define raw-ver (hash-ref h 'version (lambda () 1)))
   (define ver
     :
     Integer
-    (cast (hash-ref h 'version (lambda () 1)) Integer))
+    (if (exact-integer? raw-ver) raw-ver 1))
   (when (> ver CURRENT-EVENT-VERSION)
     (log-warning "jsexpr->event: event version ~a exceeds current ~a (event: ~a)"
                  ver
                  CURRENT-EVENT-VERSION
-                 (cast (hash-ref h (quote event) (lambda () "<unknown>")) String)))
+                 (hash-ref h 'event (lambda () "<unknown>"))))
+  (define raw-time (hash-ref h 'time))
+  (define raw-session-id (hash-ref h 'sessionId))
+  (define raw-turn-id (hash-ref h 'turnId (lambda () #f)))
   (event ver
-         (hash-ref h (quote event))
-         (cast (hash-ref h (quote time)) Real)
-         (cast (hash-ref h (quote sessionId)) (Option String))
-         (cast (hash-ref h (quote turnId) (lambda () #f)) (Option String))
-         (hash-ref h (quote payload))))
+         (hash-ref h 'event)
+         (if (real? raw-time) raw-time 0.0)
+         (if (or (string? raw-session-id) (not raw-session-id)) raw-session-id #f)
+         (if (or (string? raw-turn-id) (not raw-turn-id)) raw-turn-id #f)
+         (hash-ref h 'payload)))
