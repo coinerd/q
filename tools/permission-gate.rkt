@@ -15,42 +15,29 @@
 ;;;   permission-config-needs-approval-tools     — accessor
 ;;;   permission-config-approval-callback        — accessor
 
-(require racket/set)
+(require racket/set
+         racket/contract)
 
 ;; ============================================================
 ;; Struct
 ;; ============================================================
 
 (struct permission-config
-        (auto-approved-tools   ; (setof string?)
-         needs-approval-tools  ; (setof string?)
-         approval-callback)    ; (string? hash? -> boolean?)
+        (auto-approved-tools ; (set/c string?)
+         needs-approval-tools ; (set/c string?)
+         approval-callback) ; (string? hash? -> boolean?)
   #:transparent)
 
 ;; ============================================================
 ;; Default config — headless mode (auto-approve everything)
 ;; ============================================================
 
-(define (make-default-permission-config
-         #:auto-approved [auto-approved #f]
-         #:needs-approval [needs-approval #f]
-         #:callback [callback #f])
-  (permission-config
-   (or auto-approved
-       (set "read"
-            "glob"
-            "ls"
-            "find"
-            "grep"
-            "context-files"))
-   (or needs-approval
-       (set "edit"
-            "write"
-            "bash"
-            "delete"
-            "move"
-            "spawn_subagent"))
-   (or callback (lambda (tool-name args) #t))))
+(define (make-default-permission-config #:auto-approved [auto-approved #f]
+                                        #:needs-approval [needs-approval #f]
+                                        #:callback [callback #f])
+  (permission-config (or auto-approved (set "read" "glob" "ls" "find" "grep" "context-files"))
+                     (or needs-approval (set "edit" "write" "bash" "delete" "move" "spawn_subagent"))
+                     (or callback (lambda (tool-name args) #t))))
 
 ;; ============================================================
 ;; Predicate — does this tool call require approval?
@@ -77,6 +64,11 @@
 ;; ============================================================
 
 (provide (struct-out permission-config)
-         make-default-permission-config
+         (contract-out [make-default-permission-config
+                        (->* ()
+                             (#:auto-approved (or/c (set/c string?) #f)
+                                              #:needs-approval (or/c (set/c string?) #f)
+                                              #:callback (or/c (-> string? hash? boolean?) #f))
+                             permission-config?)])
          tool-needs-approval?
          request-approval)
