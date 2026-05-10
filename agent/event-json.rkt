@@ -1,30 +1,53 @@
 #lang racket/base
 
-;; agent/event-json.rkt — JSON serialization for typed events + registry
+;; agent/event-json.rkt -- JSON serialization for typed events via registry
 ;;
-;; Extracted from event-types.rkt. Contains:
-;;   - typed-event->jsexpr / jsexpr->typed-event
-;;   - event-extra-fields (serialization helpers)
-;;   - dispatch-deserialize (type-tagged match dispatch)
-;;   - all-known-event-types / event-name->tool-name (registry)
+;; H-01: Replaced 474-line manual dual-match with registry dispatch.
+;; Event types auto-register serializers/deserializers via define-typed-event.
+;; Per-tool events (manual structs) register explicitly below.
 
 (require racket/match
          "event-structs/typed-event-predicates.rkt"
-         (only-in "event-structs/stream-events.rkt"
-                  stream-delta-event
-                  stream-delta-event-delta
-                  stream-tool-call-delta-event
-                  stream-tool-call-delta-event-delta-tool-call
-                  stream-thinking-event
-                  stream-thinking-event-delta
-                  stream-completed-event
-                  stream-completed-event-usage
-                  stream-completed-event-finish_reason
-                  stream-completed-event-truncated?
-                  stream-tool-call-started-event
-                  stream-tool-call-started-event-id
-                  stream-tool-call-started-event-name
-                  stream-tool-call-started-event-arguments))
+         ;; Per-tool event imports for manual serializer registration
+         (only-in "event-structs/tool-events.rkt"
+                  bash-tool-call-event
+                  bash-tool-call-event-command
+                  bash-tool-call-event-timeout
+                  bash-tool-call-event-cwd
+                  bash-tool-call-event?
+                  edit-tool-call-event
+                  edit-tool-call-event-path
+                  edit-tool-call-event-edits
+                  edit-tool-call-event?
+                  write-tool-call-event
+                  write-tool-call-event-path
+                  write-tool-call-event-content
+                  write-tool-call-event?
+                  read-tool-call-event
+                  read-tool-call-event-path
+                  read-tool-call-event-offset
+                  read-tool-call-event-limit
+                  read-tool-call-event?
+                  grep-tool-call-event
+                  grep-tool-call-event-pattern
+                  grep-tool-call-event-path
+                  grep-tool-call-event-glob
+                  grep-tool-call-event?
+                  find-tool-call-event
+                  find-tool-call-event-pattern
+                  find-tool-call-event-path
+                  find-tool-call-event?
+                  custom-tool-call-event
+                  custom-tool-call-event?
+                  tool-call-event-tool-call-id
+                  tool-call-event-tool-name
+                  tool-call-event-arguments)
+         ;; Registry functions
+         (only-in "../util/event-macro.rkt"
+                  lookup-event-serializer
+                  lookup-event-deserializer
+                  register-event-serializer!
+                  register-event-deserializer!))
 
 (provide typed-event->jsexpr
          jsexpr->typed-event
@@ -32,19 +55,203 @@
          event-name->tool-name)
 
 ;; ============================================================
-;; JSON Serialization
+;; Per-tool event serializer registration (manual structs)
+;; ============================================================
+
+;; bash-tool-call-event
+(register-event-serializer! "tool.bash.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      "bash"
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'command
+                                      (bash-tool-call-event-command evt)
+                                      'timeout
+                                      (bash-tool-call-event-timeout evt)
+                                      'cwd
+                                      (bash-tool-call-event-cwd evt))))
+
+(register-event-deserializer! "tool.bash.called"
+                              (lambda (type ts sid tid h)
+                                (bash-tool-call-event type
+                                                      ts
+                                                      sid
+                                                      tid
+                                                      "bash"
+                                                      (hasheq)
+                                                      (hash-ref h 'toolCallId "")
+                                                      (hash-ref h 'command "")
+                                                      (hash-ref h 'timeout 30)
+                                                      (hash-ref h 'cwd ""))))
+
+;; edit-tool-call-event
+(register-event-serializer! "tool.edit.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      "edit"
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'path
+                                      (edit-tool-call-event-path evt)
+                                      'edits
+                                      (edit-tool-call-event-edits evt))))
+
+(register-event-deserializer! "tool.edit.called"
+                              (lambda (type ts sid tid h)
+                                (edit-tool-call-event type
+                                                      ts
+                                                      sid
+                                                      tid
+                                                      "edit"
+                                                      (hasheq)
+                                                      (hash-ref h 'toolCallId "")
+                                                      (hash-ref h 'path "")
+                                                      (hash-ref h 'edits '()))))
+
+;; write-tool-call-event
+(register-event-serializer! "tool.write.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      "write"
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'path
+                                      (write-tool-call-event-path evt)
+                                      'content
+                                      (write-tool-call-event-content evt))))
+
+(register-event-deserializer! "tool.write.called"
+                              (lambda (type ts sid tid h)
+                                (write-tool-call-event type
+                                                       ts
+                                                       sid
+                                                       tid
+                                                       "write"
+                                                       (hasheq)
+                                                       (hash-ref h 'toolCallId "")
+                                                       (hash-ref h 'path "")
+                                                       (hash-ref h 'content ""))))
+
+;; read-tool-call-event
+(register-event-serializer! "tool.read.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      "read"
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'path
+                                      (read-tool-call-event-path evt)
+                                      'offset
+                                      (read-tool-call-event-offset evt)
+                                      'limit
+                                      (read-tool-call-event-limit evt))))
+
+(register-event-deserializer! "tool.read.called"
+                              (lambda (type ts sid tid h)
+                                (read-tool-call-event type
+                                                      ts
+                                                      sid
+                                                      tid
+                                                      "read"
+                                                      (hasheq)
+                                                      (hash-ref h 'toolCallId "")
+                                                      (hash-ref h 'path "")
+                                                      (hash-ref h 'offset #f)
+                                                      (hash-ref h 'limit #f))))
+
+;; grep-tool-call-event
+(register-event-serializer! "tool.grep.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      "grep"
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'pattern
+                                      (grep-tool-call-event-pattern evt)
+                                      'path
+                                      (grep-tool-call-event-path evt)
+                                      'glob
+                                      (grep-tool-call-event-glob evt))))
+
+(register-event-deserializer! "tool.grep.called"
+                              (lambda (type ts sid tid h)
+                                (grep-tool-call-event type
+                                                      ts
+                                                      sid
+                                                      tid
+                                                      "grep"
+                                                      (hasheq)
+                                                      (hash-ref h 'toolCallId "")
+                                                      (hash-ref h 'pattern "")
+                                                      (hash-ref h 'path "")
+                                                      (hash-ref h 'glob ""))))
+
+;; find-tool-call-event
+(register-event-serializer! "tool.find.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      "find"
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'pattern
+                                      (find-tool-call-event-pattern evt)
+                                      'path
+                                      (find-tool-call-event-path evt))))
+
+(register-event-deserializer! "tool.find.called"
+                              (lambda (type ts sid tid h)
+                                (find-tool-call-event type
+                                                      ts
+                                                      sid
+                                                      tid
+                                                      "find"
+                                                      (hasheq)
+                                                      (hash-ref h 'toolCallId "")
+                                                      (hash-ref h 'pattern "")
+                                                      (hash-ref h 'path ""))))
+
+;; custom-tool-call-event
+(register-event-serializer! "tool.custom.called"
+                            (lambda (evt)
+                              (hasheq 'toolName
+                                      (tool-call-event-tool-name evt)
+                                      'toolCallId
+                                      (tool-call-event-tool-call-id evt)
+                                      'arguments
+                                      (tool-call-event-arguments evt))))
+
+(register-event-deserializer! "tool.custom.called"
+                              (lambda (type ts sid tid h)
+                                (custom-tool-call-event type
+                                                        ts
+                                                        sid
+                                                        tid
+                                                        (hash-ref h 'toolName "unknown")
+                                                        (hash-ref h 'arguments (hasheq))
+                                                        (hash-ref h 'toolCallId ""))))
+
+;; ============================================================
+;; JSON Serialization (H-01: registry dispatch)
 ;; ============================================================
 
 ;; typed-event->jsexpr : typed-event? -> hash?
 (define (typed-event->jsexpr evt)
   (define base
-    `#hasheq((type . ,(typed-event-type evt))
-             (timestamp . ,(typed-event-timestamp evt))
-             (sessionId . ,(typed-event-session-id evt))
-             (turnId . ,(typed-event-turn-id evt))))
-  (define extra (event-extra-fields evt))
-  (for/fold ([h base]) ([(k v) (in-hash extra)])
-    (hash-set h k v)))
+    (hasheq 'type
+            (typed-event-type evt)
+            'timestamp
+            (typed-event-timestamp evt)
+            'sessionId
+            (typed-event-session-id evt)
+            'turnId
+            (typed-event-turn-id evt)))
+  (define type-str (typed-event-type evt))
+  (define serializer (lookup-event-serializer type-str))
+  (if serializer
+      (for/fold ([h base]) ([(k v) (in-hash (serializer evt))])
+        (hash-set h k v))
+      base))
 
 ;; jsexpr->typed-event : hash? -> typed-event?
 (define (jsexpr->typed-event h)
@@ -52,373 +259,10 @@
   (define ts (hash-ref h 'timestamp 0))
   (define sid (hash-ref h 'sessionId ""))
   (define tid (hash-ref h 'turnId #f))
-  (dispatch-deserialize type ts sid tid h))
-
-;; ============================================================
-;; Serialization helpers
-;; ============================================================
-
-;; Collect extra fields for each concrete event type
-(define (event-extra-fields evt)
-  (match evt
-    [(? turn-start-event?)
-     (hasheq 'model (turn-start-event-model evt) 'provider (turn-start-event-provider evt))]
-    [(? turn-end-event?)
-     (hasheq 'reason (turn-end-event-reason evt) 'durationMs (turn-end-event-duration-ms evt))]
-    [(? message-start-event?)
-     (hasheq 'role (message-start-event-role evt) 'model (message-start-event-model evt))]
-    [(? message-update-event?)
-     (hasheq 'content (message-update-event-content evt) 'delta (message-update-event-delta evt))]
-    [(? message-end-event?)
-     (hasheq 'role
-             (message-end-event-role evt)
-             'contentLength
-             (message-end-event-content-length evt))]
-    [(? tool-execution-start-event?)
-     (hasheq 'toolName
-             (tool-execution-start-event-tool-name evt)
-             'toolCallId
-             (tool-execution-start-event-tool-call-id evt))]
-    [(? tool-execution-update-event?)
-     (hasheq 'toolName
-             (tool-execution-update-event-tool-name evt)
-             'progress
-             (tool-execution-update-event-progress evt))]
-    [(? tool-execution-end-event?)
-     (hasheq 'toolName
-             (tool-execution-end-event-tool-name evt)
-             'durationMs
-             (tool-execution-end-event-duration-ms evt)
-             'resultSummary
-             (tool-execution-end-event-result-summary evt))]
-    [(? bash-tool-call-event?)
-     (hasheq 'toolName
-             "bash"
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'command
-             (bash-tool-call-event-command evt)
-             'timeout
-             (bash-tool-call-event-timeout evt)
-             'cwd
-             (bash-tool-call-event-cwd evt))]
-    [(? edit-tool-call-event?)
-     (hasheq 'toolName
-             "edit"
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'path
-             (edit-tool-call-event-path evt)
-             'edits
-             (edit-tool-call-event-edits evt))]
-    [(? write-tool-call-event?)
-     (hasheq 'toolName
-             "write"
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'path
-             (write-tool-call-event-path evt)
-             'content
-             (write-tool-call-event-content evt))]
-    [(? read-tool-call-event?)
-     (hasheq 'toolName
-             "read"
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'path
-             (read-tool-call-event-path evt)
-             'offset
-             (read-tool-call-event-offset evt)
-             'limit
-             (read-tool-call-event-limit evt))]
-    [(? grep-tool-call-event?)
-     (hasheq 'toolName
-             "grep"
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'pattern
-             (grep-tool-call-event-pattern evt)
-             'path
-             (grep-tool-call-event-path evt)
-             'glob
-             (grep-tool-call-event-glob evt))]
-    [(? find-tool-call-event?)
-     (hasheq 'toolName
-             "find"
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'pattern
-             (find-tool-call-event-pattern evt)
-             'path
-             (find-tool-call-event-path evt))]
-    [(? custom-tool-call-event?)
-     (hasheq 'toolName
-             (tool-call-event-tool-name evt)
-             'toolCallId
-             (tool-call-event-tool-call-id evt)
-             'arguments
-             (tool-call-event-arguments evt))]
-    [(? tool-call-event?)
-     (hasheq 'toolName
-             (tool-call-event-tool-name evt)
-             'arguments
-             (tool-call-event-arguments evt)
-             'toolCallId
-             (tool-call-event-tool-call-id evt))]
-    [(? tool-result-event?)
-     (hasheq 'toolCallId
-             (tool-result-event-tool-call-id evt)
-             'content
-             (tool-result-event-content evt)
-             'isError
-             (tool-result-event-is-error? evt))]
-    ;; Stream-context event payloads (N-05)
-    [(? stream-delta-event?) (hasheq 'delta (stream-delta-event-delta evt))]
-    [(? stream-tool-call-delta-event?)
-     (hasheq 'delta-tool-call (stream-tool-call-delta-event-delta-tool-call evt))]
-    [(? stream-thinking-event?) (hasheq 'delta (stream-thinking-event-delta evt))]
-    [(? stream-completed-event?)
-     (hasheq 'usage
-             (stream-completed-event-usage evt)
-             'finish_reason
-             (stream-completed-event-finish_reason evt)
-             'truncated?
-             (stream-completed-event-truncated? evt))]
-    [(? stream-tool-call-started-event?)
-     (hasheq 'id
-             (stream-tool-call-started-event-id evt)
-             'name
-             (stream-tool-call-started-event-name evt)
-             'arguments
-             (stream-tool-call-started-event-arguments evt))]
-    [(? provider-request-event?)
-     (hasheq 'model
-             (provider-request-event-model evt)
-             'provider
-             (provider-request-event-provider evt))]
-    [(? provider-response-event?)
-     (hasheq 'model
-             (provider-response-event-model evt)
-             'provider
-             (provider-response-event-provider evt)
-             'latencyMs
-             (provider-response-event-latency-ms evt))]
-    ;; Streaming events
-    [(? model-stream-delta-event?)
-     (hasheq 'delta (model-stream-delta-event-delta evt) 'model (model-stream-delta-event-model evt))]
-    [(? model-stream-thinking-event?)
-     (hasheq 'thinking
-             (model-stream-thinking-event-thinking evt)
-             'model
-             (model-stream-thinking-event-model evt))]
-    [(? model-stream-completed-event?)
-     (hasheq 'model
-             (model-stream-completed-event-model evt)
-             'provider
-             (model-stream-completed-event-provider evt))]
-    ;; Blocked events
-    [(? model-request-blocked-event?) (hasheq 'reason (model-request-blocked-event-reason evt))]
-    [(? message-blocked-event?)
-     (hasheq 'hook (message-blocked-event-hook evt) 'reason (message-blocked-event-reason evt))]
-    [(? turn-cancelled-event?)
-     (hasheq 'reason
-             (turn-cancelled-event-reason evt)
-             'iteration
-             (turn-cancelled-event-iteration evt))]
-    [(? assistant-message-completed-event?)
-     (hasheq 'contentLength (assistant-message-completed-event-content-length evt))]
-    [(? session-start-event?) (hasheq 'model (session-start-event-model evt))]
-    [(? session-shutdown-event?) (hasheq 'reason (session-shutdown-event-reason evt))]
-    [(? input-event?)
-     (hasheq 'inputType (input-event-input-type evt) 'content (input-event-content evt))]
-    [(? model-select-event?)
-     (hasheq 'model (model-select-event-model evt) 'provider (model-select-event-provider evt))]
-    [(? agent-start-event?) (hasheq 'model (agent-start-event-model evt))]
-    [(? agent-end-event?)
-     (hasheq 'reason (agent-end-event-reason evt) 'durationMs (agent-end-event-duration-ms evt))]
-    [(? context-event?)
-     (hasheq 'tokenCount (context-event-token-count evt) 'windowSize (context-event-window-size evt))]
-    [_ (hasheq)]))
-
-;; Dispatch deserialization by type string
-(define (dispatch-deserialize type ts sid tid h)
-  (match type
-    ["turn.started"
-     (turn-start-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["turn.completed"
-     (turn-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
-    ["message.started"
-     (message-start-event type ts sid tid (hash-ref h 'role "") (hash-ref h 'model ""))]
-    ["message.updated"
-     (message-update-event type ts sid tid (hash-ref h 'content "") (hash-ref h 'delta ""))]
-    ["message.completed"
-     (message-end-event type ts sid tid (hash-ref h 'role "") (hash-ref h 'contentLength 0))]
-    ["tool.execution.started"
-     (tool-execution-start-event type
-                                 ts
-                                 sid
-                                 tid
-                                 (hash-ref h 'toolName "")
-                                 (hash-ref h 'toolCallId ""))]
-    ["tool.execution.updated"
-     (tool-execution-update-event type
-                                  ts
-                                  sid
-                                  tid
-                                  (hash-ref h 'toolName "")
-                                  (hash-ref h 'progress ""))]
-    ["tool.execution.completed"
-     (tool-execution-end-event type
-                               ts
-                               sid
-                               tid
-                               (hash-ref h 'toolName "")
-                               (hash-ref h 'durationMs 0)
-                               (hash-ref h 'resultSummary ""))]
-    ["tool.bash.called"
-     (bash-tool-call-event type
-                           ts
-                           sid
-                           tid
-                           "bash"
-                           (hasheq)
-                           (hash-ref h 'toolCallId "")
-                           (hash-ref h 'command "")
-                           (hash-ref h 'timeout 30)
-                           (hash-ref h 'cwd ""))]
-    ["tool.edit.called"
-     (edit-tool-call-event type
-                           ts
-                           sid
-                           tid
-                           "edit"
-                           (hasheq)
-                           (hash-ref h 'toolCallId "")
-                           (hash-ref h 'path "")
-                           (hash-ref h 'edits '()))]
-    ["tool.write.called"
-     (write-tool-call-event type
-                            ts
-                            sid
-                            tid
-                            "write"
-                            (hasheq)
-                            (hash-ref h 'toolCallId "")
-                            (hash-ref h 'path "")
-                            (hash-ref h 'content ""))]
-    ["tool.read.called"
-     (read-tool-call-event type
-                           ts
-                           sid
-                           tid
-                           "read"
-                           (hasheq)
-                           (hash-ref h 'toolCallId "")
-                           (hash-ref h 'path "")
-                           (hash-ref h 'offset #f)
-                           (hash-ref h 'limit #f))]
-    ["tool.grep.called"
-     (grep-tool-call-event type
-                           ts
-                           sid
-                           tid
-                           "grep"
-                           (hasheq)
-                           (hash-ref h 'toolCallId "")
-                           (hash-ref h 'pattern "")
-                           (hash-ref h 'path "")
-                           (hash-ref h 'glob ""))]
-    ["tool.find.called"
-     (find-tool-call-event type
-                           ts
-                           sid
-                           tid
-                           "find"
-                           (hasheq)
-                           (hash-ref h 'toolCallId "")
-                           (hash-ref h 'pattern "")
-                           (hash-ref h 'path ""))]
-    ["tool.custom.called"
-     (custom-tool-call-event type
-                             ts
-                             sid
-                             tid
-                             (hash-ref h 'toolName "unknown")
-                             (hash-ref h 'arguments (hasheq))
-                             (hash-ref h 'toolCallId ""))]
-    ["tool.called"
-     (tool-call-event type
-                      ts
-                      sid
-                      tid
-                      (hash-ref h 'toolName "")
-                      (hash-ref h 'arguments (hasheq))
-                      (hash-ref h 'toolCallId ""))]
-    ["tool.result"
-     (tool-result-event type
-                        ts
-                        sid
-                        tid
-                        (hash-ref h 'toolCallId "")
-                        (hash-ref h 'content "")
-                        (hash-ref h 'isError #f))]
-    ["model.request.started"
-     (provider-request-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["model.request.completed"
-     (provider-response-event type
-                              ts
-                              sid
-                              tid
-                              (hash-ref h 'model "")
-                              (hash-ref h 'provider "")
-                              (hash-ref h 'latencyMs 0))]
-    ["session.started" (session-start-event type ts sid tid (hash-ref h 'model ""))]
-    ["session.shutdown" (session-shutdown-event type ts sid tid (hash-ref h 'reason ""))]
-    ["input" (input-event type ts sid tid (hash-ref h 'inputType "") (hash-ref h 'content ""))]
-    ["model.selected"
-     (model-select-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ["agent.started" (agent-start-event type ts sid tid (hash-ref h 'model ""))]
-    ["agent.completed"
-     (agent-end-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'durationMs 0))]
-    ["context.built"
-     (context-event type ts sid tid (hash-ref h 'tokenCount 0) (hash-ref h 'windowSize 0))]
-    ;; Streaming events
-    ["provider.stream.delta"
-     (model-stream-delta-event type ts sid tid (hash-ref h 'delta "") (hash-ref h 'model ""))]
-    ["provider.stream.thinking"
-     (model-stream-thinking-event type ts sid tid (hash-ref h 'thinking "") (hash-ref h 'model ""))]
-    ["provider.stream.completed"
-     (model-stream-completed-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
-    ;; Stream-context events (N-05)
-    ["model.stream.delta" (stream-delta-event type ts sid tid (hash-ref h 'delta ""))]
-    ["model.stream.delta.tool-call"
-     (stream-tool-call-delta-event type ts sid tid (hash-ref h 'delta-tool-call ""))]
-    ["model.stream.thinking" (stream-thinking-event type ts sid tid (hash-ref h 'delta ""))]
-    ["model.stream.completed"
-     (stream-completed-event type
-                             ts
-                             sid
-                             tid
-                             (hash-ref h 'usage (hasheq))
-                             (hash-ref h 'finish_reason "")
-                             (hash-ref h 'truncated? #f))]
-    ["tool.call.started"
-     (stream-tool-call-started-event type
-                                     ts
-                                     sid
-                                     tid
-                                     (hash-ref h 'id "")
-                                     (hash-ref h 'name "")
-                                     (hash-ref h 'arguments ""))]
-    ;; Blocked events
-    ["model.request.blocked" (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
-    ["message.blocked"
-     (message-blocked-event type ts sid tid (hash-ref h 'hook "") (hash-ref h 'reason ""))]
-    ["turn.cancelled"
-     (turn-cancelled-event type ts sid tid (hash-ref h 'reason "") (hash-ref h 'iteration #f))]
-    ["assistant.message.completed"
-     (assistant-message-completed-event type ts sid tid (hash-ref h 'contentLength 0))]
-    [_ (typed-event type ts sid tid)]))
+  (define deserializer (lookup-event-deserializer type))
+  (if deserializer
+      (deserializer type ts sid tid h)
+      (typed-event type ts sid tid)))
 
 ;; ============================================================
 ;; Registry

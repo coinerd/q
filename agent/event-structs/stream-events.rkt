@@ -20,13 +20,17 @@
 (define-typed-event stream-completed-event
                     "model.stream.completed"
                     (usage finish_reason)
-                    #:optional ([truncated? #f]))
+                    #:optional ([truncated? #f])
+                    #:defaults (usage (hasheq)))
 
 ;; model.stream.delta — text delta during streaming
 (define-typed-event stream-delta-event "model.stream.delta" (delta))
 
 ;; model.stream.delta with tool-call — emitted for tool-call deltas
-(define-typed-event stream-tool-call-delta-event "model.stream.delta.tool-call" (delta-tool-call))
+(define-typed-event stream-tool-call-delta-event
+                    "model.stream.delta.tool-call"
+                    (delta-tool-call)
+                    #:json-keys (delta-tool-call delta-tool-call))
 
 ;; model.stream.thinking — thinking/reasoning delta
 (define-typed-event stream-thinking-event "model.stream.thinking" (delta))
@@ -36,13 +40,17 @@
 ;; ============================================================
 
 ;; message.start — emitted when first text delta arrives
-(define-typed-event stream-message-start-event "message.start" (message-id))
+(define-typed-event stream-message-start-event "message.start" (message-id) #:no-serialize)
 
 ;; message.delta — text delta with message-id
-(define-typed-event stream-message-delta-event "message.delta" (text message-id))
+(define-typed-event stream-message-delta-event "message.delta" (text message-id) #:no-serialize)
 
 ;; message.end — emitted when stream completes or is interrupted
-(define-typed-event stream-message-end-event "message.end" (message-id usage))
+(define-typed-event stream-message-end-event
+                    "message.end"
+                    (message-id usage)
+                    #:defaults (usage (hasheq))
+                    #:no-serialize)
 
 ;; ============================================================
 ;; Turn lifecycle events (streaming context)
@@ -52,10 +60,11 @@
 (define-typed-event stream-turn-completed-event
                     "turn.completed"
                     (termination turn-id-str)
-                    #:optional ([reason #f]))
+                    #:optional ([reason #f])
+                    #:no-serialize)
 
 ;; turn.cancelled — emitted when user cancels
-(define-typed-event stream-turn-cancelled-event "turn.cancelled" (reason))
+(define-typed-event stream-turn-cancelled-event "turn.cancelled" (reason) #:no-serialize)
 
 ;; ============================================================
 ;; Tool call events (streaming context)
@@ -67,4 +76,6 @@
 ;; assistant.message.completed — emitted when assistant message is fully assembled
 (define-typed-event stream-assistant-msg-completed-event
                     "assistant.message.completed"
-                    (message-id content))
+                    (message-id content)
+                    #:json-keys (message-id messageId)
+                    #:no-serialize)

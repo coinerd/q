@@ -22,15 +22,22 @@
 
 (define-typed-event tool-execution-end-event
                     "tool.execution.completed"
-                    (tool-name duration-ms result-summary))
+                    (tool-name duration-ms result-summary)
+                    #:defaults (duration-ms 0))
 
 ;; ============================================================
 ;; Generic tool call/result (typed-event parent)
 ;; ============================================================
 
-(define-typed-event tool-call-event "tool.called" (tool-name arguments tool-call-id))
+(define-typed-event tool-call-event
+                    "tool.called"
+                    (tool-name arguments tool-call-id)
+                    #:defaults (arguments (hasheq)))
 
-(define-typed-event tool-result-event "tool.result" (tool-call-id content is-error?))
+(define-typed-event tool-result-event
+                    "tool.result"
+                    (tool-call-id content is-error?)
+                    #:defaults (is-error? #f))
 
 ;; ============================================================
 ;; Per-tool typed events (tool-call-event parent — manual)

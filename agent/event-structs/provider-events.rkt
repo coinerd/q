@@ -7,7 +7,10 @@
 
 (define-typed-event provider-request-event "model.request.started" (model provider))
 
-(define-typed-event provider-response-event "model.request.completed" (model provider latency-ms))
+(define-typed-event provider-response-event
+                    "model.request.completed"
+                    (model provider latency-ms)
+                    #:defaults (latency-ms 0))
 
 ;; Streaming events (LLM streaming responses)
 

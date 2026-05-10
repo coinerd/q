@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.36.0 — 2026-05-10
+
+### Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)
+
+### High Impact
+- **H-01**: Extend `define-typed-event` macro to auto-generate JSON serialization and
+  deserialization for all macro-defined events. Replace 474-line manual dual-match in
+  `event-json.rkt` with ~30-line registry dispatch. New events now need ZERO changes
+  to `event-json.rkt` — just add `define-typed-event` with `#:defaults` and `#:json-keys`.
+
+### New Features
+- **M-12**: 27 round-trip tests for all registered event types, including registry
+  completeness check verifying all 38 known event types have serializers
+
+### Cleanup
+- **M-10**: Global `*event-field-registry*` superseded by per-struct `*-event-fields`
+  constants; kept for backward compatibility with deprecation notice
+- **L-06**: Macro optional-attribute handling improved with `~optional`/`#:defaults`
+
+### Macro Extensions
+- `#:defaults` — specify deserialization defaults for required fields (e.g., `#:defaults (duration-ms 0)`)
+- `#:json-keys` — override JSON key mapping (e.g., `#:json-keys (delta-tool-call delta-tool-call)`)
+- `#:no-serialize` — skip serializer registration for internal-only events
+
+**Verification**: 111 event tests pass, lint 18/18
+
 ## v0.35.9 — 2026-05-10
 
 ### Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
