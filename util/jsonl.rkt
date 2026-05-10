@@ -10,6 +10,7 @@
 ;;;   jsonl-line-valid?     — check if a line is complete valid JSON
 
 (provide jsonl-append!
+         jsonl-write-to-port!
          jsonl-append-entries!
          jsonl-read-all
          jsonl-read-all-valid
@@ -36,14 +37,18 @@
 
 ;; ── Append ──
 
+;; M-14: Port-based variant — write a single entry to an output port.
+;; Caller manages port lifecycle. Useful for batch writes.
+(define (jsonl-write-to-port! out entry)
+  (write-json entry out)
+  (newline out))
+
 (define (jsonl-append! path entry)
   ;; Append a single jsexpr as one JSON line to file.
   ;; Creates the file (and parent dirs) if missing.
   (ensure-parent-dirs! path)
   (call-with-output-file path
-                         (lambda (out)
-                           (write-json entry out)
-                           (newline out))
+                         (lambda (out) (jsonl-write-to-port! out entry))
                          #:mode 'text
                          #:exists 'append))
 

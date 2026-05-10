@@ -3,6 +3,14 @@
 ;; runtime/iteration.rkt -- agent iteration loop FACADE
 ;; STABILITY: stable
 ;;
+;; M-07 DEPRECATION NOTICE: This module is a re-export facade. New code should
+;; import directly from sub-modules:
+;;   runtime/iteration/counters.rkt
+;;   runtime/iteration/decision.rkt
+;;   runtime/iteration/step-interpreter.rkt
+;;   runtime/iteration/main-loop.rkt
+;; This facade will be removed in v0.38.0.
+;;
 ;; Thin re-export facade over runtime/iteration/*. Sub-modules:
 ;;   counters.rkt          -- compute-next-counters, check-cancellation
 ;;   decision.rkt          -- iteration-ctx, step-result, decide-next-action,

@@ -86,6 +86,8 @@
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
   ;; v0.28.21 W7 + v0.28.22 W2: GSD progress pinning
   ;; v0.28.23 W0: tightened to tool/assistant roles only, removed broad wave-done regex
+  ;; L-02: Prefer message-meta 'gsd-pin flag over fragile regex matching.
+  ;; The regex fallback supports legacy messages created before gsd-pin was added.
   (define (gsd-progress-message? m)
     (or (hash-ref (message-meta m) 'gsd-pin #f)
         (and (memq (message-role m) '(tool assistant))
@@ -93,9 +95,9 @@
                                                 #:when (text-part? part))
                                        (text-part-text part)))])
                (and (non-empty-string? txt)
-                    (or (regexp-match? #rx"wave [0-9]+ marked complete" txt)
-                        (regexp-match? #rx"PLAN.md.*updated" txt)
-                        (regexp-match? #rx"STATE.md.*updated" txt)))))))
+                    (regexp-match?
+                     #rx"wave [0-9]+ marked complete|PLAN\\.md.*updated|STATE\\.md.*updated"
+                     txt))))))
   (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
   (define-values (sys-protected unpinned-raw)
     (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))

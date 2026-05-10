@@ -26,7 +26,8 @@
                   provider-info?
                   provider-info-provider)
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "gsd/session-state.rkt" gsd-session-ctx?))
+         ;; M-06: Import struct from pure types module
+         "../util/extension-types.rkt")
 
 ;; Struct and predicate
 (provide extension-ctx
@@ -59,30 +60,12 @@
          ctx-session-token-count
          ctx-session-model)
 
-;; ============================================================
-;; extension-ctx struct
-;; ============================================================
-
-(struct extension-ctx
-        (session-id ; string?
-         session-dir ; (or/c path-string? #f)
-         event-bus ; event-bus?
-         extension-registry ; extension-registry?
-         model-name ; (or/c string? #f)
-         cancellation-token ; (or/c cancellation-token? #f)
-         working-directory ; (or/c path-string? #f)
-         ;; FEAT-58: rich extension context fields
-         session-store ; (or/c any/c #f) — read-only session access
-         tool-registry ; (or/c any/c #f) — dynamic tool registration
-         command-registry ; (or/c any/c #f) — slash command registration
-         ui-channel ; (or/c channel? #f) — user interaction requests
-         provider-registry ; (or/c provider-registry? #f) — LLM provider access (#1114)
-         ;; #1223: session state fields for query API
-         session-messages ; (or/c (listof hash?) #f) — read-only message history
-         session-token-usage ; (or/c hash? #f) — token usage stats
-         gsd-ctx ; (or/c gsd-session-ctx? #f) — per-session GSD state (C-01 v0.35.1)
-         )
-  #:transparent)
+;; M-06: Struct definition moved to util/extension-types.rkt (no runtime imports).
+;; Re-exported here for backward compatibility.
+;; Struct fields: session-id, session-dir, event-bus, extension-registry,
+;;   model-name, cancellation-token, working-directory, session-store,
+;;   tool-registry, command-registry, ui-channel, provider-registry,
+;;   session-messages, session-token-usage, gsd-ctx
 
 ;; ============================================================
 ;; Constructor — keyword args with optional fields defaulting to #f
