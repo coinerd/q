@@ -100,7 +100,10 @@
   (for/hash ([(k v) (in-hash h)])
     (values (key->string k) v)))
 
-;; Flexible hash-ref: tries both string and symbol keys
+;; Flexible hash-ref: tries both string and symbol keys (I-17: documented)
+;; Key normalization: automatically tries both 'key and "key" variants.
+;; This handles the common case where JSON configs use string keys
+;; but Racket code uses symbol keys.
 (define (flex-ref h
                   key
                   [default

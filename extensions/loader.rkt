@@ -29,6 +29,7 @@
 
 ;; Extension loading errors
 (provide (struct-out extension-load-error)
+         classify-exception
          (contract-out [discover-extensions (-> path-string? (listof any/c))]
                        [load-extension!
                         (->* (extension-registry? path-string?) (#:event-bus (or/c any/c #f)) void?)]
@@ -270,6 +271,8 @@
   (cond
     [(exn:fail:syntax? e) 'syntax-error]
     [(exn:fail:read? e) 'syntax-error]
+    [(exn:fail:filesystem? e) 'filesystem-error]
+    [(exn:fail:contract? e) 'contract-error]
     [(not-found-error? e) 'not-found]
     [else 'unknown]))
 

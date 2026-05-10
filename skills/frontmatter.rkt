@@ -34,6 +34,15 @@
 ;; Parses YAML-like frontmatter from SKILL.md content.
 ;; Frontmatter is delimited by --- markers at the start of the file.
 ;; Returns a hash of parsed key-value fields, or #f if no valid frontmatter.
+;;
+;; LIMITATION (I-21): This is a simple regex-based parser, not a full YAML parser.
+;; It only supports flat key: value pairs. It does NOT support:
+;;   - Nested structures (objects, nested maps)
+;;   - Lists/arrays (YAML - item syntax)
+;;   - Multi-line values (|, >, folded scalars)
+;;   - Quoted strings with embedded colons
+;;   - Comments after values (# inline comments)
+;; For skill frontmatter, only flat string values are needed.
 (define (parse-skill-frontmatter content)
   (define lines (string-split content "\n"))
   (cond
