@@ -24,7 +24,6 @@
                   set-gsd-state!
                   current-gsd-history
                   set-gsd-history!
-                  gsd-state-sem
                   gsd-state-snapshot
                   gsd-history-snapshot
                   gsd-state-update!

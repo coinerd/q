@@ -43,7 +43,7 @@
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
                   [set-gsd-event-bus! events:set-gsd-event-bus!])
-         (only-in "../gsd/session-state.rkt" set-gsd-state! gsd-state-sem))
+         (only-in "../gsd/session-state.rkt" set-gsd-state! with-gsd-lock))
 
 (provide register-gsd-commands
          handle-execute-command
@@ -59,13 +59,21 @@
   (ext-register-command! ctx "/plan" "Display current GSD plan" 'general '() '("p"))
   (ext-register-command! ctx "/state" "Display current project state" 'general '() '("s"))
   (ext-register-command! ctx "/handoff" "Display handoff status" 'general '() '("ho"))
-  (ext-register-command! ctx "/go" "Start implementing the current plan" 'general '() '("implement" "i"))
+  (ext-register-command! ctx
+                         "/go"
+                         "Start implementing the current plan"
+                         'general
+                         '()
+                         '("implement" "i"))
   (ext-register-command! ctx "/replan" "Return to planning phase" 'general '() '())
   (ext-register-command! ctx "/skip" "Skip a wave (usage: /skip N)" 'general '() '())
   (ext-register-command! ctx "/reset" "Reset GSD to idle state" 'general '() '())
-  (ext-register-command! ctx "/wave-done"
+  (ext-register-command! ctx
+                         "/wave-done"
                          "Mark wave N complete, update PLAN.md and STATE.md"
-                         'general '() '("wd"))
+                         'general
+                         '()
+                         '("wd"))
   (ext-register-command! ctx "/done" "Archive completed plan" 'general '() '("d"))
   (ext-register-command! ctx "/gsd" "Show GSD workflow status" 'general '() '())
   (hook-pass #f))
@@ -79,8 +87,7 @@
   (define input-text (hash-ref payload 'input ""))
   (define base-dir (or (pinned-planning-dir) (current-directory)))
   (match cmd
-    [(? (lambda (c) (member c '("/go" "/implement" "/i"))))
-     (handle-go-command base-dir input-text)]
+    [(? (lambda (c) (member c '("/go" "/implement" "/i")))) (handle-go-command base-dir input-text)]
     ["/gsd" (handle-gsd-status)]
     ["/replan"
      (define result (cmd-replan))
@@ -138,11 +145,9 @@
      (define plan-from-index (load-plan-from-index base-dir))
      (define plan
        (or plan-from-index
-           (let ([waves (parse-waves-from-markdown plan-content)])
-             (gsd-plan waves "" '() '()))))
+           (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
      ;; Emit gsd.plan.parsed event
-     (events:emit-gsd-event! 'gsd.plan.parsed
-                             (hasheq 'wave-count (length (gsd-plan-waves plan))))
+     (events:emit-gsd-event! 'gsd.plan.parsed (hasheq 'wave-count (length (gsd-plan-waves plan))))
      ;; Step 1: Normalize plan to canonical IR
      (define norm-result (normalize-plan plan))
      (match norm-result
@@ -164,7 +169,8 @@ Fix the plan before using /go.")))]
         (define validated-plan? (gsd-validated-plan? validation))
         ;; Emit gsd.plan.validated event
         (events:emit-gsd-event! 'gsd.plan.validated
-                                (hasheq 'valid? validated-plan?
+                                (hasheq 'valid?
+                                        validated-plan?
                                         'error-count
                                         (if validated-plan?
                                             0
