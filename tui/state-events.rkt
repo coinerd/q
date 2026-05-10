@@ -1,9 +1,10 @@
 #lang racket/base
 
-;; tui/state-events.rkt — Event→state reduction for UI state
+;; tui/state-events.rkt -- Event->state reduction for UI state
 ;;
-;; Pure function: apply-event-to-state and helpers.
-;; Split from state.rkt (v0.22.6 W2) to keep each module under 400 lines.
+;; v0.35.4 (W-07): Registry-based event reducers replace monolithic case dispatch.
+;; Each event type has a named handler function registered at module init time.
+;; apply-event-to-state dispatches via hash lookup.
 
 (require racket/string
          racket/list
@@ -13,11 +14,24 @@
          "state-types.rkt")
 
 (provide apply-event-to-state
-         current-gsd-mode-query)
+         current-gsd-mode-query
+         register-event-reducer!
+         event-reducer-registered?)
 
 ;; Injected callback to query GSD mode without direct import.
-;; Set during TUI initialization to avoid tui→extensions circular dependency.
 (define current-gsd-mode-query (make-parameter (lambda () 'idle)))
+
+;; ============================================================
+;; Event reducer registry (W-07)
+;; ============================================================
+
+(define event-reducers (make-hash))
+
+(define (register-event-reducer! type-string handler)
+  (hash-set! event-reducers type-string handler))
+
+(define (event-reducer-registered? type-string)
+  (hash-has-key? event-reducers type-string))
 
 ;; Local helper (avoids circular dependency with state-ui)
 (define (ui-model-label state)
@@ -31,373 +45,390 @@
       clean))
 
 ;; ============================================================
-;; Event reduction
+;; Helper: append entry with auto-id
 ;; ============================================================
 
-(define (apply-event-to-state state evt)
-  (define ev (event-ev evt))
+(define (append-entry st entry)
+  (define-values (id-entry st1) (assign-entry-id entry st))
+  (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
+
+;; Dedup guard: prevent duplicate tool-start entries
+(define (recent-tool-start? st name)
+  (define transcript (ui-state-transcript st))
+  (and (not (null? transcript))
+       (let ([last (car transcript)])
+         (and (eq? (transcript-entry-kind last) 'tool-start)
+              (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+
+;; Dedup guard: prevent duplicate tool-end entries
+(define (recent-tool-end? st name)
+  (define transcript (ui-state-transcript st))
+  (and (not (null? transcript))
+       (let ([last (car transcript)])
+         (and (memq (transcript-entry-kind last) '(tool-end tool-fail))
+              (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+
+;; ============================================================
+;; Named event handlers (extracted from case dispatch)
+;; ============================================================
+
+(define (handle-assistant-message-completed state evt)
   (define payload (event-payload evt))
+  (define streamed (ui-state-streaming-text state))
+  (define content (or streamed (hash-ref payload 'content "")))
+  (define ts (event-time evt))
+  (define thinking (ui-state-streaming-thinking state))
+  (define s0
+    (if (and thinking
+             (> (string-length (string-trim thinking)) 0)
+             (string=? (string-trim content) ""))
+        (append-entry state (make-entry 'thinking thinking ts (hash)))
+        state))
+  (struct-copy ui-state
+               (append-entry s0 (make-entry 'assistant content ts (hash)))
+               [busy? #f]
+               [pending-tool-name #f]
+               [streaming-text #f]
+               [streaming-thinking #f]))
 
-  (define (append-entry st entry)
-    (define-values (id-entry st1) (assign-entry-id entry st))
-    (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
+(define (handle-tool-call-started state evt)
+  (define payload (event-payload evt))
+  (define name (hash-ref payload 'name "?"))
+  (if (recent-tool-start? state name)
+      (struct-copy ui-state state [busy? #t] [pending-tool-name name])
+      (let* ([args-raw (hash-ref payload 'arguments #f)]
+             [arg-summary (if args-raw
+                              (extract-arg-summary args-raw)
+                              "")]
+             [text arg-summary]
+             [ts (event-time evt)]
+             [meta (hasheq 'name name 'arguments (or args-raw ""))]
+             [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+        (if (ui-state-pending-tool-name state)
+            (struct-copy ui-state new-state [busy? #t])
+            (struct-copy ui-state new-state [busy? #t] [pending-tool-name name])))))
 
-  ;; v0.29.17 W1: Dedup guard — prevent duplicate tool-start entries when
-  ;; both raw "tool.call.started" and typed "tool.execution.started" fire.
-  (define (recent-tool-start? st name)
-    (define transcript (ui-state-transcript st))
-    (and (not (null? transcript))
-         (let ([last (car transcript)])
-           (and (eq? (transcript-entry-kind last) 'tool-start)
-                (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+(define (handle-tool-execution-started state evt)
+  (define payload (event-payload evt))
+  (define name (hash-ref payload 'tool-name "?"))
+  (if (recent-tool-start? state name)
+      (struct-copy ui-state state [busy? #t] [pending-tool-name name])
+      (let* ([args-raw (hash-ref payload 'arguments #f)]
+             [arg-summary (if args-raw
+                              (extract-arg-summary args-raw)
+                              "")]
+             [text arg-summary]
+             [ts (event-time evt)]
+             [meta (hasheq 'name name 'arguments (or args-raw ""))]
+             [new-state (append-entry state (make-entry 'tool-start text ts meta))])
+        (if (ui-state-pending-tool-name state)
+            (struct-copy ui-state new-state [busy? #t])
+            (struct-copy ui-state new-state [busy? #t] [pending-tool-name name])))))
 
-  ;; v0.32.0: Dedup guard — prevent duplicate tool-end entries when parallel
-  ;; tools with the same name complete in rapid succession.
-  (define (recent-tool-end? st name)
-    (define transcript (ui-state-transcript st))
-    (and (not (null? transcript))
-         (let ([last (car transcript)])
-           (and (memq (transcript-entry-kind last) '(tool-end tool-fail))
-                (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+(define (handle-tool-execution-completed state evt)
+  (define payload (event-payload evt))
+  (define name (hash-ref payload 'tool-name "?"))
+  (define result-summary (hash-ref payload 'result-summary 'error))
+  (define ts (event-time evt))
+  (if (recent-tool-end? state name)
+      (struct-copy ui-state state [pending-tool-name #f])
+      (if (eq? result-summary 'completed)
+          (let* ([meta (hasheq 'name name)])
+            (struct-copy ui-state
+                         (append-entry state (make-entry 'tool-end "" ts meta))
+                         [pending-tool-name #f]))
+          (let* ([err "tool failed"]
+                 [meta (hasheq 'name name 'error err)])
+            (struct-copy ui-state
+                         (append-entry state (make-entry 'tool-fail err ts meta))
+                         [pending-tool-name #f])))))
 
-  (case ev
-    [("assistant.message.completed")
-     (define streamed (ui-state-streaming-text state))
-     (define content (or streamed (hash-ref payload 'content "")))
-     (define ts (event-time evt))
-     ;; v0.28.21 W0: Persist thinking when content is empty (tool-call turn)
-     (define thinking (ui-state-streaming-thinking state))
-     (define s0
-       (if (and thinking
-                (> (string-length (string-trim thinking)) 0)
-                (string=? (string-trim content) ""))
-           (append-entry state (make-entry 'thinking thinking ts (hash)))
-           state))
-     (struct-copy ui-state
-                  (append-entry s0 (make-entry 'assistant content ts (hash)))
-                  [busy? #f]
-                  [pending-tool-name #f]
-                  [streaming-text #f]
-                  [streaming-thinking #f])]
-
-    [("tool.call.started")
-     (let* ([name (hash-ref payload 'name "?")])
-       (if (recent-tool-start? state name)
-           (struct-copy ui-state state (busy? #t) (pending-tool-name name))
-           (let* ([args-raw (hash-ref payload 'arguments #f)]
-                  [arg-summary (if args-raw
-                                   (extract-arg-summary args-raw)
-                                   "")]
-                  [text arg-summary]
-                  [ts (event-time evt)]
-                  [meta (hasheq 'name name 'arguments (or args-raw ""))]
-                  [new-state (append-entry state (make-entry 'tool-start text ts meta))])
-             (if (ui-state-pending-tool-name state)
-                 (struct-copy ui-state new-state (busy? #t))
-                 (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))))]
-
-    [("tool.execution.started")
-     (let* ([name (hash-ref payload 'tool-name "?")])
-       (if (recent-tool-start? state name)
-           (struct-copy ui-state state (busy? #t) (pending-tool-name name))
-           (let* ([args-raw (hash-ref payload 'arguments #f)]
-                  [arg-summary (if args-raw
-                                   (extract-arg-summary args-raw)
-                                   "")]
-                  [text arg-summary]
-                  [ts (event-time evt)]
-                  [meta (hasheq 'name name 'arguments (or args-raw ""))]
-                  [new-state (append-entry state (make-entry 'tool-start text ts meta))])
-             (if (ui-state-pending-tool-name state)
-                 (struct-copy ui-state new-state (busy? #t))
-                 (struct-copy ui-state new-state (busy? #t) (pending-tool-name name))))))]
-
-    [("tool.execution.completed")
-     (define name (hash-ref payload 'tool-name "?"))
-     (define result-summary (hash-ref payload 'result-summary 'error))
-     (define ts (event-time evt))
-     ;; v0.32.0: Skip if a tool-end for the same name was just appended
-     ;; (parallel same-name tools produce duplicate entries without this guard).
-     (if (recent-tool-end? state name)
-         (struct-copy ui-state state [pending-tool-name #f])
-         (if (eq? result-summary 'completed)
-             (let* ([meta (hasheq 'name name)])
-               (struct-copy ui-state
-                            (append-entry state (make-entry 'tool-end "" ts meta))
-                            [pending-tool-name #f]))
-             (let* ([err "tool failed"]
-                    [meta (hasheq 'name name 'error err)])
-               (struct-copy ui-state
-                            (append-entry state (make-entry 'tool-fail err ts meta))
-                            [pending-tool-name #f]))))]
-
-    [("runtime.error")
-     (define err (hash-ref payload 'error "unknown error"))
-     (define ts (event-time evt))
-     (define error-type
-       (hash-ref
-        payload
-        'errorType
-        (lambda ()
-          (cond
-            [(regexp-match? #rx"[Tt]imeout|timed out" err) 'timeout]
-            [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) 'rate-limit]
-            [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err) 'auth]
-            [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
-            [else 'provider-error]))))
-     (define retries-attempted (hash-ref payload 'retries-attempted #f))
-     (define error-history (hash-ref payload 'errorHistory '()))
-     (define history-types (remove-duplicates error-history))
-     (define hint
+(define (handle-runtime-error state evt)
+  (define payload (event-payload evt))
+  (define err (hash-ref payload 'error "unknown error"))
+  (define ts (event-time evt))
+  (define error-type
+    (hash-ref
+     payload
+     'errorType
+     (lambda ()
        (cond
-         [(and retries-attempted (> retries-attempted 0))
-          (cond
-            [(and (member 'timeout history-types) (member 'rate-limit history-types))
-             (format "Provider timed out, then rate limited (~a retries). Wait 30s, then type /retry."
-                     retries-attempted)]
-            [(> (length history-types) 1)
-             (format "Mixed errors after ~a retries. Wait a moment, then type /retry."
-                     retries-attempted)]
-            [else
-             (case error-type
-               [(rate-limit)
-                (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
-                        retries-attempted)]
-               [(timeout)
-                (format "Provider timed out after ~a retries. Type /retry to resubmit."
-                        retries-attempted)]
-               [else
-                (format "Error persisted after ~a retries. Type /retry to resubmit."
-                        retries-attempted)])])]
+         [(regexp-match? #rx"[Tt]imeout|timed out" err) 'timeout]
+         [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) 'rate-limit]
+         [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err) 'auth]
+         [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
+         [else 'provider-error]))))
+  (define retries-attempted (hash-ref payload 'retries-attempted #f))
+  (define error-history (hash-ref payload 'errorHistory '()))
+  (define history-types (remove-duplicates error-history))
+  (define hint
+    (cond
+      [(and retries-attempted (> retries-attempted 0))
+       (cond
+         [(and (member 'timeout history-types) (member 'rate-limit history-types))
+          (format "Provider timed out, then rate limited (~a retries). Wait 30s, then type /retry."
+                  retries-attempted)]
+         [(> (length history-types) 1)
+          (format "Mixed errors after ~a retries. Wait a moment, then type /retry."
+                  retries-attempted)]
          [else
           (case error-type
-            [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
-            [(rate-limit) "Rate limited. Will retry automatically."]
-            [(auth) "API key error. Check ~/.q/config.json"]
-            [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
-            [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
-            [(internal-error) "Internal error occurred. Type /retry to resubmit your prompt."]
-            [else "Type /retry to resubmit your prompt."])]))
-     (define streamed (ui-state-streaming-text state))
-     (define s0
-       (if (and streamed (> (string-length (string-trim streamed)) 0))
-           (append-entry state (make-entry 'assistant streamed ts (hasheq 'partial #t)))
-           state))
-     (define s1
-       (struct-copy ui-state
-                    s0
-                    [busy? #f]
-                    [pending-tool-name #f]
-                    [streaming-text #f]
-                    [streaming-thinking #f]
-                    [status-message (truncate-status-msg err)]))
-     (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
-     (append-entry s2 (make-entry 'system hint ts (hash)))]
-
-    [("session.started")
-     (define sid (hash-ref payload 'sessionId ""))
-     (define s1 (struct-copy ui-state state [session-id sid]))
-     (append-entry s1
-                   (make-entry 'system (format "Session started: ~a" sid) (event-time evt) (hash)))]
-
-    [("session.resumed")
-     (define sid (hash-ref payload 'sessionId ""))
-     (define s1 (struct-copy ui-state state [session-id sid]))
-     (append-entry s1
-                   (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash)))]
-
-    [("model.stream.delta")
-     (define delta (hash-ref payload 'delta ""))
-     (define current-streaming (ui-state-streaming-text state))
-     (define new-streaming (string-append (or current-streaming "") delta))
-     (struct-copy ui-state state [streaming-text new-streaming] [busy? #t])]
-
-    [("turn.started")
-     (struct-copy ui-state
-                  state
-                  [busy? #t]
-                  [busy-since (event-time evt)]
-                  [pending-tool-name #f]
-                  [streaming-text #f]
-                  [streaming-thinking #f]
-                  [status-message #f])]
-
-    [("turn.completed")
-     ;; v0.28.20 T9: Enforce minimum 500ms busy duration to prevent flicker
-     (define min-busy-ms 500)
-     (define since (ui-state-busy-since state))
-     (define elapsed
-       (if since
-           (- (event-time evt) since)
-           min-busy-ms))
-     (if (< elapsed min-busy-ms)
-         (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])
-         (struct-copy ui-state
-                      state
-                      [busy? #f]
-                      [busy-since #f]
-                      [streaming-text #f]
-                      [streaming-thinking #f]
-                      [pending-tool-name #f]))]
-
-    [("turn.cancelled")
-     (struct-copy ui-state
-                  state
-                  [busy? #f]
-                  [streaming-text #f]
-                  [streaming-thinking #f]
-                  [pending-tool-name #f])]
-
-    [("compaction.warning")
-     (define tc (hash-ref payload 'tokenCount "?"))
-     (append-entry
-      state
-      (make-entry 'system (format "[compaction warning: ~a tokens]" tc) (event-time evt) (hash)))]
-
-    [("session.forked")
-     (define new-sid (hash-ref payload 'newSessionId ""))
-     (append-entry
-      state
-      (make-entry 'system (format "[session forked: ~a]" new-sid) (event-time evt) (hash)))]
-
-    [("compaction")
-     (define reason (hash-ref payload 'reason ""))
-     (if (string=? reason "compaction-complete")
-         (struct-copy ui-state state [status-message #f])
-         (struct-copy ui-state state [status-message "Compacting..."]))]
-
-    [("auto-retry")
-     (define attempt (hash-ref payload 'attempt "?"))
-     (define max-attempts (hash-ref payload 'max-attempts "?"))
-     (define error-type (hash-ref payload 'error-type #f))
-     (define type-label
+            [(rate-limit)
+             (format "Rate limit persisted after ~a retries. Wait a moment, then type /retry."
+                     retries-attempted)]
+            [(timeout)
+             (format "Provider timed out after ~a retries. Type /retry to resubmit."
+                     retries-attempted)]
+            [else
+             (format "Error persisted after ~a retries. Type /retry to resubmit."
+                     retries-attempted)])])]
+      [else
        (case error-type
-         [(timeout) "LLM timeout"]
-         [(rate-limit) "rate limited"]
-         [(context-overflow) "context too large"]
-         [(provider-error) "server error"]
-         [else #f]))
-     (define msg
-       (if type-label
-           (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
-           (format "[retry: attempt ~a/~a]" attempt max-attempts)))
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'system msg (event-time evt) (hash)))
-                  [streaming-text #f]
-                  [streaming-thinking #f])]
+         [(timeout) "Provider timed out. Type /retry to resubmit your prompt."]
+         [(rate-limit) "Rate limited. Will retry automatically."]
+         [(auth) "API key error. Check ~/.q/config.json"]
+         [(context-overflow) "Context too long. Use /compact to reduce, then /retry."]
+         [(max-iterations) "Max iterations reached. Simplify your request or use /compact."]
+         [(internal-error) "Internal error occurred. Type /retry to resubmit your prompt."]
+         [else "Type /retry to resubmit your prompt."])]))
+  (define streamed (ui-state-streaming-text state))
+  (define s0
+    (if (and streamed (> (string-length (string-trim streamed)) 0))
+        (append-entry state (make-entry 'assistant streamed ts (hasheq 'partial #t)))
+        state))
+  (define s1
+    (struct-copy ui-state
+                 s0
+                 [busy? #f]
+                 [pending-tool-name #f]
+                 [streaming-text #f]
+                 [streaming-thinking #f]
+                 [status-message (truncate-status-msg err)]))
+  (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
+  (append-entry s2 (make-entry 'system hint ts (hash))))
 
-    [("injection")
-     (define content-type (hash-ref payload 'content-type "unknown"))
-     (define msg (format "[injected ~a message]" content-type))
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'system msg (event-time evt) (hash)))
-                  [streaming-text #f]
-                  [streaming-thinking #f])]
+(define (handle-session-started state evt)
+  (define payload (event-payload evt))
+  (define sid (hash-ref payload 'sessionId ""))
+  (define s1 (struct-copy ui-state state [session-id sid]))
+  (append-entry s1 (make-entry 'system (format "Session started: ~a" sid) (event-time evt) (hash))))
 
-    [("model.request.started") (struct-copy ui-state state [busy? #t])]
+(define (handle-session-resumed state evt)
+  (define payload (event-payload evt))
+  (define sid (hash-ref payload 'sessionId ""))
+  (define s1 (struct-copy ui-state state [session-id sid]))
+  (append-entry s1 (make-entry 'system (format "Session resumed: ~a" sid) (event-time evt) (hash))))
 
-    [("context.built")
-     (define tok (hash-ref payload 'tokenCount #f))
-     (if tok
-         (struct-copy ui-state state [context-tokens tok])
-         state)]
+(define (handle-model-stream-delta state evt)
+  (define payload (event-payload evt))
+  (define delta (hash-ref payload 'delta ""))
+  (define current-streaming (ui-state-streaming-text state))
+  (define new-streaming (string-append (or current-streaming "") delta))
+  (struct-copy ui-state state [streaming-text new-streaming] [busy? #t]))
 
-    [("tool.call.blocked")
-     (define name (hash-ref payload 'name "?"))
-     (define reason (hash-ref payload 'reason "blocked by extension"))
-     (struct-copy ui-state
-                  (append-entry state
-                                (make-entry 'system
-                                            (format "[tool blocked: ~a — ~a]" name reason)
-                                            (event-time evt)
-                                            (hasheq 'name name)))
-                  [pending-tool-name #f])]
+(define (handle-turn-started state evt)
+  (struct-copy ui-state
+               state
+               [busy? #t]
+               [busy-since (event-time evt)]
+               [pending-tool-name #f]
+               [streaming-text #f]
+               [streaming-thinking #f]
+               [status-message #f]))
 
-    [("queue.status-update") (struct-copy ui-state state [queue-counts payload])]
+(define (handle-turn-completed state evt)
+  (define min-busy-ms 500)
+  (define since (ui-state-busy-since state))
+  (define ts (event-time evt))
+  (define elapsed
+    (if since
+        (- ts since)
+        min-busy-ms))
+  (if (< elapsed min-busy-ms)
+      (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])
+      (struct-copy ui-state
+                   state
+                   [busy? #f]
+                   [busy-since #f]
+                   [streaming-text #f]
+                   [streaming-thinking #f]
+                   [pending-tool-name #f])))
 
-    [("iteration.soft-warning")
-     (define iter (hash-ref payload 'iteration "?"))
-     (define remaining (hash-ref payload 'remaining "?"))
-     (define label (if (eq? ((current-gsd-mode-query)) 'executing) "executing" "exploring"))
-     (append-entry
-      state
-      (make-entry 'system
-                  (format "[~a... iteration ~a, ~a remaining before hard stop]" label iter remaining)
-                  (event-time evt)
-                  (hash)))]
+(define (handle-turn-cancelled state evt)
+  (struct-copy ui-state
+               state
+               [busy? #f]
+               [streaming-text #f]
+               [streaming-thinking #f]
+               [pending-tool-name #f]))
 
-    [("exploration.progress")
-     (define count (hash-ref payload 'consecutive-tools "?"))
-     (define tool-names (hash-ref payload 'tool-names '()))
-     (define label (if (eq? ((current-gsd-mode-query)) 'executing) "executing" "exploring"))
-     (append-entry state
-                   (make-entry 'system
-                               (format "[~a... ~a tool calls: ~a]"
-                                       label
-                                       count
-                                       (string-join (map (lambda (s)
-                                                           (if (string? s)
-                                                               s
-                                                               (format "~a" s)))
-                                                         tool-names)
-                                                    ", "))
-                               (event-time evt)
-                               (hash)))]
+(define (handle-compaction-warning state evt)
+  (define payload (event-payload evt))
+  (define tc (hash-ref payload 'tokenCount "?"))
+  (append-entry
+   state
+   (make-entry 'system (format "[compaction warning: ~a tokens]" tc) (event-time evt) (hash))))
 
-    [("gsd.plan.archived")
-     (define path (hash-ref payload 'path "?"))
-     (append-entry
-      state
-      (make-entry 'system (format "\u2705 Plan archived to ~a" path) (event-time evt) (hash)))]
+(define (handle-session-forked state evt)
+  (define payload (event-payload evt))
+  (define new-sid (hash-ref payload 'newSessionId ""))
+  (append-entry state
+                (make-entry 'system (format "[session forked: ~a]" new-sid) (event-time evt) (hash))))
 
-    [("context.mid-turn-over-budget")
-     (define estimated (hash-ref payload 'estimated-tokens "?"))
-     (define budget (hash-ref payload 'budget "?"))
-     (append-entry state
-                   (make-entry 'system
-                               (format "[context growing: ~a/~a tokens used]" estimated budget)
-                               (event-time evt)
-                               (hash)))]
+(define (handle-compaction state evt)
+  (define payload (event-payload evt))
+  (define reason (hash-ref payload 'reason ""))
+  (if (string=? reason "compaction-complete")
+      (struct-copy ui-state state [status-message #f])
+      (struct-copy ui-state state [status-message "Compacting..."])))
 
-    ;; Backward-compatible handlers for old raw event topics (tests + legacy)
-    [("tool.call.completed")
-     (define name (hash-ref payload 'name "?"))
-     (define result-raw (hash-ref payload 'result #f))
-     (define result-summary
-       (if result-raw
-           (string-replace (truncate-string (tool-result-content->string result-raw) 80)
-                           "\n"
-                           " \u23ce ")
-           ""))
-     (define text
-       (if (string=? result-summary "")
-           (format "[OK: ~a]" name)
-           (format "[OK: ~a] ~a" name result-summary)))
-     (define ts (event-time evt))
-     (define meta (hasheq 'name name 'result (or result-raw "")))
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'tool-end text ts meta))
-                  [pending-tool-name #f])]
+(define (handle-auto-retry state evt)
+  (define payload (event-payload evt))
+  (define attempt (hash-ref payload 'attempt "?"))
+  (define max-attempts (hash-ref payload 'max-attempts "?"))
+  (define error-type (hash-ref payload 'error-type #f))
+  (define type-label
+    (case error-type
+      [(timeout) "LLM timeout"]
+      [(rate-limit) "rate limited"]
+      [(context-overflow) "context too large"]
+      [(provider-error) "server error"]
+      [else #f]))
+  (define msg
+    (if type-label
+        (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
+        (format "[retry: attempt ~a/~a]" attempt max-attempts)))
+  (struct-copy ui-state
+               (append-entry state (make-entry 'system msg (event-time evt) (hash)))
+               [streaming-text #f]
+               [streaming-thinking #f]))
 
-    [("tool.call.failed")
-     (define name (hash-ref payload 'name "?"))
-     (define err (hash-ref payload 'error "unknown"))
-     (define ts (event-time evt))
-     (struct-copy
-      ui-state
-      (append-entry state
-                    (make-entry 'tool-fail
-                                (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " \u23ce ")
-                                ts
-                                (hasheq 'name name 'error err)))
-      [pending-tool-name #f])]
+(define (handle-injection state evt)
+  (define payload (event-payload evt))
+  (define content-type (hash-ref payload 'content-type "unknown"))
+  (define msg (format "[injected ~a message]" content-type))
+  (struct-copy ui-state
+               (append-entry state (make-entry 'system msg (event-time evt) (hash)))
+               [streaming-text #f]
+               [streaming-thinking #f]))
 
-    [("compaction.started") (struct-copy ui-state state [status-message "Compacting..."])]
-    [("compaction.start") (struct-copy ui-state state [status-message "Compacting..."])]
-    [("compaction.completed") (struct-copy ui-state state [status-message #f])]
-    [("compaction.end") (struct-copy ui-state state [status-message #f])]
+(define (handle-model-request-started state evt)
+  (struct-copy ui-state state [busy? #t]))
 
-    [("auto-retry.start")
+(define (handle-context-built state evt)
+  (define payload (event-payload evt))
+  (define tok (hash-ref payload 'tokenCount #f))
+  (if tok
+      (struct-copy ui-state state [context-tokens tok])
+      state))
+
+(define (handle-tool-call-blocked state evt)
+  (define payload (event-payload evt))
+  (define name (hash-ref payload 'name "?"))
+  (define reason (hash-ref payload 'reason "blocked by extension"))
+  (struct-copy ui-state
+               (append-entry state
+                             (make-entry 'system
+                                         (format "[tool blocked: ~a -- ~a]" name reason)
+                                         (event-time evt)
+                                         (hasheq 'name name)))
+               [pending-tool-name #f]))
+
+(define (handle-queue-status-update state evt)
+  (define payload (event-payload evt))
+  (struct-copy ui-state state [queue-counts payload]))
+
+(define (handle-iteration-soft-warning state evt)
+  (define payload (event-payload evt))
+  (define iter (hash-ref payload 'iteration "?"))
+  (define remaining (hash-ref payload 'remaining "?"))
+  (define label (if (eq? ((current-gsd-mode-query)) 'executing) "executing" "exploring"))
+  (append-entry
+   state
+   (make-entry 'system
+               (format "[~a... iteration ~a, ~a remaining before hard stop]" label iter remaining)
+               (event-time evt)
+               (hash))))
+
+(define (handle-exploration-progress state evt)
+  (define payload (event-payload evt))
+  (define count (hash-ref payload 'consecutive-tools "?"))
+  (define tool-names (hash-ref payload 'tool-names '()))
+  (define label (if (eq? ((current-gsd-mode-query)) 'executing) "executing" "exploring"))
+  (append-entry state
+                (make-entry 'system
+                            (format "[~a... ~a tool calls: ~a]"
+                                    label
+                                    count
+                                    (string-join (map (lambda (s)
+                                                        (if (string? s)
+                                                            s
+                                                            (format "~a" s)))
+                                                      tool-names)
+                                                 ", "))
+                            (event-time evt)
+                            (hash))))
+
+(define (handle-gsd-plan-archived state evt)
+  (define payload (event-payload evt))
+  (define path (hash-ref payload 'path "?"))
+  (append-entry state (make-entry 'system (format "[archived] ~a" path) (event-time evt) (hash))))
+
+(define (handle-context-mid-turn-over-budget state evt)
+  (define payload (event-payload evt))
+  (define estimated (hash-ref payload 'estimated-tokens "?"))
+  (define budget (hash-ref payload 'budget "?"))
+  (append-entry state
+                (make-entry 'system
+                            (format "[context growing: ~a/~a tokens used]" estimated budget)
+                            (event-time evt)
+                            (hash))))
+
+(define (handle-tool-call-completed state evt)
+  (define payload (event-payload evt))
+  (define name (hash-ref payload 'name "?"))
+  (define result-raw (hash-ref payload 'result #f))
+  (define result-summary
+    (if result-raw
+        (string-replace (truncate-string (tool-result-content->string result-raw) 80) "\n" " | ")
+        ""))
+  (define text
+    (if (string=? result-summary "")
+        (format "[OK: ~a]" name)
+        (format "[OK: ~a] ~a" name result-summary)))
+  (define ts (event-time evt))
+  (define meta (hasheq 'name name 'result (or result-raw "")))
+  (struct-copy ui-state
+               (append-entry state (make-entry 'tool-end text ts meta))
+               [pending-tool-name #f]))
+
+(define (handle-tool-call-failed state evt)
+  (define payload (event-payload evt))
+  (define name (hash-ref payload 'name "?"))
+  (define err (hash-ref payload 'error "unknown"))
+  (define ts (event-time evt))
+  (struct-copy ui-state
+               (append-entry state
+                             (make-entry 'tool-fail
+                                         (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " | ")
+                                         ts
+                                         (hasheq 'name name 'error err)))
+               [pending-tool-name #f]))
+
+(define (handle-compaction-lifecycle state evt)
+  (define ev (event-ev evt))
+  (cond
+    [(member ev '("compaction.started" "compaction.start"))
+     (struct-copy ui-state state [status-message "Compacting..."])]
+    [(member ev '("compaction.completed" "compaction.end"))
+     (struct-copy ui-state state [status-message #f])]
+    [else state]))
+
+(define (handle-auto-retry-lifecycle state evt)
+  (define ev (event-ev evt))
+  (define payload (event-payload evt))
+  (cond
+    [(equal? ev "auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
      (define max-attempts (hash-ref payload 'max-retries "?"))
      (define error-type (hash-ref payload 'errorType #f))
@@ -416,8 +447,7 @@
                   (append-entry state (make-entry 'system msg (event-time evt) (hash)))
                   [streaming-text #f]
                   [streaming-thinking #f])]
-
-    [("auto-retry.context-reduced")
+    [(equal? ev "auto-retry.context-reduced")
      (define original (hash-ref payload 'original-messages 0))
      (define reduced (hash-ref payload 'reduced-messages 0))
      (append-entry state
@@ -425,20 +455,71 @@
                                (format "[retry: reduced context ~a -> ~a messages]" original reduced)
                                (event-time evt)
                                (hash)))]
-
-    [("model.stream.thinking")
-     (define delta (hash-ref payload 'delta ""))
-     (define current-thinking (ui-state-streaming-thinking state))
-     (define new-thinking (string-append (or current-thinking "") delta))
-     (struct-copy ui-state state [streaming-thinking new-thinking] [busy? #t])]
-
-    [("model.stream.completed")
-     (define usage (hash-ref payload 'usage (hasheq)))
-     (define in-tok (hash-ref usage 'prompt_tokens (hash-ref usage 'input_tokens 0)))
-     (define out-tok (hash-ref usage 'completion_tokens (hash-ref usage 'output_tokens 0)))
-     (define ct (ui-state-cost-tracker state))
-     (when ct
-       (cost-tracker-update! ct in-tok out-tok (ui-model-label state)))
-     (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])]
-
     [else state]))
+
+(define (handle-model-stream-thinking state evt)
+  (define payload (event-payload evt))
+  (define delta (hash-ref payload 'delta ""))
+  (define current-thinking (ui-state-streaming-thinking state))
+  (define new-thinking (string-append (or current-thinking "") delta))
+  (struct-copy ui-state state [streaming-thinking new-thinking] [busy? #t]))
+
+(define (handle-model-stream-completed state evt)
+  (define payload (event-payload evt))
+  (define usage (hash-ref payload 'usage (hasheq)))
+  (define in-tok (hash-ref usage 'prompt_tokens (hash-ref usage 'input_tokens 0)))
+  (define out-tok (hash-ref usage 'completion_tokens (hash-ref usage 'output_tokens 0)))
+  (define ct (ui-state-cost-tracker state))
+  (when ct
+    (cost-tracker-update! ct in-tok out-tok (ui-model-label state)))
+  (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f]))
+
+;; ============================================================
+;; Register all handlers at module load time
+;; ============================================================
+
+(register-event-reducer! "assistant.message.completed" handle-assistant-message-completed)
+(register-event-reducer! "tool.call.started" handle-tool-call-started)
+(register-event-reducer! "tool.execution.started" handle-tool-execution-started)
+(register-event-reducer! "tool.execution.completed" handle-tool-execution-completed)
+(register-event-reducer! "runtime.error" handle-runtime-error)
+(register-event-reducer! "session.started" handle-session-started)
+(register-event-reducer! "session.resumed" handle-session-resumed)
+(register-event-reducer! "model.stream.delta" handle-model-stream-delta)
+(register-event-reducer! "turn.started" handle-turn-started)
+(register-event-reducer! "turn.completed" handle-turn-completed)
+(register-event-reducer! "turn.cancelled" handle-turn-cancelled)
+(register-event-reducer! "compaction.warning" handle-compaction-warning)
+(register-event-reducer! "session.forked" handle-session-forked)
+(register-event-reducer! "compaction" handle-compaction)
+(register-event-reducer! "auto-retry" handle-auto-retry)
+(register-event-reducer! "injection" handle-injection)
+(register-event-reducer! "model.request.started" handle-model-request-started)
+(register-event-reducer! "context.built" handle-context-built)
+(register-event-reducer! "tool.call.blocked" handle-tool-call-blocked)
+(register-event-reducer! "queue.status-update" handle-queue-status-update)
+(register-event-reducer! "iteration.soft-warning" handle-iteration-soft-warning)
+(register-event-reducer! "exploration.progress" handle-exploration-progress)
+(register-event-reducer! "gsd.plan.archived" handle-gsd-plan-archived)
+(register-event-reducer! "context.mid-turn-over-budget" handle-context-mid-turn-over-budget)
+(register-event-reducer! "tool.call.completed" handle-tool-call-completed)
+(register-event-reducer! "tool.call.failed" handle-tool-call-failed)
+(register-event-reducer! "compaction.started" handle-compaction-lifecycle)
+(register-event-reducer! "compaction.start" handle-compaction-lifecycle)
+(register-event-reducer! "compaction.completed" handle-compaction-lifecycle)
+(register-event-reducer! "compaction.end" handle-compaction-lifecycle)
+(register-event-reducer! "auto-retry.start" handle-auto-retry-lifecycle)
+(register-event-reducer! "auto-retry.context-reduced" handle-auto-retry-lifecycle)
+(register-event-reducer! "model.stream.thinking" handle-model-stream-thinking)
+(register-event-reducer! "model.stream.completed" handle-model-stream-completed)
+
+;; ============================================================
+;; Event reduction dispatch
+;; ============================================================
+
+(define (apply-event-to-state state evt)
+  (define ev (event-ev evt))
+  (define handler (hash-ref event-reducers ev #f))
+  (if handler
+      (handler state evt)
+      state))
