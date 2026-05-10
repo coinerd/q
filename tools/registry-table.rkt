@@ -73,7 +73,8 @@
                               (hasheq 'type "string" 'description "Path to file to write")
                               'content
                               (hasheq 'type "string" 'description "Content to write")))
-              tool-write)
+              tool-write
+              #f)
    ;; edit
    (tool-spec
     "edit"
@@ -114,7 +115,8 @@
                               (hasheq 'type "number" 'description "Timeout in seconds")
                               'working-directory
                               (hasheq 'type "string" 'description "Working directory")))
-              tool-bash)
+              tool-bash
+              #f)
    ;; grep
    (tool-spec "grep"
               "Search for text patterns in files"
@@ -135,7 +137,8 @@
                               (hasheq 'type "integer" 'description "Max matches")
                               'context-lines
                               (hasheq 'type "integer" 'description "Context lines around match")))
-              tool-grep)
+              tool-grep
+              #f)
    ;; find
    (tool-spec "find"
               "Find files and directories by name or type"
@@ -154,7 +157,8 @@
                               (hasheq 'type "integer" 'description "Max recursion depth")
                               'max-results
                               (hasheq 'type "integer" 'description "Max results")))
-              tool-find)
+              tool-find
+              #f)
    ;; ls
    (tool-spec "ls"
               "List directory contents"
@@ -171,7 +175,8 @@
                               (hasheq 'type "boolean" 'description "Long format with size/type")
                               'sort-by
                               (hasheq 'type "string" 'description "\"name\", \"size\", or \"date\"")))
-              tool-ls)
+              tool-ls
+              #f)
    ;; date
    (tool-spec
     "date"
@@ -186,7 +191,8 @@
                             "string"
                             'description
                             "Output format: iso (default), date, time, unix, weekday, iso-full")))
-    tool-date)
+    tool-date
+    #f)
    ;; firecrawl
    (tool-spec
     "firecrawl"
@@ -220,7 +226,8 @@
       (hasheq 'type "boolean" 'description "Extract main content only (default true)")
       'timeout
       (hasheq 'type "integer" 'description "Timeout in seconds for crawl polling (default 30)")))
-    tool-firecrawl)
+    tool-firecrawl
+    #f)
    ;; spawn-subagent
    (tool-spec
     "spawn-subagent"
@@ -245,7 +252,8 @@
                             (hasheq 'type "string")
                             'description
                             "Allowed tool names for child")))
-    tool-spawn-subagent)
+    tool-spawn-subagent
+    #f)
    ;; spawn-subagents
    (tool-spec
     "spawn-subagents"
@@ -268,7 +276,8 @@
       (hasheq 'type "integer" 'description "Max concurrent subagents (1-3, default 3)")
       'aggregate
       (hasheq 'type "boolean" 'description "Include aggregated summary in response (default true)")))
-    tool-spawn-subagents)
+    tool-spawn-subagents
+    #f)
    ;; session_recall
    (tool-spec
     "session_recall"
@@ -301,7 +310,8 @@
                                     (hasheq 'type "string" 'description "End entry ID"))
                             'description
                             "Retrieve a range of entries by ID (inclusive)")))
-    tool-session-recall)
+    tool-session-recall
+    #f)
    ;; delete-lines
    (tool-spec
     "delete-lines"
@@ -339,7 +349,8 @@
       (hasheq 'type "string" 'description "Search query for match action")
       'name
       (hasheq 'type "string" 'description "Skill name for load action")))
-    tool-skill-route)))
+    tool-skill-route
+    #f)))
 
 ;; ============================================================
 ;; Registration from specs

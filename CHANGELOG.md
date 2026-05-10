@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.36.8 — 2026-05-10
+
+### Goal: Audit Remediation — Contract Fixes + Dead Code + Test Gaps
+
+### Critical
+- **C-01–C-04** (CONTRACT): Fixed 4 contract mismatches in `runtime/auth-store.rkt`:
+  `lookup-credential` (missing 2nd arg + `#:project-dir`), `store-credential!`
+  (wrong arg order), `credential-present?` (missing `#:project-dir`),
+  `resolve-provider-credentials` (wrong return type). Widened `mask-api-key`
+  and `validate-credential-format` to `any/c` inputs.
+- **C-05** (CONTRACT): Fixed `resolve-model` contract to accept `(or/c string? #f)`
+  for model-name instead of requiring non-false string.
+
+### Dead Code & Migration
+- **W-01**: Removed dead `tui/payload-types.rkt` (zero imports).
+- **W-03**: Migrated all 14 tool specs from raw `(list ...)` to `(tool-spec ...)` struct
+  format in `tools/registry-table.rkt`.
+
+### Deprecation & Cleanup
+- **W-02**: Added deprecation warning to `lookup-event-fields` (target: v0.38.0).
+- **W-04**: Renamed `test-event-roundtrip-pbt.rkt` to `test-event-roundtrip.rkt`.
+- **Fix**: Added `assemble-context` to check-deps internal-prefixes (false positive).
+
+### Test Improvements
+- **W-06**: Added 4 structured provider-error path tests for `retryable-error?`.
+- **W-07**: Added 2 per-bus circuit breaker configuration tests.
+- **I-04**: Added direct test for `assemble-context/pure`.
+- **Contract fix**: Updated `make-event-bus` contract to accept `#:threshold`
+  and `#:cooldown-secs` keyword args.
+
+**Verification**: 470/470 test files, lint 18/18
+
+
 ## v0.36.7 — 2026-05-10
 
 ### Goal: Error Classification & Exception Hygiene (M-11, L-07, L-09)
