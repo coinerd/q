@@ -4,7 +4,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/auto-retry.rkt")
+         "../runtime/auto-retry.rkt"
+         "../llm/provider-errors.rkt")
 
 ;; ============================================================
 ;; retryable-error? predicate tests
@@ -505,3 +506,24 @@
   (with-handlers ([retry-exhausted? (lambda (e) (set-box! exn-result e))])
     (with-retry-policy p (lambda () (raise (exn:fail "HTTP 503" (current-continuation-marks))))))
   (check-true (retry-exhausted? (unbox exn-result))))
+
+;; ============================================================
+;; W-06: Structured provider-error path tests (M-11)
+;; ============================================================
+
+(test-case "W-06a: retryable-error? with provider-error rate-limit"
+  (check-not-false (retryable-error?
+                    (provider-error "rate limited" (current-continuation-marks) 429 'rate-limit))))
+
+(test-case "W-06b: retryable-error? with provider-error auth-error returns #f"
+  (check-false (retryable-error?
+                (provider-error "bad key" (current-continuation-marks) 401 'auth-error))))
+
+(test-case "W-06c: classify-error with provider-error timeout returns 'timeout"
+  (check-equal? (classify-error (provider-error "timed out" (current-continuation-marks) #f 'timeout))
+                'timeout))
+
+(test-case "W-06d: classify-error with provider-error server-error returns 'server-error"
+  (check-equal?
+   (classify-error (provider-error "internal error" (current-continuation-marks) 500 'server-error))
+   'server-error))

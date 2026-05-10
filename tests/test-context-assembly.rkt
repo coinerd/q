@@ -360,9 +360,13 @@
       (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
   ;; Add user message with GSD-like text at position 50 (middle)
   (define user-gsd
-    (make-message "ug" #f 'user 'message
+    (make-message "ug"
+                  #f
+                  'user
+                  'message
                   (list (make-text-part "I want to run wave-done 0"))
-                  (current-seconds) (hasheq)))
+                  (current-seconds)
+                  (hasheq)))
   (define msgs-with-user (append (take base-msgs 50) (list user-gsd) (drop base-msgs 50)))
   (define tiered (build-tiered-context msgs-with-user #:tier-c-count 4))
   (define tier-a (tiered-context-tier-a tiered))
@@ -371,10 +375,12 @@
   (define user-in-a?
     (for/or ([m (in-list tier-a)])
       (and (eq? (message-role m) 'user)
-           (string-contains?
-            (string-join (map (lambda (p) (if (text-part? p) (text-part-text p) ""))
-                              (message-content m)))
-            "wave-done"))))
+           (string-contains? (string-join (map (lambda (p)
+                                                 (if (text-part? p)
+                                                     (text-part-text p)
+                                                     ""))
+                                               (message-content m)))
+                             "wave-done"))))
   (check-false user-in-a? "user message with wave-done NOT pinned to Tier A"))
 
 (test-case "T10: tool message with Wave N marked complete IS pinned to Tier A"
@@ -383,9 +389,13 @@
     (for/list ([i (in-range 100)])
       (make-test-msg (format "m~a" i) 'user 'message (format "Msg ~a" i))))
   (define tool-gsd
-    (make-message "tg" #f 'tool 'message
+    (make-message "tg"
+                  #f
+                  'tool
+                  'message
                   (list (make-text-part "Wave 3 marked complete. PLAN.md updated."))
-                  (current-seconds) (hasheq)))
+                  (current-seconds)
+                  (hasheq)))
   (define msgs-with-tool (append (take base-msgs 50) (list tool-gsd) (drop base-msgs 50)))
   (define tiered (build-tiered-context msgs-with-tool #:tier-c-count 4))
   (define tier-a (tiered-context-tier-a tiered))
@@ -393,8 +403,31 @@
   (define tool-in-a?
     (for/or ([m (in-list tier-a)])
       (and (eq? (message-role m) 'tool)
-           (string-contains?
-            (string-join (map (lambda (p) (if (text-part? p) (text-part-text p) ""))
-                              (message-content m)))
-            "Wave 3 marked complete"))))
+           (string-contains? (string-join (map (lambda (p)
+                                                 (if (text-part? p)
+                                                     (text-part-text p)
+                                                     ""))
+                                               (message-content m)))
+                             "Wave 3 marked complete"))))
   (check-true tool-in-a? "tool message with GSD text IS pinned to Tier A"))
+
+;; ============================================================
+;; I-04: Direct test for assemble-context/pure
+;; ============================================================
+
+(require (only-in "../runtime/turn-orchestrator.rkt" (assemble-context/pure ctx-assemble-pure)))
+
+(define ctx-assemble ctx-assemble-pure)
+
+(test-case "I-04: ctx-assemble returns message list without side effects"
+  (define msgs
+    (list (make-test-msg "u1" 'user 'message "Hello")
+          (make-test-msg "a1" 'assistant 'message "Hi there")
+          (make-test-msg "u2" 'user 'message "How are you?")))
+  (define config (hash 'tier-b-count 10 'tier-c-count 2 'max-tokens 4096))
+  (define result (ctx-assemble msgs config))
+  (check-pred list? result)
+  (check >= (length result) 1)
+  ;; Verify all results are messages
+  (for ([m (in-list result)])
+    (check-true (message? m))))

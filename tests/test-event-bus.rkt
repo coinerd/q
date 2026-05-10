@@ -341,3 +341,37 @@
   (check-not-false (unbox received)
                    "subscriber should fire when filter returns non-boolean truthy value")
   (check-equal? (event-ev (unbox received)) "test.type"))
+
+;; ============================================================
+;; W-07: Per-bus circuit breaker configuration tests (L-07)
+;; ============================================================
+
+(test-case "W-07a: bus with #:threshold 2 opens circuit after 2 failures"
+  (define bus (make-event-bus #:threshold 2))
+  (define call-count (box 0))
+  (subscribe! bus
+              (lambda (evt)
+                (set-box! call-count (add1 (unbox call-count)))
+                (error "boom")))
+  ;; Publish twice -> 2 failures -> circuit opens
+  (publish! bus (test-event #:name "t1"))
+  (publish! bus (test-event #:name "t2"))
+  (publish! bus (test-event #:name "t3"))
+  ;; 3rd publish should be blocked by circuit breaker
+  ;; call-count should still be 2 (not 3)
+  (check-equal? (unbox call-count) 2))
+
+(test-case "W-07b: bus with custom threshold 3 allows more failures before breaking"
+  (define bus (make-event-bus #:threshold 3))
+  (define call-count (box 0))
+  (subscribe! bus
+              (lambda (evt)
+                (set-box! call-count (add1 (unbox call-count)))
+                (error "boom")))
+  ;; With threshold 3, first 3 calls should succeed (but raise), 4th should be blocked
+  (publish! bus (test-event #:name "t1"))
+  (publish! bus (test-event #:name "t2"))
+  (publish! bus (test-event #:name "t3"))
+  (publish! bus (test-event #:name "t4"))
+  ;; call-count should be 3 (4th blocked by circuit)
+  (check-equal? (unbox call-count) 3))
