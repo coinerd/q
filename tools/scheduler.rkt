@@ -331,8 +331,8 @@
        (hash-ref results-by-idx
                  idx
                  (lambda () (make-error-result "internal: missing execution result")))]
-      [(blocked) (make-error-result (preflight-entry-error-message entry "blocked"))]
-      [(error) (make-error-result (preflight-entry-error-message entry "error"))])))
+      [(blocked) (make-error-result (preflight-entry-error-message entry))]
+      [(error) (make-error-result (preflight-entry-error-message entry))])))
 
 ;; ============================================================
 ;; Compute metadata

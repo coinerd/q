@@ -269,7 +269,6 @@
      (mark-dirty! ctx)
      'handled]
     [(tui.editor.copy copy) #f] ;; Complex — let hardcoded handle
-    [(tui.editor.cut cut) #f]
     [(tui.editor.paste paste)
      (define text (clipboard-paste))
      (when text
@@ -278,7 +277,6 @@
     [(tui.editor.expand-file-ref expand-file-ref)
      (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
      'handled]
-    [(tui.editor.select-all select-all) #f] ;; Complex — let hardcoded handle
     [(tui.navigation.scroll-up scroll-up)
      (set-box! (tui-ctx-ui-state-box ctx) (scroll-up state 1))
      'handled]

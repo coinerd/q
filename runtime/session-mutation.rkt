@@ -5,7 +5,8 @@
 ;; Wraps all set-agent-session-...! calls with transition checks.
 ;; Prevents invalid state transitions like #t→#t on prompt-running?.
 
-(require "session-types.rkt")
+(require "session-types.rkt"
+         (only-in "../util/errors.rkt" raise-session-error))
 
 (provide guarded-set-prompt-running!
          guarded-set-compacting!
@@ -28,18 +29,18 @@
 (define (guarded-set-prompt-running! sess value)
   (define current (agent-session-prompt-running? sess))
   (when (and current value)
-    (error 'set-prompt-running!
-           "session ~a: prompt already running (invariant violation #t→#t)"
-           (agent-session-session-id sess)))
+    (raise-session-error (format "session ~a: prompt already running (invariant violation #t→#t)"
+                                 (agent-session-session-id sess))
+                         (agent-session-session-id sess)))
   (set-agent-session-prompt-running?! sess value))
 
 ;; W-04: Guard compacting? transitions — no #t→#t
 (define (guarded-set-compacting! sess value)
   (define current (agent-session-compacting? sess))
   (when (and current value)
-    (error 'set-compacting!
-           "session ~a: already compacting (invariant violation #t→#t)"
-           (agent-session-session-id sess)))
+    (raise-session-error (format "session ~a: already compacting (invariant violation #t→#t)"
+                                 (agent-session-session-id sess))
+                         (agent-session-session-id sess)))
   (set-agent-session-compacting?! sess value))
 
 ;; W-04: Guard shutdown-requested? — idempotent (#t→#t allowed for safety)

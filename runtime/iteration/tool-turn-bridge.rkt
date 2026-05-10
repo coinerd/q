@@ -135,7 +135,7 @@
                   (when msg
                     (let loop ()
                       (define old (unbox collected))
-                      (unless (box-cas! collected old (append old (list msg)))
+                      (unless (box-cas! collected old (cons msg old))
                         (loop))))))
               #:filter (lambda (evt) (equal? (event-ev evt) inject-topic)))
   collected)

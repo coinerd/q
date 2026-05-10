@@ -14,7 +14,6 @@
          default-timeout-seconds
          default-max-output-bytes
          with-resource-limits
-         current-process-count
          get-process-count
          process-count-box
          reset-process-count!
@@ -42,6 +41,7 @@
 (define process-count-sem (make-semaphore 1))
 
 ;; I-22: current-process-count now just reads from the box (no independent state)
+;; DEPRECATED (N-06): Use (get-process-count) instead. Not exported.
 (define current-process-count (make-parameter (unbox process-count-box)))
 
 ;; Internal: read authoritative count from box

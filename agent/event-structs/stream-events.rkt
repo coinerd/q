@@ -26,7 +26,7 @@
 (define-typed-event stream-delta-event "model.stream.delta" (delta))
 
 ;; model.stream.delta with tool-call — emitted for tool-call deltas
-(define-typed-event stream-tool-call-delta-event "model.stream.delta" (delta-tool-call))
+(define-typed-event stream-tool-call-delta-event "model.stream.delta.tool-call" (delta-tool-call))
 
 ;; model.stream.thinking — thinking/reasoning delta
 (define-typed-event stream-thinking-event "model.stream.thinking" (delta))

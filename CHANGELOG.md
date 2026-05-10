@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.35.8 — 2026-05-10
+
+### Goal: Deep Audit Remediation (N-01–N-13, I-07)
+
+### HIGH — Runtime Bug Fixes
+- **N-01**: Fixed `preflight-entry-error-message` arity bug in `scheduler.rkt` (2-arg → 1-arg)
+- **N-02**: Updated 4 `interpret-step` tests from 13-arg (with `on-recurse`) to 10-arg API, matching on `step-directive?`
+
+### MEDIUM
+- **N-03**: Migrated `state-machine.rkt` from deprecated `current-gsd-state`/`set-gsd-state!` to `gsd-state-snapshot`/`gsd-state-update!`/`gsd-history-update!`
+- **N-04**: Disambiguated `stream-tool-call-delta-event` type string to `"model.stream.delta.tool-call"`
+- **N-05**: Added 5 stream-context events to `event-json.rkt` dispatch + serializer (stream-events now re-exported from `typed-event-predicates.rkt`)
+- **N-06**: Deprecated `current-process-count` parameter — removed from provide, use `get-process-count` instead
+
+### LOW — Dead Code & Cleanup
+- **N-07**: Removed dead `make-model-request-with-hook` from `loop.rkt`
+- **N-08**: Removed `circuit-breaker-state` from `event-bus.rkt` provide (kept internally)
+- **N-09**: Fixed stale comment `sync-wave-status!` → `mark-wave-status!` in `wave-docs.rkt`
+- **N-10**: Added `test-process-extension-command.rkt` (4 tests)
+- **N-11**: Removed dead keymap actions (`tui.editor.cut`, `tui.editor.select-all`)
+- **N-12**: Replaced `error` with `raise-session-error` in `session-mutation.rkt`
+- **N-13**: Updated 11 docs files from v0.35.2 → v0.35.8
+
+### Carried Over
+- **I-07**: Fixed O(n) `(append old (list msg))` → O(1) `(cons msg old)` in `tool-turn-bridge.rkt` CAS retry
+
+**Verification**: lint 18/18, all targeted tests green
+
 ## v0.35.7 — 2026-05-07
 
 ### Goal: Extension & GSD Cleanup (v0.35.7 milestone — FINAL)

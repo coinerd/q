@@ -9,7 +9,21 @@
 ;;   - all-known-event-types / event-name->tool-name (registry)
 
 (require racket/match
-         "event-structs/typed-event-predicates.rkt")
+         "event-structs/typed-event-predicates.rkt"
+         (only-in "event-structs/stream-events.rkt"
+                  stream-delta-event
+                  stream-delta-event-delta
+                  stream-tool-call-delta-event
+                  stream-tool-call-delta-event-delta-tool-call
+                  stream-thinking-event
+                  stream-thinking-event-delta
+                  stream-completed-event
+                  stream-completed-event-usage
+                  stream-completed-event-finish_reason
+                  stream-tool-call-started-event
+                  stream-tool-call-started-event-id
+                  stream-tool-call-started-event-name
+                  stream-tool-call-started-event-arguments))
 
 (provide typed-event->jsexpr
          jsexpr->typed-event
@@ -157,6 +171,23 @@
              (tool-result-event-content evt)
              'isError
              (tool-result-event-is-error? evt))]
+    ;; Stream-context event payloads (N-05)
+    [(? stream-delta-event?) (hasheq 'delta (stream-delta-event-delta evt))]
+    [(? stream-tool-call-delta-event?)
+     (hasheq 'delta-tool-call (stream-tool-call-delta-event-delta-tool-call evt))]
+    [(? stream-thinking-event?) (hasheq 'delta (stream-thinking-event-delta evt))]
+    [(? stream-completed-event?)
+     (hasheq 'usage
+             (stream-completed-event-usage evt)
+             'finish_reason
+             (stream-completed-event-finish_reason evt))]
+    [(? stream-tool-call-started-event?)
+     (hasheq 'id
+             (stream-tool-call-started-event-id evt)
+             'name
+             (stream-tool-call-started-event-name evt)
+             'arguments
+             (stream-tool-call-started-event-arguments evt))]
     [(? provider-request-event?)
      (hasheq 'model
              (provider-request-event-model evt)
@@ -355,6 +386,26 @@
      (model-stream-thinking-event type ts sid tid (hash-ref h 'thinking "") (hash-ref h 'model ""))]
     ["provider.stream.completed"
      (model-stream-completed-event type ts sid tid (hash-ref h 'model "") (hash-ref h 'provider ""))]
+    ;; Stream-context events (N-05)
+    ["model.stream.delta" (stream-delta-event type ts sid tid (hash-ref h 'delta ""))]
+    ["model.stream.delta.tool-call"
+     (stream-tool-call-delta-event type ts sid tid (hash-ref h 'delta-tool-call ""))]
+    ["model.stream.thinking" (stream-thinking-event type ts sid tid (hash-ref h 'delta ""))]
+    ["model.stream.completed"
+     (stream-completed-event type
+                             ts
+                             sid
+                             tid
+                             (hash-ref h 'usage (hasheq))
+                             (hash-ref h 'finish_reason ""))]
+    ["tool.call.started"
+     (stream-tool-call-started-event type
+                                     ts
+                                     sid
+                                     tid
+                                     (hash-ref h 'id "")
+                                     (hash-ref h 'name "")
+                                     (hash-ref h 'arguments ""))]
     ;; Blocked events
     ["model.request.blocked" (model-request-blocked-event type ts sid tid (hash-ref h 'reason ""))]
     ["message.blocked"
@@ -395,6 +446,11 @@
                    "agent.started"
                    "agent.completed"
                    "context.built"
+                   "model.stream.delta"
+                   "model.stream.delta.tool-call"
+                   "model.stream.thinking"
+                   "model.stream.completed"
+                   "tool.call.started"
                    "provider.stream.delta"
                    "provider.stream.thinking"
                    "provider.stream.completed"
