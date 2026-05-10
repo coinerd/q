@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.36.3 — 2026-05-10
+
+### Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)
+
+### High Impact
+- **H-04** (PURE-01): Wired `#:estimate-text-proc` parameter in `build-assembled-context`
+  so callers can pass pure token estimation functions instead of relying on the
+  hardcoded `estimate-message-tokens` import.
+- **M-02** (CORE-03): Extracted `assemble-context/pure` from `turn-orchestrator.rkt`
+  — pure context assembly without event emission or hook dispatch. Exported for testing.
+- **M-05** (LAYER-03): Decoupled compactor from LLM layer. Moved `llm-summarize` and
+  `make-llm-summarize-fn` to new `runtime/compactor-llm-bridge.rkt`. Compactor no longer
+  imports from `llm/model.rkt` or `llm/provider.rkt`. Removed `#:provider`/`#:model-name`
+  keyword args from `compact-history`, `compact-history-advisory`, `compact-and-persist!`.
+  Callers should pass `#:summarize-fn (make-llm-summarize-fn provider model-name)` instead.
+
+### Cleanup
+- **L-03** (PURE-05): Replaced `mutable-set` with immutable `for/fold` accumulator in
+  `valid-api-message-sequence?`.
+- **L-04** (MATCH-02): Replaced `case` with `match` in context assembly serialization
+  for consistency.
+
+**Verification**: All modules compile, lint 18/18
+
 ## v0.36.2 — 2026-05-10
 
 ### Goal: GSD Concurrency & State Safety (H-03, H-05)

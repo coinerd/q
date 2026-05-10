@@ -95,8 +95,7 @@
 
 (provide (contract-out
           [run-provider-turn
-           (->* (list?
-                       (or/c provider? #f)
+           (->* (list? (or/c provider? #f)
                        event-bus?
                        (or/c tool-registry? #f)
                        (or/c extension-registry? #f)
@@ -107,12 +106,41 @@
                 (#:tool-list-proc (or/c procedure? #f))
                 loop-result?)]
           [build-assembled-context
-           (-> list? (or/c hash? session-config?) (or/c extension-registry? #f) event-bus? string? exact-nonnegative-integer? list?)]
-          [register-session-extensions! (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]))
+           (-> list?
+               (or/c hash? session-config?)
+               (or/c extension-registry? #f)
+               event-bus?
+               string?
+               exact-nonnegative-integer?
+               list?)]
+          [register-session-extensions!
+           (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]
+          [assemble-context/pure (-> list? (or/c hash? session-config?) list?)]))
 
 ;; ============================================================
 ;; Context assembly
 ;; ============================================================
+
+;; Pure: assemble context from messages and config without side effects.
+;; Returns the assembled message list (no events, no hooks).
+(define (assemble-context/pure ctx-to-use config)
+  (define tier-b-count (dict-ref config 'tier-b-count 20))
+  (define tier-c-count (dict-ref config 'tier-c-count 4))
+  (define max-tokens (dict-ref config 'max-tokens 8192))
+  (define ws (dict-ref config 'working-set #f))
+  (define ws-messages-promise
+    (delay
+      (if ws
+          (working-set-resolve-messages ws ctx-to-use message-id)
+          '())))
+  (define ws-messages (force ws-messages-promise))
+  (define-values (tc _hook-result)
+    (build-tiered-context-with-hooks ctx-to-use
+                                     #:tier-b-count tier-b-count
+                                     #:tier-c-count tier-c-count
+                                     #:max-tokens max-tokens
+                                     #:working-set-messages ws-messages))
+  (tiered-context->message-list tc))
 
 ;; Build assembled context using tiered context assembly with hooks.
 ;; Returns the assembled message list.

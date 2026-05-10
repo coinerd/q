@@ -28,13 +28,9 @@
          (only-in "../util/error-helpers.rkt" with-telemetry)
          "../runtime/session-store.rkt"
          (only-in "../runtime/compaction-prompts.rkt"
-                  summary-prompt
-                  iterative-update-prompt
                   format-messages-for-summary
                   MAX-TOOL-RESULT-CHARS
                   MAX-SUMMARY-WORDS)
-         (only-in "../llm/model.rkt" make-model-request model-response-content model-response?)
-         (only-in "../llm/provider.rkt" provider-send provider?)
          (only-in "../util/hook-types.rkt"
                   hook-result
                   hook-result?
@@ -56,8 +52,6 @@
          (contract-out [compact-history
                         (->* (list?)
                              (#:summarize-fn procedure?
-                                             #:provider any/c
-                                             #:model-name any/c
                                              #:previous-summary (or/c string? #f)
                                              #:hook-dispatcher (or/c procedure? #f)
                                              #:token-config any/c)
@@ -65,8 +59,6 @@
                        [compact-history-advisory
                         (->* (list?)
                              (#:summarize-fn procedure?
-                                             #:provider any/c
-                                             #:model-name any/c
                                              #:previous-summary (or/c string? #f)
                                              #:hook-dispatcher (or/c procedure? #f)
                                              #:token-config any/c)
@@ -74,8 +66,6 @@
                        [compact-and-persist!
                         (->* (list? (or/c path-string? #f))
                              (#:summarize-fn procedure?
-                                             #:provider any/c
-                                             #:model-name any/c
                                              #:previous-summary (or/c string? #f)
                                              #:hook-dispatcher (or/c procedure? #f)
                                              #:token-config any/c)
@@ -85,11 +75,6 @@
                        [compaction-result->message-list (-> compaction-result? list?)]
                        [default-strategy (-> compaction-strategy?)]
                        [default-summarize (-> list? string?)]
-                       [llm-summarize
-                        (->* (list? any/c any/c)
-                             (#:previous-summary (or/c string? #f) #:file-tracker any/c)
-                             string?)]
-                       [make-llm-summarize-fn (-> any/c any/c procedure?)]
                        [extract-file-tracker (-> list? hash?)]
                        [find-previous-file-tracker (-> list? hash?)]
                        [merge-file-trackers (->* () () #:rest list? hash?)]))
@@ -196,39 +181,6 @@
       (set-add! all-writes path)))
   (hasheq 'readFiles (set->list all-reads) 'modifiedFiles (set->list all-writes)))
 
-;; Call the LLM to summarize messages.
-;; When #:previous-summary is provided, uses iterative update prompt.
-;; Returns the summary text string.
-(define (llm-summarize messages
-                       provider
-                       model-name
-                       #:previous-summary [prev-summary #f]
-                       #:file-tracker [file-tracker (hasheq)])
-  (define formatted (format-messages-for-summary messages))
-  (define prompt-text
-    (if prev-summary
-        (iterative-update-prompt prev-summary formatted file-tracker)
-        (summary-prompt formatted file-tracker)))
-  ;; Build a minimal model-request with just the prompt
-  (define req
-    (make-model-request (list (hasheq 'role "user" 'content prompt-text))
-                        #f
-                        (hasheq 'model model-name 'max_tokens 2000)))
-  (define resp (provider-send provider req))
-  ;; Extract text from response content
-  (define content (model-response-content resp))
-  (string-join (for/list ([part (in-list content)])
-                 (cond
-                   [(hash? part) (hash-ref part 'text "")]
-                   [(string? part) part]
-                   [else (format "~a" part)]))
-               ""))
-
-;; Create a summarize function suitable for use with compact-history.
-;; The returned function has signature: (listof message?) -> string
-(define (make-llm-summarize-fn provider model-name)
-  (lambda (messages) (llm-summarize messages provider model-name)))
-
 ;; ============================================================
 ;; build-summary-window
 ;; ============================================================
@@ -300,14 +252,13 @@
 ;; or touch the filesystem in any way. To persist the compaction, use
 ;; `compact-and-persist!` or call `write-compaction-entry!` explicitly.
 ;;
-;; v0.8.9: Added #:provider, #:model-name for LLM-powered summarization,
-;;         #:hook-dispatcher for extension hooks, #:previous-summary for
-;;         iterative compaction.
+;; v0.8.9: Added #:hook-dispatcher for extension hooks,
+;;         #:previous-summary for iterative compaction.
 ;; v0.9.1 (#636): Hook blocking now actually prevents compaction.
+;; M-05: Removed #:provider/#:model-name. Use #:summarize-fn with
+;;        make-llm-summarize-fn from compactor-llm-bridge.rkt instead.
 (define (compact-history messages
                          #:summarize-fn [summarize-fn default-summarize]
-                         #:provider [provider #f]
-                         #:model-name [model-name #f]
                          #:previous-summary [prev-summary #f]
                          #:hook-dispatcher [hook-dispatcher #f]
                          #:token-config [token-config (default-token-compaction-config)])
@@ -353,16 +304,8 @@
                (let ([payload (hook-result-payload hook-res)])
                  (and (hash? payload) (hash-ref payload 'summary #f)))))
         ;; Build summarization — use custom summary if provided, else standard path
-        (define base-summary-text
-          (or custom-summary
-              (if (and provider model-name)
-                  (llm-summarize adjusted-old
-                                 provider
-                                 model-name
-                                 #:previous-summary
-                                 (or prev-summary (find-previous-summary adjusted-recent))
-                                 #:file-tracker cumulative-ft)
-                  (summarize-fn adjusted-old))))
+        ;; M-05: Always use summarize-fn (no more direct LLM coupling)
+        (define base-summary-text (or custom-summary (summarize-fn adjusted-old)))
         ;; Append turn prefix to summary if split-turn detected
         (define summary-text
           (if (string=? turn-prefix "")
@@ -370,10 +313,8 @@
               (string-append base-summary-text "\n\n" turn-prefix)))
         ;; Build file tracker metadata for the summary message
         (define file-tracker-meta
-          (if (and provider model-name)
-              (if (> (hash-count cumulative-ft) 0)
-                  (hasheq 'fileTracker cumulative-ft)
-                  (hasheq))
+          (if (> (hash-count cumulative-ft) 0)
+              (hasheq 'fileTracker cumulative-ft)
               (hasheq)))
         (define first-kept-id
           (if (pair? adjusted-recent)
@@ -416,15 +357,11 @@
 ;; the advisory contract crystal clear.
 (define (compact-history-advisory messages
                                   #:summarize-fn [summarize-fn default-summarize]
-                                  #:provider [provider #f]
-                                  #:model-name [model-name #f]
                                   #:previous-summary [prev-summary #f]
                                   #:hook-dispatcher [hook-dispatcher #f]
                                   #:token-config [token-config (default-token-compaction-config)])
   (compact-history messages
                    #:summarize-fn summarize-fn
-                   #:provider provider
-                   #:model-name model-name
                    #:previous-summary prev-summary
                    #:hook-dispatcher hook-dispatcher
                    #:token-config token-config))
@@ -443,16 +380,12 @@
 (define (compact-and-persist! messages
                               session-log-path
                               #:summarize-fn [summarize-fn default-summarize]
-                              #:provider [provider #f]
-                              #:model-name [model-name #f]
                               #:previous-summary [prev-summary #f]
                               #:hook-dispatcher [hook-dispatcher #f]
                               #:token-config [token-config (default-token-compaction-config)])
   (with-telemetry "compact-and-persist"
                   (let ([result (compact-history messages
                                                  #:summarize-fn summarize-fn
-                                                 #:provider provider
-                                                 #:model-name model-name
                                                  #:previous-summary prev-summary
                                                  #:hook-dispatcher hook-dispatcher
                                                  #:token-config token-config)])

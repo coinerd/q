@@ -154,17 +154,17 @@
                                      (length messages))))
   (if hook-dispatcher
       (let ([result (hook-dispatcher 'context-assembly payload)])
-        (case (hook-result-action result)
-          [(block)
+        (match (hook-result-action result)
+          ['block
            (define reason (hook-result-payload result))
            (raise (exn:fail (format "Context assembly blocked by hook: ~a"
                                     (if reason reason "no reason given"))
                             (current-continuation-marks)))]
-          [(amend)
+          ['amend
            (define amended-payload (hook-result-payload result))
            (values (payload->tiered-context amended-payload) result)]
-          [(pass) (values base-context result)]
-          [else (values base-context result)]))
+          ['pass (values base-context result)]
+          [_ (values base-context result)]))
       (values base-context #f)))
 
 (define (tiered-context->message-list tc)

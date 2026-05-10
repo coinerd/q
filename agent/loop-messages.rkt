@@ -49,36 +49,45 @@
 ;; Check that tool messages always follow assistant messages with tool_calls,
 ;; and that every tool_call_id in tool messages has a matching assistant tool_call.
 (define (valid-api-message-sequence? msgs)
-  (define tool-call-ids (mutable-set))
-  (define prev-role #f)
-  (for/and ([m (in-list msgs)]
-            [i (in-naturals)])
-    (define role (hash-ref m 'role #f))
-    (cond
-      [(and (equal? role "tool") (not (or (equal? prev-role "assistant") (equal? prev-role "tool"))))
-       (log-warning "INVALID: msg[~a] role=tool follows role=~a (expected assistant or tool)"
-                    i
-                    prev-role)
-       #f]
-      [(equal? role "assistant")
-       (define tcs (hash-ref m 'tool_calls #f))
-       (when tcs
-         (for ([tc (in-list tcs)])
-           (set-add! tool-call-ids (hash-ref tc 'id #f))))
-       #t]
-      [(equal? role "tool")
-       (define tcid (hash-ref m 'tool_call_id #f))
-       (cond
-         [(not tcid)
-          (log-warning "INVALID: msg[~a] role=tool has no tool_call_id" i)
-          #f]
-         [(not (set-member? tool-call-ids tcid))
-          (log-warning "INVALID: msg[~a] role=tool tool_call_id=~a not found in preceding tool_calls"
-                       i
-                       tcid)
-          #f]
-         [else #t])]
-      [else #t])))
+  ;; L-03: Pure immutable implementation using for/fold accumulator
+  (define-values (result _seen-ids _prev-role)
+    (for/fold ([valid? #t]
+               [tool-call-ids (set)]
+               [prev-role #f])
+              ([m (in-list msgs)]
+               [i (in-naturals)]
+               #:break (not valid?))
+      (define role (hash-ref m 'role #f))
+      (cond
+        [(and (equal? role "tool")
+              (not (or (equal? prev-role "assistant") (equal? prev-role "tool"))))
+         (log-warning "INVALID: msg[~a] role=tool follows role=~a (expected assistant or tool)"
+                      i
+                      prev-role)
+         (values #f tool-call-ids role)]
+        [(equal? role "assistant")
+         (define tcs (hash-ref m 'tool_calls #f))
+         (define new-ids
+           (if tcs
+               (for/fold ([s tool-call-ids]) ([tc (in-list tcs)])
+                 (set-add s (hash-ref tc 'id #f)))
+               tool-call-ids))
+         (values #t new-ids role)]
+        [(equal? role "tool")
+         (define tcid (hash-ref m 'tool_call_id #f))
+         (cond
+           [(not tcid)
+            (log-warning "INVALID: msg[~a] role=tool has no tool_call_id" i)
+            (values #f tool-call-ids role)]
+           [(not (set-member? tool-call-ids tcid))
+            (log-warning
+             "INVALID: msg[~a] role=tool tool_call_id=~a not found in preceding tool_calls"
+             i
+             tcid)
+            (values #f tool-call-ids role)]
+           [else (values #t tool-call-ids role)])]
+        [else (values #t tool-call-ids role)])))
+  result)
 
 ;; ============================================================
 ;; Role merging

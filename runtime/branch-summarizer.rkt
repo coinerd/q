@@ -10,7 +10,7 @@
          racket/string
          (only-in "../util/protocol-types.rkt" message? message-role message-content)
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "../runtime/compactor.rkt" llm-summarize))
+         (only-in "../runtime/compactor-llm-bridge.rkt" llm-summarize))
 
 (provide (contract-out
           [summarize-branch
