@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.35.5 — 2026-05-07
+
+### Goal: Tool System Contracts & DSL (v0.35.5 milestone)
+
+### W0 — Tool DSL Improvements (W-16, W-20, I-09)
+- **W-16**: Arity wrapper in make-tool validates handler accepts 1 or 2 args
+- **W-20**: `#:optional` clause in `define-tool` for optional property defaults
+- **I-09**: `tool-call-accum` struct replaces 3-element list in stream delta accumulation
+- 7 new tests for arity validation, struct fields, and backwards compat
+
+### W1 — Permission Contract & Bash Stderr (W-11, W-18, I-13, I-19)
+- **W-11**: `contract-out` on `make-default-permission-config` with `set/c` and procedure contracts
+- **W-18**: `current-warning-port` parameter replaces hardcoded `(current-error-port)` in bash tool
+- **I-13**: `current-block-destructive` accepts thunk `(lambda () (safe-mode?))` instead of sentinel
+- **I-19**: Removed deprecated `session-bytes-written` parameter from `write.rkt`
+- 7 new tests for permission contracts, warning port, thunk resolver
+
+**Verification**: lint 16/18 (2 pre-existing version-sync), all tool/bash tests green
+
 ## v0.35.4 — 2026-05-07
 
 ### Goal: TUI Dispatcher Refactoring (v0.35.4 milestone)
