@@ -18,16 +18,23 @@
 (provide (struct-out credential)
          (struct-out redacted-credential)
          ;; H-02: Contract-wrapped exports
-         (contract-out [lookup-credential
-                        (->* (string?) (#:project-dir (or/c path-string? #f)) (or/c credential? #f))]
-                       [credential-present? (-> string? (or/c hash? #f) boolean?)]
-                       [store-credential! (-> string? string? void?)]
-                       [resolve-provider-credentials (-> hash? (listof redacted-credential?))]
-                       [mask-api-key (-> string? string?)]
-                       [cred->redacted (-> credential? redacted-credential?)]
-                       [validate-credential-format (-> string? string? (or/c #f string?))]
-                       [load-credential-file (->* () ((or/c path-string? #f)) (or/c hash? #f))]
-                       [save-credential-file! (->* (string? string?) ((or/c path-string? #f)) void?)])
+         (contract-out
+          [lookup-credential
+           (->* (string? (or/c hash? #f))
+                (#:project-dir (or/c path-string? #f))
+                (or/c credential? #f))]
+          [credential-present?
+           (->* (string? (or/c hash? #f)) (#:project-dir (or/c path-string? #f)) boolean?)]
+          [store-credential!
+           (->* (string? string? #:provider-config hash?)
+                (#:config-path (or/c path-string? #f))
+                hash?)]
+          [resolve-provider-credentials (-> hash? hash?)]
+          [mask-api-key (-> any/c string?)]
+          [cred->redacted (-> credential? redacted-credential?)]
+          [validate-credential-format (-> any/c any/c (or/c #f #t string?))]
+          [load-credential-file (->* () ((or/c path-string? #f)) (or/c hash? #f))]
+          [save-credential-file! (->* (string? string?) ((or/c path-string? #f)) void?)])
          ;; Non-contracted (macro and accessor)
          credential-file-path
          with-credential)

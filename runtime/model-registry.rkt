@@ -42,13 +42,13 @@
          (struct-out model-registry)
          (struct-out model-resolution)
          ;; H-02: Contract-wrapped exports
-         (contract-out [resolve-model (-> model-registry? string? (or/c model-resolution? #f))]
-                       [resolve-model-by-provider
-                        (-> model-registry? string? (or/c model-resolution? #f))]
-                       [available-models (-> model-registry? (listof model-entry?))]
-                       [default-model (-> model-registry? (or/c string? #f))]
-                       [default-model-for-mode (-> model-registry? symbol? (or/c string? #f))]
-                       [make-model-registry-from-config (-> hash? model-registry?)]))
+         (contract-out
+          [resolve-model (-> model-registry? (or/c string? #f) (or/c model-resolution? #f))]
+          [resolve-model-by-provider (-> model-registry? string? (or/c model-resolution? #f))]
+          [available-models (-> model-registry? (listof model-entry?))]
+          [default-model (-> model-registry? (or/c string? #f))]
+          [default-model-for-mode (-> model-registry? symbol? (or/c string? #f))]
+          [make-model-registry-from-config (-> hash? model-registry?)]))
 
 ;; ============================================================
 ;; Structs
