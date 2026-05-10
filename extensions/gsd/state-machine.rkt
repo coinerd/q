@@ -80,7 +80,12 @@
 (define (gsm-state? v)
   (and (symbol? v) (memq v GSD-STATES) #t))
 
-;; Transition table: (from . to) pairs that are valid.
+;; L-09: Transition table design note.
+;; This table is intentionally simple: plain (from . to) pairs with no guards,
+;; no actions, no conditions. This keeps the FSM easy to reason about and test.
+;; If the GSD state machine grows more complex (e.g., conditional transitions,
+;; entry/exit actions), the table should be enriched with a proper FSM library.
+;; Current design is sufficient for the 5-state GSD lifecycle.
 (define TRANSITIONS
   '((idle . exploring) (exploring . plan-written)
                        (exploring . idle)

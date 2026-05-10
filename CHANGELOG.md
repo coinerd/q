@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.36.7 — 2026-05-10
+
+### Goal: Error Classification & Exception Hygiene (M-11, L-07, L-09)
+
+### Medium Impact
+- **M-11** (EXN-02): Restructured `retryable-error?` to use `provider-error-category`
+  as primary classification path. Structured errors bypass string matching entirely.
+  String-based fallback retained for non-structured errors.
+- **L-07** (PARAM-02): Made circuit breaker configurable per-bus. `make-event-bus` now
+  accepts `#:threshold` and `#:cooldown-secs` keyword args (defaults from global params).
+  `event-bus` struct extended with `cb-threshold` and `cb-cooldown-secs` fields.
+
+### Cleanup
+- **L-09** (FSM-02): Added design documentation to GSD transition table explaining
+  the intentional simplicity (no guards/actions) and when it should be enriched.
+
+**Verification**: All modules compile, lint 18/18
+
 ## v0.36.6 — 2026-05-10
 
 ### Goal: Module Boundary Hardening (M-06, M-07, M-14, L-02)

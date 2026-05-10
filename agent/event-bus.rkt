@@ -78,16 +78,21 @@
 (define circuit-breaker-semaphore (make-semaphore 1))
 
 ;; Check if a subscriber is circuit-broken (thread-safe)
-;; breaker-state: hash of sub-id -> (cons failure-count last-failure-secs)
-(define (circuit-broken? breaker-state sub-id)
-  (define threshold (current-circuit-breaker-threshold))
+;; Uses per-bus threshold/cooldown if available, falls back to global params.
+(define (circuit-broken? breaker-state sub-id #:bus [bus #f])
+  (define threshold
+    (if bus
+        (event-bus-cb-threshold bus)
+        (current-circuit-breaker-threshold)))
   (if (not threshold)
       #f
       (with-circuit-breaker-lock (lambda ()
                                    (define entry (hash-ref breaker-state sub-id #f))
                                    (and entry
                                         (>= (car entry) threshold)
-                                        (let ([cooldown (current-circuit-breaker-cooldown-secs)])
+                                        (let ([cooldown (if bus
+                                                            (event-bus-cb-cooldown-secs bus)
+                                                            (current-circuit-breaker-cooldown-secs))])
                                           (if (and cooldown
                                                    (> (- (current-seconds) (cdr entry)) cooldown))
                                               (begin
@@ -98,8 +103,11 @@
 
 ;; Record a failure for a subscriber (thread-safe)
 ;; breaker-state: hash of sub-id -> (cons failure-count last-failure-secs)
-(define (record-failure! breaker-state sub-id)
-  (define threshold (current-circuit-breaker-threshold))
+(define (record-failure! breaker-state sub-id #:bus [bus #f])
+  (define threshold
+    (if bus
+        (event-bus-cb-threshold bus)
+        (current-circuit-breaker-threshold)))
   (when threshold
     (with-circuit-breaker-lock
      (lambda ()
@@ -128,15 +136,20 @@
 ;; Event bus struct
 ;; ============================================================
 
-(struct event-bus (subscriptions-box semaphore next-id-box breaker-state)
+(struct event-bus
+        (subscriptions-box semaphore next-id-box breaker-state cb-threshold cb-cooldown-secs)
   #:constructor-name make-event-bus-internal)
 
 ;; ============================================================
 ;; Public constructor
 ;; ============================================================
 
-(define (make-event-bus)
-  (make-event-bus-internal (box '()) (make-semaphore 1) (box 0) (make-hash)))
+;; L-07: Configurable circuit breaker per bus.
+;; #:threshold — consecutive failures before circuit breaks (default from parameter)
+;; #:cooldown-secs — seconds before retrying a broken circuit (default from parameter)
+(define (make-event-bus #:threshold [threshold (current-circuit-breaker-threshold)]
+                        #:cooldown-secs [cooldown (current-circuit-breaker-cooldown-secs)])
+  (make-event-bus-internal (box '()) (make-semaphore 1) (box 0) (make-hash) threshold cooldown))
 
 ;; Thread-safe event bus lock helper (Finding A3)
 (define (with-event-bus-lock bus thunk)
@@ -200,11 +213,11 @@
     (define sub-id (subscription-id s))
     (define pred (subscription-filter s))
     (cond
-      [(circuit-broken? breaker-state sub-id) (void)]
+      [(circuit-broken? breaker-state sub-id #:bus bus) (void)]
       [(and pred (not (pred evt))) (void)] ; predicate filter rejected
       [else
        (with-handlers ([exn:fail? (lambda (exn)
-                                    (record-failure! breaker-state sub-id)
+                                    (record-failure! breaker-state sub-id #:bus bus)
                                     (err-handler evt (subscription-handler s) exn))])
          ((subscription-handler s) evt)
          (record-success! breaker-state sub-id))]))
