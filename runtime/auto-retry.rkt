@@ -74,10 +74,6 @@
 ;; Check if an error is retryable (transient / rate-limit / server error).
 ;; Permanent tool errors (validation failures) are NEVER retryable.
 (define (retryable-error? exn)
-  (when (permanent-tool-error? exn)
-    (for/or ([pattern (in-list PERMANENT_TOOL_PATTERNS)])
-      (string-contains? (string-downcase (exn-message exn)) (string-downcase pattern))
-      #f)) ; matched but return #f via cond below
   (match (permanent-tool-error? exn)
     [#t #f]
     [_
