@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.35.9 — 2026-05-10
+
+### Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
+
+### 🔴 Critical Fixes
+- **R-01**: Fix GSD state machine deadlock — `gsm-transition!`/`gsm-reset!`/`reset-gsm!` nested
+  `with-gsd-lock` on same non-reentrant semaphore via `gsd-state-snapshot`/`gsd-state-update!`,
+  causing all GSD workflow tests to hang (14 test timeouts restored to passing)
+- **R-02**: Fix `stream-completed-event` JSON round-trip arity crash — deserialization was missing
+  the `truncated?` optional field (7-arg constructor called with 6 args)
+
+### 🟢 Cleanup
+- **N-08**: Remove `circuit-breaker-state` from `event-bus.rkt` provide (was dead export)
+- **N-11**: Remove dead `tui.editor.cut`/`tui.editor.select-all` keymap bindings from `keymap.rkt`
+
+**Verification**: lint 18/18, 0 GSD timeouts, all event round-trips pass
+
 ## v0.35.8 — 2026-05-10
 
 ### Goal: Deep Audit Remediation (N-01–N-13, I-07)
