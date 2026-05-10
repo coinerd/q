@@ -531,3 +531,7 @@
 (test-case "W-06e: retryable-error? with provider-error network returns truthy"
   (define exn (provider-error "connection reset" (current-continuation-marks) #f 'network))
   (check-not-false (retryable-error? exn)))
+
+(test-case "W-06f: retryable-error? with provider-error server-error returns truthy"
+  (define exn (provider-error "internal server error" (current-continuation-marks) 500 'server-error))
+  (check-not-false (retryable-error? exn)))

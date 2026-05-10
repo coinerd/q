@@ -186,9 +186,6 @@
 
 ;; ============================================================
 ;; Load plan from disk (PLAN.md index + wave docs)
-
-;; ============================================================
-;; Load plan from disk (PLAN.md index + wave docs)
 ;; ============================================================
 
 (define (load-plan-from-index base-dir)
