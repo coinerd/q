@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.36.10 — 2026-05-10
+
+### Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization
+
+### Fixed
+- **Q-01** (COMMENT): Stale "list" references in `tools/registry-table.rkt` → `tool-spec` struct
+- **Q-02** (HEADER): Collapsed duplicate section header in `wave-executor.rkt`
+- **Q-03** (IMPORT): Narrowed `interfaces/doctor.rkt` to `(only-in ... credential-file-path ...)`
+- **Q-04** (PERF): Reduced W-07c sleep 2.0s → 1.1s (`#:cooldown-secs 0`)
+- **Q-05** (TEST): Added `server-error` provider-error test to retryable-error? matrix
+
+### Changed
+- `tools/registry-table.rkt`: comment cleanup
+- `extensions/gsd/wave-executor.rkt`: -3 lines (duplicate header)
+- `interfaces/doctor.rkt`: import narrowed + raco fmt reformat
+- `tests/test-event-bus.rkt`: W-07c ~0.9s faster
+- `tests/test-auto-retry.rkt`: +1 test
+- Score: 8.7 → 8.9
+
+---
+
 ## v0.36.9 — 2026-05-10
 
 ### Goal: Audit Remediation — Test Gaps + Dead Code + Contract Tightening
