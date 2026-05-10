@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.36.9 — 2026-05-10
+
+### Goal: Audit Remediation — Test Gaps + Dead Code + Contract Tightening
+
+### Fixed
+- **N-01** (TEST): Added `#:cooldown-secs` circuit breaker tests (W-07c, W-07d)
+- **N-02** (COMMENT): Fixed stale filename in `test-event-roundtrip.rkt` header
+- **N-03** (DEAD CODE): Removed legacy `list?` branch from `register-tools-from-specs!` — all specs now use `tool-spec` structs
+- **N-04** (IMPORT): Narrowed `cli/init-wizard.rkt` import to `(only-in ...)`
+- **N-06** (CONTRACT): Tightened `resolve-provider-credentials` to `hash/c` for static validation
+- **N-07** (THREAD): Made deprecation flag atomic (`box`/`set-box!`) instead of plain `set!`
+- **N-08** (TEST): Added `'network` category test for `retryable-error?`
+- **W-05** (DOCS): Documented single-threaded invariant in `wave-executor.rkt`
+
+### Changed
+- `tests/test-auto-retry.rkt` +4, `tests/test-event-bus.rkt` +17
+- `tools/registry-table.rkt` -11 lines (dead branch removed)
+- `util/event-macro.rkt`: `set!` → `set-box!`
+- `runtime/auth-store.rkt`: contract tightened
+- `cli/init-wizard.rkt`: `(only-in ...)`
+- `extensions/gsd/wave-executor.rkt`: TOCTOU docs
+
+---
+
 ## v0.36.8 — 2026-05-10
 
 ### Goal: Audit Remediation — Contract Fixes + Dead Code + Test Gaps
