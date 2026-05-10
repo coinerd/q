@@ -139,6 +139,11 @@
     (raise-argument-error 'make-tool "hash?" schema))
   (unless (procedure? execute)
     (raise-argument-error 'make-tool "procedure?" execute))
+  ;; W-16: Arity check — validate handler accepts 1 or 2 args (args [exec-ctx])
+  (unless (or (procedure-arity-includes? execute 1) (procedure-arity-includes? execute 2))
+    (raise-arguments-error 'make-tool
+                           (format "tool '~a' handler does not accept 1 or 2 args (args [exec-ctx])"
+                                   name)))
   (tool name
         description
         schema
