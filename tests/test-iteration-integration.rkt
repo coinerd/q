@@ -38,6 +38,12 @@
                   cancellation-token-cancelled?)
          (only-in "../util/event.rkt" event-ev)
          (only-in "../runtime/iteration.rkt" step-result)
+         (only-in "../runtime/iteration/directive.rkt"
+                  directive-recurse?
+                  directive-stop?
+                  directive-recurse-new-ctx
+                  directive-recurse-new-counters
+                  directive-stop-result)
          "../agent/event-bus.rkt"
          "../runtime/working-set.rkt")
 
@@ -183,63 +189,28 @@
   (define events-box (collect-events bus "runtime.error"))
   (define max-iter 5)
   (define max-hard 10)
-  ;; on-recurse should NOT be called for hard-limit
-  (define on-recurse (lambda args (fail "on-recurse should not be called for hard-limit")))
-  (define step-res (step-result 'stop-hard-limit 'max-iterations-exceeded (make-initial-counters) (hasheq)))
-  (define out
-    (interpret-step step-res
-                          result
-                          '()
-                          infra
-                          counters
-                          ws
-                          (hash)
-                          #f
-                          max-iter
-                          max-hard
-                          #f
-                          'all
-                          on-recurse))
-  (check-true (loop-result? out))
-  (check-equal? (loop-result-termination-reason out) 'max-iterations-exceeded)
-  (check-true (hash-has-key? (loop-result-metadata out) 'maxIterationsReached))
+  (define step-res
+    (step-result 'stop-hard-limit 'max-iterations-exceeded (make-initial-counters) (hasheq)))
+  (define out (interpret-step step-res result '() infra counters ws (hash) #f max-iter max-hard))
+  (check-true (directive-stop? out))
+  (define stop-result (directive-stop-result out))
+  (check-equal? (loop-result-termination-reason stop-result) 'max-iterations-exceeded)
+  (check-true (hash-has-key? (loop-result-metadata stop-result) 'maxIterationsReached))
   (check-true (pair? (unbox events-box)) "runtime.error event was emitted")
   (delete-file log-path))
 
-(test-case "interpret-step: 'continue calls on-recurse with updated counters"
+(test-case "interpret-step: 'continue returns directive-recurse with updated counters"
   (define bus (make-event-bus))
   (define log-path (make-temp-log-path))
   (define infra (loop-infra '() #f #f bus "test-session" log-path #f))
   (define counters (make-initial-counters))
   (define ws (make-working-set))
-  (define msgs (list (make-msg-with-tool-call "read" (hasheq 'path "/tmp/test.rkt"))))
-  (define result (make-loop-result msgs 'tool-calls-pending (hasheq)))
-  ;; execute-pending-tool-calls needs tool-coordinator; use empty msg list
-  ;; to avoid calling handle-tool-calls-pending with real tools
   (define result-no-msgs (make-loop-result '() 'tool-calls-pending (hasheq)))
-  (define recurse-args-box (box #f))
-  (define on-recurse
-    (lambda (ctx new-counters ws2)
-      (set-box! recurse-args-box (list ctx new-counters ws2))
-      (make-loop-result ctx 'completed (hasheq))))
-  (define step-res (step-result 'continue 'tool-calls-pending (compute-next-counters counters '()) (hasheq)))
-  (define out
-    (interpret-step step-res
-                          result-no-msgs
-                          '()
-                          infra
-                          counters
-                          ws
-                          (hash)
-                          #f
-                          5
-                          10
-                          #f
-                          'all
-                          on-recurse))
-  (check-true (loop-result? out))
-  (check-not-false (unbox recurse-args-box) "on-recurse was called")
-  (define new-counters (cadr (unbox recurse-args-box)))
+  (define step-res
+    (step-result 'continue 'tool-calls-pending (compute-next-counters counters '()) (hasheq)))
+  (define out (interpret-step step-res result-no-msgs '() infra counters ws (hash) #f 5 10))
+  (check-true (directive-recurse? out) "continue returns directive-recurse")
+  (define new-counters (directive-recurse-new-counters out))
   (check-equal? (loop-counters-iteration new-counters) 1 "iteration incremented on continue")
   (delete-file log-path))
 
@@ -250,12 +221,9 @@
   (define counters (make-initial-counters))
   (define ws (make-working-set))
   (define result (make-loop-result '() 'completed (hasheq)))
-  ;; on-recurse used as followup-continuation — should NOT be called for simple completed stop
-  (define on-recurse (lambda args (fail "followup should not trigger without followup queue")))
   (define step-res (step-result 'stop 'completed (make-initial-counters) (hasheq)))
-  (define out
-    (interpret-step step-res result '() infra counters ws (hash) #f 5 10 #f 'all on-recurse))
-  (check-true (loop-result? out))
+  (define out (interpret-step step-res result '() infra counters ws (hash) #f 5 10))
+  (check-true (directive-stop? out))
   (delete-file log-path))
 
 (test-case "interpret-step: 'stop-soft-limit emits warning and recurses"
@@ -266,30 +234,12 @@
   (define ws (make-working-set))
   (define result (make-loop-result '() 'tool-calls-pending (hasheq)))
   (define events-box (collect-events bus "iteration.soft-warning"))
-  (define recurse-args-box (box #f))
-  (define on-recurse
-    (lambda (ctx new-counters ws2)
-      (set-box! recurse-args-box (list ctx new-counters ws2))
-      (make-loop-result ctx 'completed (hasheq))))
-  (define step-res (step-result 'stop-soft-limit 'tool-calls-pending (make-initial-counters) (hasheq)))
-  (define out
-    (interpret-step step-res
-                          result
-                          '()
-                          infra
-                          counters
-                          ws
-                          (hash)
-                          #f
-                          5
-                          10
-                          #f
-                          'all
-                          on-recurse))
-  (check-true (loop-result? out))
+  (define step-res
+    (step-result 'stop-soft-limit 'tool-calls-pending (make-initial-counters) (hasheq)))
+  (define out (interpret-step step-res result '() infra counters ws (hash) #f 5 10))
+  (check-true (directive-recurse? out) "soft-limit returns directive-recurse")
   (check-true (pair? (unbox events-box)) "iteration.soft-warning event was emitted")
-  (check-not-false (unbox recurse-args-box) "on-recurse was called for soft-limit")
-  (define new-counters (cadr (unbox recurse-args-box)))
+  (define new-counters (directive-recurse-new-counters out))
   (check-equal? (loop-counters-iteration new-counters)
                 1
                 "iteration incremented on soft-limit recurse")

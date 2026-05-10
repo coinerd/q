@@ -71,6 +71,7 @@
 ;; Per-subscriber circuit breaker state: hash of sub-id -> (cons failure-count last-failure-secs)
 ;; Deprecated global parameter — kept for backward compatibility only.
 ;; New code should use the explicit breaker-state hash argument.
+;; DEPRECATED (N-08): Not exported. State is passed explicitly.
 (define circuit-breaker-state (make-parameter (make-hash)))
 
 ;; Dedicated semaphore for circuit breaker state mutations (#444).

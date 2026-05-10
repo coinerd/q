@@ -110,21 +110,6 @@
                      #:state st)
   raw-messages)
 
-;; Phase 3: Build model-request and dispatch pre hook
-(define (make-model-request-with-hook req provider hook-dispatcher)
-  (define pre-hook-result
-    (and hook-dispatcher
-         (hook-dispatcher 'model-request-pre
-                          (hasheq 'model-name
-                                  (provider-name provider)
-                                  'message-count
-                                  (length (model-request-messages req))
-                                  'messages
-                                  (model-request-messages req)
-                                  'settings
-                                  (model-request-settings req)))))
-  pre-hook-result)
-
 ;; ============================================================
 ;; Main entry point — thin orchestrator
 ;; ============================================================
