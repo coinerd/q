@@ -15,6 +15,7 @@
 
 (require racket/string
          racket/match
+         racket/contract
          (only-in "../llm/provider-errors.rkt" raise-provider-error))
 
 ;; ── URL Validation ──────────────────────────────────────────
@@ -40,20 +41,14 @@
 (provide (struct-out model-entry)
          (struct-out model-registry)
          (struct-out model-resolution)
-
-         ;; Resolution
-         resolve-model
-         resolve-model-by-provider
-
-         ;; Listing
-         available-models
-
-         ;; Defaults
-         default-model
-         default-model-for-mode
-
-         ;; Registry creation
-         make-model-registry-from-config)
+         ;; H-02: Contract-wrapped exports
+         (contract-out [resolve-model (-> model-registry? string? (or/c model-resolution? #f))]
+                       [resolve-model-by-provider
+                        (-> model-registry? string? (or/c model-resolution? #f))]
+                       [available-models (-> model-registry? (listof model-entry?))]
+                       [default-model (-> model-registry? (or/c string? #f))]
+                       [default-model-for-mode (-> model-registry? symbol? (or/c string? #f))]
+                       [make-model-registry-from-config (-> hash? model-registry?)]))
 
 ;; ============================================================
 ;; Structs

@@ -5,7 +5,13 @@
 
 (require racket/set
          (only-in racket/base make-semaphore call-with-semaphore)
-         (only-in "tool-struct.rkt" tool? tool-name tool-description tool-schema tool-prompt-snippet tool-prompt-guidelines))
+         (only-in "tool-struct.rkt"
+                  tool?
+                  tool-name
+                  tool-description
+                  tool-schema
+                  tool-prompt-snippet
+                  tool-prompt-guidelines))
 
 (provide (struct-out tool-registry)
          tool-registry?
@@ -32,6 +38,9 @@
   (tool-registry (make-hash) (box #f) (make-semaphore 1)))
 
 ;; Thread-safe registry lock helper (Finding A2: 7 call sites)
+;; L-10 WARNING: Racket semaphores are NOT reentrant. Calling
+;; with-registry-lock from inside another with-registry-lock on the
+;; same registry WILL deadlock. Do not nest lock acquisition.
 (define (with-registry-lock reg thunk)
   (call-with-semaphore (tool-registry-sem reg) thunk))
 

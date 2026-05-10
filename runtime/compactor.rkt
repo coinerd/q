@@ -52,21 +52,47 @@
 
 (provide (struct-out compaction-strategy)
          (struct-out compaction-result)
-         ;; Compaction functions (WP-37: now also exports compact-history for tests)
-         compact-history
-         compact-history-advisory
-         compact-and-persist!
-         build-summary-window
-         write-compaction-entry!
-         compaction-result->message-list
-         default-strategy
-         default-summarize
-         ;; LLM-powered summarization (v0.8.9)
-         llm-summarize
-         make-llm-summarize-fn
-         extract-file-tracker
-         find-previous-file-tracker
-         merge-file-trackers)
+         ;; H-02: Contract-wrapped compaction functions
+         (contract-out [compact-history
+                        (->* (list?)
+                             (#:summarize-fn procedure?
+                                             #:provider any/c
+                                             #:model-name any/c
+                                             #:previous-summary (or/c string? #f)
+                                             #:hook-dispatcher (or/c procedure? #f)
+                                             #:token-config any/c)
+                             compaction-result?)]
+                       [compact-history-advisory
+                        (->* (list?)
+                             (#:summarize-fn procedure?
+                                             #:provider any/c
+                                             #:model-name any/c
+                                             #:previous-summary (or/c string? #f)
+                                             #:hook-dispatcher (or/c procedure? #f)
+                                             #:token-config any/c)
+                             compaction-result?)]
+                       [compact-and-persist!
+                        (->* (list? (or/c path-string? #f))
+                             (#:summarize-fn procedure?
+                                             #:provider any/c
+                                             #:model-name any/c
+                                             #:previous-summary (or/c string? #f)
+                                             #:hook-dispatcher (or/c procedure? #f)
+                                             #:token-config any/c)
+                             compaction-result?)]
+                       [build-summary-window (-> list? compaction-strategy? (values list? list?))]
+                       [write-compaction-entry! (-> (or/c path-string? #f) compaction-result? void?)]
+                       [compaction-result->message-list (-> compaction-result? list?)]
+                       [default-strategy (-> compaction-strategy?)]
+                       [default-summarize (-> list? string?)]
+                       [llm-summarize
+                        (->* (list? any/c any/c)
+                             (#:previous-summary (or/c string? #f) #:file-tracker any/c)
+                             string?)]
+                       [make-llm-summarize-fn (-> any/c any/c procedure?)]
+                       [extract-file-tracker (-> list? hash?)]
+                       [find-previous-file-tracker (-> list? hash?)]
+                       [merge-file-trackers (->* () () #:rest list? hash?)]))
 
 ;; ============================================================
 ;; Structs

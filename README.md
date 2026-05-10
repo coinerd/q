@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.36.0-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.36.1-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.36.0
+racket main.rkt --version  # q version 0.36.1
 raco test tests/           # run the full test suite
 ```
 
@@ -272,7 +272,7 @@ q/
 |--------|-------|
 | Test files | 551 |
 | Source modules | 416 |
-| Source lines | 63541 |
+| Source lines | 63556 |
 | Test lines | 98473 |
 | Test assertions | 15302 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -362,6 +362,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.36.1** — Goal: Security & Runtime Contracts (H-02, L-08, L-10)
 
 **v0.36.0** — Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)
 

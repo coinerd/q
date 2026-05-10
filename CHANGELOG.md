@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.36.1 — 2026-05-10
+
+### Goal: Security & Runtime Contracts (H-02, L-08, L-10)
+
+### High Impact
+- **H-02** (CON-01/02/03): Added `contract-out` boundaries to all security-critical
+  runtime modules: `auth-store.rkt`, `compactor.rkt`, `model-registry.rkt`. All public
+  functions now have explicit input/output contracts preventing invalid data propagation.
+
+### Cleanup
+- **L-08** (EXN-01): Removed dead `when` block in `retryable-error?` — evaluated
+  `for/or` but discarded the result. Simplified to direct `match` dispatch.
+- **L-10** (TOOL-03): Added reentrancy warning documentation to tool registry semaphore.
+  Racket semaphores are NOT reentrant; nested `with-registry-lock` calls will deadlock.
+
+**Verification**: All modules compile, lint 18/18
+
 ## v0.36.0 — 2026-05-10
 
 ### Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)

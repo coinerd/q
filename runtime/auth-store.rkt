@@ -8,6 +8,7 @@
 
 (require "../util/json-helpers.rkt")
 (require json
+         racket/contract
          racket/file
          racket/string
          racket/generic
@@ -16,30 +17,19 @@
 ;; Structs
 (provide (struct-out credential)
          (struct-out redacted-credential)
-
-         ;; Lookup
-         lookup-credential
-         credential-present?
-
-         ;; Storage (optional persistence)
-         store-credential!
-
-         ;; Batch resolution
-         resolve-provider-credentials
-
-         ;; Redaction
-         mask-api-key
-         cred->redacted
-
-         ;; Validation
-         validate-credential-format
-
-         ;; Credential file
-         load-credential-file
-         save-credential-file!
+         ;; H-02: Contract-wrapped exports
+         (contract-out [lookup-credential
+                        (->* (string?) (#:project-dir (or/c path-string? #f)) (or/c credential? #f))]
+                       [credential-present? (-> string? (or/c hash? #f) boolean?)]
+                       [store-credential! (-> string? string? void?)]
+                       [resolve-provider-credentials (-> hash? (listof redacted-credential?))]
+                       [mask-api-key (-> string? string?)]
+                       [cred->redacted (-> credential? redacted-credential?)]
+                       [validate-credential-format (-> string? string? (or/c #f string?))]
+                       [load-credential-file (->* () ((or/c path-string? #f)) (or/c hash? #f))]
+                       [save-credential-file! (->* (string? string?) ((or/c path-string? #f)) void?)])
+         ;; Non-contracted (macro and accessor)
          credential-file-path
-
-         ;; Scoped access
          with-credential)
 
 ;; ═══════════════════════════════════════════════════════════════════
@@ -94,7 +84,6 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; Helper: non-empty string? — string that is not empty and not only whitespace
-
 
 ;; Helper: get a value from a hash by either symbol or string key
 ;; Returns the first found value, or #f if neither key exists
