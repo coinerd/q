@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.35.8-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.35.9-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.35.8
+racket main.rkt --version  # q version 0.35.9
 raco test tests/           # run the full test suite
 ```
 
@@ -272,7 +272,7 @@ q/
 |--------|-------|
 | Test files | 550 |
 | Source modules | 416 |
-| Source lines | 63575 |
+| Source lines | 63569 |
 | Test lines | 98368 |
 | Test assertions | 15279 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -360,6 +360,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.35.9** — Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
 
 **v0.35.8** — Goal: Deep Audit Remediation (N-01–N-13, I-07)
 

@@ -20,15 +20,14 @@
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "session-state.rkt"
-                  current-gsd-state ; N-03: kept for with-gsd-lock compatibility
-                  set-gsd-state! ; N-03: kept for with-gsd-lock compatibility
+                  current-gsd-state
+                  set-gsd-state!
                   current-gsd-history
                   set-gsd-history!
-                  gsd-state-snapshot
-                  gsd-state-update!
                   gsd-state-sem
-                  gsd-history-update!
+                  gsd-state-snapshot
                   gsd-history-snapshot
+                  gsd-state-update!
                   with-gsd-lock))
 
 ;; States
@@ -148,18 +147,20 @@
       current-state)]))
 
 (define (gsm-transition! target)
-  ;; N-03: Uses gsd-state-snapshot/gsd-state-update! instead of deprecated globals
+  ;; R-01: Use current-gsd-state/set-gsd-state! directly inside with-gsd-lock.
+  ;; gsd-state-snapshot/gsd-state-update! call with-gsd-lock internally,
+  ;; causing deadlock on the same non-reentrant semaphore.
   (with-gsd-lock
    (lambda ()
-     (define state (gsd-state-snapshot))
+     (define state (current-gsd-state))
      (define current (gsd-runtime-state-mode state))
      (emit-gsd-event! 'gsd.transition.attempted (hasheq 'from current 'to target))
      (define-values (result new-state) (compute-next-gsm-state state target))
      (cond
        [(ok? result)
         (define new-mode (gsd-runtime-state-mode new-state))
-        (gsd-state-update! (lambda (_) new-state))
-        (gsd-history-update! (lambda (h) (cons (list current new-mode (current-seconds)) h)))
+        (set-gsd-state! new-state)
+        (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
         (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to new-mode))
         result]
        [else
@@ -169,21 +170,20 @@
         result]))))
 
 (define (gsm-reset!)
-  ;; N-03: Uses gsd-state-snapshot/gsd-state-update!
+  ;; R-01: Use current-gsd-state/set-gsd-state! directly inside with-gsd-lock.
   (with-gsd-lock
    (lambda ()
-     (define state (gsd-state-snapshot))
+     (define state (current-gsd-state))
      (define old (gsd-runtime-state-mode state))
-     (gsd-state-update! (lambda (_)
-                          (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f])))
-     (gsd-history-update! (lambda (h) (cons (list old 'idle (current-seconds)) h)))
+     (set-gsd-state! (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
+     (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
-  ;; N-03: Uses gsd-state-update!/gsd-history-update!
+  ;; R-01: Use set-gsd-state!/set-gsd-history! directly inside with-gsd-lock.
   (with-gsd-lock (lambda ()
-                   (gsd-state-update! (lambda (_) (make-initial-gsd-state)))
-                   (gsd-history-update! (lambda (_) '()))
+                   (set-gsd-state! (make-initial-gsd-state))
+                   (set-gsd-history! '())
                    (void))))
 
 (define (gsm-valid-next-states)

@@ -20,6 +20,7 @@
                   stream-completed-event
                   stream-completed-event-usage
                   stream-completed-event-finish_reason
+                  stream-completed-event-truncated?
                   stream-tool-call-started-event
                   stream-tool-call-started-event-id
                   stream-tool-call-started-event-name
@@ -180,7 +181,9 @@
      (hasheq 'usage
              (stream-completed-event-usage evt)
              'finish_reason
-             (stream-completed-event-finish_reason evt))]
+             (stream-completed-event-finish_reason evt)
+             'truncated?
+             (stream-completed-event-truncated? evt))]
     [(? stream-tool-call-started-event?)
      (hasheq 'id
              (stream-tool-call-started-event-id evt)
@@ -397,7 +400,8 @@
                              sid
                              tid
                              (hash-ref h 'usage (hasheq))
-                             (hash-ref h 'finish_reason ""))]
+                             (hash-ref h 'finish_reason "")
+                             (hash-ref h 'truncated? #f))]
     ["tool.call.started"
      (stream-tool-call-started-event type
                                      ts

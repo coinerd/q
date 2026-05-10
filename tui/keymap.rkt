@@ -127,12 +127,8 @@
           'tui.editor.word-right
           'copy
           'tui.editor.copy
-          'cut
-          'tui.editor.cut
           'paste
           'tui.editor.paste
-          'select-all
-          'tui.editor.select-all
           'clear-input
           'tui.editor.clear-input
           'clear-screen
@@ -220,12 +216,8 @@
   (keymap-add! km (key-spec 'right #f #t #f) 'tui.navigation.end)
   ;; Ctrl-C for copy
   (keymap-add! km (key-spec #\c #t #f #f) 'tui.editor.copy)
-  ;; Ctrl-X for cut
-  (keymap-add! km (key-spec #\x #t #f #f) 'tui.editor.cut)
   ;; Ctrl-V for paste
   (keymap-add! km (key-spec #\v #t #f #f) 'tui.editor.paste)
-  ;; Ctrl-A for select-all
-  (keymap-add! km (key-spec #\a #t #f #f) 'tui.editor.select-all)
   ;; Ctrl-U for clear input
   (keymap-add! km (key-spec #\u #t #f #f) 'tui.editor.clear-input)
   ;; Ctrl-L for clear screen

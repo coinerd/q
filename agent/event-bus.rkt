@@ -34,8 +34,6 @@
          ;; Circuit breaker configuration
          current-circuit-breaker-threshold
          current-circuit-breaker-cooldown-secs
-         ;; Deprecated: use explicit breaker-state argument instead
-         circuit-breaker-state
          ;; New per-bus isolated circuit breaker functions
          circuit-broken?
          record-failure!
