@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.35.5-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.35.6-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.35.5
+racket main.rkt --version  # q version 0.35.6
 raco test tests/           # run the full test suite
 ```
 
@@ -357,6 +357,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.35.6** — Goal: Agent Session Invariants (v0.35.6 milestone)
 
 **v0.35.5** — Goal: Tool System Contracts & DSL (v0.35.5 milestone)
 

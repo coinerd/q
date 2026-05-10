@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.35.6 — 2026-05-07
+
+### Goal: Agent Session Invariants (v0.35.6 milestone)
+
+### W0 — Session Mutation Guards (W-04, I-14, I-15)
+- **W-04**: `session-mutation.rkt` with guarded transition functions
+  - `guarded-set-prompt-running!` prevents #t->#t invariant violation
+  - `guarded-set-compacting!` prevents #t->#t invariant violation
+  - `valid-session-phase?` predicate for phase validation
+- **I-14**: Hash chain already separated in `session-store-integrity.rkt` (verified)
+- **I-15**: Document `global`/`project` fields as `#:INTERNAL` in settings struct
+- 7 new tests for mutation guards and phase predicate
+
+### W1 — Streaming Decomposition & Loop Cleanup (W-06, I-01, I-02)
+- **W-06**: Extracted `openai-stream-request` from streaming closure
+  - Returns `(values response-port stream-timeout cleanup-thunk)`
+- **I-01**: Extracted named phases from `run-agent-turn`:
+  - `emit-turn-start!` — turn-started event + agent-start hook dispatch
+  - `build-turn-context` — raw message building + context.built event
+- **I-02**: `classify-hook-result` retained in public API (used in loop-stream.rkt)
+- 7 new tests for extracted helpers
+
+**Verification**: lint 16/18 (2 pre-existing version-sync), all tests green
+
 ## v0.35.5 — 2026-05-07
 
 ### Goal: Tool System Contracts & DSL (v0.35.5 milestone)
