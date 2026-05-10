@@ -102,7 +102,7 @@
      (cond
        [new-session-text
         (when display-text
-          (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+          (define entry (make-system-entry display-text))
           (set-box! (cmd-ctx-state-box cctx)
                     (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
         (define factory (cmd-ctx-session-factory-runner cctx))
@@ -136,7 +136,7 @@
                   (runner new-session-text)))))])]
        [submit-text
         (when display-text
-          (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+          (define entry (make-system-entry display-text))
           (set-box! (cmd-ctx-state-box cctx)
                     (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
         (define runner (cmd-ctx-session-runner cctx))
@@ -153,13 +153,13 @@
                             (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
                       (runner submit-text)))))]
        [display-text
-        (define entry (make-entry 'system display-text (current-inexact-milliseconds) (hash)))
+        (define entry (make-system-entry display-text))
         (set-box! (cmd-ctx-state-box cctx)
                   (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))])
      'continue]
     [else
      (log-debug "command fell through: cmd=~a" cmd-name)
-     (define entry (make-entry 'error "Unknown command. Type /help for commands." 0 (hash)))
+     (define entry (make-error-entry "Unknown command. Type /help for commands."))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]))
 
@@ -224,7 +224,7 @@
         'continue]
        ['compact
         ;; Compact: add status message and notify runtime
-        (define entry (make-entry 'system "[compact requested]" 0 (hash)))
+        (define entry (make-system-entry "[compact requested]"))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         (when (cmd-ctx-event-bus cctx)
           (publish! (cmd-ctx-event-bus cctx)
@@ -261,8 +261,7 @@
                                 (or (ui-state-session-id state) "")
                                 #f
                                 (hash))))
-        (define entry
-          (make-entry 'system "[interrupt requested]" (current-inexact-milliseconds) (hash)))
+        (define entry (make-system-entry "[interrupt requested]"))
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        ['tree (handle-tree-command cctx)]
@@ -312,8 +311,7 @@
                                                            (hasheq 'reason "error")))))])
                   (runner enriched-prompt)))))]
           [else
-           (define entry
-             (make-entry 'error "No previous prompt to retry." (current-inexact-milliseconds) (hash)))
+           (define entry (make-error-entry "No previous prompt to retry."))
            (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
         'continue]
        ['activate (handle-activate-command cctx)]
