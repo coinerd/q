@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.35.7 — 2026-05-07
+
+### Goal: Extension & GSD Cleanup (v0.35.7 milestone — FINAL)
+
+### W0 — Extension Loader & Remaining Fixes (W-12, I-10, I-17, I-21, I-22)
+- **W-12**: Added `filesystem-error` and `contract-error` categories to `classify-exception`
+- **I-10**: Replaced `cast` with explicit field extraction in `jsexpr->event` (Typed Racket)
+- **I-17**: Documented `flex-ref` key normalization behavior in `model-registry.rkt`
+- **I-21**: Documented YAML parser limitations in `skills/frontmatter.rkt`
+- **I-22**: Documented unified process tracking (box-only) in `sandbox/limits.rkt`
+- 6 new tests for exception classification and process tracking
+
+**Verification**: lint 16/18 (2 pre-existing version-sync), all tests green
+
+---
+
+## v0.35.x Architecture Abstraction Remediation — COMPLETE
+
+All 8 milestones delivered (v0.35.0 through v0.35.7):
+- **v0.35.0**: Event System Integrity (4 waves)
+- **v0.35.1**: Global State Isolation (2 waves)
+- **v0.35.2**: Runtime Config Struct & Scheduler Types (2 waves)
+- **v0.35.3**: Iteration Loop Decomposition (2 waves)
+- **v0.35.4**: TUI Dispatcher Refactoring (3 waves)
+- **v0.35.5**: Tool System Contracts & DSL (2 waves)
+- **v0.35.6**: Agent Session Invariants (2 waves)
+- **v0.35.7**: Extension & GSD Cleanup (1 wave)
+
+Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
+
 ## v0.35.6 — 2026-05-07
 
 ### Goal: Agent Session Invariants (v0.35.6 milestone)
