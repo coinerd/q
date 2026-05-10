@@ -41,6 +41,7 @@
          injection-event-topic
          (struct-out extension)
          extension-registry?
+         (struct-out ext-registry-data)
          (contract-out [make-extension-registry (-> extension-registry?)]
                        [register-extension! (-> extension-registry? extension? void?)]
                        [unregister-extension! (-> extension-registry? string? void?)]
@@ -52,49 +53,54 @@
 ;; Extension registry (thread-safe, insertion-ordered)
 ;; ============================================================
 
+;; M-04: Named struct replacing raw (cons list hash) pair.
+(struct ext-registry-data (list index) #:transparent)
+
 (struct extension-registry (data-box semaphore) #:constructor-name make-extension-registry-internal)
 
 ;;; make-extension-registry : -> extension-registry?
 (define (make-extension-registry)
-  (make-extension-registry-internal (box (cons '() (hasheq))) (make-semaphore 1)))
+  (make-extension-registry-internal (box (ext-registry-data '() (hasheq))) (make-semaphore 1)))
 
 ;;; register-extension! : extension-registry? extension? -> void?
 (define (register-extension! registry ext)
-  (call-with-semaphore (extension-registry-semaphore registry)
-                       (lambda ()
-                         (define data (unbox (extension-registry-data-box registry)))
-                         (define old-list (car data))
-                         (define old-hash (cdr data))
-                         (define filtered-list
-                           (filter (lambda (e) (not (equal? (extension-name e) (extension-name ext))))
-                                   old-list))
-                         (set-box! (extension-registry-data-box registry)
-                                   (cons (append filtered-list (list ext))
-                                         (hash-set old-hash (extension-name ext) ext))))))
+  (call-with-semaphore
+   (extension-registry-semaphore registry)
+   (lambda ()
+     (define data (unbox (extension-registry-data-box registry)))
+     (define old-list (ext-registry-data-list data))
+     (define old-hash (ext-registry-data-index data))
+     (define filtered-list
+       (filter (lambda (e) (not (equal? (extension-name e) (extension-name ext)))) old-list))
+     (set-box! (extension-registry-data-box registry)
+               (ext-registry-data (append filtered-list (list ext))
+                                  (hash-set old-hash (extension-name ext) ext))))))
 
 ;;; unregister-extension! : extension-registry? string? -> void?
 (define (unregister-extension! registry name)
-  (call-with-semaphore (extension-registry-semaphore registry)
-                       (lambda ()
-                         (define data (unbox (extension-registry-data-box registry)))
-                         (define old-list (car data))
-                         (define old-hash (cdr data))
-                         (set-box! (extension-registry-data-box registry)
-                                   (cons (filter (lambda (e) (not (equal? (extension-name e) name)))
-                                                 old-list)
-                                         (hash-remove old-hash name))))))
+  (call-with-semaphore
+   (extension-registry-semaphore registry)
+   (lambda ()
+     (define data (unbox (extension-registry-data-box registry)))
+     (define old-list (ext-registry-data-list data))
+     (define old-hash (ext-registry-data-index data))
+     (set-box! (extension-registry-data-box registry)
+               (ext-registry-data (filter (lambda (e) (not (equal? (extension-name e) name)))
+                                          old-list)
+                                  (hash-remove old-hash name))))))
 
 ;;; lookup-extension : extension-registry? string? -> (or/c #f extension?)
 (define (lookup-extension registry name)
   (call-with-semaphore (extension-registry-semaphore registry)
                        (lambda ()
                          (define data (unbox (extension-registry-data-box registry)))
-                         (hash-ref (cdr data) name #f))))
+                         (hash-ref (ext-registry-data-index data) name #f))))
 
 ;;; list-extensions : extension-registry? -> (listof extension?)
 (define (list-extensions registry)
   (call-with-semaphore (extension-registry-semaphore registry)
-                       (lambda () (car (unbox (extension-registry-data-box registry))))))
+                       (lambda ()
+                         (ext-registry-data-list (unbox (extension-registry-data-box registry))))))
 
 ;;; handlers-for-point : extension-registry? symbol? -> (listof pair?)
 (define (handlers-for-point registry hook-point)
