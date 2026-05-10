@@ -40,12 +40,8 @@
          (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
-         (only-in "../../runtime/runtime-helpers.rkt"
-                  emit-session-event!
-                  maybe-dispatch-hooks)
-         (only-in "../../util/hook-types.rkt"
-                  hook-result-action
-                  hook-result?)
+         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../util/event-contracts.rkt"
                   error-detail-payload/c
@@ -59,10 +55,7 @@
                   loop-result-messages)
          (only-in "../../util/ids.rkt" generate-id now-seconds)
          (only-in "../../runtime/session-store.rkt" append-entries!)
-         (only-in "../../agent/queue.rkt"
-                  dequeue-followup!
-                  dequeue-all-followups!
-                  queue-status)
+         (only-in "../../agent/queue.rkt" queue-status)
          (only-in "../../runtime/working-set.rkt"
                   working-set-update!
                   ws-entry-path
@@ -76,11 +69,9 @@
                   estimate-mid-turn-tokens
                   maybe-compact-mid-turn
                   detect-exploration-loop)
-         (only-in "decision.rkt"
-                  step-result
-                  step-result-action
-                  step-result-new-counters)
-         (only-in "internal.rkt" assert-payload))
+         (only-in "decision.rkt" step-result step-result-action step-result-new-counters)
+         (only-in "internal.rkt" assert-payload)
+         (only-in "directive.rkt" directive-recurse directive-stop directive-yield))
 
 (provide interpret-step
          handle-stop-action
@@ -137,60 +128,16 @@
 ;; handle-stop-action
 ;; ============================================================
 
-(define (handle-stop-action result
-                            new-msgs
-                            infra
-                            counters
-                            ws
-                            config
-                            steering-queue
-                            follow-up-mode
-                            followup-continuation)
+(define (handle-stop-action result new-msgs infra counters ws config)
   (define termination (loop-result-termination-reason result))
   (if (eq? termination 'completed)
       (begin
         (append-entries! (loop-infra-log-path infra) new-msgs)
         (let-values ([(amended-result after-hook-res)
                       (maybe-dispatch-hooks (loop-infra-ext-reg infra) 'turn-end result)])
-          (let ([effective-result (if (and after-hook-res
-                                           (eq? (hook-result-action after-hook-res) 'amend))
-                                      amended-result
-                                      result)])
-            (define followup-continued?
-              (and steering-queue
-                   (let ([followups (if (eq? follow-up-mode 'one-at-a-time)
-                                        (let ([one (dequeue-followup! steering-queue)])
-                                          (if one (list one) '()))
-                                        (dequeue-all-followups! steering-queue))])
-                     (if (null? followups)
-                         #f
-                         (let ([followup-msgs
-                                (for/list ([fu (in-list followups)])
-                                  (make-message (generate-id)
-                                                #f
-                                                'user
-                                                'text
-                                                (list (make-text-part fu))
-                                                (now-seconds)
-                                                (hasheq 'source "followup")))])
-                           (emit-session-event!
-                            (loop-infra-bus infra)
-                            (loop-infra-session-id infra)
-                            "followup.injected"
-                            (hasheq 'count (length followups) 'mode (symbol->string follow-up-mode)))
-                           (append-entries! (loop-infra-log-path infra) followup-msgs)
-                           (followup-continuation
-                            (append (loop-infra-ctx infra) new-msgs followup-msgs)
-                            (struct-copy loop-counters
-                                         counters
-                                         [iteration (add1 (loop-counters-iteration counters))]
-                                         [consecutive-tool-count 0]
-                                         [seen-paths '()]
-                                         [consecutive-error-count 0]
-                                         [recent-tool-names '()]
-                                         [stall-retry-count 0])
-                            ws))))))
-            (if followup-continued? effective-result effective-result))))
+          (if (and after-hook-res (eq? (hook-result-action after-hook-res) 'amend))
+              amended-result
+              result)))
       (begin
         (append-entries! (loop-infra-log-path infra) new-msgs)
         result)))
@@ -208,22 +155,13 @@
                         config
                         sess
                         max-iterations
-                        max-iterations-hard
-                        steering-queue
-                        follow-up-mode
-                        on-recurse)
+                        max-iterations-hard)
+  ;; v0.35.3 (W-02): Returns step-directive? instead of calling on-recurse callback
   (define action (step-result-action step-res))
   (match action
     ['stop
-     (handle-stop-action result
-                         new-msgs
-                         infra
-                         counters
-                         ws
-                         config
-                         steering-queue
-                         follow-up-mode
-                         on-recurse)]
+     (define stop-result (handle-stop-action result new-msgs infra counters ws config))
+     (directive-stop stop-result)]
     ['stop-hard-limit
      (append-entries! (loop-infra-log-path infra) new-msgs)
      (emit-session-event! (loop-infra-bus infra)
@@ -237,9 +175,10 @@
                                                   'maxIterations
                                                   max-iterations-hard)
                                           error-detail-payload/c))
-     (make-loop-result new-msgs
-                       'max-iterations-exceeded
-                       (hash-set (loop-result-metadata result) 'maxIterationsReached #t))]
+     (directive-stop (make-loop-result
+                      new-msgs
+                      'max-iterations-exceeded
+                      (hash-set (loop-result-metadata result) 'maxIterationsReached #t)))]
     ['stop-soft-limit
      (append-entries! (loop-infra-log-path infra) new-msgs)
      (emit-session-event! (loop-infra-bus infra)
@@ -272,14 +211,14 @@
                                        budget-config
                                        #:emit-event emit-fn)
              updated-ctx)))
-     (on-recurse ctx-after-budget
-                 (struct-copy loop-counters
-                              counters
-                              [iteration (add1 (loop-counters-iteration counters))]
-                              [consecutive-tool-count
-                               (add1 (loop-counters-consecutive-tool-count counters))]
-                              [stall-retry-count 0])
-                 ws)]
+     (directive-recurse ctx-after-budget
+                        (struct-copy loop-counters
+                                     counters
+                                     [iteration (add1 (loop-counters-iteration counters))]
+                                     [consecutive-tool-count
+                                      (add1 (loop-counters-consecutive-tool-count counters))]
+                                     [stall-retry-count 0])
+                        ws)]
     ['continue
      (append-entries! (loop-infra-log-path infra) new-msgs)
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
@@ -296,11 +235,11 @@
                                     (loop-counters-recent-tool-names new-counters)
                                     'iteration
                                     (loop-counters-iteration counters))))
-     (on-recurse updated-ctx
-                 (struct-copy loop-counters
-                              new-counters
-                              [iteration (add1 (loop-counters-iteration counters))]
-                              [consecutive-tool-count
-                               (add1 (loop-counters-consecutive-tool-count counters))]
-                              [stall-retry-count 0])
-                 ws)]))
+     (directive-recurse updated-ctx
+                        (struct-copy loop-counters
+                                     new-counters
+                                     [iteration (add1 (loop-counters-iteration counters))]
+                                     [consecutive-tool-count
+                                      (add1 (loop-counters-consecutive-tool-count counters))]
+                                     [stall-retry-count 0])
+                        ws)]))
