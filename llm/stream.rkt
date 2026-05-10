@@ -15,6 +15,9 @@
          racket/port
          racket/match)
 
+;; Accumulator for partial tool-call deltas (I-09)
+(struct tool-call-accum (id name arguments) #:transparent)
+
 ;; — SSE line-level helpers —
 (provide parse-sse-lines
          parse-sse-line
@@ -23,6 +26,7 @@
          ;; — OpenAI chunk normalization —
          normalize-openai-chunks
          normalize-openai-chunk
+         (struct-out tool-call-accum)
          accumulate-tool-call-deltas
          ;; — Incremental SSE reading —
          read-sse-chunks
@@ -273,22 +277,27 @@
         [(hash-has-key? groups idx)
          ;; Accumulate into existing entry
          (define existing (hash-ref groups idx))
-         (define prev-id (car existing))
-         (define prev-name (cadr existing))
-         (define prev-args (caddr existing))
+         (define prev-id (tool-call-accum-id existing))
+         (define prev-name (tool-call-accum-name existing))
+         (define prev-args (tool-call-accum-arguments existing))
          (hash-set! groups
                     idx
-                    (list (or maybe-id prev-id)
-                          (or maybe-name prev-name)
-                          (string-append prev-args args-delta)))]
+                    (tool-call-accum (or maybe-id prev-id)
+                                     (or maybe-name prev-name)
+                                     (string-append prev-args args-delta)))]
         ;; New tool call
-        [else (hash-set! groups idx (list maybe-id maybe-name args-delta))])))
+        [else (hash-set! groups idx (tool-call-accum maybe-id maybe-name args-delta))])))
 
   ;; Build finalized tool calls in index order
   (define sorted-indices (sort (hash-keys groups) <))
   (for/list ([idx (in-list sorted-indices)])
     (define val (hash-ref groups idx))
-    (hasheq 'id (car val) 'name (cadr val) 'arguments (caddr val))))
+    (hasheq 'id
+            (tool-call-accum-id val)
+            'name
+            (tool-call-accum-name val)
+            'arguments
+            (tool-call-accum-arguments val))))
 
 ;; ============================================================
 ;; parse-sse-line (incremental)

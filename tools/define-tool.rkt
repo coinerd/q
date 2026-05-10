@@ -29,6 +29,9 @@
         #:description desc:str
         #:required (req:str ...)
         #:properties [(prop-name:id prop-type:str prop-desc:str) ...]
+        (~optional (~seq #:optional [(opt-name:id opt-type:str opt-desc:str opt-default:expr) ...])
+                   #:defaults
+                   ([(opt-name 1) '()] [(opt-type 1) '()] [(opt-desc 1) '()] [(opt-default 1) '()]))
         handler:expr)
 
      #:with tool-name-str #`#,(symbol->string (syntax->datum #'name))
@@ -38,6 +41,13 @@
                                        [pt (syntax->list #'(prop-type ...))]
                                        [pd (syntax->list #'(prop-desc ...))])
                               #`(cons '#,(syntax->datum pn) (hasheq 'type #,pt 'description #,pd)))
+     ;; Build optional property pairs (W-20)
+     #:with (opt-pair ...) (for/list ([on (syntax->list #'(opt-name ...))]
+                                      [ot (syntax->list #'(opt-type ...))]
+                                      [od (syntax->list #'(opt-desc ...))]
+                                      [odef (syntax->list #'(opt-default ...))])
+                             #`(cons '#,(syntax->datum on)
+                                     (hasheq 'type #,ot 'description #,od 'default #,odef)))
 
      #'(begin
          (define tool-id handler)
@@ -50,5 +60,5 @@
                               'required
                               '(req ...)
                               'properties
-                              (make-immutable-hasheq (list prop-pair ...)))
+                              (make-immutable-hasheq (list prop-pair ... opt-pair ...)))
                       tool-id)))]))
