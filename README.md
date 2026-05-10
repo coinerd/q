@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.36.3-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.36.4-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.36.3
+racket main.rkt --version  # q version 0.36.4
 raco test tests/           # run the full test suite
 ```
 
@@ -271,8 +271,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 552 |
-| Source modules | 417 |
-| Source lines | 63585 |
+| Source modules | 418 |
+| Source lines | 63641 |
 | Test lines | 98536 |
 | Test assertions | 15316 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -365,6 +365,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+
+**v0.36.4** — Goal: Tool System Data Representation (M-03, M-04, M-13)
 
 **v0.36.3** — Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)
 

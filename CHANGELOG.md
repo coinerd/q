@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.36.4 — 2026-05-10
+
+### Goal: Tool System Data Representation (M-03, M-04, M-13)
+
+### Medium Impact
+- **M-03** (DATA-01): Defined `tool-spec` struct in `tools/registry-table.rkt` replacing
+  raw list access (`car`/`cadr`/`caddr`/`cadddr`). `register-tools-from-specs!` accepts
+  both new struct and legacy list format for migration.
+- **M-04** (DATA-02): Defined `ext-registry-data` struct in `extensions/api.rkt` replacing
+  `(cons list hash)` pair. All accessors now use named fields (`ext-registry-data-list`,
+  `ext-registry-data-index`).
+- **M-13** (BOTTOM-02): Defined `runtime-error-payload`, `tool-result-payload`, and
+  `tool-call-meta` structs in new `tui/payload-types.rkt` for the most common TUI event
+  payload shapes.
+
+**Verification**: All modules compile, lint 18/18
+
 ## v0.36.3 — 2026-05-10
 
 ### Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)

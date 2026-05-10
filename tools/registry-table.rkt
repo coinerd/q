@@ -22,8 +22,20 @@
          "builtins/session-recall.rkt"
          "builtins/skill-router.rkt")
 
+;; M-03: Named struct replacing raw list access.
+;; Each spec was a list: (name description schema handler [prompt-guidelines])
+;; Now a named struct with clear field accessors.
+(struct tool-spec (name description schema handler prompt-guidelines) #:transparent)
+
 (provide register-tools-from-specs!
-         tool-specs)
+         tool-specs
+         tool-spec
+         tool-spec?
+         tool-spec-name
+         tool-spec-description
+         tool-spec-schema
+         tool-spec-handler
+         tool-spec-prompt-guidelines)
 
 ;; ============================================================
 ;; Tool spec table
@@ -332,17 +344,36 @@
 ;; ============================================================
 
 ;; Register tools from a spec list.
-;; spec format: (list name description schema handler [prompt-guidelines])
+;; Accepts both new tool-spec structs and legacy list format for migration.
 (define (register-tools-from-specs! registry specs #:only [only #f])
   (for ([spec (in-list specs)])
-    (define name (car spec))
-    (when (or (not only) (member name only))
-      (define description (cadr spec))
-      (define schema (caddr spec))
-      (define handler (cadddr spec))
-      ;; Optional 5th element: prompt-guidelines string
-      (define pg (and (>= (length spec) 5) (list-ref spec 4)))
-      (if pg
-          (register-tool! registry (make-tool name description schema handler #:prompt-guidelines pg))
-          (register-tool! registry (make-tool name description schema handler)))))
+    (cond
+      [(tool-spec? spec)
+       (define name (tool-spec-name spec))
+       (when (or (not only) (member name only))
+         (define pg (tool-spec-prompt-guidelines spec))
+         (if pg
+             (register-tool! registry
+                             (make-tool name
+                                        (tool-spec-description spec)
+                                        (tool-spec-schema spec)
+                                        (tool-spec-handler spec)
+                                        #:prompt-guidelines pg))
+             (register-tool! registry
+                             (make-tool name
+                                        (tool-spec-description spec)
+                                        (tool-spec-schema spec)
+                                        (tool-spec-handler spec)))))]
+      [(list? spec)
+       ;; Legacy format: (list name description schema handler [prompt-guidelines])
+       (define name (car spec))
+       (when (or (not only) (member name only))
+         (define description (cadr spec))
+         (define schema (caddr spec))
+         (define handler (cadddr spec))
+         (define pg (and (>= (length spec) 5) (list-ref spec 4)))
+         (if pg
+             (register-tool! registry
+                             (make-tool name description schema handler #:prompt-guidelines pg))
+             (register-tool! registry (make-tool name description schema handler))))]))
   (void))
