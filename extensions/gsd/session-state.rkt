@@ -123,25 +123,27 @@
                                    (update-thunk (unbox (gsd-session-ctx-history-box ctx)))))))
 ;; ============================================================
 ;; Default global context (backward compatibility)
+;; DEPRECATION TIMELINE: Deprecated globals (current-gsd-state, set-gsd-state!,
+;; current-gsd-history, set-gsd-history!, gsd-state-snapshot, gsd-state-update!,
+;; gsd-history-snapshot, gsd-history-update!) will be removed in v0.38.0.
+;; Use per-session gsd-ctx-* accessors and with-gsd-transaction instead.
 ;; ============================================================
 
 (define gsd-default-ctx (make-gsd-context))
 
-;; Outer semaphore for compound operations (with-gsd-lock).
-;; The struct has its own inner semaphore for individual operations.
-;; Two-level locking: outer serializes compound ops, inner serializes individual ops.
-;; No deadlock risk since outer is always acquired before inner.
-(define gsd-state-sem (make-semaphore 1))
+;; H-05: gsd-state-sem removed — collapsed into per-ctx semaphore.
 
 ;; ============================================================
-;; Convenience accessors for default context (DEPRECATED: use gsd-ctx-* per-session accessors)
+;; Convenience accessors for default context (DEPRECATED)
+;; H-05: These now use DIRECT box access (no semaphore) so they can be
+;; safely called inside with-gsd-lock without deadlock.
 ;; ============================================================
 
 (define (current-gsd-state)
-  (ctx-read gsd-default-ctx gsd-session-ctx-state-box))
+  (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
 
 (define (set-gsd-state! v)
-  (ctx-write! gsd-default-ctx gsd-session-ctx-state-box v))
+  (set-box! (gsd-session-ctx-state-box gsd-default-ctx) v))
 
 (define (current-gsd-mode)
   (gsd-runtime-state-mode (current-gsd-state)))
@@ -150,44 +152,43 @@
   (gsd-runtime-state-current-wave (current-gsd-state)))
 
 (define (current-plan-data)
-  (ctx-read gsd-default-ctx gsd-session-ctx-plan-box))
+  (unbox (gsd-session-ctx-plan-box gsd-default-ctx)))
 
 (define (set-plan-data! v)
-  (ctx-write! gsd-default-ctx gsd-session-ctx-plan-box v))
+  (set-box! (gsd-session-ctx-plan-box gsd-default-ctx) v))
 
 (define (current-pinned-dir)
-  (ctx-read gsd-default-ctx gsd-session-ctx-pinned-dir-box))
+  (unbox (gsd-session-ctx-pinned-dir-box gsd-default-ctx)))
 
 (define (set-pinned-dir! v)
-  (ctx-write! gsd-default-ctx gsd-session-ctx-pinned-dir-box v))
+  (set-box! (gsd-session-ctx-pinned-dir-box gsd-default-ctx) v))
 
 (define (current-edit-limit)
-  (ctx-read gsd-default-ctx gsd-session-ctx-edit-limit-box))
+  (unbox (gsd-session-ctx-edit-limit-box gsd-default-ctx)))
 
 (define (set-edit-limit! v)
-  (ctx-write! gsd-default-ctx gsd-session-ctx-edit-limit-box v))
+  (set-box! (gsd-session-ctx-edit-limit-box gsd-default-ctx) v))
 
 (define (current-gsd-event-bus)
-  (ctx-read gsd-default-ctx gsd-session-ctx-event-bus-box))
+  (unbox (gsd-session-ctx-event-bus-box gsd-default-ctx)))
 
 (define (set-gsd-event-bus! v)
-  (ctx-write! gsd-default-ctx gsd-session-ctx-event-bus-box v))
+  (set-box! (gsd-session-ctx-event-bus-box gsd-default-ctx) v))
 
 (define (current-gsd-history)
-  (ctx-read gsd-default-ctx gsd-session-ctx-history-box))
+  (unbox (gsd-session-ctx-history-box gsd-default-ctx)))
 
 (define (set-gsd-history! v)
-  (ctx-write! gsd-default-ctx gsd-session-ctx-history-box v))
+  (set-box! (gsd-session-ctx-history-box gsd-default-ctx) v))
 
-;; ============================================================
-;; Thread-safe lock helper (outer semaphore for compound ops)
-;; ============================================================
-
+;; H-05: Collapsed two-level locking. The outer gsd-state-sem has been removed.
+;; with-gsd-lock now acquires the per-ctx semaphore directly.
+;; This eliminates the possibility of nested lock acquisition deadlock.
 (define (with-gsd-lock thunk)
-  (call-with-semaphore gsd-state-sem thunk))
+  (call-with-semaphore (gsd-session-ctx-sem gsd-default-ctx) thunk))
 
 ;; ============================================================
-;; Atomic state operations
+;; Atomic state operations (H-05: now use direct box access inside with-gsd-lock)
 ;; ============================================================
 
 (define (gsd-state-snapshot)
@@ -258,7 +259,6 @@
          current-gsd-history
          set-gsd-history!
          ;; Atomic operations (deprecated global)
-         gsd-state-sem
          gsd-state-snapshot
          gsd-state-update!
          gsd-history-snapshot

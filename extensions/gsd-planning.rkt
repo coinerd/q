@@ -52,7 +52,7 @@
                   [gsd-event-bus-box events:event-bus-box]
                   [set-gsd-event-bus! events:set-event-bus!]
                   [emit-gsd-event! events:emit-gsd-event!])
-         (only-in "gsd/session-state.rkt" set-gsd-state! gsd-state-sem)
+         (only-in "gsd/session-state.rkt" set-gsd-state!)
          ;; Extracted sub-modules
          "gsd/tool-handlers.rkt"
          "gsd/command-handlers.rkt")

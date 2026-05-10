@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.36.2 — 2026-05-10
+
+### Goal: GSD Concurrency & State Safety (H-03, H-05)
+
+### High Impact
+- **H-05** (FSM-01): Collapsed two-level locking into single per-ctx semaphore.
+  `gsd-state-sem` removed; `with-gsd-lock` now acquires `gsd-default-ctx`'s semaphore
+  directly. Deprecated convenience accessors (`current-gsd-state`, `set-gsd-state!`, etc.)
+  changed to direct box access so they can be safely called inside `with-gsd-lock` without
+  deadlock. Added deprecation timeline: removed in v0.38.0.
+- **H-03** (PARAM-01): Documented explicit `#:ctx` parameter migration path for state-machine
+  functions. Current implementation routes through deprecated globals with documented timeline.
+
+### New Tests
+- 5 multi-session isolation tests verifying independent `gsd-session-ctx` instances
+  do not interfere with each other's state, history, or plan data.
+
+**Verification**: All GSD tests pass (43 tests), lint 18/18
+
 ## v0.36.1 — 2026-05-10
 
 ### Goal: Security & Runtime Contracts (H-02, L-08, L-10)
