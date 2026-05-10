@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.36.6 — 2026-05-10
+
+### Goal: Module Boundary Hardening (M-06, M-07, M-14, L-02)
+
+### Medium Impact
+- **M-06** (LAYER-02): Moved `extension-ctx` struct definition to `util/extension-types.rkt`
+  (pure types, no runtime imports). `extensions/context.rkt` re-imports and re-exports
+  for backward compatibility. Convenience methods remain in context.rkt.
+- **M-14** (PORT-01): Added `jsonl-write-to-port!` port-based variant alongside
+  path-based `jsonl-append!`. Enables batch writes with caller-managed port lifecycle.
+- **L-02** (CORE-04): Consolidated 3 separate regex patterns in `gsd-progress-message?`
+  into single combined regex with `message-meta` priority path documented.
+
+### Cleanup
+- **M-07** (MOD-01): Added deprecation notice to `runtime/iteration.rkt` facade.
+  New code should import from sub-modules directly. Removal targeted for v0.38.0.
+
+**Verification**: All modules compile, lint 18/18
+
 ## v0.36.5 — 2026-05-10
 
 ### Goal: TUI State Decomposition (H-06, M-08, M-09, L-01, L-05)
