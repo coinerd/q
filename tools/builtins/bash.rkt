@@ -43,6 +43,7 @@
 (provide tool-bash
          current-warn-on-destructive
          current-block-destructive
+         current-warning-port
          current-extra-destructive-patterns
          destructive-command?
          destructive-patterns
@@ -205,7 +206,13 @@
 ;; SEC-13 (v0.22.0): Default now defers to safe-mode.
 ;; When 'safe-mode-default, resolves to (safe-mode?) at call time.
 ;; Explicitly setting #t/#f overrides this behavior.
-(define current-block-destructive (make-parameter 'safe-mode-default))
+(define current-block-destructive (make-parameter (lambda () (safe-mode?))))
+
+;; W-18: Warning output port (default: current-error-port)
+(define current-warning-port (make-parameter #f))
+
+(define (get-warning-port)
+  (or (current-warning-port) (current-error-port)))
 
 ;; Resolve exec-limits from settings (if provided) or defaults.
 ;; settings may be a q-settings? struct or #f.
@@ -240,7 +247,8 @@
      (define block-destructive?
        (let ([v (current-block-destructive)])
          (cond
-           [(eq? v 'safe-mode-default) (safe-mode?)]
+           [(procedure? v) (v)] ;; I-13: thunk resolver
+           [(eq? v 'safe-mode-default) (safe-mode?)] ;; backward compat
            [else v])))
      ;; Execution policy gate (RA-1a, v0.24.7)
      (cond
@@ -252,7 +260,7 @@
        [else
         ;; Optional warning
         (when (and (current-warn-on-destructive) (destructive-command? command))
-          (fprintf (current-error-port) "WARNING: Destructive command detected: ~a~n" command))
+          (fprintf (get-warning-port) "WARNING: Destructive command detected: ~a~n" command))
         (define timeout-arg (hash-ref args 'timeout #f))
         (define raw-work-dir (hash-ref args 'working-directory #f))
         (define work-dir (and raw-work-dir (expand-home-path raw-work-dir)))
@@ -266,7 +274,7 @@
               (sandbox-enabled? settings)
               #t))
         (when (not use-sandbox?)
-          (fprintf (current-error-port) "WARNING: Sandbox disabled via settings~n"))
+          (fprintf (get-warning-port) "WARNING: Sandbox disabled via settings~n"))
 
         ;; Track process for concurrent process limit (SEC-12)
         (track-process!)
