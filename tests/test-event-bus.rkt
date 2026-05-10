@@ -375,3 +375,20 @@
   (publish! bus (test-event #:name "t4"))
   ;; call-count should be 3 (4th blocked by circuit)
   (check-equal? (unbox call-count) 3))
+
+(test-case "W-07c: cooldown-secs allows circuit recovery after wait"
+  (define bus (make-event-bus #:threshold 1 #:cooldown-secs 1))
+  (define state (make-hash))
+  (record-failure! state 1 #:bus bus)
+  (check-true (circuit-broken? state 1 #:bus bus))
+  ;; Wait for cooldown to elapse
+  (sleep 2.0)
+  (check-false (circuit-broken? state 1 #:bus bus)))
+
+(test-case "W-07d: cooldown-secs #f keeps circuit permanently broken"
+  (define bus (make-event-bus #:threshold 1 #:cooldown-secs #f))
+  (define state (make-hash))
+  (record-failure! state 1 #:bus bus)
+  (check-true (circuit-broken? state 1 #:bus bus))
+  ;; No cooldown -> stays broken regardless
+  (check-true (circuit-broken? state 1 #:bus bus)))

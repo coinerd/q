@@ -527,3 +527,7 @@
   (check-equal?
    (classify-error (provider-error "internal error" (current-continuation-marks) 500 'server-error))
    'server-error))
+
+(test-case "W-06e: retryable-error? with provider-error network returns truthy"
+  (define exn (provider-error "connection reset" (current-continuation-marks) #f 'network))
+  (check-not-false (retryable-error? exn)))

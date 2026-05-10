@@ -12,7 +12,7 @@
          racket/string
          racket/file
          racket/list
-         "../runtime/auth-store.rkt")
+         (only-in "../runtime/auth-store.rkt" save-credential-file!))
 
 (provide run-init-wizard)
 

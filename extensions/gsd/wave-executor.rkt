@@ -51,6 +51,11 @@
 
 (struct wave-executor (plan statuses-box) #:transparent)
 
+;; W-05: These accessors read/write mutable state without locking.
+;; Safe because GSD wave execution is single-threaded (one wave at a time,
+;; enforced by the state machine). If multi-wave concurrency is added,
+;; these need synchronization.
+
 (define (wave-executor-statuses exec)
   (unbox (wave-executor-statuses-box exec)))
 
