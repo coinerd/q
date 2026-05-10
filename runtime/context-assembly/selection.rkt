@@ -55,6 +55,7 @@
       (let ()
         (define token-memo (make-hash))
         (define memo-hit-box (box 0))
+        (define base-estimate (or estimate-text-proc estimate-message-tokens))
         (define (memoized-estimate msg)
           (define id (message-id msg))
           (cond
@@ -62,7 +63,7 @@
              (set-box! memo-hit-box (add1 (unbox memo-hit-box)))
              (hash-ref token-memo id)]
             [else
-             (define est (estimate-message-tokens msg))
+             (define est (base-estimate msg))
              (hash-set! token-memo id est)
              est]))
 

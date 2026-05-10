@@ -8,7 +8,7 @@
 
 (require racket/contract
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "../runtime/compactor.rkt" llm-summarize))
+         (only-in "../runtime/compactor-llm-bridge.rkt" llm-summarize))
 
 (provide (contract-out
           [incremental-summarize

@@ -13,7 +13,7 @@
          "../util/protocol-types.rkt"
          "../llm/token-budget.rkt"
          (only-in "../runtime/compaction-prompts.rkt" format-messages-for-summary)
-         (only-in "../runtime/compactor.rkt" llm-summarize)
+         (only-in "../runtime/compactor-llm-bridge.rkt" llm-summarize)
          (only-in "../llm/provider.rkt" provider?))
 
 ;; Summary cache
