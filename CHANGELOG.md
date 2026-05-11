@@ -1,6 +1,23 @@
 # Changelog
 
-## v0.38.7 — 2026-05-12
+## v0.38.8 -- 2026-05-07
+
+### Fixed
+- R-01--R-05: Re-exported `tool-execute` from `tools/tool.rkt` facade (5 test files fixed)
+- R-06: Re-exported `tool-render-call`/`tool-render-result` from facade
+- R-07: Exported `model-entry`/`model-resolution` constructors for test fixtures
+- R-08: Fixed `test-tui-selection-state.rkt` selection accessor names
+- P-01: Replaced `struct-out summary-cache` with selective exports
+- P-02: Removed `#:transparent` from `model-registry` struct
+- P-03: Added deprecation note to `tool-execute` in `tool-struct.rkt`
+- CHANGELOG dates corrected for v0.38.5/6/7
+
+### Added
+- Test for `build-assembled-context/raw` (T-01 memo injection)
+- Test for `start-trace-logger!` `#:port` parameter (T-02)
+- Test for `parse-wave-doc-from-string` (T-03 pure extraction)
+
+## v0.38.7 — 2026-05-07
 
 ### Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
 
@@ -25,7 +42,7 @@
 **Verification**: targeted tests all pass (iteration, events, context-assembly)
 
 
-## v0.38.6 — 2026-05-12
+## v0.38.6 — 2026-05-07
 
 ### Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
 
@@ -51,7 +68,7 @@
 **Verification**: lint 15/18 (3 pre-existing failures), all TUI tests pass
 
 
-## v0.38.5 — 2026-05-12
+## v0.38.5 — 2026-05-07
 
 ### Goal: TUI State Decomposition Part 1 (Milestone 6 of v0.38.x)
 
