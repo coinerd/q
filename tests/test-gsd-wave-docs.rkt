@@ -335,3 +335,32 @@
   (update-wave-in-index! test-dir 1 "FAILED")
   (check-equal? (plan-overall-status test-dir) 'partly-done)
   (teardown))
+
+;; ============================================================
+;; T-03: parse-wave-doc-from-string pure extraction
+;; ============================================================
+
+(test-case "parse-wave-doc-from-string parses valid DONE wave"
+  (define text "# Wave 0
+Status: DONE
+Some content here.")
+  (define result (parse-wave-doc-from-string text 0 "W0" (string->path "/tmp/W0.md")))
+  (check-not-false result)
+  (check-equal? (hash-ref result 'status) "DONE")
+  (check-equal? (hash-ref result 'slug) "W0")
+  (check-equal? (hash-ref result 'index) 0)
+  (check-equal? (hash-ref result 'path) "/tmp/W0.md"))
+
+(test-case "parse-wave-doc-from-string parses wave without status"
+  (define text "# Wave 1
+Some description without status header.")
+  (define result (parse-wave-doc-from-string text 1 "W1"))
+  (check-not-false result)
+  (check-equal? (hash-ref result 'status) "Inbox")
+  (check-equal? (hash-ref result 'slug) "W1"))
+
+(test-case "parse-wave-doc-from-string returns hash for empty input"
+  (define result (parse-wave-doc-from-string "" 0 "W0"))
+  (check-not-false result)
+  ;; Empty input -> status defaults to Inbox
+  (check-equal? (hash-ref result 'status) "Inbox"))

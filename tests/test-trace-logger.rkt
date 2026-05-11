@@ -189,3 +189,22 @@
   (define entries (read-trace-jsonl dir))
   (check-equal? (length entries) 20 "all 20 events with nested structs should be logged")
   (delete-directory/files dir))
+
+;; ============================================================
+;; T-02: #:port parameter for testability
+;; ============================================================
+
+(test-case "start-trace-logger! accepts #:port string port"
+  (define dir (make-temp-dir))
+  (define bus (make-event-bus))
+  (define logger (make-trace-logger bus dir #:enabled? #t))
+  (define out (open-output-string))
+  (start-trace-logger! logger #:port out)
+  ;; Publish a trace event
+  (publish! bus (make-event "test.port" (current-seconds) "s" #f (hasheq 'key "value")))
+  (flush-trace-logger! logger)
+  (stop-trace-logger! logger)
+  ;; Check output was written to string port
+  (define output (get-output-string out))
+  (check-true (string-contains? output "test.port") "trace event should appear in string port output")
+  (delete-directory/files dir))
