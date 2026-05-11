@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.38.4 — 2026-05-11
+
+### Goal: Extension & GSD Cleanup (Milestone 5 of v0.38.x)
+
+### Fixed
+- **M-07** (MEDIUM): Completed GSD session state migration.
+  Removed `current-gsd-state`/`set-gsd-state!` from public API in
+  `extensions/gsd/session-state.rkt`. Updated `extensions/gsd/core.rkt`
+  to use `gsd-state-update!`. Updated `extensions/gsd/state-machine.rkt`
+  to use direct box access inside `with-gsd-lock` (preserving R-01
+  deadlock avoidance).
+- **M-08** (MEDIUM): Replaced 10 one-time parameters with
+  `ui-callback-registry` struct in `extensions/ui-surface.rkt`.
+  Backward-compatible parameter wrappers retained as deprecated.
+- **L-12** (LOW): Separated parsing from filesystem I/O in
+  `extensions/gsd/wave-docs.rkt`. Extracted pure functions:
+  `parse-wave-doc-from-string`, `update-plan-index-text`,
+  `find-next-inbox-entry`, `compute-plan-overall-status`.
+- **L-13** (LOW): Removed `register-event-fields!` calls from
+  `define-typed-event` macro expansion in `util/event-macro.rkt`.
+  Manual `register-event-fields!` calls remain for backward compat.
+- **Regression fix**: Restored `tool-execute` import in
+  `extensions/tool-api.rkt` (broken in v0.38.2 boundary hardening).
+
+**Verification**: lint 18/18, targeted tests 167/167 pass
+
+---
+
 ## v0.38.3 — 2026-05-11
 
 ### Goal: Pure Core & Idiomatic Patterns (Milestone 4 of v0.38.x)

@@ -249,7 +249,6 @@
                                   #:timestamp [timestamp (current-seconds)]
                                   kw-arg ...)
                  (event-name type-str timestamp session-id turn-id all-field ...))
-               (register-event-fields! 'event-name fields-name)
                (provide (struct-out event-name)
                         make-name
                         type-name
@@ -263,7 +262,6 @@
                                   #:timestamp [timestamp (current-seconds)]
                                   kw-arg ...)
                  (event-name type-str timestamp session-id turn-id all-field ...))
-               (register-event-fields! 'event-name fields-name)
                ;; H-01: Auto-generated serializer
                (register-event-serializer! type-str (lambda (evt) (hasheq serializer-pair ...)))
                ;; H-01: Auto-generated deserializer

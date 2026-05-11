@@ -31,12 +31,16 @@
 (provide wave-doc-path
          write-wave-doc!
          read-wave-doc
+         parse-wave-doc-from-string
          slugify
          parse-plan-index
          update-wave-in-index!
+         update-plan-index-text
          next-inbox-wave
+         find-next-inbox-entry
          mark-wave-status!
          plan-overall-status
+         compute-plan-overall-status
          wave-exists?
          wave-status-markers
          wave-index-entry
@@ -99,15 +103,19 @@
                          #:exists 'truncate)
   path)
 
+(define (parse-wave-doc-from-string text idx slug [path #f])
+  (define status (extract-status text))
+  (define content (strip-status-header text))
+  (hasheq 'index idx 'slug slug 'status status 'content content
+          'path (if path (path->string path) #f)))
+
 (define (read-wave-doc base-dir idx slug)
   (define path (wave-doc-path base-dir idx slug))
   (cond
     [(not (file-exists? path)) #f]
     [else
      (define text (call-with-input-file path port->string))
-     (define status (extract-status text))
-     (define content (strip-status-header text))
-     (hasheq 'index idx 'slug slug 'status status 'content content 'path (path->string path))]))
+     (parse-wave-doc-from-string text idx slug path)]))
 
 (define (extract-status text)
   (define m (regexp-match wave-header-rx text))
@@ -152,14 +160,17 @@
 ;; PLAN.md index status update
 ;; ============================================================
 
+(define (update-plan-index-text text wave-idx new-status)
+  (define marker (status->marker new-status))
+  (update-index-line text wave-idx marker))
+
 (define (update-wave-in-index! base-dir wave-idx new-status)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
      (define text (call-with-input-file plan-path port->string))
-     (define marker (status->marker new-status))
-     (define new-text (update-index-line text wave-idx marker))
+     (define new-text (update-plan-index-text text wave-idx new-status))
      (call-with-output-file plan-path (lambda (out) (display new-text out)) #:exists 'truncate)
      #t]))
 
@@ -189,17 +200,19 @@
 ;; Wave queries
 ;; ============================================================
 
+(define (find-next-inbox-entry entries)
+  (for/first ([e entries]
+              #:when (or (string=? (wave-index-entry-status e) STATUS-INBOX)
+                         (string=? (wave-index-entry-status e) STATUS-FAILED)))
+    e))
+
 (define (next-inbox-wave base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (cond
     [(not (file-exists? plan-path)) #f]
     [else
      (define text (call-with-input-file plan-path port->string))
-     (define entries (parse-plan-index text))
-     (for/first ([e entries]
-                 #:when (or (string=? (wave-index-entry-status e) STATUS-INBOX)
-                            (string=? (wave-index-entry-status e) STATUS-FAILED)))
-       e)]))
+     (find-next-inbox-entry (parse-plan-index text))]))
 
 ;; ============================================================
 ;; Dual-write status transition
@@ -232,24 +245,26 @@
 ;; Plan overall status
 ;; ============================================================
 
+(define (compute-plan-overall-status entries)
+  (cond
+    [(null? entries) 'not-started]
+    [else
+     (define statuses (map wave-index-entry-status entries))
+     (define all-done?
+       (for/and ([s statuses])
+         (done-or-deferred? s)))
+     (define any-progress?
+       (for/or ([s statuses])
+         (not (string=? s STATUS-INBOX))))
+     (cond
+       [all-done? 'all-done]
+       [any-progress? 'partly-done]
+       [else 'in-progress])]))
+
 (define (plan-overall-status base-dir)
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (cond
     [(not (file-exists? plan-path)) 'not-started]
     [else
      (define text (call-with-input-file plan-path port->string))
-     (define entries (parse-plan-index text))
-     (cond
-       [(null? entries) 'not-started]
-       [else
-        (define statuses (map wave-index-entry-status entries))
-        (define all-done?
-          (for/and ([s statuses])
-            (done-or-deferred? s)))
-        (define any-progress?
-          (for/or ([s statuses])
-            (not (string=? s STATUS-INBOX))))
-        (cond
-          [all-done? 'all-done]
-          [any-progress? 'partly-done]
-          [else 'in-progress])])]))
+     (compute-plan-overall-status (parse-plan-index text))]))
