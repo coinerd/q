@@ -23,6 +23,14 @@
          racket/list
          racket/path
          json
+         (only-in "../runtime/session-config.rkt"
+                  session-config?
+                  hash->session-config
+                  config-settings
+                  config-provider
+                  config-model-name
+                  config-session-index
+                  config-parallel-tools)
          (only-in "../util/tool-types.rkt" tool-call?)
          (only-in "../tools/tool.rkt" tool-result? tool-registry?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
@@ -138,7 +146,8 @@
                                    session-id
                                    log-path
                                    token
-                                   config)
+                                   config-raw)
+  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
   ;; Extract tool calls from assistant messages
   (define tool-calls (extract-tool-calls-from-messages new-msgs))
 

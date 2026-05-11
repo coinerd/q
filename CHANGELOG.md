@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.37.0 — 2026-05-11
+
+### Goal: Config Accessor Adoption + Correctness (Milestone 1 of v0.37.x Racket Abstraction Remediation)
+
+### Fixed
+- **FB-02**: `resolve-max-iterations-hard` added to `session-config.rkt`; main-loop.rkt now
+  uses centralized default computation instead of inline `(dict-ref config 'max-iterations-hard (max ...))`,
+  eliminating divergence when key is explicitly `#f`.
+- **FB-03**: Migrated `dict-ref config 'max-context-tokens` in `step-interpreter.rkt` to
+  `(config-max-context-tokens config)` accessor.
+
+### Contracts
+- **FB-06**: Added `contract-out` for all 27 `config-*` accessors in `session-config.rkt` with
+  typed contracts (`exact-positive-integer?`, `(or/c 'off 'minimal 'low 'medium 'high 'xhigh)`, etc.).
+
+### Validation
+- **FB-05**: `normalize-session-config-hash` validates known keys, coerces `thinking-level`
+  from string→symbol, and warns on unknown keys (preserved, not dropped).
+
+### Migration
+- **FB-01**: Migrated 8 `dict-ref` sites in `turn-orchestrator.rkt` to accessors
+  (`config-tier-b-count`, `config-tier-c-count`, `config-max-tokens`, `config-working-set`,
+  `config-settings`, `config-model-name`). Config normalized to `session-config?` at entry.
+- **FB-04**: Migrated 5 `dict-ref` sites in `tool-coordinator.rkt` to accessors
+  (`config-settings`, `config-provider`, `config-model-name`, `config-session-index`,
+  `config-parallel-tools`). Config normalized to `session-config?` at entry.
+
+### Changed
+- `runtime/session-config.rkt`: +120 lines (resolve-max-iterations-hard, normalize-session-config-hash, contracts)
+- `runtime/iteration/main-loop.rkt`: config normalized, resolve-max-iterations-hard used
+- `runtime/iteration/step-interpreter.rkt`: dict-ref → accessor
+- `runtime/turn-orchestrator.rkt`: 8 dict-ref → accessor, config normalization
+- `runtime/tool-coordinator.rkt`: 5 dict-ref → accessor, config normalization
+- `tests/test-session-config.rkt`: +4 tests (resolve, normalization)
+- `tests/test-iteration-integration.rkt`: updated for session-config config
+
+**Verification**: lint 18/18, targeted tests green
+
+---
+
 ## v0.36.10 — 2026-05-10
 
 ### Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization

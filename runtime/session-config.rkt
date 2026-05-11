@@ -23,7 +23,8 @@
 ;;   tool-coordinator.rkt, iteration/retry-policy.rkt
 
 (require racket/dict
-         racket/contract)
+         racket/contract
+         (only-in "../runtime/working-set.rkt" working-set?))
 
 (provide (struct-out session-config)
          session-config?
@@ -49,7 +50,7 @@
           [config-max-iterations (-> session-config? exact-positive-integer?)]
           [config-max-iterations-hard (-> session-config? (or/c #f exact-positive-integer?))]
           [config-thinking-level (-> session-config? (or/c 'off 'minimal 'low 'medium 'high 'xhigh))]
-          [config-working-set (-> session-config? (or/c #f hash?))]
+          [config-working-set (-> session-config? (or/c #f working-set?))]
           [config-parallel-tools (-> session-config? (or/c #f boolean?))]
           [config-cancellation-token (-> session-config? (or/c #f hash?))]
           [config-tier-b-count (-> session-config? exact-nonnegative-integer?)]
