@@ -415,7 +415,8 @@
 ;; I-04: Direct test for assemble-context/pure
 ;; ============================================================
 
-(require (only-in "../runtime/turn-orchestrator.rkt" (assemble-context/pure ctx-assemble-pure)))
+(require (only-in "../runtime/turn-orchestrator.rkt" (assemble-context/pure ctx-assemble-pure))
+         (only-in "../runtime/session-config.rkt" hash->session-config))
 
 (define ctx-assemble ctx-assemble-pure)
 
@@ -424,7 +425,7 @@
     (list (make-test-msg "u1" 'user 'message "Hello")
           (make-test-msg "a1" 'assistant 'message "Hi there")
           (make-test-msg "u2" 'user 'message "How are you?")))
-  (define config (hash 'tier-b-count 10 'tier-c-count 2 'max-tokens 4096))
+  (define config (hash->session-config (hash 'tier-b-count 10 'tier-c-count 2 'max-tokens 4096)))
   (define-values (result _hook-res) (ctx-assemble msgs config))
   (check-pred list? result)
   (check >= (length result) 1)

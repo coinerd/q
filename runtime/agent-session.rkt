@@ -100,19 +100,20 @@
          agent-session-prompt-running?
          ensure-persisted!
          buffer-or-append!
-         (contract-out [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
-                       [resume-agent-session (-> string? any/c agent-session?)]
-                       [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
-                       [run-prompt!
-                        (->* (agent-session? (or/c string? message?))
-                             (#:max-iterations (or/c exact-nonnegative-integer? #f)
-                                               #:ensure-persisted! (or/c procedure? #f)
-                                               #:buffer-or-append! (or/c procedure? #f))
-                             any)]
-                       [session-id (-> agent-session? string?)]
-                       [session-history (-> agent-session? list?)]
-                       [session-active? (-> agent-session? boolean?)]
-                       [close-session! (-> agent-session? void?)])
+         (contract-out ;; NOTE (W-01): This is the ONLY entry point that accepts raw hashes for backward compat.
+          [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
+          [resume-agent-session (-> string? any/c agent-session?)]
+          [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
+          [run-prompt!
+           (->* (agent-session? (or/c string? message?))
+                (#:max-iterations (or/c exact-nonnegative-integer? #f)
+                                  #:ensure-persisted! (or/c procedure? #f)
+                                  #:buffer-or-append! (or/c procedure? #f))
+                any)]
+          [session-id (-> agent-session? string?)]
+          [session-history (-> agent-session? list?)]
+          [session-active? (-> agent-session? boolean?)]
+          [close-session! (-> agent-session? void?)])
          maybe-compact-context
          ;; Thinking level control (#1153)
          thinking-levels
