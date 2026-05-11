@@ -350,11 +350,7 @@
                        ;; F1: Immediately set busy? so status bar shows [thinking...]
                        ;; before the LLM responds (was waiting for turn.started event)
                        (set-box! (tui-ctx-ui-state-box ctx)
-                                 (struct-copy ui-state
-                                              cur-state
-                                              [busy? #t]
-                                              [streaming-text #f]
-                                              [pending-tool-name #f]))
+                                 (clear-streaming (set-pending-tool-name (set-busy cur-state #t) #f)))
                        (mark-dirty! ctx)
                        ;; F1: Show user message in transcript immediately
                        ;; (don't wait for JSONL events — the TUI transcript is display-only)

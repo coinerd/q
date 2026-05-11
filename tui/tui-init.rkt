@@ -202,7 +202,7 @@
            'make-styled-segment
            styled-segment
            'set-status-message
-           (lambda (box msg) (set-box! box (struct-copy ui-state (unbox box) [status-message msg])))
+           (lambda (box msg) (set-box! box (set-status-message (unbox box) msg)))
            'set-extension-widget
            set-extension-widget
            'remove-extension-widget

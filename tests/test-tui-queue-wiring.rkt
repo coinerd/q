@@ -65,7 +65,7 @@
       (define ctx (make-tui-ctx #:session-runner runner #:session-queue q))
       ;; Mark state as busy (simulating streaming)
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (define busy-state (struct-copy ui-state state [busy? #t]))
+      (define busy-state (set-busy state #t))
       (set-box! (tui-ctx-ui-state-box ctx) busy-state)
       ;; Simulate submit
       (define text "do another thing")
@@ -96,7 +96,7 @@
       (define ctx (make-tui-ctx #:session-runner runner #:session-queue q))
       ;; Mark state as busy
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (define busy-state (struct-copy ui-state state [busy? #t]))
+      (define busy-state (set-busy state #t))
       (set-box! (tui-ctx-ui-state-box ctx) busy-state)
       ;; Simulate submit with queue wiring logic
       (define text "queued message")
@@ -128,7 +128,7 @@
       (define ctx (make-tui-ctx #:session-runner runner #:session-queue #f))
       ;; Mark busy
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (define busy-state (struct-copy ui-state state [busy? #t]))
+      (define busy-state (set-busy state #t))
       (set-box! (tui-ctx-ui-state-box ctx) busy-state)
       ;; Simulate submit — no queue, so should fall through to runner
       (define text "fallback call")
@@ -150,7 +150,7 @@
       (define ctx (make-tui-ctx #:session-runner runner #:session-queue q))
       ;; Mark busy
       (define state (unbox (tui-ctx-ui-state-box ctx)))
-      (define busy-state (struct-copy ui-state state [busy? #t]))
+      (define busy-state (set-busy state #t))
       (set-box! (tui-ctx-ui-state-box ctx) busy-state)
       ;; Queue multiple messages
       (for ([msg '("first" "second" "third")])

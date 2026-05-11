@@ -65,7 +65,7 @@
   (check-false (ui-state-streaming-text st1)))
 
 (test-case "turn.cancelled clears busy and streaming"
-  (define st0 (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "partial text"]))
+  (define st0 (set-streaming-text (set-busy (initial-ui-state) #t) "partial text"))
   (define st1 (apply-event-to-state st0 (make-test-event "turn.cancelled" (hash))))
   (check-false (ui-state-busy? st1))
   (check-false (ui-state-streaming-text st1)))

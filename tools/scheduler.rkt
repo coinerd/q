@@ -18,7 +18,6 @@
                   tool?
                   tool-name
                   tool-schema
-                  tool-execute
                   make-tool
                   make-tool-registry
                   tool-registry?
@@ -43,6 +42,7 @@
                   tool-call-id
                   tool-call-name
                   tool-call-arguments)
+         (only-in "tool-struct.rkt" tool-execute)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode-predicates.rkt"
                   safe-mode?

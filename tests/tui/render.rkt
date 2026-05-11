@@ -122,9 +122,7 @@
     ;; render-status-bar and render-input-line
     ;; --------------------------------------------------------
     (test-case "render-status-bar uses ASCII * when busy, not emoji"
-      (let ([state (struct-copy ui-state
-                                (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
-                                [busy? #t])])
+      (let ([state (set-busy (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4") #t)])
         (define line (render-status-bar state 80))
         (define text (styled-segment-text (first (styled-line-segments line))))
         (check-true (string-contains? text "*") "busy marker is ASCII *")
@@ -327,10 +325,8 @@
 
     (test-case "render-transcript: streaming text shown at bottom when scroll=0"
       (let* ([entries (list (make-entry 'system "line1" 0 (hash)))]
-             [state (struct-copy ui-state
-                                 (initial-ui-state)
-                                 [transcript entries]
-                                 [streaming-text "streaming..."])])
+             [state (set-streaming-text (struct-copy ui-state (initial-ui-state) [transcript entries])
+                                        "streaming...")])
         (define-values (lines _st) (render-transcript state 10 200))
         (check-equal? (length lines) 2 "streaming text appended")
         ;; Last line should be the streaming text (dim)
@@ -561,10 +557,8 @@
   (test-suite "Thinking indicator"
 
     (test-case "render-status-bar shows [thinking...] when busy with no streaming text"
-      (let ([state (struct-copy ui-state
-                                (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
-                                [busy? #t]
-                                [streaming-text #f])])
+      (let ([state (clear-streaming
+                    (set-busy (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4") #t))])
         (define line (render-status-bar state 80))
         (define text (styled-segment-text (first (styled-line-segments line))))
         (check-true (string-contains? text "[thinking...]")
@@ -577,10 +571,9 @@
         (check-false (string-contains? text "[thinking...]") "no [thinking...] when not busy")))
 
     (test-case "render-status-bar does NOT show [thinking...] when streaming text present"
-      (let ([state (struct-copy ui-state
-                                (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
-                                [busy? #t]
-                                [streaming-text "Partial response..."])])
+      (let ([state (set-streaming-text
+                    (set-busy (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4") #t)
+                    "Partial response...")])
         (define line (render-status-bar state 80))
         (define text (styled-segment-text (first (styled-line-segments line))))
         (check-false (string-contains? text "[thinking...]")
@@ -594,11 +587,11 @@
 
     (test-case "streaming-thinking shown when no streaming-text"
       (define state
-        (struct-copy ui-state
-                     (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
-                     [busy? #t]
-                     [streaming-thinking "pondering deeply..."]
-                     [streaming-text #f]))
+        (set-streaming-text
+         (set-streaming-thinking
+          (set-busy (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4") #t)
+          "pondering deeply...")
+         #f))
       (define-values (lines _st) (render-transcript state 10 200))
       (define all-text (string-join (map styled-line->text lines) "\n"))
       (check-true (string-contains? all-text "pondering deeply...")
@@ -606,11 +599,11 @@
 
     (test-case "streaming-thinking hidden when streaming-text present"
       (define state
-        (struct-copy ui-state
-                     (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
-                     [busy? #t]
-                     [streaming-thinking "hidden thoughts"]
-                     [streaming-text "visible response"]))
+        (set-streaming-text
+         (set-streaming-thinking
+          (set-busy (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4") #t)
+          "hidden thoughts")
+         "visible response"))
       (define-values (lines _st) (render-transcript state 10 200))
       (define all-text (string-join (map styled-line->text lines) "\n"))
       (check-false (string-contains? all-text "hidden thoughts")
@@ -621,10 +614,9 @@
       (define entry (transcript-entry 'thinking "persisted thought" 0 (hasheq) #f))
       (define state
         (struct-copy ui-state
-                     (initial-ui-state #:session-id "test-sess" #:model-name "gpt-4")
-                     [transcript (list entry)]
-                     [streaming-thinking #f]
-                     [streaming-text #f]))
+                     (clear-streaming (initial-ui-state #:session-id "test-sess"
+                                                        #:model-name "gpt-4"))
+                     [transcript (list entry)]))
       (define-values (lines _st) (render-transcript state 10 200))
       (define all-text (string-join (map styled-line->text lines) "\n"))
       (check-true (string-contains? all-text "persisted thought")
@@ -1008,8 +1000,7 @@
       (check-true (string-contains? text "ctx:0") "shows ctx:0 when no context"))
 
     (test-case "status bar shows error in status-message"
-      (define s
-        (struct-copy ui-state (initial-ui-state #:session-id "s1") [status-message "API key error"]))
+      (define s (set-status-message (initial-ui-state #:session-id "s1") "API key error"))
       (define line (render-status-bar s 80))
       (define text (styled-line->text line))
       (check-true (string-contains? text "API key error") "error shown in status bar"))))

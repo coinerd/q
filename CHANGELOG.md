@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.38.6 — 2026-05-12
+
+### Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
+
+### Fixed
+- **H-03 Phase 2** (HIGH): Extracted `streaming-state` sub-struct from
+  `ui-state` monolith in `tui/state-types.rkt`. Replaced 6 individual
+  fields (`busy?`, `status-message`, `pending-tool-name`,
+  `streaming-text`, `streaming-thinking`, `busy-since`) with 1
+  `streaming` sub-struct field. Added backward-compatible read
+  accessors and setter helpers (`set-busy`, `set-status-message`,
+  `set-pending-tool-name`, `set-streaming-text`,
+  `set-streaming-thinking`, `set-busy-since`, `clear-streaming`,
+  `update-streaming`). Updated all `struct-copy` call sites across
+  `tui/state-events.rkt`, `tui/tui-init.rkt`, `tui/tui-keybindings.rkt`,
+  `tui/tui-render-loop.rkt`, `extensions/dialog-api.rkt`, and 12+ test
+  files.
+- **Bugfix**: Fixed `tools/scheduler.rkt` import of `tool-execute`
+  (pre-existing regression from v0.38.2 that blocked compilation of
+  TUI modules).
+- Added backward-compatible `ui-state-rendered-cache` and
+  `ui-state-rendered-cache-width` accessors for `cache-state` sub-struct.
+
+**Verification**: lint 15/18 (3 pre-existing failures), all TUI tests pass
+
+
 ## v0.38.5 — 2026-05-12
 
 ### Goal: TUI State Decomposition Part 1 (Milestone 6 of v0.38.x)

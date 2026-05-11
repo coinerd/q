@@ -15,6 +15,7 @@
          (struct-out ui-state)
          (struct-out selection-state)
          (struct-out cache-state)
+         (struct-out streaming-state)
          (struct-out branch-info)
          (struct-out overlay-state)
          (struct-out tree-browser-state)
@@ -36,6 +37,26 @@
          rendered-cache-invalidate-entry
          rendered-cache-width-valid?
          rendered-cache-set-width
+         ui-state-rendered-cache
+         ui-state-rendered-cache-width
+
+         ;; Backward-compatible streaming accessors (v0.38.6 migration)
+         ui-state-busy?
+         ui-state-status-message
+         ui-state-pending-tool-name
+         ui-state-streaming-text
+         ui-state-streaming-thinking
+         ui-state-busy-since
+
+         ;; Streaming update helpers
+         update-streaming
+         set-busy
+         set-status-message
+         set-pending-tool-name
+         set-streaming-text
+         set-streaming-thinking
+         set-busy-since
+         clear-streaming
 
          ;; String helpers
          truncate-string
@@ -52,19 +73,26 @@
   #:transparent)
 
 ;; Selection state -- cursor position and selection range
-(struct selection-state (anchor end)
-  #:transparent)
+(struct selection-state (anchor end) #:transparent)
 
 ;; Cache state -- rendered content cache
-(struct cache-state (entries width)
+(struct cache-state (entries width) #:transparent)
+
+;; Streaming state — turn activity / partial output group
+(struct streaming-state
+        (busy? ; boolean — is the agent currently processing?
+         status-message ; string or #f — temporary status
+         pending-tool-name ; string or #f — name of tool currently executing
+         streaming-text ; string or #f — partial streaming text
+         streaming-thinking ; string or #f — accumulated thinking text
+         busy-since) ; any/c — timestamp when busy started
   #:transparent)
 
-;; The complete UI state (27 fields, grouped by domain)
+;; The complete UI state (21 fields, grouped by domain)
 ;;
-;; Field groups (v0.32.6 documentation):
+;; Field groups (v0.38.6 documentation):
 ;;   Transcript:  transcript, scroll-offset, next-entry-id
-;;   Streaming:   busy?, status-message, pending-tool-name, streaming-text,
-;;                streaming-thinking, busy-since
+;;   Streaming:   streaming (streaming-state)
 ;;   Selection:   selection (selection-state)
 ;;   Branch:      current-branch, visible-branches
 ;;   Cache:       cache (cache-state)
@@ -79,17 +107,12 @@
 (struct ui-state
         (transcript ; (listof transcript-entry) — newest LAST
          scroll-offset ; integer — 0 = bottom, positive = scrolled up
-         ;; --- Streaming group ---
-         busy? ; boolean — is the agent currently processing?
          ;; --- Session group ---
          session-id ; string or #f
          model-name ; string or #f
          mode ; symbol: 'chat | 'single | etc.
-         ;; --- Streaming group (cont.) ---
-         status-message ; string or #f — temporary status
-         pending-tool-name ; string or #f — name of tool currently executing
-         streaming-text ; string or #f — partial streaming text (during model.stream.delta)
-         streaming-thinking ; string or #f — accumulated thinking text (during model.stream.thinking)
+         ;; --- Streaming group ---
+         streaming ; streaming-state — turn activity / partial output
          ;; --- Branch group ---
          current-branch ; string or #f — current branch node id
          visible-branches ; (listof branch-info) — cached branch list for display
@@ -114,9 +137,7 @@
          editor-component ; (or/c #f q-component?) — custom editor for input area (#1150)
          ;; --- Budget group ---
          context-tokens ; (or/c #f integer?) — estimated token count from context events (v0.19.12 W1)
-         cost-tracker ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
-         ;; --- Streaming group (cont.) ---
-         busy-since)
+         cost-tracker) ; (or/c #f cost-tracker?) — mutable cost accumulator (G8.4)
   #:transparent)
 
 ;; Overlay state for modal/popup UI elements (command palette, etc.)
@@ -192,7 +213,9 @@
                     ([k (in-list (take sorted-keys
                                        (- (hash-count new-cache) RENDER-CACHE-MAX-SIZE)))])
             (hash-remove c k)))))
-  (struct-copy ui-state state [cache (cache-state pruned-cache (cache-state-width (ui-state-cache state)))]))
+  (struct-copy ui-state
+               state
+               [cache (cache-state pruned-cache (cache-state-width (ui-state-cache state)))]))
 
 (define (rendered-cache-clear state)
   (struct-copy ui-state state [cache (cache-state (hash) #f)]))
@@ -200,14 +223,24 @@
 (define (rendered-cache-invalidate-entry state entry-id)
   (struct-copy ui-state
                state
-               [cache (cache-state (hash-remove (cache-state-entries (ui-state-cache state)) entry-id)
-                                   (cache-state-width (ui-state-cache state)))]))
+               [cache
+                (cache-state (hash-remove (cache-state-entries (ui-state-cache state)) entry-id)
+                             (cache-state-width (ui-state-cache state)))]))
 
 (define (rendered-cache-width-valid? state width)
   (equal? (cache-state-width (ui-state-cache state)) width))
 
 (define (rendered-cache-set-width state width)
-  (struct-copy ui-state state [cache (cache-state (cache-state-entries (ui-state-cache state)) width)]))
+  (struct-copy ui-state
+               state
+               [cache (cache-state (cache-state-entries (ui-state-cache state)) width)]))
+
+;; Backward-compatible cache accessors (v0.38.6: cache-state sub-struct)
+(define (ui-state-rendered-cache state)
+  (cache-state-entries (ui-state-cache state)))
+
+(define (ui-state-rendered-cache-width state)
+  (cache-state-width (ui-state-cache state)))
 
 ;; ============================================================
 ;; Constructor with defaults
@@ -218,14 +251,10 @@
                           #:mode [mode 'chat])
   (ui-state '() ; transcript
             0 ; scroll-offset
-            #f ; busy?
             session-id
             model-name
             mode
-            #f ; status-message
-            #f ; pending-tool-name
-            #f ; streaming-text
-            #f ; streaming-thinking
+            (streaming-state #f #f #f #f #f #f) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -240,8 +269,59 @@
             #f ; focused-component
             #f ; editor-component
             #f ; context-tokens
-            (make-cost-tracker) ; cost-tracker
-            #f))
+            (make-cost-tracker)))
+
+;; ============================================================
+;; Backward-compatible streaming accessors (v0.38.6)
+;; ============================================================
+
+(define (ui-state-busy? state)
+  (streaming-state-busy? (ui-state-streaming state)))
+
+(define (ui-state-status-message state)
+  (streaming-state-status-message (ui-state-streaming state)))
+
+(define (ui-state-pending-tool-name state)
+  (streaming-state-pending-tool-name (ui-state-streaming state)))
+
+(define (ui-state-streaming-text state)
+  (streaming-state-streaming-text (ui-state-streaming state)))
+
+(define (ui-state-streaming-thinking state)
+  (streaming-state-streaming-thinking (ui-state-streaming state)))
+
+(define (ui-state-busy-since state)
+  (streaming-state-busy-since (ui-state-streaming state)))
+
+;; ============================================================
+;; Streaming update helpers
+;; ============================================================
+
+(define (update-streaming state f)
+  (struct-copy ui-state state [streaming (f (ui-state-streaming state))]))
+
+(define (set-busy state busy?)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [busy? busy?]))))
+
+(define (set-status-message state msg)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [status-message msg]))))
+
+(define (set-pending-tool-name state name)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [pending-tool-name name]))))
+
+(define (set-streaming-text state text)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [streaming-text text]))))
+
+(define (set-streaming-thinking state thinking)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [streaming-thinking thinking]))))
+
+(define (set-busy-since state since)
+  (update-streaming state (lambda (s) (struct-copy streaming-state s [busy-since since]))))
+
+(define (clear-streaming state)
+  (update-streaming state
+                    (lambda (s)
+                      (struct-copy streaming-state s [streaming-text #f] [streaming-thinking #f]))))
 
 ;; ============================================================
 ;; String helpers

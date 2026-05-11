@@ -361,7 +361,7 @@
 
     (test-case "status bar shows busy indicator when busy"
       (define ubuf (make-mock-ubuf 80 24))
-      (define state (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
+      (define state (set-busy (initial-ui-state #:session-id "s1") #t))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
       (define status-row-num (tui-layout-status-row layout))
@@ -472,7 +472,7 @@
     ;; --------------------------------------------------------
     (test-case "render-frame! shows streaming text"
       (define ubuf (make-mock-ubuf 80 24))
-      (define state (struct-copy ui-state (initial-ui-state) [streaming-text "Partial response..."]))
+      (define state (set-streaming-text (initial-ui-state) "Partial response..."))
       (define input-st (initial-input-state))
       (define layout (compute-layout 80 24))
       (run-render-frame! ubuf state input-st layout)
@@ -552,8 +552,7 @@
                            (hasheq 'messageId "m1" 'content "Previous answer"))
           (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "bash" 'arguments "ls"))))
   ;; Add streaming text to simulate mid-stream state
-  (define state
-    (struct-copy ui-state (simulate-events s0 events) [streaming-text "New answer streaming"]))
+  (define state (set-streaming-text (simulate-events s0 events) "New answer streaming"))
   (define input-st (initial-input-state))
   (define layout (compute-layout 80 24))
   ;; Should not raise — streaming text renders below committed entries
@@ -597,7 +596,7 @@
     (for/fold ([s (initial-ui-state)]) ([i (in-range 30)])
       (add-transcript-entry s (make-entry 'assistant (format "Line ~a" i) 0 (hash)))))
   ;; Add streaming text and scroll
-  (define state (struct-copy ui-state s0 [streaming-text "Streaming..."] [scroll-offset 10]))
+  (define state (struct-copy ui-state (set-streaming-text s0 "Streaming...") [scroll-offset 10]))
   ;; render-status-bar should include scroll indicator
   (define status-line (render-status-bar state 80))
   (define status-text (styled-line->text status-line))
@@ -610,11 +609,8 @@
 ;; Risk: Status message hides tool name
 (test-case "status bar with status-message + busy + pending-tool-name all set"
   (define state
-    (struct-copy ui-state
-                 (initial-ui-state)
-                 [busy? #t]
-                 [pending-tool-name "read"]
-                 [status-message "Compacting..."]))
+    (set-status-message (set-pending-tool-name (set-busy (initial-ui-state) #t) "read")
+                        "Compacting..."))
   (define line (render-status-bar state 80))
   (define text (styled-line->text line))
   ;; status-message should take priority in ui-status-text
