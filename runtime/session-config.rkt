@@ -31,7 +31,8 @@
          (only-in "../extensions/api.rkt" extension-registry?)
          (only-in "../runtime/model-registry.rkt" model-registry?)
          (only-in "../runtime/trace-logger.rkt" trace-logger?)
-         (only-in "../runtime/settings.rkt" q-settings?))
+         (only-in "../runtime/settings.rkt" q-settings?)
+         (only-in "../util/cancellation.rkt" cancellation-token?))
 
 (provide session-config?
          session-config
@@ -59,7 +60,7 @@
           [config-thinking-level (-> session-config? (or/c 'off 'minimal 'low 'medium 'high 'xhigh))]
           [config-working-set (-> session-config? (or/c #f working-set?))]
           [config-parallel-tools (-> session-config? (or/c #f boolean?))]
-          [config-cancellation-token (-> session-config? (or/c #f hash?))]
+          [config-cancellation-token (-> session-config? (or/c #f cancellation-token?))]
           [config-tier-b-count (-> session-config? exact-nonnegative-integer?)]
           [config-tier-c-count (-> session-config? exact-nonnegative-integer?)]
           [config-templates (-> session-config? (or/c #f hash?))]
