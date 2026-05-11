@@ -33,6 +33,8 @@
 
 (require/typed "../../runtime/session-types.rkt" [#:opaque AgentSession agent-session?])
 
+(require/typed "../../runtime/working-set.rkt" [#:opaque WorkingSet working-set?])
+
 ;; ── Typed imports from untyped modules ──────────────────────────
 
 ;; ── Loop state structs (v0.29.16 W0) ──────────────────────────
@@ -74,10 +76,9 @@
 ;; v0.37.4 (FA-04): Bundle loop-evolving parameters into a single struct
 ;; to avoid threading 6+ positional parameters through interpret-step.
 (struct iteration-snapshot
-  ([counters : loop-counters]
-   [ws : Any]
-   [config : SessionConfig]
-   [sess : (U AgentSession #f)]
-   [max-iterations : Nonnegative-Integer]
-   [max-iterations-hard : Nonnegative-Integer])
+        ([counters : loop-counters] [ws : (U WorkingSet #f)]
+                                    [config : SessionConfig]
+                                    [sess : (U AgentSession #f)]
+                                    [max-iterations : Nonnegative-Integer]
+                                    [max-iterations-hard : Nonnegative-Integer])
   #:transparent)
