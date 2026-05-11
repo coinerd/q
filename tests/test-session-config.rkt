@@ -11,7 +11,8 @@
 (require rackunit
          racket/dict
          racket/hash
-         "../runtime/session-config.rkt")
+         "../runtime/session-config.rkt"
+         (only-in "../runtime/session-index/schema.rkt" make-empty-index session-index?))
 
 ;; ── Constructor tests ────────────────────────────────────────────
 
@@ -184,8 +185,9 @@
   (check-false (config-session-index c)))
 
 (test-case "config-session-index returns set value"
-  (define c (hash->session-config (hasheq 'session-index 42)))
-  (check-equal? (config-session-index c) 42))
+  (define idx (make-empty-index))
+  (define c (hash->session-config (hasheq 'session-index idx)))
+  (check-pred session-index? (config-session-index c)))
 
 ;; ── Full integration: agent-session round-trip ───────────────────
 

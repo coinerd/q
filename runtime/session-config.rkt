@@ -32,7 +32,8 @@
          (only-in "../runtime/model-registry.rkt" model-registry?)
          (only-in "../runtime/trace-logger.rkt" trace-logger?)
          (only-in "../runtime/settings.rkt" q-settings?)
-         (only-in "../util/cancellation.rkt" cancellation-token?))
+         (only-in "../util/cancellation.rkt" cancellation-token?)
+         (only-in "../runtime/session-index/schema.rkt" session-index?))
 
 (provide session-config?
          session-config
@@ -68,7 +69,7 @@
           [config-verbose? (-> session-config? boolean?)]
           [config-max-tokens (-> session-config? exact-positive-integer?)]
           [config-token-budget-threshold (-> session-config? (or/c #f exact-nonnegative-integer?))]
-          [config-session-index (-> session-config? (or/c #f exact-nonnegative-integer?))]))
+          [config-session-index (-> session-config? (or/c #f session-index?))]))
 
 ;; ── session-config struct ────────────────────────────────────────
 
