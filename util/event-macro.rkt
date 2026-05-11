@@ -244,6 +244,8 @@
                (struct event-name typed-event (all-field ...) #:transparent)
                (define type-name type-str)
                (define fields-name '(all-field ...))
+               ;; I-12: Register field names for event-struct->hasheq runtime lookup
+               (register-event-fields! 'event-name fields-name)
                (define (make-name #:session-id session-id
                                   #:turn-id turn-id
                                   #:timestamp [timestamp (current-seconds)]
@@ -257,6 +259,8 @@
                (struct event-name typed-event (all-field ...) #:transparent)
                (define type-name type-str)
                (define fields-name '(all-field ...))
+               ;; I-12: Register field names for event-struct->hasheq runtime lookup
+               (register-event-fields! 'event-name fields-name)
                (define (make-name #:session-id session-id
                                   #:turn-id turn-id
                                   #:timestamp [timestamp (current-seconds)]
