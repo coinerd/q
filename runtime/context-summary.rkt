@@ -69,7 +69,7 @@
         ([table #:mutable] ; hash: key=(from-id . to-id) → value=text
          [order #:mutable] ; list of keys in LRU order (newest first)
          [max-entries #:mutable]) ; capacity limit
-  #:transparent)
+  )
 
 (define (make-summary-cache #:max-entries [max DEFAULT-CACHE-MAX-ENTRIES])
   (summary-cache (hash) '() max))

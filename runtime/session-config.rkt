@@ -156,7 +156,7 @@
 ;; ── Dynamic default resolution ─────────────────────────────────
 
 (define (resolve-max-iterations-hard config max-iterations)
-  (or (config-max-iterations-hard config) (max (inexact->exact (floor (* max-iterations 1.6))) 80)))
+  (or (config-max-iterations-hard config) (max (quotient (* max-iterations 8) 5) 80)))
 
 ;; ── Conversion helpers ───────────────────────────────────────────
 

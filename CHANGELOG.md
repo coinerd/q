@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.38.0 — 2026-05-11
+
+### Goal: Quick-Win Struct Safety (Milestone 1 of v0.38.x)
+
+### Fixed
+- **H-01** (HIGH): Removed `#:transparent` from `tool-registry` struct in
+  `tools/registry.rkt`. Zero external field access; representation now hidden.
+- **L-05** (LOW): Replaced inexact floating-point arithmetic in
+  `resolve-max-iterations-hard` with exact rational `(quotient (* max-iterations 8) 5)`.
+- **L-14** (LOW): Removed `struct-out ext-registry-data` from public API in
+  `extensions/api.rkt`. All field access is internal to the module.
+- **M-06** (MEDIUM): Added `#:port` keyword parameter to `start-trace-logger!` in
+  `runtime/trace-logger.rkt`. Supports string-port injection for testing. Added
+  guard to close existing port on re-start, preventing double-start leak.
+- **L-01** (LOW): Removed `#:transparent` from `summary-cache` struct in
+  `runtime/context-summary.rkt`. All access via helper functions; accessors
+  remain available internally.
+
+**Verification**: lint 18/18, targeted tests 54/54 pass
+
+---
+
 ## v0.37.8 — 2026-05-11
 
 ### Goal: Audit Remediation — Accessor Migration + Dormant Symbol Cleanup
