@@ -24,7 +24,13 @@
 
 (require racket/dict
          racket/contract
-         (only-in "../runtime/working-set.rkt" working-set?))
+         (only-in "../runtime/working-set.rkt" working-set?)
+         (only-in "../llm/provider.rkt" provider?)
+         (only-in "../tools/registry.rkt" tool-registry?)
+         (only-in "../agent/event-bus.rkt" event-bus?)
+         (only-in "../extensions/api.rkt" extension-registry?)
+         (only-in "../runtime/model-registry.rkt" model-registry?)
+         (only-in "../runtime/trace-logger.rkt" trace-logger?))
 
 (provide session-config?
          session-config
@@ -34,11 +40,11 @@
          normalize-session-config-hash
          ;; Smart accessors with defaults
          (contract-out
-          [config-provider (-> session-config? (or/c #f symbol?))]
-          [config-tool-registry (-> session-config? (or/c #f hash?))]
-          [config-event-bus (-> session-config? (or/c #f hash?))]
-          [config-extension-registry (-> session-config? (or/c #f hash?))]
-          [config-model-registry (-> session-config? (or/c #f hash?))]
+          [config-provider (-> session-config? (or/c #f provider?))]
+          [config-tool-registry (-> session-config? (or/c #f tool-registry?))]
+          [config-event-bus (-> session-config? (or/c #f event-bus?))]
+          [config-extension-registry (-> session-config? (or/c #f extension-registry?))]
+          [config-model-registry (-> session-config? (or/c #f model-registry?))]
           [config-settings (-> session-config? (or/c #f hash?))]
           [config-model-name (-> session-config? (or/c #f string?))]
           [config-session-dir (-> session-config? (or/c #f path-string?))]
@@ -56,7 +62,7 @@
           [config-tier-b-count (-> session-config? exact-nonnegative-integer?)]
           [config-tier-c-count (-> session-config? exact-nonnegative-integer?)]
           [config-templates (-> session-config? (or/c #f hash?))]
-          [config-trace-logger (-> session-config? (or/c #f procedure?))]
+          [config-trace-logger (-> session-config? (or/c #f trace-logger?))]
           [config-verbose? (-> session-config? boolean?)]
           [config-max-tokens (-> session-config? exact-positive-integer?)]
           [config-token-budget-threshold (-> session-config? (or/c #f exact-nonnegative-integer?))]
