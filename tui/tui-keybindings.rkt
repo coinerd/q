@@ -343,6 +343,12 @@
         (set-box! (tui-ctx-input-state-box ctx) (input-expand-file-ref inp))
         'continue]
        [(#\u001b) 'continue]
+       [(#\backspace)
+        (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
+        'continue]
+       [(#\rubout)
+        (set-box! (tui-ctx-input-state-box ctx) (input-backspace inp))
+        'continue]
        [else
         ;; Regular printable character
         (set-box! (tui-ctx-input-state-box ctx) (input-insert-char inp keycode))
@@ -419,6 +425,43 @@
               ;; Clear any streaming text and busy state
               (set-box! (tui-ctx-ui-state-box ctx)
                         (clear-streaming (set-pending-tool-name (set-busy state #f) #f)))))
+        'continue]
+
+       ;; Plain arrow keys and navigation (no keymap entry for unmodified)
+       [(left kp-left)
+        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-left inp))
+        'continue]
+       [(right kp-right)
+        (set-box! (tui-ctx-input-state-box ctx) (input-cursor-right inp))
+        'continue]
+       [(home kp-home)
+        (set-box! (tui-ctx-input-state-box ctx) (input-home inp))
+        'continue]
+       [(end kp-end)
+        (set-box! (tui-ctx-input-state-box ctx) (input-end inp))
+        'continue]
+       [(up kp-up)
+        (set-box! (tui-ctx-input-state-box ctx) (input-history-up inp))
+        'continue]
+       [(down kp-down)
+        (set-box! (tui-ctx-input-state-box ctx) (input-history-down inp))
+        'continue]
+       [(delete kp-delete)
+        (set-box! (tui-ctx-input-state-box ctx) (input-delete inp))
+        'continue]
+       [(pgup kp-pgup)
+        (let ()
+          (define-values (_cols rows) (tui-screen-size))
+          (define layout (compute-layout _cols rows))
+          (set-box! (tui-ctx-ui-state-box ctx)
+                    (scroll-up state (max 1 (tui-layout-transcript-height layout)))))
+        'continue]
+       [(pgdn kp-pgdn)
+        (let ()
+          (define-values (_cols rows) (tui-screen-size))
+          (define layout (compute-layout _cols rows))
+          (set-box! (tui-ctx-ui-state-box ctx)
+                    (scroll-down state (max 1 (tui-layout-transcript-height layout)))))
         'continue]
        [else 'continue])]
 

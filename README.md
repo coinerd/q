@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.38.9-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.38.10-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -199,7 +199,7 @@ racket main.rkt --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.38.9
+racket main.rkt --version  # q version 0.38.10
 raco test tests/           # run the full test suite
 ```
 
@@ -272,8 +272,8 @@ q/
 |--------|-------|
 | Test files | 553 |
 | Source modules | 419 |
-| Source lines | 64318 |
-| Test lines | 98896 |
+| Source lines | 64361 |
+| Test lines | 98897 |
 | Test assertions | 15383 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -378,11 +378,14 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
+
+**v0.38.10** — Fixed
+
 **v0.38.9** — Fixed
 
 **v0.38.8** — Goal: Audit Remediation — fix 8 compile regressions, struct-safety, test coverage
 
-**v0.38.7** — Goal: Audit Remediation 2014 fix 8 compile regressions, struct-safety, test coverage
+**v0.38.7** — Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
 
 **v0.38.6** — Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
 

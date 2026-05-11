@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.38.10 — 2026-05-11
+
+### Fixed
+- BUG-01: `config-provider` contract `(or/c #f symbol?)` → `(or/c #f provider?)` — crashed `--tui`
+- BUG-02: 5 more wrong contracts in `session-config.rkt` (`hash?` → correct struct predicates)
+- R-01: README v0.38.7 line restored to original description
+- R-02: Added 12 missing keyboard handlers in `handle-key` (backspace, rubout, delete, left, right, home, end, kp-*, pgup, pgdn)
+- R-03: Migrated `tests/test-main.rkt` from `hash?`/`hash-ref` to `session-config?`/`dict-ref`
+
 ## v0.38.9 — 2026-05-11
 
 ### Fixed
