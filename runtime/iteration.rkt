@@ -93,7 +93,7 @@
                                                 string?
                                                 exact-nonnegative-integer?)
                              (#:cancellation-token (or/c cancellation-token? #f)
-                              #:config (or/c hash? session-config?)
+                              #:config session-config?
                               #:queue (or/c queue? #f)
                               #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
                               #:injected-box (or/c box? #f)

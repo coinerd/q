@@ -39,7 +39,7 @@
          max-iterations ; exact-nonnegative-integer? — iteration limit
          ;; Optional fields (keyword, default #f)
          cancellation-token ; (or/c cancellation-token? #f)
-         config ; (or/c hash? session-config?)
+         config ; session-config?
          queue ; (or/c queue? #f) — steering message queue
          follow-up-delivery-mode ; (or/c 'all 'one-at-a-time)
          injected-box ; (or/c box? #f) — injected message box

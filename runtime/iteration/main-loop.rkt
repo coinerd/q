@@ -89,7 +89,7 @@
                                                 string?
                                                 exact-nonnegative-integer?)
                              (#:cancellation-token (or/c cancellation-token? #f)
-                              #:config (or/c hash? session-config?)
+                              #:config session-config?
                               #:queue (or/c queue? #f)
                               #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
                               #:injected-box (or/c box? #f)
@@ -122,10 +122,7 @@
         [force-shutdown-check (loop-config-force-shutdown-check cfg)]
         [initial-ws (loop-config-working-set cfg)]
         [sess (loop-config-session cfg)])
-    (define config
-      (if (session-config? config-raw)
-          config-raw
-          (hash->session-config config-raw)))
+    (define config config-raw)
     (define max-iterations-hard (resolve-max-iterations-hard config max-iterations))
     (define ws (or initial-ws (make-working-set)))
     (define agent-start-payload
@@ -276,7 +273,7 @@
                             session-id
                             max-iterations
                             #:cancellation-token [token #f]
-                            #:config [config-raw (hash)]
+                            #:config [config-raw (hash->session-config (hash))]
                             #:queue [steering-queue #f]
                             #:follow-up-delivery-mode [follow-up-mode 'all]
                             #:injected-box [injected-box #f]
