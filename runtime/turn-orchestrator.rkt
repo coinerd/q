@@ -123,15 +123,18 @@
                list?)]
           [register-session-extensions!
            (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]
-          [assemble-context/pure (-> list? (or/c hash? session-config?) list?)]))
+          [assemble-context/pure
+           (->* (list? (or/c hash? session-config?))
+                 (#:hook-dispatcher (or/c procedure? #f))
+                 (values list? any/c))]))
 
 ;; ============================================================
 ;; Context assembly
 ;; ============================================================
 
 ;; Pure: assemble context from messages and config without side effects.
-;; Returns the assembled message list (no events, no hooks).
-(define (assemble-context/pure ctx-to-use config-raw)
+;; Returns the assembled message list and hook result (no events emitted here).
+(define (assemble-context/pure ctx-to-use config-raw #:hook-dispatcher [hook-dispatcher #f])
   (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
   (define tier-b-count (config-tier-b-count config))
   (define tier-c-count (config-tier-c-count config))
@@ -143,32 +146,21 @@
           (working-set-resolve-messages ws ctx-to-use message-id)
           '())))
   (define ws-messages (force ws-messages-promise))
-  (define-values (tc _hook-result)
+  (define-values (tc hook-result)
     (build-tiered-context-with-hooks ctx-to-use
+                                     #:hook-dispatcher hook-dispatcher
                                      #:tier-b-count tier-b-count
                                      #:tier-c-count tier-c-count
                                      #:max-tokens max-tokens
                                      #:working-set-messages ws-messages))
-  (tiered-context->message-list tc))
+  (values (tiered-context->message-list tc) hook-result))
 
 ;; Build assembled context using tiered context assembly with hooks.
 ;; Returns the assembled message list.
 (define (build-assembled-context ctx-to-use config-raw ext-reg bus session-id iteration)
   ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
   (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
-  (define tier-b-count (config-tier-b-count config))
-  (define tier-c-count (config-tier-c-count config))
-  (define max-tokens (config-max-tokens config))
-  ;; v0.26.0: Extract working set from config
-  ;; v0.29.5 W3: Defer ws-message resolution
   (define ws (config-working-set config))
-  (define ws-messages-promise
-    (delay
-      (if ws
-          (working-set-resolve-messages ws ctx-to-use message-id)
-          '())))
-  (define ws-messages (force ws-messages-promise))
-  (define ws-message-ids (map message-id ws-messages))
 
   ;; R2-6: Create hook dispatcher function for context assembly
   (define ctx-assembly-hook-dispatcher
@@ -177,21 +169,14 @@
            (define result (dispatch-hooks hook-point payload ext-reg))
            result)))
 
-  ;; Build tiered context with hook support
-  (define-values (tc assembly-hook-result)
-    (build-tiered-context-with-hooks ctx-to-use
-                                     #:hook-dispatcher ctx-assembly-hook-dispatcher
-                                     #:tier-b-count tier-b-count
-                                     #:tier-c-count tier-c-count
-                                     #:max-tokens max-tokens
-                                     #:working-set-messages ws-messages))
+  ;; FD-05: Delegate pure assembly to assemble-context/pure
+  (define-values (ctx-assembled assembly-hook-result)
+    (assemble-context/pure ctx-to-use config-raw #:hook-dispatcher ctx-assembly-hook-dispatcher))
 
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
     (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
     (raise-extension-error "Context assembly blocked by extension" "unknown" "turn.started"))
-
-  (define ctx-assembled (tiered-context->message-list tc))
 
   ;; v0.26.0: Emit working-set.injected event
   (when ws

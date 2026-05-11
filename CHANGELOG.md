@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.37.5 — 2026-05-11
+
+### Goal: Turn Orchestrator Decomposition (Milestone 6 of v0.37.x)
+
+### Fixed
+- **FD-05** (M): Separated pure assembly from effectful dispatch in
+  `build-assembled-context`. `assemble-context/pure` now accepts optional
+  `#:hook-dispatcher` and returns `(values list? any/c)`. `build-assembled-context`
+  delegates pure assembly to it, then handles block results, emits events, and
+  dispatches the 'context hook. Eliminates ~25 lines of duplicated config
+  extraction and tiered-context building.
+
+### Changed
+- `runtime/turn-orchestrator.rkt`: `assemble-context/pure` signature extended;
+  `build-assembled-context` refactored to delegate
+- `tests/test-context-assembly.rkt`: updated for values return
+
+**Verification**: lint 18/18, test-context-assembly 34/34
+
+---
+
 ## v0.37.4 — 2026-05-11
 
 ### Goal: Iteration Loop Hygiene (Milestone 5 of v0.37.x)
