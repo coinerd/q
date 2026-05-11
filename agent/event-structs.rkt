@@ -34,6 +34,7 @@
          "event-structs/hook-events.rkt"
          "event-structs/stream-events.rkt")
 
+;; WARNING: all-from-out leaks submodule additions -- keep submodules stable
 (provide (all-from-out "event-structs/base.rkt")
          (all-from-out "event-structs/turn-events.rkt")
          (all-from-out "event-structs/message-events.rkt")
