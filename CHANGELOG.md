@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.37.8 — 2026-05-11
+
+### Goal: Audit Remediation — Accessor Migration + Dormant Symbol Cleanup
+
+### Fixed
+- **R-01** (MEDIUM): Migrated 5 remaining `dict-ref` calls in
+  `runtime/tool-coordinator.rkt` to config accessors (`config-settings`,
+  `config-provider`, `config-model-name`, `config-session-index`,
+  `config-parallel-tools`). All accessors already imported.
+- **R-02** (LOW): Migrated 2 `dict-ref` calls in
+  `runtime/turn-orchestrator.rkt` to `config-settings` and `config-model-name`.
+- **R-04** (INFO): Removed dormant `stop-budget` from `step-action?` predicate
+  and `step-result` contract in `runtime/iteration/decision.rkt`. No code path
+  ever produced this action; removing it prevents accidental usage and keeps
+  the action universe clean.
+- **R-05b** (INFO): Migrated `dict-ref` in `runtime/session-compaction.rkt` to
+  `config-max-context-tokens` accessor.
+- **R-05c** (INFO): Migrated 2 `dict-ref` calls in
+  `runtime/session-lifecycle.rkt` to `config-working-set` accessor.
+
+### Changed
+- `tests/test-iteration-pure.rkt`: Updated step-action? test to exclude removed
+  `stop-budget` symbol.
+
+### Verification
+- Zero `dict-ref config` remaining in `runtime/` (excluding TR `retry-policy.rkt`)
+- Zero `stop-budget` references in `runtime/`
+- Lint 18/18
+
+**Score delta**: 9.1 -> 9.3
+
+---
+
 ## v0.37.7 — 2026-05-11
 
 ### Goal: Architecture Fitness Tests (Milestone 8 of v0.37.x)

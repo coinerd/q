@@ -8,6 +8,7 @@
 
 (require racket/contract
          (only-in racket/dict dict-ref)
+         (only-in "session-config.rkt" config-max-context-tokens)
          "../llm/token-budget.rkt"
          "../runtime/compactor.rkt"
          (only-in "../util/protocol-types.rkt" message-role message-content content-part->jsexpr)
@@ -62,25 +63,25 @@
                                                   #:reason "budget-exceeded"
                                                   #:tokens-before token-count
                                                   #:tokens-after token-count))
-        (dynamic-wind
-         (lambda () (void))
-         (lambda ()
-           (maybe-compact-context-internal sess
-                                           context-with-system
-                                           token-count
-                                           token-budget-threshold
-                                           bus
-                                           sid))
-         (lambda ()
-           (set-agent-session-compacting?! sess #f)
-           (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
-           (emit-typed-event! bus
-                              (make-compaction-event #:session-id sid
-                                                     #:turn-id #f
-                                                     #:timestamp (current-inexact-milliseconds)
-                                                     #:reason "compaction-complete"
-                                                     #:tokens-before token-count
-                                                     #:tokens-after token-count))))])]))
+        (dynamic-wind (lambda () (void))
+                      (lambda ()
+                        (maybe-compact-context-internal sess
+                                                        context-with-system
+                                                        token-count
+                                                        token-budget-threshold
+                                                        bus
+                                                        sid))
+                      (lambda ()
+                        (set-agent-session-compacting?! sess #f)
+                        (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
+                        (emit-typed-event! bus
+                                           (make-compaction-event #:session-id sid
+                                                                  #:turn-id #f
+                                                                  #:timestamp
+                                                                  (current-inexact-milliseconds)
+                                                                  #:reason "compaction-complete"
+                                                                  #:tokens-before token-count
+                                                                  #:tokens-after token-count))))])]))
 
 ;; Internal compaction logic (extracted for dynamic-wind)
 (define (maybe-compact-context-internal sess
@@ -133,6 +134,6 @@
 ;;; context exceeds 90% budget during tool-call loops.
 ;;; Returns compacted context or original if compaction not possible.
 (define (compact-context-mid-turn sess context)
-  (define max-tokens (dict-ref (agent-session-config sess) 'max-context-tokens 128000))
+  (define max-tokens (config-max-context-tokens (agent-session-config sess)))
   (define budget-threshold (inexact->exact (floor (* max-tokens 0.9))))
   (maybe-compact-context sess context budget-threshold))

@@ -15,9 +15,7 @@
 (require racket/contract
          racket/match
          (only-in "counters.rkt" compute-next-counters)
-         (only-in "../../util/loop-result.rkt"
-                  loop-result-termination-reason
-                  loop-result-messages)
+         (only-in "../../util/loop-result.rkt" loop-result-termination-reason loop-result-messages)
          (only-in "loop-state.rkt"
                   loop-counters
                   loop-counters-iteration
@@ -39,15 +37,14 @@
          metadata) ; hash? — metadata for result construction
   #:transparent)
 
-(define step-action?
-  (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit 'stop-budget))
+(define step-action? (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit))
 
 (provide (struct-out iteration-ctx)
-         (contract-out
-           [struct step-result ([action (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit 'stop-budget)]
+         (contract-out (struct step-result
+                               ([action (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit)]
                                 [termination (or/c symbol? #f)]
                                 [new-counters any/c]
-                                [metadata hash?])])
+                                [metadata hash?])))
          decide-next-action
          compute-step-result
          known-termination-reasons

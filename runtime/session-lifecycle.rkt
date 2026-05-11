@@ -14,6 +14,7 @@
 ;;   run-prompt-internal     — internal prompt execution (after input hook)
 
 (require racket/contract
+         (only-in "session-config.rkt" config-working-set)
          "session-mutation.rkt"
          racket/string
          racket/file
@@ -157,7 +158,7 @@
         user-message))
 
   ;; v0.26.0: Reset working set on new user message
-  (define ws (dict-ref (agent-session-config sess) 'working-set #f))
+  (define ws (config-working-set (agent-session-config sess)))
   (when ws
     (working-set-reset! ws))
 
@@ -269,7 +270,7 @@
           ;; v0.32.0: Stop trace logger on error (flush before return)
           (stop-trace-logger! tracer)
           (make-loop-result context-with-system 'error payload))])
-    (define ws (dict-ref cfg 'working-set #f))
+    (define ws (config-working-set cfg))
     (define result
       (run-iteration-loop context-with-system
                           prov
