@@ -248,6 +248,12 @@
             (typed-event-turn-id evt)))
   (define type-str (typed-event-type evt))
   (define serializer (lookup-event-serializer type-str))
+  (define vec (struct->vector evt))
+  (define total-fields (sub1 (vector-length vec)))
+  (when (and (not serializer) (> total-fields 4))
+    (log-warning "q/event-json: no serializer for typed event '~a', dropping ~a subclass fields"
+                 type-str
+                 (- total-fields 4)))
   (if serializer
       (for/fold ([h base]) ([(k v) (in-hash (serializer evt))])
         (hash-set h k v))
@@ -260,6 +266,8 @@
   (define sid (hash-ref h 'sessionId ""))
   (define tid (hash-ref h 'turnId #f))
   (define deserializer (lookup-event-deserializer type))
+  (when (and (not deserializer) (> (hash-count h) 4))
+    (log-warning "q/event-json: no deserializer for event type '~a'" type))
   (if deserializer
       (deserializer type ts sid tid h)
       (typed-event type ts sid tid)))

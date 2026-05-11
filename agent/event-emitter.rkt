@@ -23,7 +23,8 @@
 (provide (contract-out [emit-typed-event!
                         (->* (event-bus? typed-event?) (#:state (or/c loop-state? #f)) event?)]
                        [event-struct->hasheq (-> typed-event? hash?)]
-                       [get-struct-field-names (-> symbol? (listof symbol?))]))
+                       [get-struct-field-names (-> symbol? (listof symbol?))])
+         typed-event-base-field-count)
 
 ;; Look up the field name list for a given event struct symbol.
 ;; Uses auto-populated registry from define-typed-event macro.
@@ -39,23 +40,29 @@
       raw))
 
 ;; Serialize a typed event struct to a hasheq payload.
+;; W-02: Use accessors instead of hardcoded vector offsets for base fields.
+;; typed-event has 4 base fields: type, timestamp, session-id, turn-id.
+;; Subclass app fields start at vector index 5 (= 1 struct-type + 4 base fields).
+(define typed-event-base-field-count 4)
+
 (define (event-struct->hasheq evt)
   (define vec (struct->vector evt))
+  (define app-start (+ 1 typed-event-base-field-count))
   (define base
     (hasheq 'type
-            (vector-ref vec 1)
+            (typed-event-type evt)
             'timestamp
-            (vector-ref vec 2)
+            (typed-event-timestamp evt)
             'session-id
-            (vector-ref vec 3)
+            (typed-event-session-id evt)
             'turn-id
-            (vector-ref vec 4)))
+            (typed-event-turn-id evt)))
   (define name (struct-name evt))
   (define fields (get-struct-field-names name))
   (for/fold ([h base])
             ([i (in-naturals)]
              [fname (in-list fields)])
-    (hash-set h fname (vector-ref vec (+ 5 i)))))
+    (hash-set h fname (vector-ref vec (+ app-start i)))))
 
 ;; Emit a typed event on the bus.
 ;; Optional #:state for state accumulation (mirrors emit! from loop-messages).

@@ -224,3 +224,27 @@
   (check-equal? (dict-ref c 'unknown-key) 42)
   ;; Use dict-ref for raw value access; config-provider has provider? contract
   (check-eq? (dict-ref c 'provider) 'p))
+
+;; -- T-01: Contract-rejection tests for config-settings --
+(test-case "T-01: config-settings returns #f when no settings provided"
+  (define c (hash->session-config (hasheq)))
+  (check-false (config-settings c) "config-settings should return #f for empty config"))
+
+(test-case "T-01: config-settings contract rejects plain hash on return"
+  ;; A plain hash is not a q-settings? -- the contract should raise
+  (define c (hash->session-config (hasheq 'settings (hasheq))))
+  (check-exn exn:fail:contract?
+             (lambda () (config-settings c))
+             "config-settings should raise contract error for plain hash"))
+
+;; -- T-02: Contract-rejection tests for config-cancellation-token --
+(test-case "T-02: config-cancellation-token returns #f when not provided"
+  (define c (hash->session-config (hasheq)))
+  (check-false (config-cancellation-token c)))
+
+(test-case "T-02: config-cancellation-token contract rejects non-token on return"
+  ;; A string is not a cancellation-token? -- the contract should raise
+  (define c (hash->session-config (hasheq 'cancellation-token "not-a-token")))
+  (check-exn exn:fail:contract?
+             (lambda () (config-cancellation-token c))
+             "config-cancellation-token should raise contract error for string"))

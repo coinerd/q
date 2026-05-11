@@ -175,6 +175,8 @@
 
   ;; Capture batch start time for per-batch duration (v0.29.16)
   (define batch-start-ms (current-inexact-milliseconds))
+  ;; W-05: per-tool start time tracking for accurate duration-ms
+  (define per-tool-start-ms (make-hash))
 
   ;; Run tool batch through scheduler (skip if blocked or no registry)
   (define sched-result
@@ -197,13 +199,17 @@
            (lambda (event-type payload)
              (cond
                [(equal? event-type "tool.execution.start")
+                ;; W-05: store per-tool start-ms for accurate duration
+                (define tcid (hash-ref payload 'tool-call-id))
+                (define start-ms (hash-ref payload 'start-ms (current-inexact-milliseconds)))
+                (hash-set! per-tool-start-ms tcid start-ms)
                 (emit-typed-event! bus
                                    (make-tool-execution-start-event
                                     #:session-id session-id
                                     #:turn-id #f
                                     #:timestamp (current-inexact-milliseconds)
                                     #:tool-name (hash-ref payload 'tool-name)
-                                    #:tool-call-id (hash-ref payload 'tool-call-id)))]
+                                    #:tool-call-id tcid))]
                [else (emit-session-event! bus session-id event-type payload)]))
            #:runtime-settings (or (config-settings config)
                                   (make-minimal-settings #:provider (config-provider config)
@@ -235,8 +241,11 @@
                         #:turn-id #f
                         #:timestamp (current-inexact-milliseconds)
                         #:tool-name (tool-call-name tc)
+                        ;; W-05: use per-tool start-ms when available, fallback to batch-start
                         #:duration-ms (inexact->exact (floor (- (current-inexact-milliseconds)
-                                                                batch-start-ms)))
+                                                                (hash-ref per-tool-start-ms
+                                                                          (tool-call-id tc)
+                                                                          batch-start-ms))))
                         #:result-summary (if (tool-result-is-error? tr) 'error 'completed))))
 
   ;; Convert scheduler results to tool-result messages.

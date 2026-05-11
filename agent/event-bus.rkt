@@ -231,16 +231,23 @@
 ;; Typed event bridge (EVT-01)
 ;; ============================================================
 
+;; W-06: Convert camelCase JSON keys to snake_case Racket symbols.
+;; This ensures bus-emit-typed! produces payloads compatible with TUI handlers.
+(define (json-key->racket-key k)
+  (define s (symbol->string k))
+  (string->symbol (regexp-replace* #rx"([a-z])([A-Z])" s "\\1-\\2")))
+
 ;; Convert a typed-event to a raw event struct for bus transport.
 ;; The typed event's type field becomes the event name.
 ;; Extra fields are serialized via typed-event->jsexpr and stripped
 ;; of the base fields (type, timestamp, sessionId, turnId).
+;; W-06: Keys are converted from camelCase to snake_case for TUI compatibility.
 (define (typed-event->event te)
   (define h (typed-event->jsexpr te))
   (define payload
     (for/hash ([(k v) (in-hash h)]
                #:when (not (memq k '(type timestamp sessionId turnId))))
-      (values k v)))
+      (values (json-key->racket-key k) v)))
   (make-event (typed-event-type te)
               (typed-event-timestamp te)
               (typed-event-session-id te)

@@ -170,3 +170,24 @@
   (check-true (turn-cancelled-event? evt))
   (check-equal? (turn-cancelled-event-iteration evt) #f)
   (check-equal? turn-cancelled-event-fields '(reason iteration)))
+
+;; -- T-05: Macro registry wiring break-glass test --
+(require (only-in "../util/event-macro.rkt" lookup-event-fields register-event-fields!))
+
+(test-case "T-05: register-event-fields! is required for field lookup"
+  ;; Verify that a known event type has its fields registered
+  (define fields (lookup-event-fields 'turn-start-event))
+  (check-not-false fields "turn-start-event should have registered fields")
+  (check-equal? fields '(model provider)))
+
+(test-case "T-05: unregistered event type returns #f"
+  (define fields (lookup-event-fields 'nonexistent-event-type-xyz))
+  (check-equal? fields '()))
+
+(test-case "T-05: registration is idempotent"
+  ;; Re-registering should not error
+  (register-event-fields! 'test-idempotent-event '(field-a field-b))
+  (check-equal? (lookup-event-fields 'test-idempotent-event) '(field-a field-b))
+  ;; Register again with same values
+  (register-event-fields! 'test-idempotent-event '(field-a field-b))
+  (check-equal? (lookup-event-fields 'test-idempotent-event) '(field-a field-b)))

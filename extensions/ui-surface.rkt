@@ -58,61 +58,6 @@
 ;; Global mutable registry (replaces 10 individual parameters).
 (define *ui-registry* (box (ui-callback-registry #f #f #f #f #f #f #f #f #f #f)))
 
-;; Backward-compatible parameter wrappers (deprecated, removal v0.39.0)
-(define (ui-set-footer-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-footer new-val]))
-      (ui-callback-registry-set-footer r)))
-
-(define (ui-set-header-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-header new-val]))
-      (ui-callback-registry-set-header r)))
-
-(define (ui-clear-footer-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [clear-footer new-val]))
-      (ui-callback-registry-clear-footer r)))
-
-(define (ui-clear-header-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [clear-header new-val]))
-      (ui-callback-registry-clear-header r)))
-
-(define (ui-make-styled-line-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [make-styled-line new-val]))
-      (ui-callback-registry-make-styled-line r)))
-
-(define (ui-make-styled-segment-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [make-styled-segment new-val]))
-      (ui-callback-registry-make-styled-segment r)))
-
-(define (ui-set-status-message-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-status-message new-val]))
-      (ui-callback-registry-set-status-message r)))
-
-(define (ui-set-extension-widget-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-extension-widget new-val]))
-      (ui-callback-registry-set-extension-widget r)))
-
-(define (ui-remove-extension-widget-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry* (struct-copy ui-callback-registry r [remove-extension-widget new-val]))
-      (ui-callback-registry-remove-extension-widget r)))
-
 (define (ui-remove-all-extension-widgets-param [new-val #f])
   (define r (unbox *ui-registry*))
   (if new-val
