@@ -166,7 +166,7 @@
   (define tool-calls-to-run (tool-call-actions-calls-to-run actions))
   (define tool-call-blocked? (tool-call-actions-blocked? actions))
 
-  ;; Dispatch 'tool.execution.start hook before tool batch
+  ;; Dispatch 'tool.execution.started hook before tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
     (maybe-dispatch-hooks
      ext-reg
@@ -198,7 +198,7 @@
            #:event-publisher
            (lambda (event-type payload)
              (cond
-               [(equal? event-type "tool.execution.start")
+               [(equal? event-type "tool.execution.started")
                 ;; W-05: store per-tool start-ms for accurate duration
                 (define tcid (hash-ref payload 'tool-call-id))
                 (define start-ms (hash-ref payload 'start-ms (current-inexact-milliseconds)))

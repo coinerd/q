@@ -206,6 +206,7 @@
          (styled (format "[tool result: ~a]" name) '(dim))
          (styled (format "[tool failed: ~a]" name) '(red)))]
     ;; Backward-compatible handlers for old raw event topics
+    ;; DEPRECATED (W-04): Legacy handlers for old raw event topics. Kept for backward compat.
     [("tool.call.completed")
      (define name (hash-ref payload 'name "?"))
      (define result (hash-ref payload 'result #f))

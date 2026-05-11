@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.38.11 -- 2026-05-07
+
+- W-02: Harden event-struct->hasheq with typed-event accessors (W0)
+- W-03: Add log-warning for missing event serializers (W0)
+- W-05: Per-tool start-ms for accurate duration tracking (W0)
+- W-06: Unify emission path key format (snake_case) (W0)
+- W-01: Remove dual-type (or/c hash? session-config?) from internal runtime modules (W1)
+- W-04: Deprecate legacy tool.call.completed/failed handlers (W2)
+- W-07: Align event naming to tool.execution.started (W2)
+- W-08: Undeprecate register-event-fields! (canonical mechanism) (W2)
+- D-02: Fix resolve-defaults syntax comparison fragility (W2)
+- D-01: Remove dead *-param wrappers from ui-surface.rkt (W0)
+- T-01..T-05: New test coverage for session-config contracts, TR boundary, payloads, macro registry
+
 ## v0.38.10 — 2026-05-11
 
 ### Fixed
