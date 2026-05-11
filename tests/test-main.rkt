@@ -7,6 +7,7 @@
          racket/file
          json
          "../main.rkt"
+         "../runtime/session-config.rkt"
          (only-in "../extensions/api.rkt" extension-registry? list-extensions))
 
 (define (capture-output thunk)
@@ -59,25 +60,25 @@
 (test-case "returns a hash with required keys"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-pred hash? rt)
-  (check-true (hash-has-key? rt 'provider))
-  (check-true (hash-has-key? rt 'tool-registry))
-  (check-true (hash-has-key? rt 'event-bus))
-  (check-true (hash-has-key? rt 'max-iterations)))
+  (check-pred session-config? rt)
+  (check-true (dict-has-key? rt 'provider))
+  (check-true (dict-has-key? rt 'tool-registry))
+  (check-true (dict-has-key? rt 'event-bus))
+  (check-true (dict-has-key? rt 'max-iterations)))
 
 (test-case "provider is valid when config exists (may be real or mock depending on config)"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (provider? (hash-ref rt 'provider)))
+  (check-true (provider? (dict-ref rt 'provider)))
   ;; Provider name depends on whether ~/.q/config.json exists and has valid config
   ;; Could be "mock" (no config) or "openai-compatible" (config with credentials or local provider)
-  (check-true (not (false? (member (provider-name (hash-ref rt 'provider))
+  (check-true (not (false? (member (provider-name (dict-ref rt 'provider))
                                    '("mock" "openai-compatible"))))))
 
 (test-case "tool-registry has built-in tools (>= 13)"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (define reg (hash-ref rt 'tool-registry))
+  (define reg (dict-ref rt 'tool-registry))
   ;; Guard: use >= to avoid breakage when tools are added
   (check-true (>= (length (list-tools reg)) 13)
               (format "expected >= 13 built-in tools, got ~a" (length (list-tools reg)))))
@@ -85,35 +86,35 @@
 (test-case "event-bus is valid"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (event-bus? (hash-ref rt 'event-bus))))
+  (check-true (event-bus? (dict-ref rt 'event-bus))))
 
 (test-case "max-iterations from cli-config"
   (define cfg (parse-cli-args #("--max-turns" "5")))
   (define rt (build-runtime-from-cli cfg))
-  (check-equal? (hash-ref rt 'max-iterations) 5))
+  (check-equal? (dict-ref rt 'max-iterations) 5))
 
 (test-case "session-id from cli-config"
   (define cfg (parse-cli-args #("--session" "abc123")))
   (define rt (build-runtime-from-cli cfg))
-  (check-equal? (hash-ref rt 'session-id) "abc123"))
+  (check-equal? (dict-ref rt 'session-id) "abc123"))
 
 (test-case "cli-config->runtime-config uses project-dir key for --project-dir"
   (define cfg (parse-cli-args #("--project-dir" "/tmp/myproject")))
   (define rt (cli-config->runtime-config cfg))
-  (check-true (hash-has-key? rt 'project-dir))
-  (check-false (hash-has-key? rt 'session-dir))
-  (check-equal? (hash-ref rt 'project-dir) "/tmp/myproject"))
+  (check-true (dict-has-key? rt 'project-dir))
+  (check-false (dict-has-key? rt 'session-dir))
+  (check-equal? (dict-ref rt 'project-dir) "/tmp/myproject"))
 
 (test-case "no-tools flag propagated"
   (define cfg (parse-cli-args #("--no-tools")))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-ref rt 'no-tools?)))
+  (check-true (dict-ref rt 'no-tools?)))
 
 (test-case "default session-dir is provided"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'session-dir))
-  (check-true (path-string? (hash-ref rt 'session-dir))))
+  (check-true (dict-has-key? rt 'session-dir))
+  (check-true (path-string? (dict-ref rt 'session-dir))))
 
 ;; ============================================================
 ;; mode-for-config
@@ -331,20 +332,20 @@
 (test-case "build-runtime-from-cli: includes extension-registry key"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'extension-registry)
+  (check-true (dict-has-key? rt 'extension-registry)
               "runtime config should have extension-registry key"))
 
 (test-case "build-runtime-from-cli: extension-registry is an extension-registry?"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
   (check-pred extension-registry?
-              (hash-ref rt 'extension-registry)
+              (dict-ref rt 'extension-registry)
               "extension-registry value should satisfy extension-registry?"))
 
 (test-case "build-runtime-from-cli: extension-registry starts empty"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (define ext-reg (hash-ref rt 'extension-registry))
+  (define ext-reg (dict-ref rt 'extension-registry))
   (check-equal? (length (list-extensions ext-reg))
                 0
                 "extension-registry should start with no extensions"))
@@ -359,9 +360,9 @@
                 (lambda ()
                   (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
                   (define rt (build-runtime-from-cli cfg))
-                  (check-true (hash-has-key? rt 'system-instructions))
+                  (check-true (dict-has-key? rt 'system-instructions))
                   ;; Empty project dir with no .q dir → no project tree, no instructions
-                  (check-equal? (hash-ref rt 'system-instructions)
+                  (check-equal? (dict-ref rt 'system-instructions)
                                 '()
                                 "system-instructions should be empty in empty project dir"))
                 (lambda () (delete-directory/files tmp-dir))))
@@ -376,8 +377,8 @@
                 (lambda ()
                   (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
                   (define rt (build-runtime-from-cli cfg))
-                  (check-true (hash-has-key? rt 'system-instructions))
-                  (define instrs (hash-ref rt 'system-instructions))
+                  (check-true (dict-has-key? rt 'system-instructions))
+                  (define instrs (dict-ref rt 'system-instructions))
                   (check-true (and (list? instrs) (>= (length instrs) 1))
                               "should have at least one instruction from instructions.md")
                   (when (and (list? instrs) (not (null? instrs)))
@@ -392,16 +393,16 @@
 (test-case "build-runtime-from-cli: includes model-name key when --model given"
   (define cfg (parse-cli-args #("--model" "gpt-4o")))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'model-name) "runtime config should have model-name key")
-  (check-equal? (hash-ref rt 'model-name) "gpt-4o" "model-name should match --model flag"))
+  (check-true (dict-has-key? rt 'model-name) "runtime config should have model-name key")
+  (check-equal? (dict-ref rt 'model-name) "gpt-4o" "model-name should match --model flag"))
 
 (test-case "build-runtime-from-cli: model-name resolves from config when --model not given"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'model-name))
+  (check-true (dict-has-key? rt 'model-name))
   ;; When no --model flag, model-name is resolved from config default-model
   ;; (may be a string like "glm-5.1" or #f if no config/default found)
-  (check-true (or (string? (hash-ref rt 'model-name)) (eq? (hash-ref rt 'model-name) #f))
+  (check-true (or (string? (dict-ref rt 'model-name)) (eq? (dict-ref rt 'model-name) #f))
               "model-name should be resolved from config or #f"))
 
 ;; ============================================================
@@ -436,39 +437,39 @@
 (test-case "cli-config->runtime-config: propagates model"
   (define cfg (parse-cli-args #("--model" "claude-3")))
   (define rt (cli-config->runtime-config cfg))
-  (check-equal? (hash-ref rt 'model) "claude-3"))
+  (check-equal? (dict-ref rt 'model) "claude-3"))
 
 (test-case "cli-config->runtime-config: propagates session-id"
   (define cfg (parse-cli-args #("--session" "s1")))
   (define rt (cli-config->runtime-config cfg))
-  (check-equal? (hash-ref rt 'session-id) "s1"))
+  (check-equal? (dict-ref rt 'session-id) "s1"))
 
 (test-case "cli-config->runtime-config: propagates config-path"
   (define cfg (parse-cli-args #("--config" "/tmp/cfg.json")))
   (define rt (cli-config->runtime-config cfg))
-  (check-equal? (hash-ref rt 'config-path) "/tmp/cfg.json"))
+  (check-equal? (dict-ref rt 'config-path) "/tmp/cfg.json"))
 
 (test-case "cli-config->runtime-config: omits model when not set"
   (define cfg (parse-cli-args #()))
   (define rt (cli-config->runtime-config cfg))
-  (check-false (hash-has-key? rt 'model)))
+  (check-false (dict-has-key? rt 'model)))
 
 (test-case "cli-config->runtime-config: omits session-id when not set"
   (define cfg (parse-cli-args #()))
   (define rt (cli-config->runtime-config cfg))
-  (check-false (hash-has-key? rt 'session-id)))
+  (check-false (dict-has-key? rt 'session-id)))
 
 (test-case "cli-config->runtime-config: always includes max-iterations"
   (define cfg (parse-cli-args #()))
   (define rt (cli-config->runtime-config cfg))
-  (check-true (hash-has-key? rt 'max-iterations))
-  (check-equal? (hash-ref rt 'max-iterations) 10))
+  (check-true (dict-has-key? rt 'max-iterations))
+  (check-equal? (dict-ref rt 'max-iterations) 10))
 
 (test-case "cli-config->runtime-config: propagates tools list"
   (define cfg (parse-cli-args #("--tool" "read" "--tool" "bash")))
   (define rt (cli-config->runtime-config cfg))
-  (check-true (hash-has-key? rt 'tools))
-  (check-equal? (sort (hash-ref rt 'tools) string<?) '("bash" "read")))
+  (check-true (dict-has-key? rt 'tools))
+  (check-equal? (sort (dict-ref rt 'tools) string<?) '("bash" "read")))
 
 ;; ============================================================
 ;; build-runtime-from-cli: multiple flags combined
@@ -477,12 +478,12 @@
 (test-case "build-runtime-from-cli with multiple flags combined"
   (define cfg (parse-cli-args #("--model" "gpt-4" "--max-turns" "5" "--verbose")))
   (define rt (build-runtime-from-cli cfg))
-  (check-equal? (hash-ref rt 'model-name) "gpt-4")
-  (check-equal? (hash-ref rt 'max-iterations) 5)
-  (check-true (hash-ref rt 'verbose? #f))
-  (check-true (hash-has-key? rt 'provider))
-  (check-true (hash-has-key? rt 'session-dir))
-  (check-true (hash-has-key? rt 'system-instructions)))
+  (check-equal? (dict-ref rt 'model-name) "gpt-4")
+  (check-equal? (dict-ref rt 'max-iterations) 5)
+  (check-true (dict-ref rt 'verbose? #f))
+  (check-true (dict-has-key? rt 'provider))
+  (check-true (dict-has-key? rt 'session-dir))
+  (check-true (dict-has-key? rt 'system-instructions)))
 
 ;; ============================================================
 ;; build-runtime-from-cli: empty extension dir
@@ -496,16 +497,16 @@
                 (lambda ()
                   (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
                   (define rt (build-runtime-from-cli cfg))
-                  (check-true (hash-has-key? rt 'extension-registry))
-                  (define ext-reg (hash-ref rt 'extension-registry))
+                  (check-true (dict-has-key? rt 'extension-registry))
+                  (define ext-reg (dict-ref rt 'extension-registry))
                   (check-equal? (length (list-extensions ext-reg)) 0))
                 (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-runtime-from-cli: extension registry always present"
   (define cfg (parse-cli-args #()))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-has-key? rt 'extension-registry))
-  (define ext-reg (hash-ref rt 'extension-registry))
+  (check-true (dict-has-key? rt 'extension-registry))
+  (define ext-reg (dict-ref rt 'extension-registry))
   ;; Registry exists; count depends on project-local .q/extensions/ and
   ;; global ~/.q/extensions/ — not guaranteed to be 0.
   (check-true (list? (list-extensions ext-reg)) "extension-registry should be a list"))
@@ -530,14 +531,14 @@
    (lambda ()
      (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir) "--model" "gpt-4o")))
      (define rt (build-runtime-from-cli cfg))
-     (check-true (hash-has-key? rt 'provider))
-     (check-true (provider? (hash-ref rt 'provider)))
-     (check-equal? (provider-name (hash-ref rt 'provider)) "openai-compatible")
-     (check-equal? (hash-ref rt 'model-name) "gpt-4o")
-     (check-true (hash-has-key? rt 'session-dir))
-     (check-true (hash-has-key? rt 'tool-registry))
-     (check-true (hash-has-key? rt 'extension-registry))
-     (check-true (hash-has-key? rt 'system-instructions)))
+     (check-true (dict-has-key? rt 'provider))
+     (check-true (provider? (dict-ref rt 'provider)))
+     (check-equal? (provider-name (dict-ref rt 'provider)) "openai-compatible")
+     (check-equal? (dict-ref rt 'model-name) "gpt-4o")
+     (check-true (dict-has-key? rt 'session-dir))
+     (check-true (dict-has-key? rt 'tool-registry))
+     (check-true (dict-has-key? rt 'extension-registry))
+     (check-true (dict-has-key? rt 'system-instructions)))
    (lambda ()
      (cleanup-temp-dir tmp-dir)
      (putenv "Q_TEST_INTEGRATION_BUILD_KEY" ""))))
@@ -560,8 +561,8 @@
        (parse-cli-args
         (vector "--project-dir" (path->string tmp-dir) "--model" "gpt-4o" "--no-tools")))
      (define rt (build-runtime-from-cli cfg))
-     (check-true (hash-ref rt 'no-tools?))
-     (define reg (hash-ref rt 'tool-registry))
+     (check-true (dict-ref rt 'no-tools?))
+     (define reg (dict-ref rt 'tool-registry))
      (check-equal? (length (list-tools reg)) 0 "no tools should be registered with --no-tools"))
    (lambda ()
      (cleanup-temp-dir tmp-dir)
@@ -574,7 +575,7 @@
 (test-case "build-runtime-from-cli: --tool limits registered tools"
   (define cfg (parse-cli-args #("--tool" "read" "--tool" "bash")))
   (define rt (build-runtime-from-cli cfg))
-  (define reg (hash-ref rt 'tool-registry))
+  (define reg (dict-ref rt 'tool-registry))
   (define names (sort (list-tools reg) string<? #:key tool-name))
   (check-equal? (map tool-name names) '("bash" "read")))
 
@@ -703,8 +704,8 @@
                 (lambda ()
                   (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
                   (define rt (build-runtime-from-cli cfg))
-                  (check-true (hash-has-key? rt 'session-dir))
-                  (check-true (path-string? (hash-ref rt 'session-dir))))
+                  (check-true (dict-has-key? rt 'session-dir))
+                  (check-true (path-string? (dict-ref rt 'session-dir))))
                 (lambda () (cleanup-temp-dir tmp-dir))))
 
 ;; ============================================================
@@ -723,10 +724,10 @@
 (test-case "build-runtime-from-cli: verbose? flag propagated"
   (define cfg (parse-cli-args #("--verbose")))
   (define rt (build-runtime-from-cli cfg))
-  (check-true (hash-ref rt 'verbose?)))
+  (check-true (dict-ref rt 'verbose?)))
 
 (test-case "build-runtime-from-cli: verbose? defaults to #f"
-  (check-false (hash-ref (build-runtime-from-cli (parse-cli-args #())) 'verbose?)))
+  (check-false (dict-ref (build-runtime-from-cli (parse-cli-args #())) 'verbose?)))
 
 ;; ============================================================
 ;; register-default-tools! #:only filtering
@@ -752,7 +753,7 @@
 (test-case "build-runtime-from-cli: --tool flag filters registered tools"
   (define cfg (parse-cli-args #("--tool" "read")))
   (define rt (build-runtime-from-cli cfg))
-  (check-equal? (tool-names (hash-ref rt 'tool-registry)) '("read")))
+  (check-equal? (tool-names (dict-ref rt 'tool-registry)) '("read")))
 
 ;; ============================================================
 ;; build-provider: --config path overrides global settings
