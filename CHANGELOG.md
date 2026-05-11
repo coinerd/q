@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.37.7 — 2026-05-11
+
+### Goal: Architecture Fitness Tests (Milestone 8 of v0.37.x)
+
+### Added
+- **FM-17b** (M): Purity checks for `decision.rkt` and `counters.rkt` in
+  `test-arch-fitness.rkt`. Verifies neither module imports low-level I/O modules
+  (`racket/port`, `racket/file`, `racket/tcp`). Documents known impurity in
+  `counters.rkt` (event-bus import for `check-cancellation`) pending FA-03 fix.
+- **FM-17d** (M): Config schema drift test. Scans all `runtime/` files for
+  `dict-ref config` patterns and verifies each key has a corresponding
+  `config-*` accessor in `session-config.rkt`. Catches future drift: any new
+  `dict-ref config` without an accessor causes test failure.
+
+### Changed
+- `tests/test-arch-fitness.rkt`: +3 tests (2 purity + 1 schema drift)
+
+**Verification**: lint 18/18, test-arch-fitness 23/23
+
+---
+
 ## v0.37.6 — 2026-05-11
 
 ### Goal: FSM Transition Centralization (Milestone 7 of v0.37.x)

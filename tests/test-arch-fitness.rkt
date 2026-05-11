@@ -311,3 +311,50 @@
                     "event-codec.rkt must define payload->hash")))))
 
 (run-tests v02810-suite)
+
+;; ════════════════════════════════════════════════════════════
+;; v0.37.7 additions: FM-17b purity checks, FM-17d schema drift
+;; ════════════════════════════════════════════════════════════
+
+(define v0377-suite
+  (test-suite "v0.37.7-fitness"
+
+    ;; FM-17b: decision.rkt and counters.rkt purity
+    (test-case "FM-17b: decision.rkt imports no I/O modules"
+      (define p (build-path q-dir "runtime" "iteration" "decision.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp"))
+                     "decision.rkt should not import I/O modules")))
+
+    (test-case "FM-17b: counters.rkt imports no I/O modules"
+      (define p (build-path q-dir "runtime" "iteration" "counters.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        ;; NOTE: check-cancellation in counters.rkt imports event-bus (FA-03).
+        ;; This test documents the known impurity; remove exemption once FA-03 is fixed.
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp"))
+                     "counters.rkt should not import low-level I/O modules")))
+
+    ;; FM-17d: Config schema drift -- dict-ref keys must have accessors
+    (test-case "FM-17d: All dict-ref config keys have session-config accessors"
+      (define accessor-pattern #rx"config-([a-z-]+)")
+      (define config-path (build-path q-dir "runtime" "session-config.rkt"))
+      (define config-content (file->string config-path))
+      (define accessors
+        (for/list ([m (in-list (regexp-match* accessor-pattern config-content #:match-select cadr))])
+          (string->symbol m)))
+      (define runtime-files (rkt-files-in "runtime"))
+      (define missing-accessors
+        (for*/list ([f (in-list runtime-files)]
+                    [m (in-list (regexp-match* #rx"dict-ref\\s+config\\s+'([a-z-]+)"
+                                               (file->string f)
+                                               #:match-select cadr))]
+                    #:when (not (member (string->symbol m) accessors)))
+          (cons (path->string (find-relative-path (simplify-path q-dir) (simplify-path f)))
+                (string->symbol m))))
+      (check-equal? missing-accessors
+                    '()
+                    (format "dict-ref config keys missing accessors: ~a" missing-accessors)))))
+
+(run-tests v0377-suite)
