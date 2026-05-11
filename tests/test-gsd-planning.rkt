@@ -28,6 +28,7 @@
                   gsd-success?
                   gsd-failed?)
          "../tools/tool.rkt"
+         "../tools/tool-struct.rkt"
          "../agent/event-bus.rkt"
          "../util/event.rkt"
          (prefix-in events: "../extensions/gsd/events.rkt"))

@@ -5,7 +5,8 @@
 (require rackunit
          racket/string
          "../tools/define-tool.rkt"
-         "../tools/tool.rkt")
+         "../tools/tool.rkt"
+         "../tools/tool-struct.rkt")
 
 ;; ============================================================
 ;; Test 1: Basic tool with properties

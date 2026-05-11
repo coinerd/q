@@ -34,7 +34,14 @@
          "registry.rkt"
          "schema-helpers.rkt")
 
-(provide (all-from-out "tool-struct.rkt")
+(provide tool?
+         tool
+         tool-name
+         tool-description
+         tool-schema
+         tool-prompt-snippet
+         tool-prompt-guidelines
+         tool-dangerous?
          (contract-out [make-tool
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)

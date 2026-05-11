@@ -2,7 +2,8 @@
 
 (require rackunit
          "../tools/registry-defaults.rkt"
-         "../tools/tool.rkt")
+         "../tools/tool.rkt"
+         "../tools/tool-struct.rkt")
 
 ;; ============================================================
 ;; register-default-tools! — registers all tools
