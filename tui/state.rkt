@@ -13,23 +13,7 @@
          "state-events.rkt"
          "state-ui.rkt")
 
-(provide (struct-out transcript-entry)
-         (struct-out ui-state)
-         (struct-out branch-info)
-         (struct-out overlay-state)
-         (struct-out tree-browser-state)
-         initial-ui-state
-         make-entry
-         make-system-entry
-         make-error-entry
-         assign-entry-id
-         next-entry-id
-         rendered-cache-ref
-         rendered-cache-set
-         rendered-cache-clear
-         rendered-cache-invalidate-entry
-         rendered-cache-width-valid?
-         rendered-cache-set-width
+(provide (all-from-out "state-types.rkt")
          apply-event-to-state
          transcript-entries
          add-transcript-entry

@@ -13,6 +13,8 @@
 
 (provide (struct-out transcript-entry)
          (struct-out ui-state)
+         (struct-out selection-state)
+         (struct-out cache-state)
          (struct-out branch-info)
          (struct-out overlay-state)
          (struct-out tree-browser-state)
@@ -49,15 +51,23 @@
          )
   #:transparent)
 
+;; Selection state -- cursor position and selection range
+(struct selection-state (anchor end)
+  #:transparent)
+
+;; Cache state -- rendered content cache
+(struct cache-state (entries width)
+  #:transparent)
+
 ;; The complete UI state (27 fields, grouped by domain)
 ;;
 ;; Field groups (v0.32.6 documentation):
 ;;   Transcript:  transcript, scroll-offset, next-entry-id
 ;;   Streaming:   busy?, status-message, pending-tool-name, streaming-text,
 ;;                streaming-thinking, busy-since
-;;   Selection:   sel-anchor, sel-end
+;;   Selection:   selection (selection-state)
 ;;   Branch:      current-branch, visible-branches
-;;   Cache:       rendered-cache, rendered-cache-width
+;;   Cache:       cache (cache-state)
 ;;   Overlay:     active-overlay
 ;;   Extension:   extension-widgets, custom-header, custom-footer
 ;;   Input:       focused-component, editor-component
@@ -84,11 +94,9 @@
          current-branch ; string or #f — current branch node id
          visible-branches ; (listof branch-info) — cached branch list for display
          ;; --- Selection group ---
-         sel-anchor ; (cons col row) or #f — mouse selection start
-         sel-end ; (cons col row) or #f — mouse selection end
+         selection ; selection-state -- cursor position and selection range
          ;; --- Cache group ---
-         rendered-cache ; hash — maps entry-id → (listof styled-line)
-         rendered-cache-width ; integer or #f — width used for cache
+         cache ; cache-state -- rendered content cache
          ;; --- Transcript group (cont.) ---
          next-entry-id ; integer — monotonic counter
          ;; --- Overlay group ---
@@ -171,10 +179,10 @@
 (define RENDER-CACHE-MAX-SIZE 100)
 
 (define (rendered-cache-ref state entry-id)
-  (hash-ref (ui-state-rendered-cache state) entry-id #f))
+  (hash-ref (cache-state-entries (ui-state-cache state)) entry-id #f))
 
 (define (rendered-cache-set state entry-id lines)
-  (define old-cache (ui-state-rendered-cache state))
+  (define old-cache (cache-state-entries (ui-state-cache state)))
   (define new-cache (hash-set old-cache entry-id lines))
   (define pruned-cache
     (if (<= (hash-count new-cache) RENDER-CACHE-MAX-SIZE)
@@ -184,21 +192,22 @@
                     ([k (in-list (take sorted-keys
                                        (- (hash-count new-cache) RENDER-CACHE-MAX-SIZE)))])
             (hash-remove c k)))))
-  (struct-copy ui-state state [rendered-cache pruned-cache]))
+  (struct-copy ui-state state [cache (cache-state pruned-cache (cache-state-width (ui-state-cache state)))]))
 
 (define (rendered-cache-clear state)
-  (struct-copy ui-state state [rendered-cache (hash)] [rendered-cache-width #f]))
+  (struct-copy ui-state state [cache (cache-state (hash) #f)]))
 
 (define (rendered-cache-invalidate-entry state entry-id)
   (struct-copy ui-state
                state
-               [rendered-cache (hash-remove (ui-state-rendered-cache state) entry-id)]))
+               [cache (cache-state (hash-remove (cache-state-entries (ui-state-cache state)) entry-id)
+                                   (cache-state-width (ui-state-cache state)))]))
 
 (define (rendered-cache-width-valid? state width)
-  (equal? (ui-state-rendered-cache-width state) width))
+  (equal? (cache-state-width (ui-state-cache state)) width))
 
 (define (rendered-cache-set-width state width)
-  (struct-copy ui-state state [rendered-cache-width width]))
+  (struct-copy ui-state state [cache (cache-state (cache-state-entries (ui-state-cache state)) width)]))
 
 ;; ============================================================
 ;; Constructor with defaults
@@ -219,10 +228,8 @@
             #f ; streaming-thinking
             #f ; current-branch
             '() ; visible-branches
-            #f ; sel-anchor
-            #f ; sel-end
-            (hash) ; rendered-cache
-            #f ; rendered-cache-width
+            (selection-state #f #f)
+            (cache-state (hash) #f)
             0 ; next-entry-id
             #f ; active-overlay
             #f ; queue-counts

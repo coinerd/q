@@ -121,16 +121,16 @@
 ;; ============================================================
 
 (define (set-selection-anchor state col row)
-  (struct-copy ui-state state [sel-anchor (cons col row)] [sel-end (cons col row)]))
+  (struct-copy ui-state state [selection (selection-state (cons col row) (cons col row))]))
 
 (define (set-selection-end state col row)
-  (struct-copy ui-state state [sel-end (cons col row)]))
+  (struct-copy ui-state state [selection (selection-state (selection-state-anchor (ui-state-selection state)) (cons col row))]))
 
 (define (clear-selection state)
-  (struct-copy ui-state state [sel-anchor #f] [sel-end #f]))
+  (struct-copy ui-state state [selection (selection-state #f #f)]))
 
 (define (has-selection? state)
-  (and (ui-state-sel-anchor state) (ui-state-sel-end state)))
+  (and (selection-state-anchor (ui-state-selection state)) (selection-state-end (ui-state-selection state))))
 
 ;; ============================================================
 ;; Queries
