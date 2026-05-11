@@ -38,9 +38,16 @@
       ""))
 
 ;; Structs
-(provide (struct-out model-entry)
-         (struct-out model-registry)
-         (struct-out model-resolution)
+(provide model-entry?
+         model-entry-name
+         model-entry-provider-name
+         model-entry-provider-config
+         model-registry?
+         model-resolution?
+         model-resolution-model-name
+         model-resolution-provider-name
+         model-resolution-base-url
+         model-resolution-provider-config
          ;; H-02: Contract-wrapped exports
          (contract-out
           [resolve-model (-> model-registry? (or/c string? #f) (or/c model-resolution? #f))]

@@ -26,8 +26,8 @@
          racket/contract
          (only-in "../runtime/working-set.rkt" working-set?))
 
-(provide (struct-out session-config)
-         session-config?
+(provide session-config?
+         session-config
          hash->session-config
          session-config->hash
          resolve-max-iterations-hard

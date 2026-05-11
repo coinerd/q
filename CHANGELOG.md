@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.38.1 — 2026-05-11
+
+### Goal: Session-Config & Model-Registry Encapsulation (Milestone 2 of v0.38.x)
+
+### Fixed
+- **M-01** (MEDIUM): Replaced `struct-out session-config` with selective exports
+  in `runtime/session-config.rkt`. Exported `session-config?`, `session-config`
+  constructor, `hash->session-config`, `session-config->hash`, and all `config-*`
+  accessors. Removed raw field accessor `session-config-data` from public API.
+- **M-02** (MEDIUM): Replaced `struct-out` for `model-entry`, `model-registry`,
+  and `model-resolution` in `runtime/model-registry.rkt` with selective exports.
+  Kept safe accessors (`model-entry-name`, `model-resolution-model-name`, etc.)
+  and predicates. Removed internal `model-registry-*` field accessors from public
+  API.
+
+**Verification**: lint 18/18, targeted tests 124/124 pass
+
+---
+
 ## v0.38.0 — 2026-05-11
 
 ### Goal: Quick-Win Struct Safety (Milestone 1 of v0.38.x)
