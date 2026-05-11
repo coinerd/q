@@ -417,9 +417,8 @@
                                       #f
                                       (hash))))
               ;; Clear any streaming text and busy state
-              (set-box!
-               (tui-ctx-ui-state-box ctx)
-               (struct-copy ui-state state [busy? #f] [streaming-text #f] [pending-tool-name #f]))))
+              (set-box! (tui-ctx-ui-state-box ctx)
+                        (clear-streaming (set-pending-tool-name (set-busy state #f) #f)))))
         'continue]
        [else 'continue])]
 

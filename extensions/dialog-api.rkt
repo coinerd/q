@@ -11,7 +11,7 @@
 (require racket/contract
          racket/list
          "ui-surface.rkt"
-         (only-in "../tui/state.rkt" ui-state ui-state-status-message))
+         (only-in "../tui/state.rkt" ui-state ui-state-status-message set-status-message))
 
 ;; Notification levels
 (provide NOTIFY-INFO
@@ -173,4 +173,4 @@
      (ui-set-status-message! state msg)
      (unbox state)]
     ;; Plain state: return a new state with the status message set
-    [else (struct-copy ui-state state [status-message msg])]))
+    [else (set-status-message state msg)]))

@@ -87,18 +87,15 @@
              (string=? (string-trim content) ""))
         (append-entry state (make-entry 'thinking thinking ts (hash)))
         state))
-  (struct-copy ui-state
-               (append-entry s0 (make-entry 'assistant content ts (hash)))
-               [busy? #f]
-               [pending-tool-name #f]
-               [streaming-text #f]
-               [streaming-thinking #f]))
+  (clear-streaming (set-pending-tool-name
+                    (set-busy (append-entry s0 (make-entry 'assistant content ts (hash))) #f)
+                    #f)))
 
 (define (handle-tool-call-started state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
   (if (recent-tool-start? state name)
-      (struct-copy ui-state state [busy? #t] [pending-tool-name name])
+      (set-pending-tool-name (set-busy state #t) name)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
@@ -108,14 +105,14 @@
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])
         (if (ui-state-pending-tool-name state)
-            (struct-copy ui-state new-state [busy? #t])
-            (struct-copy ui-state new-state [busy? #t] [pending-tool-name name])))))
+            (set-busy new-state #t)
+            (set-pending-tool-name (set-busy new-state #t) name)))))
 
 (define (handle-tool-execution-started state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'tool-name "?"))
   (if (recent-tool-start? state name)
-      (struct-copy ui-state state [busy? #t] [pending-tool-name name])
+      (set-pending-tool-name (set-busy state #t) name)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
@@ -125,8 +122,8 @@
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])
         (if (ui-state-pending-tool-name state)
-            (struct-copy ui-state new-state [busy? #t])
-            (struct-copy ui-state new-state [busy? #t] [pending-tool-name name])))))
+            (set-busy new-state #t)
+            (set-pending-tool-name (set-busy new-state #t) name)))))
 
 (define (handle-tool-execution-completed state evt)
   (define payload (event-payload evt))
@@ -134,17 +131,13 @@
   (define result-summary (hash-ref payload 'result-summary 'error))
   (define ts (event-time evt))
   (if (recent-tool-end? state name)
-      (struct-copy ui-state state [pending-tool-name #f])
+      (set-pending-tool-name state #f)
       (if (eq? result-summary 'completed)
           (let* ([meta (hasheq 'name name)])
-            (struct-copy ui-state
-                         (append-entry state (make-entry 'tool-end "" ts meta))
-                         [pending-tool-name #f]))
+            (set-pending-tool-name (append-entry state (make-entry 'tool-end "" ts meta)) #f))
           (let* ([err "tool failed"]
                  [meta (hasheq 'name name 'error err)])
-            (struct-copy ui-state
-                         (append-entry state (make-entry 'tool-fail err ts meta))
-                         [pending-tool-name #f])))))
+            (set-pending-tool-name (append-entry state (make-entry 'tool-fail err ts meta)) #f)))))
 
 ;; M-09: Extracted error classification (pure function)
 (define (classify-error-type err payload)
@@ -204,13 +197,8 @@
         (append-entry state (make-entry 'assistant streamed ts (hasheq 'partial #t)))
         state))
   (define s1
-    (struct-copy ui-state
-                 s0
-                 [busy? #f]
-                 [pending-tool-name #f]
-                 [streaming-text #f]
-                 [streaming-thinking #f]
-                 [status-message (truncate-status-msg err)]))
+    (set-status-message (clear-streaming (set-pending-tool-name (set-busy s0 #f) #f))
+                        (truncate-status-msg err)))
   (define s2 (append-entry s1 (make-entry 'error (format "Error: ~a" err) ts (hash))))
   (append-entry s2 (make-entry 'system hint ts (hash))))
 
@@ -231,17 +219,12 @@
   (define delta (hash-ref payload 'delta ""))
   (define current-streaming (ui-state-streaming-text state))
   (define new-streaming (string-append (or current-streaming "") delta))
-  (struct-copy ui-state state [streaming-text new-streaming] [busy? #t]))
+  (set-streaming-text (set-busy state #t) new-streaming))
 
 (define (handle-turn-started state evt)
-  (struct-copy ui-state
-               state
-               [busy? #t]
-               [busy-since (event-time evt)]
-               [pending-tool-name #f]
-               [streaming-text #f]
-               [streaming-thinking #f]
-               [status-message #f]))
+  (set-status-message
+   (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #t) (event-time evt)) #f))
+   #f))
 
 (define (handle-turn-completed state evt)
   (define min-busy-ms 500)
@@ -252,22 +235,11 @@
         (- ts since)
         min-busy-ms))
   (if (< elapsed min-busy-ms)
-      (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f])
-      (struct-copy ui-state
-                   state
-                   [busy? #f]
-                   [busy-since #f]
-                   [streaming-text #f]
-                   [streaming-thinking #f]
-                   [pending-tool-name #f])))
+      (clear-streaming state)
+      (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))))
 
 (define (handle-turn-cancelled state evt)
-  (struct-copy ui-state
-               state
-               [busy? #f]
-               [streaming-text #f]
-               [streaming-thinking #f]
-               [pending-tool-name #f]))
+  (clear-streaming (set-pending-tool-name (set-busy state #f) #f)))
 
 (define (handle-compaction-warning state evt)
   (define payload (event-payload evt))
@@ -286,8 +258,8 @@
   (define payload (event-payload evt))
   (define reason (hash-ref payload 'reason ""))
   (if (string=? reason "compaction-complete")
-      (struct-copy ui-state state [status-message #f])
-      (struct-copy ui-state state [status-message "Compacting..."])))
+      (set-status-message state #f)
+      (set-status-message state "Compacting...")))
 
 (define (handle-auto-retry state evt)
   (define payload (event-payload evt))
@@ -305,22 +277,16 @@
     (if type-label
         (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
         (format "[retry: attempt ~a/~a]" attempt max-attempts)))
-  (struct-copy ui-state
-               (append-entry state (make-entry 'system msg (event-time evt) (hash)))
-               [streaming-text #f]
-               [streaming-thinking #f]))
+  (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash)))))
 
 (define (handle-injection state evt)
   (define payload (event-payload evt))
   (define content-type (hash-ref payload 'content-type "unknown"))
   (define msg (format "[injected ~a message]" content-type))
-  (struct-copy ui-state
-               (append-entry state (make-entry 'system msg (event-time evt) (hash)))
-               [streaming-text #f]
-               [streaming-thinking #f]))
+  (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash)))))
 
 (define (handle-model-request-started state evt)
-  (struct-copy ui-state state [busy? #t]))
+  (set-busy state #t))
 
 (define (handle-context-built state evt)
   (define payload (event-payload evt))
@@ -333,13 +299,12 @@
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
   (define reason (hash-ref payload 'reason "blocked by extension"))
-  (struct-copy ui-state
-               (append-entry state
-                             (make-entry 'system
-                                         (format "[tool blocked: ~a -- ~a]" name reason)
-                                         (event-time evt)
-                                         (hasheq 'name name)))
-               [pending-tool-name #f]))
+  (set-pending-tool-name (append-entry state
+                                       (make-entry 'system
+                                                   (format "[tool blocked: ~a -- ~a]" name reason)
+                                                   (event-time evt)
+                                                   (hasheq 'name name)))
+                         #f))
 
 (define (handle-queue-status-update state evt)
   (define payload (event-payload evt))
@@ -405,30 +370,27 @@
         (format "[OK: ~a] ~a" name result-summary)))
   (define ts (event-time evt))
   (define meta (hasheq 'name name 'result (or result-raw "")))
-  (struct-copy ui-state
-               (append-entry state (make-entry 'tool-end text ts meta))
-               [pending-tool-name #f]))
+  (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
 
 (define (handle-tool-call-failed state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
   (define err (hash-ref payload 'error "unknown"))
   (define ts (event-time evt))
-  (struct-copy ui-state
-               (append-entry state
-                             (make-entry 'tool-fail
-                                         (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " | ")
-                                         ts
-                                         (hasheq 'name name 'error err)))
-               [pending-tool-name #f]))
+  (set-pending-tool-name
+   (append-entry state
+                 (make-entry 'tool-fail
+                             (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " | ")
+                             ts
+                             (hasheq 'name name 'error err)))
+   #f))
 
 (define (handle-compaction-lifecycle state evt)
   (define ev (event-ev evt))
   (cond
     [(member ev '("compaction.started" "compaction.start"))
-     (struct-copy ui-state state [status-message "Compacting..."])]
-    [(member ev '("compaction.completed" "compaction.end"))
-     (struct-copy ui-state state [status-message #f])]
+     (set-status-message state "Compacting...")]
+    [(member ev '("compaction.completed" "compaction.end")) (set-status-message state #f)]
     [else state]))
 
 (define (handle-auto-retry-lifecycle state evt)
@@ -450,10 +412,7 @@
        (if type-label
            (format "[retry: ~a, ~a/~a...]" type-label attempt max-attempts)
            (format "[retry: attempt ~a/~a]" attempt max-attempts)))
-     (struct-copy ui-state
-                  (append-entry state (make-entry 'system msg (event-time evt) (hash)))
-                  [streaming-text #f]
-                  [streaming-thinking #f])]
+     (clear-streaming (append-entry state (make-entry 'system msg (event-time evt) (hash))))]
     [(equal? ev "auto-retry.context-reduced")
      (define original (hash-ref payload 'original-messages 0))
      (define reduced (hash-ref payload 'reduced-messages 0))
@@ -469,7 +428,7 @@
   (define delta (hash-ref payload 'delta ""))
   (define current-thinking (ui-state-streaming-thinking state))
   (define new-thinking (string-append (or current-thinking "") delta))
-  (struct-copy ui-state state [streaming-thinking new-thinking] [busy? #t]))
+  (set-streaming-thinking (set-busy state #t) new-thinking))
 
 (define (handle-model-stream-completed state evt)
   (define payload (event-payload evt))
@@ -479,7 +438,7 @@
   (define ct (ui-state-cost-tracker state))
   (when ct
     (cost-tracker-update! ct in-tok out-tok (ui-model-label state)))
-  (struct-copy ui-state state [streaming-text #f] [streaming-thinking #f]))
+  (clear-streaming state))
 
 ;; ============================================================
 ;; Register all handlers at module load time

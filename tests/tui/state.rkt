@@ -141,18 +141,15 @@
         (check-true (ui-state-busy? s2))))
 
     (test-case "apply-event: turn.completed"
-      (let* ([s (struct-copy ui-state (initial-ui-state) [busy? #t])]
+      (let* ([s (set-busy (initial-ui-state) #t)]
              [evt (make-test-event "turn.completed" (hash))]
              [s2 (apply-event-to-state s evt)])
         (check-false (ui-state-busy? s2))))
 
     (test-case "turn.cancelled clears busy and streaming"
       (define s0
-        (struct-copy ui-state
-                     (initial-ui-state)
-                     [busy? #t]
-                     [streaming-text "partial..."]
-                     [pending-tool-name "bash"]))
+        (set-pending-tool-name (set-streaming-text (set-busy (initial-ui-state) #t) "partial...")
+                               "bash"))
       (define evt (make-test-event "turn.cancelled" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-busy? s1))
@@ -180,7 +177,7 @@
         (check-equal? (ui-state-status-message s2) "Compacting...")))
 
     (test-case "apply-event: compaction.completed"
-      (let* ([s (struct-copy ui-state (initial-ui-state) [status-message "Compacting..."])]
+      (let* ([s (set-status-message (initial-ui-state) "Compacting...")]
              [evt (make-test-event "compaction.completed" (hash))]
              [s2 (apply-event-to-state s evt)])
         (check-false (ui-state-status-message s2))))
@@ -265,7 +262,7 @@
 
     (test-case "ui-busy?: reflects busy state"
       (check-false (ui-busy? (initial-ui-state)))
-      (check-true (ui-busy? (struct-copy ui-state (initial-ui-state) [busy? #t]))))
+      (check-true (ui-busy? (set-busy (initial-ui-state) #t))))
 
     (test-case "ui-session-label: returns session id or default"
       (check-equal? (ui-session-label (initial-ui-state)) "no session")
@@ -277,13 +274,11 @@
 
     (test-case "ui-status-text: idle / busy / tool / status-message"
       (check-equal? (ui-status-text (initial-ui-state)) "idle")
-      (check-equal? (ui-status-text (struct-copy ui-state (initial-ui-state) [busy? #t])) "busy...")
-      (check-equal? (ui-status-text
-                     (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "bash"]))
+      (check-equal? (ui-status-text (set-busy (initial-ui-state) #t)) "busy...")
+      (check-equal? (ui-status-text (set-pending-tool-name (set-busy (initial-ui-state) #t) "bash"))
                     "busy (bash)...")
-      (check-equal?
-       (ui-status-text (struct-copy ui-state (initial-ui-state) [status-message "Compacting..."]))
-       "Compacting..."))
+      (check-equal? (ui-status-text (set-status-message (initial-ui-state) "Compacting..."))
+                    "Compacting..."))
 
     ;; ============================================================
     ;; Multiple events accumulate
@@ -556,42 +551,40 @@
     ;; ============================================================
 
     (test-case "BUG-29: runtime.error clears pending-tool-name"
-      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "bash"]))
+      (define s0 (set-pending-tool-name (set-busy (initial-ui-state) #t) "bash"))
       (define evt (make-test-event "runtime.error" (hash 'error "crash")))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "runtime.error clears pending-tool-name")
       (check-false (ui-state-busy? s1) "runtime.error clears busy?"))
 
     (test-case "BUG-29: runtime.error clears streaming-text"
-      (define s0
-        (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "partial response..."]))
+      (define s0 (set-streaming-text (set-busy (initial-ui-state) #t) "partial response..."))
       (define evt (make-test-event "runtime.error" (hash 'error "crash")))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "runtime.error clears streaming-text"))
 
     (test-case "BUG-30: turn.started clears stale pending-tool-name"
-      (define s0 (struct-copy ui-state (initial-ui-state) [pending-tool-name "old-tool"]))
+      (define s0 (set-pending-tool-name (initial-ui-state) "old-tool"))
       (define evt (make-test-event "turn.started" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "turn.started clears pending-tool-name")
       (check-true (ui-state-busy? s1) "turn.started sets busy?"))
 
     (test-case "BUG-30: turn.started clears stale streaming-text"
-      (define s0 (struct-copy ui-state (initial-ui-state) [streaming-text "stale stream text"]))
+      (define s0 (set-streaming-text (initial-ui-state) "stale stream text"))
       (define evt (make-test-event "turn.started" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.started clears streaming-text"))
 
     (test-case "BUG-31: turn.completed clears pending-tool-name"
-      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "read"]))
+      (define s0 (set-pending-tool-name (set-busy (initial-ui-state) #t) "read"))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-pending-tool-name s1) "turn.completed clears pending-tool-name")
       (check-false (ui-state-busy? s1) "turn.completed clears busy?"))
 
     (test-case "BUG-31: turn.completed clears streaming-text"
-      (define s0
-        (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "leftover stream"]))
+      (define s0 (set-streaming-text (set-busy (initial-ui-state) #t) "leftover stream"))
       (define evt (make-test-event "turn.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "turn.completed clears streaming-text"))
@@ -607,7 +600,7 @@
       (check-equal? (ui-state-status-message s1) "Compacting..."))
 
     (test-case "BUG-32: compaction.end clears status message"
-      (define s0 (struct-copy ui-state (initial-ui-state) [status-message "Compacting..."]))
+      (define s0 (set-status-message (initial-ui-state) "Compacting..."))
       (define evt (make-test-event "compaction.end" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-status-message s1)))
@@ -623,7 +616,7 @@
       (check-not-false (string-contains? (transcript-entry-text last-entry) "retry")))
 
     (test-case "BUG-34: model.stream.completed clears streaming-text"
-      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "partial..."]))
+      (define s0 (set-streaming-text (set-busy (initial-ui-state) #t) "partial..."))
       (define evt (make-test-event "model.stream.completed" (hash)))
       (define s1 (apply-event-to-state s0 evt))
       (check-false (ui-state-streaming-text s1) "model.stream.completed clears streaming-text"))
@@ -634,7 +627,7 @@
 
     (test-case "BUG-38: tool.call.started guards against pending overwrite"
       ;; If a tool is already pending, don't overwrite its name
-      (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "read"]))
+      (define s0 (set-pending-tool-name (set-busy (initial-ui-state) #t) "read"))
       (define evt
         (make-test-event "tool.call.started" (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")))
       (define s1 (apply-event-to-state s0 evt))
@@ -658,21 +651,30 @@
 
 (let ()
   (define state (initial-ui-state))
-  (check-false (selection-state-anchor (ui-state-selection state)) "initial-ui-state: sel-anchor is #f")
+  (check-false (selection-state-anchor (ui-state-selection state))
+               "initial-ui-state: sel-anchor is #f")
   (check-false (selection-state-end (ui-state-selection state)) "initial-ui-state: sel-end is #f")
   (check-false (has-selection? state) "has-selection? returns #f initially"))
 
 (let ()
   (define state (initial-ui-state))
   (define next (set-selection-anchor state 5 10))
-  (check-equal? (selection-state-anchor (ui-state-selection next)) '(5 . 10) "set-selection-anchor sets anchor")
-  (check-equal? (selection-state-end (ui-state-selection next)) '(5 . 10) "set-selection-anchor also sets end"))
+  (check-equal? (selection-state-anchor (ui-state-selection next))
+                '(5 . 10)
+                "set-selection-anchor sets anchor")
+  (check-equal? (selection-state-end (ui-state-selection next))
+                '(5 . 10)
+                "set-selection-anchor also sets end"))
 
 (let ()
   (define state (set-selection-anchor (initial-ui-state) 5 10))
   (define next (set-selection-end state 20 30))
-  (check-equal? (selection-state-end (ui-state-selection next)) '(20 . 30) "set-selection-end updates end")
-  (check-equal? (selection-state-anchor (ui-state-selection next)) '(5 . 10) "set-selection-end preserves anchor"))
+  (check-equal? (selection-state-end (ui-state-selection next))
+                '(20 . 30)
+                "set-selection-end updates end")
+  (check-equal? (selection-state-anchor (ui-state-selection next))
+                '(5 . 10)
+                "set-selection-end preserves anchor"))
 
 (let ()
   (define state (set-selection-end (set-selection-anchor (initial-ui-state) 5 10) 20 30))
@@ -698,7 +700,8 @@
   (define s (set-selection-end (set-selection-anchor (initial-ui-state) 5 10) 20 30))
   (define scrolled (scroll-down s))
   (check-false (has-selection? scrolled) "scroll-down clears selection")
-  (check-false (selection-state-anchor (ui-state-selection scrolled)) "scroll-down clears sel-anchor"))
+  (check-false (selection-state-anchor (ui-state-selection scrolled))
+               "scroll-down clears sel-anchor"))
 
 (let ()
   ;; scroll-up preserves offset when no selection
@@ -715,13 +718,13 @@
   (check-equal? (ui-state-scroll-offset state+sel) 0 "set-selection-anchor preserves scroll-offset"))
 
 (test-case "model.request.started marks busy"
-  (define s0 (struct-copy ui-state (initial-ui-state) [busy? #f]))
+  (define s0 (set-busy (initial-ui-state) #f))
   (define evt (make-test-event "model.request.started" (hash)))
   (define s1 (apply-event-to-state s0 evt))
   (check-true (ui-state-busy? s1)))
 
 (test-case "tool.call.blocked shows in transcript"
-  (define s0 (struct-copy ui-state (initial-ui-state) [pending-tool-name "bash"]))
+  (define s0 (set-pending-tool-name (initial-ui-state) "bash"))
   (define evt (make-test-event "tool.call.blocked" (hash 'name "bash" 'reason "security policy")))
   (define s1 (apply-event-to-state s0 evt))
   (check-false (ui-state-pending-tool-name s1))
@@ -730,14 +733,14 @@
   (check-not-false (string-contains? (transcript-entry-text last-entry) "tool blocked")))
 
 (test-case "context.built stores tokenCount"
-  (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [session-id "s1"]))
+  (define s0 (struct-copy ui-state (set-busy (initial-ui-state) #t) [session-id "s1"]))
   (define evt (make-test-event "context.built" (hash 'tokenCount 42)))
   (define s1 (apply-event-to-state s0 evt))
   (check-equal? (ui-state-context-tokens s1) 42) ; v0.19.12 W1: stores token count
   (check-not-equal? s1 s0 "context.built now returns new state with token count"))
 
 (test-case "context.built without tokenCount is passthrough"
-  (define s0 (struct-copy ui-state (initial-ui-state) [busy? #t] [session-id "s1"]))
+  (define s0 (struct-copy ui-state (set-busy (initial-ui-state) #t) [session-id "s1"]))
   (define evt (make-test-event "context.built" (hash)))
   (define s1 (apply-event-to-state s0 evt))
   (check-eq? s1 s0 "context.built without tokenCount returns state unchanged"))
@@ -747,7 +750,7 @@
 ;; ============================================================
 
 (test-case "model.stream.delta accumulates text"
-  (define s0 (struct-copy ui-state (initial-ui-state) [streaming-text "Hello"]))
+  (define s0 (set-streaming-text (initial-ui-state) "Hello"))
   (define evt (make-test-event "model.stream.delta" (hash 'delta " world")))
   (define s1 (apply-event-to-state s0 evt))
   (check-equal? (ui-state-streaming-text s1) "Hello world")

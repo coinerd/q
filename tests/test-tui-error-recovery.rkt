@@ -25,13 +25,13 @@
 (define-test-suite
  test-tui-error-recovery
  (test-case "error recovery: runtime.error clears busy?"
-   (define s0 (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
+   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
    (define evt
      (make-test-event "runtime.error" (hasheq 'error "test error" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 evt))
    (check-false (ui-state-busy? s1) "busy? cleared after runtime.error"))
  (test-case "error recovery: error message shown in transcript"
-   (define s0 (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
+   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
    (define evt
      (make-test-event "runtime.error"
                       (hasheq 'error "something went wrong" 'errorType 'internal-error)))
@@ -41,7 +41,7 @@
    (define entry (last entries))
    (check-equal? (transcript-entry-kind entry) 'error))
  (test-case "error recovery: turn.completed after error is idempotent"
-   (define s0 (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
+   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
    (define err-evt
      (make-test-event "runtime.error" (hasheq 'error "test error" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 err-evt))
@@ -51,7 +51,7 @@
    (define s2 (apply-event-to-state s1 done-evt))
    (check-false (ui-state-busy? s2) "busy? still false after turn.completed"))
  (test-case "error recovery: subsequent prompt works after error"
-   (define s0 (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
+   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
    (define err-evt
      (make-test-event "runtime.error" (hasheq 'error "test error" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 err-evt))
@@ -60,7 +60,7 @@
    (define s2 (apply-event-to-state s1 start-evt))
    (check-true (ui-state-busy? s2) "new turn sets busy?=#t after error recovery"))
  (test-case "error recovery: internal-error hint shown"
-   (define s0 (struct-copy ui-state (initial-ui-state #:session-id "s1") [busy? #t]))
+   (define s0 (set-busy (initial-ui-state #:session-id "s1") #t))
    (define evt
      (make-test-event "runtime.error" (hasheq 'error "internal failure" 'errorType 'internal-error)))
    (define s1 (apply-event-to-state s0 evt))
@@ -72,11 +72,9 @@
                (format "hint mentions internal: ~a" hint-text)))
  (test-case "error recovery: streaming state cleared on error"
    (define s0
-     (struct-copy ui-state
-                  (initial-ui-state #:session-id "s1")
-                  [busy? #t]
-                  [streaming-text "partial code..."]
-                  [streaming-thinking "thinking..."]))
+     (set-streaming-thinking (set-streaming-text (set-busy (initial-ui-state #:session-id "s1") #t)
+                                                 "partial code...")
+                             "thinking..."))
    (define evt (make-test-event "runtime.error" (hasheq 'error "timeout" 'errorType 'timeout)))
    (define s1 (apply-event-to-state s0 evt))
    (check-false (ui-state-streaming-text s1) "streaming-text cleared")

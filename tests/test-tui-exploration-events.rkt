@@ -127,10 +127,7 @@
    (check-false (string-contains? (transcript-entry-text entry) "rate limited")))
  (test-case "auto-retry.start: clears streaming state"
    (define s0
-     (struct-copy ui-state
-                  (initial-ui-state)
-                  [streaming-text "partial..."]
-                  [streaming-thinking "thinking..."]))
+     (set-streaming-thinking (set-streaming-text (initial-ui-state) "partial...") "thinking..."))
    (define evt (make-test-event "auto-retry.start" (hash 'attempt 1 'max-retries 3)))
    (define s1 (apply-event-to-state s0 evt))
    (check-false (ui-state-streaming-text s1))

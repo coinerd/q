@@ -67,7 +67,7 @@
     ;; Busy + thinking
     ;; --------------------------------------------------------
     (test-case "busy with no streaming shows [thinking...]"
-      (define state (struct-copy ui-state (initial-ui-state) [busy? #t]))
+      (define state (set-busy (initial-ui-state) #t))
       (define result (render-status-bar state 80))
       (define text (styled-segment-text (first-segment result)))
       (check-true (string-contains? text "[thinking...]")))
@@ -76,7 +76,7 @@
     ;; Busy + tool
     ;; --------------------------------------------------------
     (test-case "busy with pending tool shows [tool-name]"
-      (define state (struct-copy ui-state (initial-ui-state) [busy? #t] [pending-tool-name "bash"]))
+      (define state (set-pending-tool-name (set-busy (initial-ui-state) #t) "bash"))
       (define result (render-status-bar state 80))
       (define text (styled-segment-text (first-segment result)))
       (check-true (string-contains? text "[bash]")))
@@ -85,7 +85,7 @@
     ;; Busy + streaming
     ;; --------------------------------------------------------
     (test-case "busy with streaming text shows [streaming...]"
-      (define state (struct-copy ui-state (initial-ui-state) [busy? #t] [streaming-text "Hello"]))
+      (define state (set-streaming-text (set-busy (initial-ui-state) #t) "Hello"))
       (define result (render-status-bar state 80))
       (define text (styled-segment-text (first-segment result)))
       (check-true (string-contains? text "[streaming...]")))
@@ -138,8 +138,7 @@
     (test-case "single segment length fits within width"
       (define state
         (struct-copy ui-state
-                     (initial-ui-state #:model-name "gpt-4o")
-                     [busy? #t]
+                     (set-busy (initial-ui-state #:model-name "gpt-4o") #t)
                      [context-tokens 12000]))
       (define width 80)
       (define result (render-status-bar state width))
