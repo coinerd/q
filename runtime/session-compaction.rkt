@@ -7,7 +7,6 @@
 ;; Token budget checking and compaction triggering.
 
 (require racket/contract
-         (only-in racket/dict dict-ref)
          (only-in "session-config.rkt" config-max-context-tokens)
          "../llm/token-budget.rkt"
          "../runtime/compactor.rkt"

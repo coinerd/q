@@ -18,7 +18,7 @@
 ;;   extensions/context.rkt → make-extension-ctx (extension registration)
 ;; ───────────────────────────────────────────────────────────────
 
-(require (only-in racket/dict dict-ref in-dict)
+(require (only-in racket/dict in-dict)
          racket/contract
          racket/list
          racket/promise

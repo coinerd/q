@@ -17,8 +17,7 @@
 ;; Upward imports into tools/ and extensions/ layers. See iteration.rkt
 ;; header comment for full rationale.
 
-(require (only-in racket/dict dict-ref)
-         racket/contract
+(require racket/contract
          racket/contract
          racket/list
          racket/path
