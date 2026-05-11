@@ -356,6 +356,9 @@
                             (event-time evt)
                             (hash))))
 
+;; DEPRECATED (W-04): These handlers process legacy "tool.call.completed"/"tool.call.failed"
+;; raw events. New code uses typed events via "tool.execution.completed".
+;; Kept for backward compat with existing workflow tests -- remove in v0.39.
 (define (handle-tool-call-completed state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
@@ -372,6 +375,7 @@
   (define meta (hasheq 'name name 'result (or result-raw "")))
   (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
 
+;; DEPRECATED (W-04): Legacy handler for old raw event topic.
 (define (handle-tool-call-failed state evt)
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
@@ -448,6 +452,8 @@
 (register-event-reducer! "tool.call.started" handle-tool-call-started)
 (register-event-reducer! "tool.execution.started" handle-tool-execution-started)
 (register-event-reducer! "tool.execution.completed" handle-tool-execution-completed)
+(register-event-reducer! "tool.call.completed" handle-tool-call-completed)
+(register-event-reducer! "tool.call.failed" handle-tool-call-failed)
 (register-event-reducer! "runtime.error" handle-runtime-error)
 (register-event-reducer! "session.started" handle-session-started)
 (register-event-reducer! "session.resumed" handle-session-resumed)
@@ -468,8 +474,6 @@
 (register-event-reducer! "exploration.progress" handle-exploration-progress)
 (register-event-reducer! "gsd.plan.archived" handle-gsd-plan-archived)
 (register-event-reducer! "context.mid-turn-over-budget" handle-context-mid-turn-over-budget)
-(register-event-reducer! "tool.call.completed" handle-tool-call-completed)
-(register-event-reducer! "tool.call.failed" handle-tool-call-failed)
 (register-event-reducer! "compaction.started" handle-compaction-lifecycle)
 (register-event-reducer! "compaction.start" handle-compaction-lifecycle)
 (register-event-reducer! "compaction.completed" handle-compaction-lifecycle)

@@ -31,7 +31,7 @@
          field->json-key)
 
 ;; ===========================================================
-;; Event field registry (I-12, I-23) -- DEPRECATED, use per-struct constants
+;; Event field registry (I-12, I-23) -- canonical runtime mechanism for serialization
 ;; ===========================================================
 
 (define *event-field-registry* (make-hasheq))
@@ -39,12 +39,7 @@
 (define (register-event-fields! name fields)
   (hash-set! *event-field-registry* name fields))
 
-(define lookup-event-fields-logged? (box #f))
 (define (lookup-event-fields name)
-  (unless (unbox lookup-event-fields-logged?)
-    (set-box! lookup-event-fields-logged? #t)
-    (log-warning
-     "lookup-event-fields is deprecated (v0.38.0). Use per-struct *-event-fields constants."))
   (hash-ref *event-field-registry* name '()))
 
 ;; ===========================================================
@@ -168,9 +163,9 @@
       (define fsym (syntax-e f))
       (cond
         [(hash-has-key? rd-hash fsym) (hash-ref rd-hash fsym)]
-        [(member f opt-fields)
+        [(member (syntax-e f) (map syntax-e opt-fields))
          ;; Find the corresponding opt-default
-         (define idx (index-of opt-fields f))
+         (define idx (index-of (map syntax-e opt-fields) (syntax-e f)))
          (if idx
              (list-ref opt-defaults idx)
              #'#f)]
