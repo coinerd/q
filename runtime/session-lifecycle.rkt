@@ -261,7 +261,7 @@
                            (retry-exhausted-total-delay-ms e)
                            'errorHistory
                            (retry-exhausted-error-history e))
-                base-payload))
+                (payload->hash base-payload)))
           (emit-session-event! bus sid "runtime.error" payload)
           ;; Defense-in-depth: ensure turn.completed is emitted
           (emit-typed-event!
