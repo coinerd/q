@@ -15,6 +15,7 @@
 
 (provide (struct-out loop-infra)
          (struct-out loop-counters)
+         (struct-out iteration-snapshot)
          make-initial-counters)
 
 ;; ── Opaque types for untyped struct values ────────────────────
@@ -27,6 +28,10 @@
 (require/typed "../../extensions/api.rkt" [#:opaque ExtRegistry extension-registry?])
 
 (require/typed "../../util/cancellation.rkt" [#:opaque CancellationToken cancellation-token?])
+
+(require/typed "../../runtime/session-config.rkt" [#:opaque SessionConfig session-config?])
+
+(require/typed "../../runtime/session-types.rkt" [#:opaque AgentSession agent-session?])
 
 ;; ── Typed imports from untyped modules ──────────────────────────
 
@@ -65,3 +70,14 @@
   :
   loop-counters
   (loop-counters 0 0 '() 0 0 '() 0 0 0))
+
+;; v0.37.4 (FA-04): Bundle loop-evolving parameters into a single struct
+;; to avoid threading 6+ positional parameters through interpret-step.
+(struct iteration-snapshot
+  ([counters : loop-counters]
+   [ws : Any]
+   [config : SessionConfig]
+   [sess : (U AgentSession #f)]
+   [max-iterations : Nonnegative-Integer]
+   [max-iterations-hard : Nonnegative-Integer])
+  #:transparent)
