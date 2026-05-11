@@ -30,7 +30,8 @@
          (only-in "../agent/event-bus.rkt" event-bus?)
          (only-in "../extensions/api.rkt" extension-registry?)
          (only-in "../runtime/model-registry.rkt" model-registry?)
-         (only-in "../runtime/trace-logger.rkt" trace-logger?))
+         (only-in "../runtime/trace-logger.rkt" trace-logger?)
+         (only-in "../runtime/settings.rkt" q-settings?))
 
 (provide session-config?
          session-config
@@ -45,7 +46,7 @@
           [config-event-bus (-> session-config? (or/c #f event-bus?))]
           [config-extension-registry (-> session-config? (or/c #f extension-registry?))]
           [config-model-registry (-> session-config? (or/c #f model-registry?))]
-          [config-settings (-> session-config? (or/c #f hash?))]
+          [config-settings (-> session-config? (or/c #f q-settings?))]
           [config-model-name (-> session-config? (or/c #f string?))]
           [config-session-dir (-> session-config? (or/c #f path-string?))]
           [config-project-dir (-> session-config? (or/c #f path-string?))]

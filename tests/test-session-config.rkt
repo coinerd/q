@@ -24,7 +24,8 @@
 (test-case "hash->session-config with values"
   (define c
     (hash->session-config (hasheq 'provider 'prov 'model-name "gpt-4" 'max-context-tokens 128000)))
-  (check-eq? (config-provider c) 'prov)
+  ;; Use dict-ref for raw value access; config-provider has provider? contract
+  (check-eq? (dict-ref c 'provider) 'prov)
   (check-equal? (config-model-name c) "gpt-4")
   (check-equal? (config-max-context-tokens c) 128000))
 
@@ -208,7 +209,8 @@
 (test-case "normalization preserves known keys"
   (define h (hasheq 'provider 'openai 'max-iterations 10))
   (define c (hash->session-config h))
-  (check-eq? (config-provider c) 'openai)
+  ;; Use dict-ref for raw value access; config-provider has provider? contract
+  (check-eq? (dict-ref c 'provider) 'openai)
   (check-equal? (config-max-iterations c) 10))
 
 (test-case "normalization coerces string thinking-level to symbol"
@@ -218,4 +220,5 @@
 (test-case "normalization preserves unknown keys"
   (define c (hash->session-config (hasheq 'unknown-key 42 'provider 'p)))
   (check-equal? (dict-ref c 'unknown-key) 42)
-  (check-eq? (config-provider c) 'p))
+  ;; Use dict-ref for raw value access; config-provider has provider? contract
+  (check-eq? (dict-ref c 'provider) 'p))
