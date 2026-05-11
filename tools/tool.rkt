@@ -42,6 +42,12 @@
          tool-prompt-snippet
          tool-prompt-guidelines
          tool-dangerous?
+         ;; Tool execution accessor (re-exported from tool-struct.rkt)
+         ;; NOTE: tool-execute is for test/internal use only.
+         ;;       Production code should use tools/scheduler.rkt for invocation.
+         tool-execute
+         tool-render-call
+         tool-render-result
          (contract-out [make-tool
                         (->* (string? string? hash? procedure?)
                              (#:prompt-snippet (or/c string? #f)
