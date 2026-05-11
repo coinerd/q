@@ -7,6 +7,8 @@
 ;; implementations during initialization.
 ;;
 ;; This breaks the upward import from extensions/ → tui/ (ARCH-02).
+;; M-08 (v0.38.4): Replaced 10 individual parameters with a single
+;; ui-callback-registry struct.
 
 (require racket/contract
          (only-in "../tui/state.rkt" ui-state ui-state-extension-widgets))
@@ -33,55 +35,123 @@
          install-ui-callbacks!
 
          ;; Check if callbacks are installed
-         ui-callbacks-installed?)
+         ui-callbacks-installed?
 
-;; ── Callback parameters ────────────────────────────────────
+         ;; M-08: Registry struct and accessor (for advanced use)
+         ui-callback-registry
+         ui-callback-registry?)
 
-;; Each parameter holds a procedure (or #f if not yet installed).
+;; ── Callback registry struct ───────────────────────────────
 
-(define ui-set-footer-param (make-parameter #f))
-(define ui-set-header-param (make-parameter #f))
-(define ui-clear-footer-param (make-parameter #f))
-(define ui-clear-header-param (make-parameter #f))
-(define ui-make-styled-line-param (make-parameter #f))
-(define ui-make-styled-segment-param (make-parameter #f))
-(define ui-set-status-message-param (make-parameter #f))
-(define ui-set-extension-widget-param (make-parameter #f))
-(define ui-remove-extension-widget-param (make-parameter #f))
-(define ui-remove-all-extension-widgets-param (make-parameter #f))
+(struct ui-callback-registry
+        (set-footer set-header
+                    clear-footer
+                    clear-header
+                    make-styled-line
+                    make-styled-segment
+                    set-status-message
+                    set-extension-widget
+                    remove-extension-widget
+                    remove-all-extension-widgets)
+  #:transparent)
+
+;; Global mutable registry (replaces 10 individual parameters).
+(define *ui-registry* (box (ui-callback-registry #f #f #f #f #f #f #f #f #f #f)))
+
+;; Backward-compatible parameter wrappers (deprecated, removal v0.39.0)
+(define (ui-set-footer-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-footer new-val]))
+      (ui-callback-registry-set-footer r)))
+
+(define (ui-set-header-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-header new-val]))
+      (ui-callback-registry-set-header r)))
+
+(define (ui-clear-footer-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [clear-footer new-val]))
+      (ui-callback-registry-clear-footer r)))
+
+(define (ui-clear-header-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [clear-header new-val]))
+      (ui-callback-registry-clear-header r)))
+
+(define (ui-make-styled-line-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [make-styled-line new-val]))
+      (ui-callback-registry-make-styled-line r)))
+
+(define (ui-make-styled-segment-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [make-styled-segment new-val]))
+      (ui-callback-registry-make-styled-segment r)))
+
+(define (ui-set-status-message-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-status-message new-val]))
+      (ui-callback-registry-set-status-message r)))
+
+(define (ui-set-extension-widget-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [set-extension-widget new-val]))
+      (ui-callback-registry-set-extension-widget r)))
+
+(define (ui-remove-extension-widget-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry* (struct-copy ui-callback-registry r [remove-extension-widget new-val]))
+      (ui-callback-registry-remove-extension-widget r)))
+
+(define (ui-remove-all-extension-widgets-param [new-val #f])
+  (define r (unbox *ui-registry*))
+  (if new-val
+      (set-box! *ui-registry*
+                (struct-copy ui-callback-registry r [remove-all-extension-widgets new-val]))
+      (ui-callback-registry-remove-all-extension-widgets r)))
 
 ;; ── Public API ─────────────────────────────────────────────
 
 (define (ui-set-footer! ui-state-box lines)
-  ((ui-set-footer-param) ui-state-box lines))
+  ((ui-callback-registry-set-footer (unbox *ui-registry*)) ui-state-box lines))
 
 (define (ui-set-header! ui-state-box lines)
-  ((ui-set-header-param) ui-state-box lines))
+  ((ui-callback-registry-set-header (unbox *ui-registry*)) ui-state-box lines))
 
 (define (ui-clear-footer! ui-state-box)
-  ((ui-clear-footer-param) ui-state-box))
+  ((ui-callback-registry-clear-footer (unbox *ui-registry*)) ui-state-box))
 
 (define (ui-clear-header! ui-state-box)
-  ((ui-clear-header-param) ui-state-box))
+  ((ui-callback-registry-clear-header (unbox *ui-registry*)) ui-state-box))
 
 (define (ui-make-styled-line segments)
-  ((ui-make-styled-line-param) segments))
+  ((ui-callback-registry-make-styled-line (unbox *ui-registry*)) segments))
 
 (define (ui-make-styled-segment text style)
-  ((ui-make-styled-segment-param) text style))
+  ((ui-callback-registry-make-styled-segment (unbox *ui-registry*)) text style))
 
 ;; Set status message in the ui-state box (dialog-api notification integration)
 ;; ui-state-box: box? containing ui-state
 ;; message: string? — the formatted status message
 (define (ui-set-status-message! ui-state-box message)
-  (define cb (ui-set-status-message-param))
+  (define cb (ui-callback-registry-set-status-message (unbox *ui-registry*)))
   (when cb
     (cb ui-state-box message)))
 
 ;; Set a widget from an extension
 ;; Falls back to direct struct-copy when no TUI callback is installed
 (define (ui-set-extension-widget! state ext-name key lines)
-  (define cb (ui-set-extension-widget-param))
+  (define cb (ui-callback-registry-set-extension-widget (unbox *ui-registry*)))
   (if cb
       (cb state ext-name key lines)
       ;; Fallback: directly update the extension-widgets hash
@@ -91,7 +161,7 @@
 
 ;; Remove a specific widget
 (define (ui-remove-extension-widget! state ext-name key)
-  (define cb (ui-remove-extension-widget-param))
+  (define cb (ui-callback-registry-remove-extension-widget (unbox *ui-registry*)))
   (if cb
       (cb state ext-name key)
       (let* ([widgets (ui-state-extension-widgets state)]
@@ -100,22 +170,23 @@
 
 ;; Remove all widgets for an extension
 (define (ui-remove-all-extension-widgets! state ext-name)
-  (define cb (ui-remove-all-extension-widgets-param))
+  (define cb (ui-callback-registry-remove-all-extension-widgets (unbox *ui-registry*)))
   (if cb
       (cb state ext-name)
       (let* ([widgets (ui-state-extension-widgets state)]
              [new-widgets (for/hash ([(k v) (in-hash widgets)]
-                                      #:when (not (equal? (car k) ext-name)))
+                                     #:when (not (equal? (car k) ext-name)))
                             (values k v))])
         (struct-copy ui-state state [extension-widgets new-widgets]))))
 
 (define (ui-callbacks-installed?)
-  (and (ui-set-footer-param)
-       (ui-set-header-param)
-       (ui-clear-footer-param)
-       (ui-clear-header-param)
-       (ui-make-styled-line-param)
-       (ui-make-styled-segment-param)))
+  (define r (unbox *ui-registry*))
+  (and (ui-callback-registry-set-footer r)
+       (ui-callback-registry-set-header r)
+       (ui-callback-registry-clear-footer r)
+       (ui-callback-registry-clear-header r)
+       (ui-callback-registry-make-styled-line r)
+       (ui-callback-registry-make-styled-segment r)))
 
 ;; install-ui-callbacks! : hash? -> void?
 ;; Installs concrete UI implementations.
@@ -125,23 +196,14 @@
 ;;                set-extension-widget, remove-extension-widget,
 ;;                remove-all-extension-widgets
 (define (install-ui-callbacks! callbacks)
-  (when (hash-ref callbacks 'set-footer #f)
-    (ui-set-footer-param (hash-ref callbacks 'set-footer)))
-  (when (hash-ref callbacks 'set-header #f)
-    (ui-set-header-param (hash-ref callbacks 'set-header)))
-  (when (hash-ref callbacks 'clear-footer #f)
-    (ui-clear-footer-param (hash-ref callbacks 'clear-footer)))
-  (when (hash-ref callbacks 'clear-header #f)
-    (ui-clear-header-param (hash-ref callbacks 'clear-header)))
-  (when (hash-ref callbacks 'make-styled-line #f)
-    (ui-make-styled-line-param (hash-ref callbacks 'make-styled-line)))
-  (when (hash-ref callbacks 'make-styled-segment #f)
-    (ui-make-styled-segment-param (hash-ref callbacks 'make-styled-segment)))
-  (when (hash-ref callbacks 'set-status-message #f)
-    (ui-set-status-message-param (hash-ref callbacks 'set-status-message)))
-  (when (hash-ref callbacks 'set-extension-widget #f)
-    (ui-set-extension-widget-param (hash-ref callbacks 'set-extension-widget)))
-  (when (hash-ref callbacks 'remove-extension-widget #f)
-    (ui-remove-extension-widget-param (hash-ref callbacks 'remove-extension-widget)))
-  (when (hash-ref callbacks 'remove-all-extension-widgets #f)
-    (ui-remove-all-extension-widgets-param (hash-ref callbacks 'remove-all-extension-widgets))))
+  (set-box! *ui-registry*
+            (ui-callback-registry (hash-ref callbacks 'set-footer #f)
+                                  (hash-ref callbacks 'set-header #f)
+                                  (hash-ref callbacks 'clear-footer #f)
+                                  (hash-ref callbacks 'clear-header #f)
+                                  (hash-ref callbacks 'make-styled-line #f)
+                                  (hash-ref callbacks 'make-styled-segment #f)
+                                  (hash-ref callbacks 'set-status-message #f)
+                                  (hash-ref callbacks 'set-extension-widget #f)
+                                  (hash-ref callbacks 'remove-extension-widget #f)
+                                  (hash-ref callbacks 'remove-all-extension-widgets #f))))

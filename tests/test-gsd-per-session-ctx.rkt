@@ -129,7 +129,7 @@
 (test-case "gsd-default-ctx is a valid gsd-session-ctx"
   (check-true (gsd-session-ctx? gsd-default-ctx)))
 
-(test-case "backward-compat accessors use default ctx"
-  ;; Verify backward-compat accessors still work
-  (check-true (gsd-runtime-state? (current-gsd-state)))
-  (check-true (procedure? set-gsd-state!)))
+(test-case "snapshot/update accessors use default ctx"
+  ;; Verify snapshot/update accessors work (M-07: gsd-state-snapshot/gsd-state-update! removed)
+  (check-true (gsd-runtime-state? (gsd-state-snapshot)))
+  (check-true (procedure? gsd-state-update!)))

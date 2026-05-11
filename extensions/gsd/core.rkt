@@ -29,7 +29,7 @@
          ;; Direct imports (no longer via shim — W2 purification)
          (only-in "state-machine.rkt" gsm-mark-wave-complete!)
          (only-in "wave-docs.rkt" mark-wave-status!)
-         (only-in "session-state.rkt" set-gsd-state! with-gsd-lock)
+         (only-in "session-state.rkt" gsd-state-update!)
          (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "policy.rkt" gsd-decide-action policy-allowed? policy-blocked? policy-reason)
@@ -109,7 +109,7 @@
 
 ;; Restore state machine from a snapshot
 (define (gsd-state-restore! snapshot)
-  (with-gsd-lock (lambda () (set-gsd-state! snapshot))))
+  (gsd-state-update! (lambda (_) snapshot)))
 
 ;; ============================================================
 ;; Command dispatch

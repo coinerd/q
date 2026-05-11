@@ -20,14 +20,14 @@
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "session-state.rkt"
-                  current-gsd-state
-                  set-gsd-state!
                   current-gsd-history
                   set-gsd-history!
                   gsd-state-snapshot
                   gsd-history-snapshot
                   gsd-state-update!
-                  with-gsd-lock))
+                  with-gsd-lock
+                  gsd-default-ctx
+                  gsd-session-ctx-state-box))
 
 ;; States
 (provide gsm-state?
@@ -152,19 +152,19 @@
       current-state)]))
 
 (define (gsm-transition! target)
-  ;; R-01: Use current-gsd-state/set-gsd-state! directly inside with-gsd-lock.
+  ;; R-01: Direct box access inside with-gsd-lock to avoid nested semaphore deadlock.
   ;; gsd-state-snapshot/gsd-state-update! call with-gsd-lock internally,
   ;; causing deadlock on the same non-reentrant semaphore.
   (with-gsd-lock
    (lambda ()
-     (define state (current-gsd-state))
+     (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
      (define current (gsd-runtime-state-mode state))
      (emit-gsd-event! 'gsd.transition.attempted (hasheq 'from current 'to target))
      (define-values (result new-state) (compute-next-gsm-state state target))
      (cond
        [(ok? result)
         (define new-mode (gsd-runtime-state-mode new-state))
-        (set-gsd-state! new-state)
+        (set-box! (gsd-session-ctx-state-box gsd-default-ctx) new-state)
         (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
         (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to new-mode))
         result]
@@ -189,19 +189,19 @@
          (gsm-transition! target))]))
 
 (define (gsm-reset!)
-  ;; R-01: Use current-gsd-state/set-gsd-state! directly inside with-gsd-lock.
+  ;; R-01: Direct box access inside with-gsd-lock to avoid nested semaphore deadlock.
   (with-gsd-lock
    (lambda ()
-     (define state (current-gsd-state))
+     (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
      (define old (gsd-runtime-state-mode state))
-     (set-gsd-state! (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
+     (set-box! (gsd-session-ctx-state-box gsd-default-ctx) (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
      (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
      (ok-result old 'idle))))
 
 (define (reset-gsm!)
   ;; R-01: Use set-gsd-state!/set-gsd-history! directly inside with-gsd-lock.
   (with-gsd-lock (lambda ()
-                   (set-gsd-state! (make-initial-gsd-state))
+                   (set-box! (gsd-session-ctx-state-box gsd-default-ctx) (make-initial-gsd-state))
                    (set-gsd-history! '())
                    (void))))
 
