@@ -37,15 +37,22 @@
 ;; Start / Stop
 ;; ============================================================
 
-(define (start-trace-logger! logger)
+(define (start-trace-logger! logger #:port [out-port #f])
   (when (trace-logger-enabled? logger)
     (define bus (trace-logger-bus logger))
     (define session-dir (trace-logger-session-dir logger))
-    (define trace-path (build-path session-dir "trace.jsonl"))
-    ;; Ensure parent dir exists
-    (make-directory* session-dir)
-    ;; Open output port in append mode
-    (define out (open-output-file trace-path #:exists 'append))
+    ;; Close existing port if re-starting (prevents double-start leak)
+    (define old-out (trace-logger-out-port logger))
+    (when old-out
+      (close-output-port old-out)
+      (set-trace-logger-out-port! logger #f))
+    (define out
+      (or out-port
+          (let ([trace-path (build-path session-dir "trace.jsonl")])
+            ;; Ensure parent dir exists
+            (make-directory* session-dir)
+            ;; Open output port in append mode
+            (open-output-file trace-path #:exists 'append))))
     (set-trace-logger-out-port! logger out)
     ;; Subscribe to all events
     (define sub-id (subscribe! bus (lambda (evt) (handle-event! logger evt))))

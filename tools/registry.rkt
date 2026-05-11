@@ -33,7 +33,7 @@
 ;; Tool registry
 ;; ============================================================
 
-(struct tool-registry (tools-box active-set-box sem) #:transparent)
+(struct tool-registry (tools-box active-set-box sem))
 
 ;; Safe read-only accessor under lock
 (define (tool-registry-tools reg)

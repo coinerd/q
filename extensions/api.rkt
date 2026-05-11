@@ -41,7 +41,6 @@
          injection-event-topic
          (struct-out extension)
          extension-registry?
-         (struct-out ext-registry-data)
          (contract-out [make-extension-registry (-> extension-registry?)]
                        [register-extension! (-> extension-registry? extension? void?)]
                        [unregister-extension! (-> extension-registry? string? void?)]
