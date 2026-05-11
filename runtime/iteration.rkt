@@ -82,7 +82,8 @@
                               #:working-set (or/c working-set? #f)
                               #:session (or/c agent-session? #f))
                              loop-result?)]
-                       [decide-next-action (-> iteration-ctx? loop-result? symbol?)])
+                       [decide-next-action (-> iteration-ctx? loop-result? step-action?)]
+                       [step-action? contract?])
          emit-session-event!
          maybe-dispatch-hooks
          ensure-hash-args

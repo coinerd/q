@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.37.2 — 2026-05-11
+
+### Goal: Iteration Step-Result Correctness (Milestone 3 of v0.37.x)
+
+### Fixed
+- **FC-03** (HIGH): Replaced fragile `eq? termination 'completed` with set membership
+  in `handle-stop-action` (step-interpreter.rkt). Defined `success-completion-reasons`
+  as '(completed) for now, making it safe to add `goal-achieved` later without changing
+  control flow.
+- **FC-01** (M): Added `step-action?` contract predicate for step-result action field:
+  'continue | 'stop | 'stop-hard-limit | 'stop-soft-limit | 'stop-budget.
+  Replaced `(struct-out step-result)` with `(contract-out [struct step-result (...)])`
+  in decision.rkt. Updated `decide-next-action` contract in iteration.rkt facade to
+  return `step-action?` instead of `symbol?`.
+
+### Changed
+- `runtime/iteration/decision.rkt`: `step-action?` predicate, contracted `step-result` struct
+- `runtime/iteration/step-interpreter.rkt`: `success-completion-reasons` set, `member` check
+- `runtime/iteration.rkt`: re-export `step-action?`, tightened `decide-next-action` contract
+- `tests/test-iteration-pure.rkt`: +3 tests (action contract rejection, valid actions, predicate)
+
+**Verification**: lint 18/18, test-iteration-pure 11/11, test-iteration-step-interpreter 3/3,
+test-iteration-integration 16/16
+
+---
+
 ## v0.37.1 — 2026-05-11
 
 ### Goal: Registry Encapsulation + Concurrency (Milestone 2 of v0.37.x)
