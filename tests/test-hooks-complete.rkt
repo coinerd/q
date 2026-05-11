@@ -22,7 +22,6 @@
                   register-tool!
                   tool-name
                   tool-schema
-                  tool-execute
                   tool-call
                   tool-call?
                   make-tool-call
@@ -31,6 +30,7 @@
                   tool-call-arguments
                   make-error-result
                   make-success-result)
+         (only-in "../tools/tool-struct.rkt" tool-execute)
          "../util/ids.rkt"
          (only-in "../llm/provider.rkt" make-mock-provider)
          (only-in "../llm/model.rkt" make-model-response)

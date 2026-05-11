@@ -3,8 +3,8 @@
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
 
-(provide (struct-out tool)
-         tool?
+(provide tool?
+         tool
          tool-name
          tool-description
          tool-schema

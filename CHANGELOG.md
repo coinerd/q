@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.38.2 — 2026-05-11
+
+### Goal: Tool System Boundary Hardening (Milestone 3 of v0.38.x)
+
+### Fixed
+- **H-02** (HIGH): Replaced `struct-out tool` with selective exports in
+  `tools/tool-struct.rkt`. Exported `tool?`, `tool`, constructor, and safe
+  accessors (`tool-name`, `tool-schema`, etc.). Removed `tool-execute` from
+  `tool-struct.rkt` public API.
+- **H-02** (HIGH): Updated `tools/tool.rkt` to re-export only safe accessors
+  (not `tool-execute`). `tool-execute` remains available from
+  `tools/tool-struct.rkt` for tests and internal use.
+- Updated 12 test files to import `tool-execute` from `tools/tool-struct.rkt`
+  instead of `tools/tool.rkt`, enforcing the boundary separation.
+
+**Verification**: lint 18/18, targeted tests 123/123 pass
+
+---
+
 ## v0.38.1 — 2026-05-11
 
 ### Goal: Session-Config & Model-Registry Encapsulation (Milestone 2 of v0.38.x)

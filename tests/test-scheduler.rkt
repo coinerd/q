@@ -19,7 +19,6 @@
                   tool?
                   tool-name
                   tool-schema
-                  tool-execute
                   make-tool
                   make-tool-registry
                   make-exec-context
@@ -33,6 +32,7 @@
                   tool-result-is-error?
                   make-error-result
                   make-success-result)
+         (only-in "../tools/tool-struct.rkt" tool-execute)
          (only-in "../tools/scheduler.rkt"
                   run-tool-batch
                   scheduler-result
@@ -492,12 +492,9 @@
   (register-tool! reg
                   (make-tool "thread-recorder"
                              "Records threads for testing"
-                             (hasheq 'type 'object
-                                     'properties (hasheq)
-                                     'required '())
+                             (hasheq 'type 'object 'properties (hasheq) 'required '())
                              (lambda (args exec-ctx)
-                               (set-box! threads-seen
-                                         (cons (current-thread) (unbox threads-seen)))
+                               (set-box! threads-seen (cons (current-thread) (unbox threads-seen)))
                                (sleep 0.05) ; small delay to force contention
                                (make-success-result (list (hasheq 'text "ok")) (hasheq)))))
   ;; Run 6 parallel tool calls with max 2 — should not exceed 2 concurrent threads
