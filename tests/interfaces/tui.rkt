@@ -699,23 +699,27 @@
     (define ctx (make-tui-ctx))
     (handle-mouse ctx '(click 0 10 5))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor state) "click sets sel-anchor")
-    (check-equal? (ui-state-sel-anchor state) '(10 . 5) "sel-anchor is (col . row)")
-    (check-not-false (ui-state-sel-end state) "click sets sel-end")))
+    (check-not-false (selection-state-anchor (ui-state-selection state)) "click sets sel-anchor")
+    (check-equal? (selection-state-anchor (ui-state-selection state))
+                  '(10 . 5)
+                  "sel-anchor is (col . row)")
+    (check-not-false (selection-state-end (ui-state-selection state)) "click sets sel-end")))
 (test-case "right click does not set selection"
   (let ()
     ;; Right click does NOT set selection (only left button)
     (define ctx (make-tui-ctx))
     (handle-mouse ctx '(click 2 10 5)) ;; button=2 (right)
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-false (ui-state-sel-anchor state) "right click does not set selection")))
+    (check-false (selection-state-anchor (ui-state-selection state))
+                 "right click does not set selection")))
 (test-case "middle click does not set selection"
   (let ()
     ;; Middle click does NOT set selection (only left button)
     (define ctx (make-tui-ctx))
     (handle-mouse ctx '(click 1 10 5)) ;; button=1 (middle)
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-false (ui-state-sel-anchor state) "middle click does not set selection")))
+    (check-false (selection-state-anchor (ui-state-selection state))
+                 "middle click does not set selection")))
 (test-case "drag updates sel-end"
   (let ()
     ;; Drag updates selection end
@@ -723,14 +727,15 @@
     (handle-mouse ctx '(click 0 10 5)) ;; start
     (handle-mouse ctx '(drag 15 8)) ;; drag to new position
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-equal? (ui-state-sel-end state) '(15 . 8) "drag updates sel-end")))
+    (check-equal? (selection-state-end (ui-state-selection state)) '(15 . 8) "drag updates sel-end")))
 (test-case "drag without anchor does nothing"
   (let ()
     ;; Drag without prior click does nothing
     (define ctx (make-tui-ctx))
     (handle-mouse ctx '(drag 15 8))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-false (ui-state-sel-anchor state) "drag without anchor does nothing")))
+    (check-false (selection-state-anchor (ui-state-selection state))
+                 "drag without anchor does nothing")))
 (test-case "release preserves sel-anchor"
   (let ()
     ;; Release preserves selection (for visual feedback + clipboard)
@@ -738,15 +743,17 @@
     (handle-mouse ctx '(click 0 10 5)) ;; start
     (handle-mouse ctx '(release 15 8)) ;; release
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor state) "release preserves sel-anchor")
-    (check-not-false (ui-state-sel-end state) "release preserves sel-end")))
+    (check-not-false (selection-state-anchor (ui-state-selection state))
+                     "release preserves sel-anchor")
+    (check-not-false (selection-state-end (ui-state-selection state)) "release preserves sel-end")))
 (test-case "release without selection does nothing"
   (let ()
     ;; Release without selection does nothing
     (define ctx (make-tui-ctx))
     (handle-mouse ctx '(release 15 8))
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (check-false (ui-state-sel-anchor state) "release without selection does nothing")))
+    (check-false (selection-state-anchor (ui-state-selection state))
+                 "release without selection does nothing")))
 (test-case "styled-line->text concatenates segments"
   (let ()
     ;; styled-line->text extracts plain text
@@ -894,22 +901,25 @@
     ;; Simulate click (left button, col 0, row 1)
     (handle-mouse ctx '(click 0 0 1))
     (define after-click (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor after-click) "selection lifecycle: anchor set after click")
-    (check-not-false (ui-state-sel-end after-click) "selection lifecycle: end set after click")
+    (check-not-false (selection-state-anchor (ui-state-selection after-click))
+                     "selection lifecycle: anchor set after click")
+    (check-not-false (selection-state-end (ui-state-selection after-click))
+                     "selection lifecycle: end set after click")
 
     ;; Simulate drag (col 10, row 1)
     (handle-mouse ctx '(drag 10 1))
     (define after-drag (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor after-drag)
+    (check-not-false (selection-state-anchor (ui-state-selection after-drag))
                      "selection lifecycle: anchor persists during drag")
-    (check-not-false (ui-state-sel-end after-drag) "selection lifecycle: end updated during drag")
+    (check-not-false (selection-state-end (ui-state-selection after-drag))
+                     "selection lifecycle: end updated during drag")
 
     ;; Simulate release (col 10, row 1)
     (handle-mouse ctx '(release 10 1))
     (define after-release (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor after-release)
+    (check-not-false (selection-state-anchor (ui-state-selection after-release))
                      "selection lifecycle: anchor persists after release")
-    (check-not-false (ui-state-sel-end after-release)
+    (check-not-false (selection-state-end (ui-state-selection after-release))
                      "selection lifecycle: end persists after release")))
 (test-case "click-reset: selection exists after release"
   (let ()
@@ -925,14 +935,14 @@
     (handle-mouse ctx '(drag 9 1))
     (handle-mouse ctx '(release 9 1))
     (define after-release (unbox (tui-ctx-ui-state-box ctx)))
-    (check-not-false (ui-state-sel-anchor after-release)
+    (check-not-false (selection-state-anchor (ui-state-selection after-release))
                      "click-reset: selection exists after release")
 
     ;; Click elsewhere — should reset selection to new anchor
     (handle-mouse ctx '(click 0 0 2))
     (define after-new-click (unbox (tui-ctx-ui-state-box ctx)))
-    (define anchor (ui-state-sel-anchor after-new-click))
-    (define end (ui-state-sel-end after-new-click))
+    (define anchor (selection-state-anchor (ui-state-selection after-new-click)))
+    (define end (selection-state-end (ui-state-selection after-new-click)))
     (check-not-false anchor "click-reset: anchor set after new click")
     (check-equal? anchor end "click-reset: anchor == end after new click (zero-width)")))
 (test-case "Right-click and release position tests (BUG: right-click corrupts selection)"
@@ -959,7 +969,7 @@
     (handle-mouse ctx '(drag 10 1)) ;; drag to (10,1)
     (handle-mouse ctx '(release 20 1)) ;; release at (20,1) — should NOT move end
     (define state (unbox (tui-ctx-ui-state-box ctx)))
-    (define sel-end (ui-state-sel-end state))
+    (define sel-end (selection-state-end (ui-state-selection state)))
     (check-equal? sel-end '(10 . 1) "release does not move sel-end: stays at last drag position")))
 (test-case "right-click does not change sel-anchor"
   (let ()
@@ -973,16 +983,16 @@
     (handle-mouse ctx '(click 0 0 1))
     (handle-mouse ctx '(drag 5 1))
     (define after-drag (unbox (tui-ctx-ui-state-box ctx)))
-    (define drag-end (ui-state-sel-end after-drag))
+    (define drag-end (selection-state-end (ui-state-selection after-drag)))
     ;; Right-click at different position (button 2)
     (handle-mouse ctx '(click 2 15 3))
     (handle-mouse ctx '(release 15 3))
     (define after-right-click (unbox (tui-ctx-ui-state-box ctx)))
     ;; Selection endpoints should be UNCHANGED by right-click
-    (check-equal? (ui-state-sel-anchor after-right-click)
+    (check-equal? (selection-state-anchor (ui-state-selection after-right-click))
                   '(0 . 1)
                   "right-click does not change sel-anchor")
-    (check-equal? (ui-state-sel-end after-right-click)
+    (check-equal? (selection-state-end (ui-state-selection after-right-click))
                   drag-end
                   "right-click does not change sel-end")))
 (test-case "Resize polling tests (BUG: TUI not resized on terminal resize)"

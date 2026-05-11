@@ -1,9 +1,18 @@
 # Changelog
 
-## v0.38.8 -- 2026-05-07
+## v0.38.9 — 2026-05-11
 
 ### Fixed
-- R-01--R-05: Re-exported `tool-execute` from `tools/tool.rkt` facade (5 test files fixed)
+- L-F1: CHANGELOG v0.38.8 header format corrected (double-dash → em-dash)
+- L-F2: CHANGELOG v0.38.8 date corrected (2026-05-07 → 2026-05-11)
+- V-01d: README v0.38.8 status line description corrected
+- V-02: 13 doc files version-synced from 0.38.5 → 0.38.9
+- LATENT-01: Fixed 23 unbound ui-state-sel-anchor/ui-state-sel-end in tests/interfaces/tui.rkt
+
+## v0.38.8 — 2026-05-11
+
+### Fixed
+- R-01–R-05: Re-exported `tool-execute` from `tools/tool.rkt` facade (5 test files fixed)
 - R-06: Re-exported `tool-render-call`/`tool-render-result` from facade
 - R-07: Exported `model-entry`/`model-resolution` constructors for test fixtures
 - R-08: Fixed `test-tui-selection-state.rkt` selection accessor names
