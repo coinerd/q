@@ -39,11 +39,14 @@
 
 ;; Structs
 (provide model-entry?
+         model-entry
          model-entry-name
          model-entry-provider-name
          model-entry-provider-config
          model-registry?
+         model-registry
          model-resolution?
+         model-resolution
          model-resolution-model-name
          model-resolution-provider-name
          model-resolution-base-url
@@ -80,12 +83,11 @@
 
 ;; Internal registry struct (not exported)
 (struct model-registry
-        (index ; hash: model-name → (listof model-entry) — may have duplicates across providers
-         providers ; hash: provider-name-string → provider-config-hash
+        (index ; hash: model-name -> (listof model-entry) -- may have duplicates across providers
+         providers ; hash: provider-name-string -> provider-config-hash
          default-provider ; string or #f
          default-model ; string or #f
-         )
-  #:transparent)
+         ))
 
 ;; ============================================================
 ;; Config key normalization

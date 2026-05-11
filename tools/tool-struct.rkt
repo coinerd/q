@@ -8,10 +8,15 @@
          tool-name
          tool-description
          tool-schema
+         ;; NOTE: tool-execute is exported for test/internal use only.
+         ;;       Production code should use tools/scheduler.rkt for invocation.
+         ;;       A future breaking change may gate this behind a test-only module.
          tool-execute
          tool-prompt-snippet
          tool-prompt-guidelines
-         tool-dangerous?)
+         tool-dangerous?
+         tool-render-call
+         tool-render-result)
 
 (struct tool
         (name description

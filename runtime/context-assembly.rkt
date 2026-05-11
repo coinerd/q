@@ -13,7 +13,6 @@
          (only-in "context-summary.rkt"
                   DEFAULT-CACHE-MAX-ENTRIES
                   make-summary-cache
-                  summary-cache
                   summary-cache?
                   summary-cache-lookup
                   summary-cache-store!
@@ -50,7 +49,6 @@
 ;; Re-export from context-summary.rkt
 (provide DEFAULT-CACHE-MAX-ENTRIES
          make-summary-cache
-         summary-cache
          summary-cache?
          summary-cache-lookup
          summary-cache-store!

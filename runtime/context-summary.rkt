@@ -19,7 +19,10 @@
 ;; Summary cache
 (provide (struct-out catalog-entry)
          (struct-out context-summary)
-         (struct-out summary-cache)
+         summary-cache?
+         summary-cache-table
+         summary-cache-order
+         summary-cache-max-entries
          DEFAULT-CACHE-MAX-ENTRIES
          (contract-out [make-summary-cache
                         (->* () (#:max-entries exact-nonnegative-integer?) summary-cache?)]
