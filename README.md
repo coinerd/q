@@ -374,7 +374,7 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.37.8** — Goal: Architecture Fitness Tests (Milestone 8 of v0.37.x)
+**v0.37.8** — Goal: Audit Remediation — Accessor Migration + Dormant Symbol Cleanup
 
 **v0.37.8** — Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization
 
