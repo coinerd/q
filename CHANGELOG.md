@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.38.5 — 2026-05-12
+
+### Goal: TUI State Decomposition Part 1 (Milestone 6 of v0.38.x)
+
+### Fixed
+- **M-05** (MEDIUM): Deduplicated TUI state module provides.
+  `tui/state.rkt` now uses `(all-from-out "state-types.rkt")` instead
+  of manually re-exporting each identifier.
+- **H-03 Phase 1** (HIGH): Extracted `selection-state` and `cache-state`
+  sub-structs from `ui-state` monolith in `tui/state-types.rkt`.
+  Replaced 4 individual fields (`sel-anchor`, `sel-end`,
+  `rendered-cache`, `rendered-cache-width`) with 2 sub-struct fields.
+  Updated all accessor and `struct-copy` call sites across
+  `tui/state-ui.rkt`, `tui/renderer.rkt`, `tui/tui-keybindings.rkt`,
+  and `tests/tui/state.rkt`.
+
+**Verification**: lint 18/18, targeted tests 106/109 pass
+(3 pre-existing failures in tool.call.started text generation)
+
+---
+
 ## v0.38.4 — 2026-05-11
 
 ### Goal: Extension & GSD Cleanup (Milestone 5 of v0.38.x)

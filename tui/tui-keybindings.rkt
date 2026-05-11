@@ -144,8 +144,9 @@
 (define (selection-text ctx state)
   ;; Bounds validation (#1121): guard against out-of-range indices
   (with-handlers ([exn:fail? (lambda (e) "")])
-    (define anchor (ui-state-sel-anchor state))
-    (define end (ui-state-sel-end state))
+    (define sel (ui-state-selection state))
+    (define anchor (selection-state-anchor sel))
+    (define end (selection-state-end sel))
     (and
      anchor
      end

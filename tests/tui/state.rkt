@@ -658,21 +658,21 @@
 
 (let ()
   (define state (initial-ui-state))
-  (check-false (ui-state-sel-anchor state) "initial-ui-state: sel-anchor is #f")
-  (check-false (ui-state-sel-end state) "initial-ui-state: sel-end is #f")
+  (check-false (selection-state-anchor (ui-state-selection state)) "initial-ui-state: sel-anchor is #f")
+  (check-false (selection-state-end (ui-state-selection state)) "initial-ui-state: sel-end is #f")
   (check-false (has-selection? state) "has-selection? returns #f initially"))
 
 (let ()
   (define state (initial-ui-state))
   (define next (set-selection-anchor state 5 10))
-  (check-equal? (ui-state-sel-anchor next) '(5 . 10) "set-selection-anchor sets anchor")
-  (check-equal? (ui-state-sel-end next) '(5 . 10) "set-selection-anchor also sets end"))
+  (check-equal? (selection-state-anchor (ui-state-selection next)) '(5 . 10) "set-selection-anchor sets anchor")
+  (check-equal? (selection-state-end (ui-state-selection next)) '(5 . 10) "set-selection-anchor also sets end"))
 
 (let ()
   (define state (set-selection-anchor (initial-ui-state) 5 10))
   (define next (set-selection-end state 20 30))
-  (check-equal? (ui-state-sel-end next) '(20 . 30) "set-selection-end updates end")
-  (check-equal? (ui-state-sel-anchor next) '(5 . 10) "set-selection-end preserves anchor"))
+  (check-equal? (selection-state-end (ui-state-selection next)) '(20 . 30) "set-selection-end updates end")
+  (check-equal? (selection-state-anchor (ui-state-selection next)) '(5 . 10) "set-selection-end preserves anchor"))
 
 (let ()
   (define state (set-selection-end (set-selection-anchor (initial-ui-state) 5 10) 20 30))
@@ -681,8 +681,8 @@
 (let ()
   (define state
     (clear-selection (set-selection-end (set-selection-anchor (initial-ui-state) 5 10) 20 30)))
-  (check-false (ui-state-sel-anchor state) "clear-selection clears anchor")
-  (check-false (ui-state-sel-end state) "clear-selection clears end")
+  (check-false (selection-state-anchor (ui-state-selection state)) "clear-selection clears anchor")
+  (check-false (selection-state-end (ui-state-selection state)) "clear-selection clears end")
   (check-false (has-selection? state) "has-selection? returns #f after clear"))
 
 (let ()
@@ -690,15 +690,15 @@
   (define s (set-selection-anchor (initial-ui-state) 5 10))
   (define scrolled (scroll-up s))
   (check-false (has-selection? scrolled) "scroll-up clears selection")
-  (check-false (ui-state-sel-anchor scrolled) "scroll-up clears sel-anchor")
-  (check-false (ui-state-sel-end scrolled) "scroll-up clears sel-end"))
+  (check-false (selection-state-anchor (ui-state-selection scrolled)) "scroll-up clears sel-anchor")
+  (check-false (selection-state-end (ui-state-selection scrolled)) "scroll-up clears sel-end"))
 
 (let ()
   ;; scroll-down also clears selection
   (define s (set-selection-end (set-selection-anchor (initial-ui-state) 5 10) 20 30))
   (define scrolled (scroll-down s))
   (check-false (has-selection? scrolled) "scroll-down clears selection")
-  (check-false (ui-state-sel-anchor scrolled) "scroll-down clears sel-anchor"))
+  (check-false (selection-state-anchor (ui-state-selection scrolled)) "scroll-down clears sel-anchor"))
 
 (let ()
   ;; scroll-up preserves offset when no selection

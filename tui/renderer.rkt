@@ -279,8 +279,9 @@
         trans-lines-raw))
   (define pad-count (- transcript-height (length visible-lines-raw)))
   ;; Apply selection highlight with pad-count for correct coordinate mapping
-  (define sel-anchor (ui-state-sel-anchor ui-state))
-  (define sel-end (ui-state-sel-end ui-state))
+  (define sel (ui-state-selection ui-state))
+  (define sel-anchor (selection-state-anchor sel))
+  (define sel-end (selection-state-end sel))
   (define trans-lines
     (if (and sel-anchor sel-end)
         (apply-selection-highlight visible-lines-raw sel-anchor sel-end trans-y pad-count)
