@@ -44,7 +44,7 @@
          (only-in "../../runtime/working-set.rkt" working-set? make-working-set)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
          (only-in "../../runtime/session-types.rkt" agent-session?)
-         (only-in "../../runtime/session-config.rkt" session-config?)
+         (only-in "../../runtime/session-config.rkt" session-config? hash->session-config resolve-max-iterations-hard)
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../tools/registry.rkt" tool-registry?)
          (only-in "../../extensions/api.rkt" extension-registry?)
@@ -88,7 +88,7 @@
                             session-id
                             max-iterations
                             #:cancellation-token [token #f]
-                            #:config [config (hash)]
+                            #:config [config-raw (hash)]
                             #:queue [steering-queue #f]
                             #:follow-up-delivery-mode [follow-up-mode 'all]
                             #:injected-box [injected-box #f]
@@ -96,8 +96,8 @@
                             #:force-shutdown-check [force-shutdown-check #f]
                             #:working-set [initial-ws #f]
                             #:session [sess #f])
-  (define max-iterations-hard
-    (dict-ref config 'max-iterations-hard (max (inexact->exact (floor (* max-iterations 1.6))) 80)))
+  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define max-iterations-hard (resolve-max-iterations-hard config max-iterations))
   (define ws (or initial-ws (make-working-set)))
   (define agent-start-payload
     (hasheq 'session-id

@@ -55,6 +55,7 @@
                   loop-result-messages)
          (only-in "../../util/ids.rkt" generate-id now-seconds)
          (only-in "../../runtime/session-store.rkt" append-entries!)
+         (only-in "../../runtime/session-config.rkt" config-max-context-tokens)
          (only-in "../../agent/queue.rkt" queue-status)
          (only-in "../../runtime/working-set.rkt"
                   working-set-update!
@@ -193,7 +194,7 @@
                                   'remaining
                                   (- max-iterations-hard (add1 (loop-counters-iteration counters)))))
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
-     (define budget-config (hasheq 'max-context-tokens (dict-ref config 'max-context-tokens 128000)))
+     (define budget-config (hasheq 'max-context-tokens (config-max-context-tokens config)))
      (define emit-fn
        (lambda (name payload)
          (emit-session-event! (loop-infra-bus infra) (loop-infra-session-id infra) name payload)))

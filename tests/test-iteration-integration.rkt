@@ -4,6 +4,7 @@
 ;; v0.29.17 W0: Tests for interpret-step internals via (module+ for-testing)
 
 (require rackunit
+         (only-in "../runtime/session-config.rkt" hash->session-config)
          racket/set
          racket/file
          (submod "../runtime/iteration.rkt" for-testing)
@@ -191,7 +192,7 @@
   (define max-hard 10)
   (define step-res
     (step-result 'stop-hard-limit 'max-iterations-exceeded (make-initial-counters) (hasheq)))
-  (define out (interpret-step step-res result '() infra counters ws (hash) #f max-iter max-hard))
+  (define out (interpret-step step-res result '() infra counters ws (hash->session-config (hash)) #f max-iter max-hard))
   (check-true (directive-stop? out))
   (define stop-result (directive-stop-result out))
   (check-equal? (loop-result-termination-reason stop-result) 'max-iterations-exceeded)
@@ -208,7 +209,7 @@
   (define result-no-msgs (make-loop-result '() 'tool-calls-pending (hasheq)))
   (define step-res
     (step-result 'continue 'tool-calls-pending (compute-next-counters counters '()) (hasheq)))
-  (define out (interpret-step step-res result-no-msgs '() infra counters ws (hash) #f 5 10))
+  (define out (interpret-step step-res result-no-msgs '() infra counters ws (hash->session-config (hash)) #f 5 10))
   (check-true (directive-recurse? out) "continue returns directive-recurse")
   (define new-counters (directive-recurse-new-counters out))
   (check-equal? (loop-counters-iteration new-counters) 1 "iteration incremented on continue")
@@ -222,7 +223,7 @@
   (define ws (make-working-set))
   (define result (make-loop-result '() 'completed (hasheq)))
   (define step-res (step-result 'stop 'completed (make-initial-counters) (hasheq)))
-  (define out (interpret-step step-res result '() infra counters ws (hash) #f 5 10))
+  (define out (interpret-step step-res result '() infra counters ws (hash->session-config (hash)) #f 5 10))
   (check-true (directive-stop? out))
   (delete-file log-path))
 
@@ -236,7 +237,7 @@
   (define events-box (collect-events bus "iteration.soft-warning"))
   (define step-res
     (step-result 'stop-soft-limit 'tool-calls-pending (make-initial-counters) (hasheq)))
-  (define out (interpret-step step-res result '() infra counters ws (hash) #f 5 10))
+  (define out (interpret-step step-res result '() infra counters ws (hash->session-config (hash)) #f 5 10))
   (check-true (directive-recurse? out) "soft-limit returns directive-recurse")
   (check-true (pair? (unbox events-box)) "iteration.soft-warning event was emitted")
   (define new-counters (directive-recurse-new-counters out))

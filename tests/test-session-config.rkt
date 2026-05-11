@@ -22,9 +22,8 @@
   (check-false (config-model-name c)))
 
 (test-case "hash->session-config with values"
-  (define c (hash->session-config (hasheq 'provider 'prov
-                                           'model-name "gpt-4"
-                                           'max-context-tokens 128000)))
+  (define c
+    (hash->session-config (hasheq 'provider 'prov 'model-name "gpt-4" 'max-context-tokens 128000)))
   (check-eq? (config-provider c) 'prov)
   (check-equal? (config-model-name c) "gpt-4")
   (check-equal? (config-max-context-tokens c) 128000))
@@ -32,9 +31,8 @@
 ;; ── gen:dict: dict-ref ──────────────────────────────────────────
 
 (test-case "dict-ref on stored keys"
-  (define c (hash->session-config (hasheq 'provider 'my-prov
-                                           'model-name "model-1"
-                                           'thinking-level 'high)))
+  (define c
+    (hash->session-config (hasheq 'provider 'my-prov 'model-name "model-1" 'thinking-level 'high)))
   (check-eq? (dict-ref c 'provider) 'my-prov)
   (check-equal? (dict-ref c 'model-name) "model-1")
   (check-eq? (dict-ref c 'thinking-level) 'high))
@@ -50,8 +48,7 @@
 
 (test-case "dict-ref error on unknown key without default"
   (define c (hash->session-config (hasheq)))
-  (check-exn exn:fail?
-             (lambda () (dict-ref c 'nonexistent))))
+  (check-exn exn:fail? (lambda () (dict-ref c 'nonexistent))))
 
 ;; ── gen:dict: dict-set ──────────────────────────────────────────
 
@@ -167,7 +164,6 @@
   ;; hash-ref on gen:dict implementation works through dict-ref
   (check-eq? (dict-ref c 'provider) 'prov))
 
-
 ;; ── New accessor defaults (v0.30.5) ─────────────────────────────
 
 (test-case "config-max-tokens defaults to 8192"
@@ -191,3 +187,35 @@
   (check-equal? (config-session-index c) 42))
 
 ;; ── Full integration: agent-session round-trip ───────────────────
+
+;; ── resolve-max-iterations-hard (v0.37.0 FB-02) ───────────────
+
+(test-case "resolve-max-iterations-hard returns config value when set"
+  (define c (hash->session-config (hasheq 'max-iterations-hard 100)))
+  (check-equal? (resolve-max-iterations-hard c 50) 100))
+
+(test-case "resolve-max-iterations-hard computes dynamic default when #f"
+  (define c (hash->session-config (hasheq)))
+  ;; max-iterations-hard defaults to #f in accessor
+  (check-false (config-max-iterations-hard c))
+  ;; resolve computes: max(floor(50 * 1.6), 80) = max(80, 80) = 80
+  (check-equal? (resolve-max-iterations-hard c 50) 80)
+  ;; resolve computes: max(floor(100 * 1.6), 80) = max(160, 80) = 160
+  (check-equal? (resolve-max-iterations-hard c 100) 160))
+
+;; ── normalize-session-config-hash (v0.37.0 FB-05) ──────────────
+
+(test-case "normalization preserves known keys"
+  (define h (hasheq 'provider 'openai 'max-iterations 10))
+  (define c (hash->session-config h))
+  (check-eq? (config-provider c) 'openai)
+  (check-equal? (config-max-iterations c) 10))
+
+(test-case "normalization coerces string thinking-level to symbol"
+  (define c (hash->session-config (hasheq 'thinking-level "high")))
+  (check-eq? (config-thinking-level c) 'high))
+
+(test-case "normalization preserves unknown keys"
+  (define c (hash->session-config (hasheq 'unknown-key 42 'provider 'p)))
+  (check-equal? (dict-ref c 'unknown-key) 42)
+  (check-eq? (config-provider c) 'p))
