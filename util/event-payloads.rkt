@@ -75,8 +75,8 @@
 ;; Convert any known payload struct to a hasheq (for serialization/legacy consumers).
 (: payload->hash (-> Any (HashTable Symbol Any)))
 (define (payload->hash p)
-  (cond
-    [(session-start-payload? p)
+  (match p
+    [(? session-start-payload?)
      (hasheq '__type
              'session-start
              'session-id
@@ -85,21 +85,21 @@
              (session-start-payload-config p)
              'reason
              (session-start-payload-reason p))]
-    [(session-end-payload? p)
+    [(? session-end-payload?)
      (hasheq '__type
              'session-end
              'session-id
              (session-end-payload-session-id p)
              'duration
              (session-end-payload-duration p))]
-    [(session-switch-payload? p)
+    [(? session-switch-payload?)
      (hasheq '__type
              'session-switch
              'session-id
              (session-switch-payload-session-id p)
              'operation
              (session-switch-payload-operation p))]
-    [(tool-call-event-payload? p)
+    [(? tool-call-event-payload?)
      (hasheq '__type
              'tool-call
              'session-id
@@ -110,36 +110,36 @@
              (tool-call-event-payload-tool-name p)
              'tool-call-id
              (tool-call-event-payload-tool-call-id p))]
-    [(session-id-payload? p)
+    [(? session-id-payload?)
      (hasheq '__type 'session-id 'sessionId (session-id-payload-session-id p))]
-    [(error-payload? p)
+    [(? error-payload?)
      (hasheq '__type 'error 'error (error-payload-error p) 'errorType (error-payload-error-type p))]
-    [(input-payload? p)
+    [(? input-payload?)
      (hasheq '__type
              'input
              'session-id
              (input-payload-session-id p)
              'message
              (input-payload-message p))]
-    [(gsd-mode-payload? p)
+    [(? gsd-mode-payload?)
      (hasheq '__type
              'gsd-mode
              'old-mode
              (gsd-mode-payload-old-mode p)
              'new-mode
              (gsd-mode-payload-new-mode p))]
-    [(hash? p) (cast p (HashTable Symbol Any))]
-    [else (hasheq 'payload p)]))
+    [(? hash?) (cast p (HashTable Symbol Any))]
+    [_ (hasheq 'payload p)]))
 
 ;; Extract session-id from any payload that has one.
 (: payload-session-id (-> Any (Option String)))
 (define (payload-session-id p)
-  (cond
-    [(session-start-payload? p) (session-start-payload-session-id p)]
-    [(session-end-payload? p) (session-end-payload-session-id p)]
-    [(session-switch-payload? p) (session-switch-payload-session-id p)]
-    [(tool-call-event-payload? p) (tool-call-event-payload-session-id p)]
-    [(session-id-payload? p) (session-id-payload-session-id p)]
-    [(input-payload? p) (input-payload-session-id p)]
-    [(hash? p) (cast (hash-ref (cast p (HashTable Symbol Any)) 'session-id #f) (Option String))]
-    [else #f]))
+  (match p
+    [(? session-start-payload?) (session-start-payload-session-id p)]
+    [(? session-end-payload?) (session-end-payload-session-id p)]
+    [(? session-switch-payload?) (session-switch-payload-session-id p)]
+    [(? tool-call-event-payload?) (tool-call-event-payload-session-id p)]
+    [(? session-id-payload?) (session-id-payload-session-id p)]
+    [(? input-payload?) (input-payload-session-id p)]
+    [(? hash?) (cast (hash-ref (cast p (HashTable Symbol Any)) 'session-id #f) (Option String))]
+    [_ #f]))

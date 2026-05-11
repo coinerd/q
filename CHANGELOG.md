@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.38.3 — 2026-05-11
+
+### Goal: Pure Core & Idiomatic Patterns (Milestone 4 of v0.38.x)
+
+### Fixed
+- **M-04** (MEDIUM): Refactored `extensions/gsd/plan-validator.rkt` to replace
+  all `set!` accumulators with `for/fold` in `validate-plan-strict`,
+  `validate-normalized-plan`, and `format-validation-report`.
+- **L-02** (LOW): Replaced `cond` with `match` in `util/event-payloads.rkt`
+  for `payload->hash` and `payload-session-id`.
+- **L-03** (LOW): Replaced module-level `memo-hit-box` with parameter injection
+  in `runtime/context-assembly/selection.rkt`.
+- **L-04** (LOW): Parameterized time source in `runtime/compactor.rkt`
+  `compact-history` via `#:now` keyword.
+- **L-08** (LOW): Replaced `cond` with `match` in `entry->context-message`
+  in `runtime/context-assembly/selection.rkt`.
+- **L-09** (LOW): Removed `compact-history-advisory` alias from
+  `runtime/compactor.rkt`; callers use `compact-history` directly.
+
+**Verification**: lint 18/18, targeted tests 108/108 pass
+
+---
+
 ## v0.38.2 — 2026-05-11
 
 ### Goal: Tool System Boundary Hardening (Milestone 3 of v0.38.x)

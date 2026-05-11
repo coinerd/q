@@ -10,7 +10,8 @@
 ;;   pure. Then wrap with a thin impure shell that creates the memo. This would allow
 ;;   the core logic to be typed. Estimated effort: ~2 waves. Deferred to backlog.
 
-(require racket/list
+(require racket/match
+         racket/list
          racket/set
          (only-in "../../util/protocol-types.rkt"
                   message
@@ -81,7 +82,8 @@
   (define (emit-trace phase data)
     (when trace
       (trace phase data)))
-  (define memo-hit-box (box 0))
+  (define memo-hit-box (or (and (hash? config) (hash-ref config 'memo-hit-counter #f))
+                           (box 0)))
   (define base-estimate (or estimate-text-proc estimate-message-tokens))
   (define (memoized-estimate msg)
     (define id (message-id msg))
@@ -230,16 +232,15 @@
      (values pre post)]))
 
 (define (entry->context-message entry)
-  (define kind (message-kind entry))
-  (cond
-    [(memq kind '(message)) entry]
-    [(eq? kind 'compaction-summary) (transform-summary-to-user entry)]
-    [(eq? kind 'branch-summary) (transform-summary-to-user entry)]
-    [(memq kind '(session-info model-change thinking-level-change)) #f]
-    [(memq kind '(tool-result bash-execution)) entry]
-    [(eq? kind 'system-instruction) entry]
-    [(eq? kind 'custom-message) entry]
-    [else entry]))
+  (match (message-kind entry)
+    ['message entry]
+    ['compaction-summary (transform-summary-to-user entry)]
+    ['branch-summary (transform-summary-to-user entry)]
+    [(or 'session-info 'model-change 'thinking-level-change) #f]
+    [(or 'tool-result 'bash-execution) entry]
+    ['system-instruction entry]
+    ['custom-message entry]
+    [_ entry]))
 
 (define (transform-summary-to-user entry)
   (struct-copy message entry [role 'user]))

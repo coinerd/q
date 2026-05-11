@@ -360,12 +360,12 @@
    (check-equal? (length all-entries) 3)
    (delete-directory/files dir #:must-exist? #f))
  ;; ══════════════════════════════════════════════════════════════
- ;; compact-history-advisory
+ ;; compact-history-advisory removed (L-09)
  ;; ══════════════════════════════════════════════════════════════
- (test-case "compact-history-advisory is advisory-only (alias for compact-history)"
+ (test-case "compact-history produces deterministic advisory results"
    (define msgs (make-n-messages 30))
    (define r1 (compact-history msgs #:summarize-fn test-summarize #:token-config tiny-tc))
-   (define r2 (compact-history-advisory msgs #:summarize-fn test-summarize #:token-config tiny-tc))
+   (define r2 (compact-history msgs #:summarize-fn test-summarize #:token-config tiny-tc))
    ;; Both return the same removed-count and kept-count
    (check-equal? (compaction-result-removed-count r1) (compaction-result-removed-count r2))
    (check-equal? (length (compaction-result-kept-messages r1))

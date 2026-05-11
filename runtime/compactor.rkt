@@ -6,7 +6,6 @@
 ;;   compaction-strategy          — struct: summary-window-size, keep-recent-count
 ;;   compaction-result            — struct: summary-message, removed-count, kept-messages
 ;;   compact-history              — summarize history and produce compaction entries (ADVISORY-ONLY)
-;;   compact-history-advisory     — explicit alias for compact-history (advisory, no filesystem)
 ;;   compact-and-persist!         — compact history AND write summary entry to session log
 ;;   build-summary-window         — determine what to summarize vs what to keep recent
 ;;   write-compaction-entry!      — write a compaction entry to session log
@@ -56,13 +55,7 @@
                                              #:hook-dispatcher (or/c procedure? #f)
                                              #:token-config any/c)
                              compaction-result?)]
-                       [compact-history-advisory
-                        (->* (list?)
-                             (#:summarize-fn procedure?
-                                             #:previous-summary (or/c string? #f)
-                                             #:hook-dispatcher (or/c procedure? #f)
-                                             #:token-config any/c)
-                             compaction-result?)]
+
                        [compact-and-persist!
                         (->* (list? (or/c path-string? #f))
                              (#:summarize-fn procedure?
@@ -261,7 +254,8 @@
                          #:summarize-fn [summarize-fn default-summarize]
                          #:previous-summary [prev-summary #f]
                          #:hook-dispatcher [hook-dispatcher #f]
-                         #:token-config [token-config (default-token-compaction-config)])
+                         #:token-config [token-config (default-token-compaction-config)]
+                         #:now [now-fn current-inexact-milliseconds])
   ;; Dispatch 'session-before-compact hook if dispatcher provided
   ;; Returns identity result if hook blocks, otherwise proceeds with compaction.
   ;; #769: Hook can provide custom summary via amend action.
@@ -321,7 +315,7 @@
               (message-id (car adjusted-recent))
               #f))
         (define summary-msg
-          (make-message (format "compaction-~a" (current-inexact-milliseconds))
+          (make-message (format "compaction-~a" (now-fn))
                         #f ; no parent — compaction summaries are root-level context
                         'system
                         'compaction-summary
@@ -346,25 +340,6 @@
   (if summary
       (cons summary kept)
       kept))
-
-;; ============================================================
-;; compact-history-advisory
-;; ============================================================
-
-;; Explicit advisory variant — returns the result but does NOT write
-;; to the session log. This is a pure function that does not touch
-;; the filesystem. Equivalent to `compact-history` but named to make
-;; the advisory contract crystal clear.
-(define (compact-history-advisory messages
-                                  #:summarize-fn [summarize-fn default-summarize]
-                                  #:previous-summary [prev-summary #f]
-                                  #:hook-dispatcher [hook-dispatcher #f]
-                                  #:token-config [token-config (default-token-compaction-config)])
-  (compact-history messages
-                   #:summarize-fn summarize-fn
-                   #:previous-summary prev-summary
-                   #:hook-dispatcher hook-dispatcher
-                   #:token-config token-config))
 
 ;; ============================================================
 ;; compact-and-persist!
