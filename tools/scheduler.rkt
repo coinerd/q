@@ -189,9 +189,12 @@
   (define tc-args (tool-call-arguments tc))
 
   ;; FEAT-73: emit tool.execution.start lifecycle event
+  ;; W-05: include per-tool start-ms for accurate duration tracking
+  (define tool-start-ms (current-inexact-milliseconds))
   (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
   (when ev-pub
-    (ev-pub "tool.execution.start" (hasheq 'tool-name tc-name 'tool-call-id tc-id)))
+    (ev-pub "tool.execution.start"
+            (hasheq 'tool-name tc-name 'tool-call-id tc-id 'start-ms tool-start-ms)))
 
   (define pre-payload (hasheq 'tool-name tc-name 'args tc-args 'entry-id tc-id))
 
