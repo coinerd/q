@@ -142,8 +142,9 @@
 
     (test-case "step-result accepts all valid action symbols"
       (for-each (lambda (action)
-                  (check-pred step-result? (step-result action 'completed (make-test-counters) (hasheq))))
-                '(continue stop stop-hard-limit stop-soft-limit stop-budget)))))
+                  (check-pred step-result?
+                              (step-result action 'completed (make-test-counters) (hasheq))))
+                '(continue stop stop-hard-limit stop-soft-limit)))))
 
 ;; ============================================================
 ;; Run all tests

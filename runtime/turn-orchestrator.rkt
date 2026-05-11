@@ -125,8 +125,8 @@
            (-> tool-registry? (or/c extension-registry? #f) event-bus? string? (listof hash?))]
           [assemble-context/pure
            (->* (list? (or/c hash? session-config?))
-                 (#:hook-dispatcher (or/c procedure? #f))
-                 (values list? any/c))]))
+                (#:hook-dispatcher (or/c procedure? #f))
+                (values list? any/c))]))
 
 ;; ============================================================
 ;; Context assembly
@@ -135,7 +135,10 @@
 ;; Pure: assemble context from messages and config without side effects.
 ;; Returns the assembled message list and hook result (no events emitted here).
 (define (assemble-context/pure ctx-to-use config-raw #:hook-dispatcher [hook-dispatcher #f])
-  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define config
+    (if (session-config? config-raw)
+        config-raw
+        (hash->session-config config-raw)))
   (define tier-b-count (config-tier-b-count config))
   (define tier-c-count (config-tier-c-count config))
   (define max-tokens (config-max-tokens config))
@@ -159,7 +162,10 @@
 ;; Returns the assembled message list.
 (define (build-assembled-context ctx-to-use config-raw ext-reg bus session-id iteration)
   ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
-  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define config
+    (if (session-config? config-raw)
+        config-raw
+        (hash->session-config config-raw)))
   (define ws (config-working-set config))
 
   ;; R2-6: Create hook dispatcher function for context assembly
@@ -264,7 +270,10 @@
                            token
                            config-raw
                            #:tool-list-proc [tool-list-proc #f])
-  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define config
+    (if (session-config? config-raw)
+        config-raw
+        (hash->session-config config-raw)))
   ;; v0.28.20 T7: Emit system.warning if mock provider is being used
   (when (provider-is-mock? prov)
     (emit-session-event! bus
@@ -305,8 +314,8 @@
   ;; v0.15.1 Wave 1: Also resolve max-tokens from config if not in flat runtime hash.
   ;; Config may have max-tokens in: top-level, providers.<name>.max-tokens, or models.default.max-tokens.
   (define provider-settings
-    (let* ([settings (dict-ref config 'settings #f)]
-           [model-name (dict-ref config 'model-name #f)]
+    (let* ([settings (config-settings config)]
+           [model-name (config-model-name config)]
            [resolve-max-tokens
             (lambda ()
               (or

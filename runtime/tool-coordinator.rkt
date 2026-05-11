@@ -147,7 +147,10 @@
                                    log-path
                                    token
                                    config-raw)
-  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define config
+    (if (session-config? config-raw)
+        config-raw
+        (hash->session-config config-raw)))
   ;; Extract tool calls from assistant messages
   (define tool-calls (extract-tool-calls-from-messages new-msgs))
 
@@ -181,35 +184,35 @@
       [(not reg) (scheduler-result '() (hasheq))]
       [else
        (let ([hook-dispatcher-fn (and ext-reg
-                                       (lambda (hook-point payload)
-                                         (dispatch-hooks hook-point payload ext-reg)))])
-          (run-tool-batch
-           tool-calls-to-run
-           reg
-           #:hook-dispatcher hook-dispatcher-fn
-           #:exec-context
-           (make-exec-context
-            #:working-directory (path-only log-path)
-            #:cancellation-token token
-            #:event-publisher
-            (lambda (event-type payload)
-              (cond
-                [(equal? event-type "tool.execution.start")
-                 (emit-typed-event! bus
-                                    (make-tool-execution-start-event
-                                     #:session-id session-id
-                                     #:turn-id #f
-                                     #:timestamp (current-inexact-milliseconds)
-                                     #:tool-name (hash-ref payload 'tool-name)
-                                     #:tool-call-id (hash-ref payload 'tool-call-id)))]
-                [else (emit-session-event! bus session-id event-type payload)]))
-            #:runtime-settings (or (dict-ref config 'settings #f)
-                                   (make-minimal-settings #:provider (dict-ref config 'provider #f)
-                                                          #:model (dict-ref config 'model-name #f)))
-            #:call-id (generate-id)
-            #:session-metadata
-            (hasheq 'session-id session-id 'session-index (dict-ref config 'session-index #f)))
-           #:parallel? (dict-ref config 'parallel-tools #t)))]))
+                                      (lambda (hook-point payload)
+                                        (dispatch-hooks hook-point payload ext-reg)))])
+         (run-tool-batch
+          tool-calls-to-run
+          reg
+          #:hook-dispatcher hook-dispatcher-fn
+          #:exec-context
+          (make-exec-context
+           #:working-directory (path-only log-path)
+           #:cancellation-token token
+           #:event-publisher
+           (lambda (event-type payload)
+             (cond
+               [(equal? event-type "tool.execution.start")
+                (emit-typed-event! bus
+                                   (make-tool-execution-start-event
+                                    #:session-id session-id
+                                    #:turn-id #f
+                                    #:timestamp (current-inexact-milliseconds)
+                                    #:tool-name (hash-ref payload 'tool-name)
+                                    #:tool-call-id (hash-ref payload 'tool-call-id)))]
+               [else (emit-session-event! bus session-id event-type payload)]))
+           #:runtime-settings (or (config-settings config)
+                                  (make-minimal-settings #:provider (config-provider config)
+                                                         #:model (config-model-name config)))
+           #:call-id (generate-id)
+           #:session-metadata
+           (hasheq 'session-id session-id 'session-index (config-session-index config)))
+          #:parallel? (config-parallel-tools config)))]))
 
   ;; Dispatch 'tool.execution.end hook after tool batch
   (when (and ext-reg (not tool-call-blocked?))
