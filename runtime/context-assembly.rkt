@@ -42,6 +42,7 @@
                   truncate-string))
 
 ;; Re-export everything from sub-modules
+;; WARNING: all-from-out leaks submodule additions — keep submodules stable
 (provide (all-from-out "context-assembly/budgeting.rkt")
          (all-from-out "context-assembly/selection.rkt")
          (all-from-out "context-assembly/serialization.rkt"))

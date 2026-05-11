@@ -30,15 +30,23 @@
 
 ;; Simple reason payloads: (hasheq 'reason String ...)
 (define reason-payload/c
-  (and/c hash? (hash/c symbol? any/c #:immutable #t) (lambda (h) (hash-has-key? h 'reason))))
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'reason) (string? (hash-ref h 'reason #f))))))
 
 ;; Session ID payloads: (hasheq 'session-id String ...)
 (define session-id-payload/c
-  (and/c hash? (hash/c symbol? any/c #:immutable #t) (lambda (h) (hash-has-key? h 'session-id))))
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'session-id) (string? (hash-ref h 'session-id #f))))))
 
 ;; Iteration tracking: (hasheq 'iteration Natural ...)
 (define iteration-payload/c
-  (and/c hash? (hash/c symbol? any/c #:immutable #t) (lambda (h) (hash-has-key? h 'iteration))))
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h)
+           (and (hash-has-key? h 'iteration)
+                (exact-nonnegative-integer? (hash-ref h 'iteration #f))))))
 
 ;; Budget check: (hasheq 'estimated-tokens Natural 'budget Natural 'max-tokens Natural)
 (define budget-payload/c
@@ -47,7 +55,10 @@
          (lambda (h)
            (and (hash-has-key? h 'estimated-tokens)
                 (hash-has-key? h 'budget)
-                (hash-has-key? h 'max-tokens)))))
+                (hash-has-key? h 'max-tokens)
+                (exact-nonnegative-integer? (hash-ref h 'estimated-tokens #f))
+                (exact-nonnegative-integer? (hash-ref h 'budget #f))
+                (exact-nonnegative-integer? (hash-ref h 'max-tokens #f))))))
 
 ;; Compact result: (hasheq 'original-size Natural 'new-size Natural ...)
 (define compact-result-payload/c
@@ -59,23 +70,35 @@
 
 ;; Error detail: (hasheq 'error String ...)
 (define error-detail-payload/c
-  (and/c hash? (hash/c symbol? any/c #:immutable #t) (lambda (h) (hash-has-key? h 'error))))
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h) (and (hash-has-key? h 'error) (string? (hash-ref h 'error #f))))))
 
 ;; Injection count: (hasheq 'count Natural ...)
 (define injection-count-payload/c
-  (and/c hash? (hash/c symbol? any/c #:immutable #t) (lambda (h) (hash-has-key? h 'count))))
+  (and/c hash?
+         (hash/c symbol? any/c #:immutable #t)
+         (lambda (h)
+           (and (hash-has-key? h 'count) (exact-nonnegative-integer? (hash-ref h 'count #f))))))
 
 ;; Turn cancelled: (hasheq 'reason String 'iteration Natural ...)
 (define turn-cancelled-payload/c
   (and/c hash?
          (hash/c symbol? any/c #:immutable #t)
-         (lambda (h) (and (hash-has-key? h 'reason) (hash-has-key? h 'iteration)))))
+         (lambda (h)
+           (and (hash-has-key? h 'reason)
+                (string? (hash-ref h 'reason #f))
+                (hash-has-key? h 'iteration)
+                (exact-nonnegative-integer? (hash-ref h 'iteration #f))))))
 
 ;; Iteration decision: (hasheq 'iteration Natural 'termination Any ...)
 (define iteration-decision-payload/c
   (and/c hash?
          (hash/c symbol? any/c #:immutable #t)
-         (lambda (h) (and (hash-has-key? h 'iteration) (hash-has-key? h 'termination)))))
+         (lambda (h)
+           (and (hash-has-key? h 'iteration)
+                (exact-nonnegative-integer? (hash-ref h 'iteration #f))
+                (hash-has-key? h 'termination)))))
 
 ;; ============================================================
 ;; Value-type contracts for top-5 event types (I-11, v0.35.0)

@@ -11,5 +11,6 @@
 (require "sdk-core.rkt"
          "sdk-compat.rkt")
 
+;; WARNING: all-from-out leaks submodule additions -- keep submodules stable
 (provide (all-from-out "sdk-core.rkt")
          (all-from-out "sdk-compat.rkt"))

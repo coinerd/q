@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.38.7 — 2026-05-12
+
+### Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
+
+### Fixed
+- **H-04** (HIGH): Introduced `loop-config` struct to bundle the 16 parameters
+  of `run-iteration-loop` into a single configuration record. Added
+  `run-iteration-loop/v2` that accepts a `loop-config`. Original
+  `run-iteration-loop` preserved as backward-compatible wrapper.
+  New file: `runtime/iteration/loop-config.rkt`.
+- **L-07** (LOW): Investigated `define-per-tool-event` macro for tool event
+  boilerplate reduction. Determined `syntax-rules` cannot splice keyword
+  arguments from pattern variables. Kept manual definitions as clearer
+  and test-proven. Documented decision in module header.
+- **L-10** (LOW): Tightened event payload contracts in
+  `util/event-contracts.rkt`. Added value-type checks for `reason`,
+  `session-id`, `iteration`, `count`, `error` fields (string? or
+  exact-nonnegative-integer? as appropriate).
+- **L-11** (LOW): Added `all-from-out` facade warning comments to
+  `agent/event-structs.rkt`, `runtime/context-assembly.rkt`, and
+  `interfaces/sdk.rkt`.
+
+**Verification**: targeted tests all pass (iteration, events, context-assembly)
+
+
 ## v0.38.6 — 2026-05-12
 
 ### Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)

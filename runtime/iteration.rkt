@@ -34,7 +34,27 @@
                   interpret-step
                   handle-stop-action
                   execute-pending-tool-calls)
-         (only-in "iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "iteration/main-loop.rkt" run-iteration-loop run-iteration-loop/v2)
+         (only-in "iteration/loop-config.rkt"
+                  loop-config?
+                  loop-config-context
+                  loop-config-provider
+                  loop-config-bus
+                  loop-config-registry
+                  loop-config-ext-registry
+                  loop-config-log-path
+                  loop-config-session-id
+                  loop-config-max-iterations
+                  loop-config-cancellation-token
+                  loop-config-config
+                  loop-config-queue
+                  loop-config-follow-up-delivery-mode
+                  loop-config-injected-box
+                  loop-config-shutdown-check
+                  loop-config-force-shutdown-check
+                  loop-config-working-set
+                  loop-config-session
+                  make-loop-config)
          ;; Shared helpers (backward compat)
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
@@ -82,6 +102,7 @@
                               #:working-set (or/c working-set? #f)
                               #:session (or/c agent-session? #f))
                              loop-result?)]
+                       [run-iteration-loop/v2 (-> loop-config? loop-result?)]
                        [decide-next-action (-> iteration-ctx? loop-result? step-action?)]
                        [step-action? contract?])
          emit-session-event!
@@ -96,6 +117,25 @@
          estimate-mid-turn-tokens
          maybe-compact-mid-turn
          register-session-extensions!
+         loop-config?
+         loop-config-context
+         loop-config-provider
+         loop-config-bus
+         loop-config-registry
+         loop-config-ext-registry
+         loop-config-log-path
+         loop-config-session-id
+         loop-config-max-iterations
+         loop-config-cancellation-token
+         loop-config-config
+         loop-config-queue
+         loop-config-follow-up-delivery-mode
+         loop-config-injected-box
+         loop-config-shutdown-check
+         loop-config-force-shutdown-check
+         loop-config-working-set
+         loop-config-session
+         make-loop-config
          (struct-out iteration-ctx)
          known-termination-reasons
          (struct-out step-result)
