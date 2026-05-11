@@ -13,6 +13,7 @@
          racket/contract
          (only-in "loop-state.rkt"
                   loop-infra
+                  iteration-snapshot
                   make-initial-counters
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
@@ -211,17 +212,14 @@
                                                       max-iterations-hard)
                                        result
                                        counters))
+                (define snapshot
+                  (iteration-snapshot counters ws config sess max-iterations max-iterations-hard))
                 (define directive
                   (interpret-step step-res
                                   result
                                   new-msgs
                                   (struct-copy loop-infra infra [ctx ctx-with-injected])
-                                  counters
-                                  ws
-                                  config
-                                  sess
-                                  max-iterations
-                                  max-iterations-hard))
+                                  snapshot))
                 (match directive
                   [(directive-stop final-result) final-result]
                   [(directive-recurse new-ctx new-counters ws2)

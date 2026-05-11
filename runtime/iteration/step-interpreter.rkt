@@ -14,6 +14,13 @@
          racket/dict
          (only-in "loop-state.rkt"
                   loop-infra
+                  iteration-snapshot
+                  iteration-snapshot-counters
+                  iteration-snapshot-ws
+                  iteration-snapshot-config
+                  iteration-snapshot-sess
+                  iteration-snapshot-max-iterations
+                  iteration-snapshot-max-iterations-hard
                   loop-infra-ctx
                   loop-infra-ext-reg
                   loop-infra-reg
@@ -147,20 +154,30 @@
         result)))
 
 ;; ============================================================
+;; Shared helpers
+;; ============================================================
+
+;; FA-02: Shared counter increment logic for recurse branches
+(define (make-next-counters base)
+  (struct-copy loop-counters
+               base
+               [iteration (add1 (loop-counters-iteration base))]
+               [consecutive-tool-count (add1 (loop-counters-consecutive-tool-count base))]
+               [stall-retry-count 0]))
+
+;; ============================================================
 ;; interpret-step
 ;; ============================================================
 
-(define (interpret-step step-res
-                        result
-                        new-msgs
-                        infra
-                        counters
-                        ws
-                        config
-                        sess
-                        max-iterations
-                        max-iterations-hard)
-  ;; v0.35.3 (W-02): Returns step-directive? instead of calling on-recurse callback
+;; v0.37.4 (FA-04): Bundle evolving parameters into iteration-snapshot
+;; to avoid threading 6+ positional parameters.
+(define (interpret-step step-res result new-msgs infra snapshot)
+  (define counters (iteration-snapshot-counters snapshot))
+  (define ws (iteration-snapshot-ws snapshot))
+  (define config (iteration-snapshot-config snapshot))
+  (define sess (iteration-snapshot-sess snapshot))
+  (define max-iterations (iteration-snapshot-max-iterations snapshot))
+  (define max-iterations-hard (iteration-snapshot-max-iterations-hard snapshot))
   (define action (step-result-action step-res))
   (match action
     ['stop
@@ -215,14 +232,7 @@
                                        budget-config
                                        #:emit-event emit-fn)
              updated-ctx)))
-     (directive-recurse ctx-after-budget
-                        (struct-copy loop-counters
-                                     counters
-                                     [iteration (add1 (loop-counters-iteration counters))]
-                                     [consecutive-tool-count
-                                      (add1 (loop-counters-consecutive-tool-count counters))]
-                                     [stall-retry-count 0])
-                        ws)]
+     (directive-recurse ctx-after-budget (make-next-counters counters) ws)]
     ['continue
      (append-entries! (loop-infra-log-path infra) new-msgs)
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))

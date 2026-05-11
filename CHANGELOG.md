@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.37.4 — 2026-05-11
+
+### Goal: Iteration Loop Hygiene (Milestone 5 of v0.37.x)
+
+### Fixed
+- **FA-04** (M): Added `iteration-snapshot` struct to `loop-state.rkt` (TR-compatible with
+  opaque types for session-config and agent-session). Replaced 6 positional parameters
+  threaded through `interpret-step` with a single snapshot, reducing parameter count
+  from 11 to 5.
+- **FA-02** (M): Extracted shared counter-increment logic into `make-next-counters` helper,
+  eliminating duplication between 'stop-soft-limit and 'continue branches.
+
+### Changed
+- `runtime/iteration/loop-state.rkt`: +`iteration-snapshot` struct (counters, ws, config,
+  sess, max-iterations, max-iterations-hard)
+- `runtime/iteration/main-loop.rkt`: construct snapshot before calling `interpret-step`
+- `runtime/iteration/step-interpreter.rkt`: accept snapshot, use `make-next-counters`
+- `tests/test-iteration-integration.rkt`: updated 4 `interpret-step` calls to use snapshot
+
+**Verification**: lint 18/18, test-iteration-pure 11/11, test-iteration-step-interpreter 3/3,
+test-iteration-integration 16/16, test-iteration-main-loop 3/3
+
+---
+
 ## v0.37.3 — 2026-05-11
 
 ### Goal: Context Assembly Purity (Milestone 4 of v0.37.x)
