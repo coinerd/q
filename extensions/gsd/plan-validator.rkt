@@ -12,30 +12,40 @@
 (: validate-plan-strict : gsd-plan -> validation-result)
 (define (validate-plan-strict plan)
   (define waves (gsd-plan-waves plan))
-  (: errors : (Listof String))
-  (define errors '())
-  (: warnings : (Listof String))
-  (define warnings '())
-  (when (null? waves)
-    (set! errors (cons "Plan has no waves" errors)))
-  (for ([w waves])
-    (define widx (gsd-wave-index w))
-    (define prefix (format "Wave ~a" widx))
-    (when (string=? (gsd-wave-title w) "")
-      (set! warnings (cons (format "~a: no explicit title" prefix) warnings)))
-    (when (null? (gsd-wave-files w))
-      (set! warnings
-            (cons (format "~a: no file references — wave may not produce changes" prefix) warnings)))
-    (when (or (not (gsd-wave-verify w)) (string=? (gsd-wave-verify w) ""))
-      (set! warnings (cons (format "~a: no verify command" prefix) warnings)))
-    (when (string=? (gsd-wave-root-cause w) "")
-      (set! warnings (cons (format "~a: no root-cause/objective" prefix) warnings)))
-    (when (string=? (gsd-wave-title w) "")
-      (set! warnings
-            (cons (format "~a: cannot derive wave doc slug (empty title)" prefix) warnings))))
-  (when (and (pair? waves) (andmap (lambda ([w : gsd-wave]) (null? (gsd-wave-files w))) waves))
-    (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
-  (validation-result (reverse errors) (reverse warnings)))
+  (define-values (errors warnings)
+    (for/fold : (Values (Listof String) (Listof String))
+              ([errors : (Listof String) (if (null? waves) (list "Plan has no waves") '())]
+               [warnings : (Listof String) '()])
+              ([w waves])
+      (define widx (gsd-wave-index w))
+      (define prefix (format "Wave ~a" widx))
+      (define new-warnings
+        (cond
+          [(string=? (gsd-wave-title w) "")
+           (cons (format "~a: no explicit title" prefix) warnings)]
+          [else warnings]))
+      (define new-warnings2
+        (if (null? (gsd-wave-files w))
+            (cons (format "~a: no file references — wave may not produce changes" prefix) new-warnings)
+            new-warnings))
+      (define new-warnings3
+        (if (or (not (gsd-wave-verify w)) (string=? (gsd-wave-verify w) ""))
+            (cons (format "~a: no verify command" prefix) new-warnings2)
+            new-warnings2))
+      (define new-warnings4
+        (if (string=? (gsd-wave-root-cause w) "")
+            (cons (format "~a: no root-cause/objective" prefix) new-warnings3)
+            new-warnings3))
+      (define new-warnings5
+        (if (string=? (gsd-wave-title w) "")
+            (cons (format "~a: cannot derive wave doc slug (empty title)" prefix) new-warnings4)
+            new-warnings4))
+      (values errors new-warnings5)))
+  (define final-errors
+    (if (and (pair? waves) (andmap (lambda ([w : gsd-wave]) (null? (gsd-wave-files w))) waves))
+        (cons "Plan has no file references in any wave — nothing to execute" errors)
+        errors))
+  (validation-result (reverse final-errors) (reverse warnings)))
 
 ;; v0.24.2: Validate normalized plan and wrap as gsd-validated-plan.
 ;; Takes a gsd-normalized-plan (already structurally valid from normalization)
@@ -43,29 +53,35 @@
 (: validate-normalized-plan : gsd-normalized-plan -> (U gsd-validated-plan validation-result))
 (define (validate-normalized-plan norm-plan)
   (define waves (gsd-normalized-plan-waves norm-plan))
-  (: errors : (Listof String))
-  (define errors '())
-  (: warnings : (Listof String))
-  (define warnings '())
-  (when (null? waves)
-    (set! errors (cons "Plan has no waves" errors)))
-  (for ([w waves])
-    (define widx (gsd-normalized-wave-index w))
-    (define prefix (format "Wave ~a" widx))
-    (when (string=? (gsd-normalized-wave-title w) "")
-      (set! warnings (cons (format "~a: no explicit title" prefix) warnings)))
-    (when (null? (gsd-normalized-wave-files w))
-      (set! warnings
-            (cons (format "~a: no file references — wave may not produce changes" prefix) warnings)))
-    (when (string=? (gsd-normalized-wave-verify-command w) "")
-      (set! warnings (cons (format "~a: no verify command" prefix) warnings))))
-  (when (and (pair? waves)
+  (define-values (errors warnings)
+    (for/fold : (Values (Listof String) (Listof String))
+              ([errors : (Listof String) (if (null? waves) (list "Plan has no waves") '())]
+               [warnings : (Listof String) '()])
+              ([w waves])
+      (define widx (gsd-normalized-wave-index w))
+      (define prefix (format "Wave ~a" widx))
+      (define new-warnings
+        (if (string=? (gsd-normalized-wave-title w) "")
+            (cons (format "~a: no explicit title" prefix) warnings)
+            warnings))
+      (define new-warnings2
+        (if (null? (gsd-normalized-wave-files w))
+            (cons (format "~a: no file references — wave may not produce changes" prefix) new-warnings)
+            new-warnings))
+      (define new-warnings3
+        (if (string=? (gsd-normalized-wave-verify-command w) "")
+            (cons (format "~a: no verify command" prefix) new-warnings2)
+            new-warnings2))
+      (values errors new-warnings3)))
+  (define final-errors
+    (if (and (pair? waves)
              (andmap (lambda ([w : gsd-normalized-wave]) (null? (gsd-normalized-wave-files w)))
                      waves))
-    (set! errors (cons "Plan has no file references in any wave — nothing to execute" errors)))
-  (if (null? errors)
+        (cons "Plan has no file references in any wave — nothing to execute" errors)
+        errors))
+  (if (null? final-errors)
       (gsd-validated-plan norm-plan)
-      (validation-result (reverse errors) (reverse warnings))))
+      (validation-result (reverse final-errors) (reverse warnings))))
 
 (: valid-plan->go? : gsd-plan -> Boolean)
 (define (valid-plan->go? plan)
@@ -76,26 +92,26 @@
 (define (format-validation-report result)
   (define errs (validation-result-errors result))
   (define warns (validation-result-warnings result))
-  (: parts : (Listof String))
-  (define parts '())
-  (when (not (null? errs))
-    (set! parts
-          (cons (format "❌ ERRORS (block /go):\n~a"
-                        (string-join (for/list :
-                                       (Listof String)
-                                       ([e : String errs])
-                                       (format "  - ~a" e))
-                                     "\n"))
-                parts)))
-  (when (not (null? warns))
-    (set! parts
-          (cons (format "⚠️  WARNINGS:\n~a"
-                        (string-join (for/list :
-                                       (Listof String)
-                                       ([w : String warns])
-                                       (format "  - ~a" w))
-                                     "\n"))
-                parts)))
+  (define parts
+    (let ([error-part
+           (if (null? errs)
+               '()
+               (list (format "❌ ERRORS (block /go):\n~a"
+                             (string-join (for/list :
+                                            (Listof String)
+                                            ([e : String errs])
+                                            (format "  - ~a" e))
+                                          "\n"))))]
+          [warn-part
+           (if (null? warns)
+               '()
+               (list (format "⚠️  WARNINGS:\n~a"
+                             (string-join (for/list :
+                                            (Listof String)
+                                            ([w : String warns])
+                                            (format "  - ~a" w))
+                                          "\n"))))])
+      (append warn-part error-part)))
   (if (null? errs)
       (string-append "✅ Plan is valid.\n"
                      (if (null? parts)
