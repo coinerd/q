@@ -39,6 +39,7 @@
          gsm-current
          ;; Transition
          gsm-transition!
+         gsm-transition-to!
          gsm-reset!
          compute-next-gsm-state
          ;; Transition result
@@ -173,6 +174,20 @@
          (hasheq 'from current 'to target 'reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
+;; FF-01: Auto-routing transition — finds shortest path via BFS and follows it.
+;; additive API; gsm-transition! still works for single-step transitions.
+(define (gsm-transition-to! target)
+  (define current (gsm-current))
+  (cond
+    [(eq? current target) (ok-result current target)]
+    [else
+     (define path (find-transition-path current target))
+     (if path
+         (for/fold ([result (ok-result current current)])
+                   ([step path])
+           (gsm-transition! step))
+         (gsm-transition! target))]))
+
 (define (gsm-reset!)
   ;; R-01: Use current-gsd-state/set-gsd-state! directly inside with-gsd-lock.
   (with-gsd-lock
@@ -208,6 +223,32 @@
 ;; ============================================================
 ;; Internal helpers
 ;; ============================================================
+
+;; BFS path finder for multi-step transitions
+(define (find-transition-path from to)
+  (define visited (make-hash))
+  (define q (list (list from '())))
+  (let loop ([q q])
+    (cond
+      [(null? q) #f]
+      [else
+       (define node (caar q))
+       (define path (cdar q))
+       (cond
+         [(eq? node to) (reverse path)]
+         [(hash-has-key? visited node) (loop (cdr q))]
+         [else
+          (hash-set! visited node #t)
+          (define next-steps
+            (for/list ([t TRANSITIONS]
+                       #:when (eq? (car t) node)
+                       #:unless (hash-has-key? visited (cdr t)))
+              (cdr t)))
+          (define new-q
+            (append (cdr q)
+                    (for/list ([s next-steps])
+                      (cons s (cons s path)))))
+          (loop new-q)])])))
 
 (define (valid-transition? from to)
   (or (and (eq? from 'idle) (eq? to 'idle))

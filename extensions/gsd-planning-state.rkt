@@ -65,18 +65,9 @@
 (define (set-gsd-mode! v)
   (cond
     [(not v) (gsm-reset!)]
-    [(eq? v 'planning) (gsm-transition! 'exploring)]
-    [(eq? v 'plan-written)
-     (when (eq? (gsm-current) 'idle)
-       (gsm-transition! 'exploring))
-     (gsm-transition! 'plan-written)]
-    [(eq? v 'executing)
-     (when (eq? (gsm-current) 'exploring)
-       (gsm-transition! 'plan-written))
-     (when (eq? (gsm-current) 'idle)
-       (gsm-transition! 'exploring)
-       (gsm-transition! 'plan-written))
-     (gsm-transition! 'executing)]
+    [(eq? v 'planning) (gsm-transition-to! 'exploring)]
+    [(eq? v 'plan-written) (gsm-transition-to! 'plan-written)]
+    [(eq? v 'executing) (gsm-transition-to! 'executing)]
     [else (gsm-transition! v)]))
 
 ;; ============================================================
