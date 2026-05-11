@@ -375,6 +375,34 @@
      (define reg (make-tool-registry))
      (check-equal? (list-tools-jsexpr reg) '()))))
 
+   (test-case "tool-registry-tools returns empty list for empty registry"
+     (define reg (make-tool-registry))
+     (check-equal? (tool-registry-tools reg) '()))
+
+   (test-case "tool-registry-tools returns registered tools"
+     (define reg (make-tool-registry))
+     (register-tool! reg t)
+     (check-equal? (length (tool-registry-tools reg)) 1)
+     (check-equal? (tool-name (car (tool-registry-tools reg))) "read_file"))
+
+   (test-case "tool-active? returns #t when all tools active (no filter)"
+     (define reg (make-tool-registry))
+     (register-tool! reg t)
+     (check-true (tool-active? reg "read_file")))
+
+   (test-case "tool-active? returns #f for inactive tool when filter set"
+     (define reg (make-tool-registry))
+     (register-tool! reg t)
+     (set-active-tools! reg '("other"))
+     (check-false (tool-active? reg "read_file")))
+
+   (test-case "tool-active? returns #t for active tool when filter set"
+     (define reg (make-tool-registry))
+     (register-tool! reg t)
+     (set-active-tools! reg '("read_file"))
+     (check-true (tool-active? reg "read_file")))
+
+
 (run-tests tool-reg-tests)
 
 ;; ============================================================

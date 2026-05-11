@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.37.1 — 2026-05-11
+
+### Goal: Registry Encapsulation + Concurrency (Milestone 2 of v0.37.x)
+
+### Fixed
+- **FE-02** (HIGH): Replaced `(struct-out tool-registry)` with selective exports in
+  `tools/registry.rkt`. Internal fields (`tools-box`, `active-set-box`, `sem`) no longer
+  exposed. Added `tool-registry-tools` safe read-only accessor that acquires lock.
+- **FE-01** (M): Added `with-registry-lock` to `tool-active?` — previously read active-set
+  box without synchronization, risking torn reads. Fixed `list-active-tools` to avoid
+  calling `tool-active?` while already inside lock (non-reentrant semaphore deadlock).
+
+### Changed
+- `tools/registry.rkt`: selective exports, `tool-registry-tools` accessor, locked `tool-active?`
+- `tools/tool.rkt`: re-export `tool-registry-tools` and `with-registry-lock`
+- `tests/test-tool-registry.rkt`: +5 tests (tools accessor, active? with/without filter)
+
+**Verification**: lint 18/18, 40/41 tests pass (1 pre-existing exec-context contract error)
+
+---
+
 ## v0.37.0 — 2026-05-11
 
 ### Goal: Config Accessor Adoption + Correctness (Milestone 1 of v0.37.x Racket Abstraction Remediation)

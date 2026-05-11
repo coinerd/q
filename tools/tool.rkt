@@ -104,6 +104,8 @@
                        [tool->jsexpr (-> tool? hash?)])
          set-active-tools!
          tool-active?
+         tool-registry-tools
+         with-registry-lock
          list-active-tools
          list-active-tools-jsexpr
          list-tools-jsexpr
