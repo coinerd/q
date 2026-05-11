@@ -117,14 +117,16 @@
   (check-equal? (gsd-runtime-state-mode new-state) 'exploring))
 
 (test-case "returned state clears executor on executing → idle"
-  (define-values (r new-state) (compute-next-gsm-state (make-state 'executing #:executor (lambda () 'work)) 'idle))
+  (define-values (r new-state)
+    (compute-next-gsm-state (make-state 'executing #:executor (lambda () 'work)) 'idle))
   (check-true (ok? r))
   (check-equal? (gsd-runtime-state-mode new-state) 'idle)
   (check-false (gsd-runtime-state-wave-executor new-state)))
 
 (test-case "returned state clears executor on executing → verifying"
   (define exec (lambda () 'work))
-  (define-values (r new-state) (compute-next-gsm-state (make-state 'executing #:executor exec) 'verifying))
+  (define-values (r new-state)
+    (compute-next-gsm-state (make-state 'executing #:executor exec) 'verifying))
   (check-true (ok? r))
   (check-equal? (gsd-runtime-state-mode new-state) 'verifying)
   (check-false (gsd-runtime-state-wave-executor new-state)))
@@ -144,3 +146,30 @@
   (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'nonexistent))
   (check-true (err? r))
   (check-equal? (err-reason r) "invalid state: nonexistent"))
+
+;; ============================================================
+;; FF-01: gsm-transition-to! auto-routing
+;; ============================================================
+
+(test-case "gsm-transition-to! idle from idle is no-op"
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'idle))
+  (check-true (ok? r))
+  (check-equal? (ok-to r) 'idle))
+
+(test-case "gsm-transition-to! finds multi-step path idle -> executing"
+  ;; Path: idle -> exploring -> plan-written -> executing
+  (define-values (r1 s1) (compute-next-gsm-state (make-state 'idle) 'exploring))
+  (check-true (ok? r1))
+  (define-values (r2 s2) (compute-next-gsm-state s1 'plan-written))
+  (check-true (ok? r2))
+  (define-values (r3 s3) (compute-next-gsm-state s2 'executing))
+  (check-true (ok? r3))
+  (check-equal? (gsd-runtime-state-mode s3) 'executing))
+
+(test-case "gsm-transition-to! finds path plan-written -> exploring via idle"
+  ;; plan-written -> idle -> exploring (no direct transition)
+  (define-values (r1 s1) (compute-next-gsm-state (make-state 'plan-written) 'idle))
+  (check-true (ok? r1))
+  (define-values (r2 s2) (compute-next-gsm-state s1 'exploring))
+  (check-true (ok? r2))
+  (check-equal? (gsd-runtime-state-mode s2) 'exploring))

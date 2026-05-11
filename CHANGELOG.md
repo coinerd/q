@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.37.6 — 2026-05-11
+
+### Goal: FSM Transition Centralization (Milestone 7 of v0.37.x)
+
+### Fixed
+- **FF-01** (M): Added `gsm-transition-to!` with BFS path-finding for automatic
+  multi-step routing in the GSD state machine. Replaced scattered manual
+  multi-hop transitions in `set-gsd-mode!`, `cmd-plan`, and `cmd-replan`.
+  `gsm-transition-to!` computes the shortest valid path from current state to
+  target and follows it step-by-step. Additive API -- `gsm-transition!` remains
+  available for single-step transitions.
+
+### Added
+- `extensions/gsd/state-machine.rkt`: `gsm-transition-to!` + `find-transition-path`
+- `tests/test-state-machine-pure.rkt`: 3 tests for auto-routing (idle no-op,
+  idle->executing multi-step, plan-written->exploring via idle)
+
+### Changed
+- `extensions/gsd-planning-state.rkt`: `set-gsd-mode!` simplified to single calls
+- `extensions/gsd/core.rkt`: `cmd-plan` and `cmd-replan` use auto-routing
+
+**Verification**: lint 18/18, test-state-machine-pure 24/24
+
+---
+
 ## v0.37.5 — 2026-05-11
 
 ### Goal: Turn Orchestrator Decomposition (Milestone 6 of v0.37.x)
