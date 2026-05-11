@@ -91,7 +91,15 @@
          ;; G4: typed event emission
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
-         (only-in "../runtime/session-config.rkt" session-config?))
+         (only-in "../runtime/session-config.rkt"
+                  session-config?
+                  hash->session-config
+                  config-tier-b-count
+                  config-tier-c-count
+                  config-max-tokens
+                  config-working-set
+                  config-settings
+                  config-model-name))
 
 (provide (contract-out
           [run-provider-turn
@@ -123,11 +131,12 @@
 
 ;; Pure: assemble context from messages and config without side effects.
 ;; Returns the assembled message list (no events, no hooks).
-(define (assemble-context/pure ctx-to-use config)
-  (define tier-b-count (dict-ref config 'tier-b-count 20))
-  (define tier-c-count (dict-ref config 'tier-c-count 4))
-  (define max-tokens (dict-ref config 'max-tokens 8192))
-  (define ws (dict-ref config 'working-set #f))
+(define (assemble-context/pure ctx-to-use config-raw)
+  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define tier-b-count (config-tier-b-count config))
+  (define tier-c-count (config-tier-c-count config))
+  (define max-tokens (config-max-tokens config))
+  (define ws (config-working-set config))
   (define ws-messages-promise
     (delay
       (if ws
@@ -144,14 +153,15 @@
 
 ;; Build assembled context using tiered context assembly with hooks.
 ;; Returns the assembled message list.
-(define (build-assembled-context ctx-to-use config ext-reg bus session-id iteration)
+(define (build-assembled-context ctx-to-use config-raw ext-reg bus session-id iteration)
   ;; WP-37 + R2-6: Context Assembly with Tier A/B/C separation and Hook support
-  (define tier-b-count (dict-ref config 'tier-b-count 20))
-  (define tier-c-count (dict-ref config 'tier-c-count 4))
-  (define max-tokens (dict-ref config 'max-tokens 8192))
+  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
+  (define tier-b-count (config-tier-b-count config))
+  (define tier-c-count (config-tier-c-count config))
+  (define max-tokens (config-max-tokens config))
   ;; v0.26.0: Extract working set from config
   ;; v0.29.5 W3: Defer ws-message resolution
-  (define ws (dict-ref config 'working-set #f))
+  (define ws (config-working-set config))
   (define ws-messages-promise
     (delay
       (if ws
@@ -267,8 +277,9 @@
                            session-id
                            turn-id
                            token
-                           config
+                           config-raw
                            #:tool-list-proc [tool-list-proc #f])
+  (define config (if (session-config? config-raw) config-raw (hash->session-config config-raw)))
   ;; v0.28.20 T7: Emit system.warning if mock provider is being used
   (when (provider-is-mock? prov)
     (emit-session-event! bus
