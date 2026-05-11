@@ -16,6 +16,7 @@
                   step-result-termination
                   step-result-new-counters
                   step-result-metadata
+                  step-action?
                   iteration-ctx
                   iteration-ctx-iteration
                   iteration-ctx-consecutive-tool-count
@@ -130,7 +131,19 @@
       ;; For continue action, new-counters should be computed from compute-next-counters
       ;; With no new messages, counters should be mostly preserved
       (check-equal? (loop-counters-explore-count new-c) 3)
-      (check-equal? (loop-counters-implement-count new-c) 2))))
+      (check-equal? (loop-counters-implement-count new-c) 2))
+
+    (test-case "step-action? is a valid contract"
+      (check-true (procedure? step-action?)))
+
+    (test-case "step-result rejects invalid action symbol via contract"
+      (check-exn exn:fail:contract?
+                 (lambda () (step-result 'invalid-action 'completed (make-test-counters) (hasheq)))))
+
+    (test-case "step-result accepts all valid action symbols"
+      (for-each (lambda (action)
+                  (check-pred step-result? (step-result action 'completed (make-test-counters) (hasheq))))
+                '(continue stop stop-hard-limit stop-soft-limit stop-budget)))))
 
 ;; ============================================================
 ;; Run all tests

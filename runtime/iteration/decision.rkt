@@ -12,7 +12,8 @@
 ;;   compute-step-result — pure step computation
 ;;   known-termination-reasons — list of valid termination reason symbols
 
-(require racket/match
+(require racket/contract
+         racket/match
          (only-in "counters.rkt" compute-next-counters)
          (only-in "../../util/loop-result.rkt"
                   loop-result-termination-reason
@@ -22,12 +23,6 @@
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
                   loop-counters-explore-count))
-
-(provide (struct-out iteration-ctx)
-         (struct-out step-result)
-         decide-next-action
-         compute-step-result
-         known-termination-reasons)
 
 ;; ============================================================
 ;; Structs
@@ -43,6 +38,20 @@
          new-counters ; loop-counters? — updated counters after this step
          metadata) ; hash? — metadata for result construction
   #:transparent)
+
+(define step-action?
+  (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit 'stop-budget))
+
+(provide (struct-out iteration-ctx)
+         (contract-out
+           [struct step-result ([action (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit 'stop-budget)]
+                                [termination (or/c symbol? #f)]
+                                [new-counters any/c]
+                                [metadata hash?])])
+         decide-next-action
+         compute-step-result
+         known-termination-reasons
+         step-action?)
 
 ;; ============================================================
 ;; Pure functions

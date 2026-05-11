@@ -129,9 +129,12 @@
 ;; handle-stop-action
 ;; ============================================================
 
+(define success-completion-reasons
+  '(completed))
+
 (define (handle-stop-action result new-msgs infra counters ws config)
   (define termination (loop-result-termination-reason result))
-  (if (eq? termination 'completed)
+  (if (member termination success-completion-reasons)
       (begin
         (append-entries! (loop-infra-log-path infra) new-msgs)
         (let-values ([(amended-result after-hook-res)
