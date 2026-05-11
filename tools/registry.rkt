@@ -13,9 +13,9 @@
                   tool-prompt-snippet
                   tool-prompt-guidelines))
 
-(provide (struct-out tool-registry)
-         tool-registry?
+(provide tool-registry?
          make-tool-registry
+         tool-registry-tools
          register-tool!
          unregister-tool!
          lookup-tool
@@ -26,7 +26,8 @@
          list-active-tools-jsexpr
          list-tools-jsexpr
          set-active-tools!
-         tool-active?)
+         tool-active?
+         with-registry-lock)
 
 ;; ============================================================
 ;; Tool registry
@@ -34,6 +35,9 @@
 
 (struct tool-registry (tools-box active-set-box sem) #:transparent)
 
+;; Safe read-only accessor under lock
+(define (tool-registry-tools reg)
+  (with-registry-lock reg (lambda () (hash-values (tool-registry-tools-box reg)))))
 (define (make-tool-registry)
   (tool-registry (make-hash) (box #f) (make-semaphore 1)))
 
@@ -84,13 +88,18 @@
                                   (and active-names (list->set active-names))))))
 
 (define (tool-active? reg name)
-  (define active-set (unbox (tool-registry-active-set-box reg)))
-  (or (not active-set) (set-member? active-set name)))
+  (with-registry-lock reg
+    (lambda ()
+      (define active-set (unbox (tool-registry-active-set-box reg)))
+      (or (not active-set) (set-member? active-set name)))))
 
 (define (list-active-tools reg)
   (with-registry-lock reg
                       (lambda ()
-                        (filter (lambda (t) (tool-active? reg (tool-name t)))
+                        (define active-set (unbox (tool-registry-active-set-box reg)))
+                        (filter (lambda (t)
+                                  (or (not active-set)
+                                      (set-member? active-set (tool-name t))))
                                 (hash-values (tool-registry-tools-box reg))))))
 
 (define (list-active-tools-jsexpr reg)
