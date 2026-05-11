@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.37.3 — 2026-05-11
+
+### Goal: Context Assembly Purity (Milestone 4 of v0.37.x)
+
+### Fixed
+- **FD-02** (HIGH): Extracted mutable token-memo from `build-assembled-context` closure
+  into an explicit parameter. New `build-assembled-context/raw` takes `#:memo` directly;
+  public `build-assembled-context` creates memo internally and delegates, preserving
+  backward compatibility. Enables TR migration (no mutable hash in function body) and
+  stage-level testing (pre-populate memo to skip estimation).
+
+### Changed
+- `runtime/context-assembly/selection.rkt`: +`build-assembled-context/raw`, refactored
+  `build-assembled-context` to delegate. Memo and `memoized-estimate` moved from closure
+  to parameterized helper.
+
+**Verification**: lint 18/18, test-context-assembly 34/34, test-context-assembly-ws 6/6,
+test-context-assembly-perf 4/4
+
+---
+
 ## v0.37.2 — 2026-05-11
 
 ### Goal: Iteration Step-Result Correctness (Milestone 3 of v0.37.x)
