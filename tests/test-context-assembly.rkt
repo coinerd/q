@@ -425,7 +425,7 @@
           (make-test-msg "a1" 'assistant 'message "Hi there")
           (make-test-msg "u2" 'user 'message "How are you?")))
   (define config (hash 'tier-b-count 10 'tier-c-count 2 'max-tokens 4096))
-  (define result (ctx-assemble msgs config))
+  (define-values (result _hook-res) (ctx-assemble msgs config))
   (check-pred list? result)
   (check >= (length result) 1)
   ;; Verify all results are messages
