@@ -14,20 +14,13 @@
          "../tui/tui-keybindings.rkt"
          "../agent/queue.rkt")
 
-;; Minimal runner that records its call for verification
-(define runner-called (box #f))
-(define runner-text (box #f))
-
-(define (make-mock-runner)
-  (set-box! runner-called #f)
-  (set-box! runner-text #f)
-  (lambda (text)
-    (set-box! runner-called #t)
-    (set-box! runner-text text)))
+;; Channel-based mock runner for deterministic thread synchronization
+(define (make-sync-mock-runner ch)
+  (lambda (text) (channel-put ch text)))
 
 ;; Build a ctx with given ui-state and optional queue
 (define (make-test-ctx ui-state [q #f] [runner #f])
-  (make-tui-ctx #:event-bus #f #:session-runner (or runner (make-mock-runner)) #:session-queue q))
+  (make-tui-ctx #:event-bus #f #:session-runner (or runner void) #:session-queue q))
 
 ;; Build a ui-state with a transcript containing a single user entry
 (define (make-ui-state-with-user-entry text [timestamp (current-inexact-milliseconds)])
@@ -72,16 +65,15 @@
 
     ;; ── Branch 3: normal submit → busy, user entry, runner ──
     (test-case "normal submit sets busy, adds user entry, calls runner"
+      (define ch (make-channel))
       (define state (initial-ui-state))
-      (define runner (make-mock-runner))
+      (define runner (make-sync-mock-runner ch))
       (define ctx (make-test-ctx state #f runner))
       (set-box! (tui-ctx-ui-state-box ctx) state)
       (handle-user-submit! ctx "run this")
-      ;; Give runner thread time to execute
-      (sleep 0.1)
-      ;; Runner was called
-      (check-true (unbox runner-called))
-      (check-equal? (unbox runner-text) "run this")
+      ;; Deterministic channel-based sync (2s timeout for slow CI)
+      (define runner-result (sync/timeout 2.0 ch))
+      (check-equal? runner-result "run this")
       ;; State is busy
       (define new-state (unbox (tui-ctx-ui-state-box ctx)))
       (check-true (ui-state-busy? new-state))
@@ -90,12 +82,12 @@
       (check-equal? (transcript-entry-text (car (ui-state-transcript new-state))) "run this")
       (check-equal? (transcript-entry-kind (car (ui-state-transcript new-state))) 'user))
 
-    ;; ── Branch 3b: normal submit without runner → no crash ──
-    (test-case "normal submit without runner does not crash"
-      (define state (initial-ui-state))
-      (define ctx (make-test-ctx state #f #f))
-      (set-box! (tui-ctx-ui-state-box ctx) state)
-      ;; Should not raise
-      (check-not-exn (lambda () (handle-user-submit! ctx "no runner"))))))
+    ;; NOTE: We do not test a #f-runner scenario because:
+    ;;   1. make-tui-ctx contract requires #:session-runner procedure?
+    ;;   2. handle-user-submit! calls (runner text) directly -- no guard
+    ;;   3. A #f runner would need to bypass the contract boundary
+    ;; If the contract is relaxed in future, add a guard in handle-user-submit!
+    ;; and a test for it here.
+    ))
 
 (run-tests submit-suite 'verbose)

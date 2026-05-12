@@ -105,7 +105,7 @@
 ;;
 ;; --- Transcript group ---
 (struct ui-state
-        (transcript ; (listof transcript-entry) — newest LAST
+        (transcript ; (listof transcript-entry) — newest FIRST (cons front)
          scroll-offset ; integer — 0 = bottom, positive = scrolled up
          ;; --- Session group ---
          session-id ; string or #f
