@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.38.14 -- 2026-05-07
+
+### Changed
+- DEBT-02: Rename hook event symbols `'tool.execution.start` -> `'started`, `'tool.execution.end` -> `'completed` in hook-types.rkt, tool-coordinator.rkt, streaming-observer.rkt (W0)
+- FACADE-01: Delete `runtime/iteration.rkt` facade, migrate 22 test files + sdk-core.rkt to direct sub-module imports (W0)
+- DEBT-01: Delete `extensions/gsd-planning-state.rkt` shim, migrate 14 callers to direct gsd sub-module imports, add legacy wrappers in gsd-planning.rkt (W1)
+- W-04: Remove deprecated `handle-tool-call-completed`/`handle-tool-call-failed` from tui/state-events.rkt and cli/render.rkt, migrate 20 test files from `"tool.call.completed"`/`"tool.call.failed"` to `"tool.execution.completed"` with backward-compatible payload handling (W2)
+
 ## v0.38.13 — 2026-05-12
 
 ### Fixed
