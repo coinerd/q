@@ -14,6 +14,7 @@
          "../hooks.rkt"
          "../tool-api.rkt"
          "../gsd-planning/command-normalization.rkt"
+         "../gsd/command-parser.rkt"
          "../gsd-planning/plan-diff.rkt"
          "../gsd/state-machine.rkt"
          (only-in "../gsd/core.rkt"
@@ -108,19 +109,22 @@
 ;; Command dispatch
 ;; ============================================================
 
+;; R-04/R-16: Refactored to parse→dispatch.
+;; Pure parsing is in command-parser.rkt; this function validates and dispatches.
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
   (define base-dir (or (current-pinned-dir) (current-directory)))
-  (match cmd
-    [(? (lambda (c) (member c '("/go" "/implement" "/i")))) (handle-go-command base-dir input-text)]
-    ["/gsd" (handle-gsd-status)]
-    ["/replan"
+  (define parsed (parse-gsd-command cmd input-text))
+  (cond
+    [(gsd-cmd-go? parsed) (handle-go-command base-dir input-text)]
+    [(gsd-cmd-status? parsed) (handle-gsd-status)]
+    [(gsd-cmd-replan? parsed)
      (define result (cmd-replan))
      (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'exploring))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    ["/skip"
-     (define args-text (extract-cmd-args input-text))
+    [(gsd-cmd-skip? parsed)
+     (define args-text (gsd-cmd-skip-skip-arg parsed))
      (define result (cmd-skip args-text))
      (when (and (gsd-success? result) base-dir)
        (define idx (and (string->number (string-trim args-text))))
@@ -130,12 +134,12 @@
          (when exec
            (wave-skip! exec idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    ["/reset"
+    [(gsd-cmd-reset? parsed)
      (define result (cmd-reset))
      (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'idle))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(? (lambda (c) (member c '("/wave-done" "/wd"))))
-     (define wd-args (extract-cmd-args input-text))
+    [(gsd-cmd-wave-done? parsed)
+     (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
      (define result (cmd-wave-done base-dir wd-args))
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
@@ -143,9 +147,8 @@
        (when wave-idx
          (events:emit-gsd-event! 'gsd.wave.completed (hasheq 'wave wave-idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    ["/done"
-     (define done-args (extract-cmd-args input-text))
-     (define force? (and done-args (string-contains? done-args "--force")))
+    [(gsd-cmd-done? parsed)
+     (define force? (gsd-cmd-done-force? parsed))
      (define result (cmd-done base-dir force?))
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
@@ -155,7 +158,13 @@
                                            (hash-ref data 'archive-path "")
                                            ""))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [_ (handle-artifact-command cmd input-text base-dir payload)]))
+    [(gsd-cmd-plan? parsed)
+     (define plan-text (gsd-cmd-plan-plan-text parsed))
+     (if plan-text
+         (handle-plan-submit plan-text base-dir input-text parsed)
+         (handle-artifact-command cmd input-text base-dir payload))]
+    [(gsd-cmd-artifact? parsed) (handle-artifact-command cmd input-text base-dir payload)]
+    [else (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; ============================================================
 ;; /go command handler
@@ -305,6 +314,30 @@ Plan:
 ;; Artifact display and /plan <text> handler
 ;; ============================================================
 
+;; R-04/R-16: Focused handler for /plan <text> submit
+(define (handle-plan-submit plan-text base-dir input-text parsed)
+  (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
+  (define saved-dir (current-pinned-dir)) ;; Preserve pinned dir
+  (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
+  (when saved-bus
+    (set-gsd-event-bus! saved-bus))
+  (when saved-dir
+    (set-pinned-dir! saved-dir))
+  (set-gsd-mode! 'planning)
+  (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'planning))
+  (set-edit-limit! 500)
+  ;; Auto-create STATE.md if missing (#2164)
+  (ensure-state-md! base-dir)
+  (define existing-plan (read-planning-artifact base-dir "PLAN"))
+  (define stale-warning
+    (if existing-plan
+        "
+NOTE: An existing PLAN.md was found. OVERWRITE it completely with the new plan. Do NOT keep or merge old content.
+"
+        ""))
+  (define augmented-text (string-append (planning-prompt plan-text) stale-warning))
+  (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" plan-text))))
+
 (define (handle-artifact-command cmd input-text base-dir payload)
   (define artifact
     (match cmd
@@ -315,44 +348,11 @@ Plan:
   (match artifact
     [#f (hook-pass payload)]
     [_
-     (define args-text
-       (let* ([trimmed (string-trim input-text)]
-              [parts (and (> (string-length trimmed) 0)
-                          (char=? (string-ref trimmed 0) #\/)
-                          (string-split trimmed))])
-         (and (pair? parts)
-              (let ([rest (string-trim (substring input-text (string-length (car parts))))])
-                (and (> (string-length rest) 0) rest)))))
-     (match (and (member cmd '("/plan" "/p")) args-text)
-       ;; /plan <text> → submit as planning prompt
-       [(? values)
-        (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
-        (define saved-dir (current-pinned-dir)) ;; Preserve pinned dir
-        (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
-        (when saved-bus
-          (set-gsd-event-bus! saved-bus))
-        (when saved-dir
-          (set-pinned-dir! saved-dir))
-        (set-gsd-mode! 'planning)
-        (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'planning))
-        (set-edit-limit! 500)
-        ;; Auto-create STATE.md if missing (#2164)
-        (ensure-state-md! base-dir)
-        (define existing-plan (read-planning-artifact base-dir "PLAN"))
-        (define stale-warning
-          (if existing-plan
-              "
-NOTE: An existing PLAN.md was found. OVERWRITE it completely with the new plan. Do NOT keep or merge old content.
-"
-              ""))
-        (define augmented-text (string-append (planning-prompt args-text) stale-warning))
-        (hook-amend (hasheq 'submit augmented-text 'text (format "Planning: ~a" args-text)))]
-       [else
-        ;; Display artifact content
-        (define content (read-planning-artifact base-dir artifact))
-        (define text
-          (match content
-            [#f (format "No ~a found in .planning/" artifact)]
-            [(? hash?) (jsexpr->string content)]
-            [_ content]))
-        (hook-amend (hasheq 'text text))])]))
+     ;; Display artifact content
+     (define content (read-planning-artifact base-dir artifact))
+     (define text
+       (match content
+         [#f (format "No ~a found in .planning/" artifact)]
+         [(? hash?) (jsexpr->string content)]
+         [_ content]))
+     (hook-amend (hasheq 'text text))]))
