@@ -40,7 +40,7 @@
   (hash-set! *event-field-registry* name fields))
 
 (define (lookup-event-fields name)
-  (hash-ref *event-field-registry* name '()))
+  (hash-ref *event-field-registry* name #f))
 
 ;; ===========================================================
 ;; Event serializer registry (H-01)
