@@ -12,6 +12,7 @@
 (provide jsonl-append!
          jsonl-write-to-port!
          jsonl-append-entries!
+         jsonl-read-from-port
          jsonl-read-all
          jsonl-read-all-valid
          jsonl-read-all-valid-with-count
@@ -70,6 +71,20 @@
     (call-with-output-file path (lambda (out) (display blob out)) #:mode 'text #:exists 'append)))
 
 ;; ── Read ──
+
+;; R-01/R-02: Port-based variant — read all valid JSONL lines from an input port.
+;; Returns (values valid-list corrupted-count).
+(define (jsonl-read-from-port in)
+  (define-values (valid corrupted)
+    (for/fold ([acc '()]
+               [bad 0])
+              ([line (in-lines in)])
+      (define trimmed (string-trim line))
+      (cond
+        [(<= (string-length trimmed) 0) (values acc bad)]
+        [(jsonl-line-valid? line) (values (cons (read-json (open-input-string line)) acc) bad)]
+        [else (values acc (add1 bad))])))
+  (values (reverse valid) corrupted))
 
 (define (jsonl-read-all path)
   ;; Read all complete JSONL lines from file.

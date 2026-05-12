@@ -10,6 +10,7 @@
 ;;   execute-pending-tool-calls — execute pending tool calls, update working set
 
 (require racket/match
+         racket/class
          racket/list
          racket/dict
          (only-in "loop-state.rkt"
@@ -83,7 +84,20 @@
 
 (provide interpret-step
          handle-stop-action
-         execute-pending-tool-calls)
+         execute-pending-tool-calls
+         ;; R-09/R-10: Optional sink for dependency injection
+         sink-append-entries!)
+
+;; ============================================================
+;; R-09/R-10: Sink-aware append helper
+;; ============================================================
+
+;; When a sink is provided, use it instead of the path-based API.
+;; This enables test isolation and effect boundary extraction.
+(define (sink-append-entries! infra new-msgs [sink #f])
+  (if sink
+      (send sink sink-append-entries! new-msgs)
+      (append-entries! (loop-infra-log-path infra) new-msgs)))
 
 ;; ============================================================
 ;; execute-pending-tool-calls
@@ -136,8 +150,7 @@
 ;; handle-stop-action
 ;; ============================================================
 
-(define success-completion-reasons
-  '(completed))
+(define success-completion-reasons '(completed))
 
 (define (handle-stop-action result new-msgs infra counters ws config)
   (define termination (loop-result-termination-reason result))
