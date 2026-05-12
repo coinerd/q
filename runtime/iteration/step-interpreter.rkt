@@ -97,7 +97,7 @@
 (define (sink-append-entries! infra new-msgs [sink #f])
   (if sink
       (send sink sink-append-entries! new-msgs)
-      (sink-append-entries! infra new-msgs)))
+      (append-entries! (loop-infra-log-path infra) new-msgs)))
 
 ;; ============================================================
 ;; execute-pending-tool-calls
