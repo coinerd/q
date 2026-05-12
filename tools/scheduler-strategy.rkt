@@ -30,15 +30,13 @@
 
 (struct scheduler-strategy
         (preflight-filter ; (listof tool-call) -> (listof tool-call)
-         execution-order ; (listof tool-call) -> (listof tool-call)
-         parallelism-degree) ; -> exact-nonnegative-integer?
+         execution-order) ; (listof tool-call) -> (listof tool-call)
   #:transparent)
 
 ;; Default strategy: all tools pass preflight, maintain original order, serial execution
 (define (default-scheduler-strategy)
   (scheduler-strategy (lambda (calls) calls) ; preflight-filter: pass all
-                      (lambda (calls) calls) ; execution-order: keep order
-                      (lambda () 1))) ; parallelism: serial
+                      (lambda (calls) calls))) ; execution-order: keep order
 
 ;; Convert tool-result to tool-invocation-result
 (define (tool-result->invocation-result tool-name result)

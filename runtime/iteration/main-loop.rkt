@@ -163,7 +163,7 @@
           (make-loop-result '() 'completed (hasheq 'reason "extension-block")))
         (let ([infra (loop-infra context ext-reg reg bus session-id log-path token)])
           ;; R-06/R-07: Track FSM state: idle -> provider-turn
-          (next-iteration-state state-idle event-start-loop)
+          (current-iteration-fsm-state (next-iteration-state state-idle event-start-loop))
           (let loop ([ctx context]
                      [counters (make-initial-counters)]
                      [ws ws])
@@ -214,7 +214,8 @@
                (cond
                  [turn-blocked?
                   ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
-                  (next-iteration-state state-provider-turn event-hook-block)
+                  (current-iteration-fsm-state (next-iteration-state state-provider-turn
+                                                                     event-hook-block))
                   (emit-session-event! bus
                                        session-id
                                        "turn.blocked"
@@ -244,7 +245,8 @@
                   (define termination (loop-result-termination-reason result))
                   (define new-msgs (loop-result-messages result))
                   ;; R-06/R-07: FSM: provider-turn + model-response -> decision
-                  (next-iteration-state state-provider-turn event-model-response)
+                  (current-iteration-fsm-state (next-iteration-state state-provider-turn
+                                                                     event-model-response))
                   (emit-session-event!
                    bus
                    session-id
@@ -281,7 +283,8 @@
                   (match directive
                     [(directive-stop final-result)
                      ;; R-06/R-07: FSM: decision + termination -> complete
-                     (next-iteration-state state-decision event-termination-reason)
+                     (current-iteration-fsm-state (next-iteration-state state-decision
+                                                                        event-termination-reason))
                      final-result]
                     [(directive-recurse new-ctx new-counters ws2)
                      (loop new-ctx new-counters ws2)])])]))))))

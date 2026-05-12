@@ -24,20 +24,14 @@
       (define calls '(a b c))
       (check-equal? ((scheduler-strategy-execution-order s) calls) calls))
 
-    (test-case "default parallelism-degree is 1 (serial)"
-      (define s (default-scheduler-strategy))
-      (check-equal? ((scheduler-strategy-parallelism-degree s)) 1))
-
-    ;; ── Custom strategy ──
     (test-case "custom strategy can filter tools"
       (define s
         (scheduler-strategy (lambda (calls) (filter (lambda (c) (not (equal? c 'skip-me))) calls))
-                            (lambda (calls) calls)
-                            (lambda () 2)))
+                            (lambda (calls) calls)))
       (check-equal? ((scheduler-strategy-preflight-filter s) '(a skip-me b)) '(a b)))
 
     (test-case "custom strategy can reorder"
-      (define s (scheduler-strategy values (lambda (calls) (reverse calls)) (lambda () 1)))
+      (define s (scheduler-strategy values (lambda (calls) (reverse calls))))
       (check-equal? ((scheduler-strategy-execution-order s) '(a b c)) '(c b a)))
 
     ;; ── Tool invocation result algebra ──

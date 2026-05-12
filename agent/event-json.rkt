@@ -248,12 +248,8 @@
             (typed-event-turn-id evt)))
   (define type-str (typed-event-type evt))
   (define serializer (lookup-event-serializer type-str))
-  (define vec (struct->vector evt))
-  (define total-fields (sub1 (vector-length vec)))
-  (when (and (not serializer) (> total-fields 4))
-    (log-warning "q/event-json: no serializer for typed event '~a', dropping ~a subclass fields"
-                 type-str
-                 (- total-fields 4)))
+  (when (not serializer)
+    (log-warning "q/event-json: no serializer for typed event '~a', using base fields only" type-str))
   (if serializer
       (for/fold ([h base]) ([(k v) (in-hash (serializer evt))])
         (hash-set h k v))
