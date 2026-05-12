@@ -109,7 +109,7 @@
                                           (set-box! received-filter filter)
                                           99))))
       (define handler (hash-ref handlers 'subscribe))
-      (define result (handler (hasheq 'filter '("model.stream.text" "tool.execution.start"))))
+      (define result (handler (hasheq 'filter '("model.stream.text" "tool.execution.started"))))
       (check-equal? (hash-ref result 'subscriptionId) 99)
       (check-not-false (unbox received-filter)))
 
