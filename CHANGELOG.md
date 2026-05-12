@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.40.0 — 2026-05-12
+
+### Changed
+- **S2-F1**: Extract `compute-parent-id` and `inject-system-instructions` as pure helpers from `session-lifecycle.rkt`
+- **S2-F2**: Extract `slice-entries-up-to` and `make-session-struct` as pure helpers from `agent-session.rkt`
+- **S2-F3**: Extract `classify-tool-results` and `build-blocked-tool-results` as pure helpers from `tool-coordinator.rkt`
+- Phase-split `handle-tool-calls-pending` into Preparation, Execution, and Assembly phases
+- Add unit tests for all extracted pure helpers (21 tests total)
+- Architecture score: 9.0 -> 9.2/10
+
 ## v0.39.10 — 2026-05-12
 
 ### Added
