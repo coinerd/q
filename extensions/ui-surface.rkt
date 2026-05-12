@@ -39,7 +39,10 @@
 
          ;; M-08: Registry struct and accessor (for advanced use)
          ui-callback-registry
-         ui-callback-registry?)
+         ui-callback-registry?
+
+         ;; R-05: Parameterized registry for test isolation
+         current-ui-registry)
 
 ;; ── Callback registry struct ───────────────────────────────
 
@@ -55,41 +58,41 @@
                     remove-all-extension-widgets)
   #:transparent)
 
-;; Global mutable registry (replaces 10 individual parameters).
-(define *ui-registry* (box (ui-callback-registry #f #f #f #f #f #f #f #f #f #f)))
+;; R-05: Parameterized registry for test isolation
+(define current-ui-registry (make-parameter (ui-callback-registry #f #f #f #f #f #f #f #f #f #f)))
 
 ;; ── Public API ─────────────────────────────────────────────
 
 (define (ui-set-footer! ui-state-box lines)
-  ((ui-callback-registry-set-footer (unbox *ui-registry*)) ui-state-box lines))
+  ((ui-callback-registry-set-footer (current-ui-registry)) ui-state-box lines))
 
 (define (ui-set-header! ui-state-box lines)
-  ((ui-callback-registry-set-header (unbox *ui-registry*)) ui-state-box lines))
+  ((ui-callback-registry-set-header (current-ui-registry)) ui-state-box lines))
 
 (define (ui-clear-footer! ui-state-box)
-  ((ui-callback-registry-clear-footer (unbox *ui-registry*)) ui-state-box))
+  ((ui-callback-registry-clear-footer (current-ui-registry)) ui-state-box))
 
 (define (ui-clear-header! ui-state-box)
-  ((ui-callback-registry-clear-header (unbox *ui-registry*)) ui-state-box))
+  ((ui-callback-registry-clear-header (current-ui-registry)) ui-state-box))
 
 (define (ui-make-styled-line segments)
-  ((ui-callback-registry-make-styled-line (unbox *ui-registry*)) segments))
+  ((ui-callback-registry-make-styled-line (current-ui-registry)) segments))
 
 (define (ui-make-styled-segment text style)
-  ((ui-callback-registry-make-styled-segment (unbox *ui-registry*)) text style))
+  ((ui-callback-registry-make-styled-segment (current-ui-registry)) text style))
 
 ;; Set status message in the ui-state box (dialog-api notification integration)
 ;; ui-state-box: box? containing ui-state
 ;; message: string? — the formatted status message
 (define (ui-set-status-message! ui-state-box message)
-  (define cb (ui-callback-registry-set-status-message (unbox *ui-registry*)))
+  (define cb (ui-callback-registry-set-status-message (current-ui-registry)))
   (when cb
     (cb ui-state-box message)))
 
 ;; Set a widget from an extension
 ;; Falls back to direct struct-copy when no TUI callback is installed
 (define (ui-set-extension-widget! state ext-name key lines)
-  (define cb (ui-callback-registry-set-extension-widget (unbox *ui-registry*)))
+  (define cb (ui-callback-registry-set-extension-widget (current-ui-registry)))
   (if cb
       (cb state ext-name key lines)
       ;; Fallback: directly update the extension-widgets hash
@@ -99,7 +102,7 @@
 
 ;; Remove a specific widget
 (define (ui-remove-extension-widget! state ext-name key)
-  (define cb (ui-callback-registry-remove-extension-widget (unbox *ui-registry*)))
+  (define cb (ui-callback-registry-remove-extension-widget (current-ui-registry)))
   (if cb
       (cb state ext-name key)
       (let* ([widgets (ui-state-extension-widgets state)]
@@ -108,7 +111,7 @@
 
 ;; Remove all widgets for an extension
 (define (ui-remove-all-extension-widgets! state ext-name)
-  (define cb (ui-callback-registry-remove-all-extension-widgets (unbox *ui-registry*)))
+  (define cb (ui-callback-registry-remove-all-extension-widgets (current-ui-registry)))
   (if cb
       (cb state ext-name)
       (let* ([widgets (ui-state-extension-widgets state)]
@@ -118,7 +121,7 @@
         (struct-copy ui-state state [extension-widgets new-widgets]))))
 
 (define (ui-callbacks-installed?)
-  (define r (unbox *ui-registry*))
+  (define r (current-ui-registry))
   (and (ui-callback-registry-set-footer r)
        (ui-callback-registry-set-header r)
        (ui-callback-registry-clear-footer r)
@@ -134,14 +137,13 @@
 ;;                set-extension-widget, remove-extension-widget,
 ;;                remove-all-extension-widgets
 (define (install-ui-callbacks! callbacks)
-  (set-box! *ui-registry*
-            (ui-callback-registry (hash-ref callbacks 'set-footer #f)
-                                  (hash-ref callbacks 'set-header #f)
-                                  (hash-ref callbacks 'clear-footer #f)
-                                  (hash-ref callbacks 'clear-header #f)
-                                  (hash-ref callbacks 'make-styled-line #f)
-                                  (hash-ref callbacks 'make-styled-segment #f)
-                                  (hash-ref callbacks 'set-status-message #f)
-                                  (hash-ref callbacks 'set-extension-widget #f)
-                                  (hash-ref callbacks 'remove-extension-widget #f)
-                                  (hash-ref callbacks 'remove-all-extension-widgets #f))))
+  (current-ui-registry (ui-callback-registry (hash-ref callbacks 'set-footer #f)
+                                             (hash-ref callbacks 'set-header #f)
+                                             (hash-ref callbacks 'clear-footer #f)
+                                             (hash-ref callbacks 'clear-header #f)
+                                             (hash-ref callbacks 'make-styled-line #f)
+                                             (hash-ref callbacks 'make-styled-segment #f)
+                                             (hash-ref callbacks 'set-status-message #f)
+                                             (hash-ref callbacks 'set-extension-widget #f)
+                                             (hash-ref callbacks 'remove-extension-widget #f)
+                                             (hash-ref callbacks 'remove-all-extension-widgets #f))))

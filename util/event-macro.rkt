@@ -27,6 +27,11 @@
          register-event-deserializer!
          lookup-event-serializer
          lookup-event-deserializer
+         ;; R-14: Parameterized registries for test isolation
+         current-event-field-registry
+         current-event-serializer-registry
+         current-event-deserializer-registry
+         with-fresh-event-registries
          ;; JSON key conversion
          field->json-key)
 
@@ -34,35 +39,41 @@
 ;; Event field registry (I-12, I-23) -- canonical runtime mechanism for serialization
 ;; ===========================================================
 
-(define *event-field-registry* (make-hasheq))
+;; R-14: Parameterized registries for test isolation
+(define current-event-field-registry (make-parameter (make-hasheq)))
 
 (define (register-event-fields! name fields)
-  (hash-set! *event-field-registry* name fields))
+  (hash-set! (current-event-field-registry) name fields))
 
 (define (lookup-event-fields name)
-  (hash-ref *event-field-registry* name #f))
+  (hash-ref (current-event-field-registry) name #f))
 
 ;; ===========================================================
 ;; Event serializer registry (H-01)
 ;; ===========================================================
 
-;; type-string -> (lambda (evt) hasheq?)
-(define *event-serializer-registry* (make-hash))
-
-;; type-string -> (lambda (type ts sid tid h) typed-event?)
-(define *event-deserializer-registry* (make-hash))
+;; R-14: Parameterized registries for test isolation
+(define current-event-serializer-registry (make-parameter (make-hash)))
+(define current-event-deserializer-registry (make-parameter (make-hash)))
 
 (define (register-event-serializer! type-str fn)
-  (hash-set! *event-serializer-registry* type-str fn))
+  (hash-set! (current-event-serializer-registry) type-str fn))
 
 (define (register-event-deserializer! type-str fn)
-  (hash-set! *event-deserializer-registry* type-str fn))
+  (hash-set! (current-event-deserializer-registry) type-str fn))
 
 (define (lookup-event-serializer type-str)
-  (hash-ref *event-serializer-registry* type-str #f))
+  (hash-ref (current-event-serializer-registry) type-str #f))
 
 (define (lookup-event-deserializer type-str)
-  (hash-ref *event-deserializer-registry* type-str #f))
+  (hash-ref (current-event-deserializer-registry) type-str #f))
+
+;; R-14: Test isolation helper -- fresh registries in parameterize scope
+(define-syntax-rule (with-fresh-event-registries body ...)
+  (parameterize ([current-event-field-registry (make-hasheq)]
+                 [current-event-serializer-registry (make-hash)]
+                 [current-event-deserializer-registry (make-hash)])
+    body ...))
 
 ;; ===========================================================
 ;; JSON key conversion (H-01)
