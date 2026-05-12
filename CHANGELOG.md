@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.39.8 -- 2026-05-12
+
+### Fixed
+- BUG-01: Fix sink-append-entries! infinite recursion in step-interpreter.rkt
+- R-01c: jsonl-read-all-valid-with-count delegates to jsonl-read-from-port
+
 ## v0.39.7 -- 2026-05-12
 
 ### Fixed
