@@ -96,7 +96,7 @@
                         (hash 'content "Orphan message")
                         "tool.call.started"
                         (hash 'name "bash" 'arguments "{\"cmd\":\"ls\"}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "bash" 'result "file.txt")))
       (define state1 (apply-events state0 events))
       (check-equal? (entry-count state1) 3)

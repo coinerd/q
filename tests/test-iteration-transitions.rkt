@@ -154,7 +154,7 @@
                     "iteration completes after amended tool call")
       (define evts (reverse (unbox events)))
       (define completed-events
-        (filter (lambda (e) (equal? (event-event e) "tool.call.completed")) evts))
+        (filter (lambda (e) (equal? (event-event e) "tool.execution.completed")) evts))
       (check-equal? (length completed-events) 1 "one tool call completed")
       (when (= (length completed-events) 1)
         (check-equal? (hash-ref (event-payload (car completed-events)) 'name #f)
@@ -196,7 +196,7 @@
                     "iteration completes even when all tool calls removed")
       (define evts (reverse (unbox events)))
       (define tool-completed
-        (filter (lambda (e) (equal? (event-event e) "tool.call.completed")) evts))
+        (filter (lambda (e) (equal? (event-event e) "tool.execution.completed")) evts))
       (check-equal? (length tool-completed) 0 "no tool.call.completed when all tool calls removed")
       (cleanup-temp-log!))
 
@@ -234,7 +234,7 @@
       ;; tool.call.completed should still be emitted (scheduler ran)
       (define evts (reverse (unbox events)))
       (define tool-completed
-        (filter (lambda (e) (equal? (event-event e) "tool.call.completed")) evts))
+        (filter (lambda (e) (equal? (event-event e) "tool.execution.completed")) evts))
       (check-not-false (positive? (length tool-completed))
                        "tool.call.completed emitted despite hook block")
       (cleanup-temp-log!))

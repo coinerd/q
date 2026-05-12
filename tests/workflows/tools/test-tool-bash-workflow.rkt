@@ -93,7 +93,7 @@
       (define recorder (workflow-result-events wr))
       (define ev-names (event-names recorder))
       (check-not-false (member "tool.call.started" ev-names) "expected tool.call.started in events")
-      (check-not-false (member "tool.call.completed" ev-names)
+      (check-not-false (member "tool.execution.completed" ev-names)
                        "expected tool.call.completed in events")
 
       ;; BOUNDARY: output text references the command output

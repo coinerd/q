@@ -55,7 +55,7 @@
 
       ;; SIDE-EFFECTS: at least one tool.call.failed event was emitted
       (define recorder (workflow-result-events wr))
-      (define failed-events (events-of-type recorder "tool.call.failed"))
+      (define failed-events (events-of-type recorder "tool.execution.completed"))
       (check-true (>= (length failed-events) 1)
                   (format "expected >=1 tool.call.failed, got ~a" (length failed-events)))
 
@@ -143,8 +143,8 @@
       (define tc-started (events-of-type recorder "tool.call.started"))
       ;; Tool either succeeds (tool.call.completed) or fails gracefully (tool.call.failed)
       (define tc-completed-or-failed
-        (+ (length (events-of-type recorder "tool.call.completed"))
-           (length (events-of-type recorder "tool.call.failed"))))
+        (+ (length (events-of-type recorder "tool.execution.completed"))
+           (length (events-of-type recorder "tool.execution.completed"))))
       (check-true (>= (length tc-started) 1) "expected >=1 tool.call.started")
       (check-true (>= tc-completed-or-failed 1)
                   "expected >=1 tool.call.completed or tool.call.failed")
@@ -183,7 +183,7 @@
 
       ;; SIDE-EFFECTS: tool.call.failed event for the unknown tool
       (define recorder (workflow-result-events wr))
-      (define failed-events (events-of-type recorder "tool.call.failed"))
+      (define failed-events (events-of-type recorder "tool.execution.completed"))
       (check-true (>= (length failed-events) 1) "expected tool.call.failed for unknown tool")
 
       ;; BOUNDARY: session log remains valid despite the error

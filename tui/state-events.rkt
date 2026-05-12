@@ -126,18 +126,34 @@
             (set-pending-tool-name (set-busy new-state #t) name)))))
 
 (define (handle-tool-execution-completed state evt)
+  ;; W-04: Accepts both old (name/result/error) and new (tool-name/result-summary) payloads
   (define payload (event-payload evt))
-  (define name (hash-ref payload 'tool-name "?"))
-  (define result-summary (hash-ref payload 'result-summary 'error))
+  (define name (hash-ref payload 'tool-name (lambda () (hash-ref payload 'name "?"))))
+  (define result-summary
+    (hash-ref payload
+              'result-summary
+              (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
+  (define result-raw (hash-ref payload 'result #f))
+  (define error-raw (hash-ref payload 'error #f))
   (define ts (event-time evt))
   (if (recent-tool-end? state name)
       (set-pending-tool-name state #f)
       (if (eq? result-summary 'completed)
-          (let* ([meta (hasheq 'name name)])
-            (set-pending-tool-name (append-entry state (make-entry 'tool-end "" ts meta)) #f))
-          (let* ([err "tool failed"]
+          (let* ([result-text
+                  (if result-raw
+                      (string-replace (truncate-string (tool-result-content->string result-raw) 80)
+                                      "\n"
+                                      " | ")
+                      "")]
+                 [text (if (string=? result-text "")
+                           (format "[OK: ~a]" name)
+                           (format "[OK: ~a] ~a" name result-text))]
+                 [meta (hasheq 'name name 'result (or result-raw ""))])
+            (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
+          (let* ([err (or error-raw "tool failed")]
+                 [text (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " | ")]
                  [meta (hasheq 'name name 'error err)])
-            (set-pending-tool-name (append-entry state (make-entry 'tool-fail err ts meta)) #f)))))
+            (set-pending-tool-name (append-entry state (make-entry 'tool-fail text ts meta)) #f)))))
 
 ;; M-09: Extracted error classification (pure function)
 (define (classify-error-type err payload)
@@ -356,39 +372,6 @@
                             (event-time evt)
                             (hash))))
 
-;; DEPRECATED (W-04): These handlers process legacy "tool.call.completed"/"tool.call.failed"
-;; raw events. New code uses typed events via "tool.execution.completed".
-;; Kept for backward compat with existing workflow tests -- remove in v0.39.
-(define (handle-tool-call-completed state evt)
-  (define payload (event-payload evt))
-  (define name (hash-ref payload 'name "?"))
-  (define result-raw (hash-ref payload 'result #f))
-  (define result-summary
-    (if result-raw
-        (string-replace (truncate-string (tool-result-content->string result-raw) 80) "\n" " | ")
-        ""))
-  (define text
-    (if (string=? result-summary "")
-        (format "[OK: ~a]" name)
-        (format "[OK: ~a] ~a" name result-summary)))
-  (define ts (event-time evt))
-  (define meta (hasheq 'name name 'result (or result-raw "")))
-  (set-pending-tool-name (append-entry state (make-entry 'tool-end text ts meta)) #f))
-
-;; DEPRECATED (W-04): Legacy handler for old raw event topic.
-(define (handle-tool-call-failed state evt)
-  (define payload (event-payload evt))
-  (define name (hash-ref payload 'name "?"))
-  (define err (hash-ref payload 'error "unknown"))
-  (define ts (event-time evt))
-  (set-pending-tool-name
-   (append-entry state
-                 (make-entry 'tool-fail
-                             (string-replace (format "[FAIL: ~a] ~a" name err) "\n" " | ")
-                             ts
-                             (hasheq 'name name 'error err)))
-   #f))
-
 (define (handle-compaction-lifecycle state evt)
   (define ev (event-ev evt))
   (cond
@@ -452,8 +435,6 @@
 (register-event-reducer! "tool.call.started" handle-tool-call-started)
 (register-event-reducer! "tool.execution.started" handle-tool-execution-started)
 (register-event-reducer! "tool.execution.completed" handle-tool-execution-completed)
-(register-event-reducer! "tool.call.completed" handle-tool-call-completed)
-(register-event-reducer! "tool.call.failed" handle-tool-call-failed)
 (register-event-reducer! "runtime.error" handle-runtime-error)
 (register-event-reducer! "session.started" handle-session-started)
 (register-event-reducer! "session.resumed" handle-session-resumed)

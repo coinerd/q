@@ -533,7 +533,7 @@
           (make-test-event "assistant.message.completed"
                            (hasheq 'messageId "m1" 'content "CL answer"))
           (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "read" 'arguments "/tmp/x"))
-          (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "file data"))))
+          (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "file data"))))
   (define state (simulate-events s0 events))
   (define input-st (initial-input-state))
   (define layout (compute-layout 80 24))
@@ -573,7 +573,8 @@
       (list
        (make-test-event "tool.call.started"
                         (hasheq 'id (format "tc-~a" i) 'name "read" 'arguments (format "/tmp/f~a" i)))
-       (make-test-event "tool.call.completed" (hasheq 'name "read" 'result (format "data-~a" i))))))
+       (make-test-event "tool.execution.completed"
+                        (hasheq 'name "read" 'result (format "data-~a" i))))))
   (define state (simulate-events s0 (append base-events (apply append tool-events))))
   (define input-st (initial-input-state))
   (define layout (compute-layout 40 5))

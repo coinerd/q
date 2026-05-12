@@ -24,12 +24,12 @@
          (list
           (cons "turn.started" (hash))
           (cons "tool.call.started" (hash 'name "read" 'arguments "{\"path\":\"a.rkt\"}"))
-          (cons "tool.call.completed" (hash 'name "read" 'result "(define a 1)"))
+          (cons "tool.execution.completed" (hash 'name "read" 'result "(define a 1)"))
           (cons "tool.call.started"
                 (hash 'name "edit" 'arguments "{\"path\":\"a.rkt\",\"old\":\"1\",\"new\":\"2\"}"))
-          (cons "tool.call.completed" (hash 'name "edit" 'result "ok"))
+          (cons "tool.execution.completed" (hash 'name "edit" 'result "ok"))
           (cons "tool.call.started" (hash 'name "bash" 'arguments "{\"command\":\"raco test\"}"))
-          (cons "tool.call.completed" (hash 'name "bash" 'result "3 tests passed"))
+          (cons "tool.execution.completed" (hash 'name "bash" 'result "3 tests passed"))
           (cons "assistant.message.completed" (hash 'content "All done."))
           (cons "turn.completed" (hash)))))
       (define texts (mock-entry-texts ms1))
@@ -55,11 +55,11 @@
                         (hash)
                         "tool.call.started"
                         (hash 'name "tool-a" 'arguments "{\"x\":1}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "tool-a" 'result "a-result")
                         "tool.call.started"
                         (hash 'name "tool-b" 'arguments "{\"y\":2}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "tool-b" 'result "b-result")
                         "turn.completed"
                         (hash)))
@@ -93,13 +93,13 @@
          ;; Turn 1: read file
          (list (cons "turn.started" (hash))
                (cons "tool.call.started" (hash 'name "read" 'arguments "{\"path\":\"f.rkt\"}"))
-               (cons "tool.call.completed" (hash 'name "read" 'result "content"))
+               (cons "tool.execution.completed" (hash 'name "read" 'result "content"))
                (cons "assistant.message.completed" (hash 'content "File read."))
                (cons "turn.completed" (hash))
                ;; Turn 2: edit file
                (cons "turn.started" (hash))
                (cons "tool.call.started" (hash 'name "edit" 'arguments "{\"path\":\"f.rkt\"}"))
-               (cons "tool.call.completed" (hash 'name "edit" 'result "ok"))
+               (cons "tool.execution.completed" (hash 'name "edit" 'result "ok"))
                (cons "assistant.message.completed" (hash 'content "File edited."))
                (cons "turn.completed" (hash)))))
       (define texts (mock-entry-texts ms1))

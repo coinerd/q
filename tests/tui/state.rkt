@@ -89,7 +89,7 @@
 
     (test-case "apply-event: tool.call.completed"
       (let* ([s (initial-ui-state)]
-             [evt (make-test-event "tool.call.completed" (hash 'name "bash"))]
+             [evt (make-test-event "tool.execution.completed" (hash 'name "bash"))]
              [s2 (apply-event-to-state s evt)])
         (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'tool-end)
         (check-equal? (transcript-entry-text (first (ui-state-transcript s2))) "[OK: bash]")
@@ -97,7 +97,8 @@
 
     (test-case "apply-event: tool.call.failed"
       (let* ([s (initial-ui-state)]
-             [evt (make-test-event "tool.call.failed" (hash 'name "bash" 'error "exit code 1"))]
+             [evt (make-test-event "tool.execution.completed"
+                                   (hash 'name "bash" 'error "exit code 1"))]
              [s2 (apply-event-to-state s evt)])
         (check-equal? (transcript-entry-kind (first (ui-state-transcript s2))) 'tool-fail)
         (check-equal? (transcript-entry-text (first (ui-state-transcript s2)))
@@ -290,7 +291,8 @@
              [s2 (apply-event-to-state s1 (make-test-event "turn.started" (hash)))]
              [s3 (apply-event-to-state s2 (make-test-event "tool.call.started" (hash 'name "bash")))]
              [s4 (apply-event-to-state s3
-                                       (make-test-event "tool.call.completed" (hash 'name "bash")))]
+                                       (make-test-event "tool.execution.completed"
+                                                        (hash 'name "bash")))]
              [s5 (apply-event-to-state s4
                                        (make-test-event "assistant.message.completed"
                                                         (hash 'content "done")))])
@@ -471,7 +473,8 @@
 
     (test-case "apply-event: tool.call.completed with result"
       (let* ([s (initial-ui-state)]
-             [evt (make-test-event "tool.call.completed" (hash 'name "bash" 'result "3 files found"))]
+             [evt (make-test-event "tool.execution.completed"
+                                   (hash 'name "bash" 'result "3 files found"))]
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-kind entry) 'tool-end)
@@ -485,7 +488,7 @@
 
     (test-case "apply-event: tool.call.failed with error"
       (let* ([s (initial-ui-state)]
-             [evt (make-test-event "tool.call.failed" (hash 'name "bash" 'error "exit 1"))]
+             [evt (make-test-event "tool.execution.completed" (hash 'name "bash" 'error "exit 1"))]
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-kind entry) 'tool-fail)
@@ -493,7 +496,8 @@
         (test-case "apply-event: tool.call.completed with hash content shows text not hasheq"
           (let* ([s (initial-ui-state)]
                  [result-raw (list (hash 'type "text" 'text "Edited file successfully"))]
-                 [evt (make-test-event "tool.call.completed" (hash 'name "edit" 'result result-raw))]
+                 [evt (make-test-event "tool.execution.completed"
+                                       (hash 'name "edit" 'result result-raw))]
                  [s2 (apply-event-to-state s evt)])
             (define entry (first (ui-state-transcript s2)))
             (check-false (string-contains? (transcript-entry-text entry) "#hasheq")
@@ -514,7 +518,7 @@
 
     (test-case "apply-event: tool.call.completed without result"
       (let* ([s (initial-ui-state)]
-             [evt (make-test-event "tool.call.completed" (hash 'name "read"))]
+             [evt (make-test-event "tool.execution.completed" (hash 'name "read"))]
              [s2 (apply-event-to-state s evt)])
         (define entry (first (ui-state-transcript s2)))
         (check-equal? (transcript-entry-text entry) "[OK: read]" "no result: just shows tool name")))
@@ -887,7 +891,8 @@
                           (make-test-event "assistant.message.completed"
                                            (hash 'content "New response"))))
   (define s2 (apply-event-to-state s1 (make-test-event "tool.call.started" (hash 'name "read"))))
-  (define s3 (apply-event-to-state s2 (make-test-event "tool.call.completed" (hash 'name "read"))))
+  (define s3
+    (apply-event-to-state s2 (make-test-event "tool.execution.completed" (hash 'name "read"))))
   ;; Collect all IDs — raw field is newest-first: [5,4,3,2,1,0]
   (define all-ids (map transcript-entry-id (ui-state-transcript s3)))
   ;; All IDs should be unique: 3 scrollback + 3 runtime = 6

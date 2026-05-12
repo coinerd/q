@@ -216,7 +216,7 @@
 
    (test-case "tool.call.completed → [tool result]"
      (define evt
-       (make-event "tool.call.completed"
+       (make-event "tool.execution.completed"
                    1000
                    "sess1"
                    "turn1"
@@ -225,7 +225,7 @@
 
    (test-case "tool.call.completed with result content → shows truncated content"
      (define evt
-       (make-event "tool.call.completed"
+       (make-event "tool.execution.completed"
                    1000
                    "sess1"
                    "turn1"
@@ -234,7 +234,7 @@
 
    (test-case "tool.call.completed with multi-part result → joins with newline"
      (define evt
-       (make-event "tool.call.completed"
+       (make-event "tool.execution.completed"
                    1000
                    "sess1"
                    "turn1"
@@ -248,7 +248,7 @@
    (test-case "BUG-18: tool.call.completed with long result → truncated"
      (define long-text (make-string 500 #\A))
      (define evt
-       (make-event "tool.call.completed"
+       (make-event "tool.execution.completed"
                    1000
                    "sess1"
                    "turn1"
@@ -293,7 +293,7 @@
 
    (test-case "tool.call.failed → [tool failed: name]"
      (define evt
-       (make-event "tool.call.failed"
+       (make-event "tool.execution.completed"
                    1000
                    "sess1"
                    "turn1"
@@ -434,9 +434,10 @@
       "[tool: read]"))
 
    (test-case "tool call failed"
-     (check-equal? (format-event-for-terminal
-                    (make-event "tool.call.failed" 0 #f #f (hasheq 'name "bash" 'error "exit 1")))
-                   "[tool failed: bash — exit 1]"))
+     (check-equal?
+      (format-event-for-terminal
+       (make-event "tool.execution.completed" 0 #f #f (hasheq 'name "bash" 'error "exit 1")))
+      "[tool failed: bash — exit 1]"))
 
    (test-case "runtime error"
      (check-equal?

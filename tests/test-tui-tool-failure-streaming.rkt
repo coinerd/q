@@ -42,7 +42,7 @@
                         (hash)
                         "tool.call.started"
                         (hash 'name "read" 'arguments "{\"path\":\"x.rkt\"}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "read" 'result "contents")
                         ;; No streaming before this assistant event, so content comes from payload
                         "assistant.message.completed"
