@@ -9,25 +9,48 @@
 (require rackunit
          racket/file
          "../extensions/gsd-planning.rkt"
-         (only-in "../extensions/gsd-planning-state.rkt"
-                  gsd-mode
-                  set-gsd-mode!
-                  gsd-mode?
-                  pinned-planning-dir
-                  set-pinned-planning-dir!
-                  current-max-old-text-len
-                  set-current-max-old-text-len!
-                  completed-waves
-                  total-waves
-                  set-total-waves!
-                  mark-wave-complete!
-                  wave-complete?
-                  next-pending-wave
-                  gsd-snapshot
-                  reset-all-gsd-state!)
+         (only-in "../extensions/gsd/state-machine.rkt"
+                  gsm-current
+                  gsm-reset!
+                  gsm-transition-to!
+                  gsm-transition!
+                  gsm-completed-waves
+                  gsm-total-waves
+                  gsm-set-total-waves!
+                  gsm-mark-wave-complete!
+                  gsm-wave-complete?
+                  gsm-next-pending-wave
+                  gsm-current-wave
+                  gsm-set-current-wave!
+                  gsm-snapshot)
+         (only-in "../extensions/gsd/session-state.rkt"
+                  current-pinned-dir
+                  set-pinned-dir!
+                  current-edit-limit
+                  set-edit-limit!)
+         (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
          "../extensions/api.rkt"
          "../tools/tool.rkt"
          "../extensions/hooks.rkt")
+
+;; Legacy mode wrappers (DEBT-01)
+(define (gsd-mode)
+  (let ([s (gsm-current)])
+    (cond
+      [(eq? s 'idle) #f]
+      [(eq? s 'exploring) 'planning]
+      [else s])))
+
+(define (gsd-mode? v)
+  (eq? (gsd-mode) v))
+
+(define (set-gsd-mode! v)
+  (cond
+    [(not v) (gsm-reset!)]
+    [(eq? v 'planning) (gsm-transition-to! 'exploring)]
+    [(eq? v 'plan-written) (gsm-transition-to! 'plan-written)]
+    [(eq? v 'executing) (gsm-transition-to! 'executing)]
+    [else (gsm-transition! v)]))
 
 ;; ============================================================
 ;; Helpers
@@ -48,10 +71,10 @@
   (dynamic-wind (lambda () (make-directory* (build-path dir ".planning")))
                 (lambda ()
                   (parameterize ([current-directory dir])
-                    (set-pinned-planning-dir! dir)
+                    (set-pinned-dir! dir)
                     (thunk dir)))
                 (lambda ()
-                  (set-pinned-planning-dir! #f)
+                  (set-pinned-dir! #f)
                   (with-handlers ([exn:fail? (lambda (e) (void))])
                     (delete-directory/files dir)))))
 
@@ -100,10 +123,10 @@
          (build-path dir ".planning" "PLAN.md")
          (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
          #:exists 'truncate)
-        (check-equal? (current-max-old-text-len) 500 "default should be 500")
+        (check-equal? (current-edit-limit) 500 "default should be 500")
         (define handler (hash-ref (extension-hooks gsd-planning-extension) 'execute-command))
         (handler (hasheq 'command "/go" 'input "/go"))
-        (check-equal? (current-max-old-text-len) 1200 "should be raised to 1200 during /go"))))))
+        (check-equal? (current-edit-limit) 1200 "should be raised to 1200 during /go"))))))
 
 ;; ============================================================
 ;; Test 4: reset-all-gsd-state! is idempotent
@@ -113,12 +136,12 @@
   (with-clean-state (lambda ()
                       ;; Set some state
                       (set-gsd-mode! 'executing)
-                      (set-total-waves! 5)
-                      (mark-wave-complete! 1)
+                      (gsm-set-total-waves! 5)
+                      (gsm-mark-wave-complete! 1)
                       ;; Reset twice
                       (reset-all-gsd-state!)
                       (reset-all-gsd-state!)
                       ;; State should be clean
                       (check-false (gsd-mode))
-                      (check-equal? (total-waves) 0)
-                      (check-false (wave-complete? 1)))))
+                      (check-equal? (gsm-total-waves) 0)
+                      (check-false (gsm-wave-complete? 1)))))

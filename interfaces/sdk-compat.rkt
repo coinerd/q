@@ -24,7 +24,8 @@
                   compaction-result-removed-count
                   compaction-result?)
          (only-in "../extensions/hooks.rkt" dispatch-hooks hook-result? hook-result-payload)
-         (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot reset-all-gsd-state!)
+         (only-in "../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])
+         (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
          (only-in "../extensions/gsd/runtime-state-types.rkt" gsd-runtime-state-mode)
          (prefix-in store: "../runtime/session-store.rkt")
          "../agent/event-bus.rkt"

@@ -17,9 +17,9 @@
          racket/string
          (only-in racket/list last drop)
          (only-in "../tool.rkt" make-success-result make-error-result)
-         (only-in "../../extensions/gsd-planning-state.rkt"
-                  current-max-old-text-len
-                  set-current-max-old-text-len!)
+         (only-in "../../extensions/gsd/session-state.rkt"
+                  [current-edit-limit current-max-old-text-len]
+                  [set-edit-limit! set-current-max-old-text-len!])
          (only-in "../../util/path-helpers.rkt" expand-home-path)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          (only-in "builtin-helpers.rkt" require-safe-path!))

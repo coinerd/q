@@ -12,7 +12,12 @@
          "../agent/event-bus.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry tool-registry?)
          (only-in "../tools/registry-defaults.rkt" register-default-tools!)
-         (only-in "../extensions/gsd-planning-state.rkt" gsd-mode set-gsd-mode! reset-all-gsd-state!)
+         (only-in "../extensions/gsd/state-machine.rkt"
+                  gsm-current
+                  gsm-reset!
+                  gsm-transition-to!
+                  gsm-transition!)
+         (only-in "../extensions/gsd/core.rkt" reset-all-gsd-state!)
          (only-in "../extensions/api.rkt" make-extension-registry extension-registry?)
          (only-in "../extensions/loader.rkt" load-extension! discover-extension-files)
          (only-in "../extensions/hooks.rkt" dispatch-hooks hook-result? hook-result-payload)

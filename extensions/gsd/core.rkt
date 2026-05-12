@@ -33,7 +33,19 @@
          (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "policy.rkt" gsd-decide-action policy-allowed? policy-blocked? policy-reason)
-         (only-in "../gsd-planning-state.rkt" pinned-planning-dir))
+         (only-in "session-state.rkt"
+                  current-pinned-dir
+                  set-pinned-dir!
+                  set-edit-limit!
+                  set-gsd-event-bus!
+                  set-plan-data!))
+
+(define (reset-all-gsd-state!)
+  (reset-gsm!)
+  (set-pinned-dir! #f)
+  (set-edit-limit! 500)
+  (set-gsd-event-bus! #f)
+  (set-plan-data! #f))
 
 (provide gsd-command-dispatch
          gsd-write-guard
@@ -49,7 +61,8 @@
          ;; Re-export command result types
          (all-from-out "command-types.rkt")
          ;; Transaction wrapper (v0.24.1)
-         with-gsd-transaction)
+         with-gsd-transaction
+         reset-all-gsd-state!)
 
 ;; ============================================================
 ;; Command registry
@@ -218,12 +231,12 @@
            ;; Mark wave complete in state machine
            (gsm-mark-wave-complete! idx)
            ;; Update PLAN.md status marker
-           (let ([dir (or base-dir (pinned-planning-dir))])
+           (let ([dir (or base-dir (current-pinned-dir))])
              (when dir
                (with-handlers ([exn:fail? (lambda (e) (void))])
                  (mark-wave-status! dir idx "DONE"))))
            ;; Update STATE.md with wave completion
-           (let ([dir (or base-dir (pinned-planning-dir))])
+           (let ([dir (or base-dir (current-pinned-dir))])
              (when dir
                (with-handlers ([exn:fail? (lambda (e)
                                             (log-warning (format "cmd-wave-done/state-update: ~a"

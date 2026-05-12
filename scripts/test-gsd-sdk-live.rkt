@@ -21,7 +21,7 @@
          (only-in "../util/event.rkt" event-ev event-payload)
          "../tools/tool.rkt"
          "../interfaces/sdk.rkt"
-         (only-in "../extensions/gsd-planning-state.rkt" gsd-snapshot)
+         (only-in "../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])
          "../util/cancellation.rkt")
 
 ;; ============================================================
