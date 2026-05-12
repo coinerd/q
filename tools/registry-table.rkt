@@ -27,6 +27,7 @@
 (struct tool-spec (name description schema handler prompt-guidelines) #:transparent)
 
 (provide register-tools-from-specs!
+         dangerous-tool-names
          tool-specs
          tool-spec
          tool-spec?
@@ -355,6 +356,9 @@
 ;; Registration from specs
 ;; ============================================================
 
+;; R-03/R-22: Metadata-driven dangerous tool classification
+(define dangerous-tool-names '("write" "edit" "bash"))
+
 ;; Register tools from tool-spec structs.
 (define (register-tools-from-specs! registry specs #:only [only #f])
   (for ([spec (in-list specs)])
@@ -363,16 +367,19 @@
        (define name (tool-spec-name spec))
        (when (or (not only) (member name only))
          (define pg (tool-spec-prompt-guidelines spec))
+         (define dangerous? (and (member name dangerous-tool-names) #t))
          (if pg
              (register-tool! registry
                              (make-tool name
                                         (tool-spec-description spec)
                                         (tool-spec-schema spec)
                                         (tool-spec-handler spec)
-                                        #:prompt-guidelines pg))
+                                        #:prompt-guidelines pg
+                                        #:dangerous? dangerous?))
              (register-tool! registry
                              (make-tool name
                                         (tool-spec-description spec)
                                         (tool-spec-schema spec)
-                                        (tool-spec-handler spec)))))]))
+                                        (tool-spec-handler spec)
+                                        #:dangerous? dangerous?))))]))
   (void))

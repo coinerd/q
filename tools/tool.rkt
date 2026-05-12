@@ -53,7 +53,8 @@
                              (#:prompt-snippet (or/c string? #f)
                                                #:render-call (or/c procedure? #f)
                                                #:render-result (or/c procedure? #f)
-                                               #:prompt-guidelines (or/c string? #f))
+                                               #:prompt-guidelines (or/c string? #f)
+                                               #:dangerous? boolean?)
                              tool?)]
                        [validate-tool-args (-> tool? hash? boolean?)])
          merge-tool-lists
