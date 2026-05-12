@@ -92,61 +92,74 @@
 ;; registers it. Returns structured error info if loading fails.
 ;; When event-bus is provided, publishes extension.load.failed on error.
 ;; Returns #t if extension was loaded and registered, #f otherwise.
-(define (load-extension! registry path #:event-bus [event-bus #f])
+;; Phase 1: Validate extension state (disabled/quarantined/ok)
+(define (load-extension-validate path)
   (define ext-name (get-extension-name-from-path path))
   (define state (extension-state ext-name))
   (cond
-    [(or (eq? state 'disabled) (eq? state 'quarantined)) (void)]
-    [else
-     (define timeout-secs (current-extension-startup-timeout))
-     (define result
-       (if timeout-secs
-           ;; Run with timeout to prevent hanging on slow extensions
-           (let ([chan (make-channel)])
-             (define thd (thread (lambda () (channel-put chan (try-load-extension path)))))
-             (define maybe-result (sync/timeout timeout-secs chan))
-             (unless maybe-result
-               (kill-thread thd)) ; #447: prevent thread leak
-             (if maybe-result
-                 maybe-result
-                 (extension-load-error (if (path? path)
-                                           (path->string path)
-                                           path)
-                                       (format "extension startup timed out after ~as" timeout-secs)
-                                       'timeout)))
-           ;; No timeout — direct call
-           (try-load-extension path)))
-     (cond
-       [(extension-load-error? result)
-        (log-warning "extension load failed [~a]: ~a \u2014 ~a"
-                     (extension-load-error-category result)
-                     path
-                     (extension-load-error-message result))
-        (when event-bus
-          (publish! event-bus
-                    (make-event "extension.load.failed"
-                                (current-seconds)
-                                ""
-                                #f
-                                (hasheq 'path
-                                        (if (path? path)
-                                            (path->string path)
-                                            path)
-                                        'error
-                                        (extension-load-error-message result)
-                                        'category
-                                        (extension-load-error-category result)))))
-        (void)]
-       [(and result (extension? result))
-        ;; Tier validation: default to 'hooks (lowest) if no manifest tier declared
-        (define declared-tier 'hooks)
-        (define tier-result (extension-tier-valid? result declared-tier))
-        (when (list? tier-result)
-          (for ([msg (in-list tier-result)])
-            (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
-        (register-extension! registry result)
-        (void)]
-       [else (void)])]))
+    [(or (eq? state 'disabled) (eq? state 'quarantined)) state]
+    [else 'ok]))
+
+;; Phase 2: Attempt to load extension with optional timeout
+(define (load-extension-attempt path)
+  (define timeout-secs (current-extension-startup-timeout))
+  (if timeout-secs
+      ;; Run with timeout to prevent hanging on slow extensions
+      (let ([chan (make-channel)])
+        (define thd (thread (lambda () (channel-put chan (try-load-extension path)))))
+        (define maybe-result (sync/timeout timeout-secs chan))
+        (unless maybe-result
+          (kill-thread thd)) ; #447: prevent thread leak
+        (if maybe-result
+            maybe-result
+            (extension-load-error (if (path? path)
+                                      (path->string path)
+                                      path)
+                                  (format "extension startup timed out after ~as" timeout-secs)
+                                  'timeout)))
+      ;; No timeout — direct call
+      (try-load-extension path)))
+
+;; Phase 3: Register loaded extension or report error
+(define (load-extension-register! registry result path event-bus)
+  (cond
+    [(extension-load-error? result)
+     (log-warning "extension load failed [~a]: ~a — ~a"
+                  (extension-load-error-category result)
+                  path
+                  (extension-load-error-message result))
+     (when event-bus
+       (publish! event-bus
+                 (make-event "extension.load.failed"
+                             (current-seconds)
+                             ""
+                             #f
+                             (hasheq 'path
+                                     (if (path? path)
+                                         (path->string path)
+                                         path)
+                                     'error
+                                     (extension-load-error-message result)
+                                     'category
+                                     (extension-load-error-category result)))))
+     (void)]
+    [(and result (extension? result))
+     ;; Tier validation: default to 'hooks (lowest) if no manifest tier declared
+     (define declared-tier 'hooks)
+     (define tier-result (extension-tier-valid? result declared-tier))
+     (when (list? tier-result)
+       (for ([msg (in-list tier-result)])
+         (log-warning "extension tier violation [~a]: ~a" (extension-name result) msg)))
+     (register-extension! registry result)
+     (void)]
+    [else (void)]))
+
+;; Orchestrator: validate → attempt → register
+(define (load-extension! registry path #:event-bus [event-bus #f])
+  (define validation (load-extension-validate path))
+  (when (eq? validation 'ok)
+    (define result (load-extension-attempt path))
+    (load-extension-register! registry result path event-bus)))
 
 ;; Cache infrastructure removed (#448): was never called in production
 ;; code paths (discover-extensions calls try-load-extension directly).
