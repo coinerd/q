@@ -43,6 +43,11 @@
                   tool-call-name
                   tool-call-arguments)
          (only-in "tool-struct.rkt" tool-execute tool-dangerous?)
+         (only-in "scheduler-strategy.rkt"
+                  scheduler-strategy?
+                  scheduler-strategy-preflight-filter
+                  scheduler-strategy-execution-order
+                  default-scheduler-strategy)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode-predicates.rkt"
                   safe-mode?
@@ -54,6 +59,8 @@
 
 ;; ── Result struct ──
 (provide (struct-out scheduler-result)
+         ;; R-15: Strategy support
+         current-scheduler-strategy
          (struct-out preflight-entry)
          run-preflight
          (contract-out [run-tool-batch
@@ -67,6 +74,9 @@
 ;; ============================================================
 ;; Scheduler result struct
 ;; ============================================================
+
+;; R-15: Pluggable strategy parameter
+(define current-scheduler-strategy (make-parameter (default-scheduler-strategy)))
 
 (struct scheduler-result (results metadata) #:transparent)
 
@@ -366,7 +376,10 @@
                         registry
                         #:hook-dispatcher [hook-dispatcher #f]
                         #:exec-context [exec-ctx (make-exec-context)]
-                        #:parallel? [parallel? #f])
+                        #:parallel? [parallel? #f]
+                        #:strategy [strategy #f])
+  ;; R-15: Use provided strategy or current parameter
+  (define strat (or strategy (current-scheduler-strategy)))
   ;; Resolve event publisher from exec-context (may be #f)
   (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
 
@@ -375,8 +388,11 @@
     (ev-pub "tool.batch.preflight.started"
             (hasheq 'toolCount (length tool-calls) 'toolNames (map tool-call-name tool-calls))))
 
+  ;; R-15: Apply strategy phases
+  (define filtered-calls ((scheduler-strategy-preflight-filter strat) tool-calls))
+  (define ordered-calls ((scheduler-strategy-execution-order strat) filtered-calls))
   ;; Step 1: Preflight (serial)
-  (define preflight-entries (run-preflight tool-calls registry hook-dispatcher))
+  (define preflight-entries (run-preflight ordered-calls registry hook-dispatcher))
 
   ;; Step 2: Execution (serial or parallel)
   (define results (run-execution preflight-entries exec-ctx parallel? hook-dispatcher))
