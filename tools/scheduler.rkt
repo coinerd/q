@@ -42,7 +42,7 @@
                   tool-call-id
                   tool-call-name
                   tool-call-arguments)
-         (only-in "tool-struct.rkt" tool-execute)
+         (only-in "tool-struct.rkt" tool-execute tool-dangerous?)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "../util/safe-mode-predicates.rkt"
                   safe-mode?
@@ -233,15 +233,13 @@
              (not (request-approval perm-cfg tc-name (tool-call-arguments tc-to-execute))))
         (make-error-result (format "tool '~a' blocked — approval denied" tc-name))]
        [else
-        ;; Execute the tool (with file mutation queue for write tools)
-        (define file-mutating-tools '("write" "edit"))
+        ;; R-03/R-22: Use tool-dangerous? metadata instead of hardcoded list
         (define args (tool-call-arguments tc-to-execute))
         (define exec-result
           (with-handlers ([exn:fail? (lambda (e)
                                        (make-error-result
                                         (format "tool '~a' raised: ~a" tc-name (exn-message e))))])
-            (define path-arg
-              (and (member tc-name file-mutating-tools) (hash? args) (hash-ref args 'path #f)))
+            (define path-arg (and (tool-dangerous? t) (hash? args) (hash-ref args 'path #f)))
             (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx)))))
 
         ;; Dispatch 'tool-result-post hook
