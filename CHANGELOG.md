@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.38.13 — 2026-05-12
+
+### Fixed
+- L-NEW-01: Fix stale `"tool.execution.start"` in `test-rpc-methods.rkt` subscribe filter test
+
 ## v0.38.12 — 2026-05-12
 
 ### Fixed
