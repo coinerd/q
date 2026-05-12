@@ -58,6 +58,20 @@
          (only-in "decision.rkt" iteration-ctx compute-step-result)
          (only-in "step-interpreter.rkt" interpret-step)
          (only-in "directive.rkt" directive-recurse directive-stop directive-yield)
+         (only-in "fsm-types.rkt"
+                  state-idle
+                  state-provider-turn
+                  state-decision
+                  state-complete
+                  state-aborted
+                  event-start-loop
+                  event-model-response
+                  event-tool-calls-present
+                  event-termination-reason
+                  event-hook-block
+                  event-cancel
+                  next-iteration-state
+                  state->symbol)
          (only-in "internal.rkt" assert-payload)
          (only-in "loop-config.rkt"
                   loop-config?
@@ -104,6 +118,9 @@
 ;; run-iteration-loop
 ;; ============================================================
 
+;; R-06/R-07: FSM state tracking parameter
+(define current-iteration-fsm-state (make-parameter state-idle))
+
 (define (run-iteration-loop/v2 cfg)
   ;; Unpack loop-config fields into local bindings
   (let ([context (loop-config-context cfg)]
@@ -145,6 +162,8 @@
                            reason-payload/c))
           (make-loop-result '() 'completed (hasheq 'reason "extension-block")))
         (let ([infra (loop-infra context ext-reg reg bus session-id log-path token)])
+          ;; R-06/R-07: Track FSM state: idle -> provider-turn
+          (next-iteration-state state-idle event-start-loop)
           (let loop ([ctx context]
                      [counters (make-initial-counters)]
                      [ws ws])
@@ -194,6 +213,8 @@
                        (values amended-ctx #f))))
                (cond
                  [turn-blocked?
+                  ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
+                  (next-iteration-state state-provider-turn event-hook-block)
                   (emit-session-event! bus
                                        session-id
                                        "turn.blocked"
@@ -222,6 +243,8 @@
                                        config))
                   (define termination (loop-result-termination-reason result))
                   (define new-msgs (loop-result-messages result))
+                  ;; R-06/R-07: FSM: provider-turn + model-response -> decision
+                  (next-iteration-state state-provider-turn event-model-response)
                   (emit-session-event!
                    bus
                    session-id
@@ -256,7 +279,10 @@
                                     (struct-copy loop-infra infra [ctx ctx-with-injected])
                                     snapshot))
                   (match directive
-                    [(directive-stop final-result) final-result]
+                    [(directive-stop final-result)
+                     ;; R-06/R-07: FSM: decision + termination -> complete
+                     (next-iteration-state state-decision event-termination-reason)
+                     final-result]
                     [(directive-recurse new-ctx new-counters ws2)
                      (loop new-ctx new-counters ws2)])])]))))))
 
