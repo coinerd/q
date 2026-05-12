@@ -94,7 +94,11 @@
                         (-> agent-session? (listof any/c) exact-nonnegative-integer? any)]
                        [ensure-persisted! (-> agent-session? void?)]
                        [buffer-or-append! (-> agent-session? any/c void?)]
-                       [write-crash-log! (-> (or/c string? #f) string? string? void?)]))
+                       [write-crash-log! (-> (or/c string? #f) string? string? void?)]
+                       [compute-parent-id
+                        (->* ((listof any/c)) ((or/c any/c #f)) (or/c any/c #f))]
+                       [inject-system-instructions
+                        (-> (listof any/c) (listof string?) (listof any/c))]))
 
 ;; ============================================================
 ;; Helpers
@@ -105,6 +109,41 @@
 
 (define (session-index-path dir)
   (build-path dir "session.index"))
+
+;; ============================================================
+;; Pure helpers (extracted for testability)
+;; ============================================================
+
+;; compute-parent-id : (listof message?) (or/c index? #f) -> (or/c message-id? #f)
+;; Pure: determines the parent message ID from entries or index.
+;; File-read is done by the caller; this function only inspects data.
+(define (compute-parent-id entries [idx #f])
+  (if idx
+      (let ([leaf (active-leaf idx)])
+        (cond
+          [(not leaf) #f]
+          ;; Skip session-info entries for parent calculation
+          [(eq? (message-kind leaf) 'session-info) #f]
+          [else (message-id leaf)]))
+      (let ([existing (filter (lambda (m) (not (eq? (message-kind m) 'session-info)))
+                                entries)])
+        (if (null? existing)
+            #f
+            (message-id (last existing))))))
+
+;; inject-system-instructions : (listof message?) (listof string?) -> (listof message?)
+;; Pure: prepends a system message if instructions are non-empty.
+(define (inject-system-instructions context-messages system-instrs)
+  (if (null? system-instrs)
+      context-messages
+      (cons (make-message (generate-id)
+                          #f
+                          'system
+                          'system-instruction
+                          (list (make-text-part (string-join system-instrs "\n\n")))
+                          (now-seconds)
+                          (hasheq))
+            context-messages)))
 
 ;; ============================================================
 ;; build-session-context
@@ -133,22 +172,9 @@
         (let ()
           ;; Determine parent from active leaf in index (#521: use stored IDs)
           (define parent-id
-            (if idx
-                (let ([leaf (active-leaf idx)])
-                  (cond
-                    [(not leaf) #f]
-                    ;; Skip session-info entries for parent calculation
-                    [(eq? (message-kind leaf) 'session-info) #f]
-                    [else (message-id leaf)]))
-                ;; No index yet — determine from log
-                (let* ([raw-existing (if (file-exists? log-path)
-                                         (load-session-log log-path)
-                                         '())]
-                       [existing (filter (lambda (m) (not (eq? (message-kind m) 'session-info)))
-                                         raw-existing)])
-                  (if (null? existing)
-                      #f
-                      (message-id (last existing))))))
+            (compute-parent-id
+             (if (file-exists? log-path) (load-session-log log-path) '())
+             idx))
           (make-message (generate-id)
                         parent-id
                         'user
@@ -201,17 +227,7 @@
     (set-agent-session-model-name! sess (hash-ref settings 'model)))
 
   ;; Inject system instructions as an ephemeral system message prefix
-  (define system-instrs (agent-session-system-instructions sess))
-  (if (null? system-instrs)
-      context-messages
-      (cons (make-message (generate-id)
-                          #f
-                          'system
-                          'system-instruction
-                          (list (make-text-part (string-join system-instrs "\n\n")))
-                          (now-seconds)
-                          (hasheq))
-            context-messages)))
+  (inject-system-instructions context-messages (agent-session-system-instructions sess)))
 
 ;; ============================================================
 ;; dispatch-iteration
