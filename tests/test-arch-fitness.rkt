@@ -358,3 +358,87 @@
                     (format "dict-ref config keys missing accessors: ~a" missing-accessors)))))
 
 (run-tests v0377-suite)
+
+;; ════════════════════════════════════════════════════════════
+;; v0.39.6 additions: R-18 through R-23 hard gates
+;; ════════════════════════════════════════════════════════════
+
+(define v0396-suite
+  (test-suite "v0.39.6-hard-gates"
+
+    ;; R-18: Pure modules must not gain I/O imports
+    (test-case "R-18: decision.rkt has no I/O imports"
+      (define p (build-path q-dir "runtime" "iteration" "decision.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp" "racket/os"))
+                     "decision.rkt must not import I/O modules")))
+
+    (test-case "R-18: event-payloads.rkt has no I/O imports"
+      (define p (build-path q-dir "util" "event-payloads.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp" "racket/os"))
+                     "event-payloads.rkt must not import I/O modules")))
+
+    (test-case "R-18: event-codec.rkt has no I/O imports"
+      (define p (build-path q-dir "util" "event-codec.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/tcp" "racket/os"))
+                     "event-codec.rkt must not import I/O modules")))
+
+    ;; R-19: Parser modules must not require I/O modules
+    (test-case "R-19: GSD command-parser has no I/O imports"
+      (define p (build-path q-dir "extensions" "gsd" "command-parser.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp" "racket/os"))
+                     "command-parser.rkt must not import I/O modules")))
+
+    (test-case "R-19: TUI command-parse has no I/O imports"
+      (define p (build-path q-dir "tui" "command-parse.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp" "racket/os"))
+                     "command-parse.rkt must not import I/O modules")))
+
+    (test-case "R-19: CLI args has no I/O imports"
+      (define p (build-path q-dir "cli" "args.rkt"))
+      (when (file-exists? p)
+        (define reqs (extract-requires p))
+        (check-false (imports-from? reqs '("racket/port" "racket/file" "racket/tcp" "racket/os"))
+                     "cli/args.rkt must not import I/O modules")))
+
+    ;; R-20: Provide surface budget check (informational)
+    (test-case "R-20: Provide surface budget (informational)"
+      (define dirs-to-check '("runtime" "agent" "llm" "tools" "tui" "interfaces" "util" "extensions"))
+      (define all-files
+        (append* (for/list ([d (in-list dirs-to-check)])
+                   (rkt-files-in d))))
+      (define alert-threshold
+        (cdr (assoc 'alert-threshold (cdr (assoc 'provide-surface-budget policy)))))
+      (define high-provides
+        (for/list ([f (in-list all-files)]
+                   #:when (> (count-provides f) alert-threshold))
+          (cons (path->string (find-relative-path (simplify-path q-dir) (simplify-path f)))
+                (count-provides f))))
+      (when (not (null? high-provides))
+        (displayln (format "INFO: Modules with >~a provides: ~a" alert-threshold high-provides)))
+      (check-true #t "Informational -- always passes"))
+
+    ;; R-21: Fan-in hard gate (graduated from informational)
+    (test-case "R-21: Require fan-in budget (hard gate)"
+      (define dirs-to-check '("runtime" "agent" "llm" "tools" "tui" "interfaces"))
+      (define all-files
+        (append* (for/list ([d (in-list dirs-to-check)])
+                   (rkt-files-in d))))
+      (define over-limit
+        (for/list ([f (in-list all-files)]
+                   #:when (> (count-requires f) max-fan-in))
+          (cons (path->string (find-relative-path (simplify-path q-dir) (simplify-path f)))
+                (count-requires f))))
+      (check-true (<= (length over-limit) 3)
+                  (format "More than 3 files exceed fan-in limit of ~a: ~a" max-fan-in over-limit)))))
+
+(run-tests v0396-suite)
