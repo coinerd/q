@@ -114,6 +114,9 @@
           [session-history (-> agent-session? list?)]
           [session-active? (-> agent-session? boolean?)]
           [close-session! (-> agent-session? void?)])
+         ;; Pure helpers (W1 #4191)
+         slice-entries-up-to
+         make-session-struct
          maybe-compact-context
          ;; Thinking level control (#1153)
          thinking-levels
@@ -142,6 +145,59 @@
   (build-path dir "session.index"))
 
 ;; ============================================================
+;; Pure helpers (extracted for testability)
+;; ============================================================
+
+;; slice-entries-up-to : (listof message?) (or/c string? #f) -> (listof message?)
+;; Pure: returns entries truncated up to and including parent-entry-id.
+;; If parent-entry-id is #f or not found, returns all entries.
+(define (slice-entries-up-to entries parent-entry-id)
+  (if parent-entry-id
+      (let ([id-exists?
+             (for/or ([e (in-list entries)])
+               (equal? (message-id e) parent-entry-id))])
+        (cond
+          [(not id-exists?) entries]
+          [else
+           (let loop ([remaining entries]
+                      [acc '()])
+             (cond
+               [(null? remaining) (reverse acc)]
+               [(equal? (message-id (car remaining)) parent-entry-id)
+                (reverse (cons (car remaining) acc))]
+               [else (loop (cdr remaining) (cons (car remaining) acc))]))]))
+      entries))
+
+;; make-session-struct : keyword-based pure constructor wrapping agent-session.
+;; All fields are keyword args with sensible defaults.
+(define (make-session-struct #:id id
+                             #:dir dir
+                             #:provider [provider #f]
+                             #:tool-registry [tool-registry #f]
+                             #:event-bus [event-bus #f]
+                             #:extension-registry [extension-registry #f]
+                             #:model-name [model-name #f]
+                             #:system-instructions [system-instructions '()]
+                             #:index [index #f]
+                             #:queue [queue #f]
+                             #:config [config #f]
+                             #:active? [active? #t]
+                             #:start-time [start-time (now-seconds)]
+                             #:compacting? [compacting? #f]
+                             #:last-compaction-time [last-compaction-time #f]
+                             #:persisted? [persisted? #f]
+                             #:pending-entries [pending-entries '()]
+                             #:thinking-level [thinking-level #f]
+                             #:shutdown-requested? [shutdown-requested? #f]
+                             #:force-shutdown? [force-shutdown? #f]
+                             #:prompt-running? [prompt-running? #f])
+  (agent-session id dir provider tool-registry event-bus extension-registry
+                 model-name system-instructions index queue config active?
+                 start-time compacting? last-compaction-time persisted?
+                 pending-entries thinking-level shutdown-requested?
+                 force-shutdown? prompt-running?))
+
+;; ============================================================
 ;; make-agent-session
 ;; ============================================================
 
@@ -158,27 +214,19 @@
   (define session-created-at (now-seconds))
 
   (define sess
-    (agent-session sid
-                   dir
-                   (config-provider cfg)
-                   (config-tool-registry cfg)
-                   (config-event-bus cfg)
-                   (config-extension-registry cfg)
-                   (config-model-name cfg)
-                   (config-system-instructions cfg)
-                   #f ; index
-                   (make-queue)
-                   cfg
-                   #t ; active
-                   session-created-at
-                   #f ; compacting?
-                   #f ; last-compaction-time
-                   #f ; persisted?
-                   '() ; pending-entries
-                   (config-thinking-level cfg)
-                   #f ; shutdown-requested?
-                   #f ; force-shutdown?
-                   #f)) ; prompt-running?
+    (make-session-struct
+     #:id sid
+     #:dir dir
+     #:provider (config-provider cfg)
+     #:tool-registry (config-tool-registry cfg)
+     #:event-bus (config-event-bus cfg)
+     #:extension-registry (config-extension-registry cfg)
+     #:model-name (config-model-name cfg)
+     #:system-instructions (config-system-instructions cfg)
+     #:queue (make-queue)
+     #:config cfg
+     #:start-time session-created-at
+     #:thinking-level (config-thinking-level cfg)))
 
   ;; Emit session.started
   (emit-typed-event! (agent-session-event-bus sess)
@@ -245,27 +293,20 @@
     (raise-session-error 'resume-agent-session "session resume blocked by extension" session-id))
 
   (define sess
-    (agent-session session-id
-                   dir
-                   (config-provider cfg)
-                   (config-tool-registry cfg)
-                   (config-event-bus cfg)
-                   (config-extension-registry cfg)
-                   (config-model-name cfg)
-                   (config-system-instructions cfg)
-                   idx
-                   (make-queue)
-                   cfg
-                   #t
-                   (now-seconds)
-                   #f
-                   #f
-                   #t
-                   '()
-                   (config-thinking-level cfg)
-                   #f
-                   #f
-                   #f))
+    (make-session-struct
+     #:id session-id
+     #:dir dir
+     #:provider (config-provider cfg)
+     #:tool-registry (config-tool-registry cfg)
+     #:event-bus (config-event-bus cfg)
+     #:extension-registry (config-extension-registry cfg)
+     #:model-name (config-model-name cfg)
+     #:system-instructions (config-system-instructions cfg)
+     #:index idx
+     #:queue (make-queue)
+     #:config cfg
+     #:persisted? #t
+     #:thinking-level (config-thinking-level cfg)))
 
   (emit-session-event! (agent-session-event-bus sess)
                        session-id
@@ -310,22 +351,7 @@
         '()))
 
   (define entries-to-copy
-    (if parent-entry-id
-        (let ()
-          (define id-exists?
-            (for/or ([e (in-list entries)])
-              (equal? (message-id e) parent-entry-id)))
-          (cond
-            [(not id-exists?) entries]
-            [else
-             (let loop ([remaining entries]
-                        [acc '()])
-               (cond
-                 [(null? remaining) (reverse acc)]
-                 [(equal? (message-id (car remaining)) parent-entry-id)
-                  (reverse (cons (car remaining) acc))]
-                 [else (loop (cdr remaining) (cons (car remaining) acc))]))]))
-        entries))
+    (slice-entries-up-to entries parent-entry-id))
 
   (define new-log-path (session-log-path new-dir))
   (append-entries! new-log-path entries-to-copy)
@@ -337,27 +363,20 @@
         (build-index! new-log-path new-idx-path)))
 
   (define new-sess
-    (agent-session new-id
-                   new-dir
-                   (agent-session-provider sess)
-                   (agent-session-tool-registry sess)
-                   (agent-session-event-bus sess)
-                   (agent-session-extension-registry sess)
-                   (agent-session-model-name sess)
-                   (agent-session-system-instructions sess)
-                   new-idx
-                   (make-queue)
-                   (agent-session-config sess)
-                   #t
-                   (now-seconds)
-                   #f
-                   #f
-                   #t
-                   '()
-                   (agent-session-thinking-level sess)
-                   #f
-                   #f
-                   #f))
+    (make-session-struct
+     #:id new-id
+     #:dir new-dir
+     #:provider (agent-session-provider sess)
+     #:tool-registry (agent-session-tool-registry sess)
+     #:event-bus (agent-session-event-bus sess)
+     #:extension-registry (agent-session-extension-registry sess)
+     #:model-name (agent-session-model-name sess)
+     #:system-instructions (agent-session-system-instructions sess)
+     #:index new-idx
+     #:queue (make-queue)
+     #:config (agent-session-config sess)
+     #:persisted? #t
+     #:thinking-level (agent-session-thinking-level sess)))
 
   (emit-session-event! (agent-session-event-bus sess)
                        (agent-session-session-id sess)
