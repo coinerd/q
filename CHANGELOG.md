@@ -1,12 +1,12 @@
 # Changelog
 
-## v0.39.8 -- 2026-05-12
+## v0.39.8 — 2026-05-12
 
 ### Fixed
 - BUG-01: Fix sink-append-entries! infinite recursion in step-interpreter.rkt
 - R-01c: jsonl-read-all-valid-with-count delegates to jsonl-read-from-port
 
-## v0.39.7 -- 2026-05-12
+## v0.39.7 — 2026-05-12
 
 ### Fixed
 - REG-01: Fix deleted runtime/iteration.rkt still imported by agent-session.rkt and session-lifecycle.rkt
@@ -20,7 +20,7 @@
 - tests/test-error-classify-table.rkt: 6 tests for error classification table
 - tests/test-arch-fitness.rkt: 8 new architecture fitness hard gate tests
 
-## v0.38.14 -- 2026-05-07
+## v0.38.14 — 2026-05-07
 
 ### Changed
 - DEBT-02: Rename hook event symbols `'tool.execution.start` -> `'started`, `'tool.execution.end` -> `'completed` in hook-types.rkt, tool-coordinator.rkt, streaming-observer.rkt (W0)
