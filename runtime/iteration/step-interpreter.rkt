@@ -97,7 +97,7 @@
 (define (sink-append-entries! infra new-msgs [sink #f])
   (if sink
       (send sink sink-append-entries! new-msgs)
-      (append-entries! (loop-infra-log-path infra) new-msgs)))
+      (sink-append-entries! infra new-msgs)))
 
 ;; ============================================================
 ;; execute-pending-tool-calls
@@ -156,14 +156,14 @@
   (define termination (loop-result-termination-reason result))
   (if (member termination success-completion-reasons)
       (begin
-        (append-entries! (loop-infra-log-path infra) new-msgs)
+        (sink-append-entries! infra new-msgs)
         (let-values ([(amended-result after-hook-res)
                       (maybe-dispatch-hooks (loop-infra-ext-reg infra) 'turn-end result)])
           (if (and after-hook-res (eq? (hook-result-action after-hook-res) 'amend))
               amended-result
               result)))
       (begin
-        (append-entries! (loop-infra-log-path infra) new-msgs)
+        (sink-append-entries! infra new-msgs)
         result)))
 
 ;; ============================================================
@@ -197,7 +197,7 @@
      (define stop-result (handle-stop-action result new-msgs infra counters ws config))
      (directive-stop stop-result)]
     ['stop-hard-limit
-     (append-entries! (loop-infra-log-path infra) new-msgs)
+     (sink-append-entries! infra new-msgs)
      (emit-session-event! (loop-infra-bus infra)
                           (loop-infra-session-id infra)
                           "runtime.error"
@@ -214,7 +214,7 @@
                       'max-iterations-exceeded
                       (hash-set (loop-result-metadata result) 'maxIterationsReached #t)))]
     ['stop-soft-limit
-     (append-entries! (loop-infra-log-path infra) new-msgs)
+     (sink-append-entries! infra new-msgs)
      (emit-session-event! (loop-infra-bus infra)
                           (loop-infra-session-id infra)
                           "iteration.soft-warning"
@@ -247,7 +247,7 @@
              updated-ctx)))
      (directive-recurse ctx-after-budget (make-next-counters counters) ws)]
     ['continue
-     (append-entries! (loop-infra-log-path infra) new-msgs)
+     (sink-append-entries! infra new-msgs)
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
      (define loop-warning

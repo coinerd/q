@@ -45,11 +45,6 @@
   (check-false (regexp-match? #rx"all-from-out" content)
                "agent/loop.rkt should have explicit provides"))
 
-(test-case "runtime/iteration.rkt does not use all-from-out"
-  (define content (call-with-input-file (q-file "runtime" "iteration.rkt") port->string))
-  (check-false (regexp-match? #rx"all-from-out" content)
-               "runtime/iteration.rkt should have explicit provides"))
-
 (test-case "tools/scheduler.rkt does not use all-from-out"
   (define content (call-with-input-file (q-file "tools" "scheduler.rkt") port->string))
   (check-false (regexp-match? #rx"all-from-out" content)

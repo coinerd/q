@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.39.7 -- 2026-05-12
+
+### Fixed
+- REG-01: Fix deleted runtime/iteration.rkt still imported by agent-session.rkt and session-lifecycle.rkt
+- R-01: jsonl read functions delegate to jsonl-read-from-port (single-source logic)
+- R-02/R-10: Wire sink-append-entries! abstraction in step-interpreter (5 call sites)
+- N-03: Remove dead tool-execute import from extensions/tool-api.rkt
+- R-18/R-19/R-20/R-21: Architecture fitness hard gates (effect leakage, parser separation, provide surface, fan-in)
+- R-23: Error classification data table in auto-retry.rkt
+
+### Added
+- tests/test-error-classify-table.rkt: 6 tests for error classification table
+- tests/test-arch-fitness.rkt: 8 new architecture fitness hard gate tests
+
 ## v0.38.14 -- 2026-05-07
 
 ### Changed

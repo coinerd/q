@@ -43,7 +43,7 @@
                   session-switch-payload
                   session-id-payload)
          "../util/ids.rkt"
-         (only-in "iteration.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../agent/event-structs/session-events.rkt"
                   session-start-event
