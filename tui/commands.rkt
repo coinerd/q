@@ -16,6 +16,11 @@
          racket/string
          racket/list
          "state.rkt"
+         (only-in "command-parse.rkt"
+                  parsed-command?
+                  parsed-command-canonical-name
+                  parsed-command-args
+                  parsed-command-arg-kind)
          "palette.rkt"
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
@@ -173,9 +178,18 @@
   ;; Mark dirty (defensive: slash commands always change state)
   (set-box! (cmd-ctx-needs-redraw-box cctx) #t)
   (define state (unbox (cmd-ctx-state-box cctx)))
-  ;; Handle structured commands (lists)
+  ;; R-17: Normalize to internal dispatch form from parsed-command struct
+  (define sym
+    (if (parsed-command? cmd)
+        (parsed-command-canonical-name cmd)
+        cmd))
+  (define args
+    (if (parsed-command? cmd)
+        (parsed-command-args cmd)
+        '()))
+  ;; Handle structured commands (lists from legacy path or parsed-command)
   (cond
-    [(list? cmd)
+    [(and (list? cmd) (not (parsed-command? cmd)))
      (match (car cmd)
        ['switch (handle-switch-command cctx (cadr cmd))]
        ['children (handle-children-command cctx (cadr cmd))]
@@ -188,8 +202,10 @@
         (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
         'continue]
        [_ 'continue])]
-    ;; Handle simple symbol commands
     [else
+     ;; R-17: Unified dispatch — sym comes from parsed-command or symbol
+     (when (parsed-command? cmd)
+       (set! cmd sym))
      (match cmd
        ['model (handle-model-command cctx)]
        ['history (handle-history-command cctx)]
