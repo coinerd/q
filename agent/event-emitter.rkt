@@ -61,8 +61,10 @@
                    (typed-event-session-id evt)
                    'turn-id
                    (typed-event-turn-id evt)))
-      ;; Legacy fallback: struct->vector reflection
+      ;; Legacy fallback: struct->vector reflection (R-13: prefer serializer registry)
       (let ()
+        (log-warning "event-struct->hasheq: no serializer for '~a', using reflection fallback"
+                     (typed-event-type evt))
         (define vec (struct->vector evt))
         (define app-start (+ 1 typed-event-base-field-count))
         (define base
