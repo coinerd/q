@@ -54,6 +54,7 @@
        ['session-id (session-id-payload (hash-ref h 'sessionId))]
        [_ h])]
     ;; Legacy heuristic decode (backward compatible with pre-v0.28.11 data)
+    ;; R-13: Deprecated -- will be removed in v0.40.x. All events should use __type tags.
     [(and (hash-has-key? h 'error) (hash-has-key? h 'errorType))
      (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
     [(and (hash-has-key? h 'session-id) (hash-has-key? h 'message))
