@@ -65,6 +65,8 @@
       (with-registry-lock reg (lambda () (hash-ref (tool-registry-tools-box reg) name #f)))))
 
 ;; tool->jsexpr : tool? -> hash?
+;; Returns a JSON-serializable hash representation of a tool.
+;; Safe for external consumers (SDK, JSON mode, extensions).
 ;; Serialize a tool struct to the OpenAI normalized format.
 (define (tool->jsexpr t)
   (define base-fn
@@ -89,19 +91,22 @@
 
 (define (tool-active? reg name)
   (with-registry-lock reg
-    (lambda ()
-      (define active-set (unbox (tool-registry-active-set-box reg)))
-      (or (not active-set) (set-member? active-set name)))))
+                      (lambda ()
+                        (define active-set (unbox (tool-registry-active-set-box reg)))
+                        (or (not active-set) (set-member? active-set name)))))
 
 (define (list-active-tools reg)
   (with-registry-lock reg
                       (lambda ()
                         (define active-set (unbox (tool-registry-active-set-box reg)))
                         (filter (lambda (t)
-                                  (or (not active-set)
-                                      (set-member? active-set (tool-name t))))
+                                  (or (not active-set) (set-member? active-set (tool-name t))))
                                 (hash-values (tool-registry-tools-box reg))))))
 
+;; R-12/R-24: list-active-tools-jsexpr — primary external API
+;; Returns JSON-serializable list of active tools. Use this for
+;; SDK consumers, JSON mode, and extension API surfaces.
+;; tool-registry-tools returns internal tool? values for tool-layer use only.
 (define (list-active-tools-jsexpr reg)
   (map tool->jsexpr (list-active-tools reg)))
 
