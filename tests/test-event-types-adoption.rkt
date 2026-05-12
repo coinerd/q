@@ -20,33 +20,36 @@
 ;; ============================================================
 
 (test-case "typed-event->event preserves type as event name"
-  (define te (make-turn-start-event #:session-id "s1"
-                                     #:turn-id "t1"
-                                     #:timestamp TS
-                                     #:model "gpt-4"
-                                     #:provider "openai"))
+  (define te
+    (make-turn-start-event #:session-id "s1"
+                           #:turn-id "t1"
+                           #:timestamp TS
+                           #:model "gpt-4"
+                           #:provider "openai"))
   (define evt (typed-event->event te))
   (check-equal? (event-ev evt) "turn.started")
   (check-equal? (event-session-id evt) "s1")
   (check-equal? (event-turn-id evt) "t1"))
 
 (test-case "typed-event->event packs extra fields into payload"
-  (define te (make-turn-start-event #:session-id "s1"
-                                     #:turn-id "t1"
-                                     #:timestamp TS
-                                     #:model "glm-5"
-                                     #:provider "anthropic"))
+  (define te
+    (make-turn-start-event #:session-id "s1"
+                           #:turn-id "t1"
+                           #:timestamp TS
+                           #:model "glm-5"
+                           #:provider "anthropic"))
   (define evt (typed-event->event te))
   (define payload (event-payload evt))
   (check-equal? (hash-ref payload 'model #f) "glm-5")
   (check-equal? (hash-ref payload 'provider #f) "anthropic"))
 
 (test-case "typed-event->event strips base fields from payload"
-  (define te (make-turn-start-event #:session-id "s1"
-                                     #:turn-id "t1"
-                                     #:timestamp TS
-                                     #:model "test"
-                                     #:provider "test"))
+  (define te
+    (make-turn-start-event #:session-id "s1"
+                           #:turn-id "t1"
+                           #:timestamp TS
+                           #:model "test"
+                           #:provider "test"))
   (define evt (typed-event->event te))
   (define payload (event-payload evt))
   (check-false (hash-has-key? payload 'type))
@@ -62,10 +65,7 @@
   (define bus (make-event-bus))
   (define received (box #f))
   (subscribe! bus (lambda (evt) (set-box! received evt)))
-  (define te (make-session-start-event #:session-id "s1"
-                                        #:turn-id #f
-                                        #:timestamp TS
-                                        #:model "test"))
+  (define te (make-session-start-event #:session-id "s1" #:turn-id #f #:timestamp TS #:model "test"))
   (bus-emit-typed! bus te)
   (check-pred event? (unbox received))
   (check-equal? (event-ev (unbox received)) "session.started"))
@@ -75,11 +75,12 @@
 ;; ============================================================
 
 (test-case "typed-event JSON round-trip preserves type"
-  (define te (make-message-start-event #:session-id "s1"
-                                        #:turn-id "t1"
-                                        #:timestamp TS
-                                        #:role "assistant"
-                                        #:model "gpt-4"))
+  (define te
+    (make-message-start-event #:session-id "s1"
+                              #:turn-id "t1"
+                              #:timestamp TS
+                              #:role "assistant"
+                              #:model "gpt-4"))
   (define h (typed-event->jsexpr te))
   (check-equal? (hash-ref h 'type) "message.started")
   (check-equal? (hash-ref h 'role) "assistant")
@@ -90,10 +91,7 @@
 
 (test-case "all known event types deserialize"
   (for ([type (in-list (all-known-event-types))])
-    (define h (hasheq 'type type
-                      'timestamp TS
-                      'sessionId "s1"
-                      'turnId "t1"))
+    (define h (hasheq 'type type 'timestamp TS 'sessionId "s1" 'turnId "t1"))
     (define te (jsexpr->typed-event h))
     (check-pred typed-event? te (format "type ~a should deserialize" type))))
 
@@ -111,17 +109,16 @@
 (test-case "bus handles both raw and typed events"
   (define bus (make-event-bus))
   (define raw-count (box 0))
-  (subscribe! bus
-              (lambda (evt)
-                (set-box! raw-count (add1 (unbox raw-count)))))
+  (subscribe! bus (lambda (evt) (set-box! raw-count (add1 (unbox raw-count)))))
   ;; Raw emit
   (publish! bus (make-event "test.raw" 1000 "s1" #f (hasheq)))
   ;; Typed emit
-  (define te (make-turn-end-event #:session-id "s1"
-                                   #:turn-id "t1"
-                                   #:timestamp TS
-                                   #:reason "done"
-                                   #:duration-ms 100))
+  (define te
+    (make-turn-end-event #:session-id "s1"
+                         #:turn-id "t1"
+                         #:timestamp TS
+                         #:reason "done"
+                         #:duration-ms 100))
   (bus-emit-typed! bus te)
   (check-equal? (unbox raw-count) 2))
 
@@ -130,32 +127,32 @@
 ;; ============================================================
 
 (test-case "tool-execution typed events"
-  (define te (make-tool-execution-start-event #:session-id "s1"
-                                               #:turn-id "t1"
-                                               #:timestamp TS
-                                               #:tool-name "bash"
-                                               #:tool-call-id "tc1"))
+  (define te
+    (make-tool-execution-start-event #:session-id "s1"
+                                     #:turn-id "t1"
+                                     #:timestamp TS
+                                     #:tool-name "bash"
+                                     #:tool-call-id "tc1"))
   (check-pred tool-execution-start-event? te)
   (check-equal? (tool-execution-start-event-tool-name te) "bash")
   (define evt (typed-event->event te))
   (check-equal? (hash-ref (event-payload evt) 'toolName) "bash"))
 
 (test-case "session lifecycle typed events"
-  (define te (make-session-shutdown-event #:session-id "s1"
-                                           #:turn-id #f
-                                           #:timestamp TS
-                                           #:reason "user"))
+  (define te
+    (make-session-shutdown-event #:session-id "s1" #:turn-id #f #:timestamp TS #:reason "user"))
   (check-pred session-shutdown-event? te)
   (define h (typed-event->jsexpr te))
   (check-equal? (hash-ref h 'type) "session.shutdown")
   (check-equal? (hash-ref h 'reason) "user"))
 
 (test-case "provider typed events"
-  (define te (make-provider-request-event #:session-id "s1"
-                                           #:turn-id "t1"
-                                           #:timestamp TS
-                                           #:model "gpt-4"
-                                           #:provider "openai"))
+  (define te
+    (make-provider-request-event #:session-id "s1"
+                                 #:turn-id "t1"
+                                 #:timestamp TS
+                                 #:model "gpt-4"
+                                 #:provider "openai"))
   (check-pred provider-request-event? te)
   (define h (typed-event->jsexpr te))
   (define te2 (jsexpr->typed-event h))

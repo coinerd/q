@@ -56,19 +56,17 @@
 ;; ============================================================
 
 (test-case "delete-lines: file not found"
-  (define result (tool-delete-lines (hasheq 'path "/nonexistent-dl-test.txt"
-                                            'start-line 1 'end-line 2)))
+  (define result
+    (tool-delete-lines (hasheq 'path "/nonexistent-dl-test.txt" 'start-line 1 'end-line 2)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                "not found")))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "not found")))
 
 (test-case "delete-lines: start-line < 1"
   (define tmp (make-temporary-file "q-test-dl-~a.txt"))
   (display-to-file "a\nb\nc" tmp #:exists 'replace)
   (define result (tool-delete-lines (hasheq 'path tmp 'start-line 0 'end-line 2)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                "out of range"))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "out of range"))
   (delete-file tmp))
 
 (test-case "delete-lines: end-line > total lines"
@@ -85,28 +83,23 @@
   (display-to-file "a\nb\nc" tmp #:exists 'replace)
   (define result (tool-delete-lines (hasheq 'path tmp 'start-line 3 'end-line 1)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                "must be"))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "must be"))
   (delete-file tmp))
 
 (test-case "delete-lines: missing path"
   (define result (tool-delete-lines (hasheq 'start-line 1 'end-line 2)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                "path")))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "path")))
 
 (test-case "delete-lines: missing start-line"
   (define result (tool-delete-lines (hasheq 'path "/tmp/test.txt" 'end-line 2)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                "start-line")))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "start-line")))
 
 (test-case "delete-lines: non-integer start-line"
-  (define result (tool-delete-lines (hasheq 'path "/tmp/test.txt"
-                                            'start-line "abc" 'end-line 2)))
+  (define result (tool-delete-lines (hasheq 'path "/tmp/test.txt" 'start-line "abc" 'end-line 2)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                "integer")))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "integer")))
 
 ;; ============================================================
 ;; tool-delete-lines — details and backup
@@ -134,7 +127,8 @@
   (check-true (file-exists? backup))
   ;; Cleanup
   (delete-file tmp)
-  (when (file-exists? backup) (delete-file backup)))
+  (when (file-exists? backup)
+    (delete-file backup)))
 
 (test-case "delete-lines: preview shows deleted content"
   (define tmp (make-temporary-file "q-test-dl-~a.txt"))

@@ -61,7 +61,9 @@
   (cleanup tmp))
 
 (test-case "generate-project-tree: respects max-entries"
-  (define entries (for/list ([i (in-range 50)]) (format "file~a.rkt" i)))
+  (define entries
+    (for/list ([i (in-range 50)])
+      (format "file~a.rkt" i)))
   (define tmp (make-temp-project-tree entries))
   (define tree (generate-project-tree tmp #:max-entries 10))
   (check-equal? (length tree) 10)
@@ -85,7 +87,7 @@
   (check-true (string-contains? str "Project file tree:"))
   (check-true (string-contains? str "a.rkt"))
   (check-true (string-contains? str "b.rkt"))
-  (check-false (string-contains? str "src/"))  ;; only shows filenames with indent
+  (check-false (string-contains? str "src/")) ;; only shows filenames with indent
   (cleanup tmp))
 
 (test-case "project-tree->string: empty dir returns empty string"

@@ -11,8 +11,9 @@
 ;; Import the real closure factory from runtime/working-set.rkt (W2)
 (require (only-in "../runtime/working-set.rkt"
                   make-ws-context
-                  ws-entry-path ws-entry-message-id ws-entry-token-estimate))
-
+                  ws-entry-path
+                  ws-entry-message-id
+                  ws-entry-token-estimate))
 
 ;; ============================================================
 ;; 1. Factory returns a callable dispatch function
@@ -24,8 +25,7 @@
 
 (test-case "ws-context rejects unknown actions"
   (define ws (make-ws-context))
-  (check-exn exn:fail?
-             (lambda () (ws 'unknown-action))))
+  (check-exn exn:fail? (lambda () (ws 'unknown-action))))
 
 ;; ============================================================
 ;; 2. Entries get/add/remove
@@ -163,10 +163,8 @@
 
 (test-case "add validates path is a string"
   (define ws (make-ws-context))
-  (check-exn exn:fail?
-             (lambda () (ws 'add! 123 "msg-1" 100))))
+  (check-exn exn:fail? (lambda () (ws 'add! 123 "msg-1" 100))))
 
 (test-case "add validates token-estimate is a number"
   (define ws (make-ws-context))
-  (check-exn exn:fail?
-             (lambda () (ws 'add! "/tmp/foo.rkt" "msg-1" "not-a-number"))))
+  (check-exn exn:fail? (lambda () (ws 'add! "/tmp/foo.rkt" "msg-1" "not-a-number"))))

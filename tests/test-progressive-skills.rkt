@@ -38,17 +38,18 @@
 ;; ============================================================
 
 (test-case "skill-summary-text formats single skill"
-  (define skills (list (hasheq 'name "reviewer"
-                               'description "Read-only code review"
-                               'content "Full content ignored")))
+  (define skills
+    (list
+     (hasheq 'name "reviewer" 'description "Read-only code review" 'content "Full content ignored")))
   (define summary (skill-summary-text skills))
   (check-true (string-contains? summary "reviewer"))
   (check-true (string-contains? summary "Read-only code review"))
   (check-false (string-contains? summary "Full content ignored")))
 
 (test-case "skill-summary-text formats multiple skills"
-  (define skills (list (hasheq 'name "builder" 'description "Build things" 'content "x")
-                       (hasheq 'name "reviewer" 'description "Review things" 'content "y")))
+  (define skills
+    (list (hasheq 'name "builder" 'description "Build things" 'content "x")
+          (hasheq 'name "reviewer" 'description "Review things" 'content "y")))
   (define summary (skill-summary-text skills))
   (check-true (string-contains? summary "builder"))
   (check-true (string-contains? summary "reviewer"))
@@ -69,8 +70,9 @@
 ;; ============================================================
 
 (test-case "skills-summary-section produces header + summaries"
-  (define skills (list (hasheq 'name "builder" 'description "Build" 'content "x")
-                       (hasheq 'name "reviewer" 'description "Review" 'content "y")))
+  (define skills
+    (list (hasheq 'name "builder" 'description "Build" 'content "x")
+          (hasheq 'name "reviewer" 'description "Review" 'content "y")))
   (define section (skills-summary-section skills))
   (check-true (string-contains? section "Available Skills"))
   (check-true (string-contains? section "builder"))

@@ -121,7 +121,8 @@
   (test-case "empty-resource-set creates valid empty set"
     (define empty-resource-set (dynamic-require "../skills/types.rkt" 'empty-resource-set))
     (define resource-set? (dynamic-require "../skills/types.rkt" 'resource-set?))
-    (define resource-set-instructions (dynamic-require "../skills/types.rkt" 'resource-set-instructions))
+    (define resource-set-instructions
+      (dynamic-require "../skills/types.rkt" 'resource-set-instructions))
     (define resource-set-skills (dynamic-require "../skills/types.rkt" 'resource-set-skills))
     (define rs (empty-resource-set))
     (check-pred resource-set? rs)
@@ -132,7 +133,8 @@
     (define empty-resource-set (dynamic-require "../skills/types.rkt" 'empty-resource-set))
     (define merge-resources (dynamic-require "../skills/types.rkt" 'merge-resources))
     (define resource-set? (dynamic-require "../skills/types.rkt" 'resource-set?))
-    (define resource-set-instructions (dynamic-require "../skills/types.rkt" 'resource-set-instructions))
+    (define resource-set-instructions
+      (dynamic-require "../skills/types.rkt" 'resource-set-instructions))
     (define resource-set-skills (dynamic-require "../skills/types.rkt" 'resource-set-skills))
 
     (define global-rs (empty-resource-set))

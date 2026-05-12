@@ -16,15 +16,12 @@
   (check-true (permission-config? cfg)))
 
 (test-case "make-default-permission-config with invalid callback raises error"
-  (check-exn
-   exn:fail:contract?
-   (lambda ()
-     (make-default-permission-config #:callback "not-a-procedure"))))
+  (check-exn exn:fail:contract?
+             (lambda () (make-default-permission-config #:callback "not-a-procedure"))))
 
 (test-case "make-default-permission-config with valid sets"
-  (define cfg (make-default-permission-config
-               #:auto-approved (set "read" "ls")
-               #:needs-approval (set "bash")))
+  (define cfg
+    (make-default-permission-config #:auto-approved (set "read" "ls") #:needs-approval (set "bash")))
   (check-true (permission-config? cfg))
   (check-false (tool-needs-approval? cfg "read"))
   (check-true (tool-needs-approval? cfg "bash")))
@@ -47,7 +44,9 @@
 
 (test-case "current-block-destructive accepts thunk"
   (define called? (box #f))
-  (parameterize ([current-block-destructive (lambda () (set-box! called? #t) #t)])
+  (parameterize ([current-block-destructive (lambda ()
+                                              (set-box! called? #t)
+                                              #t)])
     (check-true ((current-block-destructive)))
     (check-true (unbox called?))))
 

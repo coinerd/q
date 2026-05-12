@@ -29,7 +29,10 @@
   (when bq
     ;; content is (cons depth inner-tokens) — but may be a list
     (define content (md-token-content bq))
-    (define inner (if (pair? content) (cdr content) '()))
+    (define inner
+      (if (pair? content)
+          (cdr content)
+          '()))
     (check-not-false (andmap md-token? inner))
     (define bold-tok (findf (lambda (t) (eq? (md-token-type t) 'bold)) inner))
     (check-not-false bold-tok "blockquote should contain bold token")))
@@ -42,7 +45,10 @@
   (check-not-false ul "should produce unordered-list token")
   (when ul
     (define content (md-token-content ul))
-    (define inner (if (pair? content) (cdr content) '()))
+    (define inner
+      (if (pair? content)
+          (cdr content)
+          '()))
     (define link (findf (lambda (t) (eq? (md-token-type t) 'link)) inner))
     (check-not-false link "list should contain link token")))
 
@@ -250,8 +256,13 @@
     (check-true (string? sgr) (format "~a should produce SGR string" color))))
 
 (test-case "theme-edge: theme-color->sgr with bright colors"
-  (for ([color '(bright-black bright-red bright-green bright-yellow
-                 bright-blue bright-magenta bright-cyan bright-white)])
+  (for ([color '(bright-black bright-red
+                              bright-green
+                              bright-yellow
+                              bright-blue
+                              bright-magenta
+                              bright-cyan
+                              bright-white)])
     (define sgr (theme-color->sgr color))
     (check-true (string? sgr) (format "~a should produce SGR string" color))))
 

@@ -34,9 +34,7 @@
     (define-values (parent _name _must-be-dir?) (split-path full-path))
     (when parent
       (make-directory* parent))
-    (call-with-output-file full-path
-                           (lambda (out) (display content out))
-                           #:exists 'replace))
+    (call-with-output-file full-path (lambda (out) (display content out)) #:exists 'replace))
   (values base session-dir))
 
 ;; ============================================================
@@ -67,7 +65,7 @@
   (syntax-rules ()
     [(_ ((project-dir session-dir) files-expr) body ...)
      (let-values ([(project-dir session-dir) (make-temp-project files-expr)])
-       (dynamic-wind
-         void
-         (lambda () body ...)
-         (lambda () (cleanup-temp-project! project-dir session-dir))))]))
+       (dynamic-wind void
+                     (lambda ()
+                       body ...)
+                     (lambda () (cleanup-temp-project! project-dir session-dir))))]))

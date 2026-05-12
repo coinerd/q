@@ -29,8 +29,7 @@
     ;; --------------------------------------------------
     (test-case "subscriber handles model.stream.completed event"
       (define sub (make-terminal-subscriber))
-      (define evt (make-event "model.stream.completed"
-                              (current-seconds) "test-session" #f (hasheq)))
+      (define evt (make-event "model.stream.completed" (current-seconds) "test-session" #f (hasheq)))
       (define output (with-output-to-string (lambda () (sub evt))))
       (check-true (or (string? output) (equal? output ""))))
 
@@ -39,8 +38,8 @@
     ;; --------------------------------------------------
     (test-case "subscriber handles model.stream.delta event"
       (define sub (make-terminal-subscriber))
-      (define evt (make-event "model.stream.delta"
-                              (current-seconds) "test-session" #f (hasheq 'delta "hello")))
+      (define evt
+        (make-event "model.stream.delta" (current-seconds) "test-session" #f (hasheq 'delta "hello")))
       (define output (with-output-to-string (lambda () (sub evt))))
       (check-true (string? output)))
 
@@ -49,8 +48,12 @@
     ;; --------------------------------------------------
     (test-case "subscriber handles unknown event type"
       (define sub (make-terminal-subscriber))
-      (define evt (make-event "unknown.event.type"
-                              (current-seconds) "test-session" #f (hasheq 'text "something")))
+      (define evt
+        (make-event "unknown.event.type"
+                    (current-seconds)
+                    "test-session"
+                    #f
+                    (hasheq 'text "something")))
       (define output (with-output-to-string (lambda () (sub evt))))
       (check-true (string? output)))
 

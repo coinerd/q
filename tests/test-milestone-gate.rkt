@@ -10,11 +10,11 @@
          racket/system)
 
 (define project-root
-  (simplify-path (build-path (or (path-only (resolved-module-path-name
-                                              (variable-reference->resolved-module-path
-                                               (#%variable-reference))))
-                                 ".")
-                             "..")))
+  (simplify-path
+   (build-path (or (path-only (resolved-module-path-name (variable-reference->resolved-module-path
+                                                          (#%variable-reference))))
+                   ".")
+               "..")))
 
 (define script (build-path project-root "scripts" "milestone-gate.rkt"))
 

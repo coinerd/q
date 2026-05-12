@@ -36,16 +36,15 @@
 ;; Helpers
 ;; ============================================================
 
-(define (make-test-score
-         #:name [name "test-task"]
-         #:total [total 85]
-         #:verdict [verdict 'PASS]
-         #:correctness [corr 90]
-         #:tool-discipline [td 80]
-         #:efficiency [eff 85]
-         #:skill-compliance [sc 90]
-         #:no-regressions [nr 95]
-         #:details [details #f])
+(define (make-test-score #:name [name "test-task"]
+                         #:total [total 85]
+                         #:verdict [verdict 'PASS]
+                         #:correctness [corr 90]
+                         #:tool-discipline [td 80]
+                         #:efficiency [eff 85]
+                         #:skill-compliance [sc 90]
+                         #:no-regressions [nr 95]
+                         #:details [details #f])
   (score-result name total verdict corr td eff sc nr details))
 
 ;; ============================================================
@@ -53,17 +52,19 @@
 ;; ============================================================
 
 (test-case "generate-report creates benchmark-report"
-  (define scores (list (make-test-score #:name "task-a" #:total 90 #:verdict 'PASS)
-                       (make-test-score #:name "task-b" #:total 45 #:verdict 'PARTIAL)))
+  (define scores
+    (list (make-test-score #:name "task-a" #:total 90 #:verdict 'PASS)
+          (make-test-score #:name "task-b" #:total 45 #:verdict 'PARTIAL)))
   (define report (generate-report scores))
   (check-true (benchmark-report? report))
   (check-equal? (length (benchmark-report-results report)) 2)
   (check-true (string? (benchmark-report-version report))))
 
 (test-case "generate-report summary has correct counts"
-  (define scores (list (make-test-score #:total 90 #:verdict 'PASS)
-                       (make-test-score #:total 45 #:verdict 'PARTIAL)
-                       (make-test-score #:total 30 #:verdict 'FAIL)))
+  (define scores
+    (list (make-test-score #:total 90 #:verdict 'PASS)
+          (make-test-score #:total 45 #:verdict 'PARTIAL)
+          (make-test-score #:total 30 #:verdict 'FAIL)))
   (define report (generate-report scores))
   (define summary (benchmark-report-summary report))
   (check-equal? (hash-ref summary 'total-tasks) 3)
@@ -72,8 +73,7 @@
   (check-equal? (hash-ref summary 'fail-count) 1))
 
 (test-case "generate-report avg-score"
-  (define scores (list (make-test-score #:total 80)
-                       (make-test-score #:total 60)))
+  (define scores (list (make-test-score #:total 80) (make-test-score #:total 60)))
   (define report (generate-report scores))
   (define summary (benchmark-report-summary report))
   ;; avg-score is stored as formatted string
@@ -106,8 +106,9 @@
 ;; ============================================================
 
 (test-case "format-report-human produces readable output"
-  (define scores (list (make-test-score #:name "task-1" #:total 90 #:verdict 'PASS)
-                       (make-test-score #:name "task-2" #:total 30 #:verdict 'FAIL)))
+  (define scores
+    (list (make-test-score #:name "task-1" #:total 90 #:verdict 'PASS)
+          (make-test-score #:name "task-2" #:total 30 #:verdict 'FAIL)))
   (define report (generate-report scores))
   (define output (format-report-human report))
   (check-true (string? output))
@@ -165,8 +166,7 @@
 (test-case "comparison->jsexpr is serializable"
   (define old-scores (list (make-test-score #:name "t" #:total 50)))
   (define new-scores (list (make-test-score #:name "t" #:total 80)))
-  (define cmp (compare-reports (generate-report old-scores)
-                               (generate-report new-scores)))
+  (define cmp (compare-reports (generate-report old-scores) (generate-report new-scores)))
   (define js (comparison->jsexpr cmp))
   (check-true (hash? js))
   (define json-str (jsexpr->string js))

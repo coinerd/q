@@ -44,11 +44,7 @@
 
 (test-case "message struct with text part"
   (define text-part-1 (make-text-part "Hello, world!"))
-  (define msg-1
-    (make-message "msg-1" #f 'user 'message
-                  (list text-part-1)
-                  1775500000
-                  '#hash()))
+  (define msg-1 (make-message "msg-1" #f 'user 'message (list text-part-1) 1775500000 '#hash()))
   (check-pred message? msg-1 "message predicate")
   (check-equal? (message-id msg-1) "msg-1")
   (check-false (message-parent-id msg-1))
@@ -61,12 +57,13 @@
 (test-case "assistant message with tool call"
   (define tc-part-1 (make-tool-call-part "tc-1" "read" '#hash((path . "foo.rkt"))))
   (define msg-2
-    (make-message "msg-2" "msg-1" 'assistant 'message
-                  (list (make-text-part "I will read the file.")
-                        tc-part-1)
+    (make-message "msg-2"
+                  "msg-1"
+                  'assistant
+                  'message
+                  (list (make-text-part "I will read the file.") tc-part-1)
                   1775500100
-                  '#hash((model . "openai-compatible/default")
-                         (turnId . "turn-1"))))
+                  '#hash((model . "openai-compatible/default") (turnId . "turn-1"))))
   (check-equal? (message-parent-id msg-2) "msg-1")
   (check-equal? (message-role msg-2) 'assistant)
   (check-equal? (length (message-content msg-2)) 2))
@@ -74,7 +71,10 @@
 (test-case "tool-result message"
   (define tr-part-1 (make-tool-result-part "tc-1" '("file contents here") #f))
   (define msg-3
-    (make-message "msg-3" "msg-2" 'tool 'tool-result
+    (make-message "msg-3"
+                  "msg-2"
+                  'tool
+                  'tool-result
                   (list tr-part-1)
                   1775500200
                   '#hash((turnId . "turn-1"))))
@@ -83,7 +83,10 @@
 
 (test-case "compaction-summary message kind"
   (define msg-compact
-    (make-message "msg-c1" "msg-2" 'system 'compaction-summary
+    (make-message "msg-c1"
+                  "msg-2"
+                  'system
+                  'compaction-summary
                   (list (make-text-part "Summary of prior turns..."))
                   1775500500
                   '#hash((strategy . "summary-plus-recency"))))
@@ -98,11 +101,7 @@
 
 (test-case "simple text message roundtrip"
   (define text-part-1 (make-text-part "Hello, world!"))
-  (define msg-1
-    (make-message "msg-1" #f 'user 'message
-                  (list text-part-1)
-                  1775500000
-                  '#hash()))
+  (define msg-1 (make-message "msg-1" #f 'user 'message (list text-part-1) 1775500000 '#hash()))
   (define rt-msg-1 (roundtrip-message msg-1))
   (check-equal? (message-id rt-msg-1) (message-id msg-1))
   (check-equal? (message-parent-id rt-msg-1) (message-parent-id msg-1))
@@ -111,18 +110,18 @@
   (check-equal? (message-timestamp rt-msg-1) (message-timestamp msg-1))
   (check-equal? (message-meta rt-msg-1) (message-meta msg-1))
   (check-equal? (length (message-content rt-msg-1)) 1)
-  (check-equal? (text-part-text (car (message-content rt-msg-1)))
-                "Hello, world!"))
+  (check-equal? (text-part-text (car (message-content rt-msg-1))) "Hello, world!"))
 
 (test-case "message with tool-call part roundtrip"
   (define tc-part-1 (make-tool-call-part "tc-1" "read" '#hash((path . "foo.rkt"))))
   (define msg-2
-    (make-message "msg-2" "msg-1" 'assistant 'message
-                  (list (make-text-part "I will read the file.")
-                        tc-part-1)
+    (make-message "msg-2"
+                  "msg-1"
+                  'assistant
+                  'message
+                  (list (make-text-part "I will read the file.") tc-part-1)
                   1775500100
-                  '#hash((model . "openai-compatible/default")
-                         (turnId . "turn-1"))))
+                  '#hash((model . "openai-compatible/default") (turnId . "turn-1"))))
   (define rt-msg-2 (roundtrip-message msg-2))
   (check-equal? (length (message-content rt-msg-2)) 2)
   (define rt-tc (cadr (message-content rt-msg-2)))
@@ -132,7 +131,10 @@
 (test-case "message with tool-result part roundtrip"
   (define tr-part-1 (make-tool-result-part "tc-1" '("file contents here") #f))
   (define msg-3
-    (make-message "msg-3" "msg-2" 'tool 'tool-result
+    (make-message "msg-3"
+                  "msg-2"
+                  'tool
+                  'tool-result
                   (list tr-part-1)
                   1775500200
                   '#hash((turnId . "turn-1"))))
@@ -144,9 +146,7 @@
   (check-false (tool-result-part-is-error? rt-tr)))
 
 (test-case "message with #f parent-id stays #f after roundtrip"
-  (define msg (make-message "m-f" #f 'user 'message
-                            (list (make-text-part "hi"))
-                            1775500000 '#hash()))
+  (define msg (make-message "m-f" #f 'user 'message (list (make-text-part "hi")) 1775500000 '#hash()))
   (check-false (message-parent-id (roundtrip-message msg))))
 
 ;; ------------------------------------------------------------
@@ -155,14 +155,10 @@
 
 (test-case "message->jsexpr output has correct keys"
   (define text-part-1 (make-text-part "Hello, world!"))
-  (define msg-1
-    (make-message "msg-1" #f 'user 'message
-                  (list text-part-1)
-                  1775500000
-                  '#hash()))
+  (define msg-1 (make-message "msg-1" #f 'user 'message (list text-part-1) 1775500000 '#hash()))
   (define j1 (message->jsexpr msg-1))
   (check-equal? (hash-ref j1 'id) "msg-1")
-  (check-equal? (hash-ref j1 'parentId) #f)  ; null in JSON
+  (check-equal? (hash-ref j1 'parentId) #f) ; null in JSON
   (check-equal? (hash-ref j1 'role) "user")
   (check-equal? (hash-ref j1 'kind) "message")
   (check-equal? (hash-ref j1 'timestamp) 1775500000)
@@ -173,12 +169,13 @@
 (test-case "tool-call serialization in message->jsexpr"
   (define tc-part-1 (make-tool-call-part "tc-1" "read" '#hash((path . "foo.rkt"))))
   (define msg-2
-    (make-message "msg-2" "msg-1" 'assistant 'message
-                  (list (make-text-part "I will read the file.")
-                        tc-part-1)
+    (make-message "msg-2"
+                  "msg-1"
+                  'assistant
+                  'message
+                  (list (make-text-part "I will read the file.") tc-part-1)
                   1775500100
-                  '#hash((model . "openai-compatible/default")
-                         (turnId . "turn-1"))))
+                  '#hash((model . "openai-compatible/default") (turnId . "turn-1"))))
   (define j2 (message->jsexpr msg-2))
   (define tc-in-j2 (cadr (hash-ref j2 'content)))
   (check-equal? (hash-ref tc-in-j2 'type) "tool-call")
@@ -190,9 +187,7 @@
 ;; ------------------------------------------------------------
 
 (test-case "event struct with all fields"
-  (define evt-1
-    (make-event "turn.started" 1775500001 "sess-1" "turn-1"
-                '#hash((model . "default"))))
+  (define evt-1 (make-event "turn.started" 1775500001 "sess-1" "turn-1" '#hash((model . "default"))))
   (check-pred event? evt-1 "event predicate")
   (check-equal? (event-version evt-1) 1)
   (check-equal? (event-event evt-1) "turn.started")
@@ -202,15 +197,11 @@
   (check-equal? (hash-ref (event-payload evt-1) 'model) "default"))
 
 (test-case "event without turn-id"
-  (define evt-2
-    (make-event "session.started" 1775500000 "sess-1" #f '#hash()))
+  (define evt-2 (make-event "session.started" 1775500000 "sess-1" #f '#hash()))
   (check-false (event-turn-id evt-2)))
 
 (test-case "event with explicit version"
-  (define evt-3
-    (make-event "runtime.error" 1775500999 "sess-1" #f
-                '#hash((message . "oops"))
-                2))
+  (define evt-3 (make-event "runtime.error" 1775500999 "sess-1" #f '#hash((message . "oops")) 2))
   (check-equal? (event-version evt-3) 2))
 
 ;; ------------------------------------------------------------
@@ -221,9 +212,7 @@
   (jsexpr->event (event->jsexpr evt)))
 
 (test-case "event JSON roundtrip preserves all fields"
-  (define evt-1
-    (make-event "turn.started" 1775500001 "sess-1" "turn-1"
-                '#hash((model . "default"))))
+  (define evt-1 (make-event "turn.started" 1775500001 "sess-1" "turn-1" '#hash((model . "default"))))
   (define rt-evt-1 (roundtrip-event evt-1))
   (check-equal? (event-version rt-evt-1) (event-version evt-1))
   (check-equal? (event-event rt-evt-1) (event-event evt-1))
@@ -233,8 +222,7 @@
   (check-equal? (hash-ref (event-payload rt-evt-1) 'model) "default"))
 
 (test-case "event roundtrip with #f turnId"
-  (define evt-2
-    (make-event "session.started" 1775500000 "sess-1" #f '#hash()))
+  (define evt-2 (make-event "session.started" 1775500000 "sess-1" #f '#hash()))
   (define rt-evt-2 (roundtrip-event evt-2))
   (check-false (event-turn-id rt-evt-2)))
 
@@ -243,9 +231,7 @@
 ;; ------------------------------------------------------------
 
 (test-case "event->jsexpr has correct keys"
-  (define evt-1
-    (make-event "turn.started" 1775500001 "sess-1" "turn-1"
-                '#hash((model . "default"))))
+  (define evt-1 (make-event "turn.started" 1775500001 "sess-1" "turn-1" '#hash((model . "default"))))
   (define je1 (event->jsexpr evt-1))
   (check-equal? (hash-ref je1 'version) 1)
   (check-equal? (hash-ref je1 'event) "turn.started")
@@ -254,8 +240,7 @@
   (check-true (hash? (hash-ref je1 'payload))))
 
 (test-case "event->jsexpr with #f turnId produces null"
-  (define evt-2
-    (make-event "session.started" 1775500000 "sess-1" #f '#hash()))
+  (define evt-2 (make-event "session.started" 1775500000 "sess-1" #f '#hash()))
   (define je2 (event->jsexpr evt-2))
   (check-false (hash-ref je2 'turnId)))
 
@@ -292,24 +277,33 @@
 
 (test-case "loop-result struct"
   (define msg-1
-    (make-message "msg-1" #f 'user 'message
+    (make-message "msg-1"
+                  #f
+                  'user
+                  'message
                   (list (make-text-part "Hello, world!"))
                   1775500000
                   '#hash()))
   (define msg-2
-    (make-message "msg-2" "msg-1" 'assistant 'message
+    (make-message "msg-2"
+                  "msg-1"
+                  'assistant
+                  'message
                   (list (make-text-part "Response"))
                   1775500100
                   '#hash()))
   (define msg-3
-    (make-message "msg-3" "msg-2" 'tool 'tool-result
+    (make-message "msg-3"
+                  "msg-2"
+                  'tool
+                  'tool-result
                   (list (make-tool-result-part "tc-1" '("ok") #f))
                   1775500200
                   '#hash((turnId . "turn-1"))))
-  (define lr-1 (make-loop-result (list msg-1 msg-2 msg-3)
-                                 'turn-completed
-                                 '#hash((turnId . "turn-1")
-                                        (tokensUsed . 1500))))
+  (define lr-1
+    (make-loop-result (list msg-1 msg-2 msg-3)
+                      'turn-completed
+                      '#hash((turnId . "turn-1") (tokensUsed . 1500))))
   (check-pred loop-result? lr-1)
   (check-equal? (length (loop-result-messages lr-1)) 3)
   (check-equal? (loop-result-termination-reason lr-1) 'turn-completed)
@@ -328,19 +322,22 @@
   (check-equal? (sort (hash-keys (event-payload (roundtrip-event evt-empty))) symbol<?) '()))
 
 (test-case "bookmark message kind"
-  (define msg-bm (make-message "bm-1" "msg-1" 'user 'bookmark
-                               (list (make-text-part "checkpoint"))
-                               1775501000 '#hash()))
+  (define msg-bm
+    (make-message "bm-1"
+                  "msg-1"
+                  'user
+                  'bookmark
+                  (list (make-text-part "checkpoint"))
+                  1775501000
+                  '#hash()))
   (check-equal? (message-kind (roundtrip-message msg-bm)) 'bookmark))
 
 (test-case "all roles and kinds survive roundtrip"
   (for ([role '(system user assistant tool extension)])
     (for ([kind '(message tool-result compaction-summary bookmark metadata)])
       (define m (make-message "x" #f role kind '() 0 '#hash()))
-      (check-equal? (message-role (roundtrip-message m)) role
-                    (format "role ~a roundtrip" role))
-      (check-equal? (message-kind (roundtrip-message m)) kind
-                    (format "kind ~a roundtrip" kind)))))
+      (check-equal? (message-role (roundtrip-message m)) role (format "role ~a roundtrip" role))
+      (check-equal? (message-kind (roundtrip-message m)) kind (format "kind ~a roundtrip" kind)))))
 
 ;; ------------------------------------------------------------
 ;; 12. Content-part serialization helpers
@@ -348,10 +345,9 @@
 
 (test-case "jsexpr->content-part dispatches on type"
   (check-true (text-part? (jsexpr->content-part '#hash((type . "text") (text . "hi")))))
-  (check-true (tool-call-part? (jsexpr->content-part '#hash((type . "tool-call")
-                                                        (id . "tc")
-                                                        (name . "bash")
-                                                        (arguments . #hash())))))
+  (check-true (tool-call-part?
+               (jsexpr->content-part
+                '#hash((type . "tool-call") (id . "tc") (name . "bash") (arguments . #hash())))))
   (check-true (tool-result-part? (jsexpr->content-part '#hash((type . "tool-result")
                                                               (toolCallId . "tc")
                                                               (content . ("ok"))

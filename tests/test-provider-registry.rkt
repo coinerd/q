@@ -18,11 +18,10 @@
 ;; ============================================================
 
 (define (make-mock-response)
-  (make-model-response
-   (list (hasheq 'type "text" 'text "mock response"))
-   (hasheq 'input-tokens 0 'output-tokens 0)
-   "mock-model"
-   'stop))
+  (make-model-response (list (hasheq 'type "text" 'text "mock response"))
+                       (hasheq 'input-tokens 0 'output-tokens 0)
+                       "mock-model"
+                       'stop))
 
 (define (make-test-provider #:name [name "test-provider"])
   (make-mock-provider (make-mock-response) #:name name))
@@ -103,11 +102,13 @@
 (test-case "register-model!: adds model to registry"
   (define reg (make-provider-registry))
   (register-provider! reg "openai" (make-test-provider))
-  (register-model! reg #:id "gpt-4o" #:name "GPT-4o"
-                       #:provider-name "openai"
-                       #:context-window 128000
-                       #:max-tokens 4096
-                       #:capabilities (hasheq 'streaming #t))
+  (register-model! reg
+                   #:id "gpt-4o"
+                   #:name "GPT-4o"
+                   #:provider-name "openai"
+                   #:context-window 128000
+                   #:max-tokens 4096
+                   #:capabilities (hasheq 'streaming #t))
   (define found (find-model reg "gpt-4o"))
   (check-true (registered-model? found))
   (check-equal? (registered-model-id found) "gpt-4o")
@@ -118,8 +119,7 @@
 (test-case "register-model!: without optional fields"
   (define reg (make-provider-registry))
   (register-provider! reg "openai" (make-test-provider))
-  (register-model! reg #:id "gpt-3.5" #:name "GPT-3.5 Turbo"
-                       #:provider-name "openai")
+  (register-model! reg #:id "gpt-3.5" #:name "GPT-3.5 Turbo" #:provider-name "openai")
   (define found (find-model reg "gpt-3.5"))
   (check-true (registered-model? found))
   (check-false (registered-model-context-window found))
@@ -147,12 +147,12 @@
 (test-case "register-model!: overwrites existing model with same key"
   (define reg (make-provider-registry))
   (register-provider! reg "openai" (make-test-provider))
-  (register-model! reg #:id "gpt-4o" #:name "GPT-4o"
-                       #:provider-name "openai"
-                       #:context-window 128000)
-  (register-model! reg #:id "gpt-4o" #:name "GPT-4o Turbo"
-                       #:provider-name "openai"
-                       #:context-window 256000)
+  (register-model! reg #:id "gpt-4o" #:name "GPT-4o" #:provider-name "openai" #:context-window 128000)
+  (register-model! reg
+                   #:id "gpt-4o"
+                   #:name "GPT-4o Turbo"
+                   #:provider-name "openai"
+                   #:context-window 256000)
   (define found (find-model reg "gpt-4o"))
   (check-equal? (registered-model-name found) "GPT-4o Turbo")
   (check-equal? (registered-model-context-window found) 256000))
@@ -211,25 +211,35 @@
   (define reg (make-provider-registry))
 
   ;; Register providers
-  (register-provider! reg "openai" (make-test-provider)
-                       #:config (hasheq 'base-url "https://api.openai.com"))
-  (register-provider! reg "anthropic" (make-another-provider)
-                       #:config (hasheq 'base-url "https://api.anthropic.com"))
+  (register-provider! reg
+                      "openai"
+                      (make-test-provider)
+                      #:config (hasheq 'base-url "https://api.openai.com"))
+  (register-provider! reg
+                      "anthropic"
+                      (make-another-provider)
+                      #:config (hasheq 'base-url "https://api.anthropic.com"))
 
   ;; Register models
-  (register-model! reg #:id "gpt-4o" #:name "GPT-4o"
-                       #:provider-name "openai"
-                       #:context-window 128000
-                       #:max-tokens 4096
-                       #:capabilities (hasheq 'streaming #t 'vision #t))
-  (register-model! reg #:id "gpt-3.5" #:name "GPT-3.5 Turbo"
-                       #:provider-name "openai"
-                       #:context-window 16384
-                       #:max-tokens 2048)
-  (register-model! reg #:id "claude-3" #:name "Claude 3 Opus"
-                       #:provider-name "anthropic"
-                       #:context-window 200000
-                       #:max-tokens 4096)
+  (register-model! reg
+                   #:id "gpt-4o"
+                   #:name "GPT-4o"
+                   #:provider-name "openai"
+                   #:context-window 128000
+                   #:max-tokens 4096
+                   #:capabilities (hasheq 'streaming #t 'vision #t))
+  (register-model! reg
+                   #:id "gpt-3.5"
+                   #:name "GPT-3.5 Turbo"
+                   #:provider-name "openai"
+                   #:context-window 16384
+                   #:max-tokens 2048)
+  (register-model! reg
+                   #:id "claude-3"
+                   #:name "Claude 3 Opus"
+                   #:provider-name "anthropic"
+                   #:context-window 200000
+                   #:max-tokens 4096)
 
   ;; Verify
   (check-equal? (length (list-providers reg)) 2)

@@ -19,26 +19,21 @@
   ;; osc-52-copy emits a well-formed OSC 52 sequence
   (define output (with-output-to-bytes (lambda () (osc-52-copy "hello"))))
   (define str (bytes->string/latin-1 output))
-  (check-true (string-contains? str "]52;c;")
-              "osc-52: has OSC 52 prefix")
-  (check-equal? (extract-osc52-b64 str) "aGVsbG8="
-                "osc-52: base64 encoded")
-  (check-true (string-suffix? str (string (integer->char 27) #\\))
-              "osc-52: ends with ST"))
+  (check-true (string-contains? str "]52;c;") "osc-52: has OSC 52 prefix")
+  (check-equal? (extract-osc52-b64 str) "aGVsbG8=" "osc-52: base64 encoded")
+  (check-true (string-suffix? str (string (integer->char 27) #\\)) "osc-52: ends with ST"))
 
 (let ()
   ;; osc-52-copy handles empty string
   (define output (with-output-to-bytes (lambda () (osc-52-copy ""))))
   (define str (bytes->string/latin-1 output))
-  (check-true (string-contains? str "]52;c;")
-              "osc-52: empty string still emits OSC 52"))
+  (check-true (string-contains? str "]52;c;") "osc-52: empty string still emits OSC 52"))
 
 (let ()
   ;; osc-52-copy handles spaces and special chars
   (define output (with-output-to-bytes (lambda () (osc-52-copy "hello world!"))))
   (define str (bytes->string/latin-1 output))
-  (check-equal? (extract-osc52-b64 str) "aGVsbG8gd29ybGQh"
-                "osc-52: spaces encoded correctly"))
+  (check-equal? (extract-osc52-b64 str) "aGVsbG8gd29ybGQh" "osc-52: spaces encoded correctly"))
 
 (let ()
   ;; osc-52-copy encodes and round-trips text correctly
@@ -47,8 +42,7 @@
   (define b64 (extract-osc52-b64 str))
   (check-not-false b64 "osc-52: base64 payload found")
   (define decoded (bytes->string/utf-8 (base64-decode (string->bytes/latin-1 b64))))
-  (check-equal? decoded "hello unicode"
-                "osc-52: text round-trips correctly"))
+  (check-equal? decoded "hello unicode" "osc-52: text round-trips correctly"))
 
 (let ()
   ;; osc-52-copy handles multi-byte UTF-8 (\u00e4\u00f6\u00fc\u00df \u2713)
@@ -57,24 +51,21 @@
   (define b64 (extract-osc52-b64 str))
   (check-not-false b64 "osc-52 UTF-8: base64 payload found")
   (define decoded (bytes->string/utf-8 (base64-decode (string->bytes/latin-1 b64))))
-  (check-equal? decoded "\u00e4\u00f6\u00fc\u00df \u2713"
-                "osc-52 UTF-8: round-trips correctly"))
+  (check-equal? decoded "\u00e4\u00f6\u00fc\u00df \u2713" "osc-52 UTF-8: round-trips correctly"))
 
 (let ()
   ;; osc-52-copy flushes the output port (sequence appears immediately)
   (define output (open-output-bytes))
   (osc-52-copy "flush-test" output)
   (define result (get-output-bytes output))
-  (check-true (> (bytes-length result) 0)
-              "osc-52: output port has data after call (flushed)"))
+  (check-true (> (bytes-length result) 0) "osc-52: output port has data after call (flushed)"))
 
 (let ()
   ;; osc-52-copy writes to custom output port
   (define output (open-output-bytes))
   (osc-52-copy "port-test" output)
   (define str (bytes->string/latin-1 (get-output-bytes output)))
-  (check-true (string-contains? str "]52;c;")
-              "osc-52: writes to custom output port"))
+  (check-true (string-contains? str "]52;c;") "osc-52: writes to custom output port"))
 
 ;; ============================================================
 ;; copy-text! with mode 'off
@@ -91,8 +82,7 @@
   (define output (open-output-bytes))
   (parameterize ([current-clipboard-mode 'off])
     (copy-text! "test" output))
-  (check-equal? (get-output-bytes output) #""
-                "copy-text! mode=off emits nothing"))
+  (check-equal? (get-output-bytes output) #"" "copy-text! mode=off emits nothing"))
 
 ;; ============================================================
 ;; copy-text! with mode 'osc52
@@ -105,8 +95,7 @@
     (define result (copy-text! "hello osc" output))
     (check-equal? result 'ok-osc52 "copy-text! mode=osc52 returns 'ok-osc52")
     (define str (bytes->string/latin-1 (get-output-bytes output)))
-    (check-true (string-contains? str "]52;c;")
-                "copy-text! mode=osc52 emits OSC 52 sequence")))
+    (check-true (string-contains? str "]52;c;") "copy-text! mode=osc52 emits OSC 52 sequence")))
 
 (let ()
   ;; mode 'osc52 with multi-byte UTF-8 text
@@ -118,7 +107,8 @@
     (define b64 (extract-osc52-b64 str))
     (check-not-false b64 "copy-text! osc52 UTF-8: base64 payload found")
     (define decoded (bytes->string/utf-8 (base64-decode (string->bytes/latin-1 b64))))
-    (check-equal? decoded "\u00e4\u00f6\u00fc\u00df \u2713"
+    (check-equal? decoded
+                  "\u00e4\u00f6\u00fc\u00df \u2713"
                   "copy-text! osc52 UTF-8: round-trips correctly")))
 
 ;; ============================================================
@@ -130,7 +120,7 @@
   (parameterize ([current-clipboard-mode 'system])
     (define result (copy-text! "test"))
     (check-not-false (member result '(ok-system unavailable failed))
-                "copy-text! mode=system returns valid status symbol")))
+                     "copy-text! mode=system returns valid status symbol")))
 
 ;; ============================================================
 ;; copy-text! with mode 'auto
@@ -141,11 +131,9 @@
   (define output (open-output-bytes))
   (parameterize ([current-clipboard-mode 'auto])
     (define result (copy-text! "auto test" output))
-    (check-not-false (member result '(ok-osc52 ok-system))
-                "copy-text! mode=auto returns ok-* status")
+    (check-not-false (member result '(ok-osc52 ok-system)) "copy-text! mode=auto returns ok-* status")
     (define str (bytes->string/latin-1 (get-output-bytes output)))
-    (check-true (string-contains? str "]52;c;")
-                "copy-text! mode=auto emits OSC 52")))
+    (check-true (string-contains? str "]52;c;") "copy-text! mode=auto emits OSC 52")))
 
 ;; ============================================================
 ;; Backend detection
@@ -155,10 +143,7 @@
   ;; detect-clipboard-tool returns #f or (list path symbol)
   (define tool (detect-clipboard-tool))
   (check-true (or (not tool)
-                  (and (list? tool)
-                       (= (length tool) 2)
-                       (path? (car tool))
-                       (symbol? (cadr tool))))
+                  (and (list? tool) (= (length tool) 2) (path? (car tool)) (symbol? (cadr tool))))
               "detect-clipboard-tool returns #f or (list path symbol)"))
 
 (let ()
@@ -177,8 +162,7 @@
 
 (let ()
   ;; clipboard-copy-via-tool is a procedure
-  (check-true (procedure? clipboard-copy-via-tool)
-              "clipboard-copy-via-tool is a procedure"))
+  (check-true (procedure? clipboard-copy-via-tool) "clipboard-copy-via-tool is a procedure"))
 
 ;; ============================================================
 ;; copy-selection!
@@ -186,41 +170,45 @@
 
 (let ()
   ;; copy-selection! returns 'disabled when no selection
-  (define (no-sel?) #f)
-  (define (get-text ctx) "should not be called")
+  (define (no-sel?)
+    #f)
+  (define (get-text ctx)
+    "should not be called")
   (parameterize ([current-clipboard-mode 'osc52])
     (define result (copy-selection! 'fake-ctx get-text no-sel?))
-    (check-equal? result 'disabled
-                  "copy-selection! returns 'disabled when no selection")))
+    (check-equal? result 'disabled "copy-selection! returns 'disabled when no selection")))
 
 (let ()
   ;; copy-selection! returns 'disabled when selection is empty string
-  (define (has-sel?) #t)
-  (define (get-text ctx) "")
+  (define (has-sel?)
+    #t)
+  (define (get-text ctx)
+    "")
   (parameterize ([current-clipboard-mode 'osc52])
     (define result (copy-selection! 'fake-ctx get-text has-sel?))
-    (check-equal? result 'disabled
-                  "copy-selection! returns 'disabled for empty selection")))
+    (check-equal? result 'disabled "copy-selection! returns 'disabled for empty selection")))
 
 (let ()
   ;; copy-selection! copies when selection exists
   (define output (open-output-bytes))
-  (define (has-sel?) #t)
-  (define (get-text ctx) "selected text")
+  (define (has-sel?)
+    #t)
+  (define (get-text ctx)
+    "selected text")
   (parameterize ([current-clipboard-mode 'osc52]
-                  [current-output-port output])
+                 [current-output-port output])
     (define result (copy-selection! 'fake-ctx get-text has-sel?))
-    (check-equal? result 'ok-osc52
-                  "copy-selection! returns 'ok-osc52 for valid selection")))
+    (check-equal? result 'ok-osc52 "copy-selection! returns 'ok-osc52 for valid selection")))
 
 (let ()
   ;; copy-selection! returns 'disabled when selection is #f
-  (define (has-sel?) #t)
-  (define (get-text ctx) #f)
+  (define (has-sel?)
+    #t)
+  (define (get-text ctx)
+    #f)
   (parameterize ([current-clipboard-mode 'osc52])
     (define result (copy-selection! 'fake-ctx get-text has-sel?))
-    (check-equal? result 'disabled
-                  "copy-selection! returns 'disabled when text is #f")))
+    (check-equal? result 'disabled "copy-selection! returns 'disabled when text is #f")))
 
 ;; ============================================================
 ;; current-clipboard-mode parameter
@@ -228,8 +216,7 @@
 
 (let ()
   ;; Default mode is 'auto
-  (check-equal? (current-clipboard-mode) 'auto
-                "default clipboard mode is 'auto"))
+  (check-equal? (current-clipboard-mode) 'auto "default clipboard mode is 'auto"))
 
 (let ()
   ;; Mode can be set and restored
@@ -243,21 +230,21 @@
 
 (let ()
   ;; detect-clipboard-tool prefers X11 tools when DISPLAY is set
-  (define tool (parameterize ([current-clipboard-mode 'auto])
-                 (detect-clipboard-tool)))
+  (define tool
+    (parameterize ([current-clipboard-mode 'auto])
+      (detect-clipboard-tool)))
   ;; In this environment, DISPLAY is set, so xclip/xsel should be preferred
   ;; over wl-copy (unless Wayland env is also set)
   (when (and (getenv "DISPLAY") (not (getenv "WAYLAND_DISPLAY")))
     (when tool
       (check-not-false (member (cadr tool) '(xclip xsel pbcopy))
-                  (format "X11 env: tool should be X11 or macOS, got ~a" tool)))))
+                       (format "X11 env: tool should be X11 or macOS, got ~a" tool)))))
 
 (let ()
   ;; detect-clipboard-tool returns #f or valid tool even without env vars
   ;; (fallback path still tries all tools)
   (define tool (detect-clipboard-tool))
-  (check-true (or (not tool)
-                  (and (list? tool) (= (length tool) 2)))
+  (check-true (or (not tool) (and (list? tool) (= (length tool) 2)))
               "detect-clipboard-tool: always returns #f or (list path sym)"))
 
 (let ()
@@ -265,7 +252,7 @@
   (when (and (getenv "DISPLAY") (find-executable-path "xclip"))
     (define tool (detect-clipboard-tool))
     (check-not-false (and tool (member (cadr tool) '(xclip xsel pbcopy)))
-                "DISPLAY set + xclip installed: found X11 tool")))
+                     "DISPLAY set + xclip installed: found X11 tool")))
 
 (let ()
   ;; copy-text! auto mode: with a working tool, returns ok-system
@@ -274,7 +261,7 @@
     (define result (copy-text! "test-auto-copy"))
     ;; Result depends on whether X11 is actually accessible
     (check-not-false (member result '(ok-system unavailable failed))
-                (format "copy-text! system mode returns valid status: ~a" result))))
+                     (format "copy-text! system mode returns valid status: ~a" result))))
 
 ;; ============================================================
 ;; Environment-aware tool detection (with mocked env vars)

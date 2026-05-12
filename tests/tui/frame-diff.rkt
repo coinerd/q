@@ -55,15 +55,13 @@
 ;; Append + change in common region
 (define frame-3-mod-append '("line0" "CHANGED" "line2" "extra"))
 (check-equal? (diff-frames frame-3 frame-3-mod-append)
-              (list (diff-cmd 'write 1 "CHANGED")
-                    (diff-cmd 'write 3 "extra"))
+              (list (diff-cmd 'write 1 "CHANGED") (diff-cmd 'write 3 "extra"))
               "changed + appended yields write for both")
 
 ;; Shrink with change in common region
 (define frame-4-mod-shrink '("line0" "DIFF" "line2"))
 (check-equal? (diff-frames frame-4 frame-4-mod-shrink)
-              (list (diff-cmd 'write 1 "DIFF")
-                    (diff-cmd 'clear-from 3 #f))
+              (list (diff-cmd 'write 1 "DIFF") (diff-cmd 'clear-from 3 #f))
               "changed + shrunk yields write + clear-from")
 
 ;; Grow by multiple lines
@@ -90,9 +88,7 @@
               "style-only change detected (red→green)")
 
 ;; ANSI frames identical → no diff
-(check-equal? (diff-frames ansi-frame-a ansi-frame-a)
-              '()
-              "identical ANSI frames yield no diff")
+(check-equal? (diff-frames ansi-frame-a ansi-frame-a) '() "identical ANSI frames yield no diff")
 
 ;; Bright-color ANSI content
 (define ansi-bright '("\x1b[90mmuted\x1b[0m"))

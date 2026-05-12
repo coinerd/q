@@ -10,7 +10,7 @@
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
          "../extensions/context.rkt"
-         "../runtime/iteration.rkt"
+         (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks)
          "../util/hook-types.rkt")
 
 (define (make-test-ctx #:session-id sid #:model-name model [reg #f])

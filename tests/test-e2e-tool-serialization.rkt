@@ -20,57 +20,73 @@
 ;; Shared fixtures
 ;; ============================================================
 
-(define messages
-  (list (hash 'role "user" 'content "What files are in /tmp?")))
+(define messages (list (hash 'role "user" 'content "What files are in /tmp?")))
 
 (define (dummy-execute args ctx)
   (make-success-result (list (hash 'type "text" 'text "ok"))))
 
 ;; Tool 1: read_file with realistic schema
 (define read-file-schema
-  (hasheq 'type "object"
-          'properties (hasheq 'path (hasheq 'type "string"
-                                            'description "Absolute file path")
-                              'encoding (hasheq 'type "string"
-                                                'description "File encoding"
-                                                'enum '("utf-8" "latin-1")))
-          'required '("path")))
+  (hasheq 'type
+          "object"
+          'properties
+          (hasheq 'path
+                  (hasheq 'type "string" 'description "Absolute file path")
+                  'encoding
+                  (hasheq 'type "string" 'description "File encoding" 'enum '("utf-8" "latin-1")))
+          'required
+          '("path")))
 
 (define read-file-tool
-  (make-tool "read_file"
-             "Read the contents of a file from disk"
-             read-file-schema
-             dummy-execute))
+  (make-tool "read_file" "Read the contents of a file from disk" read-file-schema dummy-execute))
 
 ;; Tool 2: list_directory with nested schema
 (define list-dir-schema
-  (hasheq 'type "object"
-          'properties (hasheq 'path (hasheq 'type "string"
-                                            'description "Directory path")
-                              'options (hasheq 'type "object"
-                                               'properties (hasheq 'recursive (hasheq 'type "boolean")
-                                                                   'max_depth (hasheq 'type "integer"))
-                                               'required '("recursive")))
-          'required '("path")))
+  (hasheq
+   'type
+   "object"
+   'properties
+   (hasheq 'path
+           (hasheq 'type "string" 'description "Directory path")
+           'options
+           (hasheq 'type
+                   "object"
+                   'properties
+                   (hasheq 'recursive (hasheq 'type "boolean") 'max_depth (hasheq 'type "integer"))
+                   'required
+                   '("recursive")))
+   'required
+   '("path")))
 
 (define list-dir-tool
-  (make-tool "list_directory"
-             "List files and subdirectories"
-             list-dir-schema
-             dummy-execute))
+  (make-tool "list_directory" "List files and subdirectories" list-dir-schema dummy-execute))
 
 ;; Tool 3: search_files with deeply nested schema
 (define search-schema
-  (hasheq 'type "object"
-          'properties (hasheq 'pattern (hasheq 'type "string")
-                              'filters (hasheq 'type "object"
-                                               'properties (hasheq 'glob (hasheq 'type "string")
-                                                                   'modified (hasheq 'type "object"
-                                                                                     'properties (hasheq 'after (hasheq 'type "string")
-                                                                                                         'before (hasheq 'type "string"))
-                                                                                     'required '()))
-                                               'required '()))
-          'required '("pattern")))
+  (hasheq
+   'type
+   "object"
+   'properties
+   (hasheq
+    'pattern
+    (hasheq 'type "string")
+    'filters
+    (hasheq 'type
+            "object"
+            'properties
+            (hasheq 'glob
+                    (hasheq 'type "string")
+                    'modified
+                    (hasheq 'type
+                            "object"
+                            'properties
+                            (hasheq 'after (hasheq 'type "string") 'before (hasheq 'type "string"))
+                            'required
+                            '()))
+            'required
+            '()))
+   'required
+   '("pattern")))
 
 (define search-tool
   (make-tool "search_files"
@@ -167,14 +183,16 @@
 (test-case "Model-response with tool-call content round-trips through JSON"
   (define tool-call-content
     (list (hash 'type "text" 'text "I will read the file for you.")
-          (hash 'type "tool-call"
-                'id "call_abc123"
-                'name "read_file"
-                'arguments (hash 'path "/tmp/test.txt"))))
+          (hash 'type
+                "tool-call"
+                'id
+                "call_abc123"
+                'name
+                "read_file"
+                'arguments
+                (hash 'path "/tmp/test.txt"))))
 
-  (define usage (hash 'prompt_tokens 42
-                      'completion_tokens 17
-                      'total_tokens 59))
+  (define usage (hash 'prompt_tokens 42 'completion_tokens 17 'total_tokens 59))
 
   (define resp (make-model-response tool-call-content usage "gpt-4" 'tool-calls))
 
@@ -197,8 +215,7 @@
   (define tc (cadr content2))
   (check-equal? (hash-ref tc 'type) "tool-call" "tool-call type preserved")
   (check-equal? (hash-ref tc 'name) "read_file" "tool name preserved")
-  (check-equal? (hash-ref (hash-ref tc 'arguments) 'path) "/tmp/test.txt"
-                "tool arguments preserved"))
+  (check-equal? (hash-ref (hash-ref tc 'arguments) 'path) "/tmp/test.txt" "tool arguments preserved"))
 
 ;; ============================================================
 ;; 5. Multiple tools with nested schemas — all providers
@@ -212,29 +229,24 @@
 
   ;; OpenAI
   (define openai-body (openai-build-request-body req))
-  (check-not-exn (lambda () (jsexpr->bytes openai-body))
-                 "OpenAI nested-schema body serializes")
+  (check-not-exn (lambda () (jsexpr->bytes openai-body)) "OpenAI nested-schema body serializes")
   (check-true (bytes? (jsexpr->bytes openai-body)) "OpenAI body produces bytes")
 
   ;; Anthropic
   (define anthropic-body (anthropic-build-request-body req))
-  (check-not-exn (lambda () (jsexpr->bytes anthropic-body))
-                 "Anthropic nested-schema body serializes")
+  (check-not-exn (lambda () (jsexpr->bytes anthropic-body)) "Anthropic nested-schema body serializes")
   (check-true (bytes? (jsexpr->bytes anthropic-body)) "Anthropic body produces bytes")
 
   ;; Gemini
   (define gemini-body (gemini-build-request-body req))
-  (check-not-exn (lambda () (jsexpr->bytes gemini-body))
-                 "Gemini nested-schema body serializes")
+  (check-not-exn (lambda () (jsexpr->bytes gemini-body)) "Gemini nested-schema body serializes")
   (check-true (bytes? (jsexpr->bytes gemini-body)) "Gemini body produces bytes")
 
   ;; Verify nested structure survived in OpenAI output
   (define openai-tools (hash-ref openai-body 'tools))
-  (define list-dir-jx (car (filter
-                            (lambda (t)
-                              (equal? (hash-ref (hash-ref t 'function) 'name)
-                                      "list_directory"))
-                            openai-tools)))
+  (define list-dir-jx
+    (car (filter (lambda (t) (equal? (hash-ref (hash-ref t 'function) 'name) "list_directory"))
+                 openai-tools)))
   (define params (hash-ref (hash-ref list-dir-jx 'function) 'parameters))
   (check-true (hash-has-key? params 'properties) "nested properties present")
   (define options (hash-ref (hash-ref params 'properties) 'options))
@@ -247,11 +259,7 @@
 
 (test-case "Empty-schema tool serializes for all providers"
   (define reg (make-tool-registry))
-  (register-tool! reg
-                  (make-tool "noop"
-                             "A no-op tool"
-                             (hasheq)
-                             dummy-execute))
+  (register-tool! reg (make-tool "noop" "A no-op tool" (hasheq) dummy-execute))
   (define tools (list-tools-jsexpr reg))
   (define settings (hash 'model "test-model"))
   (define req (make-model-request messages tools settings))
@@ -259,20 +267,17 @@
   ;; OpenAI
   (define openai-body (openai-build-request-body req))
   (check-true (hash-has-key? openai-body 'tools))
-  (check-not-exn (lambda () (jsexpr->bytes openai-body))
-                 "OpenAI empty-schema body serializes")
+  (check-not-exn (lambda () (jsexpr->bytes openai-body)) "OpenAI empty-schema body serializes")
   (check-true (positive? (bytes-length (jsexpr->bytes openai-body))) "OpenAI body non-empty")
 
   ;; Anthropic
   (define anthropic-body (anthropic-build-request-body req))
   (check-true (hash-has-key? anthropic-body 'tools))
-  (check-not-exn (lambda () (jsexpr->bytes anthropic-body))
-                 "Anthropic empty-schema body serializes")
+  (check-not-exn (lambda () (jsexpr->bytes anthropic-body)) "Anthropic empty-schema body serializes")
   (check-true (positive? (bytes-length (jsexpr->bytes anthropic-body))) "Anthropic body non-empty")
 
   ;; Gemini
   (define gemini-body (gemini-build-request-body req))
   (check-true (hash-has-key? gemini-body 'tools))
-  (check-not-exn (lambda () (jsexpr->bytes gemini-body))
-                 "Gemini empty-schema body serializes")
+  (check-not-exn (lambda () (jsexpr->bytes gemini-body)) "Gemini empty-schema body serializes")
   (check-true (positive? (bytes-length (jsexpr->bytes gemini-body))) "Gemini body non-empty"))

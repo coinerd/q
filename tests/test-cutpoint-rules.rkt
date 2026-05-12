@@ -23,25 +23,35 @@
   (format "msg-~a" msg-counter))
 
 (define (make-user-msg text)
-  (make-message (next-id!) #f 'user 'text
-                (list (make-text-part text))
-                (current-seconds) (hasheq)))
+  (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
 
 (define (make-assistant-msg text)
-  (make-message (next-id!) #f 'assistant 'text
+  (make-message (next-id!)
+                #f
+                'assistant
+                'text
                 (list (make-text-part text))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 (define (make-assistant-tool-call-msg tool-id tool-name)
-  (make-message (next-id!) #f 'assistant 'text
+  (make-message (next-id!)
+                #f
+                'assistant
+                'text
                 (list (make-text-part "calling tool")
                       (make-tool-call-part tool-id tool-name (hasheq)))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 (define (make-tool-result-msg call-id result-text)
-  (make-message (next-id!) #f 'tool 'tool-result
+  (make-message (next-id!)
+                #f
+                'tool
+                'tool-result
                 (list (make-tool-result-part call-id result-text #f))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 ;; ============================================================
 ;; #693: Cut-point rules
@@ -56,54 +66,50 @@
   (check-true (valid-cutpoint? msgs 1)))
 
 (test-case "valid-cutpoint: before user message is valid"
-  (define msgs (list (make-assistant-msg "hi")
-                     (make-user-msg "hello")))
+  (define msgs (list (make-assistant-msg "hi") (make-user-msg "hello")))
   (check-true (valid-cutpoint? msgs 1)))
 
 (test-case "valid-cutpoint: before tool-result is invalid"
-  (define msgs (list (make-assistant-tool-call-msg "tc1" "bash")
-                     (make-tool-result-msg "tc1" "output")))
+  (define msgs
+    (list (make-assistant-tool-call-msg "tc1" "bash") (make-tool-result-msg "tc1" "output")))
   ;; Cut at 1 would separate tool-call from tool-result
   (check-false (valid-cutpoint? msgs 1)))
 
 (test-case "valid-cutpoint: before assistant after user is valid"
-  (define msgs (list (make-user-msg "q")
-                     (make-assistant-msg "a")))
+  (define msgs (list (make-user-msg "q") (make-assistant-msg "a")))
   (check-true (valid-cutpoint? msgs 0))
   (check-true (valid-cutpoint? msgs 1)))
 
 (test-case "adjust-cutpoint: moves backward from invalid to valid"
   ;; tool-call at 0, tool-result at 1, user at 2
-  (define msgs (list (make-assistant-tool-call-msg "tc1" "bash")
-                     (make-tool-result-msg "tc1" "output")
-                     (make-user-msg "next")))
+  (define msgs
+    (list (make-assistant-tool-call-msg "tc1" "bash")
+          (make-tool-result-msg "tc1" "output")
+          (make-user-msg "next")))
   ;; Proposed cut at 1 (before tool-result) → should adjust
   (define adjusted (adjust-cutpoint msgs 1))
   (check-equal? adjusted 0))
 
 (test-case "adjust-cutpoint: keeps valid cutpoint unchanged"
-  (define msgs (list (make-user-msg "q1")
-                     (make-assistant-msg "a1")
-                     (make-user-msg "q2")))
+  (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-user-msg "q2")))
   (define adjusted (adjust-cutpoint msgs 2))
   (check-equal? adjusted 2))
 
 (test-case "adjust-cutpoint: handles tool-call/tool-result chain"
   ;; user → assistant(tool-call) → tool-result → assistant(final) → user
-  (define msgs (list (make-user-msg "q1")
-                     (make-assistant-tool-call-msg "tc1" "bash")
-                     (make-tool-result-msg "tc1" "output")
-                     (make-assistant-msg "done")
-                     (make-user-msg "q2")))
+  (define msgs
+    (list (make-user-msg "q1")
+          (make-assistant-tool-call-msg "tc1" "bash")
+          (make-tool-result-msg "tc1" "output")
+          (make-assistant-msg "done")
+          (make-user-msg "q2")))
   ;; Cut at 2 (before tool-result) → invalid, should move back
   ;; Index 1 is assistant, previous is user (no tool-calls) → valid cut
   (define adjusted (adjust-cutpoint msgs 2))
   (check-equal? adjusted 1))
 
 (test-case "find-nearest-valid-cutpoint: searches backward"
-  (define msgs (list (make-user-msg "q1")
-                     (make-assistant-msg "a1")
-                     (make-assistant-msg "a2")))
+  (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-assistant-msg "a2")))
   ;; Index 2 is assistant, previous is assistant (no tool-calls) → valid cut at 2
   ;; Actually we start by checking 2 itself, which is valid
   (define found (find-nearest-valid-cutpoint msgs 3 #t))
@@ -111,17 +117,16 @@
   (check-equal? found 3))
 
 (test-case "find-nearest-valid-cutpoint: searches forward"
-  (define msgs (list (make-assistant-tool-call-msg "tc1" "bash")
-                     (make-tool-result-msg "tc1" "output")
-                     (make-user-msg "q1")))
+  (define msgs
+    (list (make-assistant-tool-call-msg "tc1" "bash")
+          (make-tool-result-msg "tc1" "output")
+          (make-user-msg "q1")))
   ;; Forward from 1 (before tool-result, invalid) should find 2
   (define found (find-nearest-valid-cutpoint msgs 1 #f))
   (check-equal? found 2))
 
 (test-case "cutpoint-rule-description: describes valid cut"
-  (define msgs (list (make-user-msg "q1")
-                     (make-assistant-msg "a1")
-                     (make-user-msg "q2")))
+  (define msgs (list (make-user-msg "q1") (make-assistant-msg "a1") (make-user-msg "q2")))
   (define desc (cutpoint-rule-description msgs 2))
   (check-true (string-contains? desc "Valid cut")))
 
@@ -160,24 +165,24 @@
 
 (test-case "build-retry-messages: includes compaction summary"
   (define summary-msg
-    (make-message "compaction-1" #f 'system 'compaction-summary
+    (make-message "compaction-1"
+                  #f
+                  'system
+                  'compaction-summary
                   (list (make-text-part "summary text"))
-                  (current-seconds) (hasheq)))
-  (define result (compaction-result summary-msg 5
-                                     (list (make-user-msg "recent q"))))
+                  (current-seconds)
+                  (hasheq)))
+  (define result (compaction-result summary-msg 5 (list (make-user-msg "recent q"))))
   (define retry-msgs (build-retry-messages result "original prompt"))
   ;; Should have: summary + kept messages + retry message
   (check-true (>= (length retry-msgs) 2))
   ;; Last message should be the retry prompt
   (define last-msg (car (take-right retry-msgs 1)))
   (check-equal? (message-role last-msg) 'user)
-  (check-true (string-contains?
-               (text-part-text (car (message-content last-msg)))
-               "original prompt")))
+  (check-true (string-contains? (text-part-text (car (message-content last-msg))) "original prompt")))
 
 (test-case "build-retry-messages: works without summary"
-  (define result (compaction-result #f 0
-                                     (list (make-user-msg "kept msg"))))
+  (define result (compaction-result #f 0 (list (make-user-msg "kept msg"))))
   (define retry-msgs (build-retry-messages result "retry prompt"))
   ;; Should have: kept + retry
   (check-equal? (length retry-msgs) 2)
@@ -186,8 +191,13 @@
 
 (test-case "retry-context: stores all fields"
   (define summary-msg
-    (make-message "s1" #f 'system 'compaction-summary
-                  (list (make-text-part "s")) (current-seconds) (hasheq)))
+    (make-message "s1"
+                  #f
+                  'system
+                  'compaction-summary
+                  (list (make-text-part "s"))
+                  (current-seconds)
+                  (hasheq)))
   (define result (compaction-result summary-msg 3 (list (make-user-msg "q"))))
   (define msgs (build-retry-messages result "prompt"))
   (define ctx (make-retry-context "prompt" result msgs))
@@ -202,12 +212,13 @@
 
 (test-case "integration: cutpoint adjustment with overflow recovery"
   ;; Simulate: messages that would overflow, cut-point needs adjustment
-  (define msgs (list (make-user-msg "q1")
-                     (make-assistant-tool-call-msg "tc1" "bash")
-                     (make-tool-result-msg "tc1" "long output...")
-                     (make-assistant-msg "final answer")
-                     (make-user-msg "q2")
-                     (make-assistant-msg "a2")))
+  (define msgs
+    (list (make-user-msg "q1")
+          (make-assistant-tool-call-msg "tc1" "bash")
+          (make-tool-result-msg "tc1" "long output...")
+          (make-assistant-msg "final answer")
+          (make-user-msg "q2")
+          (make-assistant-msg "a2")))
   ;; Proposed cut at 2 (before tool-result) → adjust
   (define adjusted (adjust-cutpoint msgs 2))
   ;; Index 1 is assistant, previous is user → valid cut
@@ -217,9 +228,13 @@
   (check-true (can-retry-overflow? state))
   ;; After compaction, build retry
   (define summary-msg
-    (make-message "s1" #f 'system 'compaction-summary
+    (make-message "s1"
+                  #f
+                  'system
+                  'compaction-summary
                   (list (make-text-part "summarized history"))
-                  (current-seconds) (hasheq)))
+                  (current-seconds)
+                  (hasheq)))
   (define result (compaction-result summary-msg 2 (drop msgs 4)))
   (define retry-msgs (build-retry-messages result "q2"))
   (check-true (> (length retry-msgs) 0))

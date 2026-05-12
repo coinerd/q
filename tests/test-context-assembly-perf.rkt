@@ -92,7 +92,9 @@
       (define-values (idx dir) (build-linear-session 100 #:content (make-string 60 #\y)))
       ;; Tiny budget forces most into catalog
       (define cfg
-        (make-context-assembly-config #:recent-tokens 50 #:max-catalog-entries 10 #:max-catalog-tokens 5000))
+        (make-context-assembly-config #:recent-tokens 50
+                                      #:max-catalog-entries 10
+                                      #:max-catalog-tokens 5000))
       (define cr (build-assembled-context idx cfg))
       (check-true (<= (length (context-result-catalog cr)) 10)
                   (format "Expected <= 10 catalog entries, got ~a"

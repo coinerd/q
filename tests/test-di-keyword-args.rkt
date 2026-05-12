@@ -8,7 +8,10 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration.rkt"
+         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "../runtime/iteration/retry-policy.rkt"
+                  call-with-overflow-recovery
+                  check-mid-turn-budget!)
          "../runtime/turn-orchestrator.rkt"
          "../runtime/runtime-helpers.rkt"
          "../runtime/compactor.rkt"

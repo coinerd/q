@@ -22,8 +22,7 @@
                   thinking-level->budget
                   thinking-levels
                   session-id)
-         (only-in "../llm/token-budget.rkt"
-                  context-usage)
+         (only-in "../llm/token-budget.rkt" context-usage)
          "../interfaces/sdk.rkt")
 
 ;; ============================================================

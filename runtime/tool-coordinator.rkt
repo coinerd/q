@@ -170,7 +170,7 @@
   (when (and ext-reg (not (null? tool-calls-to-run)))
     (maybe-dispatch-hooks
      ext-reg
-     'tool.execution.start
+     'tool.execution.started
      (hasheq 'tools (map tool-call-name tool-calls-to-run) 'count (length tool-calls-to-run))))
 
   ;; Capture batch start time for per-batch duration (v0.29.16)
@@ -219,11 +219,11 @@
            (hasheq 'session-id session-id 'session-index (config-session-index config)))
           #:parallel? (config-parallel-tools config)))]))
 
-  ;; Dispatch 'tool.execution.end hook after tool batch
+  ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not tool-call-blocked?))
     (maybe-dispatch-hooks
      ext-reg
-     'tool.execution.end
+     'tool.execution.completed
      (hasheq
       'tools
       (for/list ([tc (in-list tool-calls-to-run)]

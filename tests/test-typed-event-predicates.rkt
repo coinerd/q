@@ -7,7 +7,8 @@
 
 ;; Test that predicates work
 (define sample-turn-start (turn-start-event "turn.started" 0 "session-1" "1" "gpt-4" "openai"))
-(define sample-hook-blocked (model-request-blocked-event "model.request.blocked" 0 "session-1" "1" "some-reason"))
+(define sample-hook-blocked
+  (model-request-blocked-event "model.request.blocked" 0 "session-1" "1" "some-reason"))
 
 (test-case "turn-start-event? predicate"
   (check-true (turn-start-event? sample-turn-start))

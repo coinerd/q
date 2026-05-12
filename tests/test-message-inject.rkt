@@ -153,7 +153,9 @@
 ;; FEAT-61: Iteration loop integration
 ;; ============================================================
 
-(require "../runtime/iteration.rkt")
+(require (only-in "../runtime/iteration/tool-turn-bridge.rkt"
+                  make-injected-collector!
+                  drain-injected-messages!))
 
 (test-case "make-injected-collector! creates a box that collects injected messages"
   (define bus (make-event-bus))

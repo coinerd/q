@@ -17,24 +17,30 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt"
-                  make-tool-registry register-tool! make-tool
+                  make-tool-registry
+                  register-tool!
+                  make-tool
                   make-exec-context
-                  make-success-result make-error-result
-                  tool-result? tool-result-is-error?)
+                  make-success-result
+                  make-error-result
+                  tool-result?
+                  tool-result-is-error?)
          "../tools/scheduler.rkt"
          "../agent/event-bus.rkt"
          (only-in "../util/protocol-types.rkt"
-                  make-event event? event-event event-payload
-                  loop-result? loop-result-termination-reason
+                  make-event
+                  event?
+                  event-event
+                  event-payload
+                  loop-result?
+                  loop-result-termination-reason
                   loop-result-messages)
          "../extensions/api.rkt"
          "../util/jsonl.rkt"
          (prefix-in sdk: "../interfaces/sdk.rkt")
          "helpers/mock-provider.rkt")
 
-(require (only-in "../main.rkt"
-                  register-default-tools!
-                  make-event-bus))
+(require (only-in "../main.rkt" register-default-tools! make-event-bus))
 
 ;; ============================================================
 ;; Failure injection helpers
@@ -48,9 +54,9 @@
     (delete-directory/files dir)))
 
 ;; Provider that raises on nth call
-(define (make-failing-provider #:on-call [n 1]
-                               #:error [err (exn:fail "injected provider failure"
-                                                      (current-continuation-marks))])
+(define (make-failing-provider
+         #:on-call [n 1]
+         #:error [err (exn:fail "injected provider failure" (current-continuation-marks))])
   (define call-count (box 0))
   (make-provider
    (lambda () "failing-mock")
@@ -59,43 +65,41 @@
      (set-box! call-count (add1 (unbox call-count)))
      (if (= (unbox call-count) n)
          (raise err)
-         (make-model-response
-          (list (hash 'type "text" 'text "ok"))
-          (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
-          "fail-mock" 'stop)))
+         (make-model-response (list (hash 'type "text" 'text "ok"))
+                              (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
+                              "fail-mock"
+                              'stop)))
    (lambda (req)
      (set-box! call-count (add1 (unbox call-count)))
      (if (= (unbox call-count) n)
          (raise err)
-         (list (make-stream-chunk "ok" #f
-                             (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
-                             #t))))))
+         (list (make-stream-chunk "ok"
+                                  #f
+                                  (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
+                                  #t))))))
 
 ;; Provider that returns malformed response (wrong shape)
 (define (make-malformed-provider)
-  (make-provider
-   (lambda () "malformed-mock")
-   (lambda () (hash 'streaming #t 'token-counting #t))
-   ;; send returns a hash instead of model-response
-   (lambda (req) (hasheq 'wrong "shape"))
-   ;; stream returns empty list
-   (lambda (req) '())))
+  (make-provider (lambda () "malformed-mock")
+                 (lambda () (hash 'streaming #t 'token-counting #t))
+                 ;; send returns a hash instead of model-response
+                 (lambda (req) (hasheq 'wrong "shape"))
+                 ;; stream returns empty list
+                 (lambda (req) '())))
 
 ;; Provider that fails mid-stream (first chunk ok, second raises)
 (define (make-midstream-failure-provider)
   (define sent-first? (box #f))
-  (make-provider
-   (lambda () "midstream-fail")
-   (lambda () (hash 'streaming #t 'token-counting #t))
-   (lambda (req)
-     (raise (exn:fail "midstream failure" (current-continuation-marks))))
-   (lambda (req)
-     (if (unbox sent-first?)
-         (raise (exn:fail "midstream failure" (current-continuation-marks)))
-         (begin
-           (set-box! sent-first? #t)
-           (list (make-stream-chunk "partial " #f #f #f)
-                 (make-stream-chunk #f #f #f #t)))))))
+  (make-provider (lambda () "midstream-fail")
+                 (lambda () (hash 'streaming #t 'token-counting #t))
+                 (lambda (req) (raise (exn:fail "midstream failure" (current-continuation-marks))))
+                 (lambda (req)
+                   (if (unbox sent-first?)
+                       (raise (exn:fail "midstream failure" (current-continuation-marks)))
+                       (begin
+                         (set-box! sent-first? #t)
+                         (list (make-stream-chunk "partial " #f #f #f)
+                               (make-stream-chunk #f #f #f #t)))))))
 
 ;; ============================================================
 ;; Test: Provider errors don't crash session
@@ -105,18 +109,17 @@
   (define dir (make-temp-dir))
   (define bus (make-event-bus))
   (define events (box '()))
-  (subscribe! bus (lambda (e)
-                    (set-box! events (cons (event-event e) (unbox events)))))
+  (subscribe! bus (lambda (e) (set-box! events (cons (event-event e) (unbox events)))))
   (define prov (make-failing-provider #:on-call 1))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)
-                               #:event-bus bus))
+  (define rt
+    (sdk:make-runtime #:provider prov
+                      #:session-dir dir
+                      #:tool-registry (make-tool-registry)
+                      #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "trigger error"))
   ;; Session should survive
-  (check-true (sdk:runtime? rt3)
-              "runtime should survive provider error")
+  (check-true (sdk:runtime? rt3) "runtime should survive provider error")
   ;; Should have started a turn
   (check-not-false (member "turn.started" (reverse (unbox events)))
                    "should emit turn.started before error")
@@ -125,9 +128,8 @@
 (test-case "fail-inject: provider error on second call (mid-session)"
   (define dir (make-temp-dir))
   (define prov (make-failing-provider #:on-call 2))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)))
+  (define rt
+    (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry (make-tool-registry)))
   (define rt2 (sdk:open-session rt))
   ;; First call succeeds
   (define-values (rt3 result1) (sdk:run-prompt! rt2 "first prompt"))
@@ -135,38 +137,32 @@
   (check-equal? (loop-result-termination-reason result1) 'completed)
   ;; Second call fails — should not crash
   (define-values (rt4 result2) (sdk:run-prompt! rt3 "second prompt"))
-  (check-true (sdk:runtime? rt4)
-              "runtime should survive mid-session provider error")
+  (check-true (sdk:runtime? rt4) "runtime should survive mid-session provider error")
   ;; First turn's data should still be in session
   (define info (sdk:session-info rt4))
-  (check >= (hash-ref info 'history-length) 2
-         "first turn data should persist after error")
+  (check >= (hash-ref info 'history-length) 2 "first turn data should persist after error")
   (cleanup-dir dir))
 
 (test-case "fail-inject: malformed provider response"
   (define dir (make-temp-dir))
   (define prov (make-malformed-provider))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)))
+  (define rt
+    (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry (make-tool-registry)))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "trigger malformed"))
   ;; Should not crash — malformed response handled gracefully
-  (check-true (sdk:runtime? rt3)
-              "runtime should survive malformed provider response")
+  (check-true (sdk:runtime? rt3) "runtime should survive malformed provider response")
   (cleanup-dir dir))
 
 (test-case "fail-inject: mid-stream failure captures partial output"
   (define dir (make-temp-dir))
   (define prov (make-midstream-failure-provider))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)))
+  (define rt
+    (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry (make-tool-registry)))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "trigger midstream"))
   ;; Should survive and may have partial output
-  (check-true (sdk:runtime? rt3)
-              "runtime should survive mid-stream failure")
+  (check-true (sdk:runtime? rt3) "runtime should survive mid-stream failure")
   (cleanup-dir dir))
 
 ;; ============================================================
@@ -177,44 +173,38 @@
   (define dir (make-temp-dir))
   (define reg (make-tool-registry))
   (register-tool! reg
-    (make-tool "crash-tool" "Crashes on execution"
-               (hasheq 'type "object"
-                       'properties (hasheq))
-               (lambda (args ctx)
-                 (raise (exn:fail "tool crash!"
-                                  (current-continuation-marks))))))
+                  (make-tool "crash-tool"
+                             "Crashes on execution"
+                             (hasheq 'type "object" 'properties (hasheq))
+                             (lambda (args ctx)
+                               (raise (exn:fail "tool crash!" (current-continuation-marks))))))
   (define prov (make-tool-call-mock-provider "crash-tool" (hasheq) "recovered"))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:max-iterations 5))
+  (define rt
+    (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:max-iterations 5))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "use crash tool"))
   ;; Should survive tool crash
-  (check-true (sdk:runtime? rt3)
-              "runtime should survive tool execution exception")
+  (check-true (sdk:runtime? rt3) "runtime should survive tool execution exception")
   (cleanup-dir dir))
 
 (test-case "fail-inject: tool returns error result"
   (define dir (make-temp-dir))
   (define reg (make-tool-registry))
   (register-tool! reg
-    (make-tool "error-tool" "Returns error"
-               (hasheq 'type "object"
-                       'properties (hasheq))
-               (lambda (args ctx)
-                 (make-error-result "deliberate error"))))
+                  (make-tool "error-tool"
+                             "Returns error"
+                             (hasheq 'type "object" 'properties (hasheq))
+                             (lambda (args ctx) (make-error-result "deliberate error"))))
   (define prov (make-tool-call-mock-provider "error-tool" (hasheq) "handled error"))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:max-iterations 5))
+  (define rt
+    (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:max-iterations 5))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "use error tool"))
   (check-true (sdk:runtime? rt3))
   (check-pred loop-result? result)
   ;; Should complete: error result is a normal flow, not an exception
-  (check-equal? (loop-result-termination-reason result) 'completed
+  (check-equal? (loop-result-termination-reason result)
+                'completed
                 "tool error result should allow completion")
   (cleanup-dir dir))
 
@@ -227,14 +217,11 @@
   (define reg (make-tool-registry))
   ;; No tools registered — provider asks for a non-existent tool
   (define prov (make-tool-call-mock-provider "nonexistent" (hasheq) "handled"))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry reg
-                               #:max-iterations 5))
+  (define rt
+    (sdk:make-runtime #:provider prov #:session-dir dir #:tool-registry reg #:max-iterations 5))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 result) (sdk:run-prompt! rt2 "call missing tool"))
-  (check-true (sdk:runtime? rt3)
-              "runtime should survive missing tool")
+  (check-true (sdk:runtime? rt3) "runtime should survive missing tool")
   (cleanup-dir dir))
 
 ;; ============================================================
@@ -251,23 +238,21 @@
      (lambda (req)
        (set-box! call-idx (add1 (unbox call-idx)))
        (if (odd? (unbox call-idx))
-           (make-model-response
-            (list (hash 'type "text" 'text "ok"))
-            (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
-            "flaky" 'stop)
-           (raise (exn:fail "intermittent failure"
-                            (current-continuation-marks)))))
+           (make-model-response (list (hash 'type "text" 'text "ok"))
+                                (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
+                                "flaky"
+                                'stop)
+           (raise (exn:fail "intermittent failure" (current-continuation-marks)))))
      (lambda (req)
        (set-box! call-idx (add1 (unbox call-idx)))
        (if (odd? (unbox call-idx))
-           (list (make-stream-chunk "ok" #f
-                               (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
-                               #t))
-           (raise (exn:fail "intermittent failure"
-                            (current-continuation-marks)))))))
-  (define rt (sdk:make-runtime #:provider flaky-prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)))
+           (list (make-stream-chunk "ok"
+                                    #f
+                                    (hasheq 'prompt-tokens 5 'completion-tokens 2 'total-tokens 7)
+                                    #t))
+           (raise (exn:fail "intermittent failure" (current-continuation-marks)))))))
+  (define rt
+    (sdk:make-runtime #:provider flaky-prov #:session-dir dir #:tool-registry (make-tool-registry)))
   (define rt2 (sdk:open-session rt))
   ;; Run 4 prompts — even ones fail, odd ones succeed
   (define-values (rt3 _1) (sdk:run-prompt! rt2 "p1"))
@@ -275,12 +260,10 @@
   (define-values (rt5 _3) (sdk:run-prompt! rt4 "p3"))
   (define-values (rt6 _4) (sdk:run-prompt! rt5 "p4"))
   ;; Final runtime should be valid
-  (check-true (sdk:runtime? rt6)
-              "runtime should survive intermittent failures")
+  (check-true (sdk:runtime? rt6) "runtime should survive intermittent failures")
   ;; Session should have some persisted data
   (define info (sdk:session-info rt6))
-  (check >= (hash-ref info 'history-length) 2
-         "some successful turns should be persisted")
+  (check >= (hash-ref info 'history-length) 2 "some successful turns should be persisted")
   (cleanup-dir dir))
 
 ;; ============================================================
@@ -291,19 +274,18 @@
   (define dir (make-temp-dir))
   (define bus (make-event-bus))
   (define events (box '()))
-  (subscribe! bus (lambda (e)
-                    (set-box! events (cons (event-event e) (unbox events)))))
+  (subscribe! bus (lambda (e) (set-box! events (cons (event-event e) (unbox events)))))
   (define prov (make-failing-provider #:on-call 1))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)
-                               #:event-bus bus))
+  (define rt
+    (sdk:make-runtime #:provider prov
+                      #:session-dir dir
+                      #:tool-registry (make-tool-registry)
+                      #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (define-values (rt3 _) (sdk:run-prompt! rt2 "trigger error"))
   (define evts (reverse (unbox events)))
   ;; turn.started should be emitted
-  (check-not-false (member "turn.started" evts)
-                   "turn.started should be emitted before error")
+  (check-not-false (member "turn.started" evts) "turn.started should be emitted before error")
   ;; NOTE: Current behavior does NOT always pair turn.started with
   ;; turn.completed on provider errors. This test documents the gap.
   ;; A future fix should ensure pairing (turn.failed or turn.completed).
@@ -315,13 +297,13 @@
   (define dir (make-temp-dir))
   (define bus (make-event-bus))
   (define events (box '()))
-  (subscribe! bus (lambda (e)
-                    (set-box! events (cons (event-event e) (unbox events)))))
+  (subscribe! bus (lambda (e) (set-box! events (cons (event-event e) (unbox events)))))
   (define prov (make-failing-provider #:on-call 1))
-  (define rt (sdk:make-runtime #:provider prov
-                               #:session-dir dir
-                               #:tool-registry (make-tool-registry)
-                               #:event-bus bus))
+  (define rt
+    (sdk:make-runtime #:provider prov
+                      #:session-dir dir
+                      #:tool-registry (make-tool-registry)
+                      #:event-bus bus))
   (define rt2 (sdk:open-session rt))
   (sdk:run-prompt! rt2 "trigger error")
   (define evts (reverse (unbox events)))

@@ -18,8 +18,7 @@
 (test-case "1-arg handler is wrapped to accept (args exec-ctx)"
   (define reg (make-tool-registry))
   (define ctx (make-test-ctx reg))
-  (ext-register-tool! ctx "test-1arg" "desc" (hasheq)
-                      (lambda (args) "result-from-1arg"))
+  (ext-register-tool! ctx "test-1arg" "desc" (hasheq) (lambda (args) "result-from-1arg"))
   (define t (lookup-tool reg "test-1arg"))
   (check-true (tool? t))
   ;; The wrapped handler should accept 2 args (args + exec-ctx)
@@ -28,7 +27,6 @@
 (test-case "handler receives correct args map"
   (define reg (make-tool-registry))
   (define ctx (make-test-ctx reg))
-  (ext-register-tool! ctx "test-args" "desc" (hasheq)
-                      (lambda (args) (hash-ref args 'x)))
+  (ext-register-tool! ctx "test-args" "desc" (hasheq) (lambda (args) (hash-ref args 'x)))
   (define t (lookup-tool reg "test-args"))
   (check-equal? ((tool-execute t) (hasheq 'x 42) 'fake-ctx) 42))

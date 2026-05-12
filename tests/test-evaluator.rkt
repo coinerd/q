@@ -83,10 +83,11 @@
   (define r (eval-in-sandbox "'x"))
   (check-true (eval-result? r))
   ;; Transparent structs can be equal to manually constructed ones
-  (check-equal? r (eval-result (eval-result-value r)
-                                (eval-result-output r)
-                                (eval-result-error r)
-                                (eval-result-elapsed-ms r))))
+  (check-equal? r
+                (eval-result (eval-result-value r)
+                             (eval-result-output r)
+                             (eval-result-error r)
+                             (eval-result-elapsed-ms r))))
 
 ;; ============================================================
 ;; 9. Multiple expressions: begin block

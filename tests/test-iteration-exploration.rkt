@@ -5,7 +5,7 @@
 ;; Verifies increased iteration budgets and exploration steering hint injection.
 
 (require rackunit
-         "../runtime/iteration.rkt")
+         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop))
 
 ;; ============================================================
 ;; Iteration budget defaults

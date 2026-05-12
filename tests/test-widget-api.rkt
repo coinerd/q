@@ -42,10 +42,8 @@
 (test-case "compute-layout-with-widgets: zero widgets = same as basic"
   (define l0 (compute-layout 80 24))
   (define l0w (compute-layout-with-widgets 80 24 0))
-  (check-equal? (tui-layout-transcript-height l0)
-                (tui-layout-transcript-height l0w))
-  (check-equal? (tui-layout-status-row l0)
-                (tui-layout-status-row l0w)))
+  (check-equal? (tui-layout-transcript-height l0) (tui-layout-transcript-height l0w))
+  (check-equal? (tui-layout-status-row l0) (tui-layout-status-row l0w)))
 
 (test-case "compute-layout-with-widgets: clamps transcript to min 1"
   (define l (compute-layout-with-widgets 80 4 3))
@@ -161,8 +159,9 @@
   (define l0 (compute-layout 80 24))
   (define th0 (tui-layout-transcript-height l0))
   ;; Add 2 widget lines
-  (define lines (list (styled-line (list (styled-segment "info line 1" '())))
-                      (styled-line (list (styled-segment "info line 2" '())))))
+  (define lines
+    (list (styled-line (list (styled-segment "info line 1" '())))
+          (styled-line (list (styled-segment "info line 2" '())))))
   (ctx-set-widget state-box "ext" "info" lines)
   (define widget-count (length (get-widget-lines-above (unbox state-box))))
   (check-equal? widget-count 2)

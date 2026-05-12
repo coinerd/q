@@ -7,7 +7,9 @@
          rackunit/text-ui
          racket/set
          "../util/protocol-types.rkt"
-         "../runtime/iteration.rkt")
+         (only-in "../runtime/iteration/tool-turn-bridge.rkt"
+                  extract-tool-target-path
+                  update-seen-paths))
 
 ;; ── Helpers ──
 

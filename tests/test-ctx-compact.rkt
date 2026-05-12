@@ -22,14 +22,16 @@
   (format "msg-~a" msg-counter))
 
 (define (make-user-msg text)
-  (make-message (next-id!) #f 'user 'text
-                (list (make-text-part text))
-                (current-seconds) (hasheq)))
+  (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
 
 (define (make-assistant-msg text)
-  (make-message (next-id!) #f 'assistant 'text
+  (make-message (next-id!)
+                #f
+                'assistant
+                'text
                 (list (make-text-part text))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 (define (make-test-messages count)
   (for/list ([i (in-range count)])
@@ -73,7 +75,8 @@
 (test-case "ctx-compact-request: stores instructions and callbacks"
   (define on-ok (lambda (r) 'ok))
   (define on-err (lambda (r) 'err))
-  (define req (ctx-compact-request "summarize focusing on code changes" on-ok on-err (current-seconds)))
+  (define req
+    (ctx-compact-request "summarize focusing on code changes" on-ok on-err (current-seconds)))
   (check-equal? (ctx-compact-request-instructions req) "summarize focusing on code changes")
   (check-true (procedure? (ctx-compact-request-on-complete req)))
   (check-true (procedure? (ctx-compact-request-on-error req))))
@@ -116,8 +119,7 @@
   (define msgs (make-test-messages 10))
   (define strategy (compaction-strategy 5 3))
   (define callback-result #f)
-  (ctx-compact msgs strategy
-                #:on-complete (lambda (r) (set! callback-result r)))
+  (ctx-compact msgs strategy #:on-complete (lambda (r) (set! callback-result r)))
   (check-true (compact-callback-result? callback-result))
   (check-true (compact-callback-result-success? callback-result)))
 
@@ -134,8 +136,9 @@
                  [current-compact-rate-window 60])
     (reset-rate-limit!)
     (define error-result #f)
-    (ctx-compact (make-test-messages 10) (compaction-strategy 5 3)
-                  #:on-error (lambda (r) (set! error-result r)))
+    (ctx-compact (make-test-messages 10)
+                 (compaction-strategy 5 3)
+                 #:on-error (lambda (r) (set! error-result r)))
     (check-true (compact-callback-result? error-result))
     (check-false (compact-callback-result-success? error-result))))
 

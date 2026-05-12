@@ -5,8 +5,7 @@
 (require rackunit
          rackunit/text-ui
          json
-         (only-in "../extensions/github/handlers/milestone-ops.rkt"
-                  milestone-create-from-spec))
+         (only-in "../extensions/github/handlers/milestone-ops.rkt" milestone-create-from-spec))
 
 (define milestone-ops-tests
   (test-suite "GitHub Milestone Ops"
@@ -17,12 +16,12 @@
 
     (test-case "milestone-create-from-spec: dry run reads valid spec"
       (define tmp-file (make-temporary-file "spec-~a.json"))
-      (call-with-output-file tmp-file
-        (lambda (out)
-          (write-json (hasheq 'milestones
-                              (list (hasheq 'title "v1.0" 'description "First release")))
-                      out))
-        #:exists 'truncate)
+      (call-with-output-file
+       tmp-file
+       (lambda (out)
+         (write-json (hasheq 'milestones (list (hasheq 'title "v1.0" 'description "First release")))
+                     out))
+       #:exists 'truncate)
       (define result (milestone-create-from-spec tmp-file #t))
       (check-not-false result)
       (delete-file tmp-file))))

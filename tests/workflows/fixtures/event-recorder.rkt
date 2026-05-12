@@ -28,10 +28,7 @@
 (define (make-event-recorder bus)
   (define events-box (box '()))
   (define sub-id
-    (subscribe! bus
-                (lambda (evt)
-                  (set-box! events-box
-                            (append (unbox events-box) (list evt)))))
+    (subscribe! bus (lambda (evt) (set-box! events-box (append (unbox events-box) (list evt)))))
     ;; No filter — record everything
     )
   (event-recorder events-box bus sub-id))
@@ -44,8 +41,7 @@
 ;; events-of-type : event-recorder? string? -> (listof event?)
 ;; Returns only events matching the given event name.
 (define (events-of-type recorder event-name)
-  (filter (lambda (evt) (equal? (event-ev evt) event-name))
-          (recorded-events recorder)))
+  (filter (lambda (evt) (equal? (event-ev evt) event-name)) (recorded-events recorder)))
 
 ;; event-names : event-recorder? -> (listof string?)
 ;; Returns the event names in order.
@@ -62,7 +58,9 @@
   (cond
     [(< names-len expected-len)
      (format "only ~a events recorded, need ~a for sequence match. Got: ~a"
-             names-len expected-len names)]
+             names-len
+             expected-len
+             names)]
     [else
      ;; Slide a window of expected-len over names
      (define found
@@ -73,8 +71,7 @@
            (equal? a b))))
      (cond
        [found #t]
-       [else
-        (format "sequence ~a not found in ~a" expected-names names)])]))
+       [else (format "sequence ~a not found in ~a" expected-names names)])]))
 
 ;; clear-events! : event-recorder? -> void?
 ;; Clears all recorded events (useful for between-turn assertions).

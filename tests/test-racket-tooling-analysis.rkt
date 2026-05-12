@@ -10,12 +10,12 @@
   (test-suite "Racket Tooling Analysis"
 
     (test-case "handle-racket-check: missing path raises error"
-      (check-exn exn:fail?
-                 (lambda () (handle-racket-check (hasheq 'path "" 'mode "syntax")))))
+      (check-exn exn:fail? (lambda () (handle-racket-check (hasheq 'path "" 'mode "syntax")))))
 
     (test-case "handle-racket-check: nonexistent file raises error"
       (check-exn exn:fail?
-                 (lambda () (handle-racket-check (hasheq 'path "/nonexistent.rkt" 'mode "syntax")))))))
+                 (lambda ()
+                   (handle-racket-check (hasheq 'path "/nonexistent.rkt" 'mode "syntax")))))))
 
 (module+ main
   (run-tests analysis-tests))

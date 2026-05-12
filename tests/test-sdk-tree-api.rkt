@@ -49,8 +49,7 @@
       (define tree2 (load-tree path))
       (define entries2 (hash-ref tree2 '%%entries%% '()))
       (check-true (for/or ([e (in-list entries2)])
-                    (and (eq? (message-kind e) 'branch)
-                         (equal? (message-id e) "b1"))))
+                    (and (eq? (message-kind e) 'branch) (equal? (message-id e) "b1"))))
       (delete-directory/files dir))
 
     (test-case "q:session-navigate creates navigation entry"

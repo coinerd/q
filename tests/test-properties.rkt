@@ -42,14 +42,17 @@
     ;; Add random entries
     (define actions '(action-a action-b action-c action-d action-e))
     (for ([i (in-range (random 1 10))])
-      (define key (key-spec (list-ref '(up down left right home end page-up page-down)
-                                      (random 8))
-                            (random 2) (random 2) (random 2)))
+      (define key
+        (key-spec (list-ref '(up down left right home end page-up page-down) (random 8))
+                  (random 2)
+                  (random 2)
+                  (random 2)))
       (keymap-add! km key (list-ref actions (random (length actions)))))
     (define entries-before (length (keymap-list km)))
     ;; Merge with itself — should not change entries
     (keymap-merge km km)
-    (check-equal? (length (keymap-list km)) entries-before
+    (check-equal? (length (keymap-list km))
+                  entries-before
                   "merging with self should not grow entries")))
 
 (test-case "prop: keymap-add! replaces existing binding"
@@ -81,8 +84,7 @@
     (keymap-add! target ks 'target-action)
     (keymap-add! source ks 'source-action)
     (keymap-merge target source)
-    (check-equal? (keymap-lookup target ks) 'source-action
-                  "source should win on conflict")))
+    (check-equal? (keymap-lookup target ks) 'source-action "source should win on conflict")))
 
 (test-case "prop: keymap-merge preserves non-conflicting bindings"
   (for ([_ (in-range N-ITERATIONS)])
@@ -93,10 +95,8 @@
     (keymap-add! target ks1 'keep-this)
     (keymap-add! source ks2 'add-this)
     (keymap-merge target source)
-    (check-equal? (keymap-lookup target ks1) 'keep-this
-                  "non-conflicting target binding preserved")
-    (check-equal? (keymap-lookup target ks2) 'add-this
-                  "source binding added")))
+    (check-equal? (keymap-lookup target ks1) 'keep-this "non-conflicting target binding preserved")
+    (check-equal? (keymap-lookup target ks2) 'add-this "source binding added")))
 
 ;; ============================================================
 ;; 2. Session replay idempotency
@@ -124,20 +124,20 @@
 
 (test-case "prop: session replay is deterministic"
   (define-values (dir sp) (make-temp-session))
-  (define msgs (for/list ([_ (in-range (random 5 20))]) (random-message)))
+  (define msgs
+    (for/list ([_ (in-range (random 5 20))])
+      (random-message)))
   ;; Write messages
   (for ([m (in-list msgs)])
     (append-entry! sp m))
   ;; Replay twice
   (define replay1 (replay-session sp))
   (define replay2 (replay-session sp))
-  (check-equal? (length replay1) (length replay2)
-                "replay lengths should match")
+  (check-equal? (length replay1) (length replay2) "replay lengths should match")
   (for ([m1 (in-list replay1)]
         [m2 (in-list replay2)]
         [i (in-naturals)])
-    (check-equal? (message-id m1) (message-id m2)
-                  (format "message ~a IDs should match" i)))
+    (check-equal? (message-id m1) (message-id m2) (format "message ~a IDs should match" i)))
   (cleanup-temp-session dir))
 
 (test-case "prop: session replay preserves message count"
@@ -147,16 +147,19 @@
     (define m (random-message))
     (append-entry! sp (random-message)))
   (define replayed (replay-session sp))
-  (check-equal? (length replayed) n
-                "replay should return exactly the written messages")
+  (check-equal? (length replayed) n "replay should return exactly the written messages")
   (cleanup-temp-session dir))
 
 (test-case "prop: session replay round-trip preserves content"
   (define-values (dir sp) (make-temp-session))
-  (define m (make-message "test-id" #f 'user 'message
-                          (list (make-text-part "hello world"))
-                          (current-seconds)
-                          (hasheq)))
+  (define m
+    (make-message "test-id"
+                  #f
+                  'user
+                  'message
+                  (list (make-text-part "hello world"))
+                  (current-seconds)
+                  (hasheq)))
   (append-entry! sp m)
   (define replayed (replay-session sp))
   (check-equal? (length replayed) 1)
@@ -185,23 +188,23 @@
 
 (test-case "prop: ASCII printable chars have width 1"
   (for ([cp (in-range 32 127)])
-    (check-equal? (char-width (integer->char cp)) 1
-                  (format "ASCII char ~a should have width 1" cp))))
+    (check-equal? (char-width (integer->char cp)) 1 (format "ASCII char ~a should have width 1" cp))))
 
 (test-case "prop: string-width equals sum of char widths"
   ;; For strings without combining characters
-  (define (string-width-impl s) (for/sum ([c (in-string s)]) (char-width c)))
+  (define (string-width-impl s)
+    (for/sum ([c (in-string s)]) (char-width c)))
   (define test-strings '("hello" "abc123" "test" "ASCII only" ""))
   (for ([s (in-list test-strings)])
-    (check-equal? (string-width-impl s) (string-width-impl s)
+    (check-equal? (string-width-impl s)
+                  (string-width-impl s)
                   "sum-of-char-widths should be consistent")))
 
 (test-case "prop: string-width is non-negative"
   (for ([_ (in-range N-ITERATIONS)])
     (define s (format "~a~a~a" (random 1000) (random 1000) (random 1000)))
     (define sw (for/sum ([c (in-string s)]) (char-width c)))
-    (check-true (>= sw 0)
-                "string-width should always be non-negative")))
+    (check-true (>= sw 0) "string-width should always be non-negative")))
 
 ;; ============================================================
 ;; 4. UTF-8 encode/decode round-trip
@@ -211,16 +214,18 @@
   (for ([_ (in-range N-ITERATIONS)])
     ;; Generate random strings from various Unicode ranges
     (define cp (random 32 1000))
-    (define s (list->string (for/list ([_ (in-range (random 1 20))])
-                              (integer->char (random 32 1000)))))
+    (define s
+      (list->string (for/list ([_ (in-range (random 1 20))])
+                      (integer->char (random 32 1000)))))
     (define bs (string->bytes/utf-8 s))
     (define s2 (bytes->string/utf-8 bs))
     (check-equal? s2 s "UTF-8 round-trip should preserve string")))
 
 (test-case "prop: UTF-8 of ASCII is identity"
   (for ([_ (in-range N-ITERATIONS)])
-    (define s (list->string (for/list ([_ (in-range (random 1 30))])
-                              (integer->char (random 32 127)))))
+    (define s
+      (list->string (for/list ([_ (in-range (random 1 30))])
+                      (integer->char (random 32 127)))))
     (define bs (string->bytes/utf-8 s))
     ;; ASCII UTF-8 bytes should be the same as the char values
     (for ([b (in-bytes bs)]
@@ -249,14 +254,12 @@
 (test-case "prop: estimate-text-tokens returns >= 1 for non-empty"
   (for ([_ (in-range N-ITERATIONS)])
     (define s (format "~a" (random 1 1000000)))
-    (check-true (>= (estimate-text-tokens s) 1)
-                "non-empty string should have >= 1 token")))
+    (check-true (>= (estimate-text-tokens s) 1) "non-empty string should have >= 1 token")))
 
 (test-case "prop: estimate-text-tokens: concatenation >= individual"
   (for ([_ (in-range 100)])
     (define s1 (format "string one ~a " (random 1000)))
     (define s2 (format "string two ~a " (random 1000)))
     (define combined (string-append s1 s2))
-    (check-true (>= (estimate-text-tokens combined)
-                    (estimate-text-tokens s1))
+    (check-true (>= (estimate-text-tokens combined) (estimate-text-tokens s1))
                 "combined should have >= tokens of first part")))

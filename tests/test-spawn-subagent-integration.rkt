@@ -26,41 +26,37 @@
 ;; Create a mock provider that returns a specific response text.
 (define (make-stub-provider response-text #:name [prov-name "test-provider"])
   (define mock-response
-    (make-model-response
-     (list (hasheq 'type "text" 'text response-text))
-     (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)
-     prov-name
-     'stop))
+    (make-model-response (list (hasheq 'type "text" 'text response-text))
+                         (hasheq 'prompt-tokens 10 'completion-tokens 20 'total-tokens 30)
+                         prov-name
+                         'stop))
   (make-mock-provider mock-response #:name prov-name))
 
 ;; Create a provider that raises on send (for error handling tests).
 (define (make-failing-provider)
-  (make-provider
-   (lambda () "failing-provider")
-   (lambda () (hasheq 'streaming #t))
-   (lambda (req) (error 'failing-provider "API connection refused"))
-   (lambda (req) (error 'failing-provider "streaming failed"))))
+  (make-provider (lambda () "failing-provider")
+                 (lambda () (hasheq 'streaming #t))
+                 (lambda (req) (error 'failing-provider "API connection refused"))
+                 (lambda (req) (error 'failing-provider "streaming failed"))))
 
 ;; Create a provider that returns tool_calls stop reason (for max-turns test).
 (define (make-tool-call-loop-provider)
   (define resp
-    (make-model-response
-     (list (hasheq 'type "text" 'text "I need to call a tool"))
-     (hasheq 'prompt-tokens 5 'completion-tokens 5 'total-tokens 10)
-     "loop-provider"
-     'tool_calls))
+    (make-model-response (list (hasheq 'type "text" 'text "I need to call a tool"))
+                         (hasheq 'prompt-tokens 5 'completion-tokens 5 'total-tokens 10)
+                         "loop-provider"
+                         'tool_calls))
   (make-mock-provider resp #:name "loop-provider"))
 
 ;; Build an exec-context with a provider in runtime-settings.
 (define (make-test-exec-ctx provider
-                             #:model [model "test-model"]
-                             #:working-directory [wd (current-directory)])
-  (make-exec-context
-   #:working-directory wd
-   #:event-publisher #f
-   #:runtime-settings (hasheq 'provider provider 'model model)
-   #:call-id (generate-id)
-   #:session-metadata (hasheq 'session-id "test-parent-session" 'role "parent")))
+                            #:model [model "test-model"]
+                            #:working-directory [wd (current-directory)])
+  (make-exec-context #:working-directory wd
+                     #:event-publisher #f
+                     #:runtime-settings (hasheq 'provider provider 'model model)
+                     #:call-id (generate-id)
+                     #:session-metadata (hasheq 'session-id "test-parent-session" 'role "parent")))
 
 ;; ============================================================
 ;; #1204: Provider Injection into Subagent Exec Context
@@ -76,11 +72,11 @@
                (format "expected success, got error: ~a" (tool-result-content result)))
   ;; The result should contain the real provider's response, not the mock fallback
   (define content (tool-result-content result))
-  (define text (string-join
-                (for/list ([c (in-list content)]
-                           #:when (hash-ref c 'text #f))
-                  (hash-ref c 'text ""))
-                ""))
+  (define text
+    (string-join (for/list ([c (in-list content)]
+                            #:when (hash-ref c 'text #f))
+                   (hash-ref c 'text ""))
+                 ""))
   (check-true (string-contains? text response-text)
               (format "expected response to contain ~v, got ~v" response-text text)))
 
@@ -93,9 +89,7 @@
 
 (test-case "#1204: subagent falls back to mock when runtime-settings lacks provider"
   ;; exec-ctx with no provider key in runtime-settings
-  (define ctx (make-exec-context
-               #:runtime-settings (hasheq 'model "test-model")
-               #:call-id "test"))
+  (define ctx (make-exec-context #:runtime-settings (hasheq 'model "test-model") #:call-id "test"))
   (define result (tool-spawn-subagent (hasheq 'task "test task") ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)))
@@ -115,14 +109,13 @@
   (define ctx (make-test-exec-ctx failing-prov))
   (define result (tool-spawn-subagent (hasheq 'task "This will fail") ctx))
   (check-true (tool-result? result))
-  (check-true (tool-result-is-error? result)
-              "expected error result when provider fails")
+  (check-true (tool-result-is-error? result) "expected error result when provider fails")
   (define content (tool-result-content result))
-  (define text (string-join
-                (for/list ([c (in-list content)]
-                           #:when (hash-ref c 'text #f))
-                  (hash-ref c 'text ""))
-                ""))
+  (define text
+    (string-join (for/list ([c (in-list content)]
+                            #:when (hash-ref c 'text #f))
+                   (hash-ref c 'text ""))
+                 ""))
   (check-true (string-contains? text "subagent failed")
               (format "error should mention 'subagent failed', got: ~v" text)))
 
@@ -130,17 +123,16 @@
   (define prov (make-stub-provider "session test"))
   (define parent-session-id "parent-abc-123")
   (define ctx
-    (make-exec-context
-     #:runtime-settings (hasheq 'provider prov 'model "test")
-     #:call-id (generate-id)
-     #:session-metadata (hasheq 'session-id parent-session-id)))
+    (make-exec-context #:runtime-settings (hasheq 'provider prov 'model "test")
+                       #:call-id (generate-id)
+                       #:session-metadata (hasheq 'session-id parent-session-id)))
   (define result (tool-spawn-subagent (hasheq 'task "test") ctx))
   (check-true (tool-result? result))
-  (when (and (not (tool-result-is-error? result))
-             (hash? (tool-result-details result)))
+  (when (and (not (tool-result-is-error? result)) (hash? (tool-result-details result)))
     (define child-session-id (hash-ref (tool-result-details result) 'session-id #f))
     (check-not-false child-session-id "child should have a session ID in details")
-    (check-not-equal? child-session-id parent-session-id
+    (check-not-equal? child-session-id
+                      parent-session-id
                       "child session ID should differ from parent")))
 
 ;; ============================================================
@@ -178,11 +170,10 @@
   (define response-text "Integration test complete")
   (define prov (make-stub-provider response-text #:name "integration-prov"))
   (define ctx (make-test-exec-ctx prov #:model "gpt-4o-mini"))
-  (define result (tool-spawn-subagent
-                  (hasheq 'task "Do the integration test"
-                          'role "You are an integration tester."
-                          'max-turns 3)
-                  ctx))
+  (define result
+    (tool-spawn-subagent
+     (hasheq 'task "Do the integration test" 'role "You are an integration tester." 'max-turns 3)
+     ctx))
   (check-true (tool-result? result))
   (check-false (tool-result-is-error? result)
                (format "integration test failed: ~a" (tool-result-content result)))
@@ -203,11 +194,11 @@
   (define ctx (make-test-exec-ctx prov))
   (define result (tool-spawn-subagent (hasheq 'task "unique test") ctx))
   (check-false (tool-result-is-error? result))
-  (define text (string-join
-                (for/list ([c (in-list (tool-result-content result))]
-                           #:when (hash-ref c 'text #f))
-                  (hash-ref c 'text ""))
-                ""))
+  (define text
+    (string-join (for/list ([c (in-list (tool-result-content result))]
+                            #:when (hash-ref c 'text #f))
+                   (hash-ref c 'text ""))
+                 ""))
   (check-true (string-contains? text unique-response)
               (format "result should contain unique provider response, got: ~v" text))
   ;; Explicitly verify we did NOT get the old mock fallback text

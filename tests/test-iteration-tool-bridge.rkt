@@ -22,9 +22,10 @@
       (check-equal? (take-at-most '(1 2 3) 3) '(1 2 3)))
 
     (test-case "compute-tool-counters: explore + implement"
-      (define tcs (list (make-tool-call #f "read" (hash))
-                        (make-tool-call #f "edit" (hash))
-                        (make-tool-call #f "grep" (hash))))
+      (define tcs
+        (list (make-tool-call #f "read" (hash))
+              (make-tool-call #f "edit" (hash))
+              (make-tool-call #f "grep" (hash))))
       (define-values (exp impl) (compute-tool-counters tcs 0 0))
       (check-equal? exp 2)
       (check-equal? impl 1))

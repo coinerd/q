@@ -13,7 +13,7 @@
                   make-context-assembly-config
                   context-assembly-config?
                   context-assembly-config-recent-tokens)
-         (only-in "../runtime/iteration.rkt" maybe-dispatch-hooks))
+         (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks))
 
 (define (make-test-ext hook-name hooks-box)
   (extension (format "lifecycle-test-~a" hook-name)

@@ -62,7 +62,9 @@
   (check-true (string? (eval-result-error result))))
 
 (test-case "eval-in-sandbox blocks file writing"
-  (define result (eval-in-sandbox "(call-with-output-file \"/tmp/sandbox-escape-test\" (lambda (p) (display \"pwned\" p)))"))
+  (define result
+    (eval-in-sandbox
+     "(call-with-output-file \"/tmp/sandbox-escape-test\" (lambda (p) (display \"pwned\" p)))"))
   (check-pred eval-result? result)
   (check-false (eval-result-value result))
   (check-true (string? (eval-result-error result))))
@@ -188,8 +190,7 @@
   (define result (eval-in-sandbox "(dynamic-require 'racket/file 'file->string)"))
   (check-pred eval-result? result)
   ;; Either it succeeds (returns procedure) or is blocked (returns #f with error)
-  (check-true (or (procedure? (eval-result-value result))
-                   (string? (eval-result-error result)))))
+  (check-true (or (procedure? (eval-result-value result)) (string? (eval-result-error result)))))
 
 ;; ============================================================
 ;; eval-in-sandbox — result struct properties
@@ -236,8 +237,9 @@
 (test-case "sandbox blocks network access"
   ;; Verify that sandbox-network-guard is set to #f by checking
   ;; the evaluator parameterization raises on network ops
-  (define result (eval-in-sandbox
-                  "(with-handlers ([exn:fail? (lambda (e) (list 'blocked (exn-message e)))])
+  (define result
+    (eval-in-sandbox
+     "(with-handlers ([exn:fail? (lambda (e) (list 'blocked (exn-message e)))])
                      (let-values ([(h in out) (tcp-connect \"example.com\" 80)])
                        'connected))"))
   (check-true (or (eval-result-error result)
@@ -245,9 +247,9 @@
                        (eq? (car (eval-result-value result)) 'blocked)))))
 
 (test-case "sandbox blocks file write access"
-  (define result (eval-in-sandbox
-                  "(with-handlers ([exn:fail? (lambda (e) (exn-message e))])
+  (define result
+    (eval-in-sandbox
+     "(with-handlers ([exn:fail? (lambda (e) (exn-message e))])
                      (call-with-output-file \"/tmp/sandbox-test-out\"
                        (lambda (p) (display \"hello\" p))))"))
-  (check-true (or (eval-result-error result)
-                  (string? (eval-result-value result)))))
+  (check-true (or (eval-result-error result) (string? (eval-result-value result)))))

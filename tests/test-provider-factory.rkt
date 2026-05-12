@@ -76,7 +76,7 @@
 ;; ============================================================
 
 (test-case "build-provider returns mock for empty settings"
-  (define settings (q-settings (hash) (hash) (hash)))  ; empty settings
+  (define settings (q-settings (hash) (hash) (hash))) ; empty settings
   (define config (hasheq))
   (define p (build-provider config settings))
   (check-pred provider? p)
@@ -87,12 +87,20 @@
 ;; ============================================================
 
 (test-case "create-provider-for-name returns anthropic provider for anthropic name"
-  (define p (create-provider-for-name "anthropic" "https://api.anthropic.com" "test-key" "claude-sonnet-4-20250514"))
+  (define p
+    (create-provider-for-name "anthropic"
+                              "https://api.anthropic.com"
+                              "test-key"
+                              "claude-sonnet-4-20250514"))
   (check-pred provider? p)
   (check-equal? (provider-name p) "anthropic"))
 
 (test-case "create-provider-for-name returns gemini provider for gemini name"
-  (define p (create-provider-for-name "gemini" "https://generativelanguage.googleapis.com" "test-key" "gemini-2.0-flash"))
+  (define p
+    (create-provider-for-name "gemini"
+                              "https://generativelanguage.googleapis.com"
+                              "test-key"
+                              "gemini-2.0-flash"))
   (check-pred provider? p)
   (check-equal? (provider-name p) "gemini"))
 

@@ -34,8 +34,7 @@
   (define reg (make-extension-registry))
   (register-extension! reg (extension "a" "1" "1" (hasheq)))
   (register-extension! reg (extension "b" "1" "1" (hasheq)))
-  (check equal? (sort (map extension-name (list-extensions reg))
-                      string<?) '("a" "b")))
+  (check equal? (sort (map extension-name (list-extensions reg)) string<?) '("a" "b")))
 
 (test-case "unregister-extension! removes extension"
   (define reg (make-extension-registry))
@@ -51,10 +50,8 @@
   (define reg (make-extension-registry))
   (define handler1 (λ (p) p))
   (define handler2 (λ (p) p))
-  (register-extension! reg (extension "ext-a" "1" "1"
-                                       (hasheq 'before-send handler1)))
-  (register-extension! reg (extension "ext-b" "1" "1"
-                                       (hasheq 'before-send handler2)))
+  (register-extension! reg (extension "ext-a" "1" "1" (hasheq 'before-send handler1)))
+  (register-extension! reg (extension "ext-b" "1" "1" (hasheq 'before-send handler2)))
   (define handlers (handlers-for-point reg 'before-send))
   (check-equal? (length handlers) 2)
   (check-equal? (car (car handlers)) "ext-a")

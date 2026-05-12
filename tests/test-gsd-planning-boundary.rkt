@@ -288,8 +288,6 @@
   (gsd-session-cleanup (hasheq))
   (check-equal? (gsd-mode) #f))
 
-
-
 (test-case "gsd-session-cleanup returns hook-pass"
   (define result (gsd-session-cleanup (hasheq 'session-id "test-session" 'duration 100)))
   (check-eq? (hook-result-action result) 'pass))
