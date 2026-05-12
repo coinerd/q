@@ -139,5 +139,5 @@
     (check-true (not (null? (get-struct-field-names name)))
                 (format "~a should have field names" name))))
 
-(test-case "get-struct-field-names returns empty for unknown types"
-  (check-equal? (get-struct-field-names 'unknown-event-type) '()))
+(test-case "get-struct-field-names returns #f for unknown types"
+  (check-false (get-struct-field-names 'unknown-event-type)))

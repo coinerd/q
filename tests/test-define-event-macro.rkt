@@ -182,7 +182,7 @@
 
 (test-case "T-05: unregistered event type returns #f"
   (define fields (lookup-event-fields 'nonexistent-event-type-xyz))
-  (check-equal? fields '()))
+  (check-false fields))
 
 (test-case "T-05: registration is idempotent"
   ;; Re-registering should not error

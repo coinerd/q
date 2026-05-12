@@ -23,7 +23,7 @@
 (provide (contract-out [emit-typed-event!
                         (->* (event-bus? typed-event?) (#:state (or/c loop-state? #f)) event?)]
                        [event-struct->hasheq (-> typed-event? hash?)]
-                       [get-struct-field-names (-> symbol? (listof symbol?))])
+                       [get-struct-field-names (-> symbol? (or/c (listof symbol?) #f))])
          typed-event-base-field-count)
 
 ;; Look up the field name list for a given event struct symbol.
@@ -59,9 +59,12 @@
             (typed-event-turn-id evt)))
   (define name (struct-name evt))
   (define fields (get-struct-field-names name))
+  (unless fields
+    (log-warning (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields"
+                         name)))
   (for/fold ([h base])
             ([i (in-naturals)]
-             [fname (in-list fields)])
+             [fname (in-list (or fields '()))])
     (hash-set h fname (vector-ref vec (+ app-start i)))))
 
 ;; Emit a typed event on the bus.

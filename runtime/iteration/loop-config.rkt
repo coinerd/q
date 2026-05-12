@@ -16,7 +16,7 @@
          (only-in "../../tools/registry.rkt" tool-registry?)
          (only-in "../../extensions/api.rkt" extension-registry?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
-         (only-in "../../runtime/session-config.rkt" session-config?)
+         (only-in "../../runtime/session-config.rkt" session-config? hash->session-config)
          (only-in "../../runtime/working-set.rkt" working-set?)
          (only-in "../../runtime/session-types.rkt" agent-session?)
          (only-in "../../util/loop-result.rkt" loop-result?))
@@ -60,7 +60,7 @@
                           session-id
                           max-iterations
                           #:cancellation-token [cancellation-token #f]
-                          #:config [config (hash)]
+                          #:config [config (hash->session-config (hash))]
                           #:queue [queue #f]
                           #:follow-up-delivery-mode [follow-up-delivery-mode 'all]
                           #:injected-box [injected-box #f]

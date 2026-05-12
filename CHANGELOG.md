@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.38.12 — 2026-05-12
+
+### Fixed
+- R-01: Fix 4 failing tests in `test-soft-iteration.rkt` (raw hash to tightened session-config? contract)
+- R-02: Fix 1 failing test in `test-di-keyword-args.rkt` (raw hash to tightened session-config? contract)
+- L-01: Delete dead `ui-remove-all-extension-widgets-param` from `ui-surface.rkt`
+- W-NEW-03: Align legacy `TOPIC-TOOL-START`/`TOPIC-TOOL-END` constants to match typed event naming
+- W-NEW-01: `lookup-event-fields` returns `#f` for unknown events (was `'()`, masks typos)
+- W-NEW-02: `make-loop-config` default config changed from raw `(hash)` to `(hash->session-config (hash))`
+- LINT: Fix CHANGELOG.md v0.38.11 header formatting
+
 ## v0.38.11 — 2026-05-12
 
 - W-02: Harden event-struct->hasheq with typed-event accessors (W0)
