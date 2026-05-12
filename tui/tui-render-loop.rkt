@@ -55,7 +55,7 @@
                        [next-message (->* (any/c) (#:timeout any/c) (or/c any/c #f))]
                        [tui-main-loop (-> any/c void?)]
                        [drain-events! (-> any/c void?)]
-                       [handle-user-submit! (-> any/c string? void?)]))
+                       [handle-user-submit! (-> any/c string? any/c)]))
 
 ;; ============================================================
 ;; Ubuf FFI/stubs

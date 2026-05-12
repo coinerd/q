@@ -4,7 +4,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../runtime/iteration/fsm-types.rkt")
+         "../runtime/iteration/fsm-types.rkt"
+         (only-in "../runtime/iteration/main-loop.rkt" current-iteration-fsm-state))
 
 (define fsm-suite
   (test-suite "Iteration FSM tests"
@@ -121,6 +122,19 @@
       (define s4 (next-iteration-state s3 event-tool-result))
       (check-eq? (state->symbol s4) 'decision)
       (define s5 (next-iteration-state s4 event-termination-reason))
-      (check-eq? (state->symbol s5) 'complete))))
+      (check-eq? (state->symbol s5) 'complete))
+
+    ;; -- FSM state parameter integration (N-04) --
+    (test-case "current-iteration-fsm-state parameter defaults to state-idle"
+      (check-eq? (current-iteration-fsm-state) state-idle))
+
+    (test-case "current-iteration-fsm-state tracks transitions"
+      (parameterize ([current-iteration-fsm-state state-idle])
+        (current-iteration-fsm-state (next-iteration-state state-idle event-start-loop))
+        (check-eq? (current-iteration-fsm-state) state-provider-turn)
+        (current-iteration-fsm-state (next-iteration-state state-provider-turn event-model-response))
+        (check-eq? (current-iteration-fsm-state) state-decision)
+        (current-iteration-fsm-state (next-iteration-state state-decision event-termination-reason))
+        (check-eq? (current-iteration-fsm-state) state-complete)))))
 
 (run-tests fsm-suite 'verbose)

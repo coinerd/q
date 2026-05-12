@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.39.10 — 2026-05-12
+
+### Added
+- T-01: tests/test-handle-user-submit.rkt — 4 tests for handle-user-submit! branches (busy-queue, duplicate-debounce, normal-submit, no-runner)
+- T-02: test-iteration-fsm.rkt — 2 integration tests for current-iteration-fsm-state parameter wiring
+
+### Changed
+- C-01: CHANGELOG v0.39.9 entry documenting all 6 fixes/changes
+
+## v0.39.9 — 2026-05-12
+
+### Changed
+- R-16: Decompose `process-extension-command` into parse→validate→execute phase helpers (tui/commands.rkt)
+- R-23: Decompose `load-extension!` into validate→attempt→register phases (extensions/loader.rkt)
+- R-26: Extract `handle-user-submit!` from tui-render-loop.rkt (~80 lines)
+
+### Fixed
+- N-02: Remove dead `parallelism-degree` field from scheduler-strategy
+- N-04: Wire FSM state parameters (`current-iteration-fsm-state`, `current-turn-fsm-state`) at transitions
+- R-13: Eliminate `struct->vector` from event-json legacy codec path; add warning on event-emitter fallback
+
 ## v0.39.8 — 2026-05-12
 
 ### Fixed

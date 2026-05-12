@@ -114,6 +114,8 @@
                              loop-result?)]
                        [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
 
+(provide current-iteration-fsm-state)
+
 ;; ============================================================
 ;; run-iteration-loop
 ;; ============================================================
