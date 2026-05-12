@@ -13,7 +13,6 @@
          "../ext-commands.rkt"
          "../hooks.rkt"
          "../tool-api.rkt"
-         "../gsd-planning-state.rkt"
          "../gsd-planning/command-normalization.rkt"
          "../gsd-planning/plan-diff.rkt"
          "../gsd/state-machine.rkt"
@@ -31,7 +30,8 @@
                   gsd-success?
                   gsd-failed?
                   gsd-command-result-mode
-                  with-gsd-transaction)
+                  with-gsd-transaction
+                  reset-all-gsd-state!)
          "../gsd/plan-types.rkt"
          "../gsd/plan-validator.rkt"
          (except-in "../gsd/wave-executor.rkt" next-pending-wave)
@@ -43,7 +43,14 @@
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
                   [set-gsd-event-bus! events:set-gsd-event-bus!])
-         (only-in "../gsd/session-state.rkt" set-gsd-state! with-gsd-lock))
+         (only-in "../gsd/session-state.rkt"
+                  set-gsd-state!
+                  with-gsd-lock
+                  current-pinned-dir
+                  set-pinned-dir!
+                  set-edit-limit!
+                  current-gsd-event-bus
+                  set-gsd-event-bus!))
 
 (provide register-gsd-commands
          handle-execute-command
@@ -54,6 +61,25 @@
 ;; ============================================================
 ;; Command registration
 ;; ============================================================
+
+;; Legacy mode wrappers (DEBT-01: migrated from gsd-planning-state.rkt)
+(define (gsd-mode)
+  (let ([s (gsm-current)])
+    (cond
+      [(eq? s 'idle) #f]
+      [(eq? s 'exploring) 'planning]
+      [else s])))
+
+(define (gsd-mode? v)
+  (eq? (gsd-mode) v))
+
+(define (set-gsd-mode! v)
+  (cond
+    [(not v) (gsm-reset!)]
+    [(eq? v 'planning) (gsm-transition-to! 'exploring)]
+    [(eq? v 'plan-written) (gsm-transition-to! 'plan-written)]
+    [(eq? v 'executing) (gsm-transition-to! 'executing)]
+    [else (gsm-transition! v)]))
 
 (define (register-gsd-commands ctx)
   (ext-register-command! ctx "/plan" "Display current GSD plan" 'general '() '("p"))
@@ -85,7 +111,7 @@
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
-  (define base-dir (or (pinned-planning-dir) (current-directory)))
+  (define base-dir (or (current-pinned-dir) (current-directory)))
   (match cmd
     [(? (lambda (c) (member c '("/go" "/implement" "/i")))) (handle-go-command base-dir input-text)]
     ["/gsd" (handle-gsd-status)]
@@ -197,13 +223,13 @@ Fix the plan before using /go.")))]
               (lambda ()
                 (set-gsd-mode! 'executing)
                 (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
-                (set-current-max-old-text-len! 1200)
+                (set-edit-limit! 1200)
                 (define wis
                   (for/list ([w (gsd-plan-waves plan)])
                     (gsd-wave-index w)))
                 (when (not (null? wis))
-                  (set-total-waves! (add1 (apply max wis))))
-                (set-current-wave-index! 0)
+                  (gsm-set-total-waves! (add1 (apply max wis))))
+                (gsm-set-current-wave! 0)
                 (define exec (make-wave-executor-from-validated validation))
                 (gsm-set-wave-executor! exec)
                 (values exec wis))
@@ -265,8 +291,8 @@ Plan:
 
 (define (handle-gsd-status)
   (define mode (gsd-mode))
-  (define tw (total-waves))
-  (define cw (completed-waves))
+  (define tw (gsm-total-waves))
+  (define cw (gsm-completed-waves))
   (define parts
     (list (format "Mode: ~a" (or mode "inactive"))
           (if (> tw 0)
@@ -300,16 +326,16 @@ Plan:
      (match (and (member cmd '("/plan" "/p")) args-text)
        ;; /plan <text> → submit as planning prompt
        [(? values)
-        (define saved-bus (gsd-event-bus)) ;; Preserve event bus across reset
-        (define saved-dir (pinned-planning-dir)) ;; Preserve pinned dir
+        (define saved-bus (current-gsd-event-bus)) ;; Preserve event bus across reset
+        (define saved-dir (current-pinned-dir)) ;; Preserve pinned dir
         (reset-all-gsd-state!) ;; Clean state for fresh plan (F1 fix)
         (when saved-bus
           (set-gsd-event-bus! saved-bus))
         (when saved-dir
-          (set-pinned-planning-dir! saved-dir))
+          (set-pinned-dir! saved-dir))
         (set-gsd-mode! 'planning)
         (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'planning))
-        (set-current-max-old-text-len! 500)
+        (set-edit-limit! 500)
         ;; Auto-create STATE.md if missing (#2164)
         (ensure-state-md! base-dir)
         (define existing-plan (read-planning-artifact base-dir "PLAN"))

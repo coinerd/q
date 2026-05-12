@@ -23,7 +23,7 @@
          (only-in "../../util/errors.rkt" raise-tool-error tool-error?)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          ;; v0.21.10: planning path resolution hardening (F7)
-         (only-in "../../extensions/gsd-planning-state.rkt" pinned-planning-dir)
+         (only-in "../../extensions/gsd/session-state.rkt" current-pinned-dir)
          (only-in "builtin-helpers.rkt" require-safe-path!))
 
 (provide tool-write
@@ -122,7 +122,7 @@
     [(not path-str) #f]
     [(path? path-str) (resolve-planning-path (path->string path-str))]
     [else
-     (define pinned (pinned-planning-dir))
+     (define pinned (current-pinned-dir))
      (cond
        [(not pinned) path-str]
        ;; Only rewrite simple .planning/ prefix paths (not ../other/.planning/)

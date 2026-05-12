@@ -14,14 +14,14 @@
          "../define-extension.rkt"
          "../context.rkt"
          "../tool-api.rkt"
-         "../gsd-planning-state.rkt"
+         "state-machine.rkt"
+         "session-state.rkt"
          "../gsd-planning/command-normalization.rkt"
          (only-in "../gsd/core.rkt" gsd-write-guard)
          (only-in "../gsd/policy.rkt" policy-decision policy-blocked? policy-reason)
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
-                  [set-gsd-event-bus! events:set-gsd-event-bus!])
-)
+                  [set-gsd-event-bus! events:set-gsd-event-bus!]))
 
 (provide planning-read-schema
          planning-write-schema
@@ -72,7 +72,7 @@
 
 (define (get-base-dir args [exec-ctx #f])
   (or (hash-ref args 'base_dir #f)
-      (pinned-planning-dir)
+      (current-pinned-dir)
       (and exec-ctx (ctx-cwd exec-ctx))
       (current-directory)))
 
@@ -191,7 +191,7 @@
      (define guard-arg (and art-path (path->string art-path)))
      (define guard-result
        (if guard-arg
-           (gsd-write-guard guard-arg (pinned-planning-dir))
+           (gsd-write-guard guard-arg (current-pinned-dir))
            (policy-decision #t #f '())))
      (match (policy-blocked? guard-result)
        [#t (make-error-result (format "Blocked: ~a" (policy-reason guard-result)))]
@@ -217,3 +217,22 @@
                                                     'text
                                                     (format "Written: ~a"
                                                             (path->string result-path)))))))])])]))
+
+;; Legacy mode wrappers (DEBT-01: migrated from gsd-planning-state.rkt)
+(define (gsd-mode)
+  (let ([s (gsm-current)])
+    (cond
+      [(eq? s 'idle) #f]
+      [(eq? s 'exploring) 'planning]
+      [else s])))
+
+(define (gsd-mode? v)
+  (eq? (gsd-mode) v))
+
+(define (set-gsd-mode! v)
+  (cond
+    [(not v) (gsm-reset!)]
+    [(eq? v 'planning) (gsm-transition-to! 'exploring)]
+    [(eq? v 'plan-written) (gsm-transition-to! 'plan-written)]
+    [(eq? v 'executing) (gsm-transition-to! 'executing)]
+    [else (gsm-transition! v)]))

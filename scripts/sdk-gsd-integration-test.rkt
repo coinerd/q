@@ -4,7 +4,8 @@
 ;; Run from q/ directory: racket scripts/sdk-gsd-integration-test.rkt
 
 (require "../extensions/gsd-planning.rkt"
-         "../extensions/gsd-planning-state.rkt"
+         "../extensions/gsd/state-machine.rkt"
+         "../extensions/gsd/session-state.rkt"
          "../extensions/gsd/state-machine.rkt"
          "../extensions/api.rkt"
          "../extensions/hooks.rkt"

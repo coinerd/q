@@ -30,7 +30,7 @@
          (only-in "../../llm/model.rkt" make-model-response)
          (only-in "../../util/protocol-types.rkt" message-role message-content text-part-text)
          (only-in "../../util/jsonl.rkt" jsonl-read-all-valid)
-         (only-in "../../extensions/gsd-planning-state.rkt" gsd-snapshot)
+         (only-in "../../extensions/gsd/state-machine.rkt" [gsm-snapshot gsd-snapshot])
          "task.rkt")
 
 (provide (struct-out execution-result)
