@@ -17,6 +17,9 @@
          classify-error
          timeout-error?
          rate-limit-error?
+         ;; Error classification data table
+         ERROR-CLASSIFICATION-TABLE
+         classify-error-from-table
          ;; Retry execution
          with-auto-retry
          ;; Configuration
@@ -164,6 +167,29 @@
 ;; Classify an error into a symbolic type for recovery hint rendering.
 ;; Returns one of: 'timeout, 'rate-limit, 'auth, 'context-overflow,
 ;; 'max-iterations, 'provider-error
+
+;; R-23: Error classification data table.
+;; Each entry: (category . (pattern ...))
+;; classify-error looks up this table instead of inline pattern matching.
+(define ERROR-CLASSIFICATION-TABLE
+  '((max-iterations . ("max.iterations"))
+    (rate-limit . ("429" "rate" "overloaded" "quota"))
+    (auth . ("401" "403" "auth" "unauthorized" "permission"))
+    (context-overflow . ("context_length" "context length"
+                                          "too many tokens"
+                                          "token limit"
+                                          "max_tokens"
+                                          "input is too long"
+                                          "exceeds the maximum"))
+    (timeout . ("timeout" "timed out" "connection reset" "broken pipe" "read error" "eof"))))
+
+(define (classify-error-from-table msg-down)
+  (for/or ([entry (in-list ERROR-CLASSIFICATION-TABLE)])
+    (define category (car entry))
+    (define patterns (cdr entry))
+    (for/or ([p (in-list patterns)])
+      (and (string-contains? msg-down p) category))))
+
 (define (classify-error exn)
   ;; Fast path: structured provider-error carries its own category.
   (match (provider-error? exn)
@@ -171,46 +197,13 @@
      (define cat (provider-error-category exn))
      (if cat cat 'provider-error)]
     [_
-     ;; Fallback: string-based classification for non-structured errors
+     ;; Fallback: table-based classification for non-structured errors
      (define msg
        (if (exn:fail? exn)
            (exn-message exn)
            (format "~a" exn)))
      (define msg-down (string-downcase msg))
-     (match #t
-       [_
-        #:when (string-contains? msg-down "max.iterations")
-        'max-iterations]
-       [_
-        #:when (string-contains? msg-down "429")
-        'rate-limit]
-       [_
-        #:when (string-contains? msg-down "rate")
-        'rate-limit]
-       [_
-        #:when (string-contains? msg-down "overloaded")
-        'rate-limit]
-       [_
-        #:when (string-contains? msg-down "quota")
-        'rate-limit]
-       [_
-        #:when (for/or ([p (in-list '("401" "403" "auth" "unauthorized" "permission"))])
-                 (string-contains? msg-down p))
-        'auth]
-       [_
-        #:when (for/or ([p (in-list '("context_length" "context length"
-                                                       "too many tokens"
-                                                       "token limit"
-                                                       "max_tokens"
-                                                       "input is too long"
-                                                       "exceeds the maximum"))])
-                 (string-contains? msg-down p))
-        'context-overflow]
-       [_
-        #:when (for/or ([p (in-list TIMEOUT_PATTERNS)])
-                 (string-contains? msg-down p))
-        'timeout]
-       [_ 'provider-error])]))
+     (or (classify-error-from-table msg-down) 'provider-error)]))
 
 ;; ============================================================
 ;; Retry logic
