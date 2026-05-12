@@ -71,7 +71,8 @@
                   event-hook-block
                   event-cancel
                   next-iteration-state
-                  state->symbol)
+                  state->symbol
+                  iteration-state?)
          (only-in "internal.rkt" assert-payload)
          (only-in "loop-config.rkt"
                   loop-config?
@@ -114,7 +115,7 @@
                              loop-result?)]
                        [run-iteration-loop/v2 (-> loop-config? loop-result?)]))
 
-(provide current-iteration-fsm-state)
+(provide (contract-out [current-iteration-fsm-state (parameter/c iteration-state?)]))
 
 ;; ============================================================
 ;; run-iteration-loop
