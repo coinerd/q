@@ -13,6 +13,23 @@
 
 (require racket/contract
          racket/match
+         (only-in "loop-fsm.rkt"
+                  turn-state-emit-start
+                  turn-state-build-context
+                  turn-state-pre-hook
+                  turn-state-stream
+                  turn-state-post-hook
+                  turn-state-complete
+                  turn-state-blocked
+                  turn-event-start
+                  turn-event-context-built
+                  turn-event-hook-pass
+                  turn-event-hook-block
+                  turn-event-stream-complete
+                  turn-event-stream-cancel
+                  turn-event-post-hook-done
+                  next-turn-state
+                  turn-state->symbol)
          racket/string
          racket/list
          racket/date
@@ -122,6 +139,9 @@
 ;;                  #:cancellation-token (or/c cancellation-token? #f)
 ;;                  #:hook-dispatcher (or/c procedure? #f)
 ;;               -> loop-result?
+;; R-06/R-07: FSM state tracking parameter for observability
+(define current-turn-fsm-state (make-parameter turn-state-emit-start))
+
 (define (run-agent-turn context
                         provider
                         bus
@@ -137,9 +157,13 @@
 
   ;; Phase 1: Emit turn-started + agent-start hook (I-01)
   (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
+  ;; R-06/R-07: FSM: emit-start -> build-context
+  (next-turn-state turn-state-emit-start turn-event-start)
 
   ;; Phase 2: Build context + emit context.built (I-01)
   (define raw-messages (build-turn-context bus session-id turn-id st context))
+  ;; R-06/R-07: FSM: build-context -> pre-hook
+  (next-turn-state turn-state-build-context turn-event-context-built)
 
   ;; Phase 3: Build model-request
   (define req (make-model-request raw-messages tools (or provider-settings (hasheq))))
@@ -160,6 +184,8 @@
   ;; v0.32.4: Flat match instead of nested CPS callbacks
   (match (classify-hook-result pre-hook-result)
     [(list 'block _)
+     ;; R-06/R-07: FSM: pre-hook -> blocked
+     (next-turn-state turn-state-pre-hook turn-event-hook-block)
      (emit-typed-event! bus
                         (make-model-request-blocked-event #:session-id session-id
                                                           #:turn-id turn-id
@@ -173,6 +199,8 @@
                                              #:duration-ms 0))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [_
+     ;; R-06/R-07: FSM: pre-hook -> stream
+     (next-turn-state turn-state-pre-hook turn-event-hook-pass)
      ;; DEBUG: validate raw-messages before sending
      (unless (valid-api-message-sequence? raw-messages)
        (log-warning "INVALID message sequence detected! Dumping raw messages:")
