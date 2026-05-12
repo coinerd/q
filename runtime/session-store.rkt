@@ -14,6 +14,7 @@
          racket/file
          racket/string
          racket/port
+         racket/class
          json
          "../util/protocol-types.rkt"
          "../util/jsonl.rkt"
@@ -63,7 +64,46 @@
          in-memory-fork!
          ;; Custom entry helpers (#1147)
          append-custom-entry!
-         load-custom-entries)
+         load-custom-entries
+         ;; R-09/R-10: Session sink interface (v0.39.0)
+         session-sink<%>
+         file-session-sink%
+         in-memory-session-sink%)
+
+;; ── R-09/R-10: Session sink interface (v0.39.0) ──
+;;
+;; A session-sink abstracts the storage backend for session entries.
+;; Production code uses file-session-sink%; tests can use in-memory-session-sink%.
+
+(define session-sink<%>
+  (interface ()
+    ;; Append a single message to the sink.
+    sink-append!
+    ;; Append multiple messages atomically.
+    sink-append-entries!
+    ;; Load all messages from the sink.
+    sink-load
+    ;; Fork the sink at a given entry.
+    sink-fork!))
+
+(define file-session-sink%
+  (class* object% (session-sink<%>)
+    (init-field log-path)
+    (super-new)
+    (define/public (sink-append! msg) (append-entry! log-path msg))
+    (define/public (sink-append-entries! msgs) (append-entries! log-path msgs))
+    (define/public (sink-load) (load-session-log log-path))
+    (define/public (sink-fork! entry-id dest-path) (fork-session! log-path entry-id dest-path))))
+
+(define in-memory-session-sink%
+  (class* object% (session-sink<%>)
+    (init-field manager session-id)
+    (super-new)
+    (define/public (sink-append! msg) (in-memory-append! manager session-id msg))
+    (define/public (sink-append-entries! msgs) (in-memory-append-entries! manager session-id msgs))
+    (define/public (sink-load) (in-memory-load manager session-id))
+    (define/public (sink-fork! entry-id dest-id)
+      (in-memory-fork! manager session-id dest-id entry-id))))
 
 ;; ── Append operations ──
 

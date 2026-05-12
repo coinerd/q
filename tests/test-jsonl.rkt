@@ -198,4 +198,31 @@
                         (check-equal? (hash-ref (car valid) 'id) "1")
                         (check-equal? (hash-ref (cadr valid) 'id) "2"))))))
 
+;; --- Port-based I/O (R-01/R-02) ---
+
+(test-case "jsonl-write-to-port! + jsonl-read-from-port roundtrip"
+  (define entries
+    (list (hasheq 'id 1 'name "alpha") (hasheq 'id 2 'name "beta") (hasheq 'id 3 'name "gamma")))
+  (define output
+    (with-output-to-string (lambda ()
+                             (for ([e (in-list entries)])
+                               (jsonl-write-to-port! (current-output-port) e)))))
+  (define-values (valid corrupted) (call-with-input-string output jsonl-read-from-port))
+  (check-equal? (length valid) 3)
+  (check-equal? corrupted 0)
+  (check-equal? (hash-ref (car valid) 'id) 1)
+  (check-equal? (hash-ref (cadr valid) 'name) "beta")
+  (check-equal? (hash-ref (caddr valid) 'id) 3))
+
+(test-case "jsonl-read-from-port skips corrupted lines"
+  (define output "{\"ok\":true}\n{BAD\n{\"also\":true}\n")
+  (define-values (valid corrupted) (call-with-input-string output jsonl-read-from-port))
+  (check-equal? (length valid) 2)
+  (check-equal? corrupted 1))
+
+(test-case "jsonl-read-from-port empty input"
+  (define-values (valid corrupted) (call-with-input-string "" jsonl-read-from-port))
+  (check-equal? valid '())
+  (check-equal? corrupted 0))
+
 (run-tests jsonl-suite 'verbose)

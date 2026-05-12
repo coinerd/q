@@ -14,7 +14,10 @@
 (provide ensure-hash-args
          ;; JSON file I/O
          read-json-file
-         write-json-file)
+         write-json-file
+         ;; R-01/R-02: Port-based I/O
+         read-json-from-port
+         write-json-to-port)
 
 ;; Parse tool-call arguments from string to hash if needed.
 ;; Streaming produces arguments as JSON strings; tools expect hashes.
@@ -27,36 +30,43 @@
      (define cleaned (string-trim args))
      (if (or (string=? cleaned "") (string=? cleaned "{}"))
          (hash)
-         (with-handlers ([exn:fail?
-                          (lambda (e)
-                            (if graceful?
-                                (hash)
-                                (raise-tool-error
-                                 (format "Failed to parse tool arguments JSON: ~a" args)
-                                 "ensure-hash-args"
-                                 (hasheq 'raw args 'error (exn-message e)))))])
+         (with-handlers ([exn:fail? (lambda (e)
+                                      (if graceful?
+                                          (hash)
+                                          (raise-tool-error
+                                           (format "Failed to parse tool arguments JSON: ~a" args)
+                                           "ensure-hash-args"
+                                           (hasheq 'raw args 'error (exn-message e)))))])
            (define parsed (string->jsexpr cleaned))
            (if (hash? parsed)
                parsed
                (if graceful?
                    (hash)
-                   (raise-tool-error
-                    (format "Tool arguments parsed to non-hash: ~a" args)
-                    "ensure-hash-args"
-                    (hasheq 'raw args 'parsed parsed))))))]
+                   (raise-tool-error (format "Tool arguments parsed to non-hash: ~a" args)
+                                     "ensure-hash-args"
+                                     (hasheq 'raw args 'parsed parsed))))))]
     [else
      (if graceful?
          (hash)
-         (raise-tool-error
-          (format "Tool arguments must be hash or JSON string, got: ~a" args)
-          "ensure-hash-args"
-          (hasheq 'raw (format "~a" args))))]))
+         (raise-tool-error (format "Tool arguments must be hash or JSON string, got: ~a" args)
+                           "ensure-hash-args"
+                           (hasheq 'raw (format "~a" args))))]))
 
 ;; Read and parse a JSON file, returning the parsed value.
 (define (read-json-file path)
-  (call-with-input-file path (lambda (in) (read-json in)) #:mode 'text))
+  (call-with-input-file path read-json-from-port #:mode 'text))
 
 ;; Write a value as JSON to a file.
 ;; #:exists controls the file-exists behavior (default 'truncate).
 (define (write-json-file path data #:exists [mode 'truncate])
-  (call-with-output-file path (lambda (out) (write-json data out)) #:mode 'text #:exists mode))
+  (call-with-output-file path
+                         (lambda (out) (write-json-to-port out data))
+                         #:mode 'text
+                         #:exists mode))
+
+;; R-01/R-02: Port-based I/O — callers manage port lifecycle.
+(define (read-json-from-port in)
+  (read-json in))
+
+(define (write-json-to-port out data)
+  (write-json data out))
