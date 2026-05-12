@@ -273,7 +273,7 @@
 
     (test-case "error event: nested payload serializes correctly"
       (define nested (hasheq 'inner (hasheq 'key "value" 'num 42)))
-      (define evt (make-event "tool.call.completed" 5000 "sess" "t1" nested))
+      (define evt (make-event "tool.execution.completed" 5000 "sess" "t1" nested))
       (define js (string->jsexpr (string-trim (event->json-line evt))))
       (define inner (hash-ref (hash-ref js 'payload) 'inner))
       (check-equal? (hash-ref inner 'key) "value")

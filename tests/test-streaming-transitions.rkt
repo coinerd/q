@@ -49,7 +49,7 @@
                                (hasheq 'messageId "m1" 'content "Hello world"))
               (make-test-event "tool.call.started"
                                (hasheq 'id "tc-1" 'name "read" 'arguments (hasheq 'path "/tmp/x")))
-              (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "content"))
+              (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "content"))
               (make-test-event "turn.completed"
                                (hasheq 'termination 'tool-calls-pending 'turnId "turn-1"))))
       (define states (simulate-and-record s0 events))
@@ -86,7 +86,7 @@
          (make-test-event "assistant.message.completed" (hasheq 'messageId "m1" 'content "CL answer"))
          (make-test-event "tool.call.started"
                           (hasheq 'id "tc-1" 'name "read" 'arguments (hasheq 'path "/tmp/x")))
-         (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "file data"))
+         (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "file data"))
          (make-test-event "turn.completed" (hasheq 'termination 'tool-calls-pending 'turnId "turn-1"))
          (make-test-event "turn.started" (hasheq) #:turn-id "turn-2")
          (make-test-event "model.stream.delta" (hasheq 'delta "Follow-up") #:turn-id "turn-2")
@@ -110,7 +110,8 @@
               (make-test-event "assistant.message.completed" (hasheq 'messageId "m1" 'content ""))
               (make-test-event "tool.call.started"
                                (hasheq 'id "tc-1" 'name "bash" 'arguments (hasheq 'command "ls")))
-              (make-test-event "tool.call.completed" (hasheq 'name "bash" 'result "file1\nfile2"))))
+              (make-test-event "tool.execution.completed"
+                               (hasheq 'name "bash" 'result "file1\nfile2"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 4))
       (check-equal? (transcript-types final)
@@ -143,8 +144,8 @@
                                (hasheq 'id "tc-1" 'name "read" 'arguments (hasheq 'path "/tmp/a")))
               (make-test-event "tool.call.started"
                                (hasheq 'id "tc-2" 'name "bash" 'arguments (hasheq 'command "ls")))
-              (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "content-a"))
-              (make-test-event "tool.call.completed" (hasheq 'name "bash" 'result "file1"))))
+              (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "content-a"))
+              (make-test-event "tool.execution.completed" (hasheq 'name "bash" 'result "file1"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 7))
       (check-equal? (transcript-length final)
@@ -164,7 +165,7 @@
                           (hasheq 'messageId "m1" 'content "Let me read that"))
          (make-test-event "tool.call.started"
                           (hasheq 'id "tc-1" 'name "read" 'arguments (hasheq 'path "/nonexistent")))
-         (make-test-event "tool.call.failed" (hasheq 'name "read" 'error "File not found"))))
+         (make-test-event "tool.execution.completed" (hasheq 'name "read" 'error "File not found"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 4))
       (check-equal? (transcript-types final)
@@ -201,8 +202,8 @@
                           (hasheq 'messageId "m1" 'content "Working..."))
          (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "read" 'arguments "/tmp/a"))
          (make-test-event "tool.call.started" (hasheq 'id "tc-2" 'name "read" 'arguments "/tmp/b"))
-         (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "data-b"))
-         (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "data-a"))))
+         (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "data-b"))
+         (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "data-a"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 6))
       (check-equal? (transcript-length final)
@@ -219,7 +220,7 @@
               (make-test-event "assistant.message.completed" (hasheq 'messageId "m1" 'content "X"))
               (make-test-event "tool.call.started"
                                (hasheq 'id "tc-1" 'name "bash" 'arguments "echo hi"))
-              (make-test-event "tool.call.completed" (hasheq 'name "bash" 'result "hi"))))
+              (make-test-event "tool.execution.completed" (hasheq 'name "bash" 'result "hi"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 5))
       (check-equal? (transcript-types final)
@@ -252,7 +253,7 @@
       (define events
         (list (make-test-event "turn.started" (hasheq))
               (make-test-event "assistant.message.completed" (hasheq 'messageId "m1" 'content "Done"))
-              (make-test-event "tool.call.completed" (hasheq 'name "bash" 'result "ok"))
+              (make-test-event "tool.execution.completed" (hasheq 'name "bash" 'result "ok"))
               (make-test-event "turn.completed" (hasheq 'termination 'completed 'turnId "t1"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 4))
@@ -294,7 +295,7 @@
               (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "read" 'arguments "/a"))
               ;; Duplicate tool start!
               (make-test-event "tool.call.started" (hasheq 'id "tc-1" 'name "read" 'arguments "/a"))
-              (make-test-event "tool.call.completed" (hasheq 'name "read" 'result "data"))))
+              (make-test-event "tool.execution.completed" (hasheq 'name "read" 'result "data"))))
       (define states (simulate-and-record s0 events))
       (define final (state-at states 5))
       ;; Two tool-start entries, one tool-end

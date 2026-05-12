@@ -117,7 +117,7 @@
       (define recorder (workflow-result-events wr))
       (check-true (>= (length (events-of-type recorder "tool.call.started")) 1)
                   "expected tool.call.started")
-      (check-true (>= (length (events-of-type recorder "tool.call.completed")) 1)
+      (check-true (>= (length (events-of-type recorder "tool.execution.completed")) 1)
                   "expected tool.call.completed")
 
       ;; BOUNDARY: tree structure valid

@@ -23,7 +23,7 @@
          ms
          (list (cons "turn.started" (hash))
                (cons "tool.call.started" (hash 'name "read" 'arguments "{\"path\":\"main.rkt\"}"))
-               (cons "tool.call.completed" (hash 'name "read" 'result "(define x 1)"))
+               (cons "tool.execution.completed" (hash 'name "read" 'result "(define x 1)"))
                (cons "turn.completed" (hash)))))
       (define texts (mock-entry-texts ms1))
       ;; Should have 2 entries: tool-start + tool-end
@@ -45,7 +45,7 @@
          ms
          (list (cons "turn.started" (hash))
                (cons "tool.call.started" (hash 'name "bash" 'arguments "{\"command\":\"rm -rf /\"}"))
-               (cons "tool.call.failed" (hash 'name "bash" 'error "permission denied"))
+               (cons "tool.execution.completed" (hash 'name "bash" 'error "permission denied"))
                (cons "turn.completed" (hash)))))
       (define texts (mock-entry-texts ms1))
       (check-equal? (length texts) 2)
@@ -78,7 +78,7 @@
                         (hash)
                         "tool.call.started"
                         (hash 'name "read" 'arguments "{\"path\":\"test.rkt\"}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "read" 'result "ok")
                         "assistant.message.completed"
                         (hash 'content "Done reading.")

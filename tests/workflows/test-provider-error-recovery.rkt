@@ -130,7 +130,7 @@
    (define events
      (list (make-evt "turn.started" '())
            (make-evt "tool.call.started" '((name . "bash") (arguments . "rm -rf /")))
-           (make-evt "tool.call.failed" '((name . "bash") (error . "blocked by extension")))
+           (make-evt "tool.execution.completed" '((name . "bash") (error . "blocked by extension")))
            (make-evt "model.stream.delta" '((delta . "I cannot do that.")))
            (make-evt "model.stream.completed" '())
            (make-evt "turn.completed" '())))

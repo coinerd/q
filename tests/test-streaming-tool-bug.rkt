@@ -96,7 +96,7 @@
       ;; Tool completes
       (define s5
         (apply-event-to-state s4
-                              (make-test-event "tool.call.completed"
+                              (make-test-event "tool.execution.completed"
                                                (hasheq 'name "read" 'result "file contents"))))
       (check-equal? (transcript-types s5) '(tool-start tool-end))
 

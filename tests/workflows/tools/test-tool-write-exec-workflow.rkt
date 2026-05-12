@@ -125,7 +125,7 @@
       ;; SIDE-EFFECTS: events include tool call events
       (define recorder (workflow-result-events wr))
       (define tc-started (events-of-type recorder "tool.call.started"))
-      (define tc-completed (events-of-type recorder "tool.call.completed"))
+      (define tc-completed (events-of-type recorder "tool.execution.completed"))
       (check-true (>= (length tc-started) 2)
                   (format "expected 2+ tool.call.started, got ~a" (length tc-started)))
       (check-true (>= (length tc-completed) 2)

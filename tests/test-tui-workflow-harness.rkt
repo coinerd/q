@@ -44,7 +44,7 @@
          ms
          (list (cons "turn.started" (hash))
                (cons "tool.call.started" (hash 'name "read" 'arguments "{\"path\":\"test.rkt\"}"))
-               (cons "tool.call.completed" (hash 'name "read" 'result "(define x 1)"))
+               (cons "tool.execution.completed" (hash 'name "read" 'result "(define x 1)"))
                (cons "assistant.message.completed" (hash 'content "I read the file."))
                (cons "turn.completed" (hash)))))
       ;; Should have 3 transcript entries: tool-start, tool-end, assistant
@@ -62,7 +62,7 @@
                         (hash)
                         "tool.call.started"
                         (hash 'name "bash" 'arguments "{\"command\":\"ls\"}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "bash" 'result "file1.rkt\nfile2.rkt")
                         "assistant.message.completed"
                         (hash 'content "Found 2 files")

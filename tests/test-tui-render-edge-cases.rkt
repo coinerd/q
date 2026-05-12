@@ -44,7 +44,7 @@
                         (hash)
                         "tool.call.started"
                         (hash 'name "read" 'arguments "{\"path\":\"a.rkt\"}")
-                        "tool.call.completed"
+                        "tool.execution.completed"
                         (hash 'name "read" 'result "ok")
                         "assistant.message.completed"
                         (hash 'content "Result.")

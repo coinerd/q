@@ -200,26 +200,23 @@
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
     [("tool.execution.completed")
-     (define name (hash-ref payload 'tool-name "?"))
-     (define result-summary (hash-ref payload 'result-summary 'error))
-     (if (eq? result-summary 'completed)
-         (styled (format "[tool result: ~a]" name) '(dim))
-         (styled (format "[tool failed: ~a]" name) '(red)))]
-    ;; Backward-compatible handlers for old raw event topics
-    ;; DEPRECATED (W-04): Legacy handlers for old raw event topics. Kept for backward compat.
-    [("tool.call.completed")
-     (define name (hash-ref payload 'name "?"))
-     (define result (hash-ref payload 'result #f))
-     (define content-str
-       (if result
-           (truncate-string (tool-result-content->string result) MAX-TOOL-DISPLAY-LEN)
-           name))
-     (styled (format "[tool result: ~a]" content-str) '(dim))]
-    [("tool.call.failed")
-     (styled (format "[tool failed: ~a \u2014 ~a]"
-                     (hash-ref payload 'name "?")
-                     (hash-ref payload 'error "unknown"))
-             '(red))]
+     ;; W-04: Accepts both old (name/result/error) and new (tool-name/result-summary) payloads
+     (define name (hash-ref payload 'tool-name (lambda () (hash-ref payload 'name "?"))))
+     (define result-summary
+       (hash-ref payload
+                 'result-summary
+                 (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
+     (cond
+       [(eq? result-summary 'completed)
+        (define result (hash-ref payload 'result #f))
+        (define content-str
+          (if result
+              (truncate-string (tool-result-content->string result) MAX-TOOL-DISPLAY-LEN)
+              name))
+        (styled (format "[tool result: ~a]" content-str) '(dim))]
+       [else
+        (define error-raw (hash-ref payload 'error "unknown"))
+        (styled (format "[tool failed: ~a — ~a]" name error-raw) '(red))])]
     [("turn.started") ""]
     [("turn.completed") ""]
     [("runtime.error") (styled (format "Error: ~a" (hash-ref payload 'error "unknown error")) '(red))]

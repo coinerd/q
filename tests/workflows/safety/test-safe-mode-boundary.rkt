@@ -160,7 +160,8 @@
 
         ;; ── Side-effects: tool.call events emitted ──
         (define names (event-names recorder))
-        (check-not-false (or (member "tool.call.completed" names) (member "tool.call.failed" names))
+        (check-not-false (or (member "tool.execution.completed" names)
+                             (member "tool.execution.completed" names))
                          "Should emit tool.call event for read attempt")
 
         (cleanup-temp-project! project-dir session-dir)))
@@ -212,7 +213,8 @@
 
         ;; ── Side-effects: events for tool call ──
         (define names (event-names recorder))
-        (check-not-false (or (member "tool.call.completed" names) (member "tool.call.failed" names))
+        (check-not-false (or (member "tool.execution.completed" names)
+                             (member "tool.execution.completed" names))
                          "Should emit tool.call event for write attempt")
 
         (cleanup-temp-project! project-dir session-dir)))
@@ -271,7 +273,9 @@
         ;; ── Side-effects: events for both tool calls ──
         (define names (event-names recorder))
         (define tool-events
-          (filter (lambda (n) (or (string=? n "tool.call.completed") (string=? n "tool.call.failed")))
+          (filter (lambda (n)
+                    (or (string=? n "tool.execution.completed")
+                        (string=? n "tool.execution.completed")))
                   names))
         (check >= (length tool-events) 2 "Should have events for both tool calls")
 
