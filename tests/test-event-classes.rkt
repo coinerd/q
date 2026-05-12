@@ -81,8 +81,8 @@
     ;; ============================================================
     (test-case "topic constants match event topics"
       (check-equal? TOPIC-STREAM-TEXT "model.stream.text")
-      (check-equal? TOPIC-TOOL-START "tool.execution.start")
-      (check-equal? TOPIC-TOOL-END "tool.execution.end")
+      (check-equal? TOPIC-TOOL-START "tool.execution.started")
+      (check-equal? TOPIC-TOOL-END "tool.execution.completed")
       (check-equal? TOPIC-INTERRUPT "interrupt.requested")
       (check-equal? TOPIC-ERROR "error")
       (check-equal? TOPIC-COMPACTION-STARTED "compaction.started"))

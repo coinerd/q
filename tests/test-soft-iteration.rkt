@@ -12,7 +12,8 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry register-tool! make-tool make-error-result)
-         "../runtime/iteration.rkt")
+         "../runtime/iteration.rkt"
+         (only-in "../runtime/session-config.rkt" hash->session-config))
 
 ;; ============================================================
 ;; Test helpers
@@ -89,7 +90,7 @@
                           tmp-log
                           "test-session"
                           3
-                          #:config (hasheq 'max-iterations-hard 6))
+                          #:config (hash->session-config (hasheq 'max-iterations-hard 6)))
       (define collected (unbox warnings))
       (check >= (length collected) 1 "Expected at least one soft-warning event")
       (cleanup!))
@@ -109,7 +110,7 @@
                             tmp-log
                             "test-session"
                             2
-                            #:config (hasheq 'max-iterations-hard 4)))
+                            #:config (hash->session-config (hasheq 'max-iterations-hard 4))))
       (check-equal? (loop-result-termination-reason result)
                     'max-iterations-exceeded
                     "Should hard-stop at max-iterations-hard")
@@ -136,7 +137,7 @@
                           tmp-log
                           "test-session"
                           20
-                          #:config (hasheq 'max-iterations-hard 50))
+                          #:config (hash->session-config (hasheq 'max-iterations-hard 50)))
       (check-equal? (unbox warnings) '() "No soft-warning should fire when loop completes normally")
       (cleanup!))
 
@@ -154,7 +155,7 @@
                           tmp-log
                           "test-session"
                           2
-                          #:config (hasheq 'max-iterations-hard 5))
+                          #:config (hash->session-config (hasheq 'max-iterations-hard 5)))
       (define collected (unbox warnings))
       (when (pair? collected)
         (define first-warning (car collected))
