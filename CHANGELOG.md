@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.38.11 -- 2026-05-07
+## v0.38.11 — 2026-05-12
 
 - W-02: Harden event-struct->hasheq with typed-event accessors (W0)
 - W-03: Add log-warning for missing event serializers (W0)

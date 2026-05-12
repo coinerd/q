@@ -19,7 +19,8 @@
          (only-in "../tools/tool.rkt" make-tool-registry)
          "../tools/registry-defaults.rkt"
          "../util/protocol-types.rkt"
-         "../util/ids.rkt")
+         "../util/ids.rkt"
+         (only-in "../runtime/session-config.rkt" hash->session-config))
 
 ;; Helper: create a simple message for testing
 (define (make-test-msg [role 'user] [content "test"])
@@ -129,7 +130,7 @@
                            "test-session"
                            "test-turn"
                            #f
-                           (hash)
+                           (hash->session-config (hash))
                            #:tool-list-proc mock-tool-list))
       (check-pred values result "run-provider-turn returns with mock tool-list-proc")
       (check-not-false (unbox tool-called-with) "mock tool-list-proc was called"))))

@@ -58,13 +58,6 @@
 ;; Global mutable registry (replaces 10 individual parameters).
 (define *ui-registry* (box (ui-callback-registry #f #f #f #f #f #f #f #f #f #f)))
 
-(define (ui-remove-all-extension-widgets-param [new-val #f])
-  (define r (unbox *ui-registry*))
-  (if new-val
-      (set-box! *ui-registry*
-                (struct-copy ui-callback-registry r [remove-all-extension-widgets new-val]))
-      (ui-callback-registry-remove-all-extension-widgets r)))
-
 ;; ── Public API ─────────────────────────────────────────────
 
 (define (ui-set-footer! ui-state-box lines)
