@@ -68,8 +68,7 @@
   (check-not-false (member 'tui-keybindings (tier-capabilities 'tui))))
 
 (test-case "tier-capabilities raises on invalid tier"
-  (check-exn exn:fail:contract?
-             (lambda () (tier-capabilities 'nonexistent))))
+  (check-exn exn:fail:contract? (lambda () (tier-capabilities 'nonexistent))))
 
 ;; ============================================================
 ;; capability-allowed?
@@ -148,12 +147,16 @@
   (check-true (string-contains? (car result) "tui-panel")))
 
 (test-case "validate-extension-tier returns #t when high tier covers all hooks"
-  (define ext (extension "test"
-                         "1"
-                         "1"
-                         (hasheq 'context-assembly (lambda (d) d)
-                                 'session-start (lambda (d) d)
-                                 'tui-panel (lambda (d) d))))
+  (define ext
+    (extension "test"
+               "1"
+               "1"
+               (hasheq 'context-assembly
+                       (lambda (d) d)
+                       'session-start
+                       (lambda (d) d)
+                       'tui-panel
+                       (lambda (d) d))))
   (check-eq? (validate-extension-tier ext 'tui) #t))
 
 (test-case "validate-extension-tier with empty hooks always valid"

@@ -26,8 +26,7 @@
       (set-box! call-count (add1 (unbox call-count)))
       "LLM summary"))
   (define custom-hook
-    (lambda (hook-point payload)
-      (hook-result 'amend (hasheq 'summary "Custom hook summary"))))
+    (lambda (hook-point payload) (hook-result 'amend (hasheq 'summary "Custom hook summary"))))
   (define msgs
     (list (msg "m1" 'user "Message one text")
           (msg "m2" 'assistant "Response two text")
@@ -45,7 +44,8 @@
     (and summary
          (string-join (for/list ([part (in-list (message-content summary))]
                                  #:when (text-part? part))
-                        (text-part-text part)) "")))
+                        (text-part-text part))
+                      "")))
   ;; The summarize-fn should NOT have been called
   (check-equal? (unbox call-count) 0)
   ;; Summary text should contain the custom text
@@ -57,9 +57,7 @@
     (lambda (messages)
       (set-box! call-count (add1 (unbox call-count)))
       "Default summary"))
-  (define pass-hook
-    (lambda (hook-point payload)
-      (hook-result 'pass (hasheq))))
+  (define pass-hook (lambda (hook-point payload) (hook-result 'pass (hasheq))))
   (define msgs
     (list (msg "m1" 'user "Message one text")
           (msg "m2" 'assistant "Response two text")
@@ -75,19 +73,14 @@
   (check-equal? (unbox call-count) 1))
 
 (test-case "hook returning block prevents compaction"
-  (define block-hook
-    (lambda (hook-point payload)
-      (hook-result 'block (hasheq))))
+  (define block-hook (lambda (hook-point payload) (hook-result 'block (hasheq))))
   (define msgs
     (list (msg "m1" 'user "Message one text")
           (msg "m2" 'assistant "Response two text")
           (msg "m3" 'user "Message three text")
           (msg "m4" 'assistant "Response four text")
           (msg "m5" 'user "Message five text")))
-  (define result
-    (compact-history msgs
-                     #:hook-dispatcher block-hook
-                     #:token-config tiny-tc))
+  (define result (compact-history msgs #:hook-dispatcher block-hook #:token-config tiny-tc))
   ;; No summary should be produced
   (check-false (compaction-result-summary-message result))
   ;; All messages kept

@@ -210,16 +210,13 @@
 ;; v0.21.2 W3: Enhanced edit error messages with common-cause hints
 (test-case "edit.rkt contains enhanced error hints"
   (define source
-    (file->string
-     (if (file-exists? "tools/builtins/edit.rkt")
-         "tools/builtins/edit.rkt"
-         "../tools/builtins/edit.rkt")))
-  (check-not-false
-   (regexp-match? #rx"leading whitespace" source)
-   "should hint about leading whitespace")
-  (check-not-false
-   (regexp-match? #rx"smaller unique snippet" source)
-   "should hint about long single-line old-text"))
+    (file->string (if (file-exists? "tools/builtins/edit.rkt")
+                      "tools/builtins/edit.rkt"
+                      "../tools/builtins/edit.rkt")))
+  (check-not-false (regexp-match? #rx"leading whitespace" source)
+                   "should hint about leading whitespace")
+  (check-not-false (regexp-match? #rx"smaller unique snippet" source)
+                   "should hint about long single-line old-text"))
 
 ;; ============================================================
 ;; F5: Backup pruning uses suffix match (v0.21.5)
@@ -239,13 +236,11 @@
   (display-to-file "unrelated" (build-path tmp-dir "some_other_file.txt"))
   ;; Read the edit.rkt source to verify suffix match is used
   (define source
-    (file->string
-     (if (file-exists? "tools/builtins/edit.rkt")
-         "tools/builtins/edit.rkt"
-         "../tools/builtins/edit.rkt")))
+    (file->string (if (file-exists? "tools/builtins/edit.rkt")
+                      "tools/builtins/edit.rkt"
+                      "../tools/builtins/edit.rkt")))
   ;; The fix replaces string-contains? with string-suffix?
-  (check-not-false
-   (regexp-match? #rx"string-suffix\\?" source)
-   "prune-old-backups should use string-suffix? instead of string-contains?")
+  (check-not-false (regexp-match? #rx"string-suffix\\?" source)
+                   "prune-old-backups should use string-suffix? instead of string-contains?")
   ;; Cleanup
   (delete-directory/files tmp-dir))

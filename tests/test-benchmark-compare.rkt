@@ -5,7 +5,6 @@
          "../scripts/benchmark/scorer.rkt"
          "../scripts/benchmark/compare.rkt")
 
-
 ;; Helper: build a benchmark-report from a list of (cons task-name score)
 (define (make-report-with-tasks task-scores)
   (generate-report

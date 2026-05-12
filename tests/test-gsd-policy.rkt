@@ -20,8 +20,7 @@
   (check-equal? (blocked-tools-for 'exploring) '()))
 
 (test-case "plan-written blocks edit/write/bash"
-  (check-equal? (sort (blocked-tools-for 'plan-written) string<?)
-                '("bash" "edit" "write")))
+  (check-equal? (sort (blocked-tools-for 'plan-written) string<?) '("bash" "edit" "write")))
 
 (test-case "executing blocks planning-write"
   (check-equal? (blocked-tools-for 'executing) '("planning-write")))
@@ -66,20 +65,27 @@
 ;; ============================================================
 
 (test-case "write-file: allowed in idle"
-  (define d (gsd-decide-action (hasheq 'mode 'idle 'target-path "/tmp/x" 'pinned-dir "/tmp") 'write-file))
+  (define d
+    (gsd-decide-action (hasheq 'mode 'idle 'target-path "/tmp/x" 'pinned-dir "/tmp") 'write-file))
   (check-true (policy-allowed? d)))
 
 (test-case "write-file: blocked when executing + in planning dir"
-  (define d (gsd-decide-action
-             (hasheq 'mode 'executing 'target-path "/home/user/.planning/PLAN.md" 'pinned-dir "/home/user/.planning")
-             'write-file))
+  (define d
+    (gsd-decide-action (hasheq 'mode
+                               'executing
+                               'target-path
+                               "/home/user/.planning/PLAN.md"
+                               'pinned-dir
+                               "/home/user/.planning")
+                       'write-file))
   (check-true (policy-blocked? d))
   (check-not-false (regexp-match? #rx"write-blocked" (format "~a" (policy-tags d)))))
 
 (test-case "write-file: allowed when executing + outside planning dir"
-  (define d (gsd-decide-action
-             (hasheq 'mode 'executing 'target-path "/tmp/out.txt" 'pinned-dir "/home/user/.planning")
-             'write-file))
+  (define d
+    (gsd-decide-action
+     (hasheq 'mode 'executing 'target-path "/tmp/out.txt" 'pinned-dir "/home/user/.planning")
+     'write-file))
   (check-true (policy-allowed? d)))
 
 ;; ============================================================
@@ -138,27 +144,28 @@
   (check-false (policy-reason d)))
 
 (test-case "write-file policy: blocks writing to planning dir during execution"
-  (define d (gsd-decide-action
-             (hasheq 'mode 'executing
-                     'target-path "/project/.planning/PLAN.md"
-                     'pinned-dir "/project/.planning")
-             'write-file))
+  (define d
+    (gsd-decide-action (hasheq 'mode
+                               'executing
+                               'target-path
+                               "/project/.planning/PLAN.md"
+                               'pinned-dir
+                               "/project/.planning")
+                       'write-file))
   (check-true (policy-blocked? d))
   (check-not-false (policy-reason d)))
 
 (test-case "write-file policy: allows writing outside planning dir during execution"
-  (define d (gsd-decide-action
-             (hasheq 'mode 'executing
-                     'target-path "/project/src/foo.rkt"
-                     'pinned-dir "/project/.planning")
-             'write-file))
+  (define d
+    (gsd-decide-action
+     (hasheq 'mode 'executing 'target-path "/project/src/foo.rkt" 'pinned-dir "/project/.planning")
+     'write-file))
   (check-true (policy-allowed? d)))
 
 (test-case "write-file policy: allows writing in non-executing mode"
   (for ([mode '(idle exploring plan-written verifying)])
-    (define d (gsd-decide-action
-               (hasheq 'mode mode
-                       'target-path "/project/.planning/PLAN.md"
-                       'pinned-dir "/project/.planning")
-               'write-file))
+    (define d
+      (gsd-decide-action
+       (hasheq 'mode mode 'target-path "/project/.planning/PLAN.md" 'pinned-dir "/project/.planning")
+       'write-file))
     (check-true (policy-allowed? d) (format "write should be allowed in ~a" mode))))

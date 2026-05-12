@@ -23,9 +23,7 @@
 (test-case "ext-subscribe! registers handler and returns sub-id"
   (define bus (make-event-bus))
   (define received (box #f))
-  (define sub-id (ext-subscribe! bus "test-ext"
-                                  (lambda (evt)
-                                    (set-box! received evt))))
+  (define sub-id (ext-subscribe! bus "test-ext" (lambda (evt) (set-box! received evt))))
   (check-true (exact-nonnegative-integer? sub-id))
   ;; Subscription is tracked
   (check-true (and (member sub-id (ext-subscription-ids "test-ext")) #t))
@@ -37,9 +35,7 @@
 (test-case "ext-unsubscribe! removes handler and tracking"
   (define bus (make-event-bus))
   (define received (box #f))
-  (define sub-id (ext-subscribe! bus "unsub-ext"
-                                  (lambda (evt)
-                                    (set-box! received evt))))
+  (define sub-id (ext-subscribe! bus "unsub-ext" (lambda (evt) (set-box! received evt))))
   (ext-unsubscribe! bus "unsub-ext" sub-id)
   ;; No longer tracked
   (check-false (and (member sub-id (ext-subscription-ids "unsub-ext")) #t))
@@ -60,11 +56,10 @@
 (test-case "ext-subscribe! with #:filter only receives matching events"
   (define bus (make-event-bus))
   (define received '())
-  (ext-subscribe! bus "filter-ext"
-                  (lambda (evt)
-                    (set! received (cons evt received)))
-                  #:filter (lambda (evt)
-                             (equal? (event-ev evt) "important")))
+  (ext-subscribe! bus
+                  "filter-ext"
+                  (lambda (evt) (set! received (cons evt received)))
+                  #:filter (lambda (evt) (equal? (event-ev evt) "important")))
   (ext-publish! bus (make-event "noise" (current-seconds) "" #f (hasheq)))
   (ext-publish! bus (make-event "important" (current-seconds) "" #f (hasheq 'data "yes")))
   (ext-publish! bus (make-event "noise2" (current-seconds) "" #f (hasheq)))
@@ -102,12 +97,8 @@
 (test-case "ext-unsubscribe-all! removes all extension subscriptions"
   (define bus (make-event-bus))
   (define received (box '()))
-  (ext-subscribe! bus "cleanup-ext"
-                  (lambda (evt)
-                    (set-box! received (cons evt (unbox received)))))
-  (ext-subscribe! bus "cleanup-ext"
-                  (lambda (evt)
-                    (set-box! received (cons evt (unbox received)))))
+  (ext-subscribe! bus "cleanup-ext" (lambda (evt) (set-box! received (cons evt (unbox received)))))
+  (ext-subscribe! bus "cleanup-ext" (lambda (evt) (set-box! received (cons evt (unbox received)))))
   (check-equal? (length (ext-subscription-ids "cleanup-ext")) 2)
   ;; Cleanup
   (ext-unsubscribe-all! bus "cleanup-ext")
@@ -131,14 +122,14 @@
   (define ext-a-received (box #f))
   (define ext-b-received (box #f))
   ;; Ext A subscribes to "b.output" events
-  (ext-subscribe! bus "ext-a"
-                  (lambda (evt)
-                    (set-box! ext-a-received evt))
+  (ext-subscribe! bus
+                  "ext-a"
+                  (lambda (evt) (set-box! ext-a-received evt))
                   #:filter (lambda (evt) (equal? (event-ev evt) "b.output")))
   ;; Ext B subscribes to "a.output" events
-  (ext-subscribe! bus "ext-b"
-                  (lambda (evt)
-                    (set-box! ext-b-received evt))
+  (ext-subscribe! bus
+                  "ext-b"
+                  (lambda (evt) (set-box! ext-b-received evt))
                   #:filter (lambda (evt) (equal? (event-ev evt) "a.output")))
   ;; A publishes, B receives
   (ext-publish! bus (make-event "a.output" (current-seconds) "" #f (hasheq 'from "a")))
@@ -154,11 +145,9 @@
   (define bus (make-event-bus))
   (define received (box #f))
   ;; First subscriber throws
-  (ext-subscribe! bus "bad-ext"
-                  (lambda (evt) (error "boom")))
+  (ext-subscribe! bus "bad-ext" (lambda (evt) (error "boom")))
   ;; Second subscriber should still receive
-  (ext-subscribe! bus "good-ext"
-                  (lambda (evt) (set-box! received evt)))
+  (ext-subscribe! bus "good-ext" (lambda (evt) (set-box! received evt)))
   (ext-publish! bus (make-event "test" (current-seconds) "" #f (hasheq)))
   (check-not-false (unbox received)))
 
@@ -171,14 +160,17 @@
   (define ext-reg (make-extension-registry))
   (define received (box #f))
   ;; Register an extension that subscribes via its hook
-  (register-extension! ext-reg
-    (extension "bus-user" "0.1" "1.0"
-               (hasheq 'on-load
-                       (lambda (ctx)
-                         ;; ctx has event-bus accessor
-                         (define bus-from-ctx (ctx-event-bus ctx))
-                         (ext-subscribe! bus-from-ctx "bus-user"
-                                         (lambda (evt) (set-box! received evt)))))))
+  (register-extension!
+   ext-reg
+   (extension
+    "bus-user"
+    "0.1"
+    "1.0"
+    (hasheq 'on-load
+            (lambda (ctx)
+              ;; ctx has event-bus accessor
+              (define bus-from-ctx (ctx-event-bus ctx))
+              (ext-subscribe! bus-from-ctx "bus-user" (lambda (evt) (set-box! received evt)))))))
   ;; The extension's hooks are registered but on-load isn't auto-dispatched
   ;; in this test — just verify the extension is registered
   (check-not-false (lookup-extension ext-reg "bus-user")))

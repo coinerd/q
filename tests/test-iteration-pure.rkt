@@ -8,21 +8,7 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../runtime/iteration.rkt"
-                  compute-step-result
-                  step-result
-                  step-result?
-                  step-result-action
-                  step-result-termination
-                  step-result-new-counters
-                  step-result-metadata
-                  step-action?
-                  iteration-ctx
-                  iteration-ctx-iteration
-                  iteration-ctx-consecutive-tool-count
-                  iteration-ctx-explore-count
-                  iteration-ctx-max-iterations
-                  iteration-ctx-max-iterations-hard)
+         "../runtime/iteration/decision.rkt"
          "../runtime/iteration/loop-state.rkt"
          (only-in "../util/loop-result.rkt"
                   make-loop-result

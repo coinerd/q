@@ -34,8 +34,7 @@
 ;; Known large modules that are exempt from size threshold
 ;; (tracked in docs/architecture/dependency-policy.rktd)
 (define KNOWN-LARGE
-  '("runtime/agent-session.rkt" "runtime/iteration.rkt"
-                                "runtime/session-lifecycle.rkt"
+  '("runtime/agent-session.rkt" "runtime/session-lifecycle.rkt"
                                 "runtime/runtime-helpers.rkt"
                                 "runtime/tool-coordinator.rkt"
                                 "runtime/turn-orchestrator.rkt"

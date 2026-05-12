@@ -5,9 +5,7 @@
 (require rackunit
          (only-in "../agent/event-bus.rkt" make-event-bus subscribe!)
          (only-in "../util/protocol-types.rkt" event-ev event-payload)
-         (only-in "../runtime/runtime-helpers.rkt"
-                  emit-session-event!
-                  maybe-dispatch-hooks))
+         (only-in "../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks))
 
 (test-case "QUAL-01: emit-session-event! publishes event to bus"
   (define bus (make-event-bus))

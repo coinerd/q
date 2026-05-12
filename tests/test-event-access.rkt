@@ -10,7 +10,7 @@
   (make-event 'test-event
               1234567890
               "session-1"
-              "42"   ; turn-id as string per contract
+              "42" ; turn-id as string per contract
               (hash 'key "value")))
 
 (test-case "event-type-ref returns correct type"

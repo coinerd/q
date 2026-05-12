@@ -557,8 +557,10 @@
   (check-equal? (sandbox-memory-limit settings) 256)) ; global inherited
 
 (test-case "security-config-from-settings extracts execution policy"
-  (define settings (q-settings (hash) (hash) (hash 'execution-policy "allowlist"
-                                                    'execution-policy.allowed '("git" "ls"))))
+  (define settings
+    (q-settings (hash)
+                (hash)
+                (hash 'execution-policy "allowlist" 'execution-policy.allowed '("git" "ls"))))
   (define config (security-config-from-settings settings))
   (check-equal? (hash-ref config 'execution-policy-mode) "allowlist")
   (check-equal? (hash-ref config 'execution-policy-allowed) '("git" "ls")))
@@ -570,9 +572,11 @@
   (check-equal? (hash-ref config 'execution-policy-allowed) '()))
 
 (test-case "security-config-from-settings extracts secret-scrub config"
-  (define settings (q-settings (hash) (hash)
-                               (hash 'secret-scrub.extra-denylist '("CUSTOM_.*")
-                                     'secret-scrub.allowlist '("SAFE_VAR"))))
+  (define settings
+    (q-settings
+     (hash)
+     (hash)
+     (hash 'secret-scrub.extra-denylist '("CUSTOM_.*") 'secret-scrub.allowlist '("SAFE_VAR"))))
   (define config (security-config-from-settings settings))
   (check-equal? (hash-ref config 'secret-scrub-extra-denylist) '("CUSTOM_.*"))
   (check-equal? (hash-ref config 'secret-scrub-allowlist) '("SAFE_VAR")))

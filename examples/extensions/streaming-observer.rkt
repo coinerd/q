@@ -19,14 +19,13 @@
   (extension "streaming-observer"
              "1.0.0"
              "1"
-             (hasheq 'tool.execution.start
+             (hasheq 'tool.execution.started
                      (lambda (payload)
                        ;; payload has: tools (list of tool names), count
                        (log-info (format "streaming-observer: ~a tools starting execution"
                                          (hash-ref payload 'count 0)))
                        (hook-pass payload))
-
-                     'tool.execution.end
+                     'tool.execution.completed
                      (lambda (payload)
                        ;; payload has: tools (list of tool results), count
                        (log-info (format "streaming-observer: ~a tools completed"

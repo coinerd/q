@@ -55,7 +55,7 @@
          "termination-decision still referenced in runtime/ — dead code removed in v0.29.9")
    ;; decide-next-action must be wired (≥1 call site)
    (list "decide-next-action-wired"
-         (lambda () (>= (grep-count "decide-next-action" "runtime/iteration.rkt") 2))
+         (lambda () (>= (grep-count "decide-next-action" "runtime/iteration/decision.rkt") 2))
          "decide-next-action has fewer than 2 references in iteration.rkt")
    ;; v0.32.4: classify-hook-result (replaced handle-hook-result) in loop-stream.rkt (≥3 calls)
    (list "classify-hook-result-stream"
@@ -69,11 +69,10 @@
    (list "emit-typed-event-note"
          (lambda () (>= (grep-count "NOTE.*v0.29.14.*emit-typed-event" "agent/event-emitter.rkt") 1))
          "emit-typed-event! missing NOTE comment documenting production callers")
-  ;; session-bytes-written parameter removed (I-19)
-  (list "session-bytes-written-removed"
-        (lambda ()
-          (= (grep-count "make-parameter.*session-bytes" "tools/builtins/write.rkt") 0))
-        "session-bytes-written parameter should be removed")
+   ;; session-bytes-written parameter removed (I-19)
+   (list "session-bytes-written-removed"
+         (lambda () (= (grep-count "make-parameter.*session-bytes" "tools/builtins/write.rkt") 0))
+         "session-bytes-written parameter should be removed")
    ;; v0.29.13 W2: session-switch must use emit-typed-event! (not raw make-event)
    (list "session-switch-typed-events"
          (lambda () (>= (grep-count "emit-typed-event!" "runtime/session-switch.rkt") 2))

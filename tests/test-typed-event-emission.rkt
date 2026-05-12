@@ -6,31 +6,38 @@
 (require rackunit
          racket/base
          (only-in "../agent/event-structs/base.rkt"
-                  typed-event typed-event? typed-event-type typed-event-timestamp)
+                  typed-event
+                  typed-event?
+                  typed-event-type
+                  typed-event-timestamp)
          (only-in "../agent/event-structs/turn-events.rkt"
-                  turn-start-event turn-start-event?
-                  turn-end-event turn-end-event?)
+                  turn-start-event
+                  turn-start-event?
+                  turn-end-event
+                  turn-end-event?)
          (only-in "../agent/event-structs/message-events.rkt"
-                  message-start-event message-start-event?
-                  message-end-event message-end-event?)
+                  message-start-event
+                  message-start-event?
+                  message-end-event
+                  message-end-event?)
          (only-in "../agent/event-structs/provider-events.rkt"
-                  provider-request-event provider-request-event?)
+                  provider-request-event
+                  provider-request-event?)
          (only-in "../agent/event-structs/tool-events.rkt"
-                  tool-execution-start-event tool-execution-start-event?
-                  tool-execution-end-event tool-execution-end-event?
-                  tool-call-event tool-call-event?)
+                  tool-execution-start-event
+                  tool-execution-start-event?
+                  tool-execution-end-event
+                  tool-execution-end-event?
+                  tool-call-event
+                  tool-call-event?)
          (only-in "../agent/event-structs/session-events.rkt"
-                  session-start-event session-start-event?
-                  context-event context-event?)
-         (only-in "../util/event.rkt"
-                  event-ev)
-         (only-in "../agent/event-bus.rkt"
-                  make-event-bus
-                  event-bus?
-                  subscribe!)
-         (only-in "../agent/event-emitter.rkt"
-                  emit-typed-event!
-                  event-struct->hasheq))
+                  session-start-event
+                  session-start-event?
+                  context-event
+                  context-event?)
+         (only-in "../util/event.rkt" event-ev)
+         (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe!)
+         (only-in "../agent/event-emitter.rkt" emit-typed-event! event-struct->hasheq))
 
 ;; ── Helper: capture events ──
 

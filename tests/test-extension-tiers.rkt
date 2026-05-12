@@ -49,17 +49,21 @@
                 '(hook-dispatch command-register session-lifecycle compaction-hooks)))
 
 (test-case "tier-capabilities: providers adds provider-register"
-  (check-equal? (tier-capabilities 'providers)
-                '(hook-dispatch command-register session-lifecycle compaction-hooks provider-register)))
+  (check-equal?
+   (tier-capabilities 'providers)
+   '(hook-dispatch command-register session-lifecycle compaction-hooks provider-register)))
 
 (test-case "tier-capabilities: tui adds tui-panels and tui-keybindings"
   (check-equal? (tier-capabilities 'tui)
-                '(hook-dispatch command-register session-lifecycle compaction-hooks
-                  provider-register tui-panels tui-keybindings)))
+                '(hook-dispatch command-register
+                                session-lifecycle
+                                compaction-hooks
+                                provider-register
+                                tui-panels
+                                tui-keybindings)))
 
 (test-case "tier-capabilities rejects invalid tier"
-  (check-exn exn:fail?
-    (λ () (tier-capabilities 'invalid))))
+  (check-exn exn:fail? (λ () (tier-capabilities 'invalid))))
 
 ;; ============================================================
 ;; 3. capability-allowed?
@@ -110,37 +114,33 @@
 ;; ============================================================
 
 (test-case "validate-extension-tier: hook-only extension at hooks tier passes"
-  (define ext (extension "simple" "1.0" "1"
-                 (hasheq 'context-assembly (λ (p) p)
-                         'tool-pre-exec (λ (p) p))))
+  (define ext
+    (extension "simple" "1.0" "1" (hasheq 'context-assembly (λ (p) p) 'tool-pre-exec (λ (p) p))))
   (check-eq? (validate-extension-tier ext 'hooks) #t))
 
 (test-case "validate-extension-tier: session hooks at hooks tier fails"
-  (define ext (extension "overreach" "1.0" "1"
-                 (hasheq 'session-start (λ (p) p))))
+  (define ext (extension "overreach" "1.0" "1" (hasheq 'session-start (λ (p) p))))
   (define result (validate-extension-tier ext 'hooks))
   (check-pred list? result)
-  (check-true (>= (length result) 1)
-              "should report at least one violation"))
+  (check-true (>= (length result) 1) "should report at least one violation"))
 
 (test-case "validate-extension-tier: session hooks at session tier passes"
-  (define ext (extension "session-ext" "1.0" "1"
-                 (hasheq 'session-start (λ (p) p)
-                         'pre-compact (λ (p) p)
-                         'context-assembly (λ (p) p))))
+  (define ext
+    (extension "session-ext"
+               "1.0"
+               "1"
+               (hasheq 'session-start (λ (p) p) 'pre-compact (λ (p) p) 'context-assembly (λ (p) p))))
   (check-eq? (validate-extension-tier ext 'session) #t))
 
 (test-case "validate-extension-tier: tui hooks at commands tier fails"
-  (define ext (extension "tui-ext" "1.0" "1"
-                 (hasheq 'tui-render (λ (p) p)
-                         'command-dispatch (λ (p) p))))
+  (define ext
+    (extension "tui-ext" "1.0" "1" (hasheq 'tui-render (λ (p) p) 'command-dispatch (λ (p) p))))
   (define result (validate-extension-tier ext 'commands))
   (check-pred list? result)
   (check-true (>= (length result) 1)))
 
 (test-case "validate-extension-tier: providers hook at providers tier passes"
-  (define ext (extension "prov-ext" "1.0" "1"
-                 (hasheq 'provider-register (λ (p) p))))
+  (define ext (extension "prov-ext" "1.0" "1" (hasheq 'provider-register (λ (p) p))))
   (check-eq? (validate-extension-tier ext 'providers) #t))
 
 (test-case "validate-extension-tier: empty hooks always pass"
@@ -152,25 +152,24 @@
 ;; ============================================================
 
 (test-case "extension-tier-valid?: valid api + valid tier passes"
-  (define ext (extension "good" "1.0" "1"
-                 (hasheq 'context-assembly (λ (p) p))))
+  (define ext (extension "good" "1.0" "1" (hasheq 'context-assembly (λ (p) p))))
   (check-true (extension-tier-valid? ext 'hooks)))
 
 (test-case "extension-tier-valid?: bad api-version fails"
-  (define ext (extension "bad-api" "1.0" "99"
-                 (hasheq 'context-assembly (λ (p) p))))
+  (define ext (extension "bad-api" "1.0" "99" (hasheq 'context-assembly (λ (p) p))))
   (check-false (extension-tier-valid? ext 'hooks)))
 
 (test-case "extension-tier-valid?: good api but tier violation fails"
-  (define ext (extension "tier-violation" "1.0" "1"
-                 (hasheq 'session-start (λ (p) p))))
+  (define ext (extension "tier-violation" "1.0" "1" (hasheq 'session-start (λ (p) p))))
   (check-false (extension-tier-valid? ext 'hooks)))
 
 (test-case "extension-tier-valid?: tui extension at tui tier passes"
-  (define ext (extension "full-ext" "1.0" "1"
-                 (hasheq 'tui-panel (λ (p) p)
-                         'tui-keybinding-help (λ (p) p)
-                         'provider-register (λ (p) p))))
+  (define ext
+    (extension
+     "full-ext"
+     "1.0"
+     "1"
+     (hasheq 'tui-panel (λ (p) p) 'tui-keybinding-help (λ (p) p) 'provider-register (λ (p) p))))
   (check-true (extension-tier-valid? ext 'tui)))
 
 ;; ============================================================
@@ -178,12 +177,13 @@
 ;; ============================================================
 
 (test-case "unknown hook point defaults to hooks tier"
-  (define ext (extension "unknown-hook" "1.0" "1"
-                 (hasheq 'some-custom-hook (λ (p) p))))
+  (define ext (extension "unknown-hook" "1.0" "1" (hasheq 'some-custom-hook (λ (p) p))))
   (check-eq? (validate-extension-tier ext 'hooks) #t))
 
 (test-case "unknown hook point requires at least hooks tier"
-  (define ext (extension "unknown-hook-bad" "1.0" "1"
-                 (hasheq 'some-custom-hook (λ (p) p)
-                         'session-start (λ (p) p))))
+  (define ext
+    (extension "unknown-hook-bad"
+               "1.0"
+               "1"
+               (hasheq 'some-custom-hook (λ (p) p) 'session-start (λ (p) p))))
   (check-eq? (validate-extension-tier ext 'session) #t))

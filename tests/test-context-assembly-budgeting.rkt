@@ -17,16 +17,16 @@
       (check-equal? (context-assembly-config-summary-window cfg) 4000))
 
     (test-case "make-context-assembly-config: custom"
-      (define cfg (make-context-assembly-config #:recent-tokens 50000
-                                                #:max-catalog-entries 20
-                                                #:max-catalog-tokens 1000
-                                                #:summary-window 2000))
+      (define cfg
+        (make-context-assembly-config #:recent-tokens 50000
+                                      #:max-catalog-entries 20
+                                      #:max-catalog-tokens 1000
+                                      #:summary-window 2000))
       (check-equal? (context-assembly-config-recent-tokens cfg) 50000)
       (check-equal? (context-assembly-config-max-catalog-entries cfg) 20))
 
     (test-case "make-context-assembly-config: rejects zero recent-tokens"
-      (check-exn exn:fail?
-        (lambda () (make-context-assembly-config #:recent-tokens 0))))
+      (check-exn exn:fail? (lambda () (make-context-assembly-config #:recent-tokens 0))))
 
     (test-case "context-result construction"
       (define cr (context-result '() 0 0 0 0 #f '() #f))

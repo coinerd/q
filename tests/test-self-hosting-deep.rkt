@@ -136,7 +136,7 @@
   (define core-modules
     '("agent/loop.rkt" "agent/event-bus.rkt"
                        "agent/state.rkt"
-                       "runtime/iteration.rkt"
+                       "runtime/iteration/main-loop.rkt"
                        "runtime/auto-retry.rkt"
                        "runtime/context-assembly.rkt"
                        "runtime/trace-logger.rkt"

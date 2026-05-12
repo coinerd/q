@@ -5,12 +5,8 @@
 
 (require rackunit
          racket/base
-         (only-in "../util/loop-result.rkt"
-                  make-loop-result
-                  loop-result-termination-reason)
-         (only-in "../runtime/iteration.rkt"
-                  iteration-ctx
-                  decide-next-action))
+         (only-in "../util/loop-result.rkt" make-loop-result loop-result-termination-reason)
+         (only-in "../runtime/iteration/decision.rkt" decide-next-action iteration-ctx))
 
 ;; Helper: build an iteration-ctx
 (define (make-ictx #:iteration [iteration 0]

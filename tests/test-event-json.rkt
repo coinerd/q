@@ -10,10 +10,11 @@
          "../agent/event-structs/turn-events.rkt")
 
 (test-case "session-start-event round-trip"
-  (define evt (make-session-start-event #:session-id "test-sess"
-                                        #:timestamp 1000
-                                        #:turn-id #f
-                                        #:model (hasheq 'model "gpt-4")))
+  (define evt
+    (make-session-start-event #:session-id "test-sess"
+                              #:timestamp 1000
+                              #:turn-id #f
+                              #:model (hasheq 'model "gpt-4")))
   (define jx (typed-event->jsexpr evt))
   (check-equal? (hash-ref jx 'type) "session-start")
   (check-equal? (hash-ref jx 'sessionId) "test-sess")
@@ -22,10 +23,11 @@
   (check-equal? (typed-event-session-id restored) "test-sess"))
 
 (test-case "session-shutdown-event round-trip"
-  (define evt (make-session-shutdown-event #:session-id "test-sess"
-                                           #:timestamp 2000
-                                           #:turn-id "t1"
-                                           #:reason "graceful"))
+  (define evt
+    (make-session-shutdown-event #:session-id "test-sess"
+                                 #:timestamp 2000
+                                 #:turn-id "t1"
+                                 #:reason "graceful"))
   (define jx (typed-event->jsexpr evt))
   (check-equal? (hash-ref jx 'type) "session-shutdown")
   (define restored (jsexpr->typed-event jx))

@@ -9,9 +9,12 @@
 ;; - v0.19.10: spiral breaker event structure
 
 (require rackunit
-         "../runtime/iteration.rkt"
+         (only-in "../runtime/iteration/tool-turn-bridge.rkt" update-seen-paths)
+         (only-in "../util/json-helpers.rkt" ensure-hash-args)
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         (only-in "../runtime/iteration/retry-policy.rkt" check-mid-turn-budget!)
+         (only-in "../runtime/runtime-helpers.rkt" emit-session-event!))
 
 ;; ============================================================
 ;; ensure-hash-args edge cases

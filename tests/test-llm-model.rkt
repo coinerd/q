@@ -36,10 +36,7 @@
 ;; ============================================================
 
 (test-case "make-model-response creates struct"
-  (define resp (make-model-response '("content")
-                                     (hasheq 'total-tokens 10)
-                                     "gpt-4"
-                                     'stop))
+  (define resp (make-model-response '("content") (hasheq 'total-tokens 10) "gpt-4" 'stop))
   (check-pred model-response? resp)
   (check-equal? (model-response-model resp) "gpt-4")
   (check-eq? (model-response-stop-reason resp) 'stop))

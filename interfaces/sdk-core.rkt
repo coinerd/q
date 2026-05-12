@@ -19,7 +19,7 @@
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt"
          (prefix-in session: "../runtime/agent-session.rkt")
-         (only-in "../runtime/iteration.rkt" register-session-extensions!)
+         (only-in "../runtime/turn-orchestrator.rkt" register-session-extensions!)
          (only-in "../runtime/compactor.rkt"
                   compact-history
                   compact-and-persist!
@@ -69,39 +69,42 @@
          cancellation-token-cancelled?
 
          ;; Core API
-         (contract-out
-          [make-runtime
-           (->* (#:provider provider?)
-                (#:session-dir (or/c path-string? path? #f)
-                               #:tool-registry tool-registry?
-                               #:extension-registry (or/c extension-registry? #f)
-                               #:event-bus event-bus?
-                               #:model-name (or/c string? #f)
-                               #:max-iterations exact-positive-integer?
-                               #:system-instructions (listof string?)
-                               #:token-budget-threshold exact-positive-integer?
-                               #:cancellation-token (or/c cancellation-token? #f)
-                               #:register-default-tools? boolean?
-                               #:auto-load-extensions? boolean?
-                               #:project-dir (or/c path-string? path? #f))
-                runtime?)]
-          [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
-          [run-prompt! (runtime? string? . -> . (values runtime? (or/c loop-result? hash? #f 'no-active-session)))]
-          [make-cancellation-token
-           (->* () (#:callback (or/c (-> any/c any/c) #f)) cancellation-token?)]
-          [make-in-memory-session-manager (-> in-memory-session-manager?)]
-          [subscribe-events!
-           (->* (runtime? procedure?) ((or/c procedure? #f)) exact-nonnegative-integer?)]
-          [interrupt! (runtime? . -> . runtime?)]
-          [fork-session! (->* (runtime?) ((or/c string? #f)) (or/c runtime? 'no-active-session))]
-          [compact-session! (->* (runtime?) (#:persist? boolean?) any)]
-          [session-info (runtime? . -> . (or/c #f hash?))]
-          [steer! (runtime? string? . -> . runtime?)]
-          [follow-up! (runtime? string? . -> . runtime?)]
-          [navigate!
-           (-> runtime?
-               (or/c string? exact-integer?)
-               (or/c navigate-result? 'no-active-session 'invalid-target))])
+         (contract-out [make-runtime
+                        (->* (#:provider provider?)
+                             (#:session-dir (or/c path-string? path? #f)
+                                            #:tool-registry tool-registry?
+                                            #:extension-registry (or/c extension-registry? #f)
+                                            #:event-bus event-bus?
+                                            #:model-name (or/c string? #f)
+                                            #:max-iterations exact-positive-integer?
+                                            #:system-instructions (listof string?)
+                                            #:token-budget-threshold exact-positive-integer?
+                                            #:cancellation-token (or/c cancellation-token? #f)
+                                            #:register-default-tools? boolean?
+                                            #:auto-load-extensions? boolean?
+                                            #:project-dir (or/c path-string? path? #f))
+                             runtime?)]
+                       [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
+                       [run-prompt!
+                        (runtime? string?
+                                  . -> .
+                                  (values runtime? (or/c loop-result? hash? #f 'no-active-session)))]
+                       [make-cancellation-token
+                        (->* () (#:callback (or/c (-> any/c any/c) #f)) cancellation-token?)]
+                       [make-in-memory-session-manager (-> in-memory-session-manager?)]
+                       [subscribe-events!
+                        (->* (runtime? procedure?) ((or/c procedure? #f)) exact-nonnegative-integer?)]
+                       [interrupt! (runtime? . -> . runtime?)]
+                       [fork-session!
+                        (->* (runtime?) ((or/c string? #f)) (or/c runtime? 'no-active-session))]
+                       [compact-session! (->* (runtime?) (#:persist? boolean?) any)]
+                       [session-info (runtime? . -> . (or/c #f hash?))]
+                       [steer! (runtime? string? . -> . runtime?)]
+                       [follow-up! (runtime? string? . -> . runtime?)]
+                       [navigate!
+                        (-> runtime?
+                            (or/c string? exact-integer?)
+                            (or/c navigate-result? 'no-active-session 'invalid-target))])
 
          ;; Compaction types
          compaction-result?

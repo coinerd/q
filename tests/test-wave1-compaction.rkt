@@ -29,18 +29,28 @@
   (make-message id #f role kind (list (make-text-part text)) (current-seconds) (hasheq)))
 
 (define (msg-with-tool-call id tool-name path-str)
-  (make-message id #f 'assistant 'message
+  (make-message id
+                #f
+                'assistant
+                'message
                 (list (make-tool-call-part id tool-name (hasheq 'path path-str)))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 (define (msg-with-tool-result id result-text)
-  (make-message id #f 'tool 'tool-result
+  (make-message id
+                #f
+                'tool
+                'tool-result
                 (list (make-tool-result-part id result-text #f))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 (define (msg-text m)
-  (string-join (for/list ([p (in-list (message-content m))] #:when (text-part? p))
-                 (text-part-text p)) ""))
+  (string-join (for/list ([p (in-list (message-content m))]
+                          #:when (text-part? p))
+                 (text-part-text p))
+               ""))
 
 ;; Tiny config for triggering compaction
 (define tiny-tc (token-compaction-config 5 0 10))
@@ -189,7 +199,9 @@
   (define summary1 (compaction-result-summary-message result1))
   (define kept1 (compaction-result-kept-messages result1))
   (define msgs-round2
-    (append (if summary1 (list summary1) '())
+    (append (if summary1
+                (list summary1)
+                '())
             kept1
             (for/list ([i (in-range 20)])
               (msg (format "r2-~a" i) 'user (format "Round 2 message ~a with enough text" i)))))
@@ -233,16 +245,16 @@
 ;; ============================================================
 
 (test-case "#1179: context-overflow-error? detects context_length errors"
-  (check-true (context-overflow-error?
-               (exn:fail "context_length_exceeded: too many tokens" (current-continuation-marks)))))
+  (check-true (context-overflow-error? (exn:fail "context_length_exceeded: too many tokens"
+                                                 (current-continuation-marks)))))
 
 (test-case "#1179: context-overflow-error? detects max tokens errors"
-  (check-true (context-overflow-error?
-               (exn:fail "Request too large: max_tokens exceeded" (current-continuation-marks)))))
+  (check-true (context-overflow-error? (exn:fail "Request too large: max_tokens exceeded"
+                                                 (current-continuation-marks)))))
 
 (test-case "#1179: context-overflow-error? rejects non-overflow errors"
-  (check-false (context-overflow-error?
-                (exn:fail "connection timeout" (current-continuation-marks)))))
+  (check-false (context-overflow-error? (exn:fail "connection timeout"
+                                                  (current-continuation-marks)))))
 
 (test-case "#1179: overflow-state tracks attempts"
   (define state (make-overflow-state #:max-attempts 1))
@@ -284,43 +296,38 @@
   (check-equal? (msg-text last-msg) "hello"))
 
 (test-case "#1179: retryable-error? detects rate limits"
-  (check-true (retryable-error?
-               (exn:fail "429 rate limit exceeded" (current-continuation-marks)))))
+  (check-true (retryable-error? (exn:fail "429 rate limit exceeded" (current-continuation-marks)))))
 
 (test-case "#1179: retryable-error? detects server errors"
-  (check-true (retryable-error?
-               (exn:fail "502 bad gateway" (current-continuation-marks)))))
+  (check-true (retryable-error? (exn:fail "502 bad gateway" (current-continuation-marks)))))
 
 (test-case "#1179: with-auto-retry succeeds on first try"
   (define attempts 0)
-  (define result (with-auto-retry
-                   (lambda ()
-                     (set! attempts (add1 attempts))
-                     "success")
-                   #:max-retries 2))
+  (define result
+    (with-auto-retry (lambda ()
+                       (set! attempts (add1 attempts))
+                       "success")
+                     #:max-retries 2))
   (check-equal? result "success")
   (check-equal? attempts 1))
 
 (test-case "#1179: with-auto-retry retries on transient failure"
   (define attempts 0)
   (define result
-    (with-auto-retry
-     (lambda ()
-       (set! attempts (add1 attempts))
-       (if (< attempts 2)
-           (raise (exn:fail "503 server error" (current-continuation-marks)))
-           "recovered"))
-     #:max-retries 2
-     #:base-delay-ms 10))
+    (with-auto-retry (lambda ()
+                       (set! attempts (add1 attempts))
+                       (if (< attempts 2)
+                           (raise (exn:fail "503 server error" (current-continuation-marks)))
+                           "recovered"))
+                     #:max-retries 2
+                     #:base-delay-ms 10))
   (check-equal? result "recovered")
   (check-equal? attempts 2))
 
 (test-case "#1179: with-auto-retry re-raises non-retryable errors"
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (with-auto-retry
-      (lambda ()
-        (raise (exn:fail "fatal logic error" (current-continuation-marks))))
-      #:max-retries 2
-      #:base-delay-ms 10))))
+  (check-exn exn:fail?
+             (lambda ()
+               (with-auto-retry (lambda ()
+                                  (raise (exn:fail "fatal logic error" (current-continuation-marks))))
+                                #:max-retries 2
+                                #:base-delay-ms 10))))

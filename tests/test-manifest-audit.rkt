@@ -34,14 +34,15 @@
                         #:author [author "test"]
                         #:files [files '()]
                         #:checksum [checksum #f])
-  (define m (make-qpm-manifest #:name name
-                               #:version version
-                               #:api-version api-version
-                               #:type type
-                               #:description description
-                               #:author author
-                               #:files files
-                               #:checksum checksum))
+  (define m
+    (make-qpm-manifest #:name name
+                       #:version version
+                       #:api-version api-version
+                       #:type type
+                       #:description description
+                       #:author author
+                       #:files files
+                       #:checksum checksum))
   (write-qpm-manifest m (build-path dir "qpm.json")))
 
 (define (touch-file dir rel-path)

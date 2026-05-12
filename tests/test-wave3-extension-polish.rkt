@@ -42,12 +42,12 @@
   (check-false (bash-execution-entry? (make-msg "b3" 'user 'message '()))))
 
 (test-case "#1186: bash-execution preserves metadata in meta field"
-  (define msg (make-msg "b1" 'tool 'bash-execution
-                        '()
-                        (hasheq 'command "ls -la"
-                                'exit-code 0
-                                'duration-ms 150
-                                'timed-out? #f)))
+  (define msg
+    (make-msg "b1"
+              'tool
+              'bash-execution
+              '()
+              (hasheq 'command "ls -la" 'exit-code 0 'duration-ms 150 'timed-out? #f)))
   (check-true (bash-execution-entry? msg))
   (check-equal? (hash-ref (message-meta msg) 'command) "ls -la")
   (check-equal? (hash-ref (message-meta msg) 'exit-code) 0)
@@ -70,9 +70,7 @@
   (check-false (tool-result-entry? bash-msg)))
 
 (test-case "#1186: bash-execution message round-trips through serialization"
-  (define msg (make-msg "b1" 'tool 'bash-execution
-                        '()
-                        (hasheq 'command "make test" 'exit-code 1)))
+  (define msg (make-msg "b1" 'tool 'bash-execution '() (hasheq 'command "make test" 'exit-code 1)))
   (define jsexpr (message->jsexpr msg))
   (define restored (jsexpr->message jsexpr))
   (check-true (bash-execution-entry? restored))
@@ -96,33 +94,27 @@
 
 (test-case "#1187: ${@:N:L} slice expansion"
   (define tpl "Selected: ${@:2:2}")
-  (check-equal? (render-template-with-positional-args tpl '("a" "b" "c" "d"))
-                "Selected: b c"))
+  (check-equal? (render-template-with-positional-args tpl '("a" "b" "c" "d")) "Selected: b c"))
 
 (test-case "#1187: missing $N expands to empty"
   (define tpl "Only $1 and $3 here")
-  (check-equal? (render-template-with-positional-args tpl '("first"))
-                "Only first and  here"))
+  (check-equal? (render-template-with-positional-args tpl '("first")) "Only first and  here"))
 
 (test-case "#1187: empty args"
   (define tpl "No args: $@ and $1")
-  (check-equal? (render-template-with-positional-args tpl '())
-                "No args:  and "))
+  (check-equal? (render-template-with-positional-args tpl '()) "No args:  and "))
 
 (test-case "#1187: combined $@ and $1"
   (define tpl "All: $@ | First: $1")
-  (check-equal? (render-template-with-positional-args tpl '("x" "y" "z"))
-                "All: x y z | First: x"))
+  (check-equal? (render-template-with-positional-args tpl '("x" "y" "z")) "All: x y z | First: x"))
 
 (test-case "#1187: ${@:N:L} at end of range"
   (define tpl "Last two: ${@:3:2}")
-  (check-equal? (render-template-with-positional-args tpl '("a" "b" "c" "d"))
-                "Last two: c d"))
+  (check-equal? (render-template-with-positional-args tpl '("a" "b" "c" "d")) "Last two: c d"))
 
 (test-case "#1187: ${@:N:L} exceeds available args"
   (define tpl "Overflow: ${@:2:5}")
-  (check-equal? (render-template-with-positional-args tpl '("a" "b" "c"))
-                "Overflow: b c"))
+  (check-equal? (render-template-with-positional-args tpl '("a" "b" "c")) "Overflow: b c"))
 
 (test-case "#1187: render-template {{var}} still works"
   (define tpl "Hello {{name}}, welcome to {{place}}!")

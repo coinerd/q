@@ -16,13 +16,12 @@
   (cond
     [(string? content) content]
     [(list? content)
-     (string-join
-      (for/list ([part (in-list content)])
-        (cond
-          [(string? part) part]
-          [(hash? part) (hash-ref part 'text "")]
-          [else ""]))
-      "\n")]
+     (string-join (for/list ([part (in-list content)])
+                    (cond
+                      [(string? part) part]
+                      [(hash? part) (hash-ref part 'text "")]
+                      [else ""]))
+                  "\n")]
     [else ""]))
 
 ;; ============================================================
@@ -55,8 +54,7 @@
   (define result (tool-date (hasheq 'format "unix")))
   (check-false (tool-result-is-error? result))
   (define text (content-text result))
-  (check-true (regexp-match? #px"^[0-9]+$" text)
-              (format "Expected unix timestamp, got: ~a" text))
+  (check-true (regexp-match? #px"^[0-9]+$" text) (format "Expected unix timestamp, got: ~a" text))
   ;; Should be > 1700000000 (after 2023)
   (check-true (> (string->number text) 1700000000)
               (format "Expected recent timestamp, got: ~a" text)))
@@ -65,8 +63,9 @@
   (define result (tool-date (hasheq 'format "weekday")))
   (check-false (tool-result-is-error? result))
   (define text (content-text result))
-  (check-not-false (member text '("Sunday" "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday"))
-              (format "Expected weekday name, got: ~a" text)))
+  (check-not-false (member text
+                           '("Sunday" "Monday" "Tuesday" "Wednesday" "Thursday" "Friday" "Saturday"))
+                   (format "Expected weekday name, got: ~a" text)))
 
 (test-case "date tool returns iso-full format"
   (define result (tool-date (hasheq 'format "iso-full")))

@@ -7,7 +7,10 @@
          "../runtime/session-index/schema.rkt"
          "../runtime/session-index/query.rkt"
          (only-in "../util/protocol-types.rkt"
-                  make-message make-text-part message-id message-parent-id))
+                  make-message
+                  make-text-part
+                  message-id
+                  message-parent-id))
 
 (define query-tests
   (test-suite "Session Index Query"

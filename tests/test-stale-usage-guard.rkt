@@ -16,13 +16,18 @@
   (make-temporary-file "q-stale-test-~a" 'directory))
 
 (define (make-test-session)
-  (make-agent-session
-   (hasheq 'session-dir (make-temp-dir)
-           'event-bus (make-event-bus)
-           'provider #f
-           'tool-registry #f
-           'model-name "test"
-           'system-instructions '())))
+  (make-agent-session (hasheq 'session-dir
+                              (make-temp-dir)
+                              'event-bus
+                              (make-event-bus)
+                              'provider
+                              #f
+                              'tool-registry
+                              #f
+                              'model-name
+                              "test"
+                              'system-instructions
+                              '())))
 
 (test-case "last-compaction-time starts as #f"
   (define sess (make-test-session))
@@ -39,8 +44,13 @@
   (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
   ;; Create context that would normally trigger compaction (threshold 0 = always)
   (define context
-    (list (make-message "m1" #f 'user 'message
-                        (list (make-text-part "hello world")) (current-seconds) (hasheq))))
+    (list (make-message "m1"
+                        #f
+                        'user
+                        'message
+                        (list (make-text-part "hello world"))
+                        (current-seconds)
+                        (hasheq))))
   ;; maybe-compact-context should return context unchanged (stale guard)
   (define result (maybe-compact-context sess context 0))
   (check-equal? result context))
@@ -51,8 +61,13 @@
   (set-agent-session-last-compaction-time! sess (- (current-inexact-milliseconds) 3000))
   ;; Create context with enough messages to trigger
   (define context
-    (list (make-message "m1" #f 'user 'message
-                        (list (make-text-part "hello")) (current-seconds) (hasheq))))
+    (list (make-message "m1"
+                        #f
+                        'user
+                        'message
+                        (list (make-text-part "hello"))
+                        (current-seconds)
+                        (hasheq))))
   ;; Should not be blocked by stale guard (3s > 2s cooldown)
   ;; The actual compaction depends on token count vs threshold, but stale guard is passed
   (define result (maybe-compact-context sess context 0))

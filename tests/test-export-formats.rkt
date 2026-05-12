@@ -25,35 +25,31 @@
 ;; ============================================================
 
 (define (make-user-msg id text ts)
-  (make-message id #f 'user 'message
-                (list (make-text-part text))
-                ts #f))
+  (make-message id #f 'user 'message (list (make-text-part text)) ts #f))
 
 (define (make-assistant-msg id text ts)
-  (make-message id #f 'assistant 'message
-                (list (make-text-part text))
-                ts #f))
+  (make-message id #f 'assistant 'message (list (make-text-part text)) ts #f))
 
 (define (make-tool-call-msg id tool-name args ts)
-  (make-message id #f 'assistant 'tool-call
-                (list (make-tool-call-part "tc-1" tool-name args))
-                ts #f))
+  (make-message id #f 'assistant 'tool-call (list (make-tool-call-part "tc-1" tool-name args)) ts #f))
 
 (define (make-tool-result-msg id content is-error ts)
-  (make-message id #f 'tool 'tool-result
+  (make-message id
+                #f
+                'tool
+                'tool-result
                 (list (make-tool-result-part "tc-1" content is-error))
-                ts #f))
+                ts
+                #f))
 
 (define basic-session
-  (list (make-user-msg "m1" "Hello, q!" 1000)
-        (make-assistant-msg "m2" "Hi! How can I help?" 1001)))
+  (list (make-user-msg "m1" "Hello, q!" 1000) (make-assistant-msg "m2" "Hi! How can I help?" 1001)))
 
 (define tool-session
   (list (make-tool-call-msg "m1" "bash" "{\"command\": \"ls\"}" 1000)
         (make-tool-result-msg "m2" "file1.txt\nfile2.txt" #f 1001)))
 
-(define error-session
-  (list (make-tool-result-msg "m1" "command not found" #t 1000)))
+(define error-session (list (make-tool-result-msg "m1" "command not found" #t 1000)))
 
 ;; ============================================================
 ;; Markdown: basic conversation
@@ -109,8 +105,7 @@
 ;; HTML: text escaping
 ;; ============================================================
 
-(define evil-session
-  (list (make-user-msg "m1" "<script>alert('xss')</script>" 1000)))
+(define evil-session (list (make-user-msg "m1" "<script>alert('xss')</script>" 1000)))
 (define html-evil (session->html evil-session))
 (check-false (string-contains? html-evil "<script>") "html: no raw script tag")
 (check-true (string-contains? html-evil "&lt;script&gt;") "html: escaped script")
@@ -157,11 +152,11 @@
 (define test-session-path (build-path test-session-dir "test-session.jsonl"))
 
 (call-with-output-file test-session-path
-  (lambda (out)
-    (for ([msg (in-list basic-session)])
-      (displayln (jsexpr->string (message->jsexpr msg)) out)))
-  #:mode 'text
-  #:exists 'replace)
+                       (lambda (out)
+                         (for ([msg (in-list basic-session)])
+                           (displayln (jsexpr->string (message->jsexpr msg)) out)))
+                       #:mode 'text
+                       #:exists 'replace)
 
 (define disp-md (export-session test-session-path 'markdown))
 (check-true (string-contains? disp-md "### user (message)") "dispatch: markdown")
@@ -187,10 +182,7 @@
 ;; ============================================================
 
 (define empty-path (build-path test-session-dir "empty.jsonl"))
-(call-with-output-file empty-path
-  (lambda (out) (void))
-  #:mode 'text
-  #:exists 'replace)
+(call-with-output-file empty-path (lambda (out) (void)) #:mode 'text #:exists 'replace)
 
 (define empty-md (export-session empty-path 'markdown))
 (check-equal? empty-md "" "empty: markdown is empty string")
@@ -200,7 +192,9 @@
 
 (define empty-json (export-session empty-path 'json))
 (define empty-parsed (string->jsexpr empty-json))
-(check-equal? (hash-ref (hash-ref empty-parsed 'session) 'entries) '() "empty: json entries empty list")
+(check-equal? (hash-ref (hash-ref empty-parsed 'session) 'entries)
+              '()
+              "empty: json entries empty list")
 
 ;; ============================================================
 ;; Cleanup

@@ -135,9 +135,11 @@
        (if (< i (length texts))
            (list-ref texts i)
            "done"))
-     (list
-      (make-stream-chunk text #f #f #f)
-      (make-stream-chunk #f #f (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15) #t)))))
+     (list (make-stream-chunk text #f #f #f)
+           (make-stream-chunk #f
+                              #f
+                              (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                              #t)))))
 
 ;; Single-response mock provider (most common case)
 (define (make-single-mock-provider [text "Mock response"])
@@ -640,23 +642,24 @@
          (set-box! call-count (add1 (unbox call-count)))
          (if (<= (unbox call-count) 1)
              (list (make-stream-chunk #f
-                                 (hasheq 'id
-                                         "tc-golden-1"
-                                         'name
-                                         "greet"
-                                         'arguments
-                                         (jsexpr->string (hasheq 'name "Alice")))
-                                 #f
-                                 #f)
+                                      (hasheq 'id
+                                              "tc-golden-1"
+                                              'name
+                                              "greet"
+                                              'arguments
+                                              (jsexpr->string (hasheq 'name "Alice")))
+                                      #f
+                                      #f)
                    (make-stream-chunk #f
-                                 #f
-                                 (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
-                                 #t))
+                                      #f
+                                      (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                                      #t))
              (list (make-stream-chunk "Greeted Alice!" #f #f #f)
-                   (make-stream-chunk #f
-                                 #f
-                                 (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
-                                 #t))))))
+                   (make-stream-chunk
+                    #f
+                    #f
+                    (hasheq 'prompt-tokens 20 'completion-tokens 10 'total-tokens 30)
+                    #t))))))
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "Say hi to Alice"))
@@ -698,12 +701,15 @@
          (if (<= (unbox call-count) 1)
              (list
               (make-stream-chunk #f (hasheq 'id "tc-unk" 'name "nonexistent" 'arguments "{}") #f #f)
-              (make-stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t))
-             (list (make-stream-chunk "Handled the error" #f #f #f)
-                   (make-stream-chunk #f
+              (make-stream-chunk #f
                                  #f
                                  (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
-                                 #t))))))
+                                 #t))
+             (list (make-stream-chunk "Handled the error" #f #f #f)
+                   (make-stream-chunk #f
+                                      #f
+                                      (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
+                                      #t))))))
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "use unknown tool"))
@@ -906,9 +912,11 @@
           "mock"
           'tool-calls))
        (lambda (req)
-         (list
-          (make-stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
-          (make-stream-chunk #f #f (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8) #t)))))
+         (list (make-stream-chunk #f (hasheq 'id "tc-loop" 'name "ping" 'arguments "{}") #f #f)
+               (make-stream-chunk #f
+                                  #f
+                                  (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
+                                  #t)))))
     (define rt (make-golden-runtime prov #:session-dir dir #:tool-registry reg #:max-iterations 1))
     (define rt2 (sdk:open-session rt))
     (define-values (rt3 result) (sdk:run-prompt! rt2 "loop test"))

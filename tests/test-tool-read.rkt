@@ -21,8 +21,7 @@
 (test-case "tool-read returns error for missing file"
   (define result (tool-read (hasheq 'path "/nonexistent/file.txt")))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                 "not found")))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "not found")))
 
 (test-case "tool-read respects offset"
   (define tmp (make-temporary-file "q-test-read-~a.txt"))
@@ -43,13 +42,10 @@
 
 (test-case "tool-read returns error for binary file"
   (define tmp (make-temporary-file "q-test-read-~a.bin"))
-  (call-with-output-file tmp
-    (λ (out) (write-bytes (bytes 0 1 2 0 4 5) out))
-    #:exists 'replace)
+  (call-with-output-file tmp (λ (out) (write-bytes (bytes 0 1 2 0 4 5) out)) #:exists 'replace)
   (define result (tool-read (hasheq 'path tmp)))
   (check-pred tool-result-is-error? result)
-  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text)
-                                 "binary"))
+  (check-true (string-contains? (hash-ref (car (tool-result-content result)) 'text) "binary"))
   (delete-file tmp))
 
 (test-case "tool-read handles empty file"
@@ -89,7 +85,9 @@
 
 (test-case "tool-read: large file (1000+ lines) works"
   (define tmp (make-temporary-file "q-test-large-~a.txt"))
-  (define lines (for/list ([i (in-range 1200)]) (format "line ~a" i)))
+  (define lines
+    (for/list ([i (in-range 1200)])
+      (format "line ~a" i)))
   (display-to-file (string-join lines "\n") tmp #:exists 'replace)
   (define result (tool-read (hasheq 'path tmp)))
   (check-false (tool-result-is-error? result))

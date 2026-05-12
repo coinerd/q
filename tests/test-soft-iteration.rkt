@@ -12,7 +12,7 @@
          "../llm/model.rkt"
          "../llm/provider.rkt"
          (only-in "../tools/tool.rkt" make-tool-registry register-tool! make-tool make-error-result)
-         "../runtime/iteration.rkt"
+         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop)
          (only-in "../runtime/session-config.rkt" hash->session-config))
 
 ;; ============================================================

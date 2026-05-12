@@ -9,11 +9,11 @@
          racket/path)
 
 (define project-root
-  (simplify-path (build-path (or (path-only (resolved-module-path-name
-                                              (variable-reference->resolved-module-path
-                                               (#%variable-reference))))
-                                 ".")
-                             "..")))
+  (simplify-path
+   (build-path (or (path-only (resolved-module-path-name (variable-reference->resolved-module-path
+                                                          (#%variable-reference))))
+                   ".")
+               "..")))
 
 (define script (build-path project-root "scripts" "metrics.rkt"))
 
@@ -25,9 +25,8 @@
   (define readme (build-path project-root "README.md"))
   (define backup (file->string readme))
   ;; Corrupt prose count to something obviously wrong
-  (define corrupted (regexp-replace* #rx"Full test suite \\([0-9]+ files\\)"
-                                     backup
-                                     "Full test suite (999 files)"))
+  (define corrupted
+    (regexp-replace* #rx"Full test suite \\([0-9]+ files\\)" backup "Full test suite (999 files)"))
   (call-with-output-file readme (λ (out) (display corrupted out)) #:exists 'replace)
   ;; Run sync-all
   (define exit-code (system/exit-code (format "cd ~a && racket ~a --sync-all" project-root script)))
@@ -43,9 +42,8 @@
   (define readme (build-path project-root "README.md"))
   (define backup (file->string readme))
   ;; Corrupt table
-  (define corrupted (regexp-replace* #rx"\\| Source lines \\| [0-9]+ \\|"
-                                     backup
-                                     "| Source lines | 00000 |"))
+  (define corrupted
+    (regexp-replace* #rx"\\| Source lines \\| [0-9]+ \\|" backup "| Source lines | 00000 |"))
   (call-with-output-file readme (λ (out) (display corrupted out)) #:exists 'replace)
   ;; Run sync-all
   (define exit-code (system/exit-code (format "cd ~a && racket ~a --sync-all" project-root script)))

@@ -5,11 +5,10 @@
 
 (require rackunit
          racket/base
-         (only-in "../util/loop-result.rkt"
-                  make-loop-result)
-         (only-in "../runtime/iteration.rkt"
-                  iteration-ctx
+         (only-in "../util/loop-result.rkt" make-loop-result)
+         (only-in "../runtime/iteration/decision.rkt"
                   decide-next-action
+                  iteration-ctx
                   known-termination-reasons))
 
 ;; Helper: build an iteration-ctx
@@ -24,14 +23,13 @@
     (define result (make-loop-result '() reason (hasheq)))
     (define action (decide-next-action ctx result))
     (check-not-false (member action '(stop stop-hard-limit stop-soft-limit continue))
-           (format "Termination reason ~a returned unexpected action ~a" reason action))))
+                     (format "Termination reason ~a returned unexpected action ~a" reason action))))
 
 (test-case "known-termination-reasons: list is non-empty"
-  (check-true (and (list? (known-termination-reasons))
-                   (> (length (known-termination-reasons)) 0))))
+  (check-true (and (list? (known-termination-reasons)) (> (length (known-termination-reasons)) 0))))
 
 (test-case "known-termination-reasons: includes core reasons"
   (define reasons (known-termination-reasons))
   (for ([required '(completed cancelled tool-calls-pending error)])
     (check-not-false (member required reasons)
-                (format "Missing required termination reason: ~a" required))))
+                     (format "Missing required termination reason: ~a" required))))

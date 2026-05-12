@@ -6,8 +6,7 @@
 
 (require rackunit
          "../tools/tool.rkt"
-         (except-in "../util/protocol-types.rkt"
-           make-tool-call make-tool-result))
+         (except-in "../util/protocol-types.rkt" make-tool-call make-tool-result))
 
 ;; ── The struct constructor from tools/tool should produce values
 ;;    accepted by the predicate imported from agent/types ──
@@ -15,13 +14,12 @@
 (define tr (make-tool-result "hello" #f #f))
 
 ;; tools/tool.rkt predicate
-(check-pred tool-result? tr
-            "tool-result? from tools/tool.rkt accepts its own constructor")
+(check-pred tool-result? tr "tool-result? from tools/tool.rkt accepts its own constructor")
 
 ;; Accessors from tools/tool.rkt work
 (check-equal? (tool-result-content tr) "hello")
-(check-false  (tool-result-details tr))
-(check-false  (tool-result-is-error? tr))
+(check-false (tool-result-details tr))
+(check-false (tool-result-is-error? tr))
 
 ;; Cross-module identity: the tool-result? from agent/types (re-exported)
 ;; must accept values created by the constructor from tools/tool.
@@ -40,7 +38,6 @@
 
 ;; Verify JSON round-trip uses the canonical serialization
 (let* ([tr4 (make-tool-result '("data") (hasheq 'code 0) #f)]
-       [jx  (tool-result->jsexpr tr4)])
+       [jx (tool-result->jsexpr tr4)])
   (check-equal? (hash-ref jx 'content) '("data"))
   (check-equal? (hash-ref jx 'isError) #f))
-

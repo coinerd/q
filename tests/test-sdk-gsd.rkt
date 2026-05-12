@@ -23,21 +23,23 @@
 ;; Helpers
 ;; ============================================================
 
-(define (make-gsd-runtime #:with-ext-reg? [with-ext? #f]
-                          #:with-session? [with-sess? #f])
+(define (make-gsd-runtime #:with-ext-reg? [with-ext? #f] #:with-session? [with-sess? #f])
   (define tmp (make-temporary-file "/tmp/sdk-gsd-test-~a" 'directory))
-  (define prov (make-simple-mock-provider
-                (list (hasheq 'role "assistant"
-                              'content (list (hasheq 'type "text"
-                                                     'text "done"))))))
+  (define prov
+    (make-simple-mock-provider
+     (list (hasheq 'role "assistant" 'content (list (hasheq 'type "text" 'text "done"))))))
   (define ext-reg (and with-ext? (make-extension-registry)))
   (when with-ext?
     (register-extension! ext-reg the-extension))
-  (define rt (make-runtime #:provider prov
-                           #:session-dir tmp
-                           #:extension-registry ext-reg
-                           #:register-default-tools? #f))
-  (define opened (if with-sess? (open-session rt) rt))
+  (define rt
+    (make-runtime #:provider prov
+                  #:session-dir tmp
+                  #:extension-registry ext-reg
+                  #:register-default-tools? #f))
+  (define opened
+    (if with-sess?
+        (open-session rt)
+        rt))
   (values opened tmp))
 
 (define (cleanup-gsd! tmp)
@@ -80,8 +82,7 @@
   ;; The GSD extension should return a hook-amend with submit text
   ;; Since no session, we get back the submit text string
   (check-pred string? result "q:plan should return submit text string when no session")
-  (check-true (string-contains? result "build a foo")
-              "submit text should contain the task")
+  (check-true (string-contains? result "build a foo") "submit text should contain the task")
   (cleanup-gsd! tmp))
 
 (test-case "W2: q:go dispatches through extension and returns submit text (no session)"
@@ -92,8 +93,9 @@
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
   (call-with-output-file (build-path plan-dir "PLAN.md")
-    (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
-    #:exists 'truncate)
+                         (lambda (out)
+                           (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
+                         #:exists 'truncate)
   ;; Pin the planning dir so the extension finds it
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result) (q:go rt))
@@ -119,8 +121,9 @@
   (define plan-dir (build-path tmp ".planning"))
   (make-directory* plan-dir)
   (call-with-output-file (build-path plan-dir "PLAN.md")
-    (lambda (out) (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
-    #:exists 'truncate)
+                         (lambda (out)
+                           (display "## Wave 0: Test\n- File: q/test.rkt\n- Verify: raco test\n" out))
+                         #:exists 'truncate)
   (set-pinned-planning-dir! tmp)
   (define-values (rt2 result) (q:go rt))
   (check-not-equal? result 'no-extension-registry)

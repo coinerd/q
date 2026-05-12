@@ -35,8 +35,7 @@
 (test-case "gather-planning-summary reads PLAN.md"
   (define dir (make-temp-planning-dir))
   (define plan-path (build-path dir ".planning" "PLAN.md"))
-  (call-with-output-file plan-path
-    (lambda (out) (display "## Wave 1: Do stuff\n- [ ] Task A\n" out)))
+  (call-with-output-file plan-path (lambda (out) (display "## Wave 1: Do stuff\n- [ ] Task A\n" out)))
   (define result (gather-planning-summary dir))
   (check-true (string-contains? result "PLAN.md"))
   (check-true (string-contains? result "Wave 1"))
@@ -45,11 +44,11 @@
 (test-case "gather-planning-summary reads multiple artifacts"
   (define dir (make-temp-planning-dir))
   (call-with-output-file (build-path dir ".planning" "PLAN.md")
-    (lambda (out) (display "Plan content\n" out)))
+                         (lambda (out) (display "Plan content\n" out)))
   (call-with-output-file (build-path dir ".planning" "STATE.md")
-    (lambda (out) (display "State content\n" out)))
+                         (lambda (out) (display "State content\n" out)))
   (call-with-output-file (build-path dir ".planning" "HANDOFF.json")
-    (lambda (out) (display "{\"phase\":\"B\"}\n" out)))
+                         (lambda (out) (display "{\"phase\":\"B\"}\n" out)))
   (define result (gather-planning-summary dir))
   (check-true (string-contains? result "PLAN.md"))
   (check-true (string-contains? result "STATE.md"))
@@ -87,7 +86,7 @@
 (test-case "handle-compact-context reads planning state"
   (define dir (make-temp-planning-dir))
   (call-with-output-file (build-path dir ".planning" "PLAN.md")
-    (lambda (out) (display "My plan\n" out)))
+                         (lambda (out) (display "My plan\n" out)))
   (define result (handle-compact-context (hasheq 'project_dir (path->string dir))))
   (define content (tool-result-content result))
   (define text-item (findf (lambda (c) (equal? (hash-ref c 'type #f) "text")) content))
@@ -95,8 +94,7 @@
   (cleanup-dir dir))
 
 (test-case "handle-compact-context includes instructions"
-  (define result (handle-compact-context
-                  (hasheq 'instructions "Focus on Phase B next")))
+  (define result (handle-compact-context (hasheq 'instructions "Focus on Phase B next")))
   (define content (tool-result-content result))
   (define trigger (findf (lambda (c) (equal? (hash-ref c 'type #f) "compaction-trigger")) content))
   (check-equal? (hash-ref trigger 'instructions) "Focus on Phase B next"))

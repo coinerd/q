@@ -47,7 +47,12 @@
   (define (mock-hook-dispatcher action payload)
     (when (eq? action 'agent-start)
       (set-box! hook-called? #t)))
-  (emit-turn-start! bus "s1" "t1" st mock-hook-dispatcher (list (message "m1" #f 'user 'message "hello" (current-seconds) (hasheq))))
+  (emit-turn-start! bus
+                    "s1"
+                    "t1"
+                    st
+                    mock-hook-dispatcher
+                    (list (message "m1" #f 'user 'message "hello" (current-seconds) (hasheq))))
   (check-true (unbox hook-called?)))
 
 ;; ============================================================

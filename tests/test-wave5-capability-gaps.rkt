@@ -84,18 +84,14 @@
 (test-case "#1194: call-with-lock acquires and releases"
   (define tmp-dir (make-temporary-file "q-lock-test-~a" 'directory))
   (define target (build-path tmp-dir "test-file.txt"))
-  (define result (call-with-lock target
-                  (lambda () "locked-result")
-                  #:timeout-ms 1000))
+  (define result (call-with-lock target (lambda () "locked-result") #:timeout-ms 1000))
   (check-equal? result "locked-result")
   (delete-directory/files tmp-dir))
 
 (test-case "#1194: with-lock-result returns ok on success"
   (define tmp-dir (make-temporary-file "q-lock-test-~a" 'directory))
   (define target (build-path tmp-dir "test.txt"))
-  (define result (with-lock-result target
-                   (lambda () 42)
-                   #:timeout-ms 1000))
+  (define result (with-lock-result target (lambda () 42) #:timeout-ms 1000))
   (check-equal? (car result) 'ok)
   (check-equal? (cadr result) 42)
   (delete-directory/files tmp-dir))
@@ -112,13 +108,12 @@
 (test-case "#1194: lock protects file write"
   (define tmp-dir (make-temporary-file "q-lock-test-~a" 'directory))
   (define target (build-path tmp-dir "protected.txt"))
-  (call-with-lock target
-    (lambda ()
-      (call-with-output-file target
-        (lambda (out) (display "hello" out))
-        #:exists 'replace)
-      "written")
-    #:timeout-ms 1000)
+  (call-with-lock
+   target
+   (lambda ()
+     (call-with-output-file target (lambda (out) (display "hello" out)) #:exists 'replace)
+     "written")
+   #:timeout-ms 1000)
   (check-true (file-exists? target))
   (check-equal? (file->string target) "hello")
   (delete-directory/files tmp-dir))
@@ -128,29 +123,32 @@
 ;; ============================================================
 
 (test-case "#1195: make-azure-openai-provider requires api-key"
-  (check-exn
-   exn:fail?
-   (lambda ()
-     (make-azure-openai-provider (hasheq 'model "gpt-4"
-                                          'base-url "https://test.openai.azure.com"
-                                          'api-version "2024-02-15-preview")))))
+  (check-exn exn:fail?
+             (lambda ()
+               (make-azure-openai-provider (hasheq 'model
+                                                   "gpt-4"
+                                                   'base-url
+                                                   "https://test.openai.azure.com"
+                                                   'api-version
+                                                   "2024-02-15-preview")))))
 
 (test-case "#1195: make-azure-openai-provider creates provider with valid config"
   (define provider
-    (make-azure-openai-provider
-     (hasheq 'api-key "test-key"
-             'model "gpt-4"
-             'base-url "https://test.openai.azure.com/openai/deployments/gpt4"
-             'api-version "2024-02-15-preview")))
+    (make-azure-openai-provider (hasheq 'api-key
+                                        "test-key"
+                                        'model
+                                        "gpt-4"
+                                        'base-url
+                                        "https://test.openai.azure.com/openai/deployments/gpt4"
+                                        'api-version
+                                        "2024-02-15-preview")))
   (check-true (provider? provider))
   (check-equal? (provider-name provider) "Azure OpenAI"))
 
 (test-case "#1195: Azure provider reports streaming capability"
   (define provider
     (make-azure-openai-provider
-     (hasheq 'api-key "test-key"
-             'model "gpt-4"
-             'base-url "https://test.openai.azure.com")))
+     (hasheq 'api-key "test-key" 'model "gpt-4" 'base-url "https://test.openai.azure.com")))
   (define caps (provider-capabilities provider))
   (check-true (hash? caps))
   (check-true (hash-ref caps 'streaming #f)))
@@ -192,7 +190,8 @@
   (define mock-response
     (make-model-response (list (hasheq 'type "text" 'text "test"))
                          (hasheq 'prompt-tokens 0 'completion-tokens 0 'total-tokens 0)
-                         "mock" 'stop))
+                         "mock"
+                         'stop))
   (define provider (make-mock-provider mock-response #:name "test-mock"))
   (define rt (q:create-session #:provider provider))
   (check-true (runtime? rt)))

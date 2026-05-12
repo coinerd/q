@@ -16,16 +16,13 @@
 (test-case "strict-exec-limits is tighter than default"
   (define strict (strict-exec-limits))
   (define default (default-exec-limits))
-  (check-true (< (exec-limits-timeout-seconds strict)
-                 (exec-limits-timeout-seconds default)))
-  (check-true (< (exec-limits-max-output-bytes strict)
-                 (exec-limits-max-output-bytes default))))
+  (check-true (< (exec-limits-timeout-seconds strict) (exec-limits-timeout-seconds default)))
+  (check-true (< (exec-limits-max-output-bytes strict) (exec-limits-max-output-bytes default))))
 
 (test-case "permissive-exec-limits is looser than default"
   (define perm (permissive-exec-limits))
   (define default (default-exec-limits))
-  (check-true (> (exec-limits-timeout-seconds perm)
-                 (exec-limits-timeout-seconds default))))
+  (check-true (> (exec-limits-timeout-seconds perm) (exec-limits-timeout-seconds default))))
 
 ;; ============================================================
 ;; merge-limits
@@ -87,32 +84,29 @@
 (test-case "track-process! increments counter (#452)"
   ;; dynamic-wind for guaranteed restore (TEST-01)
   (define saved (unbox process-count-box))
-  (dynamic-wind
-    (lambda () (set-box! process-count-box 0))
-    (lambda ()
-      (track-process!)
-      (check-equal? (get-process-count) 1)
-      (track-process!)
-      (check-equal? (get-process-count) 2))
-    (lambda () (set-box! process-count-box saved))))
+  (dynamic-wind (lambda () (set-box! process-count-box 0))
+                (lambda ()
+                  (track-process!)
+                  (check-equal? (get-process-count) 1)
+                  (track-process!)
+                  (check-equal? (get-process-count) 2))
+                (lambda () (set-box! process-count-box saved))))
 
 (test-case "untrack-process! decrements counter (#452)"
   (define saved (unbox process-count-box))
-  (dynamic-wind
-    (lambda () (set-box! process-count-box 2))
-    (lambda ()
-      (untrack-process!)
-      (check-equal? (get-process-count) 1))
-    (lambda () (set-box! process-count-box saved))))
+  (dynamic-wind (lambda () (set-box! process-count-box 2))
+                (lambda ()
+                  (untrack-process!)
+                  (check-equal? (get-process-count) 1))
+                (lambda () (set-box! process-count-box saved))))
 
 (test-case "untrack-process! never goes below zero (#452)"
   (define saved (unbox process-count-box))
-  (dynamic-wind
-    (lambda () (set-box! process-count-box 0))
-    (lambda ()
-      (untrack-process!)
-      (check-equal? (get-process-count) 0))
-    (lambda () (set-box! process-count-box saved))))
+  (dynamic-wind (lambda () (set-box! process-count-box 0))
+                (lambda ()
+                  (untrack-process!)
+                  (check-equal? (get-process-count) 0))
+                (lambda () (set-box! process-count-box saved))))
 
 (test-case "process count over limit fails within-limits?"
   (define lim (exec-limits 10 1000 10000 3))
@@ -133,15 +127,15 @@
 ;; ============================================================
 
 (test-case "with-resource-limits runs thunk and returns result"
-  (define-values (result timed-out?)
-    (with-resource-limits (λ (cust) 42) #:timeout 5))
+  (define-values (result timed-out?) (with-resource-limits (λ (cust) 42) #:timeout 5))
   (check-equal? result 42)
   (check-false timed-out?))
 
 (test-case "with-resource-limits returns timed-out on timeout"
   (define-values (result timed-out?)
-    (with-resource-limits
-     (λ (cust) (sleep 10) 'done)
-     #:timeout 0.1))
+    (with-resource-limits (λ (cust)
+                            (sleep 10)
+                            'done)
+                          #:timeout 0.1))
   (check-false result)
   (check-true timed-out?))

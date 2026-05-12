@@ -21,14 +21,18 @@
   (make-temporary-file "q-guard-test-~a" 'directory))
 
 (test-case "compacting? flag starts as #f"
-  (check-equal? (agent-session-compacting?
-                 (make-agent-session
-                  (hasheq 'session-dir (make-temp-dir)
-                          'event-bus (make-event-bus)
-                          'provider #f
-                          'tool-registry #f
-                          'model-name "test"
-                          'system-instructions '())))
+  (check-equal? (agent-session-compacting? (make-agent-session (hasheq 'session-dir
+                                                                       (make-temp-dir)
+                                                                       'event-bus
+                                                                       (make-event-bus)
+                                                                       'provider
+                                                                       #f
+                                                                       'tool-registry
+                                                                       #f
+                                                                       'model-name
+                                                                       "test"
+                                                                       'system-instructions
+                                                                       '())))
                 #f))
 
 (test-case "compaction.start and compaction.end events emitted"
@@ -49,32 +53,47 @@
 (test-case "compacting? flag prevents recursive compaction"
   ;; Simulate: if compacting? is #t, maybe-compact-context returns context unchanged
   (define sess
-    (make-agent-session
-     (hasheq 'session-dir (make-temp-dir)
-             'event-bus (make-event-bus)
-             'provider #f
-             'tool-registry #f
-             'model-name "test"
-             'system-instructions '())))
+    (make-agent-session (hasheq 'session-dir
+                                (make-temp-dir)
+                                'event-bus
+                                (make-event-bus)
+                                'provider
+                                #f
+                                'tool-registry
+                                #f
+                                'model-name
+                                "test"
+                                'system-instructions
+                                '())))
   (set-agent-session-compacting?! sess #t)
   (check-true (agent-session-compacting? sess))
   ;; If flag is set, compaction should be skipped
-  (define context (list (make-message "m1" #f 'user 'message
-                                       (list (make-text-part "hello"))
-                                       (current-seconds) (hasheq))))
+  (define context
+    (list (make-message "m1"
+                        #f
+                        'user
+                        'message
+                        (list (make-text-part "hello"))
+                        (current-seconds)
+                        (hasheq))))
   (define result (maybe-compact-context sess context 0))
   ;; Context should be returned unchanged since flag is set
   (check-equal? result context))
 
 (test-case "compacting? flag cleared after compaction"
   (define sess
-    (make-agent-session
-     (hasheq 'session-dir (make-temp-dir)
-             'event-bus (make-event-bus)
-             'provider #f
-             'tool-registry #f
-             'model-name "test"
-             'system-instructions '())))
+    (make-agent-session (hasheq 'session-dir
+                                (make-temp-dir)
+                                'event-bus
+                                (make-event-bus)
+                                'provider
+                                #f
+                                'tool-registry
+                                #f
+                                'model-name
+                                "test"
+                                'system-instructions
+                                '())))
   (set-agent-session-compacting?! sess #t)
   (set-agent-session-compacting?! sess #f)
   (check-false (agent-session-compacting? sess)))

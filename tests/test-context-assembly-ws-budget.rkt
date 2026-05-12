@@ -19,9 +19,13 @@
       ;; Create a working set with a large entry
       (define ws (make-working-set #:max-entries 30 #:max-tokens 50000))
       (define large-msg
-        (make-message "big-tool" #f 'tool 'tool-result
+        (make-message "big-tool"
+                      #f
+                      'tool
+                      'tool-result
                       (list (make-text-part (make-string 2000 #\x)))
-                      (current-seconds) (hasheq)))
+                      (current-seconds)
+                      (hasheq)))
       (working-set-update! ws
                            (list (hasheq 'name "read" 'arguments (hasheq 'path "/tmp/big.rkt")))
                            (list large-msg)
@@ -52,16 +56,20 @@
       (define ws (make-working-set #:max-entries 30 #:max-tokens 50000))
       (define ws-msgs
         (for/list ([i (in-range 5)])
-          (make-message (format "ws-~a" i) #f 'tool 'tool-result
+          (make-message (format "ws-~a" i)
+                        #f
+                        'tool
+                        'tool-result
                         (list (make-text-part (make-string 500 #\x)))
-                        (current-seconds) (hasheq))))
+                        (current-seconds)
+                        (hasheq))))
       (for ([i (in-range 5)])
-        (working-set-update! ws
-                             (list (hasheq 'name "read"
-                                           'arguments (hasheq 'path (format "/tmp/f~a.rkt" i))))
-                             (list (list-ref ws-msgs i))
-                             message-id
-                             (lambda (m) 500)))
+        (working-set-update!
+         ws
+         (list (hasheq 'name "read" 'arguments (hasheq 'path (format "/tmp/f~a.rkt" i))))
+         (list (list-ref ws-msgs i))
+         message-id
+         (lambda (m) 500)))
       (check-equal? (working-set-entry-count ws) 5)
 
       ;; Build tiered context

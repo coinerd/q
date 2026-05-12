@@ -8,7 +8,12 @@
 (require rackunit
          "../agent/event-bus.rkt"
          "../util/protocol-types.rkt"
-         "../runtime/iteration.rkt")
+         (only-in "../runtime/iteration/retry-policy.rkt"
+                  call-with-overflow-recovery
+                  check-mid-turn-budget!
+                  estimate-mid-turn-tokens
+                  maybe-compact-mid-turn)
+         (only-in "../runtime/runtime-helpers.rkt" emit-session-event!))
 
 ;; ============================================================
 ;; Helpers

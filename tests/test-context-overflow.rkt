@@ -11,7 +11,7 @@
          rackunit/text-ui
          racket/exn
          "../runtime/auto-retry.rkt"
-         "../runtime/iteration.rkt"
+         (only-in "../runtime/iteration/retry-policy.rkt" call-with-overflow-recovery)
          "../runtime/runtime-helpers.rkt"
          "../runtime/compactor.rkt"
          "../agent/event-bus.rkt"

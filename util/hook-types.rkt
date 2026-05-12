@@ -91,11 +91,11 @@
           '(pass amend)
           'resources-discover
           '(pass amend block)
-          'tool.execution.start
+          'tool.execution.started
           '(pass)
           'tool.execution.update
           '(amend)
-          'tool.execution.end
+          'tool.execution.completed
           '(pass)
           'message.update
           '(amend)

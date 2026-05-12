@@ -15,12 +15,16 @@
 
 (define (make-test-session)
   (define tmp-dir (make-temporary-file "q-agent-sess-~a" 'directory))
-  (make-agent-session
-   (hasheq 'provider #f
-           'tool-registry (make-tool-registry)
-           'event-bus (make-event-bus)
-           'session-dir tmp-dir
-           'max-iterations 5)))
+  (make-agent-session (hasheq 'provider
+                              #f
+                              'tool-registry
+                              (make-tool-registry)
+                              'event-bus
+                              (make-event-bus)
+                              'session-dir
+                              tmp-dir
+                              'max-iterations
+                              5)))
 
 (test-case "agent-session struct has prompt-running? field"
   (define sess (make-test-session))

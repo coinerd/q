@@ -10,82 +10,100 @@
 ;; ============================================================
 
 (define (make-test-config)
-  (hasheq
-   'providers
-   (hasheq
-    'openai
-    (hasheq 'base-url "https://api.openai.com/v1"
-            'api-key-env "OPENAI_API_KEY"
-            'default-model "gpt-4o"
-            'models '("gpt-4" "gpt-4o" "gpt-3.5-turbo"))
-    'anthropic
-    (hasheq 'base-url "https://api.anthropic.com/v1"
-            'api-key-env "ANTHROPIC_API_KEY"
-            'default-model "claude-3-sonnet"
-            'models '("claude-3-opus" "claude-3-sonnet" "claude-3-haiku")))
-   'default-provider "openai"
-   'default-model "gpt-4o"))
+  (hasheq 'providers
+          (hasheq 'openai
+                  (hasheq 'base-url
+                          "https://api.openai.com/v1"
+                          'api-key-env
+                          "OPENAI_API_KEY"
+                          'default-model
+                          "gpt-4o"
+                          'models
+                          '("gpt-4" "gpt-4o" "gpt-3.5-turbo"))
+                  'anthropic
+                  (hasheq 'base-url
+                          "https://api.anthropic.com/v1"
+                          'api-key-env
+                          "ANTHROPIC_API_KEY"
+                          'default-model
+                          "claude-3-sonnet"
+                          'models
+                          '("claude-3-opus" "claude-3-sonnet" "claude-3-haiku")))
+          'default-provider
+          "openai"
+          'default-model
+          "gpt-4o"))
 
 (define (make-test-config-with-string-keys)
   ;; Simulates config parsed from JSON (string keys)
-  (hash
-   "providers"
-   (hash
-    "openai"
-    (hash "base-url" "https://api.openai.com/v1"
-          "api-key-env" "OPENAI_API_KEY"
-          "default-model" "gpt-4o"
-          "models" '("gpt-4" "gpt-4o" "gpt-3.5-turbo"))
-    "anthropic"
-    (hash "base-url" "https://api.anthropic.com/v1"
-          "api-key-env" "ANTHROPIC_API_KEY"
-          "default-model" "claude-3-sonnet"
-          "models" '("claude-3-opus" "claude-3-sonnet" "claude-3-haiku")))
-   "default-provider" "openai"
-   "default-model" "gpt-4o"))
+  (hash "providers"
+        (hash "openai"
+              (hash "base-url"
+                    "https://api.openai.com/v1"
+                    "api-key-env"
+                    "OPENAI_API_KEY"
+                    "default-model"
+                    "gpt-4o"
+                    "models"
+                    '("gpt-4" "gpt-4o" "gpt-3.5-turbo"))
+              "anthropic"
+              (hash "base-url"
+                    "https://api.anthropic.com/v1"
+                    "api-key-env"
+                    "ANTHROPIC_API_KEY"
+                    "default-model"
+                    "claude-3-sonnet"
+                    "models"
+                    '("claude-3-opus" "claude-3-sonnet" "claude-3-haiku")))
+        "default-provider"
+        "openai"
+        "default-model"
+        "gpt-4o"))
 
 (define (make-single-provider-config)
-  (hasheq
-   'providers
-   (hasheq
-    'my-provider
-    (hasheq 'base-url "https://my-llm.example.com/v1"
-            'api-key-env "MY_API_KEY"
-            'default-model "my-model-v2"
-            'models '("my-model-v1" "my-model-v2")))
-   'default-provider "my-provider"
-   'default-model "my-model-v2"))
+  (hasheq 'providers
+          (hasheq 'my-provider
+                  (hasheq 'base-url
+                          "https://my-llm.example.com/v1"
+                          'api-key-env
+                          "MY_API_KEY"
+                          'default-model
+                          "my-model-v2"
+                          'models
+                          '("my-model-v1" "my-model-v2")))
+          'default-provider
+          "my-provider"
+          'default-model
+          "my-model-v2"))
 
 (define (make-empty-config)
-  (hasheq
-   'providers (hasheq)))
+  (hasheq 'providers (hasheq)))
 
 (define (make-minimal-config)
   ;; No default-provider or default-model
-  (hasheq
-   'providers
-   (hasheq
-    'groq
-    (hasheq 'base-url "https://api.groq.com/v1"
-            'api-key-env "GROQ_API_KEY"
-            'default-model "llama3-70b"
-            'models '("llama3-70b" "mixtral-8x7b")))))
+  (hasheq 'providers
+          (hasheq 'groq
+                  (hasheq 'base-url
+                          "https://api.groq.com/v1"
+                          'api-key-env
+                          "GROQ_API_KEY"
+                          'default-model
+                          "llama3-70b"
+                          'models
+                          '("llama3-70b" "mixtral-8x7b")))))
 
 ;; ============================================================
 ;; Tests — registry creation
 ;; ============================================================
 
-(check-not-false
- (make-model-registry-from-config (make-test-config))
- "registry creation from symbol-key config")
+(check-not-false (make-model-registry-from-config (make-test-config))
+                 "registry creation from symbol-key config")
 
-(check-not-false
- (make-model-registry-from-config (make-test-config-with-string-keys))
- "registry creation from string-key config")
+(check-not-false (make-model-registry-from-config (make-test-config-with-string-keys))
+                 "registry creation from string-key config")
 
-(check-not-false
- (make-model-registry-from-config (make-empty-config))
- "registry creation from empty config")
+(check-not-false (make-model-registry-from-config (make-empty-config))
+                 "registry creation from empty config")
 
 ;; ============================================================
 ;; Tests — available-models
@@ -95,8 +113,7 @@
        [models (available-models reg)]
        [names (sort (map model-entry-name models) string<?)])
   (check-equal? names
-                '("claude-3-haiku" "claude-3-opus" "claude-3-sonnet"
-                  "gpt-3.5-turbo" "gpt-4" "gpt-4o")
+                '("claude-3-haiku" "claude-3-opus" "claude-3-sonnet" "gpt-3.5-turbo" "gpt-4" "gpt-4o")
                 "available-models lists all models"))
 
 (let* ([reg (make-model-registry-from-config (make-single-provider-config))]
@@ -106,13 +123,13 @@
                 "available-models from single provider"))
 
 (let ([reg (make-model-registry-from-config (make-empty-config))])
-  (check-equal? (available-models reg) '()
-                "available-models from empty config returns empty list"))
+  (check-equal? (available-models reg) '() "available-models from empty config returns empty list"))
 
 (let* ([reg (make-model-registry-from-config (make-test-config))]
        [models (available-models reg)]
        [openai-count (length (filter (λ (e) (equal? (model-entry-provider-name e) "openai")) models))]
-       [anthropic-count (length (filter (λ (e) (equal? (model-entry-provider-name e) "anthropic")) models))])
+       [anthropic-count (length (filter (λ (e) (equal? (model-entry-provider-name e) "anthropic"))
+                                        models))])
   (check-equal? openai-count 3 "openai models count")
   (check-equal? anthropic-count 3 "anthropic models count"))
 
@@ -156,15 +173,13 @@
   (check-equal? (model-resolution-model-name res) "claude-3-haiku")
   (check-equal? (model-resolution-provider-name res) "anthropic"))
 
-(check-false
- (resolve-model (make-model-registry-from-config (make-test-config))
-                "unknown-provider/gpt-4o")
- "provider prefix with unknown provider returns #f")
+(check-false (resolve-model (make-model-registry-from-config (make-test-config))
+                            "unknown-provider/gpt-4o")
+             "provider prefix with unknown provider returns #f")
 
-(check-false
- (resolve-model (make-model-registry-from-config (make-test-config))
-                "openai/nonexistent-model")
- "provider prefix with unknown model returns #f")
+(check-false (resolve-model (make-model-registry-from-config (make-test-config))
+                            "openai/nonexistent-model")
+             "provider prefix with unknown model returns #f")
 
 ;; ============================================================
 ;; Tests — resolve-model default (#f)
@@ -176,15 +191,18 @@
   (check-equal? (model-resolution-model-name res) "gpt-4o")
   (check-equal? (model-resolution-provider-name res) "openai"))
 
-(let ([cfg (hasheq
-            'providers
-            (hasheq
-             'openai
-             (hasheq 'base-url "https://api.openai.com/v1"
-                     'api-key-env "OPENAI_API_KEY"
-                     'default-model "gpt-4o"
-                     'models '("gpt-4o")))
-            'default-provider "openai")]
+(let ([cfg (hasheq 'providers
+                   (hasheq 'openai
+                           (hasheq 'base-url
+                                   "https://api.openai.com/v1"
+                                   'api-key-env
+                                   "OPENAI_API_KEY"
+                                   'default-model
+                                   "gpt-4o"
+                                   'models
+                                   '("gpt-4o")))
+                   'default-provider
+                   "openai")]
       ;; Note: no 'default-model key at all
       )
   (let* ([reg (make-model-registry-from-config cfg)]
@@ -196,9 +214,8 @@
 ;; Tests — resolve-model graceful failure
 ;; ============================================================
 
-(check-false
- (resolve-model (make-model-registry-from-config (make-test-config)) "nonexistent-model")
- "unknown model returns #f")
+(check-false (resolve-model (make-model-registry-from-config (make-test-config)) "nonexistent-model")
+             "unknown model returns #f")
 
 (let ([reg (make-model-registry-from-config (make-empty-config))])
   (check-false (resolve-model reg "anything") "empty registry resolve returns #f")
@@ -220,32 +237,28 @@
   (check-equal? (model-resolution-model-name res) "claude-3-sonnet")
   (check-equal? (model-resolution-provider-name res) "anthropic"))
 
-(check-false
- (resolve-model-by-provider (make-model-registry-from-config (make-test-config)) "nonexistent")
- "resolve-model-by-provider returns #f for unknown provider")
+(check-false (resolve-model-by-provider (make-model-registry-from-config (make-test-config))
+                                        "nonexistent")
+             "resolve-model-by-provider returns #f for unknown provider")
 
 ;; ============================================================
 ;; Tests — default-model
 ;; ============================================================
 
-(check-equal?
- (default-model (make-model-registry-from-config (make-test-config)))
- "gpt-4o"
- "default-model returns global default")
+(check-equal? (default-model (make-model-registry-from-config (make-test-config)))
+              "gpt-4o"
+              "default-model returns global default")
 
-(check-equal?
- (default-model (make-model-registry-from-config (make-single-provider-config)))
- "my-model-v2"
- "default-model with single provider")
+(check-equal? (default-model (make-model-registry-from-config (make-single-provider-config)))
+              "my-model-v2"
+              "default-model with single provider")
 
-(check-equal?
- (default-model (make-model-registry-from-config (make-minimal-config)))
- "llama3-70b"
- "default-model falls back to first provider's default")
+(check-equal? (default-model (make-model-registry-from-config (make-minimal-config)))
+              "llama3-70b"
+              "default-model falls back to first provider's default")
 
-(check-false
- (default-model (make-model-registry-from-config (make-empty-config)))
- "default-model returns #f for empty config")
+(check-false (default-model (make-model-registry-from-config (make-empty-config)))
+             "default-model returns #f for empty config")
 
 ;; ============================================================
 ;; Tests — default-model-for-mode
@@ -257,9 +270,8 @@
   (check-equal? (default-model-for-mode reg 'tool-heavy) "gpt-4o")
   (check-equal? (default-model-for-mode reg 'fast) "gpt-4o"))
 
-(check-false
- (default-model-for-mode (make-model-registry-from-config (make-empty-config)) 'chat)
- "default-model-for-mode returns #f for empty registry")
+(check-false (default-model-for-mode (make-model-registry-from-config (make-empty-config)) 'chat)
+             "default-model-for-mode returns #f for empty registry")
 
 ;; ============================================================
 ;; Tests — model-resolution includes provider-config
@@ -292,19 +304,25 @@
 ;; ============================================================
 
 ;; Duplicate model name across providers
-(let* ([cfg (hasheq
-             'providers
-             (hasheq
-              'alpha
-              (hasheq 'base-url "https://alpha.example.com/v1"
-                      'api-key-env "ALPHA_KEY"
-                      'default-model "shared-model"
-                      'models '("shared-model"))
-              'beta
-              (hasheq 'base-url "https://beta.example.com/v1"
-                      'api-key-env "BETA_KEY"
-                      'default-model "shared-model"
-                      'models '("shared-model"))))]
+(let* ([cfg (hasheq 'providers
+                    (hasheq 'alpha
+                            (hasheq 'base-url
+                                    "https://alpha.example.com/v1"
+                                    'api-key-env
+                                    "ALPHA_KEY"
+                                    'default-model
+                                    "shared-model"
+                                    'models
+                                    '("shared-model"))
+                            'beta
+                            (hasheq 'base-url
+                                    "https://beta.example.com/v1"
+                                    'api-key-env
+                                    "BETA_KEY"
+                                    'default-model
+                                    "shared-model"
+                                    'models
+                                    '("shared-model"))))]
        [reg (make-model-registry-from-config cfg)]
        [res (resolve-model reg "shared-model")]
        [alpha-res (resolve-model reg "alpha/shared-model")]
@@ -320,8 +338,7 @@
        [models (available-models reg)]
        [gpt4-entry (findf (λ (e) (equal? (model-entry-name e) "gpt-4")) models)])
   (check-not-false gpt4-entry)
-  (check-equal? (hash-ref (model-entry-provider-config gpt4-entry) 'api-key-env)
-                "OPENAI_API_KEY"))
+  (check-equal? (hash-ref (model-entry-provider-config gpt4-entry) 'api-key-env) "OPENAI_API_KEY"))
 
 ;; ============================================================
 ;; Tests — object-style model definitions (BUG-01 regression)
@@ -330,21 +347,21 @@
 (define (make-object-style-config)
   ;; Config with object-style model definitions (hasheq with 'id field)
   ;; This is how JSON configs with {"id": "...", "name": "..."} parse
-  (hasheq
-   'providers
-   (hasheq
-    'local
-    (hasheq 'base-url "http://127.0.0.1:8080/v1"
-            'api-key-env "LOCAL_API_KEY"
-            'default-model "gemma-4"
-            'models (list (hasheq 'id "gemma-4"
-                                  'name "Gemma 4"
-                                  'context-window 131072)
-                          (hasheq 'id "llama3-8b"
-                                  'name "Llama 3 8B"
-                                  'context-window 8192))))
-   'default-provider "local"
-   'default-model "gemma-4"))
+  (hasheq 'providers
+          (hasheq 'local
+                  (hasheq 'base-url
+                          "http://127.0.0.1:8080/v1"
+                          'api-key-env
+                          "LOCAL_API_KEY"
+                          'default-model
+                          "gemma-4"
+                          'models
+                          (list (hasheq 'id "gemma-4" 'name "Gemma 4" 'context-window 131072)
+                                (hasheq 'id "llama3-8b" 'name "Llama 3 8B" 'context-window 8192))))
+          'default-provider
+          "local"
+          'default-model
+          "gemma-4"))
 
 (let* ([reg (make-model-registry-from-config (make-object-style-config))]
        [res (resolve-model reg "gemma-4")])
@@ -377,14 +394,15 @@
 
 ;; Mixed string and object style (backward compatibility)
 (define (make-mixed-style-config)
-  (hasheq
-   'providers
-   (hasheq
-    'mixed
-    (hasheq 'base-url "http://localhost:8080/v1"
-            'default-model "model-a"
-            'models (list "model-a"  ; string style
-                          (hasheq 'id "model-b" 'context-window 8192))))))  ; object style
+  (hasheq 'providers
+          (hasheq 'mixed
+                  (hasheq 'base-url
+                          "http://localhost:8080/v1"
+                          'default-model
+                          "model-a"
+                          'models
+                          (list "model-a" ; string style
+                                (hasheq 'id "model-b" 'context-window 8192)))))) ; object style
 
 (let* ([reg (make-model-registry-from-config (make-mixed-style-config))]
        [res-a (resolve-model reg "model-a")]

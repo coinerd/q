@@ -114,14 +114,16 @@
 
 (test-case "parse-raco-output: rackunit/text-ui format (successes)"
   (define parse (runner-ref 'parse-raco-output))
-  (define-values (passed failed total) (parse #"13 success(es) 0 failure(s) 0 error(s) 13 test(s) run\n0\n"))
+  (define-values (passed failed total)
+    (parse #"13 success(es) 0 failure(s) 0 error(s) 13 test(s) run\n0\n"))
   (check-equal? passed 13)
   (check-equal? failed 0)
   (check-equal? total 13))
 
 (test-case "parse-raco-output: rackunit/text-ui with failures"
   (define parse (runner-ref 'parse-raco-output))
-  (define-values (passed failed total) (parse #"5 success(es) 2 failure(s) 1 error(s) 8 test(s) run\n"))
+  (define-values (passed failed total)
+    (parse #"5 success(es) 2 failure(s) 1 error(s) 8 test(s) run\n"))
   (check-equal? passed 5)
   (check-equal? failed 2)
   (check-equal? total 7))

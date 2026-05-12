@@ -27,9 +27,14 @@
     (test-case "façade exports message struct"
       (check-true (procedure? make-message))
       (check-true (procedure? message?))
-      (define msg (make-message "test" #f 'user 'message
-                                (list (make-text-part "hello"))
-                                (current-seconds) (hasheq)))
+      (define msg
+        (make-message "test"
+                      #f
+                      'user
+                      'message
+                      (list (make-text-part "hello"))
+                      (current-seconds)
+                      (hasheq)))
       (check-true (message? msg))
       (check-equal? (message-id msg) "test"))
 

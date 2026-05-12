@@ -12,8 +12,7 @@
   (check-equal? result "Hello World!"))
 
 (test-case "render-template handles multiple variables"
-  (define result (render-template "{{greeting}} {{name}}"
-                                  (hash 'greeting "Hi" 'name "Alice")))
+  (define result (render-template "{{greeting}} {{name}}" (hash 'greeting "Hi" 'name "Alice")))
   (check-equal? result "Hi Alice"))
 
 (test-case "render-template leaves missing vars unchanged"

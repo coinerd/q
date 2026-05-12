@@ -175,7 +175,6 @@
     (check-false (environment-variables-ref clean #"API_KEY"))
     (check-equal? (environment-variables-ref clean #"PATH") #"/usr/bin")))
 
-
 (test-case "AUTH regex: non-secret vars not scrubbed"
   (check-false (secret-env-var? "AUTHOR"))
   (check-false (secret-env-var? "XAUTHORITY"))

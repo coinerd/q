@@ -11,7 +11,8 @@
          "../agent/state.rkt"
          "../extensions/hooks.rkt"
          "../extensions/api.rkt"
-         "../runtime/iteration.rkt"
+         (only-in "../runtime/iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks)
          "../runtime/agent-session.rkt"
          "../skills/types.rkt"
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result)

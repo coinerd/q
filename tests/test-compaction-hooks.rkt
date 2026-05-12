@@ -24,22 +24,27 @@
   (format "msg-~a" msg-counter))
 
 (define (make-user-msg text)
-  (make-message (next-id!) #f 'user 'text
-                (list (make-text-part text))
-                (current-seconds) (hasheq)))
+  (make-message (next-id!) #f 'user 'text (list (make-text-part text)) (current-seconds) (hasheq)))
 
 (define (make-assistant-msg text)
-  (make-message (next-id!) #f 'assistant 'text
+  (make-message (next-id!)
+                #f
+                'assistant
+                'text
                 (list (make-text-part text))
-                (current-seconds) (hasheq)))
+                (current-seconds)
+                (hasheq)))
 
 ;; ============================================================
 ;; #697: Enriched hook payload
 ;; ============================================================
 
 (test-case "build-enriched-compact-payload: includes message counts"
-  (define msgs (append (for/list ([i (in-range 10)]) (make-user-msg (format "q~a" i)))
-                       (for/list ([i (in-range 5)]) (make-assistant-msg (format "a~a" i)))))
+  (define msgs
+    (append (for/list ([i (in-range 10)])
+              (make-user-msg (format "q~a" i)))
+            (for/list ([i (in-range 5)])
+              (make-assistant-msg (format "a~a" i)))))
   (define strategy (compaction-strategy 5 3))
   (define payload (build-enriched-compact-payload msgs strategy))
   (check-equal? (hash-ref payload 'message-count) 15)
@@ -55,34 +60,34 @@
 (test-case "build-enriched-compact-payload: includes previous-summary"
   (define msgs (list (make-user-msg "hello")))
   (define strategy (compaction-strategy 5 3))
-  (define payload (build-enriched-compact-payload msgs strategy
-                                                    #:previous-summary "old summary"))
+  (define payload (build-enriched-compact-payload msgs strategy #:previous-summary "old summary"))
   (check-equal? (hash-ref payload 'previous-summary) "old summary"))
 
 (test-case "build-enriched-compact-payload: includes session-id"
   (define msgs (list (make-user-msg "hello")))
   (define strategy (compaction-strategy 5 3))
-  (define payload (build-enriched-compact-payload msgs strategy
-                                                    #:session-id "sess-123"))
+  (define payload (build-enriched-compact-payload msgs strategy #:session-id "sess-123"))
   (check-equal? (hash-ref payload 'session-id) "sess-123"))
 
 (test-case "dispatch-enriched-before-compact: returns payload and hook result"
-  (define msgs (for/list ([i (in-range 8)]) (make-user-msg (format "q~a" i))))
+  (define msgs
+    (for/list ([i (in-range 8)])
+      (make-user-msg (format "q~a" i))))
   (define strategy (compaction-strategy 5 3))
-  (define-values (hook-res payload)
-    (dispatch-enriched-before-compact #f msgs strategy))
+  (define-values (hook-res payload) (dispatch-enriched-before-compact #f msgs strategy))
   (check-false hook-res)
   (check-true (hash? payload)))
 
 (test-case "dispatch-enriched-before-compact: hook receives enriched payload"
-  (define msgs (for/list ([i (in-range 8)]) (make-user-msg (format "q~a" i))))
+  (define msgs
+    (for/list ([i (in-range 8)])
+      (make-user-msg (format "q~a" i))))
   (define strategy (compaction-strategy 5 3))
   (define received-payload #f)
   (define (mock-hook topic payload)
     (set! received-payload payload)
     (hook-result 'pass (hasheq)))
-  (define-values (hook-res payload)
-    (dispatch-enriched-before-compact mock-hook msgs strategy))
+  (define-values (hook-res payload) (dispatch-enriched-before-compact mock-hook msgs strategy))
   (check-true (hash? received-payload))
   (check-true (hash-has-key? received-payload 'message-count))
   (check-true (hook-result? hook-res)))
@@ -121,8 +126,8 @@
   (check-true (hash-ref payload 'summary-generated?)))
 
 (test-case "make-compaction-end-event: respects summary-generated flag"
-  (define evt (make-compaction-end-event 'threshold 5 3000 2500 "sess-1" "turn-1"
-                                          #:summary-generated? #f))
+  (define evt
+    (make-compaction-end-event 'threshold 5 3000 2500 "sess-1" "turn-1" #:summary-generated? #f))
   (check-false (hash-ref (event-payload evt) 'summary-generated?)))
 
 (test-case "publish-compaction-start!: publishes to event bus"
@@ -166,10 +171,11 @@
   (define events-received '())
   (subscribe! bus (lambda (evt) (set! events-received (cons evt events-received))))
 
-  (define msgs (for/list ([i (in-range 20)])
-                 (if (even? i)
-                     (make-user-msg (format "question ~a" i))
-                     (make-assistant-msg (format "answer ~a" i)))))
+  (define msgs
+    (for/list ([i (in-range 20)])
+      (if (even? i)
+          (make-user-msg (format "question ~a" i))
+          (make-assistant-msg (format "answer ~a" i)))))
   (define strategy (compaction-strategy 10 5))
 
   ;; Dispatch enriched hook
@@ -182,13 +188,15 @@
     (hook-result 'replace (hasheq 'summary "extension-provided summary")))
 
   (define-values (hook-res enriched-payload)
-    (dispatch-enriched-before-compact mock-hook msgs strategy
-                                       #:session-id "sess-integration"))
+    (dispatch-enriched-before-compact mock-hook msgs strategy #:session-id "sess-integration"))
 
   ;; Publish start event
-  (publish-compaction-start! bus 'threshold (length msgs)
-                              (hash-ref enriched-payload 'tokens-before)
-                              "sess-integration" "turn-1")
+  (publish-compaction-start! bus
+                             'threshold
+                             (length msgs)
+                             (hash-ref enriched-payload 'tokens-before)
+                             "sess-integration"
+                             "turn-1")
 
   ;; Check hook result
   (check-true (hook-result? hook-res))
@@ -198,9 +206,13 @@
   (check-equal? custom-summary "extension-provided summary")
 
   ;; Publish end event
-  (publish-compaction-end! bus 'threshold 10
+  (publish-compaction-end! bus
+                           'threshold
+                           10
                            (hash-ref enriched-payload 'tokens-before)
-                           2000 "sess-integration" "turn-1")
+                           2000
+                           "sess-integration"
+                           "turn-1")
 
   ;; Verify events received
   (check-equal? (length events-received) 2)

@@ -24,7 +24,7 @@
   (check-false (valid-skill-name? "ends-dash-"))
   (check-false (valid-skill-name? "UPPERCASE"))
   (check-false (valid-skill-name? "has space"))
-  (check-false (valid-skill-name? (make-string 65 #\a))))  ; too long
+  (check-false (valid-skill-name? (make-string 65 #\a)))) ; too long
 
 (test-case "valid-skill-name? rejects non-strings"
   (check-false (valid-skill-name? 123))
@@ -45,7 +45,7 @@
 (test-case "parse-skill-frontmatter returns #f for no frontmatter"
   (check-false (parse-skill-frontmatter "Just content\nNo frontmatter\n"))
   (check-false (parse-skill-frontmatter ""))
-  (check-false (parse-skill-frontmatter "---\nname: test\n")))  ; no closing ---
+  (check-false (parse-skill-frontmatter "---\nname: test\n"))) ; no closing ---
 
 (test-case "parse-skill-frontmatter handles quoted values"
   (define content "---\nname: \"quoted name\"\n---\n")

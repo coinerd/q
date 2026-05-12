@@ -66,13 +66,21 @@
   (check-not-false req))
 
 (test-case "parse-rpc-request: all supported method names"
-  (for ([method-str '("session.create" "session.resume" "prompt"
-                      "interrupt" "compact" "fork" "history"
-                      "subscribe" "unsubscribe" "ping" "shutdown")])
+  (for ([method-str '("session.create" "session.resume"
+                                       "prompt"
+                                       "interrupt"
+                                       "compact"
+                                       "fork"
+                                       "history"
+                                       "subscribe"
+                                       "unsubscribe"
+                                       "ping"
+                                       "shutdown")])
     (define json-str (format "{\"id\":\"t\",\"method\":\"~a\",\"params\":{}}" method-str))
     (define req (parse-rpc-request json-str))
     (check-not-false req (format "method ~a should parse" method-str))
-    (check-equal? (rpc-request-method req) (string->symbol method-str)
+    (check-equal? (rpc-request-method req)
+                  (string->symbol method-str)
                   (format "method ~a should be symbol" method-str))))
 
 ;; ============================================================
@@ -148,9 +156,12 @@
 ;; ============================================================
 
 (define (test-handlers)
-  (hasheq 'ping (λ (params) #t)
-          'prompt (λ (params) (hasheq 'reply "echo"))
-          'session.create (λ (params) (hasheq 'sessionId "s-1"))))
+  (hasheq 'ping
+          (λ (params) #t)
+          'prompt
+          (λ (params) (hasheq 'reply "echo"))
+          'session.create
+          (λ (params) (hasheq 'sessionId "s-1"))))
 
 (test-case "dispatch-rpc-request: routes to correct handler"
   (define req (rpc-request "r1" 'ping (make-immutable-hash)))
@@ -197,13 +208,12 @@
   (check-false (hash-ref parsed 'error)))
 
 (test-case "run-rpc-loop: multiple requests"
-  (define input (string-append
-                 "{\"id\":\"a\",\"method\":\"ping\",\"params\":{}}\n"
-                 "{\"id\":\"b\",\"method\":\"session.create\",\"params\":{}}\n"))
+  (define input
+    (string-append "{\"id\":\"a\",\"method\":\"ping\",\"params\":{}}\n"
+                   "{\"id\":\"b\",\"method\":\"session.create\",\"params\":{}}\n"))
   (define in (open-input-string input))
   (define out (open-output-string))
-  (define handlers (hasheq 'ping (λ (p) #t)
-                           'session.create (λ (p) (hasheq 'sessionId "s1"))))
+  (define handlers (hasheq 'ping (λ (p) #t) 'session.create (λ (p) (hasheq 'sessionId "s1"))))
   (run-rpc-loop handlers #:input-port in #:output-port out)
   (define output (get-output-string out))
   (define lines (string-split output "\n" #:trim? #f))
@@ -224,8 +234,8 @@
   (define handlers (hasheq 'ping (λ (p) #t)))
   (run-rpc-loop handlers #:input-port in #:output-port out)
   (define output (get-output-string out))
-  (define json-lines (filter (λ (l) (> (string-length (string-trim l)) 0))
-                             (string-split output "\n" #:trim? #f)))
+  (define json-lines
+    (filter (λ (l) (> (string-length (string-trim l)) 0)) (string-split output "\n" #:trim? #f)))
   (check-equal? (length json-lines) 1))
 
 (test-case "run-rpc-loop: malformed JSON returns PARSE error"
@@ -300,8 +310,8 @@
   (publish! bus (make-event "turn.started" 1000 "sess-1" #f (hasheq)))
   (publish! bus (make-event "turn.completed" 2000 "sess-1" #f (hasheq)))
   (define output (get-output-string out))
-  (define lines (filter (λ (l) (> (string-length (string-trim l)) 0))
-                        (string-split output "\n" #:trim? #f)))
+  (define lines
+    (filter (λ (l) (> (string-length (string-trim l)) 0)) (string-split output "\n" #:trim? #f)))
   (check-equal? (length lines) 2)
   (define p1 (read-json (open-input-string (first lines))))
   (define p2 (read-json (open-input-string (second lines))))
@@ -398,15 +408,11 @@
   (check-equal? (hash-count sessions) 1))
 
 (test-case "dispatch-rpc-request: session.list handler"
-  (define handlers
-    (hasheq 'session.list
-            (lambda (params)
-              (hasheq 'sessions '("sess-a" "sess-b")))))
+  (define handlers (hasheq 'session.list (lambda (params) (hasheq 'sessions '("sess-a" "sess-b")))))
   (define req (rpc-request "sl1" 'session.list (make-immutable-hash)))
   (define resp (dispatch-rpc-request req handlers))
   (check-false (rpc-response-error resp))
-  (check-equal? (hash-ref (rpc-response-result resp) 'sessions)
-                '("sess-a" "sess-b")))
+  (check-equal? (hash-ref (rpc-response-result resp) 'sessions) '("sess-a" "sess-b")))
 
 (test-case "dispatch-rpc-request: session.resume handler"
   (define handlers
@@ -484,10 +490,7 @@
   (define input "{\"id\":\"sl2\",\"method\":\"session.list\",\"params\":{}}\n")
   (define in (open-input-string input))
   (define out (open-output-string))
-  (define handlers
-    (hasheq 'session.list
-            (lambda (params)
-              (hasheq 'sessions '("aaa" "bbb")))))
+  (define handlers (hasheq 'session.list (lambda (params) (hasheq 'sessions '("aaa" "bbb")))))
   (run-rpc-loop handlers #:input-port in #:output-port out)
   (define output (get-output-string out))
   (define parsed (read-json (open-input-string (string-trim output))))
@@ -495,14 +498,13 @@
   (check-equal? (hash-ref (hash-ref parsed 'result) 'sessions) '("aaa" "bbb")))
 
 (test-case "run-rpc-loop: session.resume with sessionId param"
-  (define input "{\"id\":\"sr2\",\"method\":\"session.resume\",\"params\":{\"sessionId\":\"existing-sess\"}}\n")
+  (define input
+    "{\"id\":\"sr2\",\"method\":\"session.resume\",\"params\":{\"sessionId\":\"existing-sess\"}}\n")
   (define in (open-input-string input))
   (define out (open-output-string))
   (define handlers
     (hasheq 'session.resume
-            (lambda (params)
-              (hasheq 'sessionId (hash-ref params 'sessionId)
-                      'status "resumed"))))
+            (lambda (params) (hasheq 'sessionId (hash-ref params 'sessionId) 'status "resumed"))))
   (run-rpc-loop handlers #:input-port in #:output-port out)
   (define output (get-output-string out))
   (define parsed (read-json (open-input-string (string-trim output))))
@@ -510,14 +512,13 @@
   (check-equal? (hash-ref (hash-ref parsed 'result) 'sessionId) "existing-sess"))
 
 (test-case "run-rpc-loop: session.close with sessionId param"
-  (define input "{\"id\":\"sc4\",\"method\":\"session.close\",\"params\":{\"sessionId\":\"sess-x\"}}\n")
+  (define input
+    "{\"id\":\"sc4\",\"method\":\"session.close\",\"params\":{\"sessionId\":\"sess-x\"}}\n")
   (define in (open-input-string input))
   (define out (open-output-string))
   (define handlers
     (hasheq 'session.close
-            (lambda (params)
-              (hasheq 'sessionId (hash-ref params 'sessionId)
-                      'status "closed"))))
+            (lambda (params) (hasheq 'sessionId (hash-ref params 'sessionId) 'status "closed"))))
   (run-rpc-loop handlers #:input-port in #:output-port out)
   (define output (get-output-string out))
   (define parsed (read-json (open-input-string (string-trim output))))
@@ -529,5 +530,6 @@
     (define json-str (format "{\"id\":\"t\",\"method\":\"~a\",\"params\":{}}" method-str))
     (define req (parse-rpc-request json-str))
     (check-not-false req (format "method ~a should parse" method-str))
-    (check-equal? (rpc-request-method req) (string->symbol method-str)
+    (check-equal? (rpc-request-method req)
+                  (string->symbol method-str)
                   (format "method ~a should be correct symbol" method-str))))

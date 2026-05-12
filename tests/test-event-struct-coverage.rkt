@@ -25,5 +25,4 @@
 (test-case "count-raw-hasheq-emission-sites: initially > 0 (pre-migration)"
   (define count (count-raw-hasheq-emission-sites))
   ;; Before migration, most sites still use raw hasheq
-  (check-true (> count 0)
-              (format "Expected raw hasheq sites > 0, got ~a" count)))
+  (check-true (> count 0) (format "Expected raw hasheq sites > 0, got ~a" count)))

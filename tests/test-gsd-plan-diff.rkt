@@ -21,8 +21,7 @@
       (define plan (gsd-plan waves "" '() '()))
       (check-equal? (plan-wave-summary plan) "Waves: 2/3 completed"))))
 
-(require (only-in "../extensions/gsd/plan-types.rkt"
-                  gsd-plan gsd-wave))
+(require (only-in "../extensions/gsd/plan-types.rkt" gsd-plan gsd-wave))
 
 (module+ main
   (run-tests plan-diff-tests))

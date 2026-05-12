@@ -28,10 +28,14 @@
   log-path)
 
 (define (append-user-msg! log-path text)
-  (define msg (make-message (format "msg-~a" (current-inexact-milliseconds))
-                            #f 'user 'text
-                            (list (make-text-part text))
-                            (current-seconds) (hasheq)))
+  (define msg
+    (make-message (format "msg-~a" (current-inexact-milliseconds))
+                  #f
+                  'user
+                  'text
+                  (list (make-text-part text))
+                  (current-seconds)
+                  (hasheq)))
   (append-entry! log-path msg)
   msg)
 
@@ -85,9 +89,7 @@
   (define log-path (make-session-log dir))
   (append-user-msg! log-path "hello")
   (define entries (load-session-log log-path))
-  (define user-entries (filter (lambda (e) (and (message? e)
-                                                  (eq? (message-kind e) 'text)))
-                                entries))
+  (define user-entries (filter (lambda (e) (and (message? e) (eq? (message-kind e) 'text))) entries))
   (check-true (andmap (lambda (e) (not (session-name-entry? e))) user-entries))
   (delete-directory/files dir))
 
@@ -125,20 +127,17 @@
 (test-case "set-entry-label!: with description"
   (define dir (make-temp-session-dir))
   (define log-path (make-session-log dir))
-  (set-entry-label! log-path "test-msg-4" 'checkpoint
-                     #:description "Before refactoring")
+  (set-entry-label! log-path "test-msg-4" 'checkpoint #:description "Before refactoring")
   (define entries (load-session-log log-path))
   (define label-entries (filter entry-label? entries))
   (check-equal? (length label-entries) 1)
-  (check-equal? (hash-ref (message-meta (car label-entries)) 'description)
-                "Before refactoring")
+  (check-equal? (hash-ref (message-meta (car label-entries)) 'description) "Before refactoring")
   (delete-directory/files dir))
 
 (test-case "set-entry-label!: rejects invalid label type"
   (define dir (make-temp-session-dir))
   (define log-path (make-session-log dir))
-  (check-exn exn:fail:contract?
-    (lambda () (set-entry-label! log-path "msg-1" 'invalid-type)))
+  (check-exn exn:fail:contract? (lambda () (set-entry-label! log-path "msg-1" 'invalid-type)))
   (delete-directory/files dir))
 
 (test-case "get-entry-label: returns #f for unlabeled entry"
@@ -192,8 +191,7 @@
   (append-user-msg! log-path "message 2")
 
   ;; Label an important point
-  (set-entry-label! log-path "msg-1" 'milestone
-                     #:description "Halfway point")
+  (set-entry-label! log-path "msg-1" 'milestone #:description "Halfway point")
 
   ;; Verify name
   (check-equal? (get-session-name log-path) "Integration Test Session")

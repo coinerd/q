@@ -18,16 +18,18 @@
 
 ;; Install UI callbacks so extension API works without full TUI
 (install-ui-callbacks!
- (hasheq 'set-footer (lambda (box lines)
-                       (set-box! box (set-custom-footer (unbox box) lines)))
-         'set-header (lambda (box lines)
-                       (set-box! box (set-custom-header (unbox box) lines)))
-         'clear-footer (lambda (box)
-                         (set-box! box (clear-custom-footer (unbox box))))
-         'clear-header (lambda (box)
-                         (set-box! box (clear-custom-header (unbox box))))
-         'make-styled-line styled-line
-         'make-styled-segment styled-segment))
+ (hasheq 'set-footer
+         (lambda (box lines) (set-box! box (set-custom-footer (unbox box) lines)))
+         'set-header
+         (lambda (box lines) (set-box! box (set-custom-header (unbox box) lines)))
+         'clear-footer
+         (lambda (box) (set-box! box (clear-custom-footer (unbox box))))
+         'clear-header
+         (lambda (box) (set-box! box (clear-custom-header (unbox box))))
+         'make-styled-line
+         styled-line
+         'make-styled-segment
+         styled-segment))
 
 ;; ============================================================
 ;; #717: Custom header/footer
