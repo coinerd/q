@@ -9,8 +9,7 @@
 ;; Re-exports: tool result constructors, tool struct, tool registry,
 ;; and execution context helpers.
 
-(require "../tools/tool.rkt"
-         (only-in "../tools/tool-internal.rkt" tool-execute))
+(require "../tools/tool.rkt")
 
 ;; Tool result constructors (most common need)
 (provide make-success-result

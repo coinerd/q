@@ -90,31 +90,29 @@
   ;; Read all complete JSONL lines from file.
   ;; Raises exn:fail if any line is invalid JSON.
   ;; Returns '() if file does not exist.
+  ;; R-01: Delegates to jsonl-read-from-port for single-source read logic.
   (if (not (file-exists? path))
       '()
       (call-with-input-file
        path
        (lambda (in)
-         (for/list ([line (in-lines in)]
-                    #:when (non-empty-string? (string-trim line)))
-           (with-handlers ([exn:fail?
-                            (lambda (e)
-                              (raise (exn:fail
-                                      (format "jsonl-read-all: invalid JSON line in ~a: ~a" path line)
-                                      (exn-continuation-marks e))))])
-             (read-json (open-input-string line)))))
+         (define-values (valid corrupted) (jsonl-read-from-port in))
+         (when (> corrupted 0)
+           (raise (exn:fail (format "jsonl-read-all: ~a corrupted lines in ~a" corrupted path)
+                            (current-continuation-marks))))
+         valid)
        #:mode 'text)))
 
 (define (jsonl-read-all-valid path)
   ;; Read all valid JSONL lines, skipping partial/corrupted/empty lines.
   ;; Returns '() if file does not exist.
+  ;; R-01: Delegates to jsonl-read-from-port for single-source read logic.
   (if (not (file-exists? path))
       '()
       (call-with-input-file path
                             (lambda (in)
-                              (for/list ([line (in-lines in)]
-                                         #:when (jsonl-line-valid? line))
-                                (read-json (open-input-string line))))
+                              (define-values (valid _) (jsonl-read-from-port in))
+                              valid)
                             #:mode 'text)))
 
 (define (jsonl-read-all-valid-with-count path)

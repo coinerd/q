@@ -54,7 +54,8 @@
          (only-in "../runtime/working-set.rkt" make-working-set working-set-reset!)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
-         (only-in "iteration.rkt" run-iteration-loop emit-session-event! maybe-dispatch-hooks)
+         (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "iteration/main-loop.rkt" run-iteration-loop)
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../agent/event-structs/turn-events.rkt" turn-end-event turn-start-event)
          "session-types.rkt"
