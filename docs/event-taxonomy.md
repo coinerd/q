@@ -1,6 +1,6 @@
 # Q Event Taxonomy Reference
 
-Complete reference for all event types in Q 0.39.8.
+Complete reference for all event types in Q 0.39.9.
 ## Base Types
 
 ### `event` (protocol-level)
