@@ -16,7 +16,7 @@
                   typed-event-session-id
                   typed-event-turn-id)
          ;; Auto-populated field registry from define-typed-event (I-12)
-         (only-in "../util/event-macro.rkt" lookup-event-fields))
+         (only-in "../util/event-macro.rkt" lookup-event-fields lookup-event-serializer))
 
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
 ;; Adoption is tracked by IVG check `session-switch-typed-events`.
@@ -46,26 +46,43 @@
 (define typed-event-base-field-count 4)
 
 (define (event-struct->hasheq evt)
-  (define vec (struct->vector evt))
-  (define app-start (+ 1 typed-event-base-field-count))
-  (define base
-    (hasheq 'type
-            (typed-event-type evt)
-            'timestamp
-            (typed-event-timestamp evt)
-            'session-id
-            (typed-event-session-id evt)
-            'turn-id
-            (typed-event-turn-id evt)))
-  (define name (struct-name evt))
-  (define fields (get-struct-field-names name))
-  (unless fields
-    (log-warning (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields"
-                         name)))
-  (for/fold ([h base])
-            ([i (in-naturals)]
-             [fname (in-list (or fields '()))])
-    (hash-set h fname (vector-ref vec (+ app-start i)))))
+  ;; R-13: Try auto-generated serializer first (fast path, no struct->vector)
+  (define type-str (typed-event-type evt))
+  (define serializer (lookup-event-serializer type-str))
+  (if serializer
+      ;; Fast path: merge base fields + serializer output
+      (let ([subclass-data (serializer evt)])
+        (hash-set* subclass-data
+                   'type
+                   (typed-event-type evt)
+                   'timestamp
+                   (typed-event-timestamp evt)
+                   'session-id
+                   (typed-event-session-id evt)
+                   'turn-id
+                   (typed-event-turn-id evt)))
+      ;; Legacy fallback: struct->vector reflection
+      (let ()
+        (define vec (struct->vector evt))
+        (define app-start (+ 1 typed-event-base-field-count))
+        (define base
+          (hasheq 'type
+                  (typed-event-type evt)
+                  'timestamp
+                  (typed-event-timestamp evt)
+                  'session-id
+                  (typed-event-session-id evt)
+                  'turn-id
+                  (typed-event-turn-id evt)))
+        (define name (struct-name evt))
+        (define fields (get-struct-field-names name))
+        (unless fields
+          (log-warning
+           (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields" name)))
+        (for/fold ([h base])
+                  ([i (in-naturals)]
+                   [fname (in-list (or fields '()))])
+          (hash-set h fname (vector-ref vec (+ app-start i)))))))
 
 ;; Emit a typed event on the bus.
 ;; Optional #:state for state accumulation (mirrors emit! from loop-messages).
