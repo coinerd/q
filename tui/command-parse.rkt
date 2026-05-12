@@ -10,12 +10,17 @@
 
 (provide make-command-table
          parse-command-name
-         resolve-command-name)
+         resolve-command-name
+         ;; R-17: Structured command result
+         (struct-out parsed-command))
 
 ;; Command table: maps command name strings (including aliases) to
 ;; (cons canonical-symbol arg-kind)
 ;; arg-kind: 'none = never takes args, 'optional = works with or without, 'required = needs arg
 ;; e.g. "/help" → (cons 'help 'none), "/switch" → (cons 'switch 'required)
+
+;; R-17: Structured command result replacing ad-hoc symbol/list returns.
+(struct parsed-command (canonical-name args arg-kind) #:transparent)
 
 (define (make-command-table)
   ;; General
@@ -89,6 +94,8 @@
 
 ;; Parse a slash command string into a dispatch symbol + args list.
 ;; Returns: symbol | (list symbol args...) | #f
+;; R-17: Returns parsed-command or #f for non-commands.
+;; For backward compat, also returns 'unknown for unrecognized slash commands.
 (define (parse-command-name text)
   (define trimmed (string-trim text))
   (cond
@@ -102,20 +109,23 @@
      (define entry (hash-ref table cmd #f))
      (cond
        [(not entry) 'unknown]
-       [(eq? (cdr entry) 'none) (car entry)]
+       [(eq? (cdr entry) 'none) (parsed-command (car entry) '() 'none)]
        [(eq? (cdr entry) 'optional)
-        (if (null? args)
-            (car entry)
-            `(,(car entry) ,(car args)))]
+        (parsed-command (car entry)
+                        (if (null? args)
+                            '()
+                            (list (car args)))
+                        'optional)]
        [(eq? (cdr entry) 'required)
         (if (null? args)
-            (list (string->symbol (format "~a-error" (symbol->string (car entry))))
-                  (case (car entry)
-                    [(switch) "Usage: /switch <branch-id>"]
-                    [(children) "Usage: /children <node-id>"]
-                    [else (format "Usage: /~a <id>" (symbol->string (car entry)))]))
-            `(,(car entry) ,(car args)))]
-       [else (car entry)])]))
+            (parsed-command (string->symbol (format "~a-error" (symbol->string (car entry))))
+                            (list (case (car entry)
+                                    [(switch) "Usage: /switch <branch-id>"]
+                                    [(children) "Usage: /children <node-id>"]
+                                    [else (format "Usage: /~a <id>" (symbol->string (car entry)))]))
+                            'error)
+            (parsed-command (car entry) (list (car args)) 'required))]
+       [else (parsed-command (car entry) '() 'none)])]))
 
 ;; Resolve a command name (with alias) to canonical symbol.
 ;; Returns: symbol or #f
