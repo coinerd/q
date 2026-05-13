@@ -167,132 +167,134 @@
     [else (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; ============================================================
-;; /go command handler
+;; /go decomposition helpers (S5-F1)
 ;; ============================================================
 
-(define (handle-go-command base-dir input-text)
+;; validate-plan-for-go : path? -> (or/c (list/c 'ok gsd-plan? gsd-normalized-plan? gsd-validated-plan?) (list/c 'error string?))
+;; Load, normalize, and validate the plan. Returns 'ok with validated data or 'error with message.
+(define (validate-plan-for-go base-dir)
   (define plan-content (read-planning-artifact base-dir "PLAN"))
   (match plan-content
-    [#f (hook-amend (hasheq 'text "No PLAN found in .planning/. Use /plan <task> to create one."))]
+    [#f (list 'error "No PLAN found in .planning/. Use /plan <task> to create one.")]
     [_
-     ;; v0.24.4: Use normalized pipeline (parse → normalize → validate → executor)
-     ;; v0.21.1: Try loading from wave doc index first, fall back to inline parse
      (define plan-from-index (load-plan-from-index base-dir))
      (define plan
        (or plan-from-index
            (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
-     ;; Emit gsd.plan.parsed event
      (events:emit-gsd-event! 'gsd.plan.parsed (hasheq 'wave-count (length (gsd-plan-waves plan))))
-     ;; Step 1: Normalize plan to canonical IR
      (define norm-result (normalize-plan plan))
      (match norm-result
        [(? string?)
-        ;; Normalization failed (structural error)
-        (hook-amend (hasheq 'text
-                            (string-append "Plan normalization failed:
-"
-                                           norm-result
-                                           "
+        (list 'error (string-append "Plan normalization failed:
+" norm-result "
 
-Fix the plan before using /go.")))]
+Fix the plan before using /go."))]
        [_
-        ;; Emit gsd.plan.normalized event
         (events:emit-gsd-event! 'gsd.plan.normalized
                                 (hasheq 'wave-count (length (gsd-normalized-plan-waves norm-result))))
-        ;; Step 2: Validate normalized plan
         (define validation (validate-normalized-plan norm-result))
         (define validated-plan? (gsd-validated-plan? validation))
-        ;; Emit gsd.plan.validated event
         (events:emit-gsd-event! 'gsd.plan.validated
-                                (hasheq 'valid?
-                                        validated-plan?
-                                        'error-count
-                                        (if validated-plan?
-                                            0
-                                            (length (validation-errors validation)))
-                                        'warning-count
-                                        (if validated-plan?
-                                            0
-                                            (length (validation-warnings validation)))))
+                                (hasheq 'valid? validated-plan?
+                                        'error-count (if validated-plan? 0 (length (validation-errors validation)))
+                                        'warning-count (if validated-plan? 0 (length (validation-warnings validation)))))
         (match validated-plan?
-          [#f
-           (define report (format-validation-report validation))
-           (hook-amend (hasheq 'text
-                               (string-append "Plan validation failed:
+          [#f (list 'error (string-append "Plan validation failed:
 "
-                                              report
-                                              "
+                                           (format-validation-report validation)
+                                           "
 
-Fix the plan before using /go.")))]
-          [_
-           ;; v0.24.6: Use with-gsd-transaction for snapshot/restore
-           (define-values (executor wave-indices)
-             (with-gsd-transaction
-              "go"
-              (lambda ()
-                (set-gsd-mode! 'executing)
-                (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
-                (set-edit-limit! 1200)
-                (define wis
-                  (for/list ([w (gsd-plan-waves plan)])
-                    (gsd-wave-index w)))
-                (when (not (null? wis))
-                  (gsm-set-total-waves! (add1 (apply max wis))))
-                (gsm-set-current-wave! 0)
-                (define exec (make-wave-executor-from-validated validation))
-                (gsm-set-wave-executor! exec)
-                (values exec wis))
-              (lambda (e snap)
-                (events:emit-gsd-event!
-                 'gsd.mode.changed
-                 (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
-           ;; Transaction returns gsd-err on failure, or the thunk values on success
-           (match executor
-             [(? gsd-command-result?)
-              ;; Transaction failed — executor is actually gsd-err result
-              (hook-amend (hasheq 'text (gsd-command-result-message executor)))]
-             [_
-              (define state-content (read-planning-artifact base-dir "STATE"))
-              (define state-note
-                (if state-content
-                    (format "
+Fix the plan before using /go."))]
+          [_ (list 'ok plan norm-result validation)])])]))
+
+;; launch-wave-executor : gsd-validated-plan? gsd-plan? path? -> (or/c (list/c 'ok any/c (listof exact-nonnegative-integer?)) (list/c 'error string?))
+;; Configure state machine and create wave executor inside a transaction.
+(define (launch-wave-executor validation plan base-dir)
+  (define-values (executor wave-indices)
+    (with-gsd-transaction
+     "go"
+     (lambda ()
+       (set-gsd-mode! 'executing)
+       (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
+       (set-edit-limit! 1200)
+       (define wis
+         (for/list ([w (gsd-plan-waves plan)])
+           (gsd-wave-index w)))
+       (when (not (null? wis))
+         (gsm-set-total-waves! (add1 (apply max wis))))
+       (gsm-set-current-wave! 0)
+       (define exec (make-wave-executor-from-validated validation))
+       (gsm-set-wave-executor! exec)
+       (values exec wis))
+     (lambda (e snap)
+       (events:emit-gsd-event!
+        'gsd.mode.changed
+        (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
+  (match executor
+    [(? gsd-command-result?) (list 'error (gsd-command-result-message executor))]
+    [_ (list 'ok executor wave-indices)]))
+
+;; build-go-prompt : path? string? (or/c gsd-plan? #f) any/c string? gsd-plan? -> (values string? string?)
+;; Assemble augmented prompt text and display text for /go.
+(define (build-go-prompt base-dir plan-content plan-from-index executor wave-arg plan)
+  (define state-content (read-planning-artifact base-dir "STATE"))
+  (define state-note
+    (if state-content
+        (format "
 Current state:
 ~a
 " state-content)
-                    ""))
-              (define wave-arg
-                (let* ([trimmed (string-trim input-text)]
-                       [parts (string-split trimmed)])
-                  (if (>= (length parts) 2)
-                      (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
-                        (if (and (> (string-length maybe-num) 0)
-                                 (regexp-match? #rx"^[0-9]+$" maybe-num))
-                            (format "
-Start with wave ~a." maybe-num)
-                            ""))
-                      "")))
-              (define plan-text-for-prompt
-                (if plan-from-index
-                    (string-append plan-content "
+        ""))
+  (define plan-text-for-prompt
+    (if plan-from-index
+        (string-append plan-content "
 
 " (wave-docs-summary plan-from-index))
-                    plan-content))
-              (define exec-prompt (executing-prompt plan executor))
-              (define augmented-text
-                (string-append planning-implement-prompt
-                               exec-prompt
-                               "
+        plan-content))
+  (define exec-prompt (executing-prompt plan executor))
+  (define augmented-text
+    (string-append planning-implement-prompt
+                   exec-prompt
+                   "
 Plan:
 "
-                               plan-text-for-prompt
-                               "
+                   plan-text-for-prompt
+                   "
 "
-                               state-note
-                               wave-arg))
-              (hook-amend (hasheq 'new-session
-                                  augmented-text
-                                  'text
-                                  (format "Implementing plan~a..." wave-arg)))])])])]))
+                   state-note
+                   wave-arg))
+  (define display-text (format "Implementing plan~a..." wave-arg))
+  (values augmented-text display-text))
+
+;; ============================================================
+;; /go command handler
+;; ============================================================
+
+(define (handle-go-command base-dir input-text)
+  (define validation-result (validate-plan-for-go base-dir))
+  (match validation-result
+    [(list 'error msg) (hook-amend (hasheq 'text msg))]
+    [(list 'ok plan norm-result validation)
+     (define launch-result (launch-wave-executor validation plan base-dir))
+     (match launch-result
+       [(list 'error msg) (hook-amend (hasheq 'text msg))]
+       [(list 'ok executor _)
+        (define wave-arg
+          (let* ([trimmed (string-trim input-text)]
+                 [parts (string-split trimmed)])
+            (if (>= (length parts) 2)
+                (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
+                  (if (and (> (string-length maybe-num) 0)
+                           (regexp-match? #rx"^[0-9]+$" maybe-num))
+                      (format "
+Start with wave ~a." maybe-num)
+                      ""))
+                "")))
+        (define plan-content (read-planning-artifact base-dir "PLAN"))
+        (define plan-from-index (load-plan-from-index base-dir))
+        (define-values (augmented-text display-text)
+          (build-go-prompt base-dir plan-content plan-from-index executor wave-arg plan))
+        (hook-amend (hasheq 'new-session augmented-text 'text display-text))])]))
 
 ;; ============================================================
 ;; /gsd status handler

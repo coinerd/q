@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.40.4 — 2026-05-12
+
+### Changed
+- **S3-F2c**: Raw `tool` constructor no longer exported; consumers must use
+  validated `make-tool` keyword constructor
+- **S5-F1**: Decomposed `handle-go-command` (120+ lines) into 3 pure helpers:
+  `validate-plan-for-go`, `launch-wave-executor`, `build-go-prompt`
+- Fixed misleading "sole boundary module" comment in `turn-orchestrator.rkt`
+
 ## v0.40.3 — 2026-05-12
 
 ### Changed
