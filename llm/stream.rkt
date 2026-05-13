@@ -203,52 +203,10 @@
 
 ;; Convert a list of OpenAI-format streaming response objects
 ;; into canonical stream-chunk structs.
+;; Thin wrapper: delegates to normalize-openai-chunk per element.
 (define (normalize-openai-chunks raw-chunks)
   (for/list ([chunk (in-list raw-chunks)])
-    (define choices (hash-ref chunk 'choices '()))
-    (define usage (hash-ref chunk 'usage #f))
-    (define choice
-      (if (null? choices)
-          #f
-          (car choices)))
-    (define delta
-      (if choice
-          (hash-ref choice 'delta #f)
-          #f))
-    (define finish-reason
-      (if choice
-          (hash-ref choice 'finish_reason #f)
-          #f))
-
-    ;; Extract text delta
-    (define delta-content
-      (if delta
-          (hash-ref delta 'content #f)
-          #f))
-    ;; JSON null is represented as 'null symbol in Racket - filter it out
-    (define delta-text (if (string? delta-content) delta-content #f))
-
-    ;; v0.28.19: Extract reasoning_content for thinking models (glm-5.1, DeepSeek-R1)
-    (define delta-thinking
-      (if delta
-          (hash-ref delta 'reasoning_content #f)
-          #f))
-
-    ;; Extract tool-call delta
-    (define delta-tool-call
-      (if delta
-          (let ([tcs (hash-ref delta 'tool_calls #f)])
-            (if (and tcs (pair? tcs))
-                (car tcs) ; first tool call delta
-                #f))
-          #f))
-
-    (make-stream-chunk delta-text
-                       delta-tool-call
-                       usage
-                       (and (string? finish-reason) #t)
-                       #:delta-thinking delta-thinking
-                       #:finish-reason finish-reason)))
+    (normalize-openai-chunk chunk)))
 
 ;; ============================================================
 ;; accumulate-tool-call-deltas

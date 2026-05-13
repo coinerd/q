@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.40.3 — 2026-05-12
+
+### Changed
+- **S11-F1**: Extract shared `accumulate-stream-chunks` pure helper in loop-stream.rkt
+- **S11-F2**: Merge duplicate `normalize-openai-chunks` / `normalize-openai-chunk` paths
+  in llm/stream.rkt; chunks now delegates to singular normalize-openai-chunk
+
 ## v0.40.2 — 2026-05-12
 
 ### Changed
