@@ -45,46 +45,56 @@
 ;; Subclass app fields start at vector index 5 (= 1 struct-type + 4 base fields).
 (define typed-event-base-field-count 4)
 
+;; Reflection fallback for serializing typed events without a matching serializer.
+(define (event-struct->hasheq-reflection evt)
+  (define vec (struct->vector evt))
+  (define app-start (+ 1 typed-event-base-field-count))
+  (define base
+    (hasheq 'type
+            (typed-event-type evt)
+            'timestamp
+            (typed-event-timestamp evt)
+            'session-id
+            (typed-event-session-id evt)
+            'turn-id
+            (typed-event-turn-id evt)))
+  (define name (struct-name evt))
+  (define fields (get-struct-field-names name))
+  (unless fields
+    (log-warning
+     (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields" name)))
+  (for/fold ([h base])
+            ([i (in-naturals)]
+             [fname (in-list (or fields '()))])
+    (hash-set h fname (vector-ref vec (+ app-start i)))))
+
 (define (event-struct->hasheq evt)
   ;; R-13: Try auto-generated serializer first (fast path, no struct->vector)
   (define type-str (typed-event-type evt))
   (define serializer (lookup-event-serializer type-str))
   (if serializer
       ;; Fast path: merge base fields + serializer output
-      (let ([subclass-data (serializer evt)])
-        (hash-set* subclass-data
-                   'type
-                   (typed-event-type evt)
-                   'timestamp
-                   (typed-event-timestamp evt)
-                   'session-id
-                   (typed-event-session-id evt)
-                   'turn-id
-                   (typed-event-turn-id evt)))
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (log-warning
+                          "event-struct->hasheq: serializer for '~a' failed (~a), using reflection fallback"
+                          type-str (exn-message e))
+                         (event-struct->hasheq-reflection evt))])
+        (let ([subclass-data (serializer evt)])
+          (hash-set* subclass-data
+                     'type
+                     (typed-event-type evt)
+                     'timestamp
+                     (typed-event-timestamp evt)
+                     'session-id
+                     (typed-event-session-id evt)
+                     'turn-id
+                     (typed-event-turn-id evt))))
       ;; Legacy fallback: struct->vector reflection (R-13: prefer serializer registry)
-      (let ()
+      (begin
         (log-warning "event-struct->hasheq: no serializer for '~a', using reflection fallback"
                      (typed-event-type evt))
-        (define vec (struct->vector evt))
-        (define app-start (+ 1 typed-event-base-field-count))
-        (define base
-          (hasheq 'type
-                  (typed-event-type evt)
-                  'timestamp
-                  (typed-event-timestamp evt)
-                  'session-id
-                  (typed-event-session-id evt)
-                  'turn-id
-                  (typed-event-turn-id evt)))
-        (define name (struct-name evt))
-        (define fields (get-struct-field-names name))
-        (unless fields
-          (log-warning
-           (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields" name)))
-        (for/fold ([h base])
-                  ([i (in-naturals)]
-                   [fname (in-list (or fields '()))])
-          (hash-set h fname (vector-ref vec (+ app-start i)))))))
+        (event-struct->hasheq-reflection evt))))
 
 ;; Emit a typed event on the bus.
 ;; Optional #:state for state accumulation (mirrors emit! from loop-messages).
