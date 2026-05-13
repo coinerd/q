@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.40.7 — 2026-05-13
+
+### Changed
+- **A6-01**: Adopted `session-log-path-for` in `session-lifecycle.rkt` and `agent-session.rkt` (7 call sites)
+- **A6-04**: Added `provider-error?` guard in `openai-stream-request` to prevent re-wrapping
+- **A6-05**: `typed-event->jsexpr` now uses `(current-schema-version)` instead of hardcoded 1
+- **A6-06**: Added explicit scope comment for raw `tool` constructor in `tool-struct.rkt`
+
+### Added
+- **A6-02**: `test-stream-error-wrapping.rkt` — 5 tests for provider-error streaming contract
+- **A6-03**: `test-gsd-command-dispatch.rkt` — 5 tests for dispatch-gsd-command routing
+- **A6-07**: 2 edge case tests for `classify-tool-results` unequal-length inputs
+
 ## v0.40.6 — 2026-05-13
 
 ### Fixed

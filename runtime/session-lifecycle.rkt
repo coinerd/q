@@ -155,7 +155,7 @@
 ;;   Wave 1 (#520): Uses session-index + context-assembly tree walk
 ;;   instead of linear load-session-log.
 (define (build-session-context sess user-message ensure-persisted!-fn buffer-or-append!-fn)
-  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define log-path (session-log-path-for sess))
   (define idx-path (session-index-path (agent-session-session-dir sess)))
 
   ;; Ensure index exists (build if first time)
@@ -238,7 +238,7 @@
   (define bus (agent-session-event-bus sess))
   (define prov (agent-session-provider sess))
   (define reg (agent-session-tool-registry sess))
-  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define log-path (session-log-path-for sess))
   (define sid (agent-session-session-id sess))
   (define cfg (agent-session-config sess))
   (define cancellation-tok (dict-ref cfg 'cancellation-token #f))
@@ -317,7 +317,7 @@
                              ensure-persisted!-fn
                              buffer-or-append!-fn)
   (define bus (agent-session-event-bus sess))
-  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define log-path (session-log-path-for sess))
   (define idx-path (session-index-path (agent-session-session-dir sess)))
   (define sid (agent-session-session-id sess))
 
@@ -467,7 +467,7 @@
   (unless (agent-session-persisted? sess)
     (make-directory* (agent-session-session-dir sess))
     (set-agent-session-persisted?! sess #t)
-    (define log-path (session-log-path (agent-session-session-dir sess)))
+    (define log-path (session-log-path-for sess))
     (write-session-version-header! log-path)
     (when (not (null? (agent-session-pending-entries sess)))
       (for ([entry (in-list (reverse (agent-session-pending-entries sess)))])
@@ -476,5 +476,5 @@
 
 (define (buffer-or-append! sess entry)
   (if (agent-session-persisted? sess)
-      (append-entry! (session-log-path (agent-session-session-dir sess)) entry)
+      (append-entry! (session-log-path-for sess) entry)
       (set-agent-session-pending-entries! sess (cons entry (agent-session-pending-entries sess)))))

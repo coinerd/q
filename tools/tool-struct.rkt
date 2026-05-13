@@ -4,6 +4,8 @@
 ;; STABILITY: stable
 
 (provide tool?
+         ;; Raw struct constructor -- ONLY for use by tools/tool.rkt make-tool.
+         ;; All external construction MUST use make-tool from tools/tool.rkt.
          tool
          tool-name
          tool-description

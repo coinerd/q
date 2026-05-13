@@ -184,12 +184,14 @@
     (define result-vec
       (with-handlers ([exn:fail?
                        (lambda (e)
-                         (raise (provider-error
-                                 (format "Network error contacting ~a: ~a"
-                                         host (exn-message e))
-                                 (current-continuation-marks)
-                                 #f
-                                 'network)))])
+                         (if (provider-error? e)
+                             (raise e)
+                             (raise (provider-error
+                                     (format "Network error contacting ~a: ~a"
+                                             host (exn-message e))
+                                     (current-continuation-marks)
+                                     #f
+                                     'network))))])
         (call-with-request-timeout (lambda ()
                                    (define-values (sl rh rp)
                                      (if req-port

@@ -57,7 +57,8 @@
          handle-execute-command
          handle-go-command
          handle-gsd-status
-         handle-artifact-command)
+         handle-artifact-command
+         dispatch-gsd-command)
 
 ;; ============================================================
 ;; Command registration

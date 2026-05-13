@@ -342,7 +342,7 @@
   (define new-dir (build-path base-dir new-id))
   (make-directory* new-dir)
 
-  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define log-path (session-log-path-for sess))
   (define entries
     (if (file-exists? log-path)
         (load-session-log log-path)
@@ -402,7 +402,7 @@
   (agent-session-session-id sess))
 
 (define (session-history sess)
-  (define log-path (session-log-path (agent-session-session-dir sess)))
+  (define log-path (session-log-path-for sess))
   (if (file-exists? log-path)
       (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) (load-session-log log-path))
       '()))
