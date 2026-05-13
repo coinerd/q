@@ -33,7 +33,9 @@
          current-event-deserializer-registry
          with-fresh-event-registries
          ;; JSON key conversion
-         field->json-key)
+         field->json-key
+         ;; S8-F1: Schema versioning
+         current-schema-version)
 
 ;; ===========================================================
 ;; Event field registry (I-12, I-23) -- canonical runtime mechanism for serialization
@@ -55,6 +57,9 @@
 ;; R-14: Parameterized registries for test isolation
 (define current-event-serializer-registry (make-parameter (make-hash)))
 (define current-event-deserializer-registry (make-parameter (make-hash)))
+
+;; S8-F1: Schema versioning for safe event evolution
+(define current-schema-version (make-parameter 1))
 
 (define (register-event-serializer! type-str fn)
   (hash-set! (current-event-serializer-registry) type-str fn))
