@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.41.3 — 2026-05-13
+
+### Changed
+- **R4**: Purified `dispatch-gsd-command` -- ZERO cmd-* side effects
+  - Returns `(values action-tag parsed-struct)` only
+  - `handle-execute-command` now calls all `cmd-*` functions
+- **R6**: Command alias dedup -- `gsd-command-specs` single source of truth
+  - `gsd-command-spec` struct (canonical, description, aliases)
+  - `aliases-for` generates alias tables from spec
+  - Removed dead /plan unreachable branch in parser
+  - `register-gsd-commands` iterates spec list
+
+### Added
+- **CF-01**: 6 new dispatch edge-case tests
+  - /replan from exploring state
+  - /skip from idle state
+  - /skip with non-numeric arg
+  - /wave-done with empty args
+  - /done --force flag
+  - /plan with no text routes to artifact
+
 ## v0.41.2 — 2026-05-13
 
 ### Added
