@@ -12,20 +12,8 @@
 (require racket/contract
          racket/match
          "turn-model.rkt"
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
-
-;; ============================================================
-;; Hook classification (mirror of loop-messages.rkt)
-;; ============================================================
-
-(define (classify-hook-result result)
-  (cond
-    [(not (hook-result? result)) 'pass]
-    [else
-     (match (hook-result-action result)
-       ['block (list 'block (hook-result-payload result))]
-       ['amend (list 'amend (hook-result-payload result))]
-       [_ 'pass])]))
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
+         (only-in "loop-messages.rkt" classify-hook-result))
 
 ;; ============================================================
 ;; Decision functions
@@ -52,10 +40,10 @@
     [_ (make-decision-begin-stream hook-result)]))
 
 ;; After stream completion
-(define (decide-after-stream stream-data)
-  (if (hash-ref stream-data 'cancelled? #f)
-      (make-decision-cancelled (hash-ref stream-data 'cancel-reason "user"))
-      (make-decision-complete stream-data)))
+(define (decide-after-stream sc)
+  (if (stream-completion-cancelled? sc)
+      (make-decision-cancelled (or (stream-completion-cancel-reason sc) "user"))
+      (make-decision-complete sc)))
 
 ;; ============================================================
 ;; Top-level reducer
@@ -65,10 +53,10 @@
   (match (turn-command-tag cmd)
     ['start (decide-after-start (turn-command-payload cmd))]
     ['hook-result
-     (define payload (turn-command-payload cmd))
-     (define stage (hash-ref payload 'stage 'unknown))
-     (define hook-result (hash-ref payload 'result #f))
-     (case stage
+     (define hsp (turn-command-payload cmd))
+     (define stage-sym (hook-stage-payload-stage hsp))
+     (define hook-result (hook-stage-payload-result hsp))
+     (case stage-sym
        [(pre) (decide-after-pre-hook hook-result)]
        [(msg) (decide-after-msg-hook hook-result)]
        [else (make-decision-blocked "unknown-stage")])]
@@ -80,11 +68,10 @@
 ;; Provide
 ;; ============================================================
 
-(provide (contract-out [classify-hook-result
-                        (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]
-                       [decide-after-start (-> any/c turn-decision?)]
+(provide classify-hook-result
+         (contract-out [decide-after-start (-> any/c turn-decision?)]
                        [decide-after-context (-> any/c turn-decision?)]
                        [decide-after-pre-hook (-> any/c turn-decision?)]
                        [decide-after-msg-hook (-> any/c turn-decision?)]
-                       [decide-after-stream (-> hash? turn-decision?)]
+                       [decide-after-stream (-> stream-completion? turn-decision?)]
                        [decide-turn-step (-> turn-command? turn-decision?)]))

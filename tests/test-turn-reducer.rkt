@@ -42,13 +42,13 @@
       (check-true (decision-begin-stream? d)))
 
     (test-case "stream cancelled -> cancelled decision"
-      (define sd (hasheq 'cancelled? #t 'cancel-reason "timeout"))
-      (define d (decide-after-stream sd))
+      (define sc (make-stream-completion #:cancelled? #t #:cancel-reason "timeout"))
+      (define d (decide-after-stream sc))
       (check-true (decision-cancelled? d)))
 
     (test-case "stream complete -> complete decision"
-      (define sd (hasheq 'cancelled? #f 'text "hello"))
-      (define d (decide-after-stream sd))
+      (define sc2 (make-stream-completion #:cancelled? #f #:text "hello"))
+      (define d (decide-after-stream sc2))
       (check-true (decision-complete? d)))
 
     (test-case "top-level reducer: start command"
@@ -62,7 +62,7 @@
       (check-true (decision-cancelled? d)))
 
     (test-case "top-level reducer: stream-complete command"
-      (define cmd (make-turn-stream-complete (hasheq 'cancelled? #f 'result "ok")))
+      (define cmd (make-turn-stream-complete (make-stream-completion #:cancelled? #f #:text "ok")))
       (define d (decide-turn-step cmd))
       (check-true (decision-complete? d)))
 
@@ -77,17 +77,17 @@
       (check-true (decision-begin-stream? d)))
 
     (test-case "top-level reducer: hook-result with pre stage"
-      (define cmd (make-turn-hook-result (hasheq 'stage 'pre 'result #f)))
+      (define cmd (make-turn-hook-result (hook-stage-payload 'pre #f)))
       (define d (decide-turn-step cmd))
       (check-true (decision-check-msg-hook? d)))
 
     (test-case "top-level reducer: hook-result with msg stage"
-      (define cmd (make-turn-hook-result (hasheq 'stage 'msg 'result #f)))
+      (define cmd (make-turn-hook-result (hook-stage-payload 'msg #f)))
       (define d (decide-turn-step cmd))
       (check-true (decision-begin-stream? d)))
 
     (test-case "top-level reducer: hook-result with unknown stage -> blocked"
-      (define cmd (make-turn-hook-result (hasheq 'stage 'unknown 'result #f)))
+      (define cmd (make-turn-hook-result (hook-stage-payload 'unknown #f)))
       (define d (decide-turn-step cmd))
       (check-true (decision-blocked? d)))
 
