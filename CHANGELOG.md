@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.42.4 — 2026-05-13
+
+### Fixed
+- **F1**: Removed dead imports (`hook-result?`, `hook-result-action`, `hook-result-payload`)
+  from `agent/turn-reducer.rkt`
+- **F4**: Tightened `cycle-model!` contract from `any/c` to `model-registry?` in
+  `runtime/agent-session.rkt`
+
+### Added
+- **F2**: Event-specific field checks in codec round-trip tests (tests 5-9 now verify
+  fields: tool-name, tool-call-id, model, provider, delta, reason, hook)
+- **F3**: Added missing `shadow-log!` at msg-hook block branch in `agent/loop.rkt`
+- **F6**: New shadow mismatch detection test in `test-tool-call-intent.rkt` (9 tests total)
+
+### Changed
+- **F5**: Removed unused imports (`tool-call-intent?`, `make-stream-chunk`) from
+  `test-tool-call-intent.rkt`
+
 ## v0.42.3 — 2026-05-13
 
 ### Added

@@ -76,7 +76,8 @@
                   config-model-name
                   config-system-instructions
                   config-thinking-level
-                  config-session-dir))
+                  config-session-dir)
+         (only-in "model-registry.rkt" model-registry?))
 
 (provide agent-session?
          ;; v0.32.8: Convenience accessors (stable API)
@@ -114,7 +115,7 @@
          (contract-out
           ;; Session controls
           [set-model! (-> agent-session? string? void?)]
-          [cycle-model! (-> agent-session? any/c (or/c string? #f))]
+          [cycle-model! (-> agent-session? model-registry? (or/c string? #f))]
           [set-thinking-level! (-> agent-session? thinking-level? void?)]
           [request-shutdown! (-> agent-session? void?)]
           [force-shutdown! (-> agent-session? void?)]

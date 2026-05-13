@@ -246,6 +246,7 @@
      ;; v0.32.4: Second hook — flat match, no nesting
      (match (classify-hook-result msg-start-result)
        [(list 'block _)
+        (shadow-log! 'msg-hook (decide-after-msg-hook msg-start-result) 'blocked)
         (emit-typed-event! bus
                            (make-message-blocked-event #:session-id session-id
                                                        #:turn-id turn-id
