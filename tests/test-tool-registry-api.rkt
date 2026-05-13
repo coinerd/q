@@ -8,7 +8,7 @@
          "../tools/tool-struct.rkt")
 
 (define (make-test-tool name desc)
-  (tool name desc (hasheq 'type "object" 'properties (hasheq)) void #f #f #f #f #f))
+  (make-tool name desc (hasheq 'type "object" 'properties (hasheq)) void))
 
 (define api-suite
   (test-suite "Tool registry API tests (R-12, R-24, R-25)"

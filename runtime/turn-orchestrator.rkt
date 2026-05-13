@@ -6,10 +6,10 @@
 ;; Extracted from iteration.rkt for single-responsibility separation.
 ;; Handles: context assembly → provider turn → tool execution.
 ;;
-;; This module is the ONLY runtime module that imports upward into
-;; the tools/ and extensions/ layers. Other runtime modules must
-;; not import tools/tool.rkt, tools/scheduler.rkt, extensions/hooks.rkt,
-;; or extensions/context.rkt directly.
+;; This module is one of the boundary modules that imports upward into
+;; the tools/ and extensions/ layers (agent-session.rkt is another).
+;; Other runtime modules should not import tools/tool.rkt, tools/scheduler.rkt,
+;; extensions/hooks.rkt, or extensions/context.rkt directly.
 ;;
 ;; ── LAYER EXCEPTION (ARCH-01 / #341) ──────────────────────────
 ;;   tools/tool.rkt       → list-tools-jsexpr, merge-tool-lists
