@@ -107,8 +107,6 @@
 ;; session-log-path imported from session-types.rkt
 ;; ensure-persisted!, buffer-or-append! from agent-session.rkt
 
-(define (session-index-path dir)
-  (build-path dir "session.index"))
 
 ;; ============================================================
 ;; Pure helpers (extracted for testability)

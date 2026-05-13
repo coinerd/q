@@ -75,7 +75,16 @@
          context-assembly-payload?
          context-assembly-payload-tier-a-messages
          context-assembly-payload-tier-b-messages
-         context-assembly-payload-tier-c-messages)
+         context-assembly-payload-tier-c-messages
+         context-assembly-payload-max-tokens
+         context-assembly-payload-metadata
+         payload->tiered-context
+         tiered-context->payload
+         build-session-context/tokens
+         entry->context-message
+         load-agents-context
+         build-system-preamble
+         truncate-messages-to-budget)
 
 ;; Re-export from context-summary.rkt
 (provide DEFAULT-CACHE-MAX-ENTRIES

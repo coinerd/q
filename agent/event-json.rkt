@@ -47,22 +47,31 @@
                   lookup-event-serializer
                   lookup-event-deserializer
                   register-event-serializer!
-                  register-event-deserializer!))
+                  register-event-deserializer!
+                  current-schema-version))
 
 (provide typed-event->jsexpr
          jsexpr->typed-event
          all-known-event-types
-         event-name->tool-name)
+         event-name->tool-name
+         register-tool-event-serializer!)
+
+;; register-tool-event-serializer! : string? (-> typed-event? hash?) -> void?
+;; Wraps a base serializer with auto-injected schemaVersion.
+(define (register-tool-event-serializer! event-type base-serializer)
+  (register-event-serializer!
+   event-type
+   (lambda (evt)
+     (hash-set (base-serializer evt) 'schemaVersion (current-schema-version)))))
 
 ;; ============================================================
 ;; Per-tool event serializer registration (manual structs)
 ;; ============================================================
 
 ;; bash-tool-call-event
-(register-event-serializer! "tool.bash.called"
+(register-tool-event-serializer! "tool.bash.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       "bash"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -87,10 +96,9 @@
                                                       (hash-ref h 'cwd ""))))
 
 ;; edit-tool-call-event
-(register-event-serializer! "tool.edit.called"
+(register-tool-event-serializer! "tool.edit.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       "edit"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -112,10 +120,9 @@
                                                       (hash-ref h 'edits '()))))
 
 ;; write-tool-call-event
-(register-event-serializer! "tool.write.called"
+(register-tool-event-serializer! "tool.write.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       "write"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -137,10 +144,9 @@
                                                        (hash-ref h 'content ""))))
 
 ;; read-tool-call-event
-(register-event-serializer! "tool.read.called"
+(register-tool-event-serializer! "tool.read.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       "read"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -165,10 +171,9 @@
                                                       (hash-ref h 'limit #f))))
 
 ;; grep-tool-call-event
-(register-event-serializer! "tool.grep.called"
+(register-tool-event-serializer! "tool.grep.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       "grep"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -193,10 +198,9 @@
                                                       (hash-ref h 'glob ""))))
 
 ;; find-tool-call-event
-(register-event-serializer! "tool.find.called"
+(register-tool-event-serializer! "tool.find.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       "find"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -218,10 +222,9 @@
                                                       (hash-ref h 'path ""))))
 
 ;; custom-tool-call-event
-(register-event-serializer! "tool.custom.called"
+(register-tool-event-serializer! "tool.custom.called"
                             (lambda (evt)
-                              (hasheq 'schemaVersion 1
-                                      'toolName
+                              (hasheq 'toolName
                                       (tool-call-event-tool-name evt)
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
