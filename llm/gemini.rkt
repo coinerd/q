@@ -221,14 +221,22 @@
         [(hash-has-key? part 'functionCall)
          (let* ([fc (hash-ref part 'functionCall)]
                 [tool-id (gemini-gen-tool-id)])
-           (hasheq 'type
-                   "tool-call"
-                   'id
-                   tool-id
-                   'name
-                   (hash-ref fc 'name "")
-                   'arguments
-                   (hash-ref fc 'args (hasheq))))]
+           (define tc-hash
+             (hasheq 'type
+                     "tool-call"
+                     'id
+                     tool-id
+                     'name
+                     (hash-ref fc 'name "")
+                     'arguments
+                     (hash-ref fc 'args (hasheq))))
+           ;; Shadow: validate round-trip through tool-call-intent
+           (define tci (hash->tool-call-intent tc-hash))
+           (define round-trip (tool-call-intent->hash tci))
+           (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
+             (log-warning "tool-call-intent shadow mismatch in gemini: ~a vs ~a"
+                          (hash-ref tc-hash 'name) (hash-ref round-trip 'name)))
+           tc-hash)]
         [else part])))
 
   ;; Check for safety/recitation filtering — add warning when content is empty

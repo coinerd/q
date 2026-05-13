@@ -99,14 +99,22 @@
                      (define args
                        (with-handlers ([exn:fail? (lambda (e) args-str)])
                          (string->jsexpr args-str)))
-                     (hasheq 'type
-                             "tool-call"
-                             'id
-                             (hash-ref tc 'id)
-                             'name
-                             (hash-ref fn 'name)
-                             'arguments
-                             args))
+                     (define tc-hash
+                       (hasheq 'type
+                               "tool-call"
+                               'id
+                               (hash-ref tc 'id)
+                               'name
+                               (hash-ref fn 'name)
+                               'arguments
+                               args))
+                     ;; Shadow: validate round-trip through tool-call-intent
+                     (define tci (hash->tool-call-intent tc-hash))
+                     (define round-trip (tool-call-intent->hash tci))
+                     (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
+                       (log-warning "tool-call-intent shadow mismatch in openai: ~a vs ~a"
+                                    (hash-ref tc-hash 'name) (hash-ref round-trip 'name)))
+                     tc-hash)
                    '()))]))
 
   (make-model-response content usage model-name finish-reason))

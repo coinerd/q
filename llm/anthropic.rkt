@@ -165,14 +165,22 @@
       (match type
         ["text" (hasheq 'type "text" 'text (hash-ref block 'text ""))]
         ["tool_use"
-         (hasheq 'type
-                 "tool-call"
-                 'id
-                 (hash-ref block 'id "")
-                 'name
-                 (hash-ref block 'name "")
-                 'arguments
-                 (hash-ref block 'input (hasheq)))]
+         (define tc-hash
+           (hasheq 'type
+                   "tool-call"
+                   'id
+                   (hash-ref block 'id "")
+                   'name
+                   (hash-ref block 'name "")
+                   'arguments
+                   (hash-ref block 'input (hasheq))))
+         ;; Shadow: validate round-trip through tool-call-intent
+         (define tci (hash->tool-call-intent tc-hash))
+         (define round-trip (tool-call-intent->hash tci))
+         (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
+           (log-warning "tool-call-intent shadow mismatch in anthropic: ~a vs ~a"
+                        (hash-ref tc-hash 'name) (hash-ref round-trip 'name)))
+         tc-hash]
         [_ block])))
 
   (make-model-response content usage model-name stop-reason))

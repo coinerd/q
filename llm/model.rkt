@@ -23,7 +23,12 @@
          jsexpr->model-response
 
          (struct-out stream-chunk)
-         make-stream-chunk)
+         make-stream-chunk
+
+         (struct-out tool-call-intent)
+         make-tool-call-intent
+         tool-call-intent->hash
+         hash->tool-call-intent)
 
 ;; ============================================================
 ;; model-request
@@ -133,3 +138,33 @@
            #:delta-thinking [delta-thinking : (Option String) #f]
            #:finish-reason [finish-reason : (Option (U String Symbol)) #f])
     (stream-chunk delta-text delta-tool-call delta-thinking usage done? finish-reason)))
+
+;; ============================================================
+;; tool-call-intent — unified AST for provider tool-call data
+;; ============================================================
+
+(struct tool-call-intent
+        ([id : String] [name : String] [arguments : (HashTable Symbol Any)])
+  #:transparent)
+
+(: make-tool-call-intent (String String (HashTable Symbol Any) -> tool-call-intent))
+(define (make-tool-call-intent id name arguments)
+  (tool-call-intent id name arguments))
+
+(: tool-call-intent->hash (tool-call-intent -> (HashTable Symbol Any)))
+(define (tool-call-intent->hash tci)
+  (hasheq 'type "tool-call"
+          'id (tool-call-intent-id tci)
+          'name (tool-call-intent-name tci)
+          'arguments (tool-call-intent-arguments tci)))
+
+(: hash->tool-call-intent ((HashTable Symbol Any) -> tool-call-intent))
+(define (hash->tool-call-intent h)
+  (define id0 (hash-ref h 'id #f))
+  (define name0 (hash-ref h 'name #f))
+  (define args0 (hash-ref h 'arguments #f))
+  (tool-call-intent (if (string? id0) id0 "")
+                    (if (string? name0) name0 "")
+                    (if (hash? args0)
+                        (cast args0 (HashTable Symbol Any))
+                        (hasheq))))
