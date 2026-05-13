@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.40.8 — 2026-05-13
+
+### Changed
+- **A7-01**: Migrated last `session-log-path` DRY site in `session-events.rkt`
+
+### Added
+- **A7-02**: 4 wrapping pattern tests + `check-provider-status!` tests in `test-stream-error-wrapping.rkt` (9 total)
+- **A7-03**: 7 stateful GSD dispatch tests in `test-gsd-command-dispatch.rkt` (12 total)
+
 ## v0.40.7 — 2026-05-13
 
 ### Changed

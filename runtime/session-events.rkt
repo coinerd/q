@@ -55,7 +55,7 @@
                                                          (agent-session-session-id sess)
                                                          "session.compact.failed"
                                                          (hasheq 'error (exn-message e))))])
-         (define log-path (session-log-path (agent-session-session-dir sess)))
+         (define log-path (session-log-path-for sess))
          (when (file-exists? log-path)
            (define history (load-session-log log-path))
            (when (and (not (null? history)) (not (agent-session-compacting? sess)))
@@ -72,4 +72,4 @@
 ;; ============================================================
 ;; Helpers
 ;; ============================================================
-;; session-log-path imported from session-types.rkt (REV-05 DRY)
+;; session-log-path, session-log-path-for imported from session-types.rkt (REV-05 DRY)
