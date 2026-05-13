@@ -10,6 +10,7 @@
 ;; Dependencies: event-bus, protocol-types, hooks, ids.
 
 (require (only-in "../agent/event-bus.rkt" publish!)
+         (only-in "../util/event-contracts.rkt" event-payload-contract)
          (only-in "../util/protocol-types.rkt" make-event)
          (only-in "../util/ids.rkt" now-seconds)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
@@ -20,6 +21,11 @@
 
 ;; Publish a session-scoped event to the event bus.
 (define (emit-session-event! bus sid event-name payload)
+  ;; Contract check -- only for events with defined contracts (R2 wiring)
+  (define pc (event-payload-contract event-name))
+  (when pc
+    (unless (pc payload)
+      (log-warning "Event payload contract violation: ~a" event-name)))
   (define evt (make-event event-name (now-seconds) sid #f payload))
   (publish! bus evt)
   evt)

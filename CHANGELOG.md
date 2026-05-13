@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.41.0 — 2026-05-13
+
+### Changed
+- **R3**: Added `contract-out` to all 14 exports in `tools/registry.rkt`
+- **R2**: Wired 13 payload contracts into `emit-session-event!` via `log-warning` guard
+- **CF-02**: Fixed `with-clean-gsd-state` to use `dynamic-wind` (exception-safe cleanup)
+
+### Added
+- **R3**: `test-tool-registry-contracts.rkt` — 8 contract boundary tests
+- **R2**: 5 wiring tests in `test-event-payload-contracts.rkt` for event-payload-contract mapping
+
 ## v0.40.8 — 2026-05-13
 
 ### Changed

@@ -23,9 +23,7 @@
       [(executing) (gsm-transition-to! 'exploring)
                    (gsm-transition-to! 'plan-written)
                    (gsm-transition-to! 'executing)]))
-  (begin0
-   (thunk)
-   (reset-all-gsd-state!)))
+  (dynamic-wind void thunk (lambda () (reset-all-gsd-state!))))
 
 (define dispatch-suite
   (test-suite "dispatch-gsd-command routing"
