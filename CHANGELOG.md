@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.40.2 — 2026-05-12
+
+### Changed
+- **S4-F1**: contract-out for 5 SDK session functions in main.rkt
+- **S4-F2b**: Add contract to maybe-compact-context in session-compaction.rkt
+- **S4-F3**: Guard checks before 7 cast calls in llm/model.rkt
+
 ## v0.40.1 — 2026-05-12
 
 ### Changed
