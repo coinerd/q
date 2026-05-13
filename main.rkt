@@ -9,7 +9,10 @@
 ;; backward compatibility but includes many internal symbols.
 
 (require racket/dict)
-(require "interfaces/cli.rkt"
+(require racket/contract)
+(require "util/message.rkt"
+         "runtime/session-config.rkt"
+         "interfaces/cli.rkt"
          "interfaces/json-mode.rkt"
          "interfaces/rpc-mode.rkt"
          "interfaces/tui.rkt"
@@ -22,7 +25,8 @@
                   session-id
                   session-history
                   fork-session
-                  close-session!)
+                  close-session!
+                  agent-session?)
          "runtime/settings.rkt"
          "skills/types.rkt"
          "runtime/auth-store.rkt"
@@ -89,13 +93,20 @@
          ;; ── Explicit exports from only-in requires ──
          build-mock-provider
          local-provider?
-         make-agent-session
-         resume-agent-session
-         run-prompt!
+         ;; S4-F1: contract-out for 5 SDK session functions
+         (contract-out
+           [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
+           [resume-agent-session (-> string? any/c agent-session?)]
+           [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
+           [run-prompt!
+            (->* (agent-session? (or/c string? message?))
+                 (#:max-iterations (or/c exact-nonnegative-integer? #f)
+                                   #:ensure-persisted! (or/c procedure? #f)
+                                   #:buffer-or-append! (or/c procedure? #f))
+                 any)]
+           [close-session! (-> agent-session? void?)])
          session-id
          session-history
-         fork-session
-         close-session!
          run-interactive
          run-single-shot
          run-resume
