@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.40.1 — 2026-05-12
+
+### Changed
+- **S8-F1**: Add `schemaVersion` to all serialized events (macro-generated + 7 manual tool events)
+- **S8-F3**: Remove deprecated heuristic decode path from `event-codec.rkt`
+- `current-schema-version` parameter for safe event evolution (default 1)
+
 ## v0.40.0 — 2026-05-12
 
 ### Changed
