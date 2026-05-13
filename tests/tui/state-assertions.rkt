@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/tui/state-assertions.rkt — Reusable assertion functions for TUI state
 ;;
 ;; Provides composable predicates and assertion helpers for verifying

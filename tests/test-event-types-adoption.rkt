@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-types-adoption.rkt
 ;;
 ;; Verify typed event bridge (EVT-01) and adoption (EVT-08):

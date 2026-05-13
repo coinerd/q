@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-tool-coordinator.rkt — tests for runtime/tool-coordinator.rkt
 ;;
 ;; Tests for the extracted tool coordinator (A-02, v0.16.1 Wave 4).

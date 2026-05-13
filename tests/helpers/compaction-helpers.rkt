@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; q/tests/helpers/compaction-helpers.rkt
 ;; Centralized helpers for compaction tests.
 ;;

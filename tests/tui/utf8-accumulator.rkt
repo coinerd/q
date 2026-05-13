@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/utf8-accumulator.rkt — Tests for UTF-8 accumulator (#435)
 ;;
 ;; Tests utf8-accumulate-char, utf8-lead-byte-count,

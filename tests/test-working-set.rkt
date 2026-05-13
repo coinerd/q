@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-working-set.rkt — Unit tests for runtime/working-set.rkt
 
 (require rackunit

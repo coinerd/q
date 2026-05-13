@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-regressions.rkt — Regression tests for fixed bugs
 ;;
 ;; Prevents re-introduction of previously fixed bugs.

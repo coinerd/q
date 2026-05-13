@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/extensions/test-sdk-extension-loading.rkt
 ;; v0.18.1 Wave 1: Verify extensions load through SDK runtime in workflow tests.
 

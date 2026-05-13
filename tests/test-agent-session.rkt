@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-agent-session.rkt — tests for concurrent prompt execution guard
 ;;
 ;; Covers:

@@ -129,3 +129,32 @@ If you add a new lint script, you MUST:
 - Decide if it's fast (required) or slow (non-blocking)
 - Add it to `pre-commit.rkt`'s `fast-lint-checks` list if required
 - Verify `check-lint-alignment.rkt` passes before pushing
+
+## Test Boundary Tagging Convention
+
+All test files must declare their boundary kind in a `;; BOUNDARY:` comment
+on the second line (immediately after `#lang`). This helps reviewers and
+automation understand what layer a test exercises.
+
+### Kinds
+
+| Kind | Meaning | Example files |
+|------|---------|---------------|
+| `pure` | Pure function, no I/O or side effects | `test-foo-pure.rkt` |
+| `contract` | Contract validation, error injection | `test-contract-*.rkt` |
+| `fsm` | Finite-state machine or state transition | `test-*-fsm.rkt` |
+| `integration` | Multi-module integration, round-trips | `test-event-roundtrip.rkt` |
+| `io` | I/O, TUI, sandbox, network mocking | `test-tui-*.rkt` |
+| `macro` | Macro expansion, syntax tests | `test-macro-*.rkt` |
+
+### Example
+
+```racket
+#lang racket
+;; BOUNDARY: pure
+(require rackunit "../agent/foo.rkt")
+```
+
+Automation may use this tag to select test subsets (e.g. run only `pure`
+tests for fast feedback).
+

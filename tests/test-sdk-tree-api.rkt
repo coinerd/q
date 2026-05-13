@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sdk-tree-api.rkt — SDK tree API integration tests (#1336 Finding 9)
 ;;
 ;; Tests the public SDK tree API: q:session-branch, q:session-navigate,

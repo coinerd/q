@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-wave-docs.rkt — Tests for wave document I/O and PLAN.md index
 ;;
 ;; v0.21.1 W0: Tests for the wave-docs module covering:

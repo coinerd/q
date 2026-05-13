@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave4-sdk-expansion.rkt — tests for Wave 4 SDK Surface Expansion
 ;;
 ;; Covers:

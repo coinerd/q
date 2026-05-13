@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-tool-middleware.rkt — Tests for tool middleware HOF
 ;;
 ;; v0.29.6 W1: Tests for composable middleware pipeline.

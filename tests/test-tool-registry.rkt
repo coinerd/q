@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-tool-registry.rkt — TDD tests for tools/tool.rkt
 ;;;
 ;;; Covers:

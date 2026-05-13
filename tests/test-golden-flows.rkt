@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-golden-flows.rkt — end-to-end golden-path integration tests
 ;;
 ;; Validates complete flows across CLI parsing, JSON mode, SDK surface,

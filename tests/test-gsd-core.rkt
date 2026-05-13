@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-core.rkt — Core GSD extension tests
 ;;
 ;; Wave 1 of v0.21.0: Tests for command dispatch, tool guard,

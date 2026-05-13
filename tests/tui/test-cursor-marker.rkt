@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-cursor-marker.rkt — Tests for IME cursor marker (#464)
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-fit.rkt — W2-D3: Test scaffold for runtime/context-fit.rkt
 ;; v0.29.13: Smoke tests for message truncation within token budgets.
 

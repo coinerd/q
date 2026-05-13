@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/commands.rkt — Tests for tui/commands module
 ;;
 ;; Tests for /help command formatting and other command behaviors.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-ctx-compact.rkt — tests for Programmatic Compaction (#708-#709)
 ;;
 ;; Covers:

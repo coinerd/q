@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/safety/test-safe-mode-boundary.rkt — Safe-mode boundary workflow test (#176)
 ;;
 ;; Verifies that out-of-bounds file operations are blocked by mock tools

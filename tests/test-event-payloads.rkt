@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-payloads.rkt — Tests for util/event-payloads.rkt
 
 (require rackunit

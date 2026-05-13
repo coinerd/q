@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-gsd-wave-status.rkt — Tests for canonical wave status constants
 ;; v0.32.5 W0: Test scaffolding
 

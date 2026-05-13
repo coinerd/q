@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-split-turn-compaction.rkt — integration tests for split-turn in compaction (#767)
 ;;;
 ;;; Verifies that when the compaction cut falls mid-turn, the summary

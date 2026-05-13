@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/session/test-session-fork.rkt — Session fork workflow test (#174)
 ;;
 ;; Verifies that session fork creates a clean branch without mutating

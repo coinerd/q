@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-inspect.rkt — tests for cli/inspect.rkt
 ;;;
 ;;; Covers:

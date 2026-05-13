@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-state-machine.rkt — GSD State Machine tests
 ;;
 ;; Wave 0 of v0.21.0: State machine with explicit transitions and guards.

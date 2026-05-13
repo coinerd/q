@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-compaction-hooks.rkt — tests for Enriched Compaction Hook and Events (#697-#699)
 ;;
 ;; Covers:

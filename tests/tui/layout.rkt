@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/layout.rkt — Tests for tui/layout module
 ;; Updated v0.28.14: header-row is now #f (removed header row)
 

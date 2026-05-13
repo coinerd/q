@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-activate-command.rkt — Tests for /activate slash command
 ;;
 ;; Wave 3 of v0.17.6: /activate TUI command tests.

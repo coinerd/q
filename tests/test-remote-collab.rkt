@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-remote-collab.rkt — Tests for remote-collab extension
 
 (require rackunit

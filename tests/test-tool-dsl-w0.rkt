@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-tool-dsl-w0.rkt — Tool DSL improvement tests (W-16, W-20, I-09)
 
 (require rackunit

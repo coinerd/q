@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-policy.rkt — GSD Policy Engine tests
 ;;
 ;; Tests all mode × tool × action combinations for the unified

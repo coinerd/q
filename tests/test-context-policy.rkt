@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-policy.rkt — Tests for runtime/context-policy.rkt
 ;; STABILITY: testing
 ;;

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-streaming-transitions.rkt — Wave 2: Comprehensive TUI state transition tests
 ;;
 ;; Tests for all streaming -> tool state transitions in the TUI state machine.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-branch-summarizer.rkt — FEAT-79: Branch summarization
 ;;
 ;; Tests the real summarize-branch from runtime/branch-summarizer.rkt

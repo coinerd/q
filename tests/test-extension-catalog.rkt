@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-catalog.rkt — Tests for runtime/extension-catalog
 ;;
 ;; Wave 2 of v0.17.6: Extension catalog module tests.

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 (require rackunit
          "../../tui/frame-diff.rkt")
 

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-doctor.rkt — TDD tests for interfaces/doctor.rkt
 ;;
 ;; Covers:

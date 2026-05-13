@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-v024-fitness.rkt — Cross-module fitness gates for v0.24.x
 ;;
 ;; Validates that all architectural improvements from v0.24.0–v0.24.3

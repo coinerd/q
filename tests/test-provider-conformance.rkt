@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-provider-conformance.rkt — Abstract provider conformance test suite
 ;;
 ;; Validates that every LLM provider adapter satisfies the structural contract:

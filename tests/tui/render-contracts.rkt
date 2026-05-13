@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: contract
+
 ;; tests/tui/render-contracts.rkt — Tier 1 + Tier 2 UX contract tests
 ;;
 ;; Tests that enforce styled-line invariants and catch visual corruption bugs.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-perf.rkt — Token memoization benchmark
 ;;
 ;; Verifies that per-assembly memoization reduces repeated token estimation.

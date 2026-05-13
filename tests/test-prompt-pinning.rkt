@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-prompt-pinning.rkt — Tests for first-user-prompt pinning (#1380)
 ;; Wave 4 of v0.13.0: Pin first user prompt in context assembly
 

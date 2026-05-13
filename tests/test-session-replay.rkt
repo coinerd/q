@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-session-replay.rkt — tests for q/cli/replay.rkt
 ;;;
 ;;; Covers:

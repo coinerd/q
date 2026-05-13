@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-arch-boundaries.rkt — Architecture layer boundary tests
 ;;
 ;; Verifies that layering constraints are maintained:

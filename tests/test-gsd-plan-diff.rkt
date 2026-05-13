@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-plan-diff.rkt — tests for plan comparison and wave summary
 
 (require rackunit

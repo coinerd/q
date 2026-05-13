@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-manager.rkt — Session manager abstraction (#1321)
 ;;
 ;; Tests in-memory and persistent session manager implementations.

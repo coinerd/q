@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-wiring-run-interactive.rkt — Tests for wiring/run-interactive.rkt
 ;;
 ;; Tests module exports and make-terminal-subscriber behavior.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-classes.rkt — FEAT-77: Typed event classes
 
 (require rackunit

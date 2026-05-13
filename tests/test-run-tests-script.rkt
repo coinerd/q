@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-run-tests-script.rkt — Tests for scripts/run-tests.rkt
 ;;
 ;; NOTE: Only tests script metadata (exists, compiles, help).

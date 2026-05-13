@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-credential-backend.rkt — Tests for credential backend abstraction
 ;;
 ;; Issue #1291: GAP-02a — Credential backend abstraction layer

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-frontmatter.rkt — T01: Skills module tests
 ;;
 ;; Tests for skills/frontmatter.rkt — parse-skill-frontmatter,

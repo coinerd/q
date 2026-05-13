@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-errors.rkt — Tests for q/util/errors.rkt domain-specific exception types
 ;;
 ;; Note: provider-error tests removed — canonical provider-error is in

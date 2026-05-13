@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; test-lint-release-notes.rkt — Tests for lint-release-notes script.
 
 (require rackunit

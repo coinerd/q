@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-racket-tooling.rkt — tests for racket-tooling extension
 ;;
 ;; Covers:

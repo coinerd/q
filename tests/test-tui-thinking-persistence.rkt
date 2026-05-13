@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; test-tui-thinking-persistence.rkt — TDD tests for v0.28.21 W0
 ;; Tests that thinking text is persisted as a permanent transcript entry
 ;; when the turn completes with empty content (tool-call turns).

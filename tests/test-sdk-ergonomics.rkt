@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-sdk-ergonomics.rkt — tests for Wave 10 SDK ergonomics
 ;;
 ;; Tests for:

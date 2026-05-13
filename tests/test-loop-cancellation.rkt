@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-loop-cancellation.rkt — Wave 8: A1-A3 cancellation tests
 ;;
 ;; Tests cancellation edge cases in the agent loop:

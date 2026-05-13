@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-subprocess.rkt — focused tests for sandbox/subprocess.rkt and limits.rkt
 
 (require rackunit

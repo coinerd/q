@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/extensions/test-extension-execution-hardening.rkt
 ;; v0.18.3 Wave 2: Extension tool execution hardening tests
 ;;

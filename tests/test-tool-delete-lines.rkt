@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../tools/builtins/delete-lines.rkt"
          "../tools/tool.rkt"

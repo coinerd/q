@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-input-history-ops.rkt — unit tests for tui/input/history-ops
 
 (require rackunit

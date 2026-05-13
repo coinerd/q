@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-cutpoint-rules.rkt — tests for Compaction Cut-point Rules (#693-#696)
 ;;
 ;; Covers:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../tui/scrollback.rkt"
          "../tui/state.rkt")

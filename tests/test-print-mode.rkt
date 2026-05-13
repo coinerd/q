@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-print-mode.rkt — Tests for G9.3: -p/--print flag (print mode)
 ;;
 ;; Tests:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: pure
+
 ;; tests/test-tool-coordinator-pure.rkt -- W2: Pure helper tests for tool-coordinator.rkt
 ;;
 ;; Tests the extracted pure helpers:

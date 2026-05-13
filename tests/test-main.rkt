@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-main.rkt — tests for main.rkt entry point
 
 (require rackunit

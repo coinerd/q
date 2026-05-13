@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-manifest-audit.rkt — Tests for extensions/manifest-audit.rkt
 ;;
 ;; Tests verify-package-checksum and audit-package functions.

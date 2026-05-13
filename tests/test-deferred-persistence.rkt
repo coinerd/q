@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-deferred-persistence.rkt — tests for deferred session persistence (#771)
 ;;;
 ;;; Verifies that session directory is not created until first assistant response

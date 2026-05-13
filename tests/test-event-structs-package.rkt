@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-structs-package.rkt — verify event-structs sub-module decomposition
 ;;
 ;; Tests that:

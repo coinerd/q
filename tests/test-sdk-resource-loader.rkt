@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sdk-resource-loader.rkt — Resource loader injection (#1320)
 ;;
 ;; Tests that create-agent-session accepts #:resource-loader and uses it.

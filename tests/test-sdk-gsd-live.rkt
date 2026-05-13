@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sdk-gsd-live.rkt — v0.20.5 W4: Live SDK Integration Test
 ;;
 ;; Integration tests for the GSD SDK convenience API with mock providers.

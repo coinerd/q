@@ -40,11 +40,42 @@
                   extract-message-text
                   truncate-string))
 
-;; Re-export everything from sub-modules
-;; WARNING: all-from-out leaks submodule additions — keep submodules stable
-(provide (all-from-out "context-assembly/budgeting.rkt")
-         (all-from-out "context-assembly/selection.rkt")
-         (all-from-out "context-assembly/serialization.rkt"))
+;; Explicit re-exports from sub-modules (S1-F4)
+(provide context-assembly-config
+         context-assembly-config?
+         context-assembly-config-recent-tokens
+         context-assembly-config-max-catalog-entries
+         context-assembly-config-max-catalog-tokens
+         context-assembly-config-summary-window
+         make-context-assembly-config
+         context-result
+         context-result?
+         context-result-messages
+         context-result-total-tokens
+         context-result-pinned-count
+         context-result-recent-count
+         context-result-excluded-count
+         context-result-over-budget?
+         context-result-catalog
+         context-result-summary
+         build-assembled-context
+         build-assembled-context/raw
+         build-session-context
+         tiered-context
+         tiered-context?
+         tiered-context-tier-a
+         tiered-context-tier-b
+         tiered-context-tier-c
+         build-tiered-context
+         tiered-context->message-list
+         build-tiered-context-with-hooks
+         compute-dynamic-tier-b-count
+         summarize-tool-result
+         context-assembly-payload
+         context-assembly-payload?
+         context-assembly-payload-tier-a-messages
+         context-assembly-payload-tier-b-messages
+         context-assembly-payload-tier-c-messages)
 
 ;; Re-export from context-summary.rkt
 (provide DEFAULT-CACHE-MAX-ENTRIES

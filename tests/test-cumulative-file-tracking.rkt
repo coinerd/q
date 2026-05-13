@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-cumulative-file-tracking.rkt — tests for cumulative file tracking (#768)
 ;;;
 ;;; Verifies that file trackers are merged across compaction cycles.

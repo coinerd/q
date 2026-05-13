@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-execution-policy.rkt — tests for tool blocking and mode-based guards
 
 (require rackunit

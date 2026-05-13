@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-self-hosting-deep.rkt
 ;; Deep analysis: actually invoke extension tools and verify behavior.
 ;; Safe: all writes to temp dirs, reads from project.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-permission-gate.rkt — Tests for tools/permission-gate.rkt (G3.4)
 ;;;
 ;;; Core permission gate tests without scheduler integration:

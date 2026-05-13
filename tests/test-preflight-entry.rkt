@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-preflight-entry.rkt — Preflight entry struct tests (W-10)
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-phase-e.rkt — Tests for Phase E extensions
 
 (require rackunit

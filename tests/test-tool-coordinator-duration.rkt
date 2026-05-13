@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-tool-coordinator-duration.rkt — duration-ms accuracy tests
 ;; v0.29.17 W0: Verify tool-execution-end-event duration-ms is non-zero and
 ;; correlates with wall-clock time.

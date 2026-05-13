@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-rpc-mode.rkt — tests for q/interfaces/rpc-mode.rkt
 ;;
 ;; Covers:

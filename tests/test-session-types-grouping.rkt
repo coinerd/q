@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-types-grouping.rkt — Verify agent-session field groupings
 ;;
 ;; v0.32.8: Documents the 5 logical groups of agent-session's 21 fields.

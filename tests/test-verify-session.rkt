@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-verify-session.rkt — Tests for q verify-session CLI command
 ;;
 ;; Issue #1288: GAP-03b — Add session integrity verification command

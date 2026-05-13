@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-scheduler-hooks.rkt — Wave 11: TS1-TS8 scheduler hook protocol
 ;;
 ;; Tests for the complete hook protocol between scheduler and extensions:

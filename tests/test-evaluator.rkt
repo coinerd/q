@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-evaluator.rkt — tests for sandbox/evaluator.rkt (#222)
 ;;
 ;; Covers:

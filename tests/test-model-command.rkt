@@ -1,4 +1,6 @@
 #lang racket
+;; BOUNDARY: integration
+
 ;; test-model-command.rkt — tests for /model command in TUI and CLI
 ;;
 ;; Covers:

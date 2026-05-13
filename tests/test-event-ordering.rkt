@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-ordering.rkt — Wave 4: Regression guard
 ;;
 ;; CI-level invariant: for any agent turn with streaming text,

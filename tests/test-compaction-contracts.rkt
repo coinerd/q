@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: contract
+
 ;; tests/test-compaction-contracts.rkt — API contract assertions for compaction
 ;;
 ;; Verifies compaction API contracts hold under various configurations.

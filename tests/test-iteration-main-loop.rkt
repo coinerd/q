@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-main-loop.rkt -- Tests for run-iteration-loop orchestration
 ;;
 ;; v0.34.7 T-01: Dedicated tests for iteration main-loop module.

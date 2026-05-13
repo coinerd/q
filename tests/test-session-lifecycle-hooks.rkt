@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-session-lifecycle-hooks.rkt — tests for session lifecycle hooks (#764)
 
 (require rackunit

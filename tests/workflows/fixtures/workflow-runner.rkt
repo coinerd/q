@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/fixtures/workflow-runner.rkt — full workflow orchestration
 ;;
 ;; Creates a complete SDK runtime, session, and runs prompts through it.

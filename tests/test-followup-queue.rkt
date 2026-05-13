@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-followup-queue.rkt — tests for follow-up queue wiring (#661)
 ;;
 ;; Covers:

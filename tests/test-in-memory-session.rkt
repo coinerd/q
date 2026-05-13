@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-in-memory-session.rkt — GC-18: In-memory session manager
 ;;
 ;; Tests the in-memory session manager that provides the same interface

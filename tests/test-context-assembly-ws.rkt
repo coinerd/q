@@ -1,4 +1,6 @@
 #lang racket
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-ws.rkt — Working set integration into context assembly
 
 (require rackunit

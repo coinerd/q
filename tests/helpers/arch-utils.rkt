@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/arch-utils.rkt — Shared architecture test utilities
 ;;
 ;; Provides read-based S-expression require extraction and layer

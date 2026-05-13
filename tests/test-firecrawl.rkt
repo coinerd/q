@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          rackunit/text-ui
          (only-in "../tools/tool.rkt"

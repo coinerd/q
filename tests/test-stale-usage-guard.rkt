@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-stale-usage-guard.rkt — tests for stale usage guard (#770)
 ;;;
 ;;; Verifies that compaction is not re-triggered with stale usage data

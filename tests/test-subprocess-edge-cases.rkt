@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-subprocess-edge-cases.rkt — Wave 13: SP1-SP6 subprocess edge cases
 ;;
 ;; Tests for subprocess lifecycle: non-existent commands, working directory,

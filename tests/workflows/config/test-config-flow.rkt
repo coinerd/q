@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-config-flow.rkt — Settings config flow contract tests
 ;;
 ;; Verifies that settings struct flows correctly through the SDK

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-parameterized-registries.rkt — R-05/R-14 registry isolation tests
 
 (require rackunit

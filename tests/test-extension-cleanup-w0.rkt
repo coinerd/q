@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-cleanup-w0.rkt — Extension loader cleanup tests (W-12, I-10, I-22)
 
 (require rackunit

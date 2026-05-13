@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-tui-enter.rkt — Tests for BUG-26: TUI Enter key handling
 ;;
 ;; charterm maps Enter (byte 13) to 'return symbol, not #\return char.

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-gsd-mode-decoupling.rkt — Test TUI→GSD circular import fix
 ;;
 ;; Verifies that state-events.rkt uses an injectable parameter for GSD mode

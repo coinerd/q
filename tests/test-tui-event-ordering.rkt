@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-event-ordering.rkt — Event ordering and state consistency
 ;; edge case tests (Wave 4, W4.2 #888).
 ;;

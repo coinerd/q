@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-tree.rkt — Tests for context assembly tree-walk (merged from context-builder.rkt)
 
 (require rackunit

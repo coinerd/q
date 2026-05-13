@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-truncation-overflow.rkt — tests for G5.2 tool output truncation
 ;;; with temp-file overflow
 

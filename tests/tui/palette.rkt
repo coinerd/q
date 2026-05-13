@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; q/tests/tui/palette.rkt — TDD tests for the slash-command palette
 
 (require rackunit

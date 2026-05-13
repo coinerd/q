@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-exploration-loop-wiring.rkt — TDD tests for v0.28.22 W1
 ;; Tests for exploration loop detection wiring
 

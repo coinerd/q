@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-dialog-api.rkt — tests for Extension Dialog Primitives (#721-#724)
 ;;
 ;; Covers:

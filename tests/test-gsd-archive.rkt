@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-archive.rkt — Tests for GSD archive workflow
 ;; Issues #2155, #2156, #2157, #2158
 

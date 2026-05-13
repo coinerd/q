@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-provider-smoke.rkt — Compilation smoke tests for all LLM provider adapters
 ;;
 ;; Ensures no provider ships with syntax errors. These tests simply

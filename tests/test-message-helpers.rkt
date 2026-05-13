@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-message-helpers.rkt — shared utility consolidation tests
 
 (require rackunit

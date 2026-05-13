@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-destructive-warning.rkt — SEC-02 tests for destructive command warning
 
 (require rackunit

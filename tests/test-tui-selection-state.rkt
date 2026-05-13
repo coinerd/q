@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-selection-state.rkt — Wave 6: T8 selection + transcript mutation
 ;;
 ;; Verifies that mouse selection state interacts correctly with transcript mutations

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-sandbox.rkt — Tests for sandbox/ modules: limits, subprocess, evaluator
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-resource-loader.rkt — tests for skills/types.rkt (resource loading)
 ;;
 ;; Covers:

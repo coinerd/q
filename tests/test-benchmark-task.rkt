@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-benchmark-task.rkt — Tests for benchmark task format
 
 (require rackunit

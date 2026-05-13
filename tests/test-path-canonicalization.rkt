@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-path-canonicalization.rkt — SEC-02/SEC-03 path canonicalization tests
 ;;
 ;; Verifies that tool-write and tool-edit canonicalize paths containing

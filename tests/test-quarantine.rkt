@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-quarantine.rkt — tests for extension quarantine/disable workflow
 ;;
 ;; Covers Issue #56:

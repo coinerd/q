@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/session/test-session-compact.rkt — Session compaction workflow test (#175)
 ;;
 ;; Verifies that long session compaction preserves usable continuity.

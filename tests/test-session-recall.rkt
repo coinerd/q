@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-recall.rkt — Tests for tools/builtins/session-recall.rkt (#1391)
 ;; Wave 1: Session Recall Tool
 

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-project-tree.rkt — Tests for runtime/project-tree.rkt
 ;;; v0.19.3 Wave 3: Context Seeding with Project File Tree
 

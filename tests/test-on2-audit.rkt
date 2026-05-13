@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-on2-audit.rkt — O(n²) audit for append-in-loop patterns (#1382)
 ;; Wave 6 of v0.13.0: Document known O(n²) sites and verify no new ones
 

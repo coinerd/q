@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-parallel-tools.rkt — FEAT-73: Parallel tool execution
 
 (require rackunit

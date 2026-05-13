@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-auth-store.rkt — tests for runtime/auth-store.rkt
 ;;;
 ;;; TDD tests for credential lookup, env-first resolution,

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-define-tool.rkt — Tests for define-tool macro
 
 (require rackunit

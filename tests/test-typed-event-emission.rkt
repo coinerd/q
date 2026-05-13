@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-typed-event-emission.rkt — Tests for typed event emission bridge
 ;; v0.29.2 W0: Test scaffolding (bridge function does not exist yet — tests should FAIL)
 

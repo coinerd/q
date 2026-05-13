@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-step-directive.rkt -- Step directive type tests (W-02)
 
 (require rackunit

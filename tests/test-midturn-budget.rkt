@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-midturn-budget.rkt — mid-turn token budget check (v0.14.1 Wave 5)
 ;;;
 ;;; Tests that check-mid-turn-budget! emits context.mid-turn-over-budget

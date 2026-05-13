@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-di-keyword-args.rkt — MOD-02: DI keyword args for iteration loop
 ;; v0.22.6 W4
 ;;

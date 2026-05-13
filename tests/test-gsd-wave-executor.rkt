@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-wave-executor.rkt — Wave execution engine tests
 ;;
 ;; Wave 2b: Status lifecycle and error recovery.

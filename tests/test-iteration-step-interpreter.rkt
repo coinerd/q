@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-step-interpreter.rkt -- Tests for step interpreter action dispatch
 ;;
 ;; v0.34.7 T-01: Dedicated tests for iteration step-interpreter module.

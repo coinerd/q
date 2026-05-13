@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;;; tests/tui/branch.rkt — tests for TUI branch inspection commands
 ;;;
 ;;; Covers:

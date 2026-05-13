@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-settings-flow.rkt — Settings contract violation TDD tests (#1239)
 ;;
 ;; These tests prove that the q-settings struct does NOT flow through

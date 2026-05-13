@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave3-extension-polish.rkt — Wave 3 extension & session polish tests
 ;;
 ;; Tests for v0.11.0 Wave 3 sub-issues:

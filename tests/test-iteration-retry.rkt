@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-retry.rkt — tests for iteration/retry-policy
 
 (require rackunit

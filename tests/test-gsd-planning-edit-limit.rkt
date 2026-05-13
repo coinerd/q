@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-planning-edit-limit.rkt — Dynamic edit limit tests
 ;;
 ;; Tests for v0.20.2 Wave 1: Dynamic edit limit (500 default, 1200 during /go).

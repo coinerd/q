@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/input.rkt — Tests for tui/input module
 
 (require rackunit

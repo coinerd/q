@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-json.rkt — W2-D1: Test scaffold for agent/event-json.rkt
 ;; v0.29.13: Round-trip smoke tests for typed event JSON serialization.
 

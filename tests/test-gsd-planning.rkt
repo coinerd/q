@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-planning.rkt — tests for GSD planning extension
 ;;
 ;; Covers:

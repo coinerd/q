@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-lifecycle-ws.rkt — Session lifecycle working set integration
 
 (require rackunit

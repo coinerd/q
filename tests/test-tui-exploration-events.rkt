@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-exploration-events.rkt — Tests for v0.14.1 TUI event handlers
 ;; Covers: TC1 findings (iteration.soft-warning, exploration.progress,
 ;;   context.mid-turn-over-budget, auto-retry.start with errorType)

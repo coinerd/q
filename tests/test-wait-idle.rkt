@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wait-idle.rkt — FEAT-78: waitForIdle in SDK
 
 (require rackunit

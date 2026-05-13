@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave1-compaction.rkt — Wave 1 compaction hardening tests
 ;;
 ;; Tests for v0.11.0 Wave 1 sub-issues:

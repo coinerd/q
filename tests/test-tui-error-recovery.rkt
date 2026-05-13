@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-error-recovery.rkt — P0: TUI recovers after runner thread exception
 ;; Verifies that exception in run-prompt! does not hang TUI (busy? cleared,
 ;; error displayed, subsequent prompts work)

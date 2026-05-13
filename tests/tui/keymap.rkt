@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/keymap.rkt — Tests for configurable keybindings (Issue #411)
 
 (require rackunit

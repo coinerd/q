@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-azure-openai.rkt — tests for llm/azure-openai.rkt
 ;; v0.16.0 Wave 2: provider construction, response parsing, streaming
 

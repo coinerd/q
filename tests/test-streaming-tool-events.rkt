@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-streaming-tool-events.rkt — Wave 3: Agent loop integration tests
 ;;
 ;; Verifies the B1 fix at the agent-loop level: when a streaming response

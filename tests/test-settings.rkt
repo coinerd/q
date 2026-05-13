@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-settings.rkt — TDD tests for runtime/settings.rkt
 ;;
 ;; Covers:

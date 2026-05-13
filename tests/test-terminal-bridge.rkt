@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-terminal-bridge.rkt — Tests for tui/terminal-bridge.rkt
 ;;
 ;; Tests the stub fallback functions and message predicates/accessors

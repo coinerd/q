@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/temp-fs.rkt — T05: Temporary filesystem test helpers
 ;;
 ;; Provides with-temp-file and with-temp-dir macros that ensure

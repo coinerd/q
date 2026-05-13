@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-loop-events.rkt — Agent loop typed event emission (#1323)
 ;;
 ;; Tests that the agent loop emits typed event structs on the event bus.

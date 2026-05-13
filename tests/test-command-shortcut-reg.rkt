@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-command-shortcut-reg.rkt — tests for Command & Shortcut Registration (#679)
 ;;
 ;; Covers:

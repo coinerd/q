@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-model-timeouts.rkt — Per-model timeout profile tests (v0.14.2 Wave 3)
 ;;
 ;; Tests:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/dogfood/test-dogfood-execution-analysis.rkt
 ;; v0.18.4 Wave 2: Dogfood execution + analysis workflow tests
 

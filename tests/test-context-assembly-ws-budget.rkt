@@ -1,4 +1,6 @@
 #lang racket
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-ws-budget.rkt — Budget pressure integration test
 
 (require rackunit

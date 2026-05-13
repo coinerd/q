@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/terminal.rkt — Tests for tui/terminal module
 ;;
 ;; Most terminal I/O cannot be tested in a headless environment.

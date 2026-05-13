@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/fixtures/temp-project.rkt — temp project/session lifecycle
 ;;
 ;; Creates temporary directories for testing with RAII cleanup.

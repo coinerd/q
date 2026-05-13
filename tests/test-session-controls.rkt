@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-controls.rkt — W2-D4: Test scaffold for runtime/session-controls.rkt
 ;; v0.29.13: Smoke tests for session control functions.
 

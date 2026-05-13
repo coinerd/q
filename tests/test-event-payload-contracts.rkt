@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: contract
+
 ;; tests/test-event-payload-contracts.rkt — Event payload contract validation
 ;; v0.22.8 W3 (T3)
 ;;

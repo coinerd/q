@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-parsed-command.rkt — TUI command parsing tests (R-17)
 
 (require rackunit

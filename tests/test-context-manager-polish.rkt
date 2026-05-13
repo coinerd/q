@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-manager-polish.rkt — Wave 4 (#1394): Polish & Edge Cases
 ;;
 ;; Tests for catalog token caps, consecutive tool result collapsing,

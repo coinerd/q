@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-di-explicit.rkt — Tests for explicit DI (no parameter fallbacks)
 ;;
 ;; v0.29.5 W2: Verify DI parameters removed, resolvers use direct imports.

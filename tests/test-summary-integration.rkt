@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-summary-integration.rkt — Wave 2B (#1396): Summary Integration tests
 ;;
 ;; Tests the integration of context-summary into assemble-context:

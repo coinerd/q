@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-transitions.rkt — Wave 9: I1-I6 iteration pipeline tests
 ;;
 ;; Tests for tool call extraction, hook modification, scheduler result mapping,

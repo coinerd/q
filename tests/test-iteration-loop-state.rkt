@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-loop-state.rkt — Loop-state struct tests (v0.29.16 W0)
 
 (require rackunit

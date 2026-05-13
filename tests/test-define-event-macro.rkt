@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: macro
+
 ;; tests/test-define-event-macro.rkt — tests for define-typed-event macro
 ;;
 ;; v0.32.2 Wave 0+1: Comprehensive expansion and integration tests.

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-snapshot-ws.rkt -- T-03: TR-boundary test
 ;;
 ;; Verify that iteration-snapshot can be constructed from untyped code

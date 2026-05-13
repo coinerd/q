@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-edge-cases.rkt — T08: Edge-case tests for iteration module
 ;;
 ;; Tests boundary conditions:

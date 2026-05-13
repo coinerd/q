@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-overflow.rkt — tests for context overflow recovery (GC-27)
 ;;
 ;; Tests:

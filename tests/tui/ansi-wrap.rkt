@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/ansi-wrap.rkt — Tests for ANSI-aware word wrapping
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-audit-script.rkt — Tests for scripts/audit-project.rkt (RA-4)
 
 (require rackunit

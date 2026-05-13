@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-structs-v2.rkt — Round-trip tests for v0.30.6 new event structs
 ;;
 ;; Tests that all new typed-event structs (streaming + blocked + cancelled)

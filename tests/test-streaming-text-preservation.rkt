@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-streaming-text-preservation.rkt — v0.14.3 Wave 2
 ;;
 ;; Verifies that partial streaming text is preserved in the transcript

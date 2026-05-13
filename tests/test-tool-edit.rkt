@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../tools/builtins/edit.rkt"
          "../tools/tool.rkt"

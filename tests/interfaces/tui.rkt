@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/interfaces/tui.rkt — Tests for interfaces/tui module
 ;;
 ;; Tests the TUI wiring logic (handle-key, process-slash-command,

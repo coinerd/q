@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-pre-commit.rkt — tests for scripts/pre-commit.rkt
 ;;
 ;; These tests verify the pre-commit hook runs lint checks via lint-all.rkt

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-hooks-complete.rkt - Tests for all 20 hook dispatch points (R2-7 + Wave 2)
 
 (require rackunit

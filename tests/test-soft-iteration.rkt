@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-soft-iteration.rkt — soft iteration limit tests
 ;;
 ;; Wave 1 (v0.14.1): Agent warns at soft limit, hard-stops at hard limit.

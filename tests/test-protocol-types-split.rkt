@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-protocol-types-split.rkt
 ;;
 ;; Verify that protocol-types.rkt facade re-exports all sub-module exports

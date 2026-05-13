@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-tool-registry-api.rkt — R-12/R-24/R-25: Tool registry API cleanup
 
 (require rackunit

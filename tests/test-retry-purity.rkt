@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-retry-purity.rkt -- Retry policy purity test (I-06)
 
 (require rackunit

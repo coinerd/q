@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-trace.rkt — Assembly trace hook + property tests
 ;;
 ;; W2 of v0.23.2:

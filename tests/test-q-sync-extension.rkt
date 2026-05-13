@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-q-sync-extension.rkt — Tests for q-sync extension
 
 (require rackunit

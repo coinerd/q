@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-audit-log.rkt — tests for util/audit-log.rkt
 
 (require rackunit

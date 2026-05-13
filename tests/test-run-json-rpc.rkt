@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-run-json-rpc.rkt — Tests for wiring/run-json-rpc.rkt
 ;;
 ;; Tests the run-json and run-rpc functions. Since these depend on

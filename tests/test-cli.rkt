@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-cli.rkt — tests for interfaces/cli.rkt
 ;;
 ;; TDD: tests written first against the public contract.

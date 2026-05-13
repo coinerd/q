@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-trace-logger.rkt — v0.15.0 Wave 0
 ;;
 ;; TDD tests for the trace logger core module.

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../util/event-codec.rkt"
          (only-in "../util/event-payloads.rkt"

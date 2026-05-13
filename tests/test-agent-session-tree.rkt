@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-agent-session-tree.rkt — Tree operations in agent-session (#1317, #1318, #1319)
 ;;
 ;; Tests tree integration: branch!, navigate!, branch summaries, SDK tree API.

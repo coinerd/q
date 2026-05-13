@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/tui/test-command-integration.rkt — TUI command integration tests
 ;;
 ;; Tests that TUI slash commands correctly interact with session state,

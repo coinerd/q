@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-files.rkt — tests for skills/context-files.rkt (GC-26)
 ;;
 ;; Tests:

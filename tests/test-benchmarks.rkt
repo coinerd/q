@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-benchmarks.rkt — tests for the benchmark harness
 ;;
 ;; TDD tests for benchmarks/metrics.rkt, benchmarks/tasks.rkt, and

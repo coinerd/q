@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; q/tests/tui/clipboard.rkt — Unit tests for q/tui/clipboard module
 
 (require rackunit

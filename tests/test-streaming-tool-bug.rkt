@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-streaming-tool-bug.rkt — Wave 0: Reproduction test for streaming content
 ;; disappearance when tool calls are present.
 ;;

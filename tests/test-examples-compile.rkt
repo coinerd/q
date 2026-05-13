@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-examples-compile.rkt — Verify all SDK examples compile
 ;;
 ;; Catches missing requires in example files that pass local `raco make`

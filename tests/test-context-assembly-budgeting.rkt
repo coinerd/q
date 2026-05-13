@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-budgeting.rkt — tests for context-assembly/budgeting
 
 (require rackunit

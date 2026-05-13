@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          rackunit/text-ui
          "../llm/model.rkt")

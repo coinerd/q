@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-arch-fitness.rkt — Architecture fitness tests
 ;;
 ;; Verifies quantitative architecture health:

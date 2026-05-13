@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/mock-provider.rkt — Shared mock provider factories
 ;;
 ;; Canonical mock providers for unit and integration tests.

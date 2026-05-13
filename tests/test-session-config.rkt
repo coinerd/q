@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-config.rkt — unit tests for session-config hash wrapper + gen:dict
 ;;
 ;; v0.30.4: Redesigned to wrap a single hash. Tests verify:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-compactor.rkt — tests for runtime/compactor.rkt
 ;;;
 ;;; TDD test suite for the context compactor module.

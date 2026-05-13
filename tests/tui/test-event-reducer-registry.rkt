@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-event-reducer-registry.rkt -- Event reducer registry tests (W-07)
 
 (require rackunit

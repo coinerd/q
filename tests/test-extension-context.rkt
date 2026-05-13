@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-context.rkt — tests for extension-ctx and ctx-aware dispatch
 ;;
 ;; Covers:

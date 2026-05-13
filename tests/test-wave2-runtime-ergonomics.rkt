@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave2-runtime-ergonomics.rkt — Wave 2 runtime ergonomics tests
 ;;
 ;; Tests for v0.11.0 Wave 2 sub-issues:

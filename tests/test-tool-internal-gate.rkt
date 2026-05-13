@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-tool-internal-gate.rkt — R-15: verify tool-execute gating
 
 (require rackunit

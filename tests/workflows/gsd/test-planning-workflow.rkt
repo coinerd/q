@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/gsd/test-planning-workflow.rkt
 ;; v0.18.2 Wave 1: Planning workflow pipeline tests
 

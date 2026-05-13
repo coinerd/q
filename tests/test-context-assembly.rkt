@@ -1,4 +1,6 @@
 #lang racket
+;; BOUNDARY: integration
+
 ;; STABILITY: evolving
 
 ;; q/tests/test-context-assembly.rkt — Tests for context-assembly.rkt

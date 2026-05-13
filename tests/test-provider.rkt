@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../llm/http-helpers.rkt"
          "../llm/model.rkt"

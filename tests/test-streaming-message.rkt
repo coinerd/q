@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-streaming-message.rkt — FEAT-71/72: Streaming accumulator + thinking
 
 (require rackunit

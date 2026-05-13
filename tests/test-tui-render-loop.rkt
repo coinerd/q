@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-tui-render-loop.rkt — Tests for tui/tui-render-loop.rkt
 ;;
 ;; Tests module loading, export binding, and pure helpers.

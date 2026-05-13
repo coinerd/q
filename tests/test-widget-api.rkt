@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-widget-api.rkt — tests for Extension Widget Slots (#713-#716)
 ;;
 ;; Covers:

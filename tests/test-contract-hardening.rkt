@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: contract
+
 ;; tests/test-contract-hardening.rkt -- W0: contract hardening tests
 ;;
 ;; Tests S4-F1: contract-out on main.rkt SDK functions

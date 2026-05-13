@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-retry-iteration.rkt — Tests for /retry + iteration limit + retry display
 ;; Wave 2 of v0.13.0: #1378
 

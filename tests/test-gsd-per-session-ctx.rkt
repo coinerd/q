@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-per-session-ctx.rkt — Per-session GSD context isolation (C-01, v0.35.1)
 ;;
 ;; Tests that gsd-session-ctx instances don't share state,

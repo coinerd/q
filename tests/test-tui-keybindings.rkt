@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-tui-keybindings.rkt — Tests for tui/tui-keybindings.rkt
 ;;
 ;; Tests the tui-ctx struct, mark-dirty!, tui-ctx->cmd-ctx,

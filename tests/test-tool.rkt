@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../tools/tool.rkt"
          "../tools/tool-struct.rkt")

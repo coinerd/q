@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-tree-nav.rkt — tests for session tree navigation functions
 ;;
 ;; Covers GC-23 (remediation for GC-13):

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-session-resume.rkt — Session resume and continuity tests
 ;; (Wave 2, W2.3 #881).
 ;;

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/workflow-harness.rkt — Test infrastructure for simulating agent
 ;; events through the TUI state→render pipeline WITHOUT a real terminal.
 ;;

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-openai-compatible.rkt — Tests for OpenAI-compatible provider adapter
 ;;
 ;; BUG-34: Verify that error messages are formatted readably (not #hasheq)

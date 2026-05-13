@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-retry-enrichment.rkt — Tests for v0.14.2 Wave 2: enriched /retry
 ;;
 ;; Tests that get-last-turn-tool-summary extracts tool results from the

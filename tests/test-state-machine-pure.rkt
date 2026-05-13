@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: pure
+
 ;; tests/test-state-machine-pure.rkt — Pure FSM tests (RA-26)
 ;;
 ;; Tests compute-next-gsm-state without side effects.

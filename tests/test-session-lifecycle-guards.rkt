@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-lifecycle-guards.rkt — Wave 10: S1-S5 session lifecycle guards
 ;;
 ;; Tests for session lifecycle enforcement: operations on closed sessions,

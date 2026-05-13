@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-rpc-methods.rkt — FEAT-75: Core RPC methods
 
 (require rackunit

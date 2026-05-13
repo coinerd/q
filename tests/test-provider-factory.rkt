@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../runtime/provider-factory.rkt"
          "../runtime/settings.rkt"

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-dedup.rkt — TUI tool-start dedup guard tests
 ;; v0.29.17 W1: Verify duplicate tool-start events do not append duplicate
 ;; transcript entries.

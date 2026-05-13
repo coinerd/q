@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-lifecycle-smoke.rkt — Session lifecycle smoke test
 ;;
 ;; Verifies the basic session lifecycle: create -> close -> resume.

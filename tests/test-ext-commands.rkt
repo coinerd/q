@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-ext-commands.rkt — FEAT-60: extension slash command registration
 
 (require rackunit

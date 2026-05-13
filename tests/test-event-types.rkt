@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-types.rkt — TDD tests for typed event structs
 ;; Wave 0: Issues #1308 + #1311
 ;;

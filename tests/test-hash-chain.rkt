@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-hash-chain.rkt — Tests for hash-chained session/event records
 ;;
 ;; Issue #1287: GAP-03a — Implement hash-chained session records

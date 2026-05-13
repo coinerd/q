@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/extensions/test-extension-round-trip.rkt
 ;; v0.18.1 Wave 2: Full round-trip test with gsd-planning extension.
 ;; Loads extension, runs prompt, verifies planning-read/write tool calls work.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-compaction-guard.rkt — tests for compaction guard (#765)
 ;;;
 ;;; Verifies that:

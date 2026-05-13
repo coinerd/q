@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-model-cycling.rkt — FEAT-65: runtime model cycling
 
 (require rackunit

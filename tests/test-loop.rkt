@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-loop.rkt — tests for agent/state.rkt, agent/queue.rkt, agent/loop.rkt
 
 (require rackunit

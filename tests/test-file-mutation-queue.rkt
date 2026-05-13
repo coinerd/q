@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-file-mutation-queue.rkt — tests for per-file serialization.
 ;;;
 ;;; Verifies:

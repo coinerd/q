@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-tool-bridge.rkt — tests for iteration/tool-turn-bridge
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-termination-reasons.rkt — Exhaustiveness: every known termination reason handled
 ;; v0.29.1 W0: Test scaffolding (function does not exist yet — tests should FAIL)
 

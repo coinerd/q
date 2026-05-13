@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-scheduler-strategy.rkt — R-15: scheduler strategy tests
 
 (require rackunit

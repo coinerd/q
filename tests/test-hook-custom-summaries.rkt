@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-hook-custom-summaries.rkt — tests for hook-provided custom summaries (#769)
 ;;;
 ;;; Verifies that session-before-compact hook can provide custom summary

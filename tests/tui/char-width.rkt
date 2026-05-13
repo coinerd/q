@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/char-width.rkt — Tests for Unicode-aware terminal column width
 
 (require rackunit

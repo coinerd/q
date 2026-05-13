@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-command-parser.rkt — Pure parser tests (R-04/R-16)
 
 (require rackunit

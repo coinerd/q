@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-plan-validator.rkt — Plan validator tests
 ;;
 ;; Wave 2a: Strict validation rules that block /go.

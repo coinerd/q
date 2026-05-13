@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-lint-deprecation.rkt — Tests for scripts/lint-deprecation-deadlines.rkt
 
 (require rackunit

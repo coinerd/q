@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-render-status-line.rkt — comprehensive tests for render/status-line
 ;; v0.28.17: Single inverse segment status bar, busy/thinking/streaming, ctx, cost, scroll
 

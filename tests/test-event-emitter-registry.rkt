@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-emitter-registry.rkt — Coverage test for event field-name registry
 ;;
 ;; v0.32.9 RC-1: Safety-net test that detects if a new event type is added

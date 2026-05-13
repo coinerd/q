@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-benchmark-scorer.rkt — Tests for scoring engine
 
 (require rackunit

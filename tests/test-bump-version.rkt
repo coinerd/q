@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-bump-version.rkt — Tests for scripts/bump-version.rkt
 
 (require rackunit

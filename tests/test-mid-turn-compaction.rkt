@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-mid-turn-compaction.rkt — TDD tests for v0.28.21 W3
 ;; Tests mid-turn compaction trigger: when context exceeds 90% budget
 ;; during a tool-call loop, compact in-place with cooldown guard.

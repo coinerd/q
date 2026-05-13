@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; TEST-03: ext-register-tool! wraps 1-arg handlers to accept (args exec-ctx)
 
 (require rackunit
