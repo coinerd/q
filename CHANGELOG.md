@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.41.5 — 2026-05-13
+
+### Fixed
+- **B1 CRITICAL**: Fixed TUI crash on slash commands — `process-slash-command` contract was too
+  narrow, rejecting `parsed-command` structs. The underlying handler already supported them,
+  but the wrapper contract in `tui-keybindings.rkt` only allowed `string?` or `symbol?`.
+  Widened to `(or/c string? symbol? parsed-command?)`.
+
 ## v0.41.4 — 2026-05-13
 
 ### Fixed

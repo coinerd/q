@@ -31,6 +31,7 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          (prefix-in commands: "../tui/commands.rkt")
+         (only-in "../tui/command-parse.rkt" parsed-command?)
          "../tui/keymap.rkt"
          "keybindings/binding-resolver.rkt"
          "keybindings/default-map.rkt"
@@ -73,7 +74,8 @@
                        [handle-key (-> tui-ctx? any/c any/c)]
                        [handle-mouse (-> tui-ctx? any/c any/c)]
                        [selection-text (-> tui-ctx? any/c (or/c string? #f))]
-                       [process-slash-command (->* (tui-ctx? (or/c string? symbol?)) (string?) any/c)]
+                       [process-slash-command
+                        (->* (tui-ctx? (or/c string? symbol? parsed-command?)) (string?) any/c)]
                        [tui-ctx->cmd-ctx (-> tui-ctx? any/c)]
                        [reload-keymap! (-> void?)]
                        [current-keybindings-path (-> (or/c path-string? #f))]
