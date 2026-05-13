@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.41.1 — 2026-05-13
+
+### Added
+- **R1-P1**: NEW `agent/turn-model.rkt` -- turn-level model structs
+  - `turn-context` (7 immutable fields)
+  - `turn-command` discriminated union (4 tags)
+  - `turn-decision` discriminated union (8 tags)
+  - `fsm-transition` pure FSM computation
+  - Convenience constructors + tag predicates
+  - NEW `tests/test-turn-model.rkt`: 4 struct tests
+
 ## v0.41.0 — 2026-05-13
 
 ### Changed
