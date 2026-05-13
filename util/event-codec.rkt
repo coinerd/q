@@ -32,7 +32,7 @@
 
 ;; Decode a hash back into the appropriate payload struct.
 ;; Returns the hash as-is if no struct type matches (passthrough).
-;; v0.28.11: Uses __type tag for reliable decode, falls back to heuristic matching.
+;; v0.28.11: Uses __type tag for reliable decode. No heuristic fallback (removed v0.40.1).
 (define (hash->payload h)
   (cond
     [(not (hash? h)) h]
@@ -53,27 +53,5 @@
        ['gsd-mode (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
        ['session-id (session-id-payload (hash-ref h 'sessionId))]
        [_ h])]
-    ;; Legacy heuristic decode (backward compatible with pre-v0.28.11 data)
-    ;; R-13: Deprecated -- will be removed in v0.40.x. All events should use __type tags.
-    [(and (hash-has-key? h 'error) (hash-has-key? h 'errorType))
-     (error-payload (hash-ref h 'error) (hash-ref h 'errorType))]
-    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'message))
-     (input-payload (hash-ref h 'session-id) (hash-ref h 'message))]
-    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'config) (hash-has-key? h 'reason))
-     (session-start-payload (hash-ref h 'session-id) (hash-ref h 'config) (hash-ref h 'reason))]
-    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'duration))
-     (session-end-payload (hash-ref h 'session-id) (hash-ref h 'duration))]
-    [(and (hash-has-key? h 'session-id) (hash-has-key? h 'operation))
-     (session-switch-payload (hash-ref h 'session-id) (hash-ref h 'operation))]
-    [(and (hash-has-key? h 'session-id)
-          (hash-has-key? h 'turn-id)
-          (hash-has-key? h 'tool-name)
-          (hash-has-key? h 'tool-call-id))
-     (tool-call-event-payload (hash-ref h 'session-id)
-                              (hash-ref h 'turn-id)
-                              (hash-ref h 'tool-name)
-                              (hash-ref h 'tool-call-id))]
-    [(and (hash-has-key? h 'old-mode) (hash-has-key? h 'new-mode))
-     (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
-    [(hash-has-key? h 'sessionId) (session-id-payload (hash-ref h 'sessionId))]
+    ;; No __type tag and no heuristic match -- return hash as-is (passthrough)
     [else h]))
