@@ -61,7 +61,8 @@
 ;; bash-tool-call-event
 (register-event-serializer! "tool.bash.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       "bash"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -88,7 +89,8 @@
 ;; edit-tool-call-event
 (register-event-serializer! "tool.edit.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       "edit"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -112,7 +114,8 @@
 ;; write-tool-call-event
 (register-event-serializer! "tool.write.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       "write"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -136,7 +139,8 @@
 ;; read-tool-call-event
 (register-event-serializer! "tool.read.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       "read"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -163,7 +167,8 @@
 ;; grep-tool-call-event
 (register-event-serializer! "tool.grep.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       "grep"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -190,7 +195,8 @@
 ;; find-tool-call-event
 (register-event-serializer! "tool.find.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       "find"
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
@@ -214,7 +220,8 @@
 ;; custom-tool-call-event
 (register-event-serializer! "tool.custom.called"
                             (lambda (evt)
-                              (hasheq 'toolName
+                              (hasheq 'schemaVersion 1
+                                      'toolName
                                       (tool-call-event-tool-name evt)
                                       'toolCallId
                                       (tool-call-event-tool-call-id evt)
