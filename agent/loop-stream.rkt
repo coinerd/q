@@ -43,9 +43,40 @@
 (define MAX-STREAM-CHUNKS (make-parameter 10000))
 
 (provide MAX-STREAM-CHUNKS
+         accumulate-stream-chunks
          stream-from-provider
          handle-cancellation
          build-stream-result)
+
+;; ============================================================
+;; accumulate-stream-chunks : pure helper (S11-F1)
+;; ============================================================
+
+;; Given a list of stream-chunks, return accumulated:
+;;   'text, 'tool-calls, 'thinking, 'usage, 'finish-reason
+(define (accumulate-stream-chunks chunks)
+  (define text-parts
+    (for/list ([c (in-list chunks)]
+               #:when (stream-chunk-delta-text c))
+      (stream-chunk-delta-text c)))
+  (define thinking-parts
+    (for/list ([c (in-list chunks)]
+               #:when (stream-chunk-delta-thinking c))
+      (stream-chunk-delta-thinking c)))
+  (define tool-calls (accumulate-tool-call-deltas chunks))
+  (define usage
+    (for/first ([c (in-list chunks)]
+                #:when (stream-chunk-usage c))
+      (stream-chunk-usage c)))
+  (define finish-reason
+    (for/first ([c (in-list chunks)]
+                #:when (stream-chunk-finish-reason c))
+      (stream-chunk-finish-reason c)))
+  (hasheq 'text (apply string-append text-parts)
+          'thinking (apply string-append thinking-parts)
+          'tool-calls tool-calls
+          'usage usage
+          'finish-reason finish-reason))
 
 ;; ============================================================
 ;; stream-from-provider
@@ -370,12 +401,13 @@
                              tools
                              provider
                              hook-dispatcher)
-  (define accumulated-text (hash-ref stream-data 'text))
-  (define all-chunks (hash-ref stream-data 'all-chunks))
+  (define all-chunks (reverse (hash-ref stream-data 'all-chunks)))
+  (define acc (accumulate-stream-chunks all-chunks))
+  (define accumulated-text (hash-ref acc 'text))
 
   (define text-part (make-text-part accumulated-text))
 
-  (define accumulated-tcs (accumulate-tool-call-deltas (reverse all-chunks)))
+  (define accumulated-tcs (hash-ref acc 'tool-calls))
 
   (define tool-call-parts
     (for/list ([tc (in-list accumulated-tcs)])
@@ -385,10 +417,7 @@
 
   (define content-parts (append (list text-part) tool-call-parts))
 
-  (define stream-usage
-    (for/first ([c (in-list all-chunks)]
-                #:when (stream-chunk-usage c))
-      (stream-chunk-usage c)))
+  (define stream-usage (hash-ref acc 'usage))
 
   (define effective-usage
     (if (usage-empty? stream-usage)
