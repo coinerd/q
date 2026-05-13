@@ -257,7 +257,7 @@
             'turnId
             (typed-event-turn-id evt)
             'schemaVersion
-            1))
+            (current-schema-version)))
   (define type-str (typed-event-type evt))
   (define serializer (lookup-event-serializer type-str))
   (when (not serializer)
@@ -274,9 +274,9 @@
   (define sid (hash-ref h 'sessionId ""))
   (define tid (hash-ref h 'turnId #f))
   (define schema-version (hash-ref h 'schemaVersion 1))
-  (when (> schema-version 1)
-    (log-warning "q/event-json: event type '~a' has schemaVersion ~a > current (1)"
-                 type schema-version))
+  (when (> schema-version (current-schema-version))
+    (log-warning "q/event-json: event type '~a' has schemaVersion ~a > current (~a)"
+                 type schema-version (current-schema-version)))
   (define deserializer (lookup-event-deserializer type))
   (when (and (not deserializer) (> (hash-count h) 4))
     (log-warning "q/event-json: no deserializer for event type '~a'" type))

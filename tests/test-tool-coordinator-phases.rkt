@@ -39,6 +39,29 @@
       (check-equal? (length blocked) 2)
       (check-true (tool-result? (first blocked)))
       (check-true (tool-result-is-error? (first blocked)))
-      (check-true (tool-result-is-error? (second blocked))))))
+      (check-true (tool-result-is-error? (second blocked))))
+
+    (test-case "classify-tool-results: unequal lengths truncates"
+      (define tcs
+        (list (make-tool-call "tc1" "bash" (hasheq))
+              (make-tool-call "tc2" "read" (hasheq))
+              (make-tool-call "tc3" "edit" (hasheq))))
+      (define results
+        (list (make-success-result "ok")
+              (make-error-result "failed")))
+      (define classified (classify-tool-results tcs results))
+      (check-equal? (length classified) 2)
+      (check-equal? (hash-ref (first classified) 'name) "bash")
+      (check-equal? (hash-ref (second classified) 'name) "read"))
+
+    (test-case "classify-tool-results: more results than calls truncates"
+      (define tcs
+        (list (make-tool-call "tc1" "bash" (hasheq))))
+      (define results
+        (list (make-success-result "ok")
+              (make-error-result "extra")))
+      (define classified (classify-tool-results tcs results))
+      (check-equal? (length classified) 1)
+      (check-equal? (hash-ref (first classified) 'status) 'completed))))
 
 (run-tests phase-suite 'verbose)
