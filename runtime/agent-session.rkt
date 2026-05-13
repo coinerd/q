@@ -89,16 +89,12 @@
          agent-session-index
          agent-session-extension-registry
          agent-session-model-name
-         ;; FEAT-65: runtime model control
-         set-model!
-         cycle-model!
          agent-session-system-instructions
          agent-session-compacting?
          agent-session-last-compaction-time
          agent-session-persisted?
          agent-session-pending-entries
          agent-session-prompt-running?
-         ensure-persisted!
          buffer-or-append!
          (contract-out ;; NOTE (W-01): This is the ONLY entry point that accepts raw hashes for backward compat.
           [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
@@ -114,6 +110,18 @@
           [session-history (-> agent-session? list?)]
           [session-active? (-> agent-session? boolean?)]
           [close-session! (-> agent-session? void?)])
+         ;; v0.42.2: Session control contracts (B5-01)
+         (contract-out
+          ;; Session controls
+          [set-model! (-> agent-session? string? void?)]
+          [cycle-model! (-> agent-session? any/c (or/c string? #f))]
+          [set-thinking-level! (-> agent-session? thinking-level? void?)]
+          [request-shutdown! (-> agent-session? void?)]
+          [force-shutdown! (-> agent-session? void?)]
+          [reset-shutdown-flags! (-> agent-session? void?)]
+          [shutdown-requested? (-> agent-session? boolean?)]
+          [force-shutdown-requested? (-> agent-session? boolean?)]
+          [ensure-persisted! (-> agent-session? void?)])
          ;; Pure helpers (W1 #4191)
          slice-entries-up-to
          make-session-struct
@@ -123,15 +131,9 @@
          thinking-level?
          thinking-level->budget
          agent-session-thinking-level
-         set-thinking-level!
          ;; Graceful shutdown (#1158)
          agent-session-shutdown-requested?
-         agent-session-force-shutdown?
-         request-shutdown!
-         force-shutdown!
-         shutdown-requested?
-         force-shutdown-requested?
-         reset-shutdown-flags!)
+         agent-session-force-shutdown?)
 
 ;; ============================================================
 ;; ARCH-05: struct definition moved to session-types.rkt

@@ -8,7 +8,9 @@
 ;; STABILITY: stable
 
 (require racket/match
-         "event-payloads.rkt")
+         "event-payloads.rkt"
+         (only-in "event-macro.rkt"
+                  lookup-event-deserializer))
 (provide payload->hash
          hash->payload
          payload-type-tag)
@@ -30,9 +32,25 @@
     [(hash? p) 'raw-hash]
     [else 'unknown]))
 
+;; Try macro-registered deserializer for typed events.
+;; Returns the decoded typed-event struct or #f if no deserializer found.
+(define (try-macro-registry h)
+  (define type-str (hash-ref h 'type #f))
+  (if type-str
+      (let ([deser (lookup-event-deserializer type-str)])
+        (if deser
+            (deser type-str
+                   (hash-ref h 'timestamp 0)
+                   (hash-ref h 'sessionId "")
+                   (hash-ref h 'turnId #f)
+                   h)
+            #f))
+      #f))
+
 ;; Decode a hash back into the appropriate payload struct.
 ;; Returns the hash as-is if no struct type matches (passthrough).
 ;; v0.28.11: Uses __type tag for reliable decode. No heuristic fallback (removed v0.40.1).
+;; v0.42.2: Added macro-typed-event fallback via lookup-event-deserializer.
 (define (hash->payload h)
   (cond
     [(not (hash? h)) h]
@@ -53,5 +71,9 @@
        ['gsd-mode (gsd-mode-payload (hash-ref h 'old-mode) (hash-ref h 'new-mode))]
        ['session-id (session-id-payload (hash-ref h 'sessionId))]
        [_ h])]
+    ;; Macro-registered typed events (v0.42.2)
+    [(hash-has-key? h 'type)
+     (define result (try-macro-registry h))
+     (or result h)]
     ;; No __type tag and no heuristic match -- return hash as-is (passthrough)
     [else h]))
