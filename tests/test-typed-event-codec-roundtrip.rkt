@@ -22,7 +22,20 @@
          "../agent/event-structs/session-events.rkt"
          "../agent/event-structs/stream-events.rkt"
          "../agent/event-structs/tool-events.rkt"
-         "../agent/event-structs/turn-events.rkt")
+         "../agent/event-structs/turn-events.rkt"
+         (only-in "../agent/event-structs/tool-events.rkt"
+                  tool-execution-start-event-tool-name
+                  tool-execution-start-event-tool-call-id)
+         (only-in "../agent/event-structs/provider-events.rkt"
+                  provider-request-event-model
+                  provider-request-event-provider)
+         (only-in "../agent/event-structs/stream-events.rkt"
+                  stream-delta-event-delta)
+         (only-in "../agent/event-structs/turn-events.rkt"
+                  turn-end-event-reason)
+         (only-in "../agent/event-structs/hook-events.rkt"
+                  message-blocked-event-hook
+                  message-blocked-event-reason))
 
 (define codec-suite
   (test-suite "typed event codec round-trip"
@@ -72,7 +85,9 @@
       (check-not-false des)
       (define h (ser evt))
       (define decoded (des "tool.execution.started" 1000.0 "s1" "t1" h))
-      (check-equal? (typed-event-type decoded) "tool.execution.started"))
+      (check-equal? (typed-event-type decoded) "tool.execution.started")
+      (check-equal? (tool-execution-start-event-tool-name decoded) "bash")
+      (check-equal? (tool-execution-start-event-tool-call-id decoded) "tc1"))
 
     (test-case "provider-request-event round-trips"
       (define evt (make-provider-request-event #:session-id "s1" #:turn-id "t1"
@@ -85,7 +100,9 @@
       (check-not-false des)
       (define h (ser evt))
       (define decoded (des "model.request.started" 1000.0 "s1" "t1" h))
-      (check-equal? (typed-event-type decoded) "model.request.started"))
+      (check-equal? (typed-event-type decoded) "model.request.started")
+      (check-equal? (provider-request-event-model decoded) "gpt-4")
+      (check-equal? (provider-request-event-provider decoded) "openai"))
 
     (test-case "stream-delta-event round-trips"
       (define evt (make-stream-delta-event #:session-id "s1" #:turn-id "t1"
@@ -97,7 +114,8 @@
       (check-not-false des)
       (define h (ser evt))
       (define decoded (des "model.stream.delta" 1000.0 "s1" "t1" h))
-      (check-equal? (typed-event-type decoded) "model.stream.delta"))
+      (check-equal? (typed-event-type decoded) "model.stream.delta")
+      (check-equal? (stream-delta-event-delta decoded) "hello"))
 
     (test-case "turn-end-event round-trips"
       (define evt (make-turn-end-event #:session-id "s1" #:turn-id "t1"
@@ -110,7 +128,8 @@
       (check-not-false des)
       (define h (ser evt))
       (define decoded (des "turn.completed" 1000.0 "s1" "t1" h))
-      (check-equal? (typed-event-type decoded) "turn.completed"))
+      (check-equal? (typed-event-type decoded) "turn.completed")
+      (check-equal? (turn-end-event-reason decoded) "completed"))
 
     (test-case "message-blocked-event round-trips"
       (define evt (make-message-blocked-event #:session-id "s1" #:turn-id "t1"
@@ -123,6 +142,8 @@
       (check-not-false des)
       (define h (ser evt))
       (define decoded (des "message.blocked" 1000.0 "s1" "t1" h))
-      (check-equal? (typed-event-type decoded) "message.blocked"))))
+      (check-equal? (typed-event-type decoded) "message.blocked")
+      (check-equal? (message-blocked-event-hook decoded) "message-start")
+      (check-equal? (message-blocked-event-reason decoded) "blocked"))))
 
 (run-tests codec-suite 'verbose)

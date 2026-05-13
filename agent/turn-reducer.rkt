@@ -12,7 +12,6 @@
 (require racket/contract
          racket/match
          "turn-model.rkt"
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
          (only-in "loop-messages.rkt" classify-hook-result))
 
 ;; ============================================================
