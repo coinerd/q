@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.42.0 — 2026-05-13
+
+### Added
+- **A3-01**: Struct-ified turn-reducer hash inputs
+  - NEW `stream-completion` struct (7 fields) replaces raw hash in `decide-after-stream`
+  - NEW `hook-stage-payload` struct (2 fields) replaces raw hash in `decide-turn-step`
+  - NEW `make-stream-completion` keyword constructor
+  - Updated `tests/test-turn-model.rkt`: +2 struct tests (now 12)
+  - Updated `tests/test-turn-reducer.rkt`: uses structs instead of hashes
+- **A9-01/02**: FSM property tests
+  - NEW `tests/test-fsm-property.rkt`: 16 tests covering turn + iteration FSMs
+  - Validates all transitions, happy paths, terminal states, invalid transitions, reachability
+- **B10-04**: Codec round-trip tests for macro-registered events
+  - NEW `tests/test-typed-event-codec-roundtrip.rkt`: 9 tests
+  - Verifies serializer/deserializer registry populated (30+ entries each)
+  - Round-trip tests for 7 representative event types
+
+### Changed
+- **A1-02**: Dedup `classify-hook-result` -- removed from `turn-reducer.rkt`, now imports from `loop-messages.rkt`
+- **C11-03**: Removed redundant `current-scheduler-strategy` parameter from `scheduler.rkt`
+  - `run-tool-batch` now defaults to `(default-scheduler-strategy)` directly
+
 ## v0.41.5 — 2026-05-13
 
 ### Fixed

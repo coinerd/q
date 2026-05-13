@@ -60,7 +60,6 @@
 ;; ── Result struct ──
 (provide (struct-out scheduler-result)
          ;; R-15: Strategy support
-         current-scheduler-strategy
          (struct-out preflight-entry)
          run-preflight
          (contract-out [run-tool-batch
@@ -74,9 +73,6 @@
 ;; ============================================================
 ;; Scheduler result struct
 ;; ============================================================
-
-;; R-15: Pluggable strategy parameter
-(define current-scheduler-strategy (make-parameter (default-scheduler-strategy)))
 
 (struct scheduler-result (results metadata) #:transparent)
 
@@ -379,7 +375,7 @@
                         #:parallel? [parallel? #f]
                         #:strategy [strategy #f])
   ;; R-15: Use provided strategy or current parameter
-  (define strat (or strategy (current-scheduler-strategy)))
+  (define strat (or strategy (default-scheduler-strategy)))
   ;; Resolve event publisher from exec-context (may be #f)
   (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
 

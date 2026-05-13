@@ -96,6 +96,29 @@
         'cancelled))
 
 ;; ============================================================
+;; Stream completion -- replaces raw hash for decide-after-stream
+;; ============================================================
+
+(struct stream-completion
+        (cancelled? cancel-reason text tool-calls usage model all-chunks)
+  #:transparent)
+
+(define (make-stream-completion #:cancelled? [cancelled? #f]
+                                #:cancel-reason [cancel-reason #f]
+                                #:text [text ""]
+                                #:tool-calls [tool-calls '()]
+                                #:usage [usage (hasheq)]
+                                #:model [model ""]
+                                #:all-chunks [all-chunks '()])
+  (stream-completion cancelled? cancel-reason text tool-calls usage model all-chunks))
+
+;; ============================================================
+;; Hook stage payload -- replaces raw hash for decide-turn-step
+;; ============================================================
+
+(struct hook-stage-payload (stage result) #:transparent)
+
+;; ============================================================
 ;; FSM transition -- pure FSM computation
 ;; ============================================================
 
@@ -140,4 +163,14 @@
          decision-begin-stream?
          decision-blocked?
          decision-complete?
-         decision-cancelled?)
+         decision-cancelled?
+         ;; Stream completion
+         (contract-out (struct stream-completion
+                               ([cancelled? boolean?] [cancel-reason (or/c string? #f)]
+                                                      [text string?] [tool-calls list?]
+                                                      [usage hash?] [model string?]
+                                                      [all-chunks list?])))
+         make-stream-completion
+         ;; Hook stage payload
+         (contract-out (struct hook-stage-payload ([stage symbol?] [result any/c])))
+)

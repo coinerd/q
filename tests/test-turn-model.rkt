@@ -74,6 +74,22 @@
       (check-false (turn-start? hr))
       (define sc (make-turn-stream-complete (hasheq 'text "done")))
       (check-true (turn-stream-complete? sc))
-      (check-false (turn-cancel? sc)))))
+      (check-false (turn-cancel? sc)))
+
+    (test-case "stream-completion construction"
+      (define sc (make-stream-completion #:cancelled? #t #:cancel-reason "timeout"
+                                         #:text "hello" #:tool-calls '()
+                                         #:usage (hasheq 'tokens 10) #:model "gpt-4"))
+      (check-true (stream-completion? sc))
+      (check-true (stream-completion-cancelled? sc))
+      (check-equal? (stream-completion-cancel-reason sc) "timeout")
+      (check-equal? (stream-completion-text sc) "hello")
+      (check-equal? (stream-completion-model sc) "gpt-4"))
+
+    (test-case "hook-stage-payload construction"
+      (define hsp (hook-stage-payload 'pre (hasheq 'result "ok")))
+      (check-true (hook-stage-payload? hsp))
+      (check-equal? (hook-stage-payload-stage hsp) 'pre)
+      (check-equal? (hash-ref (hook-stage-payload-result hsp) 'result) "ok"))))
 
 (run-tests turn-model-suite 'verbose)
