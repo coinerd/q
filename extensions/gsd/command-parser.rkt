@@ -46,19 +46,23 @@
 (struct gsd-command-spec (canonical description aliases) #:transparent)
 
 (define gsd-command-specs
-  (list
-   (gsd-command-spec "/plan"      "Display current GSD plan"            '(("/p")))
-   (gsd-command-spec "/state"     "Display current project state"       '(("/s")))
-   (gsd-command-spec "/handoff"   "Display handoff status"              '(("/ho")))
-   (gsd-command-spec "/go"        "Start implementing the current plan" '(("/implement") ("/i")))
-   (gsd-command-spec "/wave-done" "Mark wave N complete, update PLAN.md and STATE.md" '(("/wd")))
-   (gsd-command-spec "/done"      "Archive completed plan"              '(("/d")))))
+  (list (gsd-command-spec "/plan" "Display current GSD plan" '("/p"))
+        (gsd-command-spec "/state" "Display current project state" '("/s"))
+        (gsd-command-spec "/handoff" "Display handoff status" '("/ho"))
+        (gsd-command-spec "/go" "Start implementing the current plan" '("/implement" "/i"))
+        (gsd-command-spec "/wave-done" "Mark wave N complete" '("/wd"))
+        (gsd-command-spec "/done" "Archive completed plan" '("/d"))
+        (gsd-command-spec "/replan" "Return to planning phase" '())
+        (gsd-command-spec "/skip" "Skip a wave (usage: /skip N)" '())
+        (gsd-command-spec "/reset" "Reset GSD to idle state" '())
+        (gsd-command-spec "/gsd" "Show GSD workflow status" '())))
 
 (define (aliases-for canonical)
   (define spec
-    (findf (lambda (s) (equal? (gsd-command-spec-canonical s) canonical))
-           gsd-command-specs))
-  (if spec (cons canonical (apply append (gsd-command-spec-aliases spec))) (list canonical)))
+    (findf (lambda (s) (equal? (gsd-command-spec-canonical s) canonical)) gsd-command-specs))
+  (if spec
+      (cons canonical (gsd-command-spec-aliases spec))
+      (list canonical)))
 
 ;; -- Pure parser --
 
@@ -76,15 +80,15 @@
 (define (parse-gsd-command cmd input-text)
   (define args-text (extract-cmd-args input-text))
   (cond
-    [(member cmd (aliases-for "/go"))        (gsd-cmd-go cmd args-text args-text)]
+    [(member cmd (aliases-for "/go")) (gsd-cmd-go cmd args-text args-text)]
     [(member cmd (aliases-for "/plan"))
      (gsd-cmd-plan cmd args-text (if (> (string-length args-text) 0) args-text #f))]
-    [(member cmd (aliases-for "/state"))     (gsd-cmd-artifact cmd args-text "STATE")]
-    [(member cmd (aliases-for "/handoff"))   (gsd-cmd-artifact cmd args-text "HANDOFF")]
-    [(equal? cmd "/gsd")                     (gsd-cmd-status cmd args-text)]
-    [(equal? cmd "/replan")                  (gsd-cmd-replan cmd args-text)]
-    [(equal? cmd "/skip")                    (gsd-cmd-skip cmd args-text args-text)]
-    [(equal? cmd "/reset")                   (gsd-cmd-reset cmd args-text)]
+    [(member cmd (aliases-for "/state")) (gsd-cmd-artifact cmd args-text "STATE")]
+    [(member cmd (aliases-for "/handoff")) (gsd-cmd-artifact cmd args-text "HANDOFF")]
+    [(equal? cmd "/gsd") (gsd-cmd-status cmd args-text)]
+    [(equal? cmd "/replan") (gsd-cmd-replan cmd args-text)]
+    [(equal? cmd "/skip") (gsd-cmd-skip cmd args-text args-text)]
+    [(equal? cmd "/reset") (gsd-cmd-reset cmd args-text)]
     [(member cmd (aliases-for "/wave-done")) (gsd-cmd-wave-done cmd args-text args-text)]
     [(equal? cmd "/done")
      (gsd-cmd-done cmd args-text (and args-text (string-contains? args-text "--force")))]

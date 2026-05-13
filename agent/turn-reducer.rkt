@@ -12,8 +12,7 @@
 (require racket/contract
          racket/match
          "turn-model.rkt"
-         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload)
-         (only-in "../util/cancellation.rkt" cancellation-token-cancelled?))
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
 ;; ============================================================
 ;; Hook classification (mirror of loop-messages.rkt)
@@ -81,11 +80,11 @@
 ;; Provide
 ;; ============================================================
 
-(provide (contract-out
-          [classify-hook-result (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]
-          [decide-after-start (-> any/c turn-decision?)]
-          [decide-after-context (-> any/c turn-decision?)]
-          [decide-after-pre-hook (-> any/c turn-decision?)]
-          [decide-after-msg-hook (-> any/c turn-decision?)]
-          [decide-after-stream (-> hash? turn-decision?)]
-          [decide-turn-step (-> turn-command? turn-decision?)]))
+(provide (contract-out [classify-hook-result
+                        (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]
+                       [decide-after-start (-> any/c turn-decision?)]
+                       [decide-after-context (-> any/c turn-decision?)]
+                       [decide-after-pre-hook (-> any/c turn-decision?)]
+                       [decide-after-msg-hook (-> any/c turn-decision?)]
+                       [decide-after-stream (-> hash? turn-decision?)]
+                       [decide-turn-step (-> turn-command? turn-decision?)]))

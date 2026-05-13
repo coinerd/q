@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.41.4 — 2026-05-13
+
+### Fixed
+- **F1 CRITICAL**: Fixed R2 event payload guard -- was inert in production due to symbol/string mismatch
+  - `event-payload-contract` now coerces string names to symbols before hasheq lookup
+  - All 13 contracted event payloads are now validated at runtime
+- **F2**: Removed dead `cancellation-token-cancelled?` import from `turn-reducer.rkt`
+- **F3**: Added `contract-out` field contracts for `turn-context` struct
+- **F4**: Added 4 missing commands (`/replan`, `/skip`, `/reset`, `/gsd`) to `gsd-command-specs`
+  - Removed separate `ext-register-command!` calls in `register-gsd-commands`
+  - Fixed alias format: flat string lists with direct `aliases-for` lookup
+
+### Added
+- **F5**: 6 new decision-tag tests in `test-turn-model.rkt` (now 10 total, was 4)
+- **F6**: 6 new edge-case tests in `test-turn-reducer.rkt` (now 17 total, was 11)
+- **F7**: Updated R2 wiring tests to use string event names (production path)
+  - Tests now verify both symbol and string paths for `event-payload-contract`
+
 ## v0.41.3 — 2026-05-13
 
 ### Changed

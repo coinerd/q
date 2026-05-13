@@ -35,6 +35,45 @@
       (define tx (fsm-transition 'idle 'processing 'next))
       (check-equal? (fsm-transition-from-state tx) 'idle)
       (check-equal? (fsm-transition-to-state tx) 'processing)
-      (check-equal? (fsm-transition-action tx) 'next))))
+      (check-equal? (fsm-transition-action tx) 'next))
+
+    (test-case "decision-emit-start constructor and predicate"
+      (define d (make-decision-emit-start (hasheq 'session-id "s1")))
+      (check-true (decision-emit-start? d))
+      (check-false (decision-blocked? d))
+      (check-equal? (turn-decision-tag d) 'emit-start))
+
+    (test-case "decision-build-context constructor and predicate"
+      (define d (make-decision-build-context (hasheq 'messages '())))
+      (check-true (decision-build-context? d))
+      (check-false (decision-emit-start? d))
+      (check-equal? (turn-decision-tag d) 'build-context))
+
+    (test-case "decision-check-pre-hook and decision-check-msg-hook"
+      (define d1 (make-decision-check-pre-hook (hasheq)))
+      (check-true (decision-check-pre-hook? d1))
+      (define d2 (make-decision-check-msg-hook (hasheq)))
+      (check-true (decision-check-msg-hook? d2))
+      (check-false (decision-check-pre-hook? d2)))
+
+    (test-case "decision-begin-stream constructor and predicate"
+      (define d (make-decision-begin-stream (hasheq 'model "test")))
+      (check-true (decision-begin-stream? d))
+      (check-false (decision-cancelled? d))
+      (check-equal? (turn-decision-tag d) 'begin-stream))
+
+    (test-case "decision-cancelled constructor and predicate"
+      (define d (make-decision-cancelled "user-abort"))
+      (check-true (decision-cancelled? d))
+      (check-false (decision-complete? d))
+      (check-equal? (turn-decision-tag d) 'cancelled))
+
+    (test-case "turn-command hook-result and stream-complete constructors"
+      (define hr (make-turn-hook-result (hasheq 'stage 'pre)))
+      (check-true (turn-hook-result? hr))
+      (check-false (turn-start? hr))
+      (define sc (make-turn-stream-complete (hasheq 'text "done")))
+      (check-true (turn-stream-complete? sc))
+      (check-false (turn-cancel? sc)))))
 
 (run-tests turn-model-suite 'verbose)

@@ -91,13 +91,7 @@
                            (gsd-command-spec-description spec)
                            'general
                            '()
-                           (map (lambda (a) (substring a 1))
-                                (gsd-command-spec-aliases spec))))
-  ;; Register commands not in gsd-command-specs (no aliases)
-  (ext-register-command! ctx "/replan" "Return to planning phase" 'general '() '())
-  (ext-register-command! ctx "/skip" "Skip a wave (usage: /skip N)" 'general '() '())
-  (ext-register-command! ctx "/reset" "Reset GSD to idle state" 'general '() '())
-  (ext-register-command! ctx "/gsd" "Show GSD workflow status" 'general '() '())
+                           (map (lambda (a) (substring a 1)) (gsd-command-spec-aliases spec))))
   (hook-pass #f))
 
 ;; ============================================================
@@ -109,20 +103,20 @@
 ;; ZERO cmd-* calls -- side effects handled by caller (handle-execute-command).
 (define (dispatch-gsd-command parsed input-text base-dir)
   (cond
-    [(gsd-cmd-go? parsed)        (values 'go (list base-dir input-text))]
-    [(gsd-cmd-status? parsed)    (values 'status #f)]
-    [(gsd-cmd-replan? parsed)    (values 'replan parsed)]
-    [(gsd-cmd-skip? parsed)      (values 'skip parsed)]
-    [(gsd-cmd-reset? parsed)     (values 'reset parsed)]
+    [(gsd-cmd-go? parsed) (values 'go (list base-dir input-text))]
+    [(gsd-cmd-status? parsed) (values 'status #f)]
+    [(gsd-cmd-replan? parsed) (values 'replan parsed)]
+    [(gsd-cmd-skip? parsed) (values 'skip parsed)]
+    [(gsd-cmd-reset? parsed) (values 'reset parsed)]
     [(gsd-cmd-wave-done? parsed) (values 'wave-done parsed)]
-    [(gsd-cmd-done? parsed)      (values 'done parsed)]
+    [(gsd-cmd-done? parsed) (values 'done parsed)]
     [(gsd-cmd-plan? parsed)
      (define plan-text (gsd-cmd-plan-plan-text parsed))
      (if plan-text
          (values 'plan-submit plan-text)
          (values 'artifact parsed))]
-    [(gsd-cmd-artifact? parsed)  (values 'artifact parsed)]
-    [else                        (values 'artifact parsed)]))
+    [(gsd-cmd-artifact? parsed) (values 'artifact parsed)]
+    [else (values 'artifact parsed)]))
 
 ;; R-04/R-16: Refactored to parse->dispatch.
 ;; Pure parsing is in command-parser.rkt; dispatch-gsd-command routes;
@@ -175,12 +169,9 @@
                                            (hash-ref data 'archive-path "")
                                            ""))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
-    [(plan-submit)
-     (handle-plan-submit result base-dir input-text parsed)]
-    [(artifact)
-     (handle-artifact-command cmd input-text base-dir payload)]
-    [else
-     (handle-artifact-command cmd input-text base-dir payload)]))
+    [(plan-submit) (handle-plan-submit result base-dir input-text parsed)]
+    [(artifact) (handle-artifact-command cmd input-text base-dir payload)]
+    [else (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; ============================================================
 ;; /go decomposition helpers (S5-F1)
@@ -201,45 +192,56 @@
      (define norm-result (normalize-plan plan))
      (match norm-result
        [(? string?)
-        (list 'error (string-append "Plan normalization failed:\n" norm-result "\n\nFix the plan before using /go."))]
+        (list 'error
+              (string-append "Plan normalization failed:\n"
+                             norm-result
+                             "\n\nFix the plan before using /go."))]
        [_
         (events:emit-gsd-event! 'gsd.plan.normalized
                                 (hasheq 'wave-count (length (gsd-normalized-plan-waves norm-result))))
         (define validation (validate-normalized-plan norm-result))
         (define validated-plan? (gsd-validated-plan? validation))
         (events:emit-gsd-event! 'gsd.plan.validated
-                                (hasheq 'valid? validated-plan?
-                                        'error-count (if validated-plan? 0 (length (validation-errors validation)))
-                                        'warning-count (if validated-plan? 0 (length (validation-warnings validation)))))
+                                (hasheq 'valid?
+                                        validated-plan?
+                                        'error-count
+                                        (if validated-plan?
+                                            0
+                                            (length (validation-errors validation)))
+                                        'warning-count
+                                        (if validated-plan?
+                                            0
+                                            (length (validation-warnings validation)))))
         (match validated-plan?
-          [#f (list 'error (string-append "Plan validation failed:\n"
-                                           (format-validation-report validation)
-                                           "\n\nFix the plan before using /go."))]
+          [#f
+           (list 'error
+                 (string-append "Plan validation failed:\n"
+                                (format-validation-report validation)
+                                "\n\nFix the plan before using /go."))]
           [_ (list 'ok plan norm-result validation)])])]))
 
 ;; launch-wave-executor : gsd-validated-plan? gsd-plan? path? -> (or/c (list/c 'ok any/c (listof exact-nonnegative-integer?)) (list/c 'error string?))
 ;; Configure state machine and create wave executor inside a transaction.
 (define (launch-wave-executor validation plan base-dir)
   (define-values (executor wave-indices)
-    (with-gsd-transaction
-     "go"
-     (lambda ()
-       (set-gsd-mode! 'executing)
-       (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
-       (set-edit-limit! 1200)
-       (define wis
-         (for/list ([w (gsd-plan-waves plan)])
-           (gsd-wave-index w)))
-       (when (not (null? wis))
-         (gsm-set-total-waves! (add1 (apply max wis))))
-       (gsm-set-current-wave! 0)
-       (define exec (make-wave-executor-from-validated validation))
-       (gsm-set-wave-executor! exec)
-       (values exec wis))
-     (lambda (e snap)
-       (events:emit-gsd-event!
-        'gsd.mode.changed
-        (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
+    (with-gsd-transaction "go"
+                          (lambda ()
+                            (set-gsd-mode! 'executing)
+                            (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
+                            (set-edit-limit! 1200)
+                            (define wis
+                              (for/list ([w (gsd-plan-waves plan)])
+                                (gsd-wave-index w)))
+                            (when (not (null? wis))
+                              (gsm-set-total-waves! (add1 (apply max wis))))
+                            (gsm-set-current-wave! 0)
+                            (define exec (make-wave-executor-from-validated validation))
+                            (gsm-set-wave-executor! exec)
+                            (values exec wis))
+                          (lambda (e snap)
+                            (events:emit-gsd-event!
+                             'gsd.mode.changed
+                             (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
   (match executor
     [(? gsd-command-result?) (list 'error (gsd-command-result-message executor))]
     [_ (list 'ok executor wave-indices)]))
@@ -286,8 +288,7 @@
                  [parts (string-split trimmed)])
             (if (>= (length parts) 2)
                 (let ([maybe-num (string-trim (string-join (cdr parts) " "))])
-                  (if (and (> (string-length maybe-num) 0)
-                           (regexp-match? #rx"^[0-9]+$" maybe-num))
+                  (if (and (> (string-length maybe-num) 0) (regexp-match? #rx"^[0-9]+$" maybe-num))
                       (format "\nStart with wave ~a." maybe-num)
                       ""))
                 "")))

@@ -115,28 +115,31 @@
       (check-false (iteration-decision-payload/c (hasheq 'iteration 1)))
       (check-false (iteration-decision-payload/c (hasheq 'termination 'completed))))
 
-    ;; ── R2 wiring tests ──
+    ;; ── R2 wiring tests (F7: test both symbol and string paths) ──
 
-    (test-case "event-payload-contract maps agent.blocked"
+    (test-case "event-payload-contract maps agent.blocked (symbol)"
       (check-pred procedure? (event-payload-contract 'agent.blocked)))
 
-    (test-case "event-payload-contract maps turn.cancelled"
-      (check-pred procedure? (event-payload-contract 'turn.cancelled)))
+    (test-case "event-payload-contract maps agent.blocked (string)"
+      (check-pred procedure? (event-payload-contract "agent.blocked")))
+
+    (test-case "event-payload-contract maps turn.cancelled (symbol and string)"
+      (check-pred procedure? (event-payload-contract 'turn.cancelled))
+      (check-pred procedure? (event-payload-contract "turn.cancelled")))
 
     (test-case "event-payload-contract returns #f for unknown event"
-      (check-false (event-payload-contract 'unknown.event)))
+      (check-false (event-payload-contract 'unknown.event))
+      (check-false (event-payload-contract "unknown.event")))
 
-    (test-case "emit-session-event! accepts valid contracted payload"
+    (test-case "emit-session-event! accepts valid contracted payload (string event name)"
       (define bus (make-event-bus))
-      (check-not-exn
-       (lambda ()
-         (emit-session-event! bus "sid" 'agent.blocked (hasheq 'reason "hook")))))
+      (check-not-exn (lambda ()
+                       (emit-session-event! bus "sid" "agent.blocked" (hasheq 'reason "hook")))))
 
-    (test-case "emit-session-event! warns on invalid contracted payload"
+    (test-case "emit-session-event! warns on invalid contracted payload (string event name)"
       (define bus (make-event-bus))
       ;; Should log warning but not raise
-      (check-not-exn
-       (lambda ()
-         (emit-session-event! bus "sid" 'agent.blocked (hasheq 'other "data")))))))
+      (check-not-exn (lambda ()
+                       (emit-session-event! bus "sid" "agent.blocked" (hasheq 'other "data")))))))
 
 (run-tests event-contract-tests)

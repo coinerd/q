@@ -14,13 +14,7 @@
 ;; ============================================================
 
 (struct turn-context
-        (session-id
-         iteration
-         messages
-         active-tools
-         model-config
-         budget-ctx
-         extension-registry)
+        (session-id iteration messages active-tools model-config budget-ctx extension-registry)
   #:transparent)
 
 ;; ============================================================
@@ -48,8 +42,7 @@
 (define (turn-cancel? cmd)
   (and (turn-command? cmd) (eq? (turn-command-tag cmd) 'cancel)))
 
-(define turn-command-tag/c
-  (or/c 'start 'hook-result 'stream-complete 'cancel))
+(define turn-command-tag/c (or/c 'start 'hook-result 'stream-complete 'cancel))
 
 ;; ============================================================
 ;; Turn decision -- discriminated union (8 tags)
@@ -93,8 +86,14 @@
   (and (turn-decision? d) (eq? (turn-decision-tag d) 'cancelled)))
 
 (define turn-decision-tag/c
-  (or/c 'emit-start 'build-context 'check-pre-hook 'check-msg-hook
-        'begin-stream 'blocked 'complete 'cancelled))
+  (or/c 'emit-start
+        'build-context
+        'check-pre-hook
+        'check-msg-hook
+        'begin-stream
+        'blocked
+        'complete
+        'cancelled))
 
 ;; ============================================================
 ;; FSM transition -- pure FSM computation
@@ -106,10 +105,18 @@
 ;; Provide
 ;; ============================================================
 
-(provide (struct-out turn-context)
+(provide (contract-out (struct turn-context
+                               ([session-id string?] [iteration exact-nonnegative-integer?]
+                                                     [messages list?]
+                                                     [active-tools list?]
+                                                     [model-config hash?]
+                                                     [budget-ctx hash?]
+                                                     [extension-registry any/c])))
          (contract-out (struct turn-command ([tag turn-command-tag/c] [payload any/c])))
-         (contract-out (struct turn-decision ([tag turn-decision-tag/c] [payload any/c] [metadata hash?])))
-         (contract-out (struct fsm-transition ([from-state symbol?] [to-state symbol?] [action symbol?])))
+         (contract-out (struct turn-decision
+                               ([tag turn-decision-tag/c] [payload any/c] [metadata hash?])))
+         (contract-out (struct fsm-transition
+                               ([from-state symbol?] [to-state symbol?] [action symbol?])))
          make-turn-start
          make-turn-hook-result
          make-turn-stream-complete
