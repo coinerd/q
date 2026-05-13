@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.42.3 — 2026-05-13
+
+### Added
+- **C8-01**: Unified tool-call-intent AST for provider tool-call data
+  - NEW `tool-call-intent` struct in `llm/model.rkt` (Typed Racket): `id`, `name`, `arguments`
+  - NEW `make-tool-call-intent` constructor, `tool-call-intent->hash`, `hash->tool-call-intent`
+  - Shadow validation in OpenAI, Anthropic, Gemini providers: round-trip check + log-warning on mismatch
+  - NEW `tests/test-tool-call-intent.rkt`: 8 tests (5 round-trip, 3 provider shadow)
+
 ## v0.42.0 — 2026-05-13
 
 ### Added
