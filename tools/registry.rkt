@@ -3,7 +3,8 @@
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
 
-(require racket/set
+(require racket/contract
+         racket/set
          (only-in racket/base make-semaphore call-with-semaphore)
          (only-in "tool-struct.rkt"
                   tool?
@@ -13,21 +14,23 @@
                   tool-prompt-snippet
                   tool-prompt-guidelines))
 
-(provide tool-registry?
-         make-tool-registry
-         tool-registry-tools
-         register-tool!
-         unregister-tool!
-         lookup-tool
-         list-tools
-         tool-names
-         tool->jsexpr
-         list-active-tools
-         list-active-tools-jsexpr
-         list-tools-jsexpr
-         set-active-tools!
-         tool-active?
-         with-registry-lock)
+(provide
+ (contract-out
+  [make-tool-registry (-> tool-registry?)]
+  [tool-registry-tools (-> tool-registry? (listof tool?))]
+  [register-tool! (-> tool-registry? tool? void?)]
+  [unregister-tool! (-> tool-registry? string? void?)]
+  [lookup-tool (-> tool-registry? (or/c string? #f) (or/c tool? #f))]
+  [list-tools (-> tool-registry? (listof tool?))]
+  [tool-names (-> tool-registry? (listof string?))]
+  [tool->jsexpr (-> tool? hash?)]
+  [list-active-tools (-> tool-registry? (listof tool?))]
+  [list-active-tools-jsexpr (-> tool-registry? (listof hash?))]
+  [list-tools-jsexpr (-> tool-registry? (listof hash?))]
+  [set-active-tools! (-> tool-registry? (or/c (listof string?) #f) void?)]
+  [tool-active? (-> tool-registry? string? boolean?)]
+  [with-registry-lock (-> tool-registry? procedure? any)])
+ tool-registry?)
 
 ;; ============================================================
 ;; Tool registry

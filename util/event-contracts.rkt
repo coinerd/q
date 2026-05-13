@@ -135,3 +135,28 @@
   (and/c hash?
          (hash/c symbol? any/c #:immutable #t)
          (lambda (h) (and (hash-has-key? h 'error) (string? (hash-ref h 'error #f))))))
+
+;; ============================================================
+;; Event name -> contract mapping (R2 wiring)
+;; ============================================================
+
+(define event-payload-contracts
+  (hasheq 'agent.blocked reason-payload/c
+          'agent.started session-id-payload/c
+          'turn.blocked reason-payload/c
+          'turn.cancelled turn-cancelled-payload/c
+          'iteration.decision iteration-decision-payload/c
+          'context.compacted compact-result-payload/c
+          'context.budget-exceeded budget-payload/c
+          'message.injected.drain injection-count-payload/c
+          'tool.error error-detail-payload/c
+          'stream.delta delta-payload/c
+          'provider.error error-type-payload/c
+          'provider.response.duration duration-payload/c
+          'model.name model-name-payload/c))
+
+(define (event-payload-contract name)
+  (hash-ref event-payload-contracts name #f))
+
+(provide event-payload-contracts
+         event-payload-contract)

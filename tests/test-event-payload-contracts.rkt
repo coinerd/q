@@ -11,7 +11,8 @@
 (require rackunit
          rackunit/text-ui
          "../util/event-contracts.rkt"
-         "../util/event-contracts.rkt")
+         "../agent/event-bus.rkt"
+         "../runtime/runtime-helpers.rkt")
 
 (define event-contract-tests
   (test-suite "Event Payload Contracts (v0.22.8 W3)"
@@ -112,6 +113,30 @@
 
     (test-case "iteration-decision-payload/c rejects missing keys"
       (check-false (iteration-decision-payload/c (hasheq 'iteration 1)))
-      (check-false (iteration-decision-payload/c (hasheq 'termination 'completed))))))
+      (check-false (iteration-decision-payload/c (hasheq 'termination 'completed))))
+
+    ;; ── R2 wiring tests ──
+
+    (test-case "event-payload-contract maps agent.blocked"
+      (check-pred procedure? (event-payload-contract 'agent.blocked)))
+
+    (test-case "event-payload-contract maps turn.cancelled"
+      (check-pred procedure? (event-payload-contract 'turn.cancelled)))
+
+    (test-case "event-payload-contract returns #f for unknown event"
+      (check-false (event-payload-contract 'unknown.event)))
+
+    (test-case "emit-session-event! accepts valid contracted payload"
+      (define bus (make-event-bus))
+      (check-not-exn
+       (lambda ()
+         (emit-session-event! bus "sid" 'agent.blocked (hasheq 'reason "hook")))))
+
+    (test-case "emit-session-event! warns on invalid contracted payload"
+      (define bus (make-event-bus))
+      ;; Should log warning but not raise
+      (check-not-exn
+       (lambda ()
+         (emit-session-event! bus "sid" 'agent.blocked (hasheq 'other "data")))))))
 
 (run-tests event-contract-tests)
