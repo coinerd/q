@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-spawn-subagent-integration.rkt — Wave 0 integration tests
 ;;
 ;; #1203: Subagent Real Provider Integration

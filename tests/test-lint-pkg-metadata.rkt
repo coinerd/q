@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-lint-pkg-metadata.rkt — Tests for scripts/lint-pkg-metadata.rkt
 ;;
 ;; FIX-09: Dedicated tests for lint-info-rkt and lint-index functions

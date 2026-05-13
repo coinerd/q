@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/test-tool-bash-security.rkt — SEC-01 bypass pattern tests + SEC-13
 ;;
 ;; Tests for destructive-command? bypass-vector patterns and

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-renderer.rkt — Tests for tui/renderer module
 ;;
 ;; Tests the ubuf-based renderer using a mock ubuf implementation.

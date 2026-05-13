@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-keymap-unified.rkt -- Keymap unification tests (W-08)
 
 (require rackunit

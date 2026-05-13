@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/mock-failure-provider.rkt — Mock provider with failure injection
 ;;
 ;; Wraps mock-provider.rkt patterns with configurable failure modes

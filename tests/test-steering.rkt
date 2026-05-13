@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-steering.rkt — Tests for exploration steering behavior
 ;; v0.18.0: Context-aware exploration steering with same-file dedup
 

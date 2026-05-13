@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/dogfood/test-dogfood-infrastructure.rkt
 ;; v0.18.4 Wave 1: Dogfood infrastructure tests
 

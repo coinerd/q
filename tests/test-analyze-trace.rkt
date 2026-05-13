@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-analyze-trace.rkt — tests for scripts/analyze-trace.rkt
 ;;
 ;; Tests metrics extraction from session messages.

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-tiers.rkt — tests for extensions/tiers.rkt
 ;;
 ;; Covers:

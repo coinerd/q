@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-wiring-run-modes.rkt — Tests for wiring/run-modes.rkt
 ;;
 ;; Tests mode-for-config, load-extensions-from-dir!, and module exports.

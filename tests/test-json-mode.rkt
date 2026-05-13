@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-json-mode.rkt — TDD tests for JSON mode interface
 ;;
 ;; Tests cover:

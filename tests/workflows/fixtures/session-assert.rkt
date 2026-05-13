@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/fixtures/session-assert.rkt — JSONL log assertions
 ;;
 ;; Assertion helpers for verifying session JSONL files.

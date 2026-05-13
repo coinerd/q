@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-event-struct-coverage.rkt — Counts emission sites vs defined structs
 ;; v0.29.2 W0: Test scaffolding (coverage check function does not exist yet — tests should FAIL)
 

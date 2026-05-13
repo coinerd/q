@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-handle-user-submit.rkt — T-01: Test handle-user-submit! branches
 ;;
 ;; Tests the 3 branches of handle-user-submit! extracted from tui-render-loop.rkt:

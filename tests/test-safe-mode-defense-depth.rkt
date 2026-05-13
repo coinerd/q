@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-safe-mode-defense-depth.rkt
 ;; Test defense-in-depth for #reader/#lang injection prevention
 

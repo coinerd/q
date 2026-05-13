@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-github-milestone-ops.rkt — tests for milestone/board handler sub-module
 
 (require rackunit

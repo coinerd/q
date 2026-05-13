@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-wave4-markdown-theme.rkt — Wave 4 edge case tests
 ;;                                               for markdown, ANSI wrap, theme
 ;;

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../agent/event-structs/typed-event-predicates.rkt"
          "../agent/event-structs/turn-events.rkt"

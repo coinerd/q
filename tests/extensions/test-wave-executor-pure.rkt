@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: pure
+
 ;; tests/extensions/test-wave-executor-pure.rkt — Tests for pure wave-executor functions
 ;; Tests compute-next-wave-statuses pure function (v0.31.5 W0)
 

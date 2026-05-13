@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/render.rkt — Tests for tui/render module
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-check-deps.rkt — tests for scripts/check-deps.rkt
 
 (require rackunit

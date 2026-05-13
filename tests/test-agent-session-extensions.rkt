@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-agent-session-extensions.rkt — extension-registry and model-name
 ;;
 ;; Split from test-agent-session.rkt (T3-01, v0.16.1).

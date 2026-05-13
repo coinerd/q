@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: contract
+
 ;; tests/test-contracts.rkt — Boundary contract tests
 ;;
 ;; Verifies that sdk-public.rkt provides the correct contracted API

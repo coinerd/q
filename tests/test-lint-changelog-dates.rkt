@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-lint-changelog-dates.rkt — Unit tests for lint-changelog-dates.rkt
 
 (require rackunit

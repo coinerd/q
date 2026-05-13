@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/gsd-test-helpers.rkt — Test helper for GSD context
 ;;
 ;; Re-exports make-gsd-context from session-state.rkt for test convenience.

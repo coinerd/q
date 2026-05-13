@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-property-security.rkt — property-based tests for security-critical modules
 ;;
 ;; TH-04: Uses quickcheck for invariant testing on:

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-mid-turn-compaction-integration.rkt — TDD tests for v0.28.22 W0
 ;; Integration tests: mid-turn compaction wired through iteration loop
 

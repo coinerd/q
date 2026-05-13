@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-workflow-harness.rkt — Smoke tests for the TUI workflow
 ;; harness infrastructure (Wave 1, W1.3 #877).
 ;;

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          (except-in "../scripts/benchmark/report.rkt" compare-reports)
          "../scripts/benchmark/scorer.rkt"

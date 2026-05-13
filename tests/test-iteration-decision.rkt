@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-iteration-decision.rkt — Tests for pure decide-next-action function
 ;; v0.29.1 W0: Test scaffolding (function does not exist yet — tests should FAIL)
 

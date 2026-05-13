@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-ext-dynamic-tools.rkt — FEAT-62: dynamic tool registration from extensions
 ;;
 ;; Covers:

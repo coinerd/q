@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/error-scenarios.rkt — Pre-built event sequences for error recovery tests
 ;;
 ;; Provides 6 common failure mode event sequences with corresponding

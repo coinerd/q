@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-json-round-trip.rkt -- Round-trip safety for typed-event JSON codec
 ;; v0.35.0 W3 (W-15, W-21)
 

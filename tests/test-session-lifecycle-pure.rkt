@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: pure
+
 ;; tests/test-session-lifecycle-pure.rkt -- W0: Pure helper tests for session-lifecycle.rkt
 ;;
 ;; Tests the extracted pure helpers:

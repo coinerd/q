@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-spawn-subagent-role-loading.rkt
 ;; v0.18.3 Wave 3: Spawn-subagent role loading tests
 ;;

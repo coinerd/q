@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-sync-version-historical.rkt — Tests for version-guard.rkt historical-line? guard
 ;;
 ;; W1 sub-issue #3325: 7 positive patterns + 2 negative cases

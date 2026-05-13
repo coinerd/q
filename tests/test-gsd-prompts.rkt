@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-prompts.rkt — Prompt template tests
 ;;
 ;; Wave 3a: Verify all prompt templates contain required content.

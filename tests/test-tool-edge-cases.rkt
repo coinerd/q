@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-tool-edge-cases.rkt — Edge case tests for tool-write and tool-read (#259)
 
 (require rackunit

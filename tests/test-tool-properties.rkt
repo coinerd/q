@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-tool-properties.rkt — Property-based Tests für Tool-Verträge
 ;;;
 ;;; Handgeschriebene Property-Tests die Tool-Verträge (invariants) prüfen:

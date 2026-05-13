@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-queue-wiring.rkt — G3.1: TUI input→queue wiring during streaming
 ;;
 ;; Tests that when the agent is busy (streaming), user input is enqueued as a

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; Test that util/event.rkt (now #lang typed/racket) exports work from untyped
 (require rackunit
          "../util/event.rkt")

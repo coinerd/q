@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/fixtures.rkt — Test cleanup and isolation macros
 ;;
 ;; Provides `with-temp-dir` and `with-env-var` macros for safe,

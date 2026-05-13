@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-stream-chunk-accumulation.rkt -- W0: accumulate-stream-chunks tests
 ;;
 ;; Tests S11-F1: shared pure helper for stream chunk accumulation

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-error-classify-table.rkt — R-23: Error classification data table
 
 (require rackunit

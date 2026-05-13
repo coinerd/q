@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-context-bundle.rkt — Context bundle assembly tests
 ;;
 ;; Wave 1b of v0.21.0: Tests for role-specific context bundles.

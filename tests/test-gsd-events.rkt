@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-events.rkt — GSD Event Telemetry tests
 ;;
 ;; Tests event emission from command dispatch and state transitions.

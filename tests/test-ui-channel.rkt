@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-ui-channel.rkt — FEAT-59: channel-based UI interaction
 
 (require rackunit

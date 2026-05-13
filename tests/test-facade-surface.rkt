@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-facade-surface.rkt — Tests for facade module curation
 ;;
 ;; v0.29.6 W2: Verify facade modules have intentional surfaces.

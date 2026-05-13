@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/e2e/test-e2e-smoke.rkt — E2E smoke tests
 ;;
 ;; Golden path smoke tests exercising the full SDK runtime.

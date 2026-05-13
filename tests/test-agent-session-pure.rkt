@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: pure
+
 ;; tests/test-agent-session-pure.rkt -- W1: Pure helper tests for agent-session.rkt
 ;;
 ;; Tests the extracted pure helpers:

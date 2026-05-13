@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-self-hosting-workflow.rkt
 ;; Live analysis of q's ability to self-host its own development workflow.
 ;; Tests each pi workflow pattern against q's actual implementation.

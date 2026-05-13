@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-github-integration.rkt — tests for GitHub integration extension
 ;;
 ;; Covers:

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-write-budget-encapsulation.rkt — Tests for write budget encapsulation
 ;;
 ;; W0 scaffolding for v0.29.0 milestone: Verify that write budget tracking

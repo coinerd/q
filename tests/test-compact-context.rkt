@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-compact-context.rkt — Tests for compact-context extension
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-export-formats.rkt — Tests for session export (Markdown, HTML, JSON)
 ;;
 ;; Covers:

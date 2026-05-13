@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-keybinding-config.rkt — Keybinding JSON loading/merge tests (#1117, #1118)
 ;;
 ;; Tests for:

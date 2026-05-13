@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-benchmark-report.rkt — Tests for benchmark report generator
 
 (require rackunit

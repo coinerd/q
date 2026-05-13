@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-lifecycle.rkt — tests for extension lifecycle features
 ;; #1146: Hot reload
 ;; #1147: Custom entry types

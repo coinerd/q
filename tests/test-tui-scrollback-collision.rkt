@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-scrollback-collision.rkt — Scrollback ID collision regression
 ;; tests (Wave 2, W2.1 #879).
 ;;

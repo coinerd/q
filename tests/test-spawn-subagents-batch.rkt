@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-spawn-subagents-batch.rkt — Batch parallel subagent tests
 ;;
 ;; Tests for spawn-subagents tool: parallel execution with bounded

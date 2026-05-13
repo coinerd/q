@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-scrollback-roundtrip.rkt — Scrollback roundtrip and new
 ;; content preservation tests (Wave 2, W2.2 #880).
 ;;

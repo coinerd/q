@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-trace-config.rkt — v0.15.0 Wave 2
 ;;
 ;; TDD tests for trace config parsing.

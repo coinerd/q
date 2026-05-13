@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 (require rackunit
          (only-in "../util/error-sanitizer.rkt" sanitize-error-message))
 

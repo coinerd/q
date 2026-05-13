@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-file-tools.rkt — tests for read.rkt, write.rkt, edit.rkt
 ;; Uses temporary files for isolation. No external dependencies.
 

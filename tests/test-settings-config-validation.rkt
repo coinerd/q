@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-settings-config-validation.rkt — v0.14.4 Wave 0
 ;;
 ;; Verifies config-parse-error detects broken JSON in config files.

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-ci-local.rkt — Tests for scripts/ci-local.rkt
 
 (require rackunit

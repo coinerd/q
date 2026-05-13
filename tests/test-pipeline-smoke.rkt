@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-pipeline-smoke.rkt — End-to-end pipeline smoke tests
 ;;
 ;; Exercises the complete make-agent-session → run-prompt! → verify output

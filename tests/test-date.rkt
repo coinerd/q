@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-date.rkt — tests for tools/builtins/date.rkt
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-archive-planning.rkt — Tests for scripts/archive-planning.rkt
 ;;
 ;; Uses temp directory fixtures instead of the real .planning/ (which is

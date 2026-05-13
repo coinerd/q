@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-process-extension-command.rkt -- Tests for process-extension-command (N-10)
 
 (require rackunit

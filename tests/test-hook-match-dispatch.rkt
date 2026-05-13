@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; test-hook-match-dispatch.rkt — Tests for classify-hook-result (data-return)
 ;; v0.32.4: Migrated from CPS handle-hook-result to data-return classify-hook-result.
 

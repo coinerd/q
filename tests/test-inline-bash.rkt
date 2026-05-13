@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; q/tests/test-inline-bash.rkt — Tests for G3.3 inline bash expansion
 ;;
 ;; Tests the expand-inline-bash function from q/tui/input.rkt.

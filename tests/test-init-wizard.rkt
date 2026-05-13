@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-init-wizard.rkt — Tests for cli/init-wizard.rkt
 ;;
 ;; Tests run-init-wizard using string ports for input/output.

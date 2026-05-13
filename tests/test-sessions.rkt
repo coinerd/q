@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sessions.rkt — tests for interfaces/sessions.rkt
 ;;
 ;; Covers session scanning, listing, filtering, metadata access,

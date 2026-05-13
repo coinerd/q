@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-input-power.rkt — Input editor power features tests
 ;;
 ;; Integration tests for Wave 2 features:

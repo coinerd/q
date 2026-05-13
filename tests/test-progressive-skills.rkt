@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-progressive-skills.rkt — Progressive Skill Disclosure tests
 ;;
 ;; Tests for two-tier skill loading: summaries in system prompt,

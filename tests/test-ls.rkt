@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-ls.rkt — tests for tools/builtins/ls.rkt
 ;; TDD: comprehensive tests for the directory listing tool.
 

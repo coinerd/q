@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-spawn-subagent-tool-dispatch.rkt — v0.19.4 GAP-1 fix verification
 ;;
 ;; Verifies that spawn-subagent actually dispatches tool_calls instead of

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-incremental-summarizer.rkt — FEAT-81: Incremental summarization
 ;;
 ;; Tests the real incremental-summarize from runtime/incremental-summarizer.rkt

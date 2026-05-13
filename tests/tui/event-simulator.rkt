@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/tui/event-simulator.rkt — Infrastructure for TUI state transition testing
 ;;
 ;; Provides helpers to simulate sequences of events on a ui-state and

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave5-capability-gaps.rkt — Wave 5 capability gaps tests
 ;;
 ;; Tests for v0.11.0 Wave 5 sub-issues:

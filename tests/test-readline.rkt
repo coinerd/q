@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-readline.rkt — Tests for util/readline.rkt
 ;;
 ;; Tests readline utility functions. Since readline requires a real terminal,

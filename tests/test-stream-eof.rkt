@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-stream-eof.rkt — Tests for silent stream EOF detection (BUG-SILENT-STREAM-EOF)
 ;;
 ;; When the API closes the connection without sending a finish_reason chunk,

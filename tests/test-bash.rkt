@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-bash.rkt — tests for tools/builtins/bash.rkt
 
 (require rackunit

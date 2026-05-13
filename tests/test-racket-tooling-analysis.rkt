@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-racket-tooling-analysis.rkt — tests for analysis sub-module
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-tree-view-fold.rkt — Tests for interactive tree selector
 ;;;
 ;;; Covers:

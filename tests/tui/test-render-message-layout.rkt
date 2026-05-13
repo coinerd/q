@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-render-message-layout.rkt — tests for render/message-layout
 
 (require rackunit

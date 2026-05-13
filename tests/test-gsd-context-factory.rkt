@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-context-factory.rkt — Tests for struct-based GSD context
 ;;
 ;; v0.29.4 W0: Original tests for closure-encapsulated context.

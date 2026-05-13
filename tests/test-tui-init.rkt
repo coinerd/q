@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-tui-init.rkt — Tests for tui/tui-init.rkt
 ;;
 ;; Tests module loading, export binding, and subscribe-runtime-events!.

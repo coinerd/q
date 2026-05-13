@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-loop-messages.rkt — W2-D2: Test scaffold for agent/loop-messages.rkt
 ;; v0.29.13: Smoke tests for usage helpers and message utilities.
 

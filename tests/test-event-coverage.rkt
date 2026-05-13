@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-coverage.rkt — #1149: fine-grained lifecycle event coverage
 ;; Verifies that hook-action-schemas and hook-point-names contain 37+ entries.
 

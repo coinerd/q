@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-agent-session-context.rkt — tiered context and event wiring
 ;;
 ;; Split from test-agent-session.rkt (T3-01, v0.16.1).

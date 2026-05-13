@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; Tests for the rewritten run-tests.rkt test runner.
 ;; Wave 13 Subs 13.1–13.4: struct, parsing, running, summary functions
 

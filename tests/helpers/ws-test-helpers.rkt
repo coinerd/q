@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/ws-test-helpers.rkt — Test helper for working-set context factory
 ;;
 ;; W0 scaffolding: provides a basic make-ws-context that satisfies

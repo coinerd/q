@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-lockfile.rkt — tests for util/lockfile.rkt
 ;; Covers: FFI getpid, pid-alive?, lock acquisition, stale detection
 

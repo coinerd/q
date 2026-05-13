@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-hof-combinators.rkt — tests for HOF combinators
 
 (require rackunit

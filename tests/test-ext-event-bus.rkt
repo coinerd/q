@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-ext-event-bus.rkt — tests for Inter-extension Event Bus (#684, #685)
 ;;
 ;; Covers:

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-hook-golden.rkt — Hook golden payload shape tests (v0.22.8 W4 T1)
 ;;
 ;; Freeze representative payloads for each hook point to catch accidental

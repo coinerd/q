@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-sandbox-security.rkt — security regression tests
 ;;
 ;; Covers:

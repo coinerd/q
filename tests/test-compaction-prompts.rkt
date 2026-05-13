@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-compaction-prompts.rkt — TDD tests for runtime/compaction-prompts.rkt
 ;;;
 ;;; Covers:

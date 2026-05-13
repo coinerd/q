@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; Test: P0 fix — mutable config hash-set! doesn't crash on second prompt
 ;; Bug: agent-session.rkt:726 called hash-set on mutable hash → crash on 2nd prompt
 ;; Fix: changed hash-set → hash-set!

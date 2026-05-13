@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.40.5 — 2026-05-12
+
+### Changed
+- **S1-F1**: Added Abstraction Selection Guide to `docs/style-guide.md`
+- **S12-F1**: Added `;; BOUNDARY: <kind>` comment convention to 564 test files
+- **S1-F4**: Replaced `all-from-out` with explicit exports in `runtime/context-assembly.rkt`
+
 ## v0.40.4 — 2026-05-12
 
 ### Changed

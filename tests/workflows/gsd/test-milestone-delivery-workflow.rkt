@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/gsd/test-milestone-delivery-workflow.rkt
 ;; v0.18.2 Wave 3: Milestone/wave lifecycle workflow tests
 ;;

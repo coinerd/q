@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-state.rkt — Tests for TUI state, focusing on error hint rendering
 
 (require rackunit

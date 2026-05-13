@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-metrics-readme-sync.rkt — Tests for metrics.rkt --sync-readme and --lint-prose
 ;;
 ;; Issue #1285: GAP-05 — Reconcile README metrics and prose counts

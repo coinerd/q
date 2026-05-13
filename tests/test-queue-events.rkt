@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-queue-events.rkt — FEAT-67: queue.update events + O(1) deque
 
 (require rackunit

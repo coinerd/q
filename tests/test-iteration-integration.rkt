@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-integration.rkt — integration tests for struct refactor
 ;; v0.29.17 W0: Tests for interpret-step internals via (module+ for-testing)
 

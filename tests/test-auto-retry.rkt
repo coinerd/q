@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-auto-retry.rkt — tests for runtime/auto-retry.rkt
 
 (require rackunit

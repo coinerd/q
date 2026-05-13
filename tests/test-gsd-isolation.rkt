@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-isolation.rkt — Multi-session isolation test (H-05)
 ;; Verifies that independent gsd-session-ctx instances don't interfere.
 

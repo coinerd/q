@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-working-set.rkt — Working set integration into iteration loop
 
 (require rackunit

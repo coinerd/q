@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/fixtures/mock-provider.rkt — scripted provider
 ;;
 ;; Deterministic mock provider that consumes a script of responses.

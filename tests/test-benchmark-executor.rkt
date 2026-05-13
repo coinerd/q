@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-benchmark-executor.rkt — Tests for benchmark executor pipeline
 ;;
 ;; Tests the fixed executor: tool registration, timeout handling,

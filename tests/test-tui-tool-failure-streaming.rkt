@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-tool-failure-streaming.rkt — Tool failure, streaming
 ;; interleaving, and edge case tests (Wave 3, W3.3 #885).
 ;;

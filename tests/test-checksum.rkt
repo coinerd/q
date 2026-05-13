@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-checksum.rkt -- Tests for q/util/checksum.rkt
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-agent-session-cancellation.rkt — cancellation token handling
 ;;
 ;; Split from test-agent-session.rkt (T3-01, v0.16.1).

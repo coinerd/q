@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-lifecycle-errors.rkt -- T-04: runtime.error payload hash guarantee
 ;;
 ;; Verify that the emitted "runtime.error" event payload satisfies hash?

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-counters.rkt -- Tests for runtime/iteration/counters.rkt
 ;;
 ;; v0.34.7 T-01: Dedicated tests for iteration counter module.

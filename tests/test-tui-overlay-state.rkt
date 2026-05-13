@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-overlay-state.rkt — Wave 6: T11 overlay + event interaction
 ;;
 ;; Verifies that overlay state interacts correctly with incoming events.

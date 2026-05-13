@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-context-summary.rkt — Tests for context-manager LLM summary (Wave 2A #1395)
 ;;
 ;; Tests the summary generation pipeline:

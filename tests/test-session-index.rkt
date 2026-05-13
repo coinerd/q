@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-session-index.rkt — tests for runtime/session-index.rkt
 
 (require rackunit

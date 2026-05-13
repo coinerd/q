@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          racket/match
          "../util/protocol-types.rkt"

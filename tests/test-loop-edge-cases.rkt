@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-loop-edge-cases.rkt — Wave 8 + v0.12.3 Wave 0 edge case tests
 ;;
 ;; Tests edge cases in the agent loop:

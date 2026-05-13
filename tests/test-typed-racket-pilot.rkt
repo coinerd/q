@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-typed-racket-pilot.rkt — RKT-01: Typed Racket pilot validation
 ;; v0.22.6 W5
 ;;

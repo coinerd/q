@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-hook-catalog.rkt — Wave 1 tests for Extension Hook Catalog Expansion
 ;; Issue #1207, sub-issues #1208, #1209, #1210
 ;;

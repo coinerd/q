@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: contract
+
 ;; tests/test-tool-coordinator-contracts.rkt — Contract enforcement tests for tool-coordinator
 ;;
 ;; W0 scaffolding for v0.29.0 milestone: Verify that tool coordinator functions

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-provider-registry.rkt — tests for Dynamic Provider Registration (#700-#703)
 ;;
 ;; Covers:

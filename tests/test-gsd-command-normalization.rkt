@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-command-normalization.rkt — tests for command parsing and artifact validation
 
 (require rackunit

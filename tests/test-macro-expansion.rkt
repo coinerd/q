@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: macro
+
 ;; tests/test-macro-expansion.rkt — Macro expansion tests (RA-08)
 ;;
 ;; v0.33.2 W1: Verify define-tool and define-typed-event expand correctly.

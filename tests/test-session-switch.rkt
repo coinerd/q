@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-switch.rkt — tests for Atomic Session Switching Lifecycle (#704-#707)
 ;;
 ;; Covers:

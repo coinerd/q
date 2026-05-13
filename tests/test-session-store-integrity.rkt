@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-store-integrity.rkt — W2-D5: Test scaffold for runtime/session-store-integrity.rkt
 ;; v0.29.13: Smoke tests for hash-chain creation and verification.
 

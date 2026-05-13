@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-markdown.rkt — FEAT-69: Markdown rendering in TUI transcript
 
 (require rackunit

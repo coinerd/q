@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-sync-readme-status.rkt — Tests for scripts/sync-readme-status.rkt
 ;;
 ;; Issue #1284: GAP-04 — Auto-generate README status block from release metadata

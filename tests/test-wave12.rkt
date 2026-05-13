@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave12.rkt — Wave 12 tests
 ;;
 ;; Covers:

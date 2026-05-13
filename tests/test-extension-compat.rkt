@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-extension-compat.rkt — Tests for extension compatibility (#1301)
 ;;
 ;; Tests the `compatibility` field in qpm-manifest and loader warnings.

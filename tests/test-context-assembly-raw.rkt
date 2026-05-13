@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-context-assembly-raw.rkt -- Tests for build-assembled-context/raw
 ;;
 ;; T-01: Verify the pure context-assembly core with memo and trace support.

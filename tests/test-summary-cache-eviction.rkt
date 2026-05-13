@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-summary-cache-eviction.rkt — LRU eviction for summary cache
 ;;
 ;; Verifies that the summary-cache evicts oldest entries when at capacity

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-structs-facade.rkt — Verify event-structs facade completeness
 ;;
 ;; v0.32.9 M-4: Ensures the event-structs.rkt facade re-exports all sub-modules,

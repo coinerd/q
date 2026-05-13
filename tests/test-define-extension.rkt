@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../extensions/define-extension.rkt"
          "../extensions/api.rkt")

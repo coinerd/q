@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-keybindings-binder.rkt — tests for keybindings/binding-resolver
 
 (require rackunit

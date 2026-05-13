@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-session-mutation.rkt — Session mutation guard tests (W-04)
 
 (require rackunit

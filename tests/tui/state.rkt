@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/state.rkt — Tests for tui/state module
 
 (require rackunit

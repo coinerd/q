@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/helpers/ci-detection.rkt — Shared CI detection for test files.
 ;;
 ;; Tests that reference files outside the q/ git repo (e.g. .pi/skills/,

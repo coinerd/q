@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-properties.rkt — Property-based invariant tests
 ;;
 ;; Property invariants that should always hold regardless of input.

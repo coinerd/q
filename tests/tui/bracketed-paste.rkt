@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/bracketed-paste.rkt — Tests for bracketed paste support (#435)
 ;;
 ;; Tests bracketed paste begin/end detection, buffer accumulation,

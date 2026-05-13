@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: contract
+
 ;; tests/test-tool-registry-contracts.rkt — Contract enforcement tests for tool registry
 ;;
 ;; W0 scaffolding for v0.29.0 milestone: Verify that tool registry operations

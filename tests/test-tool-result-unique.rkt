@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-tool-result-unique.rkt
 ;; Verifies that tool-result is defined exactly once (in tools/tool.rkt)
 ;; and that agent/types.rkt re-exports the SAME struct — not a duplicate.

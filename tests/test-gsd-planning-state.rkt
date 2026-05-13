@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-planning-state.rkt — Semaphore-protected state module tests
 ;;
 ;; Wave 0 of v0.20.3: Tests for gsd-planning-state.rkt.

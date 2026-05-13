@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-tui-keys.rkt — Tests for BUG-36: TUI arrow key and special key handling
 ;;
 ;; BUG-36: Arrow keys, Home, End were not reliably recognized on short keypresses.

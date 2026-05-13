@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-provider-settings-wiring.rkt — v0.14.4 Wave 2
 ;;
 ;; Verifies that provider settings (max-tokens) from config reach the API request body.

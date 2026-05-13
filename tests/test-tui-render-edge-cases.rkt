@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-render-edge-cases.rkt — Render pipeline edge case tests
 ;; (Wave 4, W4.1 #887).
 ;;

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration.rkt — tests for iteration loop with steering queue
 
 (require rackunit

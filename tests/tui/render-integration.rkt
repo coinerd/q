@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/tui/render-integration.rkt — Tier 2 UX Frame Integration Tests
 ;;
 ;; Tests that verify the complete render pipeline produces valid frames

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-tool-sequences.rkt — Sequential and concurrent tool call
 ;; tests (Wave 3, W3.2 #884).
 ;;

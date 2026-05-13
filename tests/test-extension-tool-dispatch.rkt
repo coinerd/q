@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-tool-dispatch.rkt — Integration test for extension tool
 ;; dispatch through the tool scheduler.
 ;;

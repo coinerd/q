@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-run-modes.rkt — Tests for extension loading in run-modes
 ;;
 ;; Wave 1 of v0.17.6: verify global + project-local extension loading

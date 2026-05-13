@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sgr.rkt — tests for tui/sgr.rkt
 ;;
 ;; Tests SGR post-processing that replaces bg=black (40) with

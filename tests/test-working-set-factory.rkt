@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-working-set-factory.rkt — Tests for closure-encapsulated working-set
 ;;
 ;; W0 scaffolding for v0.29.4: Runtime State Encapsulation.

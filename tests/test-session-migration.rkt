@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-session-migration.rkt — tests for session format versioning (#773)
 
 (require rackunit

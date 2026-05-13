@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-planning-integration.rkt — Integration tests for GSD planning
 ;;
 ;; Wave 4 (v0.20.3): Full-pipeline tests exercising hook dispatch, state transitions,

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/test-provider-error-recovery.rkt
 ;;
 ;; 12 integration test cases for TUI error recovery scenarios.

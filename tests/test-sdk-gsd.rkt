@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sdk-gsd.rkt — tests for v0.20.5 W2: GSD Convenience API
 ;;
 ;; Covers:

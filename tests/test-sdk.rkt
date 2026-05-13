@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-sdk.rkt — tests for interfaces/sdk.rkt
 ;;
 ;; TDD tests for the SDK surface — thin wrapper around runtime/session.

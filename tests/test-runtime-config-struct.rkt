@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-runtime-config-struct.rkt — Runtime config struct (W-03)
 ;;
 ;; Tests that build-runtime-from-cli returns a session-config,

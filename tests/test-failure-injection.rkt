@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-failure-injection.rkt — Failure injection tests
 ;;
 ;; Tests that the system handles failures gracefully:

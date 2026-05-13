@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-scheduler-safe-mode.rkt — TDD tests for scheduler-level safe-mode
 ;;;
 ;;; Covers (ARCH-02/QUAL-07, #191):

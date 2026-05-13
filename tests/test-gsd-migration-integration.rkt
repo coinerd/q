@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-migration-integration.rkt — Integration tests for GSD migration
 ;;
 ;; Wave 4c: Full lifecycle tests through the old API → new module delegation.

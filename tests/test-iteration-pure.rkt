@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: pure
+
 ;; tests/test-iteration-pure.rkt — Property tests for pure iteration functions
 ;;
 ;; v0.33.1 W0: Test pure transition functions extracted from iteration loop.

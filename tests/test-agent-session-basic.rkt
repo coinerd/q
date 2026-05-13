@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-agent-session-basic.rkt — session creation, text prompts, tool calls, lifecycle
 ;;
 ;; Split from test-agent-session.rkt (T3-01, v0.16.1).

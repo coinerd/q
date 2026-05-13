@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-metrics-sync-all.rkt — Tests for metrics.rkt --sync-all
 
 (require rackunit

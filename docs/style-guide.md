@@ -1,4 +1,4 @@
-<!-- verified-against: 0.40.4 --># q Source Style Guide
+<!-- verified-against: 0.40.5 --># q Source Style Guide
 
 This document defines formatting and naming conventions for the q Racket codebase.
 All changes to `q/` source files (excluding `tests/`) should follow these rules.
@@ -145,3 +145,43 @@ cd q && find . -name '*.rkt' -not -path './tests/*' -exec grep -n ' $' {} +
 # No lines over 150 chars (informational)
 cd q && find . -name '*.rkt' -not -path './tests/*' -exec awk 'length > 150 {print FILENAME":"NR":"length}' {} + | sort -t: -k3 -rn | head -20
 ```
+
+## 9. Abstraction Selection Guide
+
+When introducing a new abstraction (module, macro, DSL, struct, HOF wrapper,
+contract boundary), verify at least one criterion applies:
+
+- Pattern appears in **3+ places**
+- Names a **real q domain concept**
+- **Reduces boundary errors** (type safety, contracts)
+- **Simplifies tests** (easier mocking, pure functions)
+- **Narrows a public API** (hides unstable internals)
+
+### Decision Tree (weakest sufficient abstraction)
+
+Use the **weakest sufficient abstraction** at each level:
+
+| Situation | Preferred | Escalate to |
+|-----------|-----------|-------------|
+| Single use | Inline code | Function |
+| Reused logic | Function | HOF |
+| Parameterized behavior | HOF | Macro |
+| Named structured data | Struct | Class / Opaque |
+| Lookup table | Hash | Struct |
+| Module boundary | Module | Contract |
+| Composable logic | Data + interpreter | DSL syntax |
+| Full language extension | DSL combinators | `#lang` |
+
+### q-specific examples
+
+- **Prefer `hash` over `struct`** for simple lookup tables (tool registry,
+  provider settings) until the shape stabilizes.
+- **Prefer `struct` over `hash`** for event payloads, message parts, and any
+  data that crosses module boundaries.
+- **Prefer function over HOF** for one-off transformers; use HOF only when the
+  combinator is tested independently.
+- **Prefer `syntax-parse` macros** over raw `syntax-rules`; always add an
+  expansion test.
+- **DSL prerequisite chain**: structs → functions → combinators → macros
+  → `#lang`. Never skip steps.
+

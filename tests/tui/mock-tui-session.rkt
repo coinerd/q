@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/mock-tui-session.rkt — Mock session for TUI workflow testing
 ;;
 ;; Simulates a full TUI session lifecycle: create a session, apply events,

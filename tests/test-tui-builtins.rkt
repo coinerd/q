@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-builtins.rkt — Tests for built-in components and overlay positioning
 ;;
 ;; Covers SelectList, BorderedLoader, SettingsList components,

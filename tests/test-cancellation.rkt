@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-cancellation.rkt — unit tests for util/cancellation.rkt
 ;;
 ;; Covers:

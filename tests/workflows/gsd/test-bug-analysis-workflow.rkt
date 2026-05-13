@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/gsd/test-bug-analysis-workflow.rkt
 ;; v0.18.2 Wave 2: Bug analysis and fix workflow tests
 ;;

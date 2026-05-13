@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-typed-model.rkt — type-verification and regression tests for llm/model.rkt
 ;; v0.29.3 W0: Verify model-request, model-response, stream-chunk struct behavior
 ;; before Typed Racket migration.

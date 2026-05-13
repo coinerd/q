@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-extensions.rkt — tests for the extension system
 ;;
 ;; Covers:

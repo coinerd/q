@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-cli-builder.rkt — tests for wiring/run-modes.rkt
 ;;
 ;; Covers mode-for-config (pure function), load-extensions-from-dir!,

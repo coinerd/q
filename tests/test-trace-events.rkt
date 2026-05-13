@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-trace-events.rkt — v0.15.0 Wave 1
 ;;
 ;; Tests that new/enriched events are emitted correctly.

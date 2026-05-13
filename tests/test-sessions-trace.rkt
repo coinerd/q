@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-sessions-trace.rkt — v0.15.0 Wave 3
 ;;
 ;; Tests for the `q sessions trace` CLI subcommand.

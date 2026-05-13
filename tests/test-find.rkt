@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-find.rkt — tests for tools/builtins/find.rkt
 ;; TDD: tests first, then implementation.
 ;; Uses temporary directories for isolation.

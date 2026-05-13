@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-exploration.rkt — v0.14.4 Wave 1
 ;;
 ;; Verifies increased iteration budgets and exploration steering hint injection.

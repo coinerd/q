@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-input-file-ref.rkt — Tests for G3.2 @ file reference expansion
 ;;
 ;; Covers:

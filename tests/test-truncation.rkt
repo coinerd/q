@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;;; tests/test-truncation.rkt — tests for standardized output truncation (#774)
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-init-phases.rkt -- TUI init phase extraction tests (W-19)
 
 (require rackunit

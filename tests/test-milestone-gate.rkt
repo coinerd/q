@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-milestone-gate.rkt — Tests for scripts/milestone-gate.rkt
 
 (require rackunit

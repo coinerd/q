@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/test-tui-tool-cycle.rkt — Single tool call cycle workflow tests
 ;; (Wave 3, W3.1 #883).
 ;;

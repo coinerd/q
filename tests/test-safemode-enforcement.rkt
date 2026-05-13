@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-safemode-enforcement.rkt — tests for safe-mode enforcement
 ;; in tool dispatch (SEC-01) and path validation in file I/O tools (SEC-04).
 

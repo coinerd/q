@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/test-input-completion-ops.rkt — unit tests for tui/input/completion-ops
 
 (require rackunit

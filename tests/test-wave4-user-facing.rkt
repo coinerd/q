@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-wave4-user-facing.rkt — Wave 4 user-facing ergonomics tests
 ;;
 ;; Tests for v0.11.0 Wave 4 sub-issues:

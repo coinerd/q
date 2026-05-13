@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-planning-boundary.rkt — GSD planning/execution boundary tests
 ;;
 ;; Tests for v0.20.2 Wave 0: Server-side planning/execution boundary enforcement.

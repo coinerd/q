@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/fixtures/event-recorder.rkt — event bus subscriber
 ;;
 ;; Records all events from an event bus for later assertion.

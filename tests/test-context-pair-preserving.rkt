@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; Test that context builder preserves tool_call/tool_result pairing
 ;; during truncation. Unpaired messages cause 400 "messages parameter illegal"
 ;; errors from the API.

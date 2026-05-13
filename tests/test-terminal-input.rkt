@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-terminal-input.rkt — Tests for tui/terminal-input.rkt
 ;;
 ;; Tests pure-logic functions: UTF-8 helpers, message constructors,

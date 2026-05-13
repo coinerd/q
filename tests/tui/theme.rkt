@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; tests/tui/theme.rkt — Tests for TUI theme system (FEAT-68 expanded)
 
 (require rackunit

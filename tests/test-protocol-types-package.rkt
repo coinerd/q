@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-protocol-types-package.rkt — verify protocol-types sub-module decomposition
 ;;
 ;; Tests that:

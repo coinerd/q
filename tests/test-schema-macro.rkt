@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: macro
+
 ;; tests/test-schema-macro.rkt — Tests for tools/schema-macro.rkt
 ;;
 ;; Verifies the define-tool-schema macro and tool-schema function

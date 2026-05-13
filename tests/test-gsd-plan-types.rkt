@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-gsd-plan-types.rkt — Structured Plan/Task/Wave type tests
 ;;
 ;; Wave 0 of v0.21.0: Tests for structured plan types.

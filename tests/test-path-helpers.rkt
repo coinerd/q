@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../util/path-helpers.rkt"
          "../tools/builtins/read.rkt"

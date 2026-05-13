@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/fixtures/extension-loader.rkt — extension loading fixture
 ;;
 ;; Convenience functions for loading extensions in workflow tests.

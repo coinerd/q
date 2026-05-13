@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-integration.rkt — end-to-end integration tests
 ;;
 ;; Exercises full flows through the SDK layer:

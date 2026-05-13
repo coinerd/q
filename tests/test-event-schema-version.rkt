@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-event-schema-version.rkt -- W0: Event schema versioning tests
 ;;
 ;; Tests S8-F1: schemaVersion in serialized events + forward compat

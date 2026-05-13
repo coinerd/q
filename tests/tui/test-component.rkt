@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;;; tests/tui/component.rkt — Tests for tui/component.rkt
 
 (require rackunit

@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-github-issue-ops.rkt — tests for GitHub issue handler sub-module
 
 (require rackunit

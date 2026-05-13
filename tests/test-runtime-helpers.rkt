@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-runtime-helpers.rkt — QUAL-01: runtime helper extraction
 
 (require rackunit

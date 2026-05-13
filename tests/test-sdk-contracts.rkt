@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: contract
+
 ;; tests/test-sdk-contracts.rkt — Contract blame verification for v0.30.0
 ;;
 ;; Verifies that tightened contracts in sdk-core.rkt, sdk-public.rkt,

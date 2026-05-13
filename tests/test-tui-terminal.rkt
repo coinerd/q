@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: io
+
 ;; test-tui-terminal.rkt — Tests for tui-term based terminal adapter
 ;;
 ;; These tests verify:

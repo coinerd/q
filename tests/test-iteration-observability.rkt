@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-observability.rkt — Working set observability + read-spiral detection
 
 (require rackunit

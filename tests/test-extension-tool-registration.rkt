@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-extension-tool-registration.rkt — v0.19.4 GAP-2 fix verification
 ;;
 ;; Verifies that extension tools actually register when the register-tools

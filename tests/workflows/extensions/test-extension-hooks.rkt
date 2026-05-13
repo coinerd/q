@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/workflows/extensions/test-extension-hooks.rkt (#178)
 ;;
 ;; Verifies extension hooks fire in the correct order during a workflow.

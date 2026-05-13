@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 (require rackunit
          "../../extensions/gsd/state-machine.rkt")
 

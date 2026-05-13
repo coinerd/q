@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-lazy-context-assembly.rkt — Tests for deferred context assembly
 ;;
 ;; v0.29.5 W3: Tests that expensive context-assembly operations are deferred

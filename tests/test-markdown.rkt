@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; q/tests/test-markdown.rkt — tests for q/util/markdown.rkt
 
 (require rackunit

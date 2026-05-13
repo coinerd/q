@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; test-pkg-registry.rkt — Tests for package registry
 ;;
 ;; Issue #1295: GAP-01a — Package index format and discovery

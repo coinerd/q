@@ -1,5 +1,7 @@
 #lang racket
 
+;; BOUNDARY: integration
+
 ;; tests/test-token-compaction.rkt — tests for Token-based Compaction (#686-#689)
 ;;
 ;; Covers:

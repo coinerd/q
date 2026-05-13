@@ -1,5 +1,7 @@
 #lang racket/base
 
+;; BOUNDARY: integration
+
 ;; tests/test-iteration-wiring.rkt — Verify decide-next-action is wired into production loop
 ;;
 ;; v0.29.8 W0: Integration verification that the pure decision function
