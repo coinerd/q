@@ -54,9 +54,18 @@
 
 (: jsexpr->model-request ((HashTable Symbol Any) -> model-request))
 (define (jsexpr->model-request h)
-  (make-model-request (cast (hash-ref h 'messages) (Listof Any))
-                      (cast (hash-ref h 'tools #f) (U (Listof Any) #f))
-                      (cast (hash-ref h 'settings) (HashTable Symbol Any))))
+  (define msgs (hash-ref h 'messages))
+  (unless (list? msgs)
+    (error 'jsexpr->model-request "messages must be a list, got: ~a" msgs))
+  (define tools (hash-ref h 'tools #f))
+  (unless (or (list? tools) (not tools))
+    (error 'jsexpr->model-request "tools must be a list or #f, got: ~a" tools))
+  (define settings (hash-ref h 'settings))
+  (unless (hash? settings)
+    (error 'jsexpr->model-request "settings must be a hash, got: ~a" settings))
+  (make-model-request (cast msgs (Listof Any))
+                      (cast tools (U (Listof Any) #f))
+                      (cast settings (HashTable Symbol Any))))
 
 ;; ============================================================
 ;; model-response
@@ -89,10 +98,16 @@
 
 (: jsexpr->model-response ((HashTable Symbol Any) -> model-response))
 (define (jsexpr->model-response h)
-  (make-model-response (cast (hash-ref h 'content) (Listof Any))
+  (define content (hash-ref h 'content))
+  (unless (list? content)
+    (error 'jsexpr->model-response "content must be a list, got: ~a" content))
+  (define model (hash-ref h 'model))
+  (unless (string? model)
+    (error 'jsexpr->model-response "model must be a string, got: ~a" model))
+  (make-model-response (cast content (Listof Any))
                        (let ([u (hash-ref h 'usage #f)])
                          (if (hash? u) (cast u (HashTable Symbol Any)) (hasheq)))
-                       (cast (hash-ref h 'model) String)
+                       (cast model String)
                        (let ([sr (hash-ref h 'stopReason #f)])
                          (if sr
                              (string->symbol (cast sr String))
