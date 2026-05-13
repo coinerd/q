@@ -17,7 +17,8 @@
          "../agent/event-structs/iteration-events.rkt"
          "session-types.rkt")
 
-(provide maybe-compact-context
+(provide (contract-out
+           [maybe-compact-context (-> agent-session? (listof any/c) integer? (listof any/c))])
          compact-context-mid-turn)
 
 ;; ============================================================
