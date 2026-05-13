@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.41.2 — 2026-05-13
+
+### Added
+- **R1-P2**: NEW `agent/turn-reducer.rkt` -- pure turn reducer
+  - `decide-after-start`, `decide-after-context`, `decide-after-pre-hook`
+  - `decide-after-msg-hook`, `decide-after-stream`, `decide-turn-step`
+  - ZERO side effects: no I/O, no mutation, no event emission
+  - NEW `tests/test-turn-reducer.rkt`: 11 pure decision tests
+
 ## v0.41.1 — 2026-05-13
 
 ### Added
