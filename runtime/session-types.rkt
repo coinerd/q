@@ -35,6 +35,8 @@
 
 (provide (struct-out agent-session)
          session-log-path
+         session-index-path
+         session-log-path-for
          ;; Convenience accessors by group
          session-provider
          session-tool-registry
@@ -79,6 +81,14 @@
 
 (define (session-log-path dir)
   (build-path dir "session.jsonl"))
+
+(define (session-index-path dir)
+  (build-path dir "session.index"))
+
+;; session-log-path-for : agent-session? -> path?
+;; Convenience: returns session.jsonl path for a session struct.
+(define (session-log-path-for sess)
+  (session-log-path (agent-session-session-dir sess)))
 
 ;; ============================================================
 ;; Convenience accessors — stable API regardless of internal layout

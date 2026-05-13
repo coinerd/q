@@ -141,8 +141,6 @@
 ;; Helpers
 ;; ============================================================
 
-(define (session-index-path dir)
-  (build-path dir "session.index"))
 
 ;; ============================================================
 ;; Pure helpers (extracted for testability)

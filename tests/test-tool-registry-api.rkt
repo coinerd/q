@@ -7,7 +7,8 @@
 (require rackunit
          rackunit/text-ui
          "../tools/registry.rkt"
-         "../tools/tool-struct.rkt")
+         "../tools/tool-struct.rkt"
+         (only-in "../tools/tool.rkt" make-tool))
 
 (define (make-test-tool name desc)
   (make-tool name desc (hasheq 'type "object" 'properties (hasheq)) void))

@@ -21,7 +21,8 @@
          "model.rkt"
          "provider.rkt"
          "stream.rkt"
-         "http-helpers.rkt")
+         "http-helpers.rkt"
+         "provider-errors.rkt")
 
 ;; Provider constructor
 (provide (contract-out [make-openai-compatible-provider (-> hash? provider?)])
@@ -181,7 +182,15 @@
           (effective-request-timeout-for stream-model-name)
           (current-http-request-timeout)))
     (define result-vec
-      (call-with-request-timeout (lambda ()
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (raise (provider-error
+                                 (format "Network error contacting ~a: ~a"
+                                         host (exn-message e))
+                                 (current-continuation-marks)
+                                 #f
+                                 'network)))])
+        (call-with-request-timeout (lambda ()
                                    (define-values (sl rh rp)
                                      (if req-port
                                          (http-sendrecv host
@@ -198,7 +207,7 @@
                                                         #:headers headers
                                                         #:data body-bytes)))
                                    (vector sl rh rp))
-                                 #:timeout stream-timeout))
+                                 #:timeout stream-timeout)))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
@@ -220,7 +229,17 @@
 
   (define (stream req)
     (define _stream-t0 (current-inexact-milliseconds))
-    (define-values (response-port stream-timeout cleanup-thunk) (openai-stream-request req))
+    (define-values (response-port stream-timeout cleanup-thunk)
+      (with-handlers ([exn:fail?
+                       (lambda (e)
+                         (if (provider-error? e)
+                             (raise e)
+                             (raise (provider-error
+                                     (format "Stream setup error: ~a" (exn-message e))
+                                     (current-continuation-marks)
+                                     #f
+                                     'network))))])
+        (openai-stream-request req)))
     ;; Response port and timeout from openai-stream-request (W-06)
     ;; Status OK — return an incremental generator that reads SSE lines
     ;; from the response port, yielding stream-chunk values as they arrive.

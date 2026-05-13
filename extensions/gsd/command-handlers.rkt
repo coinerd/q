@@ -109,47 +109,69 @@
 ;; Command dispatch
 ;; ============================================================
 
+;; dispatch-gsd-command : parsed-command? string? path? -> (values symbol? any/c)
+;; Pure routing: maps parsed command to action tag + handler result.
+;; Side effects are handled by the caller (handle-execute-command).
+(define (dispatch-gsd-command parsed input-text base-dir)
+  (cond
+    [(gsd-cmd-go? parsed) (values 'go (list base-dir input-text))]
+    [(gsd-cmd-status? parsed) (values 'status #f)]
+    [(gsd-cmd-replan? parsed) (values 'replan (cmd-replan))]
+    [(gsd-cmd-skip? parsed)
+     (define args-text (gsd-cmd-skip-skip-arg parsed))
+     (values 'skip (cons (cmd-skip args-text) args-text))]
+    [(gsd-cmd-reset? parsed) (values 'reset (cmd-reset))]
+    [(gsd-cmd-wave-done? parsed)
+     (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
+     (values 'wave-done (cmd-wave-done base-dir wd-args))]
+    [(gsd-cmd-done? parsed)
+     (define force? (gsd-cmd-done-force? parsed))
+     (values 'done (cmd-done base-dir force?))]
+    [(gsd-cmd-plan? parsed)
+     (define plan-text (gsd-cmd-plan-plan-text parsed))
+     (if plan-text
+         (values 'plan-submit plan-text)
+         (values 'artifact parsed))]
+    [(gsd-cmd-artifact? parsed) (values 'artifact parsed)]
+    [else (values 'artifact parsed)]))
+
 ;; R-04/R-16: Refactored to parse→dispatch.
-;; Pure parsing is in command-parser.rkt; this function validates and dispatches.
+;; Pure parsing is in command-parser.rkt; dispatch-gsd-command routes;
+;; this function handles side effects.
 (define (handle-execute-command payload)
   (define cmd (hash-ref payload 'command #f))
   (define input-text (hash-ref payload 'input ""))
   (define base-dir (or (current-pinned-dir) (current-directory)))
   (define parsed (parse-gsd-command cmd input-text))
-  (cond
-    [(gsd-cmd-go? parsed) (handle-go-command base-dir input-text)]
-    [(gsd-cmd-status? parsed) (handle-gsd-status)]
-    [(gsd-cmd-replan? parsed)
-     (define result (cmd-replan))
+  (define-values (action result) (dispatch-gsd-command parsed input-text base-dir))
+  (case action
+    [(go) (apply handle-go-command result)]
+    [(status) (handle-gsd-status)]
+    [(replan)
      (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'exploring))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(gsd-cmd-skip? parsed)
-     (define args-text (gsd-cmd-skip-skip-arg parsed))
-     (define result (cmd-skip args-text))
-     (when (and (gsd-success? result) base-dir)
+    [(skip)
+     (define skip-result (car result))
+     (define args-text (cdr result))
+     (when (and (gsd-success? skip-result) base-dir)
        (define idx (and (string->number (string-trim args-text))))
        (when idx
          (mark-wave-status! base-dir idx "DEFERRED")
          (define exec (gsm-wave-executor))
          (when exec
            (wave-skip! exec idx))))
-     (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(gsd-cmd-reset? parsed)
-     (define result (cmd-reset))
+     (hook-amend (hasheq 'text (or (gsd-command-result-message skip-result) "")))]
+    [(reset)
      (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'idle))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(gsd-cmd-wave-done? parsed)
-     (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
-     (define result (cmd-wave-done base-dir wd-args))
+    [(wave-done)
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
          (events:emit-gsd-event! 'gsd.wave.completed (hasheq 'wave wave-idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(gsd-cmd-done? parsed)
-     (define force? (gsd-cmd-done-force? parsed))
-     (define result (cmd-done base-dir force?))
+    [(done)
      (when (gsd-success? result)
        (define data (gsd-command-result-data result))
        (events:emit-gsd-event! 'gsd.plan.archived
@@ -158,13 +180,12 @@
                                            (hash-ref data 'archive-path "")
                                            ""))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message result) "")))]
-    [(gsd-cmd-plan? parsed)
-     (define plan-text (gsd-cmd-plan-plan-text parsed))
-     (if plan-text
-         (handle-plan-submit plan-text base-dir input-text parsed)
-         (handle-artifact-command cmd input-text base-dir payload))]
-    [(gsd-cmd-artifact? parsed) (handle-artifact-command cmd input-text base-dir payload)]
-    [else (handle-artifact-command cmd input-text base-dir payload)]))
+    [(plan-submit)
+     (handle-plan-submit result base-dir input-text parsed)]
+    [(artifact)
+     (handle-artifact-command cmd input-text base-dir payload)]
+    [else
+     (handle-artifact-command cmd input-text base-dir payload)]))
 
 ;; ============================================================
 ;; /go decomposition helpers (S5-F1)

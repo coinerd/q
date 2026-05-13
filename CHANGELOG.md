@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.40.6 — 2026-05-13
+
+### Fixed
+- **REG-01**: Removed `make-tool` duplicate export from `tool-struct.rkt` (6 test compile failures)
+- **REG-02**: Added 9 missing symbols to `context-assembly.rkt` explicit provide (7 test compile failures)
+- **S11-F8**: Wrapped streaming errors in `provider-error` with `'network` category in `openai-compatible.rkt`
+- **S1-F5**: Moved `session-index-path` to `session-types.rkt` (single canonical definition)
+- **S1-F6**: Added `session-log-path-for` convenience helper
+- **S1-F7**: Extracted `dispatch-gsd-command` pure routing helper from `handle-execute-command`
+- **N-01**: Added `register-tool-event-serializer!` auto-injecting `schemaVersion` helper
+- **N-02**: Added `test-tool-coordinator-phases.rkt` with 4 phase unit tests
+
 ## v0.40.5 — 2026-05-12
 
 ### Changed
