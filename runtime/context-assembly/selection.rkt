@@ -31,8 +31,29 @@
          (only-in "../working-set.rkt" working-set? working-set-resolve-messages)
          "budgeting.rkt")
 
-(provide build-assembled-context
+;; R10: Call-options struct bundling keyword args for build-assembled-context
+(struct context-assembly-call-options
+  (cache provider model-name trace-callback working-set
+   generate-summary-proc generate-catalog-proc estimate-text-proc)
+  #:transparent)
+
+(define (make-context-assembly-call-options
+         #:cache [cache #f]
+         #:provider [provider #f]
+         #:model-name [model-name #f]
+         #:trace-callback [trace #f]
+         #:working-set [ws #f]
+         #:generate-summary-proc [summary-proc #f]
+         #:generate-catalog-proc [catalog-proc #f]
+         #:estimate-text-proc [estimate-proc #f])
+  (context-assembly-call-options
+   cache provider model-name trace ws summary-proc catalog-proc estimate-proc))
+
+(provide (struct-out context-assembly-call-options)
+         make-context-assembly-call-options
+         build-assembled-context
          build-assembled-context/raw
+         build-assembled-context/v2
          build-session-context)
 
 (define (build-assembled-context idx
@@ -45,9 +66,21 @@
                                  #:generate-summary-proc [generate-summary-proc #f]
                                  #:generate-catalog-proc [generate-catalog-proc #f]
                                  #:estimate-text-proc [estimate-text-proc #f])
+  (build-assembled-context/v2 idx config
+    (make-context-assembly-call-options
+     #:cache cache #:provider provider #:model-name model-name
+     #:trace-callback trace #:working-set ws
+     #:generate-summary-proc generate-summary-proc
+     #:generate-catalog-proc generate-catalog-proc
+     #:estimate-text-proc estimate-text-proc)))
+
+;; R10: Simplified v2 API taking call-options struct
+(define (build-assembled-context/v2 idx config opts)
+  (define trace (context-assembly-call-options-trace-callback opts))
   (define (emit-trace phase data)
     (when trace
       (trace phase data)))
+  (define ws (context-assembly-call-options-working-set opts))
   (define raw-messages (build-session-context idx))
   (emit-trace 'start (hash 'raw-count (length raw-messages)))
   (if (null? raw-messages)
@@ -56,12 +89,12 @@
         (context-result '() 0 0 0 0 #f '() #f))
       (build-assembled-context/raw raw-messages config ws
                                    #:memo (make-hash)
-                                   #:estimate-text-proc estimate-text-proc
-                                   #:generate-summary-proc generate-summary-proc
-                                   #:generate-catalog-proc generate-catalog-proc
-                                   #:provider provider
-                                   #:model-name model-name
-                                   #:cache cache
+                                   #:estimate-text-proc (context-assembly-call-options-estimate-text-proc opts)
+                                   #:generate-summary-proc (context-assembly-call-options-generate-summary-proc opts)
+                                   #:generate-catalog-proc (context-assembly-call-options-generate-catalog-proc opts)
+                                   #:provider (context-assembly-call-options-provider opts)
+                                   #:model-name (context-assembly-call-options-model-name opts)
+                                   #:cache (context-assembly-call-options-cache opts)
                                    #:trace trace)))
 
 ;; ============================================================

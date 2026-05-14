@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.43.2 — 2026-05-14
+
+### Added
+- **R10**: `context-assembly-call-options` struct bundling 8 keyword args for `build-assembled-context`
+- `build-assembled-context/v2` API accepting call-options struct
+- `util/command-helpers.rkt` with shared `extract-cmd-args` (deduplicated from 2 sites)
+
+### Changed
+- `build-assembled-context` now delegates to v2 via call-options struct (backward-compatible)
+- `extract-cmd-args` deduplicated from `gsd/command-parser.rkt` and `gsd-planning/command-normalization.rkt`
+
 ## v0.43.1 — 2026-05-14
 
 ### Added

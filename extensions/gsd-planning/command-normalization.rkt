@@ -4,7 +4,8 @@
 ;;
 ;; Pure functions for GSD command parsing and artifact name validation.
 
-(require racket/string)
+(require racket/string
+         (only-in "../../util/command-helpers.rkt" extract-cmd-args))
 
 (provide extract-cmd-args
          parse-wave-headers
@@ -26,16 +27,6 @@
                      ("SUMMARY" . ".md")
                      ("REVIEW" . ".md")
                      ("ANALYSIS" . ".md")))
-
-(define (extract-cmd-args input-text)
-  (define trimmed (string-trim input-text))
-  (define parts
-    (and (> (string-length trimmed) 0)
-         (char=? (string-ref trimmed 0) #\/)
-         (string-split trimmed)))
-  (if (and (pair? parts) (> (length parts) 1))
-      (string-trim (string-join (cdr parts) " "))
-      ""))
 
 (define (parse-wave-headers plan-text)
   (define matches (regexp-match* #rx"## [Ww]ave +([0-9]+)" plan-text))
