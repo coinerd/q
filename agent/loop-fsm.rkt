@@ -29,7 +29,11 @@
          turn-event-stream-complete
          turn-event-stream-cancel
          turn-event-post-hook-done
+         turn-event-msg-hook-block
          turn-event->symbol
+
+         ;; FSM state parameter
+         current-turn-fsm-state
 
          ;; Transition table + lookup
          TURN-TRANSITIONS
@@ -64,6 +68,7 @@
 (define turn-event-stream-complete (turn-event 'stream-complete))
 (define turn-event-stream-cancel (turn-event 'stream-cancel))
 (define turn-event-post-hook-done (turn-event 'post-hook-done))
+(define turn-event-msg-hook-block (turn-event 'msg-hook-block))
 
 (define (turn-event->symbol e)
   (turn-event-name e))
@@ -80,6 +85,8 @@
                                            [(pre-hook . hook-block) . blocked]
                                            ;; stream -> post-hook (normal completion)
                                            [(stream . stream-complete) . post-hook]
+                                           ;; stream -> blocked (msg-hook blocks)
+                                           [(stream . msg-hook-block) . blocked]
                                            ;; stream -> complete (cancelled)
                                            [(stream . stream-cancel) . complete]
                                            ;; post-hook -> complete
@@ -116,3 +123,9 @@
   (define state-sym (turn-state->symbol state))
   (define event-sym (turn-event->symbol event))
   (and (find-turn-transition state-sym event-sym) #t))
+
+;; ── FSM state parameter ──
+;; Tracks current turn FSM state for observability.
+;; Moved here from loop.rkt so turn-orchestrator can import it
+;; without pulling in the full agent loop.
+(define current-turn-fsm-state (make-parameter turn-state-emit-start))

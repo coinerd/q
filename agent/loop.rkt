@@ -28,8 +28,10 @@
                   turn-event-stream-complete
                   turn-event-stream-cancel
                   turn-event-post-hook-done
+                  turn-event-msg-hook-block
                   next-turn-state
-                  turn-state->symbol)
+                  turn-state->symbol
+                  current-turn-fsm-state)
          racket/string
          racket/list
          racket/date
@@ -146,8 +148,7 @@
 ;;                  #:cancellation-token (or/c cancellation-token? #f)
 ;;                  #:hook-dispatcher (or/c procedure? #f)
 ;;               -> loop-result?
-;; R-06/R-07: FSM state tracking parameter for observability
-(define current-turn-fsm-state (make-parameter turn-state-emit-start))
+;; R-06/R-07: FSM state parameter now lives in loop-fsm.rkt
 
 (define (run-agent-turn context
                         provider
@@ -244,6 +245,7 @@
      (define d-msg (decide-after-msg-hook msg-start-result))
      (match (turn-decision-tag d-msg)
        ['blocked
+        (current-turn-fsm-state (next-turn-state turn-state-stream turn-event-msg-hook-block))
         (emit-typed-event! bus
                            (make-message-blocked-event #:session-id session-id
                                                        #:turn-id turn-id
@@ -279,6 +281,7 @@
         (define d-stream (decide-after-stream sc))
         (match (turn-decision-tag d-stream)
           ['cancelled
+           (current-turn-fsm-state (next-turn-state turn-state-stream turn-event-stream-cancel))
            (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
           [_
            (build-stream-result stream-data
