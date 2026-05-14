@@ -243,7 +243,8 @@
       (check-not-false (regexp-match? #rx"hook error" (error-text (car results)))
                        "error message mentions hook error")
       (define metadata (scheduler-result-metadata result))
-      (check-equal? (hash-ref metadata 'errors)
+      (check-pred scheduler-batch-stats? metadata)
+      (check-equal? (scheduler-batch-stats-errors metadata)
                     1
                     "metadata counts 1 error from preflight exception"))))
 
