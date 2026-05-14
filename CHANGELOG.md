@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.44.1 — 2026-05-14
+
+### Changed
+- **R4**: Added `turn-event-msg-hook-block` event and `stream → blocked` transition to turn FSM
+- **R4**: msg-hook blocking now sets FSM to `blocked` state (was missing)
+- **R4**: Stream cancellation now sets FSM to `complete` via `stream-cancel` transition (was missing)
+- **R4**: Context-assembly blocking in turn-orchestrator now sets FSM to `blocked`
+- Moved `current-turn-fsm-state` parameter from `loop.rkt` to `loop-fsm.rkt` (shared access)
+
+### Fixed
+- 3 broken FSM integration points where state was not updated on early-return paths
+
 ## v0.44.0 — 2026-05-14
 
 ### Changed

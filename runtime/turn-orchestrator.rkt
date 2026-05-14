@@ -53,6 +53,7 @@
          (only-in "../tools/registry.rkt" tool-registry?)
          (only-in "../extensions/api.rkt" extension-registry?)
          "../agent/loop.rkt"
+         (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
          ;; ARCH-01: tool registry queries for LLM tool definitions
          (only-in "../tools/tool.rkt" list-tools-jsexpr merge-tool-lists)
          ;; Settings struct for provider settings resolution
@@ -175,6 +176,7 @@
 
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
+    (current-turn-fsm-state turn-state-blocked)
     (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
     (raise-extension-error "Context assembly blocked by extension" "unknown" "turn.started"))
 
