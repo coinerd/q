@@ -105,8 +105,7 @@
 ;; v0.44.2 (R3): Planning-phase structs for scheduler observability
 (struct scheduler-problem (calls registry strategy hook-dispatcher exec-context parallel?)
   #:transparent)
-(struct scheduler-plan (entries ordered-calls execution-order metadata)
-  #:transparent)
+(struct scheduler-plan (entries ordered-calls execution-order metadata) #:transparent)
 
 ;; v0.44.2 (R5): Typed hook payloads and batch stats
 (struct tool-pre-hook-payload (tool-name args entry-id) #:transparent)
@@ -269,8 +268,7 @@
             (with-file-mutation-queue path-arg (lambda () ((tool-execute t) args exec-ctx)))))
 
         ;; Dispatch 'tool-result-post hook
-        (define post-payload
-          (tool-post-hook-payload tc-name exec-result tc-id args))
+        (define post-payload (tool-post-hook-payload tc-name exec-result tc-id args))
 
         (define post-hook-result
           (if hook-dispatcher
@@ -382,12 +380,8 @@
                                                 (not (member idx blocked-indices))))
              1))
   (define executed (- total blocked errors))
-  ;; v0.44.2: Build typed struct, then return as hasheq for backward compat
-  (define stats (scheduler-batch-stats total executed blocked errors))
-  (hasheq 'total (scheduler-batch-stats-total stats)
-          'executed (scheduler-batch-stats-executed stats)
-          'blocked (scheduler-batch-stats-blocked stats)
-          'errors (scheduler-batch-stats-errors stats)))
+  ;; v0.44.4: Return typed struct directly (was dead-unpacking to hasheq)
+  (scheduler-batch-stats total executed blocked errors))
 
 ;; ============================================================
 ;; Main entry point
@@ -410,8 +404,10 @@
   (define entries (scheduler-plan-entries plan))
   (when ev-pub
     (ev-pub "tool.batch.preflight.started"
-            (hasheq 'toolCount (length (scheduler-plan-ordered-calls plan))
-                    'toolNames (map tool-call-name (scheduler-plan-ordered-calls plan)))))
+            (hasheq 'toolCount
+                    (length (scheduler-plan-ordered-calls plan))
+                    'toolNames
+                    (map tool-call-name (scheduler-plan-ordered-calls plan)))))
   (define results (run-execution entries exec-ctx parallel? hook-dispatcher))
   (define metadata (compute-metadata results entries))
   (when ev-pub
