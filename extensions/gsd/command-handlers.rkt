@@ -49,7 +49,8 @@
                   make-gsd-wave-completed-event
                   make-gsd-plan-parsed-event
                   make-gsd-plan-validated-event
-                  make-gsd-plan-normalized-event)
+                  make-gsd-plan-normalized-event
+                  make-gsd-plan-archived-event)
          (only-in "../gsd/session-state.rkt"
                   set-gsd-state!
                   with-gsd-lock
@@ -173,10 +174,10 @@
      (when (gsd-success? cmd-result)
        (define data (gsd-command-result-data cmd-result))
        (events:emit-gsd-event! 'gsd.plan.archived
-                               (hasheq 'path
-                                       (if (hash? data)
-                                           (hash-ref data 'archive-path "")
-                                           ""))))
+     (make-gsd-plan-archived-event #:session-id "" #:turn-id 0
+       #:path (if (hash? data)
+                  (hash-ref data 'archive-path "")
+                  ""))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(plan-submit) (handle-plan-submit result base-dir input-text parsed)]
     [(artifact) (handle-artifact-command cmd input-text base-dir payload)]
@@ -214,16 +215,15 @@
         (define validation (validate-normalized-plan norm-result))
         (define validated-plan? (gsd-validated-plan? validation))
         (events:emit-gsd-event! 'gsd.plan.validated
-                                (hasheq 'valid?
-                                        validated-plan?
-                                        'error-count
-                                        (if validated-plan?
-                                            0
-                                            (length (validation-errors validation)))
-                                        'warning-count
-                                        (if validated-plan?
-                                            0
-                                            (length (validation-warnings validation)))))
+     (make-gsd-plan-validated-event #:session-id "" #:turn-id 0
+                                    #:wave-count 0
+                                    #:valid? validated-plan?
+                                    #:error-count (if validated-plan?
+                                                      0
+                                                      (length (validation-errors validation)))
+                                    #:warning-count (if validated-plan?
+                                                        0
+                                                        (length (validation-warnings validation)))))
         (match validated-plan?
           [#f
            (list 'error
@@ -253,8 +253,11 @@
                             (values exec wis))
                           (lambda (e snap)
                             (events:emit-gsd-event!
-                             'gsd.mode.changed
-                             (hasheq 'reason "transaction-rollback" 'error (exn-message e))))))
+     'gsd.mode.changed
+     (make-gsd-mode-changed-event #:session-id "" #:turn-id 0
+                                  #:mode (gsm-current)
+                                  #:reason "transaction-rollback"
+                                  #:error (exn-message e))))))
   (match executor
     [(? gsd-command-result?) (list 'error (gsd-command-result-message executor))]
     [_ (list 'ok executor wave-indices)]))

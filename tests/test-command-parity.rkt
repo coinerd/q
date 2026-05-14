@@ -48,6 +48,10 @@
     (test-case "TUI command table has core commands"
       (for ([cmd '("/help" "/quit" "/clear" "/compact" "/switch" "/model")])
         (check hash-has-key? tui-table cmd
-          (format "Core command ~a missing from TUI table" cmd))))))
+          (format "Core command ~a missing from TUI table" cmd))))
+    (test-case "all TUI commands are in expected list -- no stale entries"
+      (for ([cmd (in-list (hash-keys tui-table))])
+        (check member cmd expected-commands
+          (format "TUI command ~a not in expected list -- stale or untested?" cmd))))))
 
 (run-tests parity-suite)

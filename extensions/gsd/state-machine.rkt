@@ -21,7 +21,8 @@
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
          (only-in "event-structs.rkt"
                   make-gsd-transition-attempted-event
-                  make-gsd-transition-succeeded-event)
+                  make-gsd-transition-succeeded-event
+                  make-gsd-transition-failed-event)
          (only-in "session-state.rkt"
                   current-gsd-history
                   set-gsd-history!
@@ -176,7 +177,9 @@
        [else
         (emit-gsd-event!
          'gsd.transition.failed
-         (hasheq 'from current 'to target 'reason (format "invalid: ~a -> ~a" current target)))
+         (make-gsd-transition-failed-event #:session-id "" #:turn-id 0
+                                           #:from current #:to target
+                                           #:reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 ;; FF-01: Auto-routing transition — finds shortest path via BFS and follows it.
