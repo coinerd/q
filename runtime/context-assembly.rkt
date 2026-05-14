@@ -60,7 +60,10 @@
          context-result-summary
          build-assembled-context
          build-assembled-context/raw
+         build-assembled-context/v2
          build-session-context
+         (struct-out context-assembly-call-options)
+         make-context-assembly-call-options
          tiered-context
          tiered-context?
          tiered-context-tier-a

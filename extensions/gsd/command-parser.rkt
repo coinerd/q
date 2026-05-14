@@ -7,7 +7,8 @@
 ;; No I/O, no side effects -- just string -> AST transformation.
 
 (require racket/match
-         racket/string)
+         racket/string
+         (only-in "../../util/command-helpers.rkt" extract-cmd-args))
 
 (provide (struct-out parsed-gsd-command)
          (struct-out gsd-cmd-go)
@@ -65,15 +66,6 @@
       (list canonical)))
 
 ;; -- Pure parser --
-
-(define (extract-cmd-args input-text)
-  (define trimmed (string-trim input-text))
-  (if (and (> (string-length trimmed) 0) (char=? (string-ref trimmed 0) #\/))
-      (let ([parts (string-split trimmed)])
-        (if (>= (length parts) 2)
-            (string-trim (string-join (cdr parts) " "))
-            ""))
-      ""))
 
 ;; Parse a slash command string into a typed AST node.
 ;; Returns #f if the command is not recognized as a GSD command.
