@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.44.3 — 2026-05-14
+
+### Changed
+- **R2**: Migrated `context.assembled` event from 6-key hasheq to `context-assembled-event` struct
+- **R2**: Migrated `context.assembly.blocked` event from hasheq to `context-blocked-event` struct
+- **R2**: Migrated `working-set.injected` event from hasheq to `working-set-injected-event` struct
+- **R2**: Migrated `iteration.decision` event from 5-key hasheq to `iteration-decision-event` struct
+- **R2**: Migrated `auto-retry.start` event from 5-key hasheq to `auto-retry-start-event` struct
+- Replaced raw `publish!` + dual emission with single typed `emit-typed-event!` for auto-retry
+
+### Added
+- 5 new typed event structs with full codec serialization
+- 5 new codec round-trip tests (32 total in suite)
+
 ## v0.44.2 — 2026-05-14
 
 ### Changed

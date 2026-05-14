@@ -29,6 +29,7 @@
          (only-in "../../util/ids.rkt" generate-id)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../agent/event-structs/hook-events.rkt" turn-cancelled-event)
+         (only-in "../../agent/event-structs/iteration-events.rkt" make-iteration-decision-event)
          (only-in "../../agent/queue.rkt"
                   queue-status
                   queue?
@@ -250,22 +251,15 @@
                   ;; R-06/R-07: FSM: provider-turn + model-response -> decision
                   (current-iteration-fsm-state (next-iteration-state state-provider-turn
                                                                      event-model-response))
-                  (emit-session-event!
-                   bus
-                   session-id
-                   "iteration.decision"
-                   (assert-payload "iteration.decision"
-                                   (hasheq 'iteration
-                                           (add1 (loop-counters-iteration counters))
-                                           'termination
-                                           termination
-                                           'consecutive_tools
-                                           (loop-counters-consecutive-tool-count counters)
-                                           'max_iterations
-                                           max-iterations
-                                           'max_iterations_hard
-                                           max-iterations-hard)
-                                   iteration-decision-payload/c))
+                  (emit-typed-event! bus (make-iteration-decision-event
+                   #:session-id session-id
+                   #:turn-id ""
+                   #:timestamp (current-inexact-milliseconds)
+                   #:iteration (add1 (loop-counters-iteration counters))
+                   #:termination termination
+                   #:consecutive-tools (loop-counters-consecutive-tool-count counters)
+                   #:max-iterations max-iterations
+                   #:max-iterations-hard max-iterations-hard))
                   (define step-res
                     (compute-step-result
                      (iteration-ctx (loop-counters-iteration counters)

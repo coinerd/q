@@ -31,3 +31,18 @@
                     "context.built"
                     (token-count window-size)
                     #:defaults (token-count 0 window-size 0))
+
+;; v0.44.3 (R2): Context assembly lifecycle events — replaces raw hasheq payloads
+(define-typed-event context-assembled-event
+                    "context.assembled"
+                    (iteration total-messages assembled-messages token-count
+                     working-set-entries working-set-tokens)
+                    #:defaults (working-set-entries 0 working-set-tokens 0))
+
+(define-typed-event context-blocked-event
+                    "context.assembly.blocked"
+                    (reason))
+
+(define-typed-event working-set-injected-event
+                    "working-set.injected"
+                    (entries tokens))
