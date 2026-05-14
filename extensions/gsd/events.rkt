@@ -7,7 +7,9 @@
 ;; All events follow: gsd.<category>.<action>
 
 (require racket/match
-         (only-in "../../util/errors.rkt" raise-extension-error))
+         (only-in "../../util/errors.rkt" raise-extension-error)
+         (only-in "../../agent/event-structs/base.rkt" typed-event?)
+         (only-in "../../agent/event-emitter.rkt" event-struct->hasheq))
 
 (provide gsd-event-names
          emit-gsd-event!
@@ -62,15 +64,18 @@
   (unless (memq event-name gsd-event-names)
     (raise-extension-error (format "Unknown event: ~a" event-name) 'gsd 'emit-event))
   (define bus (unbox gsd-event-bus-box))
-  (bus event-name
-       (hasheq 'event
-               event-name
-               'correlation-id
-               (current-gsd-correlation-id)
-               'timestamp
-               (current-inexact-milliseconds)
-               'data
-               data)))
+  (define wrapped
+    (if (typed-event? data)
+        (hasheq 'event event-name
+                'correlation-id (current-gsd-correlation-id)
+                'timestamp (current-inexact-milliseconds)
+                'data (event-struct->hasheq data)
+                '__typed #t)
+        (hasheq 'event event-name
+                'correlation-id (current-gsd-correlation-id)
+                'timestamp (current-inexact-milliseconds)
+                'data data)))
+  (bus event-name wrapped))
 
 ;; ============================================================
 ;; Event collector (for testing)

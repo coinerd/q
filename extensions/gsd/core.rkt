@@ -32,6 +32,10 @@
          (only-in "session-state.rkt" gsd-state-update!)
          (only-in "runtime-state-types.rkt" gsd-runtime-state-mode)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
+         (only-in "event-structs.rkt"
+                  make-gsd-command-received-event
+                  make-gsd-command-completed-event
+                  make-gsd-archive-failed-event)
          (only-in "policy.rkt" gsd-decide-action policy-allowed? policy-blocked? policy-reason)
          (only-in "session-state.rkt"
                   current-pinned-dir
@@ -133,7 +137,8 @@
     (if (string? command)
         (string->symbol command)
         command))
-  (emit-gsd-event! 'gsd.command.received (hasheq 'command cmd 'args args))
+  (emit-gsd-event! 'gsd.command.received
+   (make-gsd-command-received-event #:session-id "" #:turn-id 0 #:command cmd #:args args))
   (define corr-id (gensym 'gsd-cmd))
   (parameterize ([current-gsd-correlation-id corr-id])
     (define result
@@ -160,7 +165,8 @@
         [else #f]))
     (when result
       (emit-gsd-event! 'gsd.command.completed
-                       (hasheq 'command cmd 'success (gsd-command-result-success result))))
+       (make-gsd-command-completed-event #:session-id "" #:turn-id 0
+                                         #:command cmd #:success (gsd-command-result-success result))))
     result))
 
 ;; /plan <text> → exploring
@@ -289,7 +295,8 @@
   (with-gsd-transaction 'archive
                         (lambda () (archive-completed-plan! base-dir force?))
                         (lambda (e snapshot)
-                          (emit-gsd-event! 'gsd.archive.failed (hasheq 'error (exn-message e))))))
+                          (emit-gsd-event! 'gsd.archive.failed
+                          (make-gsd-archive-failed-event #:session-id "" #:turn-id 0 #:error (exn-message e))))))
 
 ;; ============================================================
 ;; Write guard (hardened — DD-6)

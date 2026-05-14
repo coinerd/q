@@ -21,7 +21,8 @@
          (only-in "../gsd/policy.rkt" policy-decision policy-blocked? policy-reason)
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
-                  [set-gsd-event-bus! events:set-gsd-event-bus!]))
+                  [set-gsd-event-bus! events:set-gsd-event-bus!])
+         (only-in "event-structs.rkt" make-gsd-mode-changed-event))
 
 (provide planning-read-schema
          planning-write-schema
@@ -211,7 +212,8 @@
                (begin
                  (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
                    (set-gsd-mode! 'plan-written)
-                   (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'plan-written)))
+                   (events:emit-gsd-event! 'gsd.mode.changed
+                   (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'plan-written)))
                  (make-success-result (list (hasheq 'type
                                                     "text"
                                                     'text
