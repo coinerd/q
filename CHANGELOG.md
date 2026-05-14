@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.44.2 — 2026-05-14
+
+### Changed
+- **R3**: Added `scheduler-problem` and `scheduler-plan` structs for scheduler observability
+- **R3**: Split `run-tool-batch` into `plan-tool-batch` (pure) + `execute-tool-plan` (effectful)
+- **R5**: Added `tool-pre-hook-payload`, `tool-post-hook-payload`, `scheduler-batch-stats` structs
+- **R5**: Added `bash-execution-config` struct for per-request bash tool settings
+- Hook payloads in scheduler now use typed structs instead of raw hasheq
+
+### Added
+- `make-bash-execution-config` constructor (reads from deprecated parameters)
+- Backward-compatible `run-tool-batch` entry point preserved
+
 ## v0.44.1 — 2026-05-14
 
 ### Changed

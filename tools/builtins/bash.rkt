@@ -44,6 +44,9 @@
          current-warn-on-destructive
          current-block-destructive
          current-warning-port
+         ;; v0.44.2: Struct-based config
+         (struct-out bash-execution-config)
+         make-bash-execution-config
          current-extra-destructive-patterns
          destructive-command?
          destructive-patterns
@@ -198,6 +201,16 @@
 ;; When #t (default), emit a warning to stderr before executing.
 ;; Can be set to #f to suppress warnings.
 (define current-warn-on-destructive (make-parameter #t))
+
+;; v0.44.2 (R5): Struct-based config for per-request bash settings
+(struct bash-execution-config (policy block-destructive? warn-on-destructive? warning-port)
+  #:transparent)
+
+(define (make-bash-execution-config #:policy [policy (current-execution-policy)]
+                                    #:block? [block? (current-block-destructive)]
+                                    #:warn? [warn? (current-warn-on-destructive)]
+                                    #:warning-port [port (current-warning-port)])
+  (bash-execution-config policy block? warn? port))
 
 ;; Optional settings parameter for destructive command blocking (SEC-01).
 ;; When #t, destructive commands return an error result instead of executing.

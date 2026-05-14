@@ -61,6 +61,15 @@
 (provide (struct-out scheduler-result)
          ;; R-15: Strategy support
          (struct-out preflight-entry)
+         ;; v0.44.2: Planning structs
+         (struct-out scheduler-problem)
+         (struct-out scheduler-plan)
+         ;; v0.44.2: Typed payloads
+         (struct-out tool-pre-hook-payload)
+         (struct-out tool-post-hook-payload)
+         (struct-out scheduler-batch-stats)
+         plan-tool-batch
+         execute-tool-plan
          run-preflight
          (contract-out [run-tool-batch
                         (->* ((listof tool-call?) tool-registry?)
@@ -92,6 +101,17 @@
 
 ;; v0.35.2 (W-10): Typed struct replaces ad-hoc hasheq
 (struct preflight-entry (status tool-call tool error-message) #:transparent)
+
+;; v0.44.2 (R3): Planning-phase structs for scheduler observability
+(struct scheduler-problem (calls registry strategy hook-dispatcher exec-context parallel?)
+  #:transparent)
+(struct scheduler-plan (entries ordered-calls execution-order metadata)
+  #:transparent)
+
+;; v0.44.2 (R5): Typed hook payloads and batch stats
+(struct tool-pre-hook-payload (tool-name args entry-id) #:transparent)
+(struct tool-post-hook-payload (tool-name result entry-id arguments) #:transparent)
+(struct scheduler-batch-stats (total executed blocked errors) #:transparent)
 ;; status: 'ready | 'blocked | 'error
 ;; tool: tool? (#f for blocked/error)
 ;; error-message: string? (#f for ready)
@@ -202,7 +222,7 @@
     (ev-pub "tool.execution.started"
             (hasheq 'tool-name tc-name 'tool-call-id tc-id 'start-ms tool-start-ms)))
 
-  (define pre-payload (hasheq 'tool-name tc-name 'args tc-args 'entry-id tc-id))
+  (define pre-payload (tool-pre-hook-payload tc-name tc-args tc-id))
 
   ;; Check if tool-call-pre hook blocks or amends
   (define pre-hook-result
@@ -250,7 +270,7 @@
 
         ;; Dispatch 'tool-result-post hook
         (define post-payload
-          (hasheq 'tool-name tc-name 'result exec-result 'entry-id tc-id 'arguments args))
+          (tool-post-hook-payload tc-name exec-result tc-id args))
 
         (define post-hook-result
           (if hook-dispatcher
@@ -362,43 +382,50 @@
                                                 (not (member idx blocked-indices))))
              1))
   (define executed (- total blocked errors))
-  (hasheq 'total total 'executed executed 'blocked blocked 'errors errors))
+  ;; v0.44.2: Build typed struct, then return as hasheq for backward compat
+  (define stats (scheduler-batch-stats total executed blocked errors))
+  (hasheq 'total (scheduler-batch-stats-total stats)
+          'executed (scheduler-batch-stats-executed stats)
+          'blocked (scheduler-batch-stats-blocked stats)
+          'errors (scheduler-batch-stats-errors stats)))
 
 ;; ============================================================
 ;; Main entry point
 ;; ============================================================
 
+;; v0.44.2 (R3): Pure planning phase — constructs scheduler-plan from scheduler-problem
+(define (plan-tool-batch problem)
+  (define calls (scheduler-problem-calls problem))
+  (define registry (scheduler-problem-registry problem))
+  (define hook-dispatcher (scheduler-problem-hook-dispatcher problem))
+  (define parallel? (scheduler-problem-parallel? problem))
+  (define strat (or (scheduler-problem-strategy problem) (default-scheduler-strategy)))
+  (define filtered-calls ((scheduler-strategy-preflight-filter strat) calls))
+  (define ordered-calls ((scheduler-strategy-execution-order strat) filtered-calls))
+  (define entries (run-preflight ordered-calls registry hook-dispatcher))
+  (scheduler-plan entries ordered-calls (if parallel? 'parallel 'serial) #f))
+
+;; v0.44.2 (R3): Effectful execution phase — runs a scheduler-plan
+(define (execute-tool-plan plan exec-ctx hook-dispatcher parallel? ev-pub)
+  (define entries (scheduler-plan-entries plan))
+  (when ev-pub
+    (ev-pub "tool.batch.preflight.started"
+            (hasheq 'toolCount (length (scheduler-plan-ordered-calls plan))
+                    'toolNames (map tool-call-name (scheduler-plan-ordered-calls plan)))))
+  (define results (run-execution entries exec-ctx parallel? hook-dispatcher))
+  (define metadata (compute-metadata results entries))
+  (when ev-pub
+    (ev-pub "tool.batch.completed" metadata))
+  (scheduler-result results metadata))
+
+;; Main entry point — backward compatible
 (define (run-tool-batch tool-calls
                         registry
                         #:hook-dispatcher [hook-dispatcher #f]
                         #:exec-context [exec-ctx (make-exec-context)]
                         #:parallel? [parallel? #f]
                         #:strategy [strategy #f])
-  ;; R-15: Use provided strategy or current parameter
-  (define strat (or strategy (default-scheduler-strategy)))
-  ;; Resolve event publisher from exec-context (may be #f)
+  (define problem (scheduler-problem tool-calls registry strategy hook-dispatcher exec-ctx parallel?))
+  (define plan (plan-tool-batch problem))
   (define ev-pub (and exec-ctx (exec-context-event-publisher exec-ctx)))
-
-  ;; Emit batch preflight started event
-  (when ev-pub
-    (ev-pub "tool.batch.preflight.started"
-            (hasheq 'toolCount (length tool-calls) 'toolNames (map tool-call-name tool-calls))))
-
-  ;; R-15: Apply strategy phases
-  (define filtered-calls ((scheduler-strategy-preflight-filter strat) tool-calls))
-  (define ordered-calls ((scheduler-strategy-execution-order strat) filtered-calls))
-  ;; Step 1: Preflight (serial)
-  (define preflight-entries (run-preflight ordered-calls registry hook-dispatcher))
-
-  ;; Step 2: Execution (serial or parallel)
-  (define results (run-execution preflight-entries exec-ctx parallel? hook-dispatcher))
-
-  ;; Step 3: Metadata
-  (define metadata (compute-metadata results preflight-entries))
-
-  ;; Emit batch completed event
-  (when ev-pub
-    (ev-pub "tool.batch.completed" metadata))
-
-  ;; Step 4: Return ordered result
-  (scheduler-result results metadata))
+  (execute-tool-plan plan exec-ctx hook-dispatcher parallel? ev-pub))
