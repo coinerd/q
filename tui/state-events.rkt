@@ -55,21 +55,30 @@
   (define-values (id-entry st1) (assign-entry-id entry st))
   (struct-copy ui-state st1 [transcript (cons id-entry (ui-state-transcript st1))]))
 
+;; Dedup window size — check last N entries for duplicate tool events
+(define dedup-window-size 10)
+
 ;; Dedup guard: prevent duplicate tool-start entries
 (define (recent-tool-start? st name)
   (define transcript (ui-state-transcript st))
-  (and (not (null? transcript))
-       (let ([last (car transcript)])
-         (and (eq? (transcript-entry-kind last) 'tool-start)
-              (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+  (define recent (take-safe transcript dedup-window-size))
+  (for/or ([entry (in-list recent)])
+    (and (eq? (transcript-entry-kind entry) 'tool-start)
+         (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
 
 ;; Dedup guard: prevent duplicate tool-end entries
 (define (recent-tool-end? st name)
   (define transcript (ui-state-transcript st))
-  (and (not (null? transcript))
-       (let ([last (car transcript)])
-         (and (memq (transcript-entry-kind last) '(tool-end tool-fail))
-              (equal? (hash-ref (transcript-entry-meta last) 'name "") name)))))
+  (define recent (take-safe transcript dedup-window-size))
+  (for/or ([entry (in-list recent)])
+    (and (memq (transcript-entry-kind entry) '(tool-end tool-fail))
+         (equal? (hash-ref (transcript-entry-meta entry) 'name "") name))))
+
+;; Safe take — returns up to n elements from lst (racket/list take is unsafe)
+(define (take-safe lst n)
+  (if (or (<= n 0) (null? lst))
+      '()
+      (cons (car lst) (take-safe (cdr lst) (- n 1)))))
 
 ;; ============================================================
 ;; Named event handlers (extracted from case dispatch)
