@@ -56,9 +56,8 @@
          (prefix-in sdk: "../interfaces/sdk.rkt")
          "helpers/mock-provider.rkt")
 
-;; Import register-default-tools! and make-event-bus from main
-(require (only-in "../tools/registry-defaults.rkt" register-default-tools!)
-         (only-in "../agent/event-bus.rkt" make-event-bus))
+;; Import register-default-tools! (make-event-bus already imported above)
+(require (only-in "../tools/registry-defaults.rkt" register-default-tools!))
 
 ;; ============================================================
 ;; Helpers

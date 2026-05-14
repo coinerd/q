@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.44.4 — 2026-05-14
+
+### Fixed
+- Fixed test-main.rkt broken by v0.44.0 boundary hardening (16+ unbound identifiers)
+- Added 5 event types to all-known-event-types registry
+- Added test coverage for scheduler plan API (6 structs + 2 functions)
+- Wired bash-execution-config into tool-bash execution path
+- Added deprecation comments to 4 bash parameters
+- Added test coverage for bash-execution-config struct
+- Fixed scheduler-batch-stats dead code (return struct directly instead of unpacking to hasheq)
+- Documented iteration.decision wire-format key change (underscore → camelCase)
+- Cleaned duplicate imports in test-integration.rkt and test-pipeline-smoke.rkt
+- Strengthened deprecation warning test to verify log output content
+- Fixed pre-existing test-event-json.rkt failures (wrong type strings)
+
 ## v0.44.3 — 2026-05-14
 
 ### Changed
