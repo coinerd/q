@@ -10,7 +10,9 @@
          racket/string
          "../agent/event-json.rkt"
          "../agent/event-structs/typed-event-predicates.rkt"
-         "../util/event-macro.rkt")
+         "../util/event-macro.rkt"
+         "../agent/event-structs/session-events.rkt"
+         "../agent/event-structs/iteration-events.rkt")
 
 (define (check-round-trip type-str make-fn fields-spec)
   (define evt (apply make-fn type-str 100 "session-1" "turn-1" fields-spec))
@@ -113,6 +115,65 @@
    (define r (jsexpr->typed-event j))
    (check-equal? (typed-event-type r) "tool.edit.called")
    (check-equal? (edit-tool-call-event-path r) "file.rkt"))
+ (test-case "context-assembled-event round-trip"
+   (define evt (make-context-assembled-event
+                #:session-id "s1" #:turn-id "t1" #:timestamp 100
+                #:iteration 1 #:total-messages 10 #:assembled-messages 8
+                #:token-count 5000 #:working-set-entries 3 #:working-set-tokens 1500))
+   (check-true (typed-event? evt))
+   (define j (typed-event->jsexpr evt))
+   (define r (jsexpr->typed-event j))
+   (check-equal? (typed-event-type r) "context.assembled")
+   (check-equal? (context-assembled-event-iteration r) 1)
+   (check-equal? (context-assembled-event-total-messages r) 10)
+   (check-equal? (context-assembled-event-token-count r) 5000)
+   (check-equal? (context-assembled-event-working-set-entries r) 3))
+
+ (test-case "context-blocked-event round-trip"
+   (define evt (make-context-blocked-event
+                #:session-id "s1" #:turn-id "t1" #:timestamp 100
+                #:reason "extension-block"))
+   (check-true (typed-event? evt))
+   (define j (typed-event->jsexpr evt))
+   (define r (jsexpr->typed-event j))
+   (check-equal? (typed-event-type r) "context.assembly.blocked")
+   (check-equal? (context-blocked-event-reason r) "extension-block"))
+
+ (test-case "working-set-injected-event round-trip"
+   (define evt (make-working-set-injected-event
+                #:session-id "s1" #:turn-id "t1" #:timestamp 100
+                #:entries 5 #:tokens 2000))
+   (check-true (typed-event? evt))
+   (define j (typed-event->jsexpr evt))
+   (define r (jsexpr->typed-event j))
+   (check-equal? (typed-event-type r) "working-set.injected")
+   (check-equal? (working-set-injected-event-entries r) 5)
+   (check-equal? (working-set-injected-event-tokens r) 2000))
+
+ (test-case "iteration-decision-event round-trip"
+   (define evt (make-iteration-decision-event
+                #:session-id "s1" #:turn-id "t1" #:timestamp 100
+                #:iteration 3 #:termination 'max-iterations
+                #:consecutive-tools 2 #:max-iterations 10 #:max-iterations-hard 15))
+   (check-true (typed-event? evt))
+   (define j (typed-event->jsexpr evt))
+   (define r (jsexpr->typed-event j))
+   (check-equal? (typed-event-type r) "iteration.decision")
+   (check-equal? (iteration-decision-event-iteration r) 3)
+   (check-equal? (iteration-decision-event-max-iterations r) 10))
+
+ (test-case "auto-retry-start-event round-trip"
+   (define evt (make-auto-retry-start-event
+                #:session-id "s1" #:turn-id "t1" #:timestamp 100
+                #:attempt 2 #:max-retries 3 #:delay-ms 1000
+                #:error "timeout" #:error-type 'exn:fail))
+   (check-true (typed-event? evt))
+   (define j (typed-event->jsexpr evt))
+   (define r (jsexpr->typed-event j))
+   (check-equal? (typed-event-type r) "auto-retry.start")
+   (check-equal? (auto-retry-start-event-attempt r) 2)
+   (check-equal? (auto-retry-start-event-error r) "timeout"))
+
  (test-case "unknown event falls back to typed-event"
    (define j (hasheq 'type "unknown.event" 'timestamp 100 'sessionId "s" 'turnId "t"))
    (define r (jsexpr->typed-event j))

@@ -92,6 +92,7 @@
          ;; G4: typed event emission
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
+         "../agent/event-structs/session-events.rkt"
          (only-in "../runtime/session-config.rkt"
                   session-config?
                   hash->session-config
@@ -177,41 +178,42 @@
   ;; Handle block action from context-assembly hook
   (when (and assembly-hook-result (eq? (hook-result-action assembly-hook-result) 'block))
     (current-turn-fsm-state turn-state-blocked)
-    (emit-session-event! bus session-id "context.assembly.blocked" (hasheq 'reason "extension-block"))
+    (emit-typed-event! bus
+                       (make-context-blocked-event #:session-id session-id
+                                                   #:turn-id ""
+                                                   #:timestamp (current-inexact-milliseconds)
+                                                   #:reason "extension-block"))
     (raise-extension-error "Context assembly blocked by extension" "unknown" "turn.started"))
 
   ;; v0.26.0: Emit working-set.injected event
   (when ws
-    (emit-session-event!
-     bus
-     session-id
-     "working-set.injected"
-     (hasheq 'entries (working-set-entry-count ws) 'tokens (working-set-token-count ws))))
+    (emit-typed-event! bus
+                       (make-working-set-injected-event #:session-id session-id
+                                                        #:turn-id ""
+                                                        #:timestamp (current-inexact-milliseconds)
+                                                        #:entries (working-set-entry-count ws)
+                                                        #:tokens (working-set-token-count ws))))
 
   ;; Emit context.assembled event (v0.19.12 W1: added tokenCount)
   ;; v0.29.5 W3: Defer token estimation — only computed when forced for event
   (define ctx-token-count-promise
     (delay
       (estimate-context-tokens ctx-assembled)))
-  (emit-session-event! bus
-                       session-id
-                       "context.assembled"
-                       (hasheq 'iteration
-                               iteration
-                               'total-messages
-                               (length ctx-to-use)
-                               'assembled-messages
-                               (length ctx-assembled)
-                               'tokenCount
-                               (force ctx-token-count-promise)
-                               'working-set-entries
-                               (if ws
-                                   (working-set-entry-count ws)
-                                   0)
-                               'working-set-tokens
-                               (if ws
-                                   (working-set-token-count ws)
-                                   0)))
+  (emit-typed-event! bus
+                     (make-context-assembled-event
+                      #:session-id session-id
+                      #:turn-id ""
+                      #:timestamp (current-inexact-milliseconds)
+                      #:iteration iteration
+                      #:total-messages (length ctx-to-use)
+                      #:assembled-messages (length ctx-assembled)
+                      #:token-count (force ctx-token-count-promise)
+                      #:working-set-entries (if ws
+                                                (working-set-entry-count ws)
+                                                0)
+                      #:working-set-tokens (if ws
+                                               (working-set-token-count ws)
+                                               0)))
 
   ;; Dispatch 'context hook — extensions can amend final context
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
@@ -340,26 +342,13 @@
                    #:max-retries 2
                    #:base-delay-ms 1000
                    #:on-retry (lambda (attempt max-retries delay-ms error-msg error-type)
-                                (publish! bus
-                                          (make-event "auto-retry.start"
-                                                      (current-inexact-milliseconds)
-                                                      session-id
-                                                      turn-id
-                                                      (hasheq 'attempt
-                                                              attempt
-                                                              'max-retries
-                                                              max-retries
-                                                              'delay-ms
-                                                              delay-ms
-                                                              'error
-                                                              error-msg
-                                                              'errorType
-                                                              error-type)))
                                 (emit-typed-event! bus
-                                                   (make-auto-retry-event
+                                                   (make-auto-retry-start-event
                                                     #:session-id session-id
                                                     #:turn-id turn-id
                                                     #:timestamp (current-inexact-milliseconds)
                                                     #:attempt attempt
-                                                    #:max-attempts max-retries
+                                                    #:max-retries max-retries
+                                                    #:delay-ms delay-ms
+                                                    #:error error-msg
                                                     #:error-type error-type)))))
