@@ -47,6 +47,8 @@
          ;; v0.44.2: Struct-based config
          (struct-out bash-execution-config)
          make-bash-execution-config
+         current-bash-execution-config
+         effective-bash-config
          current-extra-destructive-patterns
          destructive-command?
          destructive-patterns
@@ -63,6 +65,8 @@
 ;; 'warn      — current behavior: warn on destructive, allow all
 ;; 'block     — block destructive commands (same as safe-mode)
 ;; 'allowlist — only commands in current-allowed-commands execute
+;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
+;; Removal target: v0.46.0.
 (define current-execution-policy (make-parameter 'warn))
 
 ;; When execution-policy is 'allowlist, only these base commands execute.
@@ -200,6 +204,8 @@
 ;; Optional settings parameter for destructive command warning.
 ;; When #t (default), emit a warning to stderr before executing.
 ;; Can be set to #f to suppress warnings.
+;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
+;; Removal target: v0.46.0.
 (define current-warn-on-destructive (make-parameter #t))
 
 ;; v0.44.2 (R5): Struct-based config for per-request bash settings
@@ -212,6 +218,15 @@
                                     #:warning-port [port (current-warning-port)])
   (bash-execution-config policy block? warn? port))
 
+;; v0.44.4: Active execution config. When #f, tool-bash reads from deprecated parameters.
+(define current-bash-execution-config (make-parameter #f))
+
+;; v0.44.4: Resolve effective config from parameter or deprecated params.
+(define (effective-bash-config)
+  (or (current-bash-execution-config) (make-bash-execution-config)))
+
+;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
+;; Removal target: v0.46.0.
 ;; Optional settings parameter for destructive command blocking (SEC-01).
 ;; When #t, destructive commands return an error result instead of executing.
 ;; When #f (default), commands execute (with optional warning).
@@ -221,6 +236,8 @@
 ;; Explicitly setting #t/#f overrides this behavior.
 (define current-block-destructive (make-parameter (lambda () (safe-mode?))))
 
+;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
+;; Removal target: v0.46.0.
 ;; W-18: Warning output port (default: current-error-port)
 (define current-warning-port (make-parameter #f))
 

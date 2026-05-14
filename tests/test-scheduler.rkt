@@ -242,10 +242,12 @@
   (define reg (make-test-registry))
   (define sr (run-tool-batch '() reg))
   (check-equal? (length (scheduler-result-results sr)) 0)
-  (check-equal? (hash-ref (scheduler-result-metadata sr) 'total) 0)
-  (check-equal? (hash-ref (scheduler-result-metadata sr) 'executed) 0)
-  (check-equal? (hash-ref (scheduler-result-metadata sr) 'blocked) 0)
-  (check-equal? (hash-ref (scheduler-result-metadata sr) 'errors) 0))
+  (define meta (scheduler-result-metadata sr))
+  (check-pred scheduler-batch-stats? meta)
+  (check-equal? (scheduler-batch-stats-total meta) 0)
+  (check-equal? (scheduler-batch-stats-executed meta) 0)
+  (check-equal? (scheduler-batch-stats-blocked meta) 0)
+  (check-equal? (scheduler-batch-stats-errors meta) 0))
 
 ;; ============================================================
 ;; 10. Metadata counters are correct
@@ -263,10 +265,11 @@
           (tool-call "tc-4" "nonexistent" (hasheq)))) ; unknown
   (define sr (run-tool-batch tcs reg #:hook-dispatcher hook))
   (define meta (scheduler-result-metadata sr))
-  (check-equal? (hash-ref meta 'total) 4)
-  (check-equal? (hash-ref meta 'executed) 1) ; add succeeded
-  (check-equal? (hash-ref meta 'blocked) 1) ; echo blocked
-  (check-equal? (hash-ref meta 'errors) 2)) ; fail exception + nonexistent unknown
+  (check-pred scheduler-batch-stats? meta)
+  (check-equal? (scheduler-batch-stats-total meta) 4)
+  (check-equal? (scheduler-batch-stats-executed meta) 1) ; add succeeded
+  (check-equal? (scheduler-batch-stats-blocked meta) 1) ; echo blocked
+  (check-equal? (scheduler-batch-stats-errors meta) 2)) ; fail exception + nonexistent unknown
 
 ;; ============================================================
 ;; 11. Mixed batch: block, mutate-pass, mutate-fail, execute, exception

@@ -25,6 +25,10 @@
                     #:no-serialize)
 
 ;; v0.44.3 (R2): Iteration decision event — replaces 5-key hasheq payload
+;; Wire-format note (v0.44.4): Old hasheq used underscore keys (consecutive_tools,
+;; max_iterations, max_iterations_hard). Struct serialization uses camelCase
+;; (consecutiveTools, maxIterations, maxIterationsHard). Session trace files
+;; written before v0.44.3 will have different key formats.
 (define-typed-event iteration-decision-event
                     "iteration.decision"
                     (iteration termination consecutive-tools max-iterations max-iterations-hard))
