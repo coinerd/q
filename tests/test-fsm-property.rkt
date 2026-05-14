@@ -159,6 +159,93 @@
                     (loop (cons current visited)
                           (append next-queue (successors current))))))))
       (for ([st '(idle provider-turn decision tool-exec complete retrying aborted)])
-        (check-not-false (member st reachable) (format "state ~a is unreachable from idle" st))))))
+        (check-not-false (member st reachable) (format "state ~a is unreachable from idle" st))))
+    ;; -- R13: Generative PBT properties --
+
+    (test-case "turn FSM: determinism -- every (state,event) maps to exactly one next state"
+      (define pairs
+        (for/list ([e (in-list TURN-TRANSITIONS)])
+          (match e [`((,s . ,ev) . ,next) (cons (cons s ev) next)])))
+      (define grouped (make-hash))
+      (for ([p (in-list pairs)])
+        (hash-update! grouped (car p) (lambda (v) (cons (cdr p) v)) (list)))
+      (for ([(key targets) (in-hash grouped)])
+        (check = (length targets) 1
+          (format "non-deterministic transition for key ~a -> ~a" key targets))))
+
+    (test-case "turn FSM: event closure -- all events have source states"
+      (define all-events
+        (remove-duplicates
+          (for/list ([e (in-list TURN-TRANSITIONS)])
+            (match e [`((,s . ,ev) . ,next) ev]))))
+      (for ([ev (in-list all-events)])
+        (define sources
+          (filter (lambda (e) (match e [`((,s . ,e2) . ,_) (eq? e2 ev)] [_ #f]))
+                  TURN-TRANSITIONS))
+        (check > (length sources) 0
+          (format "event ~a has no source states" ev))))
+
+    (test-case "turn FSM: all non-terminal states reachable from emit-start"
+      (define (next-states-from s)
+        (for/list ([e (in-list TURN-TRANSITIONS)]
+                   #:when (match e [`((,from . ,_) . ,_) (eq? from s)]))
+          (match e [`((,_ . ,_) . ,next) next])))
+      (define reachable (mutable-set))
+      (set-add! reachable 'emit-start)
+      (let loop ([queue '(emit-start)])
+        (unless (null? queue)
+          (define s (car queue))
+          (define new-states
+            (for/list ([ns (in-list (next-states-from s))]
+                       #:unless (set-member? reachable ns))
+              (set-add! reachable ns)
+              ns))
+          (loop (append new-states (cdr queue)))))
+      (for ([expected '(build-context pre-hook stream post-hook)])
+        (check set-member? reachable expected
+          (format "state ~a not reachable from emit-start" expected))))
+
+    (test-case "iteration FSM: determinism -- every (state,event) maps to exactly one next state"
+      (define pairs
+        (for/list ([e (in-list TRANSITIONS)])
+          (match e [`((,s . ,ev) . ,next) (cons (cons s ev) next)])))
+      (define grouped (make-hash))
+      (for ([p (in-list pairs)])
+        (hash-update! grouped (car p) (lambda (v) (cons (cdr p) v)) (list)))
+      (for ([(key targets) (in-hash grouped)])
+        (check = (length targets) 1
+          (format "non-deterministic transition for key ~a -> ~a" key targets))))
+
+    (test-case "iteration FSM: event closure -- all events have source states"
+      (define all-events
+        (remove-duplicates
+          (for/list ([e (in-list TRANSITIONS)])
+            (match e [`((,s . ,ev) . ,next) ev]))))
+      (for ([ev (in-list all-events)])
+        (define sources
+          (filter (lambda (e) (match e [`((,s . ,e2) . ,_) (eq? e2 ev)] [_ #f]))
+                  TRANSITIONS))
+        (check > (length sources) 0
+          (format "event ~a has no source states" ev))))
+
+    (test-case "iteration FSM: all non-terminal states reachable from idle"
+      (define (next-states-from s)
+        (for/list ([e (in-list TRANSITIONS)]
+                   #:when (match e [`((,from . ,_) . ,_) (eq? from s)]))
+          (match e [`((,_ . ,_) . ,next) next])))
+      (define reachable (mutable-set))
+      (set-add! reachable 'idle)
+      (let loop ([queue '(idle)])
+        (unless (null? queue)
+          (define s (car queue))
+          (define new-states
+            (for/list ([ns (in-list (next-states-from s))]
+                       #:unless (set-member? reachable ns))
+              (set-add! reachable ns)
+              ns))
+          (loop (append new-states (cdr queue)))))
+      (for ([expected '(provider-turn decision tool-exec retrying)])
+        (check set-member? reachable expected
+          (format "state ~a not reachable from idle" expected))))))
 
 (run-tests fsm-suite 'verbose)
