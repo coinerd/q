@@ -42,7 +42,8 @@
          (prefix-in sdk: "../interfaces/sdk.rkt")
          "helpers/mock-provider.rkt")
 
-(require (only-in "../main.rkt" register-default-tools! make-event-bus))
+(require (only-in "../tools/registry-defaults.rkt" register-default-tools!)
+         (only-in "../agent/event-bus.rkt" make-event-bus))
 
 ;; ============================================================
 ;; Failure injection helpers

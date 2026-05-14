@@ -10,8 +10,16 @@
 
 (require racket/contract)
 
+;; Deprecation warning
+(define (warn-deprecated! symbol-name removal-version [extra-notes #f])
+  (log-warning (format "DEPRECATED: ~a (will be removed in ~a).~a"
+                       symbol-name
+                       removal-version
+                       (if extra-notes (format " ~a" extra-notes) ""))))
+
 ;; Error structs and constructors
-(provide (struct-out q-error)
+(provide warn-deprecated!
+         (struct-out q-error)
          (struct-out tool-error)
          (struct-out session-error)
          (struct-out ui-error)
