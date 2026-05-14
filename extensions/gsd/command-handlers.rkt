@@ -44,6 +44,12 @@
          (only-in "../gsd/events.rkt"
                   [emit-gsd-event! events:emit-gsd-event!]
                   [set-gsd-event-bus! events:set-gsd-event-bus!])
+         (only-in "event-structs.rkt"
+                  make-gsd-mode-changed-event
+                  make-gsd-wave-completed-event
+                  make-gsd-plan-parsed-event
+                  make-gsd-plan-validated-event
+                  make-gsd-plan-normalized-event)
          (only-in "../gsd/session-state.rkt"
                   set-gsd-state!
                   with-gsd-lock
@@ -132,7 +138,8 @@
     [(status) (handle-gsd-status)]
     [(replan)
      (define cmd-result (cmd-replan))
-     (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'exploring))
+     (events:emit-gsd-event! 'gsd.mode.changed
+      (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'exploring))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(skip)
      (define args-text (gsd-cmd-skip-skip-arg parsed))
@@ -147,7 +154,8 @@
      (hook-amend (hasheq 'text (or (gsd-command-result-message skip-result) "")))]
     [(reset)
      (define cmd-result (cmd-reset))
-     (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'idle))
+     (events:emit-gsd-event! 'gsd.mode.changed
+      (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'idle))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(wave-done)
      (define wd-args (gsd-cmd-wave-done-wave-arg parsed))
@@ -156,7 +164,8 @@
        (define data (gsd-command-result-data cmd-result))
        (define wave-idx (and (hash? data) (hash-ref data 'wave #f)))
        (when wave-idx
-         (events:emit-gsd-event! 'gsd.wave.completed (hasheq 'wave wave-idx))))
+         (events:emit-gsd-event! 'gsd.wave.completed
+         (make-gsd-wave-completed-event #:session-id "" #:turn-id 0 #:wave wave-idx))))
      (hook-amend (hasheq 'text (or (gsd-command-result-message cmd-result) "")))]
     [(done)
      (define force? (gsd-cmd-done-force? parsed))
@@ -188,7 +197,9 @@
      (define plan
        (or plan-from-index
            (let ([waves (parse-waves-from-markdown plan-content)]) (gsd-plan waves "" '() '()))))
-     (events:emit-gsd-event! 'gsd.plan.parsed (hasheq 'wave-count (length (gsd-plan-waves plan))))
+     (events:emit-gsd-event! 'gsd.plan.parsed
+      (make-gsd-plan-parsed-event #:session-id "" #:turn-id 0
+                                   #:wave-count (length (gsd-plan-waves plan))))
      (define norm-result (normalize-plan plan))
      (match norm-result
        [(? string?)
@@ -198,7 +209,8 @@
                              "\n\nFix the plan before using /go."))]
        [_
         (events:emit-gsd-event! 'gsd.plan.normalized
-                                (hasheq 'wave-count (length (gsd-normalized-plan-waves norm-result))))
+                                (make-gsd-plan-normalized-event #:session-id "" #:turn-id 0
+                                                                #:wave-count (length (gsd-normalized-plan-waves norm-result))))
         (define validation (validate-normalized-plan norm-result))
         (define validated-plan? (gsd-validated-plan? validation))
         (events:emit-gsd-event! 'gsd.plan.validated
@@ -227,7 +239,8 @@
     (with-gsd-transaction "go"
                           (lambda ()
                             (set-gsd-mode! 'executing)
-                            (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'executing))
+                            (events:emit-gsd-event! 'gsd.mode.changed
+                             (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'executing))
                             (set-edit-limit! 1200)
                             (define wis
                               (for/list ([w (gsd-plan-waves plan)])
@@ -327,7 +340,8 @@
   (when saved-dir
     (set-pinned-dir! saved-dir))
   (set-gsd-mode! 'planning)
-  (events:emit-gsd-event! 'gsd.mode.changed (hasheq 'mode 'planning))
+  (events:emit-gsd-event! 'gsd.mode.changed
+  (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'planning))
   (set-edit-limit! 500)
   ;; Auto-create STATE.md if missing (#2164)
   (ensure-state-md! base-dir)

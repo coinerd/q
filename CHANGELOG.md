@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.43.1 — 2026-05-14
+
+### Added
+- **R8**: 11 GSD typed event structs via `define-typed-event` in `extensions/gsd/event-structs.rkt`
+- `emit-gsd-event!` now supports typed events (backward-compatible overload)
+- Round-trip codec test for all 11 GSD event types (`tests/test-gsd-event-codec-roundtrip.rkt`)
+
+### Changed
+- Migrated 13 GSD hasheq emission sites to typed events:
+  - `command-handlers.rkt`: 7 sites (mode-changed, wave-completed, plan-parsed, plan-normalized)
+  - `state-machine.rkt`: 2 sites (transition-attempted, transition-succeeded)
+  - `core.rkt`: 3 sites (command-received, command-completed, archive-failed)
+  - `tool-handlers.rkt`: 1 site (mode-changed)
+
 ## v0.43.0 — 2026-05-14
 
 ### Changed

@@ -19,6 +19,9 @@
          "runtime-state-types.rkt"
          (only-in "policy.rkt" blocked-tools-for gsd-decide-action policy-allowed?)
          (only-in "events.rkt" emit-gsd-event! current-gsd-correlation-id)
+         (only-in "event-structs.rkt"
+                  make-gsd-transition-attempted-event
+                  make-gsd-transition-succeeded-event)
          (only-in "session-state.rkt"
                   current-gsd-history
                   set-gsd-history!
@@ -159,14 +162,16 @@
    (lambda ()
      (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
      (define current (gsd-runtime-state-mode state))
-     (emit-gsd-event! 'gsd.transition.attempted (hasheq 'from current 'to target))
+     (emit-gsd-event! 'gsd.transition.attempted
+      (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
      (define-values (result new-state) (compute-next-gsm-state state target))
      (cond
        [(ok? result)
         (define new-mode (gsd-runtime-state-mode new-state))
         (set-box! (gsd-session-ctx-state-box gsd-default-ctx) new-state)
         (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
-        (emit-gsd-event! 'gsd.transition.succeeded (hasheq 'from current 'to new-mode))
+        (emit-gsd-event! 'gsd.transition.succeeded
+         (make-gsd-transition-succeeded-event #:session-id "" #:turn-id 0 #:from current #:to new-mode))
         result]
        [else
         (emit-gsd-event!
