@@ -57,7 +57,8 @@
          "helpers/mock-provider.rkt")
 
 ;; Import register-default-tools! and make-event-bus from main
-(require (only-in "../main.rkt" register-default-tools! make-event-bus))
+(require (only-in "../tools/registry-defaults.rkt" register-default-tools!)
+         (only-in "../agent/event-bus.rkt" make-event-bus))
 
 ;; ============================================================
 ;; Helpers

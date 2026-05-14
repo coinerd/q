@@ -60,7 +60,8 @@
          (only-in "../runtime/compactor.rkt" compaction-result?))
 
 ;; Import register-default-tools! from main.rkt (which wires all 11 tools)
-(require (only-in "../main.rkt" register-default-tools! make-event-bus))
+(require (only-in "../tools/registry-defaults.rkt" register-default-tools!)
+         (only-in "../agent/event-bus.rkt" make-event-bus))
 
 (require (only-in "helpers/mock-provider.rkt" make-simple-mock-provider make-tool-call-mock-provider))
 

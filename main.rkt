@@ -8,34 +8,14 @@
 ;; stable, contracted public API. This module exports everything for
 ;; backward compatibility but includes many internal symbols.
 
-(require racket/dict)
-(require racket/contract)
-(require "util/message.rkt"
-         "runtime/session-config.rkt"
+(require racket/contract
+         racket/dict
          "interfaces/cli.rkt"
-         "interfaces/json-mode.rkt"
-         "interfaces/rpc-mode.rkt"
-         "interfaces/tui.rkt"
          "interfaces/doctor.rkt"
+         "interfaces/tui.rkt"
          "interfaces/sessions.rkt"
-         (only-in "runtime/agent-session.rkt"
-                  make-agent-session
-                  resume-agent-session
-                  run-prompt!
-                  session-id
-                  session-history
-                  fork-session
-                  close-session!
-                  agent-session?)
-         "runtime/settings.rkt"
-         "skills/types.rkt"
-         "runtime/auth-store.rkt"
-         "runtime/model-registry.rkt"
-         "llm/provider.rkt"
-         "llm/openai-compatible.rkt"
-         "tools/tool.rkt"
-         "agent/event-bus.rkt"
-         "extensions/api.rkt"
+         "util/message.rkt"
+         (only-in "llm/provider.rkt" provider? provider-name)
          (only-in "runtime/provider-factory.rkt" build-provider build-mock-provider local-provider?)
          (only-in "tools/registry-defaults.rkt" register-default-tools!)
          (only-in "wiring/run-modes.rkt"
@@ -46,54 +26,31 @@
                   run-resume
                   run-json
                   run-rpc
-                  run-print-mode))
+                  run-print-mode)
+         (only-in "runtime/session-config.rkt" session-config?)
+         (only-in "runtime/agent-session.rkt"
+                  make-agent-session
+                  resume-agent-session
+                  run-prompt!
+                  session-id
+                  session-history
+                  fork-session
+                  close-session!
+                  agent-session?))
 
-;; Main entry
+;; Minimal public surface. SDK consumers should use interfaces/sdk-public.rkt.
 (provide main
          ;; Wiring functions (exported for testing)
          build-provider
          register-default-tools!
          build-runtime-from-cli
-         mode-for-config
+         mode-for-config)
 
-         ;; ── Interface layer (re-exported for SDK consumers) ──
-         ;; interfaces/cli.rkt: cli-config, parse-cli-args, run-cli-interactive, print-usage, etc.
-         (all-from-out "interfaces/cli.rkt")
-         ;; interfaces/json-mode.rkt: start-json-mode!, stop-json-mode!, intent parsing
-         (all-from-out "interfaces/json-mode.rkt")
-         ;; interfaces/rpc-mode.rkt: rpc-request/response/notification structs, parse-rpc-request
-         (all-from-out "interfaces/rpc-mode.rkt")
-         ;; interfaces/tui.rkt: run-tui, tui-ctx, handle-key/mouse, clipboard ops
-         (all-from-out "interfaces/tui.rkt")
-         ;; interfaces/doctor.rkt: run-doctor, check-result, individual check functions
-         (all-from-out "interfaces/doctor.rkt")
-         ;; interfaces/sessions.rkt: sessions-list/info/delete, scan-session-dirs
-         (all-from-out "interfaces/sessions.rkt")
-
-         ;; ── Runtime / core layer (re-exported for SDK consumers) ──
-         ;; runtime/settings.rkt: q-settings struct, load-settings, merge-config
-         (all-from-out "runtime/settings.rkt")
-         ;; skills/types.rkt: skill-def struct, prompt-template types
-         (all-from-out "skills/types.rkt")
-         ;; runtime/auth-store.rkt: credential stores, load/save credentials
-         (all-from-out "runtime/auth-store.rkt")
-         ;; runtime/model-registry.rkt: model-registry, register/list models
-         (all-from-out "runtime/model-registry.rkt")
-         ;; llm/provider.rkt: provider struct, make-provider, make-model-request/response
-         (all-from-out "llm/provider.rkt")
-         ;; llm/openai-compatible.rkt: make-openai-compatible-provider
-         (all-from-out "llm/openai-compatible.rkt")
-         ;; tools/tool.rkt: tool struct, make-tool, tool-registry, make-success-result, etc.
-         (all-from-out "tools/tool.rkt")
-         ;; agent/event-bus.rkt: make-event-bus, subscribe!, publish!
-         (all-from-out "agent/event-bus.rkt")
-         ;; extensions/api.rkt: extension-registry, register-extension!
-         (all-from-out "extensions/api.rkt")
-
-         ;; ── Explicit exports from only-in requires ──
-         build-mock-provider
+;; Deprecated re-exports: use interfaces/sdk-public.rkt for SDK access.
+;; These are kept for backward compatibility until v0.46.0.
+(provide build-mock-provider
          local-provider?
-         ;; S4-F1: contract-out for 5 SDK session functions
+         ;; Session functions (contract-out)
          (contract-out
            [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
            [resume-agent-session (-> string? any/c agent-session?)]

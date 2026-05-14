@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.44.0 — 2026-05-14
+
+### Changed
+- **R1**: Removed 15 `all-from-out` from `main.rkt` (~200 → ~18 exports)
+- **R1**: 3 test files now import directly from source modules (not main.rkt)
+- Added `warn-deprecated!` utility to `util/errors.rkt`
+
+### Added
+- `tests/test-deprecation-warning.rkt` (2 tests)
+
+### Removed
+- `main.rkt` no longer re-exports from 15 interface/runtime/core modules
+
 ## v0.43.4 — 2026-05-14
 
 ### Added
