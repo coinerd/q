@@ -49,8 +49,13 @@
          "loop-messages.rkt"
          "loop-stream.rkt"
          (only-in "event-emitter.rkt" emit-typed-event!)
-         (only-in "turn-reducer.rkt" decide-after-pre-hook decide-after-msg-hook decide-after-stream)
-         (only-in "turn-model.rkt" make-stream-completion turn-decision turn-decision-tag)
+         (only-in "turn-reducer.rkt"
+                  decide-after-pre-hook decide-after-msg-hook decide-after-stream
+                  decide-after-start decide-after-context decide-turn-step)
+         (only-in "turn-model.rkt"
+                  make-stream-completion turn-decision-tag
+                  make-turn-start make-turn-hook-result make-turn-stream-complete
+                  hook-stage-payload)
          (only-in "event-structs.rkt"
                   make-turn-start-event
                   make-turn-end-event
@@ -101,13 +106,6 @@
 ;; ============================================================
 ;; Extracted helpers (I-01)
 ;; ============================================================
-
-;; Shadow-mode reducer logging -- compares reducer decision with actual behavior
-(define (shadow-log! point reducer-decision actual-action)
-  (define rtag (turn-decision-tag reducer-decision))
-  (unless (eq? rtag actual-action)
-    (log-warning "turn-reducer shadow divergence at ~a: reducer=~a actual=~a"
-                 point rtag actual-action)))
 
 ;; Phase 1: Emit turn-started event and dispatch agent-start hook
 (define (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
@@ -190,10 +188,10 @@
                                   'settings
                                   (model-request-settings req)))))
 
-  ;; v0.32.4: Flat match instead of nested CPS callbacks
-  (match (classify-hook-result pre-hook-result)
-    [(list 'block _)
-     (shadow-log! 'pre-hook (decide-after-pre-hook pre-hook-result) 'blocked)
+  ;; v0.43.0: Reducer-driven dispatch
+  (define d-pre (decide-after-pre-hook pre-hook-result))
+  (match (turn-decision-tag d-pre)
+    ['blocked
      ;; R-06/R-07: FSM: pre-hook -> blocked
      (current-turn-fsm-state (next-turn-state turn-state-pre-hook turn-event-hook-block))
      (emit-typed-event! bus
@@ -209,7 +207,6 @@
                                              #:duration-ms 0))
      (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
     [_
-     (shadow-log! 'pre-hook (decide-after-pre-hook pre-hook-result) 'check-msg-hook)
      ;; R-06/R-07: FSM: pre-hook -> stream
      (current-turn-fsm-state (next-turn-state turn-state-pre-hook turn-event-hook-pass))
      ;; DEBUG: validate raw-messages before sending
@@ -243,10 +240,10 @@
                                      'message-count
                                      (length raw-messages)))))
 
-     ;; v0.32.4: Second hook — flat match, no nesting
-     (match (classify-hook-result msg-start-result)
-       [(list 'block _)
-        (shadow-log! 'msg-hook (decide-after-msg-hook msg-start-result) 'blocked)
+     ;; v0.43.0: Reducer-driven msg-hook dispatch
+     (define d-msg (decide-after-msg-hook msg-start-result))
+     (match (turn-decision-tag d-msg)
+       ['blocked
         (emit-typed-event! bus
                            (make-message-blocked-event #:session-id session-id
                                                        #:turn-id turn-id
@@ -261,7 +258,6 @@
                                                 #:duration-ms 0))
         (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
        [_
-        (shadow-log! 'msg-hook (decide-after-msg-hook msg-start-result) 'begin-stream)
         ;; 5-7. Stream from provider
         (define stream-data
           (stream-from-provider provider
@@ -273,20 +269,18 @@
                                 hook-dispatcher
                                 cancellation-token))
 
-        ;; Shadow: build stream-completion struct for reducer
-        (define shadow-sc
+        ;; v0.43.0: Reducer-driven stream-complete dispatch
+        (define sc
           (make-stream-completion
            #:cancelled? (hash-ref stream-data 'cancelled? #f)
            #:cancel-reason (hash-ref stream-data 'cancel-reason #f)
            #:text (hash-ref stream-data 'text "")
            #:tool-calls (hash-ref stream-data 'tool-calls '())))
-        (shadow-log! 'stream-complete
-                     (decide-after-stream shadow-sc)
-                     (if (hash-ref stream-data 'cancelled? #f) 'cancelled 'complete))
-        (cond
-          [(hash-ref stream-data 'cancelled?)
+        (define d-stream (decide-after-stream sc))
+        (match (turn-decision-tag d-stream)
+          ['cancelled
            (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
-          [else
+          [_
            (build-stream-result stream-data
                                 raw-messages
                                 bus
