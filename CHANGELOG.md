@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.43.4 — 2026-05-14
+
+### Added
+- **CF1**: 6 new typed-event structs (gsd-plan-archived, gsd-transition-failed, 4 future-ready)
+- **CF1**: Extended gsd-plan-validated-event with optional fields (valid?, error-count, warning-count)
+- **CF1**: Extended gsd-mode-changed-event with optional fields (reason, error)
+- **CF1**: Migrated all 4 remaining hasheq emissions to typed structs (100% coverage)
+- **CF3**: Reverse-direction parity check in test-command-parity.rkt
+
+### Changed
+- `command-normalization.rkt` no longer re-exports `extract-cmd-args`
+- `test-gsd-command-normalization.rkt` imports `extract-cmd-args` from `util/command-helpers.rkt`
+- GSD typed event coverage: 12/17 (71%) → 17/17 (100%)
+
 ## v0.43.3 — 2026-05-14
 
 ### Added

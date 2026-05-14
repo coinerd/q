@@ -4,11 +4,9 @@
 ;;
 ;; Pure functions for GSD command parsing and artifact name validation.
 
-(require racket/string
-         (only-in "../../util/command-helpers.rkt" extract-cmd-args))
+(require racket/string)
 
-(provide extract-cmd-args
-         parse-wave-headers
+(provide parse-wave-headers
          valid-artifact-name?
          json-artifact?
          artifact-extensions

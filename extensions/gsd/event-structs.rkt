@@ -7,7 +7,9 @@
 
 (require "../../util/event-macro.rkt")
 
-(define-typed-event gsd-mode-changed-event "gsd.mode.changed" (mode))
+(define-typed-event gsd-mode-changed-event "gsd.mode.changed" (mode)
+  #:optional ([reason #f]
+              [error #f]))
 
 (define-typed-event gsd-transition-attempted-event "gsd.transition.attempted" (from to))
 
@@ -23,10 +25,26 @@
 
 (define-typed-event gsd-archive-failed-event "gsd.archive.failed" (error))
 
-(define-typed-event gsd-plan-validated-event "gsd.plan.validated" (wave-count))
+(define-typed-event gsd-plan-validated-event "gsd.plan.validated" (wave-count)
+  #:optional ([valid? #t]
+              [error-count 0]
+              [warning-count 0]))
 
 (define-typed-event gsd-plan-normalized-event "gsd.plan.normalized" (wave-count))
 
 (define-typed-event gsd-command-completed-event "gsd.command.completed" (command success))
+
+
+;; CF1-1: gsd.plan.archived
+(define-typed-event gsd-plan-archived-event "gsd.plan.archived" (path))
+
+;; CF1-4: gsd.transition.failed
+(define-typed-event gsd-transition-failed-event "gsd.transition.failed" (from to reason))
+
+;; Future-ready: no emission sites yet
+(define-typed-event gsd-wave-failed-event "gsd.wave.failed" (wave error))
+(define-typed-event gsd-wave-skipped-event "gsd.wave.skipped" (wave reason))
+(define-typed-event gsd-guard-blocked-event "gsd.guard.blocked" (tool reason))
+(define-typed-event gsd-guard-allowed-event "gsd.guard.allowed" (tool))
 
 (provide (all-defined-out))

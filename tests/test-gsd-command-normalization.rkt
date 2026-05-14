@@ -6,7 +6,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../extensions/gsd-planning/command-normalization.rkt")
+         (combine-in "../extensions/gsd-planning/command-normalization.rkt"
+                 (only-in "../util/command-helpers.rkt" extract-cmd-args)))
 
 (define cmd-norm-tests
   (test-suite "GSD Command Normalization"
