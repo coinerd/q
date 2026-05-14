@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.44.5 — 2026-05-14
+
+### Fixed
+- NF4: Fix TUI `[TOOL] ?:` ghost entries — widen tool-start dedup window from 1 to 10
+  entries so interleaved assistant/turn events don't break dedup between
+  `tool.call.started` and `tool.execution.started`
+- NF2: Fix `test-scheduler-safe-mode.rkt` and `test-scheduler-hooks.rkt` to use
+  `scheduler-batch-stats` struct accessors instead of `hash-ref` (broken by v0.44.4)
+- NF3: Wire `effective-bash-config` into `tool-bash` execution path so the config
+  struct actually controls bash policy/block/warn behavior
+- NF1: Extract 5 nested scheduler Plan API test-cases to top level for discoverability
+
 ## v0.44.4 — 2026-05-14
 
 ### Fixed
