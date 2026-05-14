@@ -61,8 +61,7 @@
 (define (register-tool-event-serializer! event-type base-serializer)
   (register-event-serializer!
    event-type
-   (lambda (evt)
-     (hash-set (base-serializer evt) 'schemaVersion (current-schema-version)))))
+   (lambda (evt) (hash-set (base-serializer evt) 'schemaVersion (current-schema-version)))))
 
 ;; ============================================================
 ;; Per-tool event serializer registration (manual structs)
@@ -70,17 +69,17 @@
 
 ;; bash-tool-call-event
 (register-tool-event-serializer! "tool.bash.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      "bash"
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'command
-                                      (bash-tool-call-event-command evt)
-                                      'timeout
-                                      (bash-tool-call-event-timeout evt)
-                                      'cwd
-                                      (bash-tool-call-event-cwd evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           "bash"
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'command
+                                           (bash-tool-call-event-command evt)
+                                           'timeout
+                                           (bash-tool-call-event-timeout evt)
+                                           'cwd
+                                           (bash-tool-call-event-cwd evt))))
 
 (register-event-deserializer! "tool.bash.called"
                               (lambda (type ts sid tid h)
@@ -97,15 +96,15 @@
 
 ;; edit-tool-call-event
 (register-tool-event-serializer! "tool.edit.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      "edit"
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'path
-                                      (edit-tool-call-event-path evt)
-                                      'edits
-                                      (edit-tool-call-event-edits evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           "edit"
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'path
+                                           (edit-tool-call-event-path evt)
+                                           'edits
+                                           (edit-tool-call-event-edits evt))))
 
 (register-event-deserializer! "tool.edit.called"
                               (lambda (type ts sid tid h)
@@ -121,15 +120,15 @@
 
 ;; write-tool-call-event
 (register-tool-event-serializer! "tool.write.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      "write"
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'path
-                                      (write-tool-call-event-path evt)
-                                      'content
-                                      (write-tool-call-event-content evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           "write"
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'path
+                                           (write-tool-call-event-path evt)
+                                           'content
+                                           (write-tool-call-event-content evt))))
 
 (register-event-deserializer! "tool.write.called"
                               (lambda (type ts sid tid h)
@@ -145,17 +144,17 @@
 
 ;; read-tool-call-event
 (register-tool-event-serializer! "tool.read.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      "read"
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'path
-                                      (read-tool-call-event-path evt)
-                                      'offset
-                                      (read-tool-call-event-offset evt)
-                                      'limit
-                                      (read-tool-call-event-limit evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           "read"
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'path
+                                           (read-tool-call-event-path evt)
+                                           'offset
+                                           (read-tool-call-event-offset evt)
+                                           'limit
+                                           (read-tool-call-event-limit evt))))
 
 (register-event-deserializer! "tool.read.called"
                               (lambda (type ts sid tid h)
@@ -172,17 +171,17 @@
 
 ;; grep-tool-call-event
 (register-tool-event-serializer! "tool.grep.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      "grep"
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'pattern
-                                      (grep-tool-call-event-pattern evt)
-                                      'path
-                                      (grep-tool-call-event-path evt)
-                                      'glob
-                                      (grep-tool-call-event-glob evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           "grep"
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'pattern
+                                           (grep-tool-call-event-pattern evt)
+                                           'path
+                                           (grep-tool-call-event-path evt)
+                                           'glob
+                                           (grep-tool-call-event-glob evt))))
 
 (register-event-deserializer! "tool.grep.called"
                               (lambda (type ts sid tid h)
@@ -199,15 +198,15 @@
 
 ;; find-tool-call-event
 (register-tool-event-serializer! "tool.find.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      "find"
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'pattern
-                                      (find-tool-call-event-pattern evt)
-                                      'path
-                                      (find-tool-call-event-path evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           "find"
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'pattern
+                                           (find-tool-call-event-pattern evt)
+                                           'path
+                                           (find-tool-call-event-path evt))))
 
 (register-event-deserializer! "tool.find.called"
                               (lambda (type ts sid tid h)
@@ -223,13 +222,13 @@
 
 ;; custom-tool-call-event
 (register-tool-event-serializer! "tool.custom.called"
-                            (lambda (evt)
-                              (hasheq 'toolName
-                                      (tool-call-event-tool-name evt)
-                                      'toolCallId
-                                      (tool-call-event-tool-call-id evt)
-                                      'arguments
-                                      (tool-call-event-arguments evt))))
+                                 (lambda (evt)
+                                   (hasheq 'toolName
+                                           (tool-call-event-tool-name evt)
+                                           'toolCallId
+                                           (tool-call-event-tool-call-id evt)
+                                           'arguments
+                                           (tool-call-event-arguments evt))))
 
 (register-event-deserializer! "tool.custom.called"
                               (lambda (type ts sid tid h)
@@ -276,7 +275,9 @@
   (define schema-version (hash-ref h 'schemaVersion 1))
   (when (> schema-version (current-schema-version))
     (log-warning "q/event-json: event type '~a' has schemaVersion ~a > current (~a)"
-                 type schema-version (current-schema-version)))
+                 type
+                 schema-version
+                 (current-schema-version)))
   (define deserializer (lookup-event-deserializer type))
   (when (and (not deserializer) (> (hash-count h) 4))
     (log-warning "q/event-json: no deserializer for event type '~a'" type))
@@ -314,6 +315,11 @@
                    "agent.started"
                    "agent.completed"
                    "context.built"
+                   "context.assembled"
+                   "context.assembly.blocked"
+                   "working-set.injected"
+                   "iteration.decision"
+                   "auto-retry.start"
                    "model.stream.delta"
                    "model.stream.delta.tool-call"
                    "model.stream.thinking"

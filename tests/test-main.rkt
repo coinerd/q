@@ -8,8 +8,40 @@
          racket/port
          racket/file
          json
-         "../main.rkt"
+         ;; From main.rkt (still exported)
+         (only-in "../main.rkt"
+                  register-default-tools!
+                  build-provider
+                  build-runtime-from-cli
+                  mode-for-config)
+         ;; Tool registry — was re-exported via all-from-out
+         (only-in "../tools/tool.rkt"
+                  make-tool-registry
+                  list-tools
+                  lookup-tool
+                  tool?
+                  tool-execute
+                  tool-name
+                  tool-names)
+         ;; Provider — was re-exported via all-from-out
+         (only-in "../llm/provider.rkt" provider? provider-name)
+         ;; CLI interface — was re-exported via all-from-out
+         (only-in "../interfaces/cli.rkt"
+                  parse-cli-args
+                  print-usage
+                  print-version
+                  cli-config->runtime-config
+                  run-cli-interactive
+                  run-cli-single
+                  cli-config-tools
+                  cli-config-no-tools?)
+         ;; Settings — was re-exported via all-from-out
+         (only-in "../runtime/settings.rkt" load-settings)
+         ;; Event bus — was re-exported via all-from-out
+         (only-in "../agent/event-bus.rkt" event-bus?)
+         ;; Session config
          "../runtime/session-config.rkt"
+         ;; Extensions
          (only-in "../extensions/api.rkt" extension-registry? list-extensions))
 
 (define (capture-output thunk)

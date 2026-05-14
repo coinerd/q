@@ -18,7 +18,7 @@
                               #:turn-id #f
                               #:model (hasheq 'model "gpt-4")))
   (define jx (typed-event->jsexpr evt))
-  (check-equal? (hash-ref jx 'type) "session-start")
+  (check-equal? (hash-ref jx 'type) "session.started")
   (check-equal? (hash-ref jx 'sessionId) "test-sess")
   (define restored (jsexpr->typed-event jx))
   (check-true (session-start-event? restored))
@@ -31,7 +31,7 @@
                                  #:turn-id "t1"
                                  #:reason "graceful"))
   (define jx (typed-event->jsexpr evt))
-  (check-equal? (hash-ref jx 'type) "session-shutdown")
+  (check-equal? (hash-ref jx 'type) "session.shutdown")
   (define restored (jsexpr->typed-event jx))
   (check-true (session-shutdown-event? restored)))
 
