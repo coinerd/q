@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.43.0 — 2026-05-14
+
+### Changed
+- **R2**: Turn-reducer is now the primary decision driver in `agent/loop.rkt`
+  (replaces manual `classify-hook-result` + `match` blocks with reducer-driven dispatch)
+- Removed `shadow-log!` function and all shadow-mode logging (reducer IS the decision-maker)
+- FSM state tracking retained for observability (follows reducer decisions)
+
+### Added
+- New integration test: `tests/test-turn-reducer-integration.rkt` (8 tests)
+  covering full turn lifecycle via `decide-turn-step`
+
 ## v0.42.4 — 2026-05-13
 
 ### Fixed
