@@ -508,55 +508,55 @@
   (check-equal? (length (scheduler-result-results result)) 6)
   ;; Verify all succeeded
   (for ([r (in-list (scheduler-result-results result))])
-    (check-false (tool-result-is-error? r)))
+    (check-false (tool-result-is-error? r))))
 
-  ;; ============================================================
-  ;; Scheduler Plan API (v0.44.4 — F2 test coverage)
-  ;; ============================================================
+;; ============================================================
+;; Scheduler Plan API (v0.44.5 — extracted to top level)
+;; ============================================================
 
-  (test-case "scheduler-problem struct construction"
-    (define reg (make-tool-registry))
-    (register-default-tools! reg)
-    (define prob
-      (scheduler-problem (list (make-tool-call "tc-1" "read" (hasheq 'path "/tmp/test.rkt")))
-                         reg
-                         #f ;; strategy (#f = default)
-                         #f ;; hook-dispatcher
-                         #f ;; exec-context
-                         #f)) ;; parallel?
-    (check-pred scheduler-problem? prob)
-    (check-equal? (length (scheduler-problem-calls prob)) 1))
+(test-case "scheduler-problem struct construction"
+  (define reg (make-tool-registry))
+  (register-default-tools! reg)
+  (define prob
+    (scheduler-problem (list (make-tool-call "tc-1" "read" (hasheq 'path "/tmp/test.rkt")))
+                       reg
+                       #f ;; strategy (#f = default)
+                       #f ;; hook-dispatcher
+                       #f ;; exec-context
+                       #f)) ;; parallel?
+  (check-pred scheduler-problem? prob)
+  (check-equal? (length (scheduler-problem-calls prob)) 1))
 
-  (test-case "plan-tool-batch produces a scheduler-plan"
-    (define reg (make-tool-registry))
-    (register-default-tools! reg)
-    (define prob
-      (scheduler-problem (list (make-tool-call "tc-1" "read" (hasheq 'path "/tmp/test.rkt")))
-                         reg
-                         #f
-                         #f
-                         #f
-                         #f))
-    (define plan (plan-tool-batch prob))
-    (check-pred scheduler-plan? plan)
-    (check-true (>= (length (scheduler-plan-entries plan)) 1)))
+(test-case "plan-tool-batch produces a scheduler-plan"
+  (define reg (make-tool-registry))
+  (register-default-tools! reg)
+  (define prob
+    (scheduler-problem (list (make-tool-call "tc-1" "read" (hasheq 'path "/tmp/test.rkt")))
+                       reg
+                       #f
+                       #f
+                       #f
+                       #f))
+  (define plan (plan-tool-batch prob))
+  (check-pred scheduler-plan? plan)
+  (check-true (>= (length (scheduler-plan-entries plan)) 1)))
 
-  (test-case "tool-pre-hook-payload struct"
-    (define p (tool-pre-hook-payload "bash" (hasheq 'command "ls") "tc-1"))
-    (check-pred tool-pre-hook-payload? p)
-    (check-equal? (tool-pre-hook-payload-tool-name p) "bash")
-    (check-equal? (tool-pre-hook-payload-entry-id p) "tc-1"))
+(test-case "tool-pre-hook-payload struct"
+  (define p (tool-pre-hook-payload "bash" (hasheq 'command "ls") "tc-1"))
+  (check-pred tool-pre-hook-payload? p)
+  (check-equal? (tool-pre-hook-payload-tool-name p) "bash")
+  (check-equal? (tool-pre-hook-payload-entry-id p) "tc-1"))
 
-  (test-case "tool-post-hook-payload struct"
-    (define p (tool-post-hook-payload "bash" 'success "tc-1" (hasheq 'command "ls")))
-    (check-pred tool-post-hook-payload? p)
-    (check-equal? (tool-post-hook-payload-tool-name p) "bash")
-    (check-equal? (tool-post-hook-payload-result p) 'success))
+(test-case "tool-post-hook-payload struct"
+  (define p (tool-post-hook-payload "bash" 'success "tc-1" (hasheq 'command "ls")))
+  (check-pred tool-post-hook-payload? p)
+  (check-equal? (tool-post-hook-payload-tool-name p) "bash")
+  (check-equal? (tool-post-hook-payload-result p) 'success))
 
-  (test-case "scheduler-batch-stats struct"
-    (define s (scheduler-batch-stats 10 8 1 1))
-    (check-pred scheduler-batch-stats? s)
-    (check-equal? (scheduler-batch-stats-total s) 10)
-    (check-equal? (scheduler-batch-stats-executed s) 8)
-    (check-equal? (scheduler-batch-stats-blocked s) 1)
-    (check-equal? (scheduler-batch-stats-errors s) 1)))
+(test-case "scheduler-batch-stats struct"
+  (define s (scheduler-batch-stats 10 8 1 1))
+  (check-pred scheduler-batch-stats? s)
+  (check-equal? (scheduler-batch-stats-total s) 10)
+  (check-equal? (scheduler-batch-stats-executed s) 8)
+  (check-equal? (scheduler-batch-stats-blocked s) 1)
+  (check-equal? (scheduler-batch-stats-errors s) 1))

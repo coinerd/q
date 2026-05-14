@@ -34,7 +34,11 @@
                   run-tool-batch
                   scheduler-result
                   scheduler-result-results
-                  scheduler-result-metadata)
+                  scheduler-result-metadata
+                  scheduler-batch-stats
+                  scheduler-batch-stats?
+                  scheduler-batch-stats-total
+                  scheduler-batch-stats-blocked)
          (only-in "../util/protocol-types.rkt"
                   tool-call
                   tool-call?
@@ -362,8 +366,9 @@
     (check-true (string-contains? (result-text (fifth results)) "blocked by safe-mode"))
     ;; Check metadata
     (define meta (scheduler-result-metadata sr))
-    (check-equal? (hash-ref meta 'total) 5)
-    (check-equal? (hash-ref meta 'blocked) 3))) ;; bash + path-blocked read + edit
+    (check-pred scheduler-batch-stats? meta)
+    (check-equal? (scheduler-batch-stats-total meta) 5)
+    (check-equal? (scheduler-batch-stats-blocked meta) 3))) ;; bash + path-blocked read + edit
 
 ;; ============================================================
 ;; 8. Predicates re-exported correctly from util/safe-mode-predicates
