@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.43.3 — 2026-05-14
+
+### Added
+- **R13**: 6 generative PBT properties for FSM determinism, closure, and reachability (turn + iteration)
+- **R14**: Command conformance parity fixture in `tests/test-command-parity.rkt`
+- **R11**: Session migration persistence round-trip test
+
+### Changed
+- `tests/test-fsm-property.rkt` extended with 6 new properties (22 total)
+
 ## v0.43.2 — 2026-05-14
 
 ### Added

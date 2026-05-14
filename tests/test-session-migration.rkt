@@ -143,3 +143,30 @@
                 (lambda ()
                   (when (file-exists? path)
                     (delete-file path)))))
+
+(test-case "session migration: persistence round-trip integrity"
+  (define path (make-temporary-file "q-session-rt-~a.jsonl"))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     ;; Write v2 entries using jsonl-append! (handles serialization)
+     (jsonl-append! path (hasheq 'kind "session-info" 'version 2 'timestamp (current-seconds)))
+     (jsonl-append! path (hasheq 'kind "user" 'content "hello" 'id "msg-1"))
+     (jsonl-append! path (hasheq 'kind "assistant" 'content "hi there" 'id "msg-2"))
+     ;; Read back
+     (define entries (for/list ([line (file->lines path)])
+                       (with-input-from-string line read-json)))
+     (check-equal? (length entries) 3)
+     (check-equal? (hash-ref (first entries) 'version) 2)
+     ;; Append new message
+     (jsonl-append! path (hasheq 'kind "user" 'content "follow-up" 'id "msg-3"))
+     ;; Read again
+     (define entries-2 (for/list ([line (file->lines path)])
+                         (with-input-from-string line read-json)))
+     (check-equal? (length entries-2) 4)
+     (check-equal? (hash-ref (fourth entries-2) 'content) "follow-up")
+     ;; Verify version header preserved
+     (check-equal? (hash-ref (first entries-2) 'kind) "session-info"))
+   (lambda ()
+     (when (file-exists? path)
+       (delete-file path)))))
