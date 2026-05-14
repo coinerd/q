@@ -9,6 +9,7 @@
 
 (require rackunit
          (only-in "../tools/builtins/bash.rkt"
+                  tool-bash
                   destructive-command?
                   destructive-patterns
                   current-block-destructive
@@ -24,10 +25,12 @@
                   bash-execution-config-warn-on-destructive?
                   current-bash-execution-config
                   effective-bash-config)
+         (only-in "../tools/tool.rkt" tool-result-is-error? tool-result-content)
          (only-in "../runtime/safe-mode.rkt"
                   safe-mode?
                   current-safe-mode-config
-                  make-safe-mode-config))
+                  make-safe-mode-config)
+         racket/string)
 
 ;; ── SEC-01: Bypass-vector pattern tests ──
 
@@ -207,4 +210,23 @@
     (parameterize ([current-bash-execution-config custom])
       (define cfg (effective-bash-config))
       (check-eq? cfg custom)
-      (check-equal? (bash-execution-config-policy cfg) 'allow))))
+      (check-equal? (bash-execution-config-policy cfg) 'allow)))
+
+  ;; ============================================================
+  ;; v0.44.5 (NF3): Integration tests — config controls tool-bash
+  ;; ============================================================
+
+  (test-case "current-bash-execution-config overrides policy in tool-bash"
+    (parameterize ([current-bash-execution-config (make-bash-execution-config #:policy 'allowlist)])
+      (define result (tool-bash (hasheq 'command "vim README.md")))
+      (check-true (tool-result-is-error? result))
+      (define txt (hash-ref (car (tool-result-content result)) 'text ""))
+      (check-true (string-contains? txt "Blocked by execution policy"))))
+
+  (test-case "current-bash-execution-config overrides block-destructive in tool-bash"
+    (parameterize ([current-bash-execution-config (make-bash-execution-config #:policy 'warn
+                                                                              #:block? #t)])
+      (define result (tool-bash (hasheq 'command "rm -rf /tmp/test")))
+      (check-true (tool-result-is-error? result))
+      (define txt (hash-ref (car (tool-result-content result)) 'text ""))
+      (check-true (string-contains? txt "Blocked destructive")))))

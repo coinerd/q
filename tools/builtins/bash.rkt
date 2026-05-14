@@ -273,24 +273,34 @@
     [(not command) (make-error-result "Missing required argument: command")]
     [(not (non-empty-string? command)) (make-error-result "command must be a non-empty string")]
     [else
-     ;; SEC-13 (v0.22.0): Resolve safe-mode default at call time
+     ;; v0.44.5 (NF3): Resolve effective config (parameter or deprecated fallback)
+     (define cfg (effective-bash-config))
+     (define policy (bash-execution-config-policy cfg))
      (define block-destructive?
-       (let ([v (current-block-destructive)])
+       (let ([v (bash-execution-config-block-destructive? cfg)])
          (cond
-           [(procedure? v) (v)] ;; I-13: thunk resolver
-           [(eq? v 'safe-mode-default) (safe-mode?)] ;; backward compat
+           [(procedure? v) (v)] ;; I-13: thunk resolver (safe-mode default)
            [else v])))
+     (define warn-on-destructive? (bash-execution-config-warn-on-destructive? cfg))
+     (define warning-port (or (bash-execution-config-warning-port cfg) (current-error-port)))
      ;; Execution policy gate (RA-1a, v0.24.7)
+     (define (policy-allows? cmd)
+       (case policy
+         [(warn block) #t]
+         [(allowlist)
+          (define base (extract-base-command cmd))
+          (member base (current-allowed-commands))]
+         [else #t]))
      (cond
-       [(not (execution-policy-allows? command))
+       [(not (policy-allows? command))
         (make-error-result (format "Blocked by execution policy (allowlist mode): ~a" command))]
        ;; Block takes priority
        [(and block-destructive? (destructive-command? command))
         (make-error-result (format "Blocked destructive command: ~a" command))]
        [else
         ;; Optional warning
-        (when (and (current-warn-on-destructive) (destructive-command? command))
-          (fprintf (get-warning-port) "WARNING: Destructive command detected: ~a~n" command))
+        (when (and warn-on-destructive? (destructive-command? command))
+          (fprintf warning-port "WARNING: Destructive command detected: ~a~n" command))
         (define timeout-arg (hash-ref args 'timeout #f))
         (define raw-work-dir (hash-ref args 'working-directory #f))
         (define work-dir (and raw-work-dir (expand-home-path raw-work-dir)))
