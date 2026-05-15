@@ -428,9 +428,25 @@
           (make-test-msg "a1" 'assistant 'message "Hi there")
           (make-test-msg "u2" 'user 'message "How are you?")))
   (define config (hash->session-config (hash 'tier-b-count 10 'tier-c-count 2 'max-tokens 4096)))
-  (define-values (result _hook-res) (ctx-assemble msgs config))
+  (define-values (result _hook-res _tc) (ctx-assemble msgs config))
   (check-pred list? result)
   (check >= (length result) 1)
   ;; Verify all results are messages
   (for ([m (in-list result)])
     (check-true (message? m))))
+
+;; v0.45.7 (NF3): OBS metrics test — verify tiered-context carries real data
+(test-case "NF3: assemble-context/pure returns tiered-context with real structure"
+  (define msgs
+    (list (make-test-msg "u1" 'user 'message "Hello")
+          (make-test-msg "a1" 'assistant 'message "Response")
+          (make-test-msg "u2" 'user 'message "Follow up")))
+  (define config (hash->session-config (hash 'tier-b-count 10 'tier-c-count 2 'max-tokens 4096)))
+  (define-values (result _hook-res tc) (ctx-assemble msgs config))
+  (check-pred tiered-context? tc)
+  ;; Total across tiers should equal assembled count
+  (define tier-total
+    (+ (length (tiered-context-tier-a tc))
+       (length (tiered-context-tier-b tc))
+       (length (tiered-context-tier-c tc))))
+  (check-equal? tier-total (length result) "tier total should match assembled count"))
