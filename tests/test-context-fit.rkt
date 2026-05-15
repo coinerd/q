@@ -47,3 +47,30 @@
 
 (test-case "fit-messages-from-recent returns empty for empty input"
   (check-equal? (fit-messages-from-recent '() 1000) '()))
+
+;; v0.45.7 (NF2): Integration test — importance rescue wired through production path
+(test-case "fit-messages-from-recent rescues critical-importance messages"
+  ;; Create 20 normal messages and 1 critical message at position 0
+  (define normal-msgs
+    (for/list ([i (in-range 1 21)])
+      (make-message (format "n~a" i)
+                    #f
+                    'user
+                    'text
+                    (list (make-text-part (format "Normal message ~a with padding text" i)))
+                    i
+                    (hasheq))))
+  (define critical-msg
+    (make-message "crit-0"
+                  #f
+                  'user
+                  'text
+                  (list (make-text-part "CRITICAL DECISION"))
+                  0
+                  (hasheq 'importance 'critical)))
+  (define msgs (cons critical-msg normal-msgs))
+  ;; Small budget — critical message should be rescued by importance pass
+  (define result (fit-messages-from-recent msgs 150))
+  (define result-ids (map message-id result))
+  (check-not-false (member "crit-0" result-ids)
+                   "critical-importance message should survive importance rescue"))

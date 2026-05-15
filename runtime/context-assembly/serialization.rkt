@@ -34,7 +34,7 @@
          tiered-context->message-list
          build-tiered-context-with-hooks
          compute-dynamic-tier-b-count
-         summarize-tool-result
+         summarize-tool-result ;; re-exported from session-walk.rkt via context-assembly.rkt
          context-assembly-payload
          context-assembly-payload?
          context-assembly-payload-tier-a-messages

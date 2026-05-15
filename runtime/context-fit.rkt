@@ -12,14 +12,16 @@
          (only-in "../runtime/context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned
-                  fit-messages-pair-preserving))
+                  fit-messages-pair-preserving
+                  fit-messages-with-importance-rescue))
 
 (provide truncate-messages-to-budget
          fit-messages-from-recent)
 
-;; Fit messages from recent end within budget (pair-preserving).
+;; Fit messages from recent end within budget (pair-preserving + importance rescue).
+;; v0.45.7 (NF2): Now uses importance-aware rescue to preserve critical/high messages.
 (define (fit-messages-from-recent messages budget)
-  (fit-messages-pair-preserving messages budget))
+  (fit-messages-with-importance-rescue messages budget))
 
 ;; truncate-messages-to-budget: Trim messages from the front to fit within token budget.
 ;; Returns truncated message list with first-user pinning preserved.
