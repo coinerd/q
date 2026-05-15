@@ -2,7 +2,7 @@
 
 ## Version
 
-v0.45.6
+v0.45.7
 
 ## Layer Diagram
 
