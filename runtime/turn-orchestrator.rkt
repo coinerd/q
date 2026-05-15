@@ -23,7 +23,7 @@
          racket/list
          racket/promise
          json
-         (only-in racket/string string-contains?)
+         (only-in racket/string string-contains? string-join)
          (only-in "../util/errors.rkt" raise-extension-error)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
@@ -105,7 +105,9 @@
                   config-max-tokens
                   config-working-set
                   config-settings
-                  config-model-name))
+                  config-model-name)
+         (only-in "../util/protocol-types.rkt" message-kind message-content)
+         racket/set)
 
 (provide (contract-out
           [run-provider-turn
@@ -220,10 +222,30 @@
                                                0)))
 
   ;; v0.45.5 (OBS-01/02/03): Emit detailed assembly metrics
+  ;; v0.45.7 (NF3): Replaced stubs with real computed values
   (define tier-a-len (length (tiered-context-tier-a tc-struct)))
   (define tier-b-len (length (tiered-context-tier-b tc-struct)))
   (define tier-c-len (length (tiered-context-tier-c tc-struct)))
   (define assembled-total (+ tier-a-len tier-b-len tier-c-len))
+  ;; Compute excluded IDs from messages not in assembled output
+  (define assembled-ids
+    (for/set ([m (in-list ctx-assembled)])
+      (message-id m)))
+  (define excluded-id-list
+    (for/list ([m (in-list ctx-to-use)]
+               #:unless (set-member? assembled-ids (message-id m)))
+      (message-id m)))
+  (define excluded-ids-str (string-join excluded-id-list ","))
+  ;; Compute summary length from compaction-summary messages
+  (define summary-len
+    (for/sum ([m (in-list ctx-assembled)] #:when (eq? (message-kind m) 'compaction-summary))
+             (define content (message-content m))
+             (if (string? content)
+                 (string-length content)
+                 0)))
+  ;; Count GSD-pinned messages (context-assembly-summary kind)
+  (define gsd-pinned
+    (for/sum ([m (in-list ctx-assembled)] #:when (eq? (message-kind m) 'context-assembly-summary)) 1))
   (emit-typed-event! bus
                      (make-context-assembly-detail-event
                       #:session-id session-id
@@ -234,9 +256,9 @@
                       #:tier-b-count tier-b-len
                       #:tier-c-count tier-c-len
                       #:excluded-count (- (length ctx-to-use) assembled-total)
-                      #:excluded-ids ""
-                      #:summary-length 0
-                      #:gsd-pinned-count 0
+                      #:excluded-ids excluded-ids-str
+                      #:summary-length summary-len
+                      #:gsd-pinned-count gsd-pinned
                       #:ws-entry-count (if ws
                                            (working-set-entry-count ws)
                                            0)
