@@ -238,20 +238,33 @@
         (context-summary from-id to-id summary-text actual-count)]
        [_ (context-summary from-id to-id cached (length entries))])]))
 
+;; CA-04 fix: expanded from 20×100 to 30×200 with file path extraction
+(define FILE-IN-TEXT-RE
+  (regexp (string-append "[a-zA-Z0-9_./-]+" "\\.[a-zA-Z][a-zA-Z][a-zA-Z]?[a-zA-Z]?")))
+
 (define (simple-summary-text entries)
-  (string-append "## Progress\n### Done\n"
+  (string-append "## Progress Summary (fallback — LLM summarization unavailable)\n\n"
+                 "### Done\n"
                  (string-join (for/list ([m (in-list entries)]
                                          [i (in-naturals)]
-                                         #:break (>= i 20))
-                                (format "- [~a] ~a: ~a"
+                                         #:break (>= i 30))
+                                (define text (extract-message-text m))
+                                (define files (regexp-match* FILE-IN-TEXT-RE text))
+                                (define truncated (truncate-string text 200))
+                                (format "- [~a] ~a: ~a~a"
                                         (message-id m)
                                         (symbol->string (message-role m))
-                                        (truncate-string (extract-message-text m) 100)))
+                                        truncated
+                                        (if (pair? files)
+                                            (format " [files: ~a]"
+                                                    (string-join (take files (min 5 (length files)))
+                                                                 ", "))
+                                            "")))
                               "\n")))
 
 ;; Count of entries actually represented in simple-summary-text
 (define (simple-summary-count entries)
-  (min (length entries) 20))
+  (min (length entries) 30))
 
 ;; ============================================================
 ;; Helpers
