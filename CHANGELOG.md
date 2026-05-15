@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.45.4 — 2026-05-15
+
+### Fixed
+- SAL-04: Added entity extraction utility (summary-entities.rkt) and quality gate in llm-summarize
+- CA-04: Expanded simple-summary-text from 20×100 to 30×200 with file path extraction
+- TEST-02: Added 9 tests for summary quality gates (test-summary-quality.rkt)
+
 ## v0.45.3 — 2026-05-15
 
 ### Fixed

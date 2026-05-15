@@ -13,7 +13,11 @@
          (only-in "compaction-prompts.rkt"
                   summary-prompt
                   iterative-update-prompt
-                  format-messages-for-summary))
+                  format-messages-for-summary)
+         (only-in "context-assembly/summary-entities.rkt"
+                  extract-key-entities
+                  check-entity-preservation
+                  entity-preservation-appendix))
 
 (provide (contract-out [llm-summarize
                         (->* (list? any/c any/c)
@@ -42,12 +46,25 @@
   (define resp (provider-send provider req))
   ;; Extract text from response content
   (define content (model-response-content resp))
-  (string-join (for/list ([part (in-list content)])
-                 (cond
-                   [(hash? part) (hash-ref part 'text "")]
-                   [(string? part) part]
-                   [else (format "~a" part)]))
-               ""))
+  (define raw-summary
+    (string-join (for/list ([part (in-list content)])
+                   (cond
+                     [(hash? part) (hash-ref part 'text "")]
+                     [(string? part) part]
+                     [else (format "~a" part)]))
+                 ""))
+  ;; SAL-04 quality gate: check entity preservation
+  (define entities (extract-key-entities messages))
+  (define missing (check-entity-preservation entities raw-summary))
+  (define final-summary
+    (if (null? missing)
+        raw-summary
+        (string-append raw-summary (entity-preservation-appendix missing))))
+  ;; Reject empty or too-short summaries
+  (when (< (string-length final-summary) 50)
+    (log-warning (format "context-summary: LLM summary too short (~a chars)"
+                         (string-length final-summary))))
+  final-summary)
 
 ;; Create a summarize function suitable for use with compact-history.
 ;; The returned function has signature: (listof message?) -> string
