@@ -54,6 +54,13 @@
 (define DEFAULT-TIER-B-COUNT 20)
 (define DEFAULT-TIER-C-COUNT 4)
 
+;; v0.45.6 (SAL-03): Dynamic Tier C sizing — scales with total message count
+;; At 200 messages: 4. At 400: 8. At 500+: 10-12.
+(define (compute-tier-c-count total-messages)
+  (min 12 (max 4 (quotient total-messages 50))))
+
+(provide compute-tier-c-count)
+
 ;; v0.28.21 W4: Dynamic Tier-B sizing
 ;; Scales Tier-B with total message count: min(50, max(20, total/10))
 ;; More messages → larger Tier-B window for better mid-context retention.
@@ -119,7 +126,12 @@
   (define total (length unpinned))
   ;; v0.28.21 W4: Use dynamic Tier-B sizing when not explicitly specified
   (define effective-tier-b (or tier-b-count (compute-dynamic-tier-b-count total)))
-  (define tier-c-size (min tier-c-count total))
+  ;; v0.45.6 (SAL-03): Use dynamic Tier-C sizing when using default
+  (define effective-tier-c
+    (if (= tier-c-count DEFAULT-TIER-C-COUNT)
+        (compute-tier-c-count total)
+        tier-c-count))
+  (define tier-c-size (min effective-tier-c total))
   (define tier-c
     (if (> tier-c-size 0)
         (take-right unpinned tier-c-size)

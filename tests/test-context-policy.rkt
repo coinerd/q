@@ -12,7 +12,9 @@
          "../runtime/context-policy.rkt"
          "../util/protocol-types.rkt"
          "../util/content-parts.rkt"
-         "../llm/token-budget.rkt")
+         "../llm/token-budget.rkt"
+         racket/set
+         (only-in "../runtime/context-assembly/serialization.rkt" compute-tier-c-count))
 
 ;; ============================================================
 ;; Helpers
@@ -175,3 +177,81 @@
   ;; Result ids should be a subsequence of original, in order
   (for ([rid (in-list result-ids)])
     (check-pred values (member rid original-ids) (format "~a should be in original" rid))))
+
+;; ============================================================
+;; v0.45.6 (SAL-02/SAL-03/TEST-03): Importance + dynamic sizing tests
+;; ============================================================
+
+(test-case "fit-messages-pair-preserving empty list"
+  (check-equal? (fit-messages-pair-preserving '() 1000) '()))
+
+(test-case "fit-messages-pair-preserving single message"
+  (define msgs (list (make-test-message "m1" 'user 'message "hello")))
+  (check-equal? (length (fit-messages-pair-preserving msgs 1000)) 1))
+
+(test-case "message-importance defaults to normal"
+  (define msg (make-test-message "m1" 'user 'message "hello"))
+  (check-equal? (message-importance msg) 'normal))
+
+(test-case "message-importance reads from meta"
+  (define msg
+    (message "m1"
+             #f
+             'user
+             'message
+             (list (make-text-part "hello"))
+             (current-seconds)
+             (hasheq 'importance 'critical)))
+  (check-equal? (message-importance msg) 'critical))
+
+(test-case "message-elevated-importance? detects critical"
+  (define msg
+    (message "m1"
+             #f
+             'user
+             'message
+             (list (make-text-part "hello"))
+             (current-seconds)
+             (hasheq 'importance 'critical)))
+  (check-not-false (message-elevated-importance? msg)))
+
+(test-case "message-elevated-importance? normal is not elevated"
+  (define msg (make-test-message "m1" 'user 'message "hello"))
+  (check-false (message-elevated-importance? msg)))
+
+(test-case "fit-messages-with-importance-rescue rescues critical messages"
+  (define normal-msgs
+    (for/list ([i (in-range 30)])
+      (make-test-message (format "n~a" i)
+                         'user
+                         'message
+                         (format "Normal message ~a with enough text to use tokens" i))))
+  (define critical-msg
+    (message "crit-1"
+             #f
+             'user
+             'message
+             (list (make-text-part "CRITICAL DECISION: use approach X"))
+             (current-seconds)
+             (hasheq 'importance 'critical)))
+  (define msgs (append normal-msgs (list critical-msg)))
+  ;; Small budget should still rescue the critical message
+  (define fitted (fit-messages-with-importance-rescue msgs 500))
+  (define fitted-ids (list->set (map message-id fitted)))
+  (check-true (set-member? fitted-ids "crit-1")
+              (format "Expected crit-1 in fitted, got ~a" (set->list fitted-ids))))
+
+(test-case "fit-messages-with-importance-rescue no important messages"
+  (define msgs
+    (for/list ([i (in-range 10)])
+      (make-test-message (format "m~a" i) 'user 'message (format "msg ~a" i))))
+  (define result (fit-messages-with-importance-rescue msgs 100000))
+  ;; Should behave same as regular fit
+  (check-equal? (length result) 10))
+
+(test-case "dynamic-tier-c-count scales with message count"
+  (check-equal? (compute-tier-c-count 100) 4) ; 100/50 = 2, max(4,2) = 4
+  (check-equal? (compute-tier-c-count 400) 8) ; 400/50 = 8
+  (check-equal? (compute-tier-c-count 600) 12) ; 600/50 = 12
+  (check-equal? (compute-tier-c-count 50) 4) ; 50/50 = 1, max(4,1) = 4
+  (check-equal? (compute-tier-c-count 1000) 12)) ; 1000/50 = 20, min(12,20) = 12
