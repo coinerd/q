@@ -35,7 +35,8 @@
                   context-summary-text
                   context-summary-entry-count
                   context-summary-from-id
-                  context-summary-to-id))
+                  context-summary-to-id)
+         (only-in "../../util/errors.rkt" warn-deprecated!))
 
 ;; R10: Call-options struct bundling keyword args for build-assembled-context
 (struct context-assembly-call-options
@@ -137,6 +138,9 @@
                                      #:model-name [model-name #f]
                                      #:cache [cache #f]
                                      #:trace [trace #f])
+  (warn-deprecated! 'build-assembled-context/raw
+                    "v0.47.0"
+                    "Use build-tiered-context from context-assembly/serialization.rkt")
   (define (emit-trace phase data)
     (when trace
       (trace phase data)))
