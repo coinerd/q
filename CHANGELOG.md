@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.45.7 — 2026-05-15
+
+### Fixed
+- NF6/NF6b/NF6c: Fixed TUI camelCase key reads (toolName, resultSummary, maxRetries) in state-events.rkt
+- NF1: Removed broken `build-session-context/tokens` duplicate from session-walk.rkt
+- NF5: Wired `fit-messages-with-importance-rescue` into `fit-messages-from-recent` in context-fit.rkt
+- NF2: Added importance rescue integration test for fit-messages-from-recent
+- NF3: Replaced hardcoded OBS metric stubs (excluded-ids, summary-length, gsd-pinned-count) with real computed values
+- NF4/ARCH-01: Migrated session-lifecycle from raw assembly path to tiered context assembly
+- Added OBS metrics test verifying tiered-context structure
+- Added regression test for first-turn context quality via tiered path
+
 ## v0.45.6 — 2026-05-15
 
 ### Fixed
