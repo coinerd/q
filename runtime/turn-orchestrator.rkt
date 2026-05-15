@@ -68,7 +68,11 @@
          (only-in "../runtime/context-assembly.rkt"
                   build-tiered-context-with-hooks
                   tiered-context->message-list
-                  build-tiered-context)
+                  build-tiered-context
+                  tiered-context?
+                  tiered-context-tier-a
+                  tiered-context-tier-b
+                  tiered-context-tier-c)
          (only-in "../runtime/working-set.rkt"
                   working-set?
                   working-set-resolve-messages
@@ -128,7 +132,7 @@
           [assemble-context/pure
            (->* (list? session-config?)
                 (#:hook-dispatcher (or/c procedure? #f))
-                (values list? any/c))]))
+                (values list? any/c tiered-context?))]))
 
 ;; ============================================================
 ;; Context assembly
@@ -155,7 +159,7 @@
                                      #:tier-c-count tier-c-count
                                      #:max-tokens max-tokens
                                      #:working-set-messages ws-messages))
-  (values (tiered-context->message-list tc) hook-result))
+  (values (tiered-context->message-list tc) hook-result tc))
 
 ;; Build assembled context using tiered context assembly with hooks.
 ;; Returns the assembled message list.
@@ -172,7 +176,7 @@
            result)))
 
   ;; FD-05: Delegate pure assembly to assemble-context/pure
-  (define-values (ctx-assembled assembly-hook-result)
+  (define-values (ctx-assembled assembly-hook-result tc-struct)
     (assemble-context/pure ctx-to-use config-raw #:hook-dispatcher ctx-assembly-hook-dispatcher))
 
   ;; Handle block action from context-assembly hook
@@ -214,6 +218,32 @@
                       #:working-set-tokens (if ws
                                                (working-set-token-count ws)
                                                0)))
+
+  ;; v0.45.5 (OBS-01/02/03): Emit detailed assembly metrics
+  (define tier-a-len (length (tiered-context-tier-a tc-struct)))
+  (define tier-b-len (length (tiered-context-tier-b tc-struct)))
+  (define tier-c-len (length (tiered-context-tier-c tc-struct)))
+  (define assembled-total (+ tier-a-len tier-b-len tier-c-len))
+  (emit-typed-event! bus
+                     (make-context-assembly-detail-event
+                      #:session-id session-id
+                      #:turn-id ""
+                      #:timestamp (current-inexact-milliseconds)
+                      #:total-messages (length ctx-to-use)
+                      #:tier-a-count tier-a-len
+                      #:tier-b-count tier-b-len
+                      #:tier-c-count tier-c-len
+                      #:excluded-count (- (length ctx-to-use) assembled-total)
+                      #:excluded-ids ""
+                      #:summary-length 0
+                      #:gsd-pinned-count 0
+                      #:ws-entry-count (if ws
+                                           (working-set-entry-count ws)
+                                           0)
+                      #:ws-tokens (if ws
+                                      (working-set-token-count ws)
+                                      0)
+                      #:cache-hit-p #f))
 
   ;; Dispatch 'context hook — extensions can amend final context
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))

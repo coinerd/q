@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.45.5 — 2026-05-15
+
+### Fixed
+- OBS-01/02/03: Added context-assembly-detail-event with tier counts, excluded count, WS stats
+- OBS-01: Tiered path now emits detailed assembly metrics per turn via turn-orchestrator
+
 ## v0.45.4 — 2026-05-15
 
 ### Fixed
