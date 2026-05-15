@@ -272,47 +272,5 @@
                   catalog
                   summary-obj))
 
-;; Build session context from index (tree walk)
-(define (build-session-context idx)
-  (define leaf (active-leaf idx))
-  (cond
-    [(not leaf) '()]
-    [else
-     (define path (get-branch idx (message-id leaf)))
-     (cond
-       [(not path) '()]
-       [else (assemble-context path)])]))
-
-(define (assemble-context path)
-  (define-values (pre-compaction post-compaction) (split-at-compaction path))
-  (define relevant-entries (if post-compaction post-compaction path))
-  (filter-map entry->context-message relevant-entries))
-
-(define (split-at-compaction path)
-  (define compaction-idx
-    (for/last ([entry (in-list path)]
-               [i (in-naturals)]
-               #:when (compaction-summary-entry? entry))
-      i))
-  (cond
-    [(not compaction-idx) (values path #f)]
-    [else
-     (define-values (pre post) (split-at path compaction-idx))
-     (values pre post)]))
-
-(define (entry->context-message entry)
-  (match (message-kind entry)
-    ['message entry]
-    ['compaction-summary (transform-summary-to-user entry)]
-    ['branch-summary (transform-summary-to-user entry)]
-    [(or 'session-info 'model-change 'thinking-level-change) #f]
-    [(or 'tool-result 'bash-execution) entry]
-    ['system-instruction entry]
-    ['custom-message entry]
-    [_ entry]))
-
-(define (transform-summary-to-user entry)
-  (struct-copy message entry [role 'user]))
-
-;; Re-export needed from session-index
-(require (only-in "../session-index.rkt" active-leaf get-branch))
+;; CA-05: Import shared session walk logic from session-walk.rkt
+(require "session-walk.rkt") ;; provides build-session-context, assemble-context, etc.

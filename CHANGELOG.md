@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.45.2 — 2026-05-15
+
+### Fixed
+- CA-05: Extract shared session-walk.rkt, eliminate duplicate build-session-context between selection.rkt and serialization.rkt
+- ARCH-02 (partial): Deduplicate assemble-context, split-at-compaction, entry->context-message into single source
+
 ## v0.45.1 — 2026-05-15
 
 ### Fixed
