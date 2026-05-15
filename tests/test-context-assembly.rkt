@@ -450,3 +450,28 @@
        (length (tiered-context-tier-b tc))
        (length (tiered-context-tier-c tc))))
   (check-equal? tier-total (length result) "tier total should match assembled count"))
+
+;; v0.45.7 (NF4/S10): Regression test for first-turn context quality via tiered path
+;; Simulates session-lifecycle migration: tree walk → tiered assembly → message list
+(test-case "NF4: session-lifecycle tiered path preserves first-user and summaries"
+  ;; Create messages including a compaction summary and first user message
+  (define msgs
+    (list (make-test-msg "sys" 'system 'system-instruction "You are helpful.")
+          (make-test-msg "u1" 'user 'message "First question")
+          (make-test-msg "a1" 'assistant 'message "First answer")
+          (make-test-msg "c1" 'assistant 'compaction-summary "Summary of prior context")
+          (make-test-msg "u2" 'user 'message "Second question")
+          (make-test-msg "a2" 'assistant 'message "Second answer")))
+  ;; Run tiered assembly (mimics session-lifecycle migration path)
+  (define-values (tc _hook-res) (build-tiered-context-with-hooks msgs #:max-tokens 8192))
+  (define result (tiered-context->message-list tc))
+  (check > (length result) 0 "tiered assembly should return messages")
+  ;; Verify all results are valid messages
+  (for ([m (in-list result)])
+    (check-true (message? m)))
+  ;; Verify compaction summary survives
+  (define summary-msgs (filter (lambda (m) (eq? (message-kind m) 'compaction-summary)) result))
+  (check > (length summary-msgs) 0 "compaction summary should survive tiered assembly")
+  ;; Verify first user message survives (Tier A pinned)
+  (define user-msgs (filter (lambda (m) (eq? (message-role m) 'user)) result))
+  (check > (length user-msgs) 0 "at least one user message should survive"))

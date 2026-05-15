@@ -42,15 +42,10 @@
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../util/error-helpers.rkt" with-telemetry)
          (only-in "../runtime/context-assembly.rkt"
-                  build-assembled-context
-                  context-assembly-config?
-                  make-context-assembly-config
-                  context-result-messages
-                  context-result-catalog
-                  context-result?
-                  catalog-entry
-                  catalog-entry?
-                  build-session-context)
+                  build-session-context
+                  build-tiered-context-with-hooks
+                  tiered-context->message-list
+                  tiered-context?)
          (only-in "../runtime/working-set.rkt" make-working-set working-set-reset!)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
@@ -70,35 +65,33 @@
                   retry-exhausted-total-delay-ms
                   retry-exhausted-error-history))
 
-(provide (contract-out [run-prompt!
-                        (->* (agent-session? (or/c string? any/c))
-                             (#:max-iterations (or/c exact-nonnegative-integer? #f)
-                                               #:ensure-persisted! (or/c procedure? #f)
-                                               #:buffer-or-append! (or/c procedure? #f))
-                             any)]
-                       [run-prompt-internal
-                        (-> agent-session?
-                            (or/c string? any/c)
-                            (or/c exact-nonnegative-integer? #f)
-                            (or/c exact-nonnegative-integer? #f)
-                            (or/c procedure? #f)
-                            (or/c procedure? #f)
-                            any)]
-                       [build-session-context
-                        (-> agent-session?
-                            (or/c string? any/c)
-                            (or/c procedure? #f)
-                            (or/c procedure? #f)
-                            (listof any/c))]
-                       [dispatch-iteration
-                        (-> agent-session? (listof any/c) exact-nonnegative-integer? any)]
-                       [ensure-persisted! (-> agent-session? void?)]
-                       [buffer-or-append! (-> agent-session? any/c void?)]
-                       [write-crash-log! (-> (or/c string? #f) string? string? void?)]
-                       [compute-parent-id
-                        (->* ((listof any/c)) ((or/c any/c #f)) (or/c any/c #f))]
-                       [inject-system-instructions
-                        (-> (listof any/c) (listof string?) (listof any/c))]))
+(provide (contract-out
+          [run-prompt!
+           (->* (agent-session? (or/c string? any/c))
+                (#:max-iterations (or/c exact-nonnegative-integer? #f)
+                                  #:ensure-persisted! (or/c procedure? #f)
+                                  #:buffer-or-append! (or/c procedure? #f))
+                any)]
+          [run-prompt-internal
+           (-> agent-session?
+               (or/c string? any/c)
+               (or/c exact-nonnegative-integer? #f)
+               (or/c exact-nonnegative-integer? #f)
+               (or/c procedure? #f)
+               (or/c procedure? #f)
+               any)]
+          [build-session-context
+           (-> agent-session?
+               (or/c string? any/c)
+               (or/c procedure? #f)
+               (or/c procedure? #f)
+               (listof any/c))]
+          [dispatch-iteration (-> agent-session? (listof any/c) exact-nonnegative-integer? any)]
+          [ensure-persisted! (-> agent-session? void?)]
+          [buffer-or-append! (-> agent-session? any/c void?)]
+          [write-crash-log! (-> (or/c string? #f) string? string? void?)]
+          [compute-parent-id (->* ((listof any/c)) ((or/c any/c #f)) (or/c any/c #f))]
+          [inject-system-instructions (-> (listof any/c) (listof string?) (listof any/c))]))
 
 ;; ============================================================
 ;; Helpers
@@ -106,7 +99,6 @@
 
 ;; session-log-path imported from session-types.rkt
 ;; ensure-persisted!, buffer-or-append! from agent-session.rkt
-
 
 ;; ============================================================
 ;; Pure helpers (extracted for testability)
@@ -123,8 +115,7 @@
           ;; Skip session-info entries for parent calculation
           [(eq? (message-kind leaf) 'session-info) #f]
           [else (message-id leaf)]))
-      (let ([existing (filter (lambda (m) (not (eq? (message-kind m) 'session-info)))
-                                entries)])
+      (let ([existing (filter (lambda (m) (not (eq? (message-kind m) 'session-info))) entries)])
         (if (null? existing)
             #f
             (message-id (last existing))))))
@@ -170,9 +161,10 @@
         (let ()
           ;; Determine parent from active leaf in index (#521: use stored IDs)
           (define parent-id
-            (compute-parent-id
-             (if (file-exists? log-path) (load-session-log log-path) '())
-             idx))
+            (compute-parent-id (if (file-exists? log-path)
+                                   (load-session-log log-path)
+                                   '())
+                               idx))
           (make-message (generate-id)
                         parent-id
                         'user
@@ -194,20 +186,17 @@
   (when idx
     (append-to-leaf! idx user-msg))
 
-  ;; Build context: use context-assembly when provider available, else tree walk
+  ;; Build context: use tiered context assembly when provider available, else tree walk
+  ;; v0.45.7 (NF4/ARCH-01): Migrated from raw build-assembled-context to tiered path
   (define context-messages
     (if idx
         (cond
           [(agent-session-provider sess)
-           ;; Use context-assembly for production pipeline with LLM summarization
-           (define cfg (make-context-assembly-config #:recent-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD))
-           (define result
-             (build-assembled-context idx
-                                      cfg
-                                      #:provider (agent-session-provider sess)
-                                      #:model-name (agent-session-model-name sess)
-                                      #:working-set ws))
-           (context-result-messages result)]
+           ;; v0.45.7: Use tiered assembly for GSD pinning, hooks, and observability
+           (define raw-msgs (build-session-context idx))
+           (define-values (tc _hook-result)
+             (build-tiered-context-with-hooks raw-msgs #:max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD))
+           (tiered-context->message-list tc)]
           ;; Fallback: context-assembly tree walk (no LLM summarization)
           [else (build-session-context idx)])
         ;; Fallback: no index — use linear history (backward compat)
