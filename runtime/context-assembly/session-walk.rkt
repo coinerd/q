@@ -24,7 +24,6 @@
          (only-in "../session-index.rkt" active-leaf get-branch))
 
 (provide build-session-context
-         build-session-context/tokens
          assemble-context
          split-at-compaction
          entry->context-message
@@ -44,16 +43,7 @@
        [#f '()]
        [_ (assemble-context path)])]))
 
-;; Token-aware variant used by serialization.rkt
-(define (build-session-context/tokens idx #:max-tokens max-tokens)
-  (define leaf (active-leaf idx))
-  (match leaf
-    [#f '()]
-    [_
-     (define path (get-branch idx (message-id leaf)))
-     (match path
-       [#f '()]
-       [_ (assemble-context path)])]))
+;; Token-aware variant lives in serialization.rkt
 
 (define (assemble-context path)
   (define-values (pre post) (split-at-compaction path))
