@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.45.0 — 2026-05-15
+
+### Fixed
+- CA-01: Inject summary into result messages when messages are excluded from context
+- CA-02: Replace hash-ref on context-summary struct with context-summary-entry-count accessor
+- New test: summary-injected-into-result-messages-when-excluded
+
 ## v0.44.5 — 2026-05-14
 
 ### Fixed

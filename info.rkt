@@ -5,7 +5,7 @@
 
 (define collection "q")
 (define pkg-name "q")
-(define version "0.44.5")
+(define version "0.45.0")
 (define pkg-desc "A local-first, extensible coding agent runtime")
 
 (define deps '("base"))
