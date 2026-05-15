@@ -78,26 +78,28 @@
                             max-tokens
                             metadata))
 
+(define (gsd-progress-message? m)
+  (or (hash-ref (message-meta m) 'gsd-pin #f)
+      (and (memq (message-role m) '(tool assistant))
+           (let ([txt (string-join (for/list ([part (message-content m)]
+                                              #:when (text-part? part))
+                                     (text-part-text part)))])
+             (and (non-empty-string? txt)
+                  (regexp-match?
+                   (regexp (string-append "wave [0-9]+ (marked complete|is complete|done)"
+                                          "|PLAN\\.md.*(updated|created|written)"
+                                          "|STATE\\.md.*(updated|created|written)"
+                                          "|HANDOFF\\.json.*(written|updated)"
+                                          "|milestone.*complete"
+                                          "|review.*(APPROVED|REQUEST_CHANGES)"))
+                   txt))))))
+
 (define (build-tiered-context messages
                               #:tier-b-count [tier-b-count #f]
                               #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
                               #:working-set-messages [ws-messages '()])
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
-  ;; v0.28.21 W7 + v0.28.22 W2: GSD progress pinning
-  ;; v0.28.23 W0: tightened to tool/assistant roles only, removed broad wave-done regex
-  ;; L-02: Prefer message-meta 'gsd-pin flag over fragile regex matching.
-  ;; The regex fallback supports legacy messages created before gsd-pin was added.
-  (define (gsd-progress-message? m)
-    (or (hash-ref (message-meta m) 'gsd-pin #f)
-        (and (memq (message-role m) '(tool assistant))
-             (let ([txt (string-join (for/list ([part (message-content m)]
-                                                #:when (text-part? part))
-                                       (text-part-text part)))])
-               (and (non-empty-string? txt)
-                    (regexp-match?
-                     #rx"wave [0-9]+ marked complete|PLAN\\.md.*updated|STATE\\.md.*updated"
-                     txt))))))
   (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
   (define-values (sys-protected unpinned-raw)
     (partition (lambda (m) (eq? (message-kind m) 'system-instruction)) regular))
@@ -295,3 +297,63 @@
                         desc
                         inst)))
         (string-join parts "\n\n")])]))
+
+;; ============================================================
+;; TEST-01: Isolated unit tests for gsd-progress-message?
+;; ============================================================
+(module+ test
+  (require rackunit)
+
+  (define (make-test-msg role text [meta (hasheq)])
+    (make-message "test-id" #f role 'text (list (make-text-part text)) (current-seconds) meta))
+
+  ;; Flag-based pinning
+  (test-case "gsd-pin-flag-pins-message"
+    (define m (make-test-msg 'assistant "wave done" (hasheq 'gsd-pin #t)))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "no-gsd-pin-flag-does-not-pin"
+    (define m (make-test-msg 'assistant "regular message" (hasheq)))
+    (check-false (gsd-progress-message? m)))
+
+  ;; Regex-based pinning (fallback)
+  (test-case "regex-matches-wave-complete"
+    (define m (make-test-msg 'assistant "wave 3 marked complete"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-wave-is-complete"
+    (define m (make-test-msg 'tool "wave 5 is complete"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-wave-done"
+    (define m (make-test-msg 'assistant "wave 2 done"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-plan-md-updated"
+    (define m (make-test-msg 'tool "PLAN.md has been updated with wave 2 status"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-state-md-created"
+    (define m (make-test-msg 'assistant "STATE.md created"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-handoff-json-written"
+    (define m (make-test-msg 'assistant "HANDOFF.json written successfully"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-milestone-complete"
+    (define m (make-test-msg 'assistant "milestone v0.45.0 is now complete"))
+    (check-true (gsd-progress-message? m)))
+
+  (test-case "regex-matches-review-approved"
+    (define m (make-test-msg 'assistant "review: APPROVED"))
+    (check-true (gsd-progress-message? m)))
+
+  ;; Negative cases
+  (test-case "regex-no-match-user-role"
+    (define m (make-test-msg 'user "wave 5 marked complete"))
+    (check-false (gsd-progress-message? m)))
+
+  (test-case "regex-no-match-non-gsd-text"
+    (define m (make-test-msg 'assistant "I have completed the refactoring"))
+    (check-false (gsd-progress-message? m))))
