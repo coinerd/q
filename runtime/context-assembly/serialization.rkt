@@ -97,7 +97,10 @@
 (define (build-tiered-context messages
                               #:tier-b-count [tier-b-count #f]
                               #:tier-c-count [tier-c-count DEFAULT-TIER-C-COUNT]
-                              #:working-set-messages [ws-messages '()])
+                              #:working-set-messages [ws-messages '()]
+                              #:trace [trace-cb #f])
+  (when trace-cb
+    (trace-cb 'start (hasheq 'total (length messages))))
   (define-values (compaction-summaries regular-msgs)
     (partition (lambda (m) (eq? (message-kind m) 'compaction-summary)) messages))
   (define-values (gsd-pinned regular) (partition gsd-progress-message? regular-msgs))
@@ -131,9 +134,18 @@
     (if (> tier-b-size 0)
         (take-right remaining-after-c tier-b-size)
         '()))
-  (tiered-context (append sys-protected pinned-user gsd-pinned compaction-summaries ws-messages)
-                  tier-b
-                  tier-c))
+  (define tier-a (append sys-protected pinned-user gsd-pinned compaction-summaries ws-messages))
+  (when trace-cb
+    (trace-cb 'partition
+              (hasheq 'tier-a
+                      (length tier-a)
+                      'tier-b
+                      (length tier-b)
+                      'tier-c
+                      (length tier-c)
+                      'gsd-pinned
+                      (length gsd-pinned))))
+  (tiered-context tier-a tier-b tier-c))
 
 (define (build-tiered-context-with-hooks messages
                                          #:hook-dispatcher [hook-dispatcher #f]

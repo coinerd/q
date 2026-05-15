@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.45.3 — 2026-05-15
+
+### Fixed
+- ARCH-01: Added optional #:trace callback to build-tiered-context for observability (OBS-01 partial)
+- CA-05: Deprecated build-assembled-context/raw with warn-deprecated! pointing to tiered path
+
 ## v0.45.2 — 2026-05-15
 
 ### Fixed
