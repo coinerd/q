@@ -991,3 +991,35 @@
   (define s0 (initial-ui-state))
   (define s1 (struct-copy ui-state s0 [mock-provider? #t]))
   (check-true (ui-state-mock-provider? s1) "mock-provider? set to #t"))
+
+;; ============================================================
+;; v0.45.7 Wave 0 (NF6): TUI camelCase key fix tests
+;; ============================================================
+
+(test-case "NF6: tool.execution.started reads camelCase toolName"
+  (define s0 (initial-ui-state))
+  (define evt (make-test-event "tool.execution.started" (hash 'toolName "read" 'toolCallId "tc-1")))
+  (define s1 (apply-event-to-state s0 evt))
+  (define entries (ui-state-transcript s1))
+  (check > (length entries) 0 "should have at least one transcript entry")
+  (define entry (car entries))
+  (check-equal? (hash-ref (transcript-entry-meta entry) 'name #f) "read"))
+
+(test-case "NF6: tool.execution.completed reads camelCase toolName"
+  (define s0 (initial-ui-state))
+  ;; Start the tool first
+  (define start-evt
+    (make-test-event "tool.execution.started" (hash 'toolName "bash" 'toolCallId "tc-2")))
+  (define s1 (apply-event-to-state s0 start-evt))
+  ;; Then complete it
+  (define end-evt
+    (make-test-event "tool.execution.completed" (hash 'toolName "bash" 'resultSummary 'completed)))
+  (define s2 (apply-event-to-state s1 end-evt))
+  ;; Should have tool-end entries — verify name is "bash", not "?"
+  (define entries (ui-state-transcript s2))
+  (define tool-end-entries (filter (lambda (e) (eq? (transcript-entry-kind e) 'tool-end)) entries))
+  (check > (length tool-end-entries) 0 "should have a tool-end entry")
+  (define end-entry (car tool-end-entries))
+  (check-equal? (hash-ref (transcript-entry-meta end-entry) 'name #f)
+                "bash"
+                "tool name should be 'bash', not '?'"))
