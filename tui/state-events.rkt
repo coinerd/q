@@ -119,7 +119,7 @@
 
 (define (handle-tool-execution-started state evt)
   (define payload (event-payload evt))
-  (define name (hash-ref payload 'tool-name "?"))
+  (define name (hash-ref payload 'toolName "?"))
   (if (recent-tool-start? state name)
       (set-pending-tool-name (set-busy state #t) name)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
@@ -135,13 +135,11 @@
             (set-pending-tool-name (set-busy new-state #t) name)))))
 
 (define (handle-tool-execution-completed state evt)
-  ;; W-04: Accepts both old (name/result/error) and new (tool-name/result-summary) payloads
+  ;; W-04: Accepts both old (name/result/error) and new (toolName/resultSummary) payloads
   (define payload (event-payload evt))
-  (define name (hash-ref payload 'tool-name (lambda () (hash-ref payload 'name "?"))))
+  (define name (hash-ref payload 'toolName (lambda () (hash-ref payload 'name "?"))))
   (define result-summary
-    (hash-ref payload
-              'result-summary
-              (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
+    (hash-ref payload 'resultSummary (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
   (define result-raw (hash-ref payload 'result #f))
   (define error-raw (hash-ref payload 'error #f))
   (define ts (event-time evt))
@@ -395,7 +393,7 @@
   (cond
     [(equal? ev "auto-retry.start")
      (define attempt (hash-ref payload 'attempt "?"))
-     (define max-attempts (hash-ref payload 'max-retries "?"))
+     (define max-attempts (hash-ref payload 'maxRetries "?"))
      (define error-type (hash-ref payload 'errorType #f))
      (define type-label
        (case error-type
