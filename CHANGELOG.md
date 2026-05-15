@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.45.6 — 2026-05-15
+
+### Fixed
+- SAL-02: Added importance annotation support (message-importance, message-elevated-importance?)
+- SAL-02: Added importance-aware post-pass (fit-messages-with-importance-rescue) to rescue critical/high messages
+- SAL-03: Dynamic Tier-C sizing (compute-tier-c-count) scales with message count
+- TEST-03: Added 10 edge case tests for fit-messages-pair-preserving and importance rescue
+
 ## v0.45.5 — 2026-05-15
 
 ### Fixed

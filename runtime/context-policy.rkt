@@ -14,6 +14,7 @@
          racket/string
          racket/set
          "../util/protocol-types.rkt"
+         (only-in "../util/message.rkt" message-meta)
          "../llm/token-budget.rkt")
 
 ;; Token estimation
@@ -29,7 +30,14 @@
          ;; Internal helpers (not contracted — used by context-assembly only)
          build-pair-index
          ;; Re-export from token-budget
-         estimate-text-tokens)
+         estimate-text-tokens
+         ;; v0.45.6 (SAL-02): Importance annotation support
+         message-importance
+         message-elevated-importance?
+         importance-levels
+         IMPORTANCE-BUDGET-FRACTION
+         ;; v0.45.6 (SAL-02): Importance-aware post-pass (keyword arg — no contract)
+         fit-messages-with-importance-rescue)
 
 ;; ============================================================
 ;; Token estimation
@@ -54,6 +62,24 @@
 
 (define (user-message? msg)
   (eq? (message-role msg) 'user))
+
+;; ============================================================
+;; v0.45.6 (SAL-02): Importance annotation support
+;; ============================================================
+
+;; Importance levels for context messages
+(define importance-levels '(critical high normal low))
+
+;; Budget reservation for important messages (10% of total budget)
+(define IMPORTANCE-BUDGET-FRACTION 0.10)
+
+;; Get importance from message meta (default: 'normal)
+(define (message-importance msg)
+  (hash-ref (message-meta msg) 'importance 'normal))
+
+;; Check if message has elevated importance
+(define (message-elevated-importance? msg)
+  (memq (message-importance msg) '(critical high)))
 
 ;; ============================================================
 ;; Pinning
@@ -197,3 +223,34 @@
                                (values fa fi fu)))))
                    (values final-acc final-ids final-used)))
              (loop (cdr remaining) final-acc2 final-ids2 final-used2)])])])))
+
+;; ============================================================
+;; v0.45.6 (SAL-02): Importance-aware post-pass
+;; ============================================================
+
+;; Fit messages with importance rescue: after recency-based fit, rescue
+;; elevated-importance messages from the excluded set using a small
+;; reserved budget (default 10% of total).
+(define (fit-messages-with-importance-rescue messages
+                                             budget
+                                             [estimate-fn estimate-message-tokens]
+                                             #:importance-budget-fraction
+                                             [frac IMPORTANCE-BUDGET-FRACTION])
+  ;; Phase 1: Existing recency-based fit
+  (define fitted (fit-messages-pair-preserving messages budget estimate-fn))
+  ;; Phase 2: Importance rescue
+  (define importance-budget (inexact->exact (floor (* budget frac))))
+  (define fitted-ids
+    (for/set ([m (in-list fitted)])
+      (message-id m)))
+  (define excluded (filter (lambda (m) (not (set-member? fitted-ids (message-id m)))) messages))
+  (define important-excluded (filter message-elevated-importance? excluded))
+  (if (null? important-excluded)
+      fitted
+      (let* ([rescued (fit-messages-pair-preserving important-excluded importance-budget estimate-fn)]
+             [rescued-ids (for/set ([m (in-list rescued)])
+                            (message-id m))]
+             ;; Remove duplicates from fitted that are also in rescued
+             [fitted-unique (filter (lambda (m) (not (set-member? rescued-ids (message-id m))))
+                                    fitted)])
+        (append rescued fitted-unique))))
