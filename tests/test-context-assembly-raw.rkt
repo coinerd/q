@@ -8,10 +8,13 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/string
          "../runtime/context-assembly/selection.rkt"
          "../runtime/context-assembly/budgeting.rkt"
+         "../runtime/context-summary.rkt"
          "../util/message.rkt"
-         "../util/content-parts.rkt")
+         "../util/content-parts.rkt"
+         (only-in "../util/content-parts.rkt" text-part? text-part-text))
 
 (define (make-test-msg text [id "msg-1"] [role 'user])
   (make-message id #f role 'text (list (make-text-part text)) 0 #f))
@@ -71,7 +74,43 @@
       (define msgs (list (make-test-msg "test" "msg-1")))
       (define result (build-assembled-context/raw msgs config #f #:memo memo #:trace trace-fn))
       (check-not-false result)
-      (check-true (> (length trace-events) 0) "trace should have received events"))))
+      (check-true (> (length trace-events) 0) "trace should have received events"))
+
+    ;; CA-01: Summary injection test
+    (test-case "summary-injected-into-result-messages-when-excluded"
+      ;; Build messages that exceed a tight budget, forcing exclusion + summary
+      (define messages
+        (for/list ([i (in-range 20)])
+          (make-test-msg
+           (format "Message ~a with enough text to consume tokens: ~a" i (make-string 200 #\x))
+           (format "msg-~a" i))))
+      (define budget 500) ;; tight budget → most messages excluded
+      (define cfg (make-context-assembly-config #:recent-tokens budget))
+      (define result
+        (build-assembled-context/raw
+         messages
+         cfg
+         #f
+         #:memo (make-hash)
+         #:generate-summary-proc
+         (λ (excluded provider model-name cache)
+           (context-summary "from-0"
+                            "to-19"
+                            "## Summary of excluded messages\nKey fact: important info here"
+                            (length excluded)))))
+      ;; The summary must be generated
+      (define summary-obj (context-result-summary result))
+      (check-not-false summary-obj "summary should be generated when messages excluded")
+      ;; KEY CHECK: summary text must appear in the assembled messages sent to LLM
+      (when summary-obj
+        (define result-msgs (context-result-messages result))
+        (define all-text
+          (string-join (for*/list ([m (in-list result-msgs)]
+                                   [part (in-list (message-content m))]
+                                   #:when (text-part? part))
+                         (text-part-text part))))
+        (check-true (string-contains? all-text (context-summary-text summary-obj))
+                    "summary text must be present in assembled context")))))
 
 (module+ main
   (run-tests raw-assembly-tests))
