@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.45.1 — 2026-05-15
+
+### Fixed
+- SAL-06: Wire gsd-pin flag into GSD wave-done and done command handlers
+- TEST-01: Add 12 isolated unit tests for gsd-progress-message? (module+ test)
+- Expanded regex fallback for GSD progress patterns (HANDOFF, milestone, review)
+- Extracted gsd-progress-message? to module level for testability
+
 ## v0.45.0 — 2026-05-15
 
 ### Fixed
