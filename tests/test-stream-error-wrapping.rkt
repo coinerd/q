@@ -191,3 +191,119 @@
     (check-equal? (current-loop-state-for-error-recovery) st1)))
 
 (run-tests stream-error-suite 'verbose)
+
+;; ============================================================
+;; v0.45.13 L3: Thinking-only partial message behavior
+;; ============================================================
+
+(test-case "v0.45.13 L3: thinking-only stream does NOT persist partial message"
+  ;; When a stream has thinking content but no text content and errors,
+  ;; the partial message is NOT persisted. This is by design: the error
+  ;; handler checks streaming-message-text, not thinking.
+  ;; This test documents the behavior for future reference.
+  (define thinking-only-prov
+    (make-provider
+     (lambda () "thinking-only-mock")
+     (lambda () (hash 'streaming #t 'token-counting #t))
+     (lambda (req) (hasheq))
+     (lambda (req)
+       (generator ()
+                  ;; Send a chunk with thinking but no text
+                  (yield (make-stream-chunk #f #f #f #f #:delta-thinking "Deep thinking..."))
+                  ;; Then error
+                  (raise (exn:fail "stream timeout" (current-continuation-marks)))))))
+  (define bus (make-event-bus))
+  (define st (make-loop-state "test-session-t" "test-turn-t"))
+  (subscribe! bus (lambda (evt) (void)))
+  (check-exn exn:fail?
+             (lambda ()
+               (stream-from-provider thinking-only-prov
+                                     (make-model-request '() #f (hasheq))
+                                     bus
+                                     "test-session-t"
+                                     "test-turn-t"
+                                     st
+                                     #f
+                                     #f)))
+  ;; Verify NO message was persisted — thinking-only content is not saved
+  ;; This is the current behavior. If changed, this test should be updated.
+  (check-equal? (loop-state-messages st) '()))
+
+(test-case "v0.45.13 L3: text+thinking stream persists full message"
+  ;; When a stream has BOTH text and thinking and errors,
+  ;; the partial message IS persisted with the text content.
+  (define both-prov
+    (make-provider
+     (lambda () "both-mock")
+     (lambda () (hash 'streaming #t 'token-counting #t))
+     (lambda (req) (hasheq))
+     (lambda (req)
+       (generator ()
+                  ;; Send text+thinking chunk
+                  (yield (make-stream-chunk "Hello" #f #f #f #:delta-thinking "Thinking..."))
+                  ;; Then error
+                  (raise (exn:fail "stream error" (current-continuation-marks)))))))
+  (define bus2 (make-event-bus))
+  (define st2 (make-loop-state "test-session-b" "test-turn-b"))
+  (subscribe! bus2 (lambda (evt) (void)))
+  (check-exn exn:fail?
+             (lambda ()
+               (stream-from-provider both-prov
+                                     (make-model-request '() #f (hasheq))
+                                     bus2
+                                     "test-session-b"
+                                     "test-turn-b"
+                                     st2
+                                     #f
+                                     #f)))
+  ;; Verify partial message WAS persisted — text is present
+  (define msgs (loop-state-messages st2))
+  (check-equal? (length msgs) 1)
+  (define content (message-content (car msgs)))
+  (check-true (and (list? content) (= (length content) 1)))
+  (check-equal? (text-part-text (car content)) "Hello"))
+
+;; ============================================================
+;; v0.45.13 M1: NF1 parameter integration with stream-from-provider
+;; ============================================================
+
+(test-case "v0.45.13 M1: parameter state matches state passed to stream-from-provider"
+  ;; Verify that when stream-from-provider is called within a parameterize
+  ;; of current-loop-state-for-error-recovery, the state object is accessible
+  ;; through the parameter during error recovery.
+  (define error-prov
+    (make-provider (lambda () "integration-mock")
+                   (lambda () (hash 'streaming #t 'token-counting #t))
+                   (lambda (req) (hasheq))
+                   (lambda (req)
+                     (generator ()
+                                (yield (make-stream-chunk "Integration text" #f #f #f))
+                                (raise (exn:fail "integration stream error"
+                                                 (current-continuation-marks)))))))
+  (define bus (make-event-bus))
+  (define st (make-loop-state "int-session" "int-turn"))
+  (subscribe! bus (lambda (evt) (void)))
+  ;; Set the parameter, then call stream-from-provider
+  (parameterize ([current-loop-state-for-error-recovery st])
+    ;; Verify parameter is set
+    (check-equal? (current-loop-state-for-error-recovery) st)
+    ;; Call stream-from-provider — it should error
+    (check-exn exn:fail?
+               (lambda ()
+                 (stream-from-provider error-prov
+                                       (make-model-request '() #f (hasheq))
+                                       bus
+                                       "int-session"
+                                       "int-turn"
+                                       st
+                                       #f
+                                       #f)))
+    ;; After error, verify partial message was persisted to the same state object
+    (define msgs (loop-state-messages st))
+    (check-equal? (length msgs) 1 "partial message persisted to loop-state")
+    ;; Verify the same state is still accessible through the parameter
+    (check-equal? (current-loop-state-for-error-recovery) st)
+    (define recovered-msgs (loop-state-messages (current-loop-state-for-error-recovery)))
+    (check-equal? (length recovered-msgs) 1 "parameter state has the partial message"))
+  ;; After parameterize exits, parameter is back to #f
+  (check-false (current-loop-state-for-error-recovery)))

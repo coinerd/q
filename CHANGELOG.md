@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.45.13 — 2026-05-16
+
+### Fixed
+- **F2**: Updated stale v0.45.11 watchdog comment in `tui/tui-render-loop.rkt` to reflect v0.45.12 L3+L4 changes
+
+### Testing
+- **M1**: Added NF1 + stream error integration test — verifies `current-loop-state-for-error-recovery` is accessible and consistent during error recovery
+- **M2**: Added 2 watchdog transcript tests — entry text content assertion and pre-existing entries preserved
+- **L2**: Added wall-clock deadline “immediate second call" test
+- **L3**: Added 2 thinking-only partial message behavior tests (documents that thinking-only content is not persisted)
+
 ## v0.45.12 — 2026-05-16
 
 ### Fixed

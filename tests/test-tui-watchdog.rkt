@@ -104,3 +104,43 @@
 (test-case "watchdog: parameter can be overridden"
   (parameterize ([current-busy-watchdog-ms 1000])
     (check-equal? (current-busy-watchdog-ms) 1000)))
+
+;; ============================================================
+;; v0.45.13 M2: Transcript entry text and timestamp assertions
+;; ============================================================
+
+(test-case "v0.45.13 M2: watchdog transcript entry has correct text and timestamp"
+  (define now (+ (current-inexact-milliseconds) (* 31 60 1000)))
+  (define st (set-busy-since (set-busy (initial-ui-state) #t) (- now (* 31 60 1000))))
+  (define result (check-busy-watchdog st now (* 30 60 1000)))
+  ;; Verify transcript entry exists
+  (define entries (ui-state-transcript result))
+  (define watchdog-entry
+    (for/first ([e (in-list entries)]
+                #:when (and (eq? (transcript-entry-kind e) 'system)
+                            (hash-ref (transcript-entry-meta e) 'watchdog #f)))
+      e))
+  (check-not-false watchdog-entry "watchdog transcript entry exists")
+  ;; Verify the text content matches expected message
+  (check-equal? (transcript-entry-text watchdog-entry)
+                "[Watchdog: busy state timed out — force-cleared after 30 min]")
+  ;; Verify timestamp matches the 'now' argument passed to check-busy-watchdog
+  (check-equal? (transcript-entry-timestamp watchdog-entry) now))
+
+(test-case "v0.45.13 M2: existing transcript entries preserved after watchdog"
+  ;; Add a pre-existing transcript entry, then fire watchdog, verify both exist
+  (define now (+ (current-inexact-milliseconds) (* 31 60 1000)))
+  (define base-st (set-busy-since (set-busy (initial-ui-state) #t) (- now (* 31 60 1000))))
+  ;; Add a pre-existing entry manually
+  (define pre-entry (make-entry 'user "existing message" 1000 (hasheq)))
+  (define st (add-transcript-entry base-st pre-entry))
+  (define result (check-busy-watchdog st now (* 30 60 1000)))
+  (check-not-false result)
+  ;; Should have 2 entries: watchdog entry (newest first) then pre-existing
+  (define entries (ui-state-transcript result))
+  (check-equal? (length entries) 2)
+  ;; Watchdog entry is first (newest, cons'd last)
+  (check-equal? (transcript-entry-kind (first entries)) 'system)
+  (check-true (hash-ref (transcript-entry-meta (first entries)) 'watchdog #f))
+  ;; Pre-existing entry is second
+  (check-equal? (transcript-entry-text (second entries)) "existing message"))
