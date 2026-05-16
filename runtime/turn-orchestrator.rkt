@@ -60,7 +60,7 @@
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
          ;; Transitive dependency of tool-coordinator
          "../tools/scheduler.rkt"
-         ;; Context assembly hook dispatch (dispatch-hooks for build-assembled-context)
+         ;; Context assembly: tiered context build with hooks + importance rescue
          "../extensions/hooks.rkt"
          (only-in "../extensions/context.rkt" make-extension-ctx)
          "../runtime/session-store.rkt"

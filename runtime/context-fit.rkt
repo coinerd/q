@@ -12,7 +12,6 @@
          (only-in "../runtime/context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned
-                  fit-messages-pair-preserving
                   fit-messages-with-importance-rescue))
 
 (provide truncate-messages-to-budget
