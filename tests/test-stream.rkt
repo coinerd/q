@@ -4,7 +4,8 @@
 
 (require rackunit
          "../llm/stream.rkt"
-         "../llm/model.rkt")
+         "../llm/model.rkt"
+         "../agent/loop-stream.rkt")
 
 ;; ============================================================
 ;; parse-sse-line tests
@@ -342,3 +343,22 @@
   ;; Now no more data — should timeout quickly (0.05s stream)
   (check-exn exn:fail:network:timeout? (lambda () (gen)))
   (close-output-port out))
+
+;; ============================================================
+;; v0.45.9 AF4: empty-response detection tests
+;; ============================================================
+
+(test-case "AF4: accumulate-stream-chunks returns empty text for thinking-only chunks"
+  (define thinking-chunk
+    (make-stream-chunk #f #f #f #f #:delta-thinking "Let me think..." #:finish-reason 'stop))
+  (define acc (accumulate-stream-chunks (list thinking-chunk)))
+  (check-equal? (hash-ref acc 'text) "")
+  (check-equal? (hash-ref acc 'tool-calls) '())
+  (check-not-false (hash-ref acc 'thinking)))
+
+(test-case "AF4: accumulate-stream-chunks returns text for mixed chunks"
+  (define text-chunk
+    (make-stream-chunk "Hello" #f #f #f #:finish-reason 'stop))
+  (define acc (accumulate-stream-chunks (list text-chunk)))
+  (check-equal? (hash-ref acc 'text) "Hello")
+  (check-equal? (hash-ref acc 'tool-calls) '()))
