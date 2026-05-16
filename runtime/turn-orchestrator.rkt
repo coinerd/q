@@ -78,6 +78,7 @@
                   working-set-resolve-messages
                   working-set-entry-count
                   working-set-token-count)
+         (only-in "context-assembly/serialization.rkt" gsd-progress-message?)
          (only-in "../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
@@ -239,13 +240,10 @@
   ;; Compute summary length from compaction-summary messages
   (define summary-len
     (for/sum ([m (in-list ctx-assembled)] #:when (eq? (message-kind m) 'compaction-summary))
-             (define content (message-content m))
-             (if (string? content)
-                 (string-length content)
-                 0)))
-  ;; Count GSD-pinned messages (context-assembly-summary kind)
-  (define gsd-pinned
-    (for/sum ([m (in-list ctx-assembled)] #:when (eq? (message-kind m) 'context-assembly-summary)) 1))
+             (for/sum ([p (in-list (message-content m))] #:when (text-part? p))
+                      (string-length (text-part-text p)))))
+  ;; Count GSD-pinned messages (using gsd-progress-message? predicate)
+  (define gsd-pinned (for/sum ([m (in-list ctx-assembled)] #:when (gsd-progress-message? m)) 1))
   (emit-typed-event! bus
                      (make-context-assembly-detail-event
                       #:session-id session-id
@@ -265,7 +263,8 @@
                       #:ws-tokens (if ws
                                       (working-set-token-count ws)
                                       0)
-                      #:cache-hit-p #f))
+                      #:cache-hit-p #f) ;; TODO: future — track context cache hits from provider
+                     )
 
   ;; Dispatch 'context hook — extensions can amend final context
   (define-values (ctx-final _ctx-hook) (maybe-dispatch-hooks ext-reg 'context ctx-assembled))
