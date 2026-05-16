@@ -249,20 +249,15 @@
    (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #t) (event-time evt)) #f))
    #f))
 
+;; v0.45.14: Removed min-busy-ms anti-flicker guard. Always clear busy? on turn.completed.
+;; The old guard caused busy? to stay #t during rapid iterations (< 500ms each),
+;; leading to false watchdog fires after 30 minutes.
 (define (handle-turn-completed state evt)
-  (define min-busy-ms 500)
-  (define since (ui-state-busy-since state))
-  (define ts (event-time evt))
-  (define elapsed
-    (if since
-        (- ts since)
-        min-busy-ms))
-  (if (< elapsed min-busy-ms)
-      (clear-streaming state)
-      (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f))))
+  (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f)))
 
+;; v0.45.14: Also clear busy-since for consistency with handle-turn-completed.
 (define (handle-turn-cancelled state evt)
-  (clear-streaming (set-pending-tool-name (set-busy state #f) #f)))
+  (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f)))
 
 (define (handle-compaction-warning state evt)
   (define payload (event-payload evt))

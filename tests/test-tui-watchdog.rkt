@@ -10,7 +10,9 @@
          "../tui/state-events.rkt"
          "../tui/state-ui.rkt"
          ;; v0.45.12 L4: Import the actual watchdog function
-         (only-in "../tui/tui-render-loop.rkt" check-busy-watchdog current-busy-watchdog-ms))
+         (only-in "../tui/tui-render-loop.rkt" check-busy-watchdog current-busy-watchdog-ms)
+         ;; v0.45.14: event constructor for apply-event-to-state tests
+         (only-in "tui/event-simulator.rkt" make-test-event))
 
 ;; Helper: create a minimal ui-state for testing
 (define (make-test-state #:busy? [busy? #f] #:busy-since [since #f])
@@ -150,3 +152,61 @@
   (check-true (hash-ref (transcript-entry-meta (first entries)) 'watchdog #f))
   ;; Pre-existing entry is second
   (check-equal? (transcript-entry-text (second entries)) "existing message"))
+
+;; ============================================================
+;; v0.45.14 W0: Rapid-iteration busy-state stuck fix
+;; ============================================================
+
+(test-case "v0.45.14: turn-completed always clears busy? regardless of elapsed time"
+  ;; Even with busy-since very recent (< 500ms), handle-turn-completed must clear busy?
+  (define now (current-inexact-milliseconds))
+  (define st
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") #t) now))
+  ;; Create a turn.completed event
+  (define evt (make-test-event "turn.completed" (hasheq) #:time (+ now 100)))
+  (define result (apply-event-to-state st evt))
+  ;; busy? MUST be #f even though only 100ms elapsed
+  (check-false (ui-state-busy? result))
+  (check-false (ui-state-busy-since result))
+  (check-false (ui-state-pending-tool-name result)))
+
+(test-case "v0.45.14: rapid iteration pattern does not stick busy"
+  ;; Simulate 10 rapid turn.started/turn.completed pairs with short elapsed times
+  (define base (initial-ui-state #:session-id "test" #:model-name "m"))
+  (define (turn-pair st idx)
+    (define start-time (+ (* idx 200) 1000000))
+    (define end-time (+ start-time 150)) ;; 150ms — well under old 500ms threshold
+    (define start-evt (make-test-event "turn.started" (hasheq) #:time start-time))
+    (define after-start (apply-event-to-state st start-evt))
+    ;; Simulate tool activity
+    (define tool-evt
+      (make-test-event "tool.call.started" (hasheq 'name "read") #:time (+ start-time 10)))
+    (define after-tool (apply-event-to-state after-start tool-evt))
+    ;; Complete the turn
+    (define end-evt (make-test-event "turn.completed" (hasheq) #:time end-time))
+    (apply-event-to-state after-tool end-evt))
+  (define final-st
+    (for/fold ([st base]) ([i (in-range 10)])
+      (turn-pair st i)))
+  ;; After 10 rapid iterations, busy? MUST be #f
+  (check-false (ui-state-busy? final-st))
+  (check-false (ui-state-busy-since final-st)))
+
+(test-case "v0.45.14: watchdog does not fire during active streaming"
+  ;; Even with expired busy-since, watchdog returns #f if streaming text is present
+  (define now (+ (current-inexact-milliseconds) (* 31 60 1000)))
+  (define base (set-busy (set-busy-since (initial-ui-state) #t) (- now (* 31 60 1000))))
+  ;; Set streaming text — agent is clearly alive and streaming
+  (define st (set-streaming-text base "partial response text..."))
+  (define result (check-busy-watchdog st now (* 30 60 1000)))
+  ;; Watchdog must NOT fire
+  (check-false result))
+
+(test-case "v0.45.14: turn-cancelled clears busy-since"
+  (define now (current-inexact-milliseconds))
+  (define st
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") #t) now))
+  (define evt (make-test-event "turn.cancelled" (hasheq) #:time (+ now 100)))
+  (define result (apply-event-to-state st evt))
+  (check-false (ui-state-busy? result))
+  (check-false (ui-state-busy-since result)))

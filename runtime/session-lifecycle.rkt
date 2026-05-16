@@ -431,9 +431,18 @@
               user-message))
         (run-prompt-internal sess effective-input max-iterations token-budget-threshold ep! ba!)]))
    ;; Cleanup: always reset prompt-running? even on error
+   ;; v0.45.14: Safety-net turn.completed ensures TUI busy? is always cleared,
+   ;; even if a regression prevents normal event flow.
    ;; B3-A: Emergency persist — defense-in-depth if session not yet persisted
    (lambda ()
      (guarded-set-prompt-running! sess #f)
+     ;; v0.45.14 W0a: Safety-net turn.completed for TUI busy-state recovery
+     (with-handlers ([exn:fail? void])
+       (define sid (agent-session-session-id sess))
+       (define bus (agent-session-event-bus sess))
+       (emit-typed-event!
+        bus
+        (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "cleanup" 0)))
      (unless (agent-session-persisted? sess)
        (with-handlers ([exn:fail? void])
          (ensure-persisted! sess))))))
