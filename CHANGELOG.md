@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.45.11 — 2026-05-16
+
+### Added
+- **W0**: SSE stream wall-clock deadline (`#:max-total-timeout`) in `read-sse-chunks` — prevents indefinite hangs from keep-alive bypass (default 600s)
+- **W0**: Consecutive-empty counter aborts after 100 non-data lines — prevents infinite loops
+- **W1**: TUI busy-state watchdog — force-clears stale busy state after 30 minutes, shows system message
+
+### Fixed
+- **NF1–NF6** (v0.45.10): All audit findings verified already in place from v0.45.9
+
+
 ## v0.45.10 — 2026-05-16
 
 ### Fixed
