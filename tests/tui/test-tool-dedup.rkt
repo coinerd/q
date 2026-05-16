@@ -33,7 +33,7 @@
       (define st (initial-ui-state))
       (define evt1 (make-test-event "tool.call.started" (hasheq 'name "bash" 'arguments "ls")))
       (define evt2
-        (make-test-event "tool.execution.started" (hasheq 'tool-name "bash" 'arguments "ls")))
+        (make-test-event "tool.execution.started" (hasheq 'toolName "bash" 'arguments "ls")))
       (define result (simulate-events st (list evt1 evt2)))
       ;; Only one tool-start entry should appear
       (define tool-starts (filter (lambda (k) (eq? k 'tool-start)) (transcript-types result)))
@@ -43,7 +43,7 @@
       (define st (initial-ui-state))
       (define evt1 (make-test-event "tool.call.started" (hasheq 'name "bash" 'arguments "ls")))
       (define evt2
-        (make-test-event "tool.execution.started" (hasheq 'tool-name "read" 'arguments "foo.txt")))
+        (make-test-event "tool.execution.started" (hasheq 'toolName "read" 'arguments "foo.txt")))
       (define result (simulate-events st (list evt1 evt2)))
       (define tool-starts (filter (lambda (k) (eq? k 'tool-start)) (transcript-types result)))
       (check-equal? (length tool-starts) 2 "different tools should each produce a tool-start"))
@@ -53,9 +53,9 @@
       (define events
         (list (make-test-event "tool.call.started" (hasheq 'name "bash" 'arguments "ls"))
               (make-test-event "tool.execution.completed"
-                               (hasheq 'tool-name "bash" 'result-summary 'completed))
+                               (hasheq 'toolName "bash" 'resultSummary 'completed))
               (make-test-event "tool.execution.completed"
-                               (hasheq 'tool-name "bash" 'result-summary 'completed))))
+                               (hasheq 'toolName "bash" 'resultSummary 'completed))))
       (define result (simulate-events st events))
       (define tool-ends
         (filter (lambda (k) (memq k '(tool-end tool-fail))) (transcript-types result)))
@@ -84,4 +84,4 @@
 
 (module+ main
   (require rackunit/text-ui)
-  (run-tests tool-start-dedup-tests))
+  (exit (run-tests tool-start-dedup-tests)))

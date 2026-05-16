@@ -180,7 +180,7 @@
          (styled (format "[tool: ~a: ~a]" name detail) '(bold yellow))
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
     [("tool.execution.started")
-     (define name (hash-ref payload 'tool-name "?"))
+     (define name (hash-ref payload 'toolName "?"))
      (define args-raw (hash-ref payload 'arguments #f))
      (define args
        (cond
@@ -201,10 +201,10 @@
          (styled (format "[tool: ~a]" name) '(bold yellow)))]
     [("tool.execution.completed")
      ;; W-04: Accepts both old (name/result/error) and new (tool-name/result-summary) payloads
-     (define name (hash-ref payload 'tool-name (lambda () (hash-ref payload 'name "?"))))
+     (define name (hash-ref payload 'toolName (lambda () (hash-ref payload 'name "?"))))
      (define result-summary
        (hash-ref payload
-                 'result-summary
+                 'resultSummary
                  (lambda () (if (hash-ref payload 'error #f) 'error 'completed))))
      (cond
        [(eq? result-summary 'completed)
