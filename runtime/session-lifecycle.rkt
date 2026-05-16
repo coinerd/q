@@ -37,7 +37,7 @@
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../util/error-helpers.rkt" with-telemetry)
          (only-in "../runtime/context-assembly.rkt"
-                  build-session-context
+                  (build-session-context build-session-context/from-index)
                   build-tiered-context-with-hooks
                   tiered-context->message-list)
          (only-in "../runtime/working-set.rkt"
@@ -77,7 +77,7 @@
                (or/c procedure? #f)
                (or/c procedure? #f)
                any)]
-          [build-session-context
+          [build-session-context-for-prompt
            (-> agent-session?
                (or/c string? any/c)
                (or/c procedure? #f)
@@ -142,7 +142,7 @@
 ;;
 ;;   Wave 1 (#520): Uses session-index + context-assembly tree walk
 ;;   instead of linear load-session-log.
-(define (build-session-context sess user-message ensure-persisted!-fn buffer-or-append!-fn)
+(define (build-session-context-for-prompt sess user-message ensure-persisted!-fn buffer-or-append!-fn)
   (define log-path (session-log-path-for sess))
   (define idx-path (session-index-path (agent-session-session-dir sess)))
 
@@ -191,10 +191,10 @@
           [(agent-session-provider sess)
            ;; v0.45.7: Use tiered assembly for GSD pinning, hooks, and observability
            ;; v0.45.8 (NF10): Inject working-set messages for context enrichment
-           (define raw-msgs (build-session-context idx))
+           (define raw-msgs (build-session-context/from-index idx))
            (define ws-msgs
              (if ws
-                 (working-set-resolve-messages ws)
+                 (working-set-resolve-messages ws raw-msgs message-id)
                  '()))
            (define-values (tc _hook-result)
              (build-tiered-context-with-hooks raw-msgs
@@ -202,7 +202,7 @@
                                               #:working-set-messages ws-msgs))
            (tiered-context->message-list tc)]
           ;; Fallback: context-assembly tree walk (no LLM summarization)
-          [else (build-session-context idx)])
+          [else (build-session-context/from-index idx)])
         ;; Fallback: no index — use linear history (backward compat)
         (let ([existing (if (file-exists? log-path)
                             (load-session-log log-path)
@@ -330,7 +330,7 @@
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system
-    (build-session-context sess user-message ensure-persisted!-fn buffer-or-append!-fn))
+    (build-session-context-for-prompt sess user-message ensure-persisted!-fn buffer-or-append!-fn))
 
   ;; 2. Check token budget and compact if needed
   (define context-after-compact

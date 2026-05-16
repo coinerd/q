@@ -11,7 +11,7 @@
          "../runtime/working-set.rkt"
          (only-in "../runtime/session-lifecycle.rkt"
                   run-prompt!
-                  build-session-context
+                  build-session-context-for-prompt
                   run-prompt-internal)
          "../runtime/session-types.rkt"
          (except-in "../runtime/agent-session.rkt" run-prompt!)
@@ -73,7 +73,7 @@
                            (lambda (m) 10))
       (check-equal? (working-set-entry-count ws) 1)
       ;; build-session-context should reset ws
-      (build-session-context sess "hello" ensure-persisted! buffer-or-append!)
+      (build-session-context-for-prompt sess "hello" ensure-persisted! buffer-or-append!)
       (check-equal? (working-set-entry-count ws) 0))
 
     ;; ── T02: run-prompt-internal creates ws in mutable config ──
@@ -129,7 +129,7 @@
                            (lambda (m) 20))
       (hash-set! cfg 'working-set ws)
       ;; build-session-context should produce context including ws message
-      (define ctx (build-session-context sess "hello" ensure-persisted! buffer-or-append!))
+      (define ctx (build-session-context-for-prompt sess "hello" ensure-persisted! buffer-or-append!))
       ;; Context should contain the tool message (it's in the working set)
       ;; Note: since there's no index, build-session-context falls back to linear history
       ;; and the working set is not injected. This test verifies the ws is at least
