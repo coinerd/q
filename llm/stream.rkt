@@ -358,10 +358,25 @@
 ;; The port is NOT closed by this function — the caller is responsible.
 (define (read-sse-chunks port
                          #:initial-timeout [initial-secs http-read-timeout-default]
-                         #:stream-timeout [stream-secs http-stream-timeout-default])
+                         #:stream-timeout [stream-secs http-stream-timeout-default]
+                         #:max-total-timeout [max-total-secs 600])
   (generator ()
              (define stream-start (current-inexact-milliseconds))
-             (let loop ([first-read? #t])
+             (define deadline (+ stream-start (* max-total-secs 1000.0)))
+             ;; v0.45.11: Consecutive empty/comment line counter.
+             ;; Prevents infinite loops when server sends keep-alives indefinitely.
+             (define max-consecutive-empty 100)
+             (let loop ([first-read? #t]
+                        [consecutive-empty 0])
+               ;; v0.45.11: Wall-clock deadline — fires regardless of keep-alives
+               (when (> (current-inexact-milliseconds) deadline)
+                 (raise (exn:fail:network:timeout
+                         (format "Stream exceeded maximum total duration (~a seconds)" max-total-secs)
+                         (current-continuation-marks))))
+               (when (>= consecutive-empty max-consecutive-empty)
+                 (raise (exn:fail:network:timeout (format "Stream exceeded ~a consecutive empty lines"
+                                                          max-consecutive-empty)
+                                                  (current-continuation-marks))))
                ;; v0.14.1: Adaptive per-chunk timeout for long generation
                (define elapsed-ms (- (current-inexact-milliseconds) stream-start))
                (define base-timeout (if first-read? initial-secs stream-secs))
@@ -383,5 +398,5 @@
                     [(eq? parsed 'done) (yield #f)]
                     [(hash? parsed)
                      (yield (normalize-openai-chunk parsed))
-                     (loop #f)]
-                    [else (loop #f)])]))))
+                     (loop #f 0)]
+                    [else (loop #f (add1 consecutive-empty))])]))))

@@ -492,3 +492,44 @@
   (check-equal? (length (unbox warning-events)) 1)
   (check-equal? (hash-ref (event-payload (car (unbox warning-events))) 'warning)
                 "empty-assistant-response"))
+
+;; ============================================================
+;; v0.45.11 W0: Wall-clock deadline + consecutive-empty tests
+;; ============================================================
+
+(test-case "v0.45.11: wall-clock deadline fires for slow stream"
+  ;; Sleep between generator calls to let the deadline expire.
+  (define lines (string-append "data: {\"choices\":[]}\n\n"
+                               "data: {\"choices\":[]}\n\n"))
+  (define in (open-input-string lines))
+  (define gen (read-sse-chunks in #:max-total-timeout 0.05))
+  ;; First read succeeds
+  (define first (gen))
+  (check-not-false first)
+  ;; Sleep past the 50ms deadline
+  (sleep 0.1)
+  ;; Now the deadline check should fire
+  (check-exn exn:fail:network:timeout?
+             (lambda () (gen))))
+(test-case "v0.45.11: consecutive-empty abort after 100 empty lines"
+  ;; Feed 101 empty lines (no data: prefix) -- should abort after 100
+  (define empty-lines (make-string 404 #\newline)) ;; 101 newlines = 101 empty lines
+  (define in (open-input-string empty-lines))
+  (define gen (read-sse-chunks in
+                               #:initial-timeout 5
+                               #:stream-timeout 5
+                               #:max-total-timeout 600))
+  (check-exn exn:fail:network:timeout?
+             (lambda ()
+               (let loop ()
+                 (define v (gen))
+                 (when v (loop))))))
+
+(test-case "v0.45.11: normal stream with default max-total-timeout works"
+  (define in (open-input-string "data: {\"choices\":[]}\ndata: [DONE]\n"))
+  (define gen (read-sse-chunks in #:max-total-timeout 600))
+  ;; Should yield a chunk then #f -- no timeout
+  (define first (gen))
+  (check-not-false first)
+  (define second (gen))
+  (check-false second))
