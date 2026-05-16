@@ -361,7 +361,7 @@
     ;; Drain all pending events from the channel (non-blocking)
     (drain-events! ctx)
 
-    ;; v0.45.11 W1 / v0.45.12 L3+L4: Busy-state watchdog — force-clear stale busy state
+    ;; Busy-state watchdog — force-clear stale busy state (v0.45.12 L3+L4)
     (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
     (define watchdog-result
       (check-busy-watchdog cur-state (current-inexact-milliseconds) (current-busy-watchdog-ms)))
