@@ -171,7 +171,7 @@
     (define raw (do-http-request base-url api-key "/chat/completions" body))
     (openai-parse-response raw))
 
-  ;; W-06: Extracted stream request — returns (values response-port cleanup-thunk)
+  ;; W-06: Extracted stream request — returns (values response-port stream-timeout cleanup-thunk)
   (define (openai-stream-request req)
     (define req-with-model (ensure-model-settings req))
     (define body (openai-build-request-body req-with-model #:stream? #t))

@@ -531,11 +531,13 @@
   (check-false second))
 
 (test-case "v0.45.12 L2: consecutive-empty resets on valid data chunk"
-  ;; Interleave empty lines with valid data — counter should reset on each valid chunk
+  ;; Interleave 80 empty lines with a valid chunk, then 80 more empty lines.
+  ;; If reset works: 80 < 100, 80 < 100 → stream completes.
+  ;; If reset broken: cumulative 160 > 100 → abort. This makes the test falsifiable.
   (define lines
-    (string-append "\n\n\n" ;; 3 empty lines
+    (string-append (apply string-append (make-list 80 "\n"))
                    "data: {\"choices\":[]}\n\n" ;; valid chunk (resets counter to 0)
-                   "\n\n\n\n\n" ;; 5 more empty lines
+                   (apply string-append (make-list 80 "\n"))
                    "data: [DONE]\n")) ;; stream end
   (define in (open-input-string lines))
   (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 5 #:max-total-timeout 600))

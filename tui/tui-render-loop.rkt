@@ -35,8 +35,7 @@
          "../util/output-guard.rkt"
          "../agent/queue.rkt"
          (only-in "../runtime/session-lifecycle.rkt" write-crash-log!)
-         "../tui/tree-view.rkt"
-         racket/set)
+         "../tui/tree-view.rkt")
 
 (define (tui-output-port)
   (or (guarded-real-output-port) (current-output-port)))

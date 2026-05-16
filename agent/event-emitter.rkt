@@ -25,9 +25,9 @@
 (provide (contract-out [emit-typed-event!
                         (->* (event-bus? typed-event?) (#:state (or/c loop-state? #f)) event?)]
                        [event-struct->hasheq (-> typed-event? hash?)]
-                       [get-struct-field-names (-> symbol? (or/c (listof symbol?) #f))])
-         typed-event-base-field-count
-         emit-session-event!)
+                       [get-struct-field-names (-> symbol? (or/c (listof symbol?) #f))]
+                       [emit-session-event! (-> event-bus? string? string? hash? event?)])
+         typed-event-base-field-count)
 
 ;; Look up the field name list for a given event struct symbol.
 ;; Uses auto-populated registry from define-typed-event macro.
