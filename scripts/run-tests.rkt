@@ -264,11 +264,14 @@
        [else
         (define exit-code (ctrl 'exit-code))
         (define stdout-bytes (get-output-bytes stdout-out))
-        (define-values (passed failed total) (parse-raco-output stdout-bytes))
+        (define stderr-bytes (get-output-bytes stderr-out))
+        ;; v0.45.8 (NF14): Merge stdout+stderr — rackunit text-ui outputs to stderr
+        (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
+        (define-values (passed failed total) (parse-raco-output merged-bytes))
         (test-file-result test-path
                           exit-code
                           stdout-bytes
-                          (get-output-bytes stderr-out)
+                          stderr-bytes
                           (elapsed)
                           passed
                           failed
@@ -277,15 +280,11 @@
      (ctrl 'wait)
      (define exit-code (ctrl 'exit-code))
      (define stdout-bytes (get-output-bytes stdout-out))
-     (define-values (passed failed total) (parse-raco-output stdout-bytes))
-     (test-file-result test-path
-                       exit-code
-                       stdout-bytes
-                       (get-output-bytes stderr-out)
-                       (elapsed)
-                       passed
-                       failed
-                       total)]))
+     (define stderr-bytes (get-output-bytes stderr-out))
+     ;; v0.45.8 (NF14): Merge stdout+stderr — rackunit text-ui outputs to stderr
+     (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
+     (define-values (passed failed total) (parse-raco-output merged-bytes))
+     (test-file-result test-path exit-code stdout-bytes stderr-bytes (elapsed) passed failed total)]))
 
 ;; ---------------------------------------------------------------------------
 ;; run-all-files - parallel dispatcher with progress dots
@@ -352,6 +351,9 @@
           failed-files
           timeout-files)
   (printf "  Tests:     ~a total, ~a passed, ~a failed~n" total-tests total-passed total-failed)
+  ;; v0.45.8 (NF14): Diagnostic hint when no test output parsed
+  (when (and (= total-tests 0) (= passed-files total-files))
+    (displayln "  ⚠ No test results parsed — files may use non-standard output format"))
   (printf "  Elapsed:   ~a~n" (format-duration total-start-ms))
   (displayln "═══════════════════════════════════════════════════════════")
 
