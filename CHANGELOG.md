@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.45.14 — 2026-05-16
+
+### Fixed
+- **HIGH**: Fixed busy-state stuck bug during rapid GSD iterations — removed `min-busy-ms` anti-flicker guard in `handle-turn-completed` that kept `busy?=#t` when turns completed in <500ms
+- Clear `busy-since` in `handle-turn-cancelled` for consistency
+- Safety-net `turn.completed` event in `run-prompt!` cleanup thunk (defense-in-depth)
+- Watchdog streaming guard — don't fire if streaming text is present
+
+### Testing
+- 4 new watchdog test cases: turn-completed clears busy, rapid-iteration pattern, streaming guard, turn-cancelled clears busy-since
+
 ## v0.45.13 — 2026-05-16
 
 ### Fixed
