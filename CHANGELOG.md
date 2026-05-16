@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.45.18 — 2026-05-17
+
+### Fixed
+- **F1**: `test-session-lifecycle-ws.rkt` — 4 broken tests fixed: use `dict-has-key?`/`dict-ref` instead of `hash-has-key?`/`hash-ref` for `session-config?` compatibility; use `set-agent-session-config!` instead of `hash-set!` on raw hash
+- **F4**: Added missing CHANGELOG entries for v0.45.16 and v0.45.17
+
+### Testing
+- Added regression test for v0.45.16 `build-session-context` shadowing bug — verifies 1-arg import distinct from 4-arg local function
+- Added regression test for v0.45.17 `emit-session-event!` contract violation — verifies non-hash payloads wrapped in `(hash 'raw payload)`
+- test-session-lifecycle-ws.rkt: 5/5 pass (was 1/5)
+
+## v0.45.17 — 2026-05-17
+
+### Fixed
+- **HIGH**: `emit-session-event!` contract violation — tool-coordinator passed raw `scheduler-batch-stats` struct instead of hash. Wraps non-hash payloads in `(hash 'raw payload)`.
+
+## v0.45.16 — 2026-05-17
+
+### Fixed
+- **CRITICAL**: `build-session-context` recursive shadowing — local 4-arg definition shadowed imported 1-arg version, causing arity crash on 2nd prompt of any session with an index. Renamed local → `build-session-context-for-prompt`, import → `build-session-context/from-index`.
+
 ## v0.45.15 — 2026-05-16
 
 ### Added
