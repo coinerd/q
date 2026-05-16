@@ -23,14 +23,9 @@
          racket/path
          (only-in "../util/protocol-types.rkt"
                   message-id
-                  message-role
-                  message-content
                   message-kind
-                  message-meta
-                  message-parent-id
                   make-message
                   make-text-part
-                  content-part->jsexpr
                   loop-result-termination-reason
                   make-loop-result)
          "../agent/event-bus.rkt"
@@ -38,7 +33,6 @@
          (only-in "../util/errors.rkt" raise-session-error)
          "../runtime/session-store.rkt"
          "../runtime/session-index.rkt"
-         (only-in "../util/event-types.rkt" injection-event-topic)
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../util/error-helpers.rkt" with-telemetry)
          (only-in "../runtime/context-assembly.rkt"
@@ -48,7 +42,6 @@
          (only-in "../runtime/working-set.rkt"
                   make-working-set
                   working-set-reset!
-                  working-set-entries
                   working-set-resolve-messages)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
