@@ -48,7 +48,8 @@
          entry->context-message
          load-agents-context
          build-system-preamble
-         truncate-messages-to-budget)
+         truncate-messages-to-budget
+         gsd-progress-message?)
 
 ;; Default tier boundaries
 (define DEFAULT-TIER-B-COUNT 20)
