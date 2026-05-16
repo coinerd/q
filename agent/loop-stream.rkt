@@ -72,11 +72,16 @@
     (for/first ([c (in-list chunks)]
                 #:when (stream-chunk-finish-reason c))
       (stream-chunk-finish-reason c)))
-  (hasheq 'text (apply string-append text-parts)
-          'thinking (apply string-append thinking-parts)
-          'tool-calls tool-calls
-          'usage usage
-          'finish-reason finish-reason))
+  (hasheq 'text
+          (apply string-append text-parts)
+          'thinking
+          (apply string-append thinking-parts)
+          'tool-calls
+          tool-calls
+          'usage
+          usage
+          'finish-reason
+          finish-reason))
 
 ;; ============================================================
 ;; stream-from-provider
@@ -404,6 +409,12 @@
   (define all-chunks (reverse (hash-ref stream-data 'all-chunks)))
   (define acc (accumulate-stream-chunks all-chunks))
   (define accumulated-text (hash-ref acc 'text))
+
+  ;; AF4 (RC1): Warn on empty assistant response (thinking-only model output)
+  (when (and (string=? accumulated-text "") (null? (hash-ref acc 'tool-calls)))
+    (log-warning "q: empty assistant response — model returned no text content (session=~a turn=~a)"
+                 session-id
+                 turn-id))
 
   (define text-part (make-text-part accumulated-text))
 
