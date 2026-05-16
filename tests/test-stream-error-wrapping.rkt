@@ -160,4 +160,34 @@
       ;; Verify NO message was added to loop-state
       (check-equal? (loop-state-messages st2) '()))))
 
+;; ============================================================
+;; v0.45.12 M3: NF1 parameter plumbing integration test
+;; ============================================================
+
+(test-case "NF1: current-loop-state-for-error-recovery parameter lifecycle"
+  ;; 1. Default is #f
+  (check-false (current-loop-state-for-error-recovery))
+  ;; 2. parameterize sets and unsets correctly
+  (define st (make-loop-state "test-session" "test-turn"))
+  (parameterize ([current-loop-state-for-error-recovery st])
+    (check-equal? (current-loop-state-for-error-recovery) st)
+    ;; 3. Messages accumulated in loop-state are visible through parameter
+    (state-add-message! st (hasheq 'role 'assistant 'content "partial text"))
+    (define recovered (current-loop-state-for-error-recovery))
+    (check-not-false recovered)
+    (define msgs (loop-state-messages recovered))
+    (check-equal? (length msgs) 1)
+    (check-equal? (hash-ref (car msgs) 'content) "partial text"))
+  ;; 4. After parameterize exits, parameter is back to #f
+  (check-false (current-loop-state-for-error-recovery)))
+
+(test-case "NF1: parameter with nested parameterize restores correctly"
+  (define st1 (make-loop-state "s1" "t1"))
+  (define st2 (make-loop-state "s2" "t2"))
+  (parameterize ([current-loop-state-for-error-recovery st1])
+    (check-equal? (current-loop-state-for-error-recovery) st1)
+    (parameterize ([current-loop-state-for-error-recovery st2])
+      (check-equal? (current-loop-state-for-error-recovery) st2))
+    (check-equal? (current-loop-state-for-error-recovery) st1)))
+
 (run-tests stream-error-suite 'verbose)

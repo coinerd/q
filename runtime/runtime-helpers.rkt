@@ -7,28 +7,20 @@
 ;; to eliminate duplication. Both files had identical copies of
 ;; emit-session-event! and maybe-dispatch-hooks.
 ;;
-;; Dependencies: event-bus, protocol-types, hooks, ids.
+;; v0.45.12 M2: emit-session-event! moved to agent/event-emitter.rkt to fix
+;; layer violation (agent core should not import from runtime). Re-exported
+;; here for backward compatibility with existing runtime callers.
 
-(require (only-in "../agent/event-bus.rkt" publish!)
-         (only-in "../util/event-contracts.rkt" event-payload-contract)
-         (only-in "../util/protocol-types.rkt" make-event)
-         (only-in "../util/ids.rkt" now-seconds)
+(require (only-in "../agent/event-emitter.rkt" emit-session-event!)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-payload))
 
 (provide emit-session-event!
          maybe-dispatch-hooks)
 
-;; Publish a session-scoped event to the event bus.
-(define (emit-session-event! bus sid event-name payload)
-  ;; Contract check -- only for events with defined contracts (R2 wiring)
-  (define pc (event-payload-contract event-name))
-  (when pc
-    (unless (pc payload)
-      (log-warning "Event payload contract violation: ~a" event-name)))
-  (define evt (make-event event-name (now-seconds) sid #f payload))
-  (publish! bus evt)
-  evt)
+;; emit-session-event! is now defined in agent/event-emitter.rkt
+;; and re-exported here for backward compatibility.
+;; Runtime callers can continue importing from runtime-helpers.rkt.
 
 ;; Safely dispatch hooks if extension-registry is present.
 ;; Returns (values amended-payload hook-result) or (values payload #f) if no registry.

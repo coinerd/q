@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.45.12 — 2026-05-16
+
+### Fixed
+- **M2**: Moved `emit-session-event!` from `runtime/runtime-helpers.rkt` to `agent/event-emitter.rkt` — fixes agent→runtime layer violation
+- **M1**: Merged duplicate CHANGELOG v0.45.10 sections
+- **L1**: SSE stream `max-total-timeout` now derived from model's effective request timeout (2x, floor 600s) instead of hardcoded
+- **L3**: TUI busy-state watchdog threshold is now configurable via `current-busy-watchdog-ms` parameter
+
+### Testing
+- **M3**: Added 2 tests for NF1 `current-loop-state-for-error-recovery` parameter lifecycle
+- **L2**: Added 2 tests for consecutive-empty counter reset on valid chunks and comment-line counting
+- **L4**: Extracted `check-busy-watchdog` to pure function; rewrote watchdog tests to use actual implementation; added 5 edge-case tests
+
 ## v0.45.11 — 2026-05-16
 
 ### Added
@@ -14,29 +27,12 @@
 ## v0.45.10 — 2026-05-16
 
 ### Fixed
-- **NF1**: Partial messages from stream errors now persist to session.jsonl via loop-state flush
+- **NF1**: Partial messages from stream errors now flushed to session.jsonl via `current-loop-state-for-error-recovery` parameter (was in-memory only)
 - **NF2**: Added test coverage for partial message persistence (2 tests)
-- **NF3**: Replaced log-warning with event bus emission for empty-response detection (observable by TUI/extensions)
-- **NF4**: Fixed whitespace-only response false-negative (uses string-trim)
-- **NF5**: Added thinking-length and model context to empty-response warning
+- **NF3**: Replaced log-warning with event bus emission (`runtime.warning`) for empty-response detection — now observable by TUI and extensions
+- **NF4**: Fixed whitespace-only response false-negative (uses `string-trim`)
+- **NF5**: Added thinking-length and turn ID to empty-response warning for better diagnostics
 - **NF6**: Retry context pollution prevention verified — error path returns original context, not loop-state
-
-
-## v0.45.10 — 2026-05-16
-
-### Fixed
-- **NF1**: Partial messages from stream errors now flushed to session.jsonl via
-  `current-loop-state-for-error-recovery` parameter (was in-memory only)
-- **NF3**: Empty-response warning now uses event bus (`runtime.warning`) instead
-  of `log-warning`, making it observable by TUI and extensions
-- **NF4**: Whitespace-only responses now correctly trigger empty-response warning
-  using `string-trim`
-- **NF5**: Empty-response warning now includes thinking length and turn ID for
-  better diagnostics
-
-### Testing
-- **NF2**: Added 2 test cases for partial message persistence on stream error
-- Added 3 test cases for empty-response warning event bus emission
 
 ## v0.45.9 — 2026-05-16
 

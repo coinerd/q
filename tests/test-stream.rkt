@@ -499,8 +499,7 @@
 
 (test-case "v0.45.11: wall-clock deadline fires for slow stream"
   ;; Sleep between generator calls to let the deadline expire.
-  (define lines (string-append "data: {\"choices\":[]}\n\n"
-                               "data: {\"choices\":[]}\n\n"))
+  (define lines (string-append "data: {\"choices\":[]}\n\n" "data: {\"choices\":[]}\n\n"))
   (define in (open-input-string lines))
   (define gen (read-sse-chunks in #:max-total-timeout 0.05))
   ;; First read succeeds
@@ -509,21 +508,18 @@
   ;; Sleep past the 50ms deadline
   (sleep 0.1)
   ;; Now the deadline check should fire
-  (check-exn exn:fail:network:timeout?
-             (lambda () (gen))))
+  (check-exn exn:fail:network:timeout? (lambda () (gen))))
 (test-case "v0.45.11: consecutive-empty abort after 100 empty lines"
   ;; Feed 101 empty lines (no data: prefix) -- should abort after 100
   (define empty-lines (make-string 404 #\newline)) ;; 101 newlines = 101 empty lines
   (define in (open-input-string empty-lines))
-  (define gen (read-sse-chunks in
-                               #:initial-timeout 5
-                               #:stream-timeout 5
-                               #:max-total-timeout 600))
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 5 #:max-total-timeout 600))
   (check-exn exn:fail:network:timeout?
              (lambda ()
                (let loop ()
                  (define v (gen))
-                 (when v (loop))))))
+                 (when v
+                   (loop))))))
 
 (test-case "v0.45.11: normal stream with default max-total-timeout works"
   (define in (open-input-string "data: {\"choices\":[]}\ndata: [DONE]\n"))
@@ -533,3 +529,33 @@
   (check-not-false first)
   (define second (gen))
   (check-false second))
+
+(test-case "v0.45.12 L2: consecutive-empty resets on valid data chunk"
+  ;; Interleave empty lines with valid data — counter should reset on each valid chunk
+  (define lines
+    (string-append "\n\n\n" ;; 3 empty lines
+                   "data: {\"choices\":[]}\n\n" ;; valid chunk (resets counter to 0)
+                   "\n\n\n\n\n" ;; 5 more empty lines
+                   "data: [DONE]\n")) ;; stream end
+  (define in (open-input-string lines))
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 5 #:max-total-timeout 600))
+  ;; First valid chunk
+  (define first (gen))
+  (check-not-false first)
+  ;; Should reach DONE without hitting 100-empty limit
+  (define done (gen))
+  (check-false done))
+
+(test-case "v0.45.12 L2: consecutive-empty counter does NOT reset on comment lines"
+  ;; Mix comments and empty lines — both count toward consecutive-empty
+  (define lines
+    (string-append (apply string-append (make-list 50 ": comment\n"))
+                   (apply string-append (make-list 51 "\n")))) ;; 50 + 51 = 101 > 100
+  (define in (open-input-string lines))
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 5 #:max-total-timeout 600))
+  (check-exn exn:fail:network:timeout?
+             (lambda ()
+               (let loop ()
+                 (define v (gen))
+                 (when v
+                   (loop))))))

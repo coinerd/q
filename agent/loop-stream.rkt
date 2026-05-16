@@ -22,8 +22,8 @@
          (only-in "../llm/stream.rkt" accumulate-tool-call-deltas)
          (only-in "../llm/token-budget.rkt" estimate-turn-tokens)
          (only-in "event-emitter.rkt" emit-typed-event!)
-         ;; v0.45.10 NF3: emit-session-event! for empty-response warning
-         (only-in "../runtime/runtime-helpers.rkt" emit-session-event!)
+         ;; v0.45.12 M2: emit-session-event! moved to agent layer (was runtime/runtime-helpers.rkt)
+         (only-in "event-emitter.rkt" emit-session-event!)
          ;; Stream event types
          (only-in "event-structs/stream-events.rkt"
                   make-stream-completed-event

@@ -16,7 +16,9 @@
                   typed-event-session-id
                   typed-event-turn-id)
          ;; Auto-populated field registry from define-typed-event (I-12)
-         (only-in "../util/event-macro.rkt" lookup-event-fields lookup-event-serializer))
+         (only-in "../util/event-macro.rkt" lookup-event-fields lookup-event-serializer)
+         (only-in "../util/event-contracts.rkt" event-payload-contract)
+         (only-in "../util/ids.rkt" now-seconds))
 
 ;; NOTE (v0.29.14): emit-typed-event! has 2+ production callers (runtime/session-switch.rkt).
 ;; Adoption is tracked by IVG check `session-switch-typed-events`.
@@ -24,7 +26,8 @@
                         (->* (event-bus? typed-event?) (#:state (or/c loop-state? #f)) event?)]
                        [event-struct->hasheq (-> typed-event? hash?)]
                        [get-struct-field-names (-> symbol? (or/c (listof symbol?) #f))])
-         typed-event-base-field-count)
+         typed-event-base-field-count
+         emit-session-event!)
 
 ;; Look up the field name list for a given event struct symbol.
 ;; Uses auto-populated registry from define-typed-event macro.
@@ -61,8 +64,8 @@
   (define name (struct-name evt))
   (define fields (get-struct-field-names name))
   (unless fields
-    (log-warning
-     (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields" name)))
+    (log-warning (format "event-struct->hasheq: no field registry for ~a, dropping subclass fields"
+                         name)))
   (for/fold ([h base])
             ([i (in-naturals)]
              [fname (in-list (or fields '()))])
@@ -74,12 +77,14 @@
   (define serializer (lookup-event-serializer type-str))
   (if serializer
       ;; Fast path: merge base fields + serializer output
-      (with-handlers ([exn:fail?
-                       (lambda (e)
-                         (log-warning
-                          "event-struct->hasheq: serializer for '~a' failed (~a), using reflection fallback"
-                          type-str (exn-message e))
-                         (event-struct->hasheq-reflection evt))])
+      (with-handlers
+          ([exn:fail?
+            (lambda (e)
+              (log-warning
+               "event-struct->hasheq: serializer for '~a' failed (~a), using reflection fallback"
+               type-str
+               (exn-message e))
+              (event-struct->hasheq-reflection evt))])
         (let ([subclass-data (serializer evt)])
           (hash-set* subclass-data
                      'type
@@ -111,3 +116,23 @@
   (when state
     (state-add-event! state raw-event))
   raw-event)
+
+;; ============================================================
+;; emit-session-event! — raw event emission (string name + hash payload)
+;; v0.45.12: Moved from runtime/runtime-helpers.rkt to fix layer violation.
+;; The agent layer should not import from runtime.
+;; ============================================================
+
+;; Publish a session-scoped event to the event bus with payload contract check.
+;; bus : event-bus?
+;; sid : string? (session-id)
+;; event-name : string?
+;; payload : hash?
+(define (emit-session-event! bus sid event-name payload)
+  (define pc (event-payload-contract event-name))
+  (when pc
+    (unless (pc payload)
+      (log-warning "Event payload contract violation: ~a" event-name)))
+  (define evt (make-event event-name (now-seconds) sid #f payload))
+  (publish! bus evt)
+  evt)

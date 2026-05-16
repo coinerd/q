@@ -113,7 +113,8 @@
                      (define round-trip (tool-call-intent->hash tci))
                      (unless (equal? (hash-ref tc-hash 'name) (hash-ref round-trip 'name))
                        (log-warning "tool-call-intent shadow mismatch in openai: ~a vs ~a"
-                                    (hash-ref tc-hash 'name) (hash-ref round-trip 'name)))
+                                    (hash-ref tc-hash 'name)
+                                    (hash-ref round-trip 'name)))
                      tc-hash)
                    '()))]))
 
@@ -195,29 +196,28 @@
                          (if (provider-error? e)
                              (raise e)
                              (raise (provider-error
-                                     (format "Network error contacting ~a: ~a"
-                                             host (exn-message e))
+                                     (format "Network error contacting ~a: ~a" host (exn-message e))
                                      (current-continuation-marks)
                                      #f
                                      'network))))])
         (call-with-request-timeout (lambda ()
-                                   (define-values (sl rh rp)
-                                     (if req-port
-                                         (http-sendrecv host
-                                                        path-str
-                                                        #:port req-port
-                                                        #:ssl? ssl?
-                                                        #:method "POST"
-                                                        #:headers headers
-                                                        #:data body-bytes)
-                                         (http-sendrecv host
-                                                        path-str
-                                                        #:ssl? ssl?
-                                                        #:method "POST"
-                                                        #:headers headers
-                                                        #:data body-bytes)))
-                                   (vector sl rh rp))
-                                 #:timeout stream-timeout)))
+                                     (define-values (sl rh rp)
+                                       (if req-port
+                                           (http-sendrecv host
+                                                          path-str
+                                                          #:port req-port
+                                                          #:ssl? ssl?
+                                                          #:method "POST"
+                                                          #:headers headers
+                                                          #:data body-bytes)
+                                           (http-sendrecv host
+                                                          path-str
+                                                          #:ssl? ssl?
+                                                          #:method "POST"
+                                                          #:headers headers
+                                                          #:data body-bytes)))
+                                     (vector sl rh rp))
+                                   #:timeout stream-timeout)))
     (define status-line (vector-ref result-vec 0))
     (define response-headers (vector-ref result-vec 1))
     (define response-port (vector-ref result-vec 2))
@@ -240,15 +240,14 @@
   (define (stream req)
     (define _stream-t0 (current-inexact-milliseconds))
     (define-values (response-port stream-timeout cleanup-thunk)
-      (with-handlers ([exn:fail?
-                       (lambda (e)
-                         (if (provider-error? e)
-                             (raise e)
-                             (raise (provider-error
-                                     (format "Stream setup error: ~a" (exn-message e))
-                                     (current-continuation-marks)
-                                     #f
-                                     'network))))])
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (if (provider-error? e)
+                                       (raise e)
+                                       (raise (provider-error (format "Stream setup error: ~a"
+                                                                      (exn-message e))
+                                                              (current-continuation-marks)
+                                                              #f
+                                                              'network))))])
         (openai-stream-request req)))
     ;; Response port and timeout from openai-stream-request (W-06)
     ;; Status OK — return an incremental generator that reads SSE lines
@@ -257,10 +256,16 @@
     ;; Previous formula (max 120 timeout/4) gave 225s for glm-5.1 (request=900s)
     ;; which caused premature SSE timeouts during slow generation.
     ;; New formula gives 450s — enough for models that stall mid-generation.
+    ;; v0.45.12 L1: Derive max-total-timeout from model's effective request timeout.
+    ;; Use 2x the request timeout as the wall-clock cap (covers slow models).
+    ;; For GLM-5.1 (900s): max-total = 1800s (30 min).
+    ;; For fast models (120s): max-total = 600s (10 min floor).
+    (define max-total-timeout (max 600 (* 2 stream-timeout)))
     (define gen
       (read-sse-chunks response-port
                        #:initial-timeout stream-timeout
-                       #:stream-timeout (max 180 (quotient stream-timeout 2))))
+                       #:stream-timeout (max 180 (quotient stream-timeout 2))
+                       #:max-total-timeout max-total-timeout))
     ;; Simple wrapper: yield chunks until done, then close port.
     ;; No dynamic-wind — it fires before/after on every yield which
     ;; causes the port to be closed between yields.
