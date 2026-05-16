@@ -11,6 +11,9 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/tool-coordinator.rkt"
+         "../tools/scheduler.rkt"
+         "../agent/event-bus.rkt"
+         "../agent/event-emitter.rkt"
          "../util/protocol-types.rkt")
 
 ;; Helper to extract text string from a tool-result
@@ -67,6 +70,27 @@
       (define result (build-blocked-tool-results (list tc)))
       (check-equal? (length result) 1)
       (check-true (tool-result-is-error? (first result)))
-      (check-true (string-contains? (result-text (first result)) "read")))))
+      (check-true (string-contains? (result-text (first result)) "read")))
+
+    ;; ── v0.45.17 regression: emit-session-event! with non-hash payload ──
+    ;; The bug: tool-coordinator passed raw scheduler-batch-stats struct to
+    ;; emit-session-event! (which expects hash?). Caused contract violation.
+    ;; Fix: wraps non-hash payloads in (hash 'raw payload).
+    (test-case "v0.45.17 regression: non-hash payload wrapped before emit"
+      (define bus (make-event-bus))
+      (define stats (scheduler-batch-stats 3 3 0 0))
+      ;; Verify stats is NOT a hash (the condition that triggered the bug)
+      (check-false (hash? stats))
+      ;; The wrapping logic from tool-coordinator:
+      ;;   (if (hash? payload) payload (hash 'raw payload))
+      (define wrapped
+        (if (hash? stats)
+            stats
+            (hash 'raw stats)))
+      (check-true (hash? wrapped))
+      (check-equal? (hash-ref wrapped 'raw) stats)
+      ;; emit-session-event! should not crash with the wrapped payload
+      (check-not-exn (lambda ()
+                       (emit-session-event! bus "test-session" "tool.batch.completed" wrapped))))))
 
 (run-tests pure-suite 'verbose)
