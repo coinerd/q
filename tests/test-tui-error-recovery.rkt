@@ -80,6 +80,31 @@
    (define evt (make-test-event "runtime.error" (hasheq 'error "timeout" 'errorType 'timeout)))
    (define s1 (apply-event-to-state s0 evt))
    (check-false (ui-state-streaming-text s1) "streaming-text cleared")
-   (check-false (ui-state-streaming-thinking s1) "streaming-thinking cleared")))
+   (check-false (ui-state-streaming-thinking s1) "streaming-thinking cleared"))
+ ;; v0.45.15 W1: Error text visibility — verify error message text is shown in transcript
+ (test-case "v0.45.15: runtime.error shows visible error text in transcript"
+   (define s0 (initial-ui-state #:session-id "s1"))
+   (define evt
+     (make-test-event "runtime.error"
+                      (hasheq 'error "Connection refused by provider" 'errorType 'network)))
+   (define s1 (apply-event-to-state s0 evt))
+   (define entries (ui-state-transcript s1))
+   ;; Should have at least 2 entries: error + hint
+   (check >= (length entries) 2 "network error adds error + hint entries")
+   ;; Error entry should contain the error message text
+   (define error-entries (filter (λ (e) (eq? (transcript-entry-kind e) 'error)) entries))
+   (check > (length error-entries) 0 "has error-kind entry")
+   (define error-entry (first error-entries))
+   (check-not-false (regexp-match #rx"Connection refused" (transcript-entry-text error-entry))
+                    "error text is visible in transcript"))
+ (test-case "v0.45.15: runtime.error with status-message shows error"
+   (define s0 (initial-ui-state #:session-id "s1"))
+   (define evt
+     (make-test-event "runtime.error"
+                      (hasheq 'error "API rate limit exceeded" 'errorType 'rate-limit)))
+   (define s1 (apply-event-to-state s0 evt))
+   ;; Status message should contain the error
+   (define status (ui-state-status-message s1))
+   (check-not-false (regexp-match #rx"rate limit" status) "status message shows error text")))
 
 (run-test test-tui-error-recovery)
