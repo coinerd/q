@@ -7,7 +7,9 @@
 (require rackunit
          rackunit/text-ui
          "../llm/provider-errors.rkt"
-         "../llm/http-helpers.rkt")
+         "../llm/http-helpers.rkt"
+         "../agent/streaming-message.rkt"
+         "../util/protocol-types.rkt")
 
 (define stream-error-suite
   (test-suite "streaming error wrapping"
