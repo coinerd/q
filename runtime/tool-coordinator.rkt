@@ -88,7 +88,8 @@
                             any/c ; config
                             (listof message?))]))
 ;; Pure helpers (W2 #4192)
-(provide classify-tool-results build-blocked-tool-results)
+(provide classify-tool-results
+         build-blocked-tool-results)
 
 ;; v0.31.5 W1: export struct
 (provide (struct-out tool-call-actions))
@@ -112,15 +113,13 @@
 (define (classify-tool-results tool-calls results)
   (for/list ([tc (in-list tool-calls)]
              [tr (in-list results)])
-    (hasheq 'name (tool-call-name tc)
-            'status (if (tool-result-is-error? tr) 'error 'completed))))
+    (hasheq 'name (tool-call-name tc) 'status (if (tool-result-is-error? tr) 'error 'completed))))
 
 ;; build-blocked-tool-results : (listof tool-call?) -> (listof tool-result?)
 ;; Pure: creates error results for every tool call when execution is blocked.
 (define (build-blocked-tool-results tool-calls)
   (for/list ([tc (in-list tool-calls)])
-    (make-error-result (format "Tool call '~a' blocked by extension"
-                               (tool-call-name tc)))))
+    (make-error-result (format "Tool call '~a' blocked by extension" (tool-call-name tc)))))
 
 (define (compute-tool-call-actions tool-calls amended hook-res)
   (if (and hook-res (eq? (hook-result-action hook-res) 'block))
@@ -167,7 +166,16 @@
   (values tool-calls assistant-msg-id actions))
 
 ;; Phase 2: Execution (scheduler + event emission)
-(define (execute-tool-batch-phase tool-calls-to-run reg ext-reg bus session-id log-path token config per-tool-start-ms batch-start-ms)
+(define (execute-tool-batch-phase tool-calls-to-run
+                                  reg
+                                  ext-reg
+                                  bus
+                                  session-id
+                                  log-path
+                                  token
+                                  config
+                                  per-tool-start-ms
+                                  batch-start-ms)
   ;; Dispatch 'tool.execution.started hook before tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
     (maybe-dispatch-hooks
@@ -203,7 +211,13 @@
                                     #:timestamp (current-inexact-milliseconds)
                                     #:tool-name (hash-ref payload 'tool-name)
                                     #:tool-call-id tcid))]
-               [else (emit-session-event! bus session-id event-type payload)]))
+               [else
+                (emit-session-event! bus
+                                     session-id
+                                     event-type
+                                     (if (hash? payload)
+                                         payload
+                                         (hash 'raw payload)))]))
            #:runtime-settings (or (config-settings config)
                                   (make-minimal-settings #:provider (config-provider config)
                                                          #:model (config-model-name config)))
@@ -213,13 +227,13 @@
           #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
-    (maybe-dispatch-hooks
-     ext-reg
-     'tool.execution.completed
-     (hasheq
-      'tools (classify-tool-results tool-calls-to-run
-                                    (scheduler-result-results sched-result))
-      'count (length tool-calls-to-run))))
+    (maybe-dispatch-hooks ext-reg
+                          'tool.execution.completed
+                          (hasheq 'tools
+                                  (classify-tool-results tool-calls-to-run
+                                                         (scheduler-result-results sched-result))
+                                  'count
+                                  (length tool-calls-to-run))))
   ;; G13: Emit typed tool-execution-end events
   (for ([tc (in-list tool-calls-to-run)]
         [tr (in-list (scheduler-result-results sched-result))])
@@ -237,7 +251,12 @@
   sched-result)
 
 ;; Phase 3: Assembly (pure result construction)
-(define (assemble-tool-results-phase tool-calls tool-calls-to-run sched-result assistant-msg-id tool-call-blocked? ext-reg)
+(define (assemble-tool-results-phase tool-calls
+                                     tool-calls-to-run
+                                     sched-result
+                                     assistant-msg-id
+                                     tool-call-blocked?
+                                     ext-reg)
   (define tool-result-msgs
     (if tool-call-blocked?
         (make-tool-result-messages tool-calls
@@ -278,10 +297,24 @@
   (define sched-result
     (if tool-call-blocked?
         (scheduler-result '() (hasheq))
-        (execute-tool-batch-phase tool-calls-to-run reg ext-reg bus session-id log-path token config per-tool-start-ms batch-start-ms)))
+        (execute-tool-batch-phase tool-calls-to-run
+                                  reg
+                                  ext-reg
+                                  bus
+                                  session-id
+                                  log-path
+                                  token
+                                  config
+                                  per-tool-start-ms
+                                  batch-start-ms)))
   ;; Phase 3: Assembly
   (define validated-msgs
-    (assemble-tool-results-phase tool-calls tool-calls-to-run sched-result assistant-msg-id tool-call-blocked? ext-reg))
+    (assemble-tool-results-phase tool-calls
+                                 tool-calls-to-run
+                                 sched-result
+                                 assistant-msg-id
+                                 tool-call-blocked?
+                                 ext-reg))
   ;; Append validated tool results to log
   (append-entries! log-path validated-msgs)
   ;; Return updated context for next iteration
