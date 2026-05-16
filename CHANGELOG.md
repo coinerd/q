@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.45.15 — 2026-05-16
+
+### Added
+- `bin/q` and `bin/q-tui` launch wrappers using `racket --make` for automatic stale bytecode recompilation after `git pull`
+- README documentation for launch wrapper usage
+
+### Fixed
+- **HIGH**: Provider failure visibility — `runtime.error` now shows error text in transcript entry and status message
+
+### Testing
+- 2 new error visibility tests: error text in transcript, status message for rate-limit errors
+- 8/8 TUI error recovery tests pass
+
 ## v0.45.14 — 2026-05-16
 
 ### Fixed
