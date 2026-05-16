@@ -566,17 +566,17 @@
 ;; v0.45.13 L2: Deadline checked at loop top (before each read)
 ;; ============================================================
 
-(test-case "v0.45.13 L2: deadline fires on immediate second call (no sleep between)"
+(test-case "v0.45.13 L2: deadline check fires at loop top before next read"
   ;; Verify the deadline check fires at the TOP of each loop iteration,
-  ;; not just after sleeping. Create a stream with one chunk and near-zero deadline.
+  ;; not just after sleeping. Create a stream with two chunks and short deadline.
   (define lines "data: {\"choices\":[]}\n\ndata: {\"choices\":[]}\n\n")
   (define in (open-input-string lines))
-  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 5 #:max-total-timeout 0.001))
-  ;; First call: generator body starts, stream-start = now, deadline = now+1ms.
+  (define gen (read-sse-chunks in #:initial-timeout 5 #:stream-timeout 5 #:max-total-timeout 0.05))
+  ;; First call: generator body starts, stream-start = now, deadline = now+50ms.
   ;; First iteration: deadline NOT yet passed (just set). Read succeeds.
   (define first (gen))
   (check-not-false first)
-  ;; Second call: loop re-enters, checks deadline at TOP. If 1ms has passed,
+  ;; Second call: loop re-enters, checks deadline at TOP. If 50ms has passed,
   ;; deadline fires BEFORE the second read-line/timeout.
-  (sleep 0.01) ;; Ensure 1ms has passed
+  (sleep 0.1) ;; Sleep past the 50ms deadline (10x margin for slow CI)
   (check-exn exn:fail:network:timeout? (lambda () (gen))))

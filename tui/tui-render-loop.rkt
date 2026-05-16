@@ -20,7 +20,6 @@
 (require "../util/error-helpers.rkt")
 (require racket/contract
          racket/bytes
-         racket/string
          "../tui/terminal.rkt"
          "../tui/state.rkt"
          "../tui/input.rkt"
@@ -45,8 +44,8 @@
          decode-mouse-x10
          decode-mouse-tui-term
          current-busy-watchdog-ms
-         check-busy-watchdog
-         (contract-out [render-ubuf-to-terminal! (-> any/c void?)]
+         (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
+                       [render-ubuf-to-terminal! (-> any/c void?)]
                        [tui-ctx-init-terminal! (-> any/c void?)]
                        [tui-ctx-resize-ubuf! (-> any/c void?)]
                        [tui-ctx-ubuf (-> any/c any/c)]

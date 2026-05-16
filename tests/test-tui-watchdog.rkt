@@ -1,5 +1,6 @@
 #lang racket
 
+;; BOUNDARY: integration
 ;; v0.45.11 W1: Tests for busy-state watchdog logic
 ;; v0.45.12 L4: Updated to test the extracted check-busy-watchdog function
 ;; directly instead of replicating logic.
@@ -125,7 +126,12 @@
   (check-equal? (transcript-entry-text watchdog-entry)
                 "[Watchdog: busy state timed out — force-cleared after 30 min]")
   ;; Verify timestamp matches the 'now' argument passed to check-busy-watchdog
-  (check-equal? (transcript-entry-timestamp watchdog-entry) now))
+  (check-equal? (transcript-entry-timestamp watchdog-entry) now)
+  ;; Verify busy? is cleared
+  (check-false (ui-state-busy? result) "busy? is cleared after watchdog fires")
+  ;; Document: busy-since is intentionally NOT cleared (benign — busy?=#f gates the check)
+  (check-true (number? (ui-state-busy-since result))
+              "busy-since retains old value (not cleared — gated by busy?)"))
 
 (test-case "v0.45.13 M2: existing transcript entries preserved after watchdog"
   ;; Add a pre-existing transcript entry, then fire watchdog, verify both exist
