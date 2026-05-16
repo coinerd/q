@@ -271,8 +271,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 586 |
-| Source modules | 429 |
-| Source lines | 66188 |
+| Source modules | 428 |
+| Source lines | 65944 |
 | Test lines | 103173 |
 | Test assertions | 16075 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -406,9 +406,9 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 **v0.45.10** — Fixed
 
-**v0.45.9** — Fixed
+**v0.45.10** — Fixed
 
-**v0.45.9** — Fixed
+**v0.45.10** — Fixed
 
 **v0.45.5** — Fixed
 
