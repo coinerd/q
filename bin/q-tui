@@ -1,0 +1,4 @@
+#!/bin/bash
+# bin/q-tui — Launch q in TUI mode with stale bytecode protection
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec racket --make "$SCRIPT_DIR/../main.rkt" --tui "$@"

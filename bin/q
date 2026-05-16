@@ -1,0 +1,6 @@
+#!/bin/bash
+# bin/q — Launch q with stale bytecode protection
+# The --make flag enables automatic recompilation when source is newer than .zo files.
+# After `git pull`, this ensures the running process picks up source changes immediately.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec racket --make "$SCRIPT_DIR/../main.rkt" "$@"

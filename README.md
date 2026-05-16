@@ -178,28 +178,32 @@ Start your local server (e.g. `llama-server`), then run q.
 ### Run
 
 ```bash
-# Terminal UI (interactive)
+# Terminal UI (interactive) — using stale-bytecode-safe wrapper
+bin/q-tui
+# ...or directly:
 racket main.rkt --tui
 
 # Single-shot prompt
-racket main.rkt "explain what this codebase does"
+bin/q "explain what this codebase does"
 
 # Resume a session
-racket main.rkt --session <session-id>
+bin/q --session <session-id>
 
 # JSON mode (machine-readable output)
-racket main.rkt --json
+bin/q --json
 
 # Override model for this run
-racket main.rkt --model gpt-5.4 "write a test"
+bin/q --model gpt-5.4 "write a test"
 ```
 
-> **Tip:** Create a shell alias for convenience: `alias q='racket /path/to/q/main.rkt'`
+> **Tip:** The `bin/q` and `bin/q-tui` wrappers use `racket --make` for automatic
+> stale-bytecode recompilation after `git pull`. Use them instead of bare
+> `racket main.rkt` to avoid running outdated `.zo` files.
 
 ### Verify
 
 ```bash
-racket main.rkt --version  # q version 0.45.14
+bin/q --version            # q version 0.45.14
 raco test tests/           # run the full test suite
 ```
 
