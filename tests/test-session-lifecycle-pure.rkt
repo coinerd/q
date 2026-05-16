@@ -11,6 +11,7 @@
 (require rackunit
          rackunit/text-ui
          "../runtime/session-lifecycle.rkt"
+         "../runtime/context-assembly.rkt"
          "../util/protocol-types.rkt")
 
 ;; Build a minimal message for testing
@@ -64,6 +65,23 @@
       ;; Content should contain both instructions separated by double newline
       (define content (hash-ref (content-part->jsexpr (car (message-content sys-msg))) 'text))
       (check-true (string-contains? content "Be helpful"))
-      (check-true (string-contains? content "Be concise")))))
+      (check-true (string-contains? content "Be concise")))
+
+    ;; ── v0.45.16 regression: build-session-context shadowing ──
+    ;; The bug: local 4-arg build-session-context shadowed imported 1-arg version,
+    ;; causing arity crash on 2nd prompt when session has an index.
+    ;; Fix: renamed import → build-session-context/from-index (internal),
+    ;;       local → build-session-context-for-prompt (exported).
+    ;; This test verifies the two functions remain distinct.
+    (test-case "v0.45.16 regression: imported build-session-context distinct from for-prompt"
+      ;; build-session-context from context-assembly (1-arg, the original import)
+      (check-pred procedure? build-session-context)
+      ;; build-session-context-for-prompt from session-lifecycle (4-arg, the local)
+      (check-pred procedure? build-session-context-for-prompt)
+      ;; They must NOT be the same procedure
+      (check-false (eq? build-session-context build-session-context-for-prompt))
+      ;; Verify arities: 1-arg import vs 4-arg local
+      (check-equal? (procedure-arity build-session-context) 1)
+      (check-equal? (procedure-arity build-session-context-for-prompt) 4))))
 
 (run-tests pure-suite 'verbose)
