@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.45.8 — 2026-05-15
+
+### Fixed
+- **NF7**: CLI render.rkt — fixed 3 kebab→camelCase key reads (`toolName`, `resultSummary`)
+- **NF8**: Test files — fixed stale kebab keys in test-tool-dedup.rkt and test-tui-exploration-events.rkt
+- **NF9**: turn-orchestrator.rkt — fixed `summary-length` type-check (iterate over text-part content)
+- **NF10**: session-lifecycle.rkt — wired working-set message injection into tiered context build
+- **NF11**: turn-orchestrator.rkt — fixed `gsd-pinned-count` using `gsd-progress-message?` predicate
+- **NF12**: Removed dead imports from session-lifecycle.rkt, context-fit.rkt, turn-orchestrator.rkt
+- **NF13**: selection.rkt — wired `fit-messages-with-importance-rescue` for importance-aware trimming
+- **NF14**: run-tests.rkt — merged stderr+stdout for rackunit text-ui result parsing
+- **NF15**: Documented `cache-hit-p` stub with TODO comment
+
 ## v0.45.7 — 2026-05-15
 
 ### Fixed
