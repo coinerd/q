@@ -44,8 +44,7 @@
          (only-in "../runtime/context-assembly.rkt"
                   build-session-context
                   build-tiered-context-with-hooks
-                  tiered-context->message-list
-                  tiered-context?)
+                  tiered-context->message-list)
          (only-in "../runtime/working-set.rkt"
                   make-working-set
                   working-set-reset!

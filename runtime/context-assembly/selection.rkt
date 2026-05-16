@@ -26,7 +26,8 @@
          (only-in "../context-policy.rkt"
                   estimate-message-tokens
                   ensure-first-user-pinned
-                  fit-messages-pair-preserving)
+                  fit-messages-pair-preserving
+                  fit-messages-with-importance-rescue)
          (only-in "../context-pinning.rkt" partition-messages/working-set)
          (only-in "../working-set.rkt" working-set? working-set-resolve-messages)
          "budgeting.rkt"
@@ -179,7 +180,8 @@
     (if (<= remaining-budget 0)
         (values '() removable)
         (let ()
-          (define kept (fit-messages-pair-preserving removable remaining-budget memoized-estimate))
+          (define kept
+            (fit-messages-with-importance-rescue removable remaining-budget memoized-estimate))
           (define kept-ids
             (for/hash ([m (in-list kept)])
               (values (message-id m) #t)))
