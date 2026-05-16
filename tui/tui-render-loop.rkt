@@ -338,9 +338,11 @@
 (define current-busy-watchdog-ms (make-parameter (* 30 60 1000)))
 
 ;; v0.45.12 L4: Extracted watchdog check to a testable pure function.
+;; v0.45.14: Added streaming guard — don't fire if agent is actively streaming.
 ;; Returns #f if no action needed, or the updated state if watchdog fires.
 (define (check-busy-watchdog state now-ms watchdog-ms)
-  (if (ui-state-busy? state)
+  (if (and (ui-state-busy? state)
+           (not (ui-state-streaming-text state))) ;; agent is actively streaming — don't fire
       (let ([since (ui-state-busy-since state)])
         (if (and since (> (- now-ms since) watchdog-ms))
             (let* ([cleared (set-status-message
