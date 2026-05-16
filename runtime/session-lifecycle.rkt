@@ -46,7 +46,11 @@
                   build-tiered-context-with-hooks
                   tiered-context->message-list
                   tiered-context?)
-         (only-in "../runtime/working-set.rkt" make-working-set working-set-reset!)
+         (only-in "../runtime/working-set.rkt"
+                  make-working-set
+                  working-set-reset!
+                  working-set-entries
+                  working-set-resolve-messages)
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
@@ -193,9 +197,16 @@
         (cond
           [(agent-session-provider sess)
            ;; v0.45.7: Use tiered assembly for GSD pinning, hooks, and observability
+           ;; v0.45.8 (NF10): Inject working-set messages for context enrichment
            (define raw-msgs (build-session-context idx))
+           (define ws-msgs
+             (if ws
+                 (working-set-resolve-messages ws)
+                 '()))
            (define-values (tc _hook-result)
-             (build-tiered-context-with-hooks raw-msgs #:max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD))
+             (build-tiered-context-with-hooks raw-msgs
+                                              #:max-tokens DEFAULT-TOKEN-BUDGET-THRESHOLD
+                                              #:working-set-messages ws-msgs))
            (tiered-context->message-list tc)]
           ;; Fallback: context-assembly tree walk (no LLM summarization)
           [else (build-session-context idx)])
