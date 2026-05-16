@@ -15,7 +15,18 @@
          loop-state-messages
          loop-state-events
          state-add-message!
-         state-add-event!)
+         state-add-event!
+         ;; v0.45.10 NF1: Parameter for error-path partial message recovery
+         current-loop-state-for-error-recovery)
+
+;; ============================================================
+;; v0.45.10 NF1: Error-path recovery parameter
+;; ============================================================
+
+;; Set by run-agent-turn before streaming, read by dispatch-iteration's
+;; error handler to flush partial messages to session.jsonl.
+;; #f when no turn is active.
+(define current-loop-state-for-error-recovery (make-parameter #f))
 
 ;; ============================================================
 ;; Internal struct — mutable boxes for accumulation

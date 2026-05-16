@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.45.10 — 2026-05-16
+
+### Fixed
+- **NF1**: Partial messages from stream errors now flushed to session.jsonl via
+  `current-loop-state-for-error-recovery` parameter (was in-memory only)
+- **NF3**: Empty-response warning now uses event bus (`runtime.warning`) instead
+  of `log-warning`, making it observable by TUI and extensions
+- **NF4**: Whitespace-only responses now correctly trigger empty-response warning
+  using `string-trim`
+- **NF5**: Empty-response warning now includes thinking length and turn ID for
+  better diagnostics
+
+### Testing
+- **NF2**: Added 2 test cases for partial message persistence on stream error
+- Added 3 test cases for empty-response warning event bus emission
+
 ## v0.45.9 — 2026-05-16
 
 ### Fixed

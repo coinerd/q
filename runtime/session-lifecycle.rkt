@@ -32,6 +32,7 @@
          (only-in "../util/hook-types.rkt" hook-result-action hook-result-payload)
          (only-in "../util/errors.rkt" raise-session-error)
          "../runtime/session-store.rkt"
+         (only-in "../agent/state.rkt" current-loop-state-for-error-recovery loop-state-messages)
          "../runtime/session-index.rkt"
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
          (only-in "../util/error-helpers.rkt" with-telemetry)
@@ -255,6 +256,14 @@
   (with-handlers
       ([exn:fail?
         (lambda (e)
+          ;; v0.45.10 NF1: Flush any partial messages from stream errors to session.jsonl
+          ;; The loop-state is set via parameter by run-agent-turn; if a stream error
+          ;; occurred after partial text was received, state-add-message! added the
+          ;; partial message to loop-state. We flush it here before the error is
+          ;; swallowed by make-loop-result.
+          (define loop-st (current-loop-state-for-error-recovery))
+          (when (and loop-st (pair? (loop-state-messages loop-st)))
+            (append-entries! log-path (loop-state-messages loop-st)))
           ;; Emit runtime.error event with classified error-type
           (define error-type (classify-error e))
           ;; A3: Include retry metadata if retries were attempted

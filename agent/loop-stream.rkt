@@ -10,6 +10,7 @@
 ;; v0.32.4: Replaced CPS handle-hook-result with classify-hook-result + match.
 
 (require racket/match
+         racket/string
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "streaming-message.rkt"
@@ -21,6 +22,8 @@
          (only-in "../llm/stream.rkt" accumulate-tool-call-deltas)
          (only-in "../llm/token-budget.rkt" estimate-turn-tokens)
          (only-in "event-emitter.rkt" emit-typed-event!)
+         ;; v0.45.10 NF3: emit-session-event! for empty-response warning
+         (only-in "../runtime/runtime-helpers.rkt" emit-session-event!)
          ;; Stream event types
          (only-in "event-structs/stream-events.rkt"
                   make-stream-completed-event
@@ -423,11 +426,24 @@
   (define acc (accumulate-stream-chunks all-chunks))
   (define accumulated-text (hash-ref acc 'text))
 
-  ;; AF4 (RC1): Warn on empty assistant response (thinking-only model output)
-  (when (and (string=? accumulated-text "") (null? (hash-ref acc 'tool-calls)))
-    (log-warning "q: empty assistant response — model returned no text content (session=~a turn=~a)"
-                 session-id
-                 turn-id))
+  ;; AF4 (RC1) + v0.45.10 NF3/NF4/NF5: Warn on empty assistant response
+  ;; Uses event bus (not log-warning) so TUI/extensions can observe.
+  ;; string-trim catches whitespace-only responses (NF4).
+  (define trimmed-text (string-trim accumulated-text))
+  (when (and (string=? trimmed-text "") (null? (hash-ref acc 'tool-calls)))
+    (define thinking-len (string-length (hash-ref acc 'thinking "")))
+    (emit-session-event! bus
+                         session-id
+                         "runtime.warning"
+                         (hasheq 'warning
+                                 "empty-assistant-response"
+                                 'turnId
+                                 turn-id
+                                 'detail
+                                 (format "model returned ~a chars thinking but no text content"
+                                         thinking-len)
+                                 'thinkingLength
+                                 thinking-len)))
 
   (define text-part (make-text-part accumulated-text))
 

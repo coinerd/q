@@ -357,8 +357,138 @@
   (check-not-false (hash-ref acc 'thinking)))
 
 (test-case "AF4: accumulate-stream-chunks returns text for mixed chunks"
-  (define text-chunk
-    (make-stream-chunk "Hello" #f #f #f #:finish-reason 'stop))
+  (define text-chunk (make-stream-chunk "Hello" #f #f #f #:finish-reason 'stop))
   (define acc (accumulate-stream-chunks (list text-chunk)))
   (check-equal? (hash-ref acc 'text) "Hello")
   (check-equal? (hash-ref acc 'tool-calls) '()))
+
+;; ============================================================
+;; v0.45.10 NF3/NF4/NF5: runtime.warning event tests
+;; ============================================================
+
+(require "../llm/provider.rkt"
+         "../util/event.rkt"
+         "../agent/event-bus.rkt"
+         "../agent/state.rkt")
+
+(test-case "NF3: runtime.warning emitted for thinking-only response"
+  (define bus (make-event-bus))
+  (define warning-events (box '()))
+  (subscribe! bus
+              (lambda (evt)
+                (when (equal? (event-ev evt) "runtime.warning")
+                  (set-box! warning-events (cons evt (unbox warning-events))))))
+  (define st (make-loop-state "test-session" "test-turn"))
+  ;; Create stream-data with thinking-only chunks (no text)
+  (define thinking-chunk
+    (make-stream-chunk #f
+                       #f
+                       #f
+                       #f
+                       #:delta-thinking "Let me think deeply about this..."
+                       #:finish-reason 'stop))
+  (define stream-data
+    (hasheq 'text
+            ""
+            'tool-calls
+            '()
+            'thinking
+            "Let me think deeply about this..."
+            'all-chunks
+            (list thinking-chunk)
+            'cancelled?
+            #f
+            'stream-blocked?
+            #f))
+  (define prov
+    (make-provider (lambda () "test-provider")
+                   (lambda () (hash 'streaming #t 'token-counting #t))
+                   (lambda (req) (hasheq))
+                   (lambda (req) '())))
+  ;; Call build-stream-result — should emit runtime.warning
+  (define result
+    (build-stream-result stream-data
+                         '() ;; raw-messages
+                         bus
+                         "test-session"
+                         "test-turn"
+                         st
+                         #f ;; tools
+                         prov
+                         #f)) ;; hook-dispatcher
+  ;; Verify warning event was emitted
+  (define warnings (unbox warning-events))
+  (check-equal? (length warnings) 1)
+  (define payload (event-payload (car warnings)))
+  (check-equal? (hash-ref payload 'warning) "empty-assistant-response")
+  (check-equal? (hash-ref payload 'turnId) "test-turn")
+  (check-true (> (hash-ref payload 'thinkingLength) 0)))
+
+(test-case "NF3: no warning when tool calls present with empty text"
+  (define bus (make-event-bus))
+  (define warning-events (box '()))
+  (subscribe! bus
+              (lambda (evt)
+                (when (equal? (event-ev evt) "runtime.warning")
+                  (set-box! warning-events (cons evt (unbox warning-events))))))
+  (define st (make-loop-state "test-session" "test-turn"))
+  ;; Provide a chunk with a tool call — accumulate-stream-chunks should extract it
+  (define tc-chunk
+    (make-stream-chunk #f
+                       (hasheq 'index 0 'id "tc-1" 'name "read" 'arguments "{}")
+                       #f
+                       #f
+                       #:finish-reason 'tool-calls))
+  (define stream-data
+    (hasheq 'text
+            ""
+            'tool-calls
+            '()
+            'thinking
+            ""
+            'all-chunks
+            (list tc-chunk)
+            'cancelled?
+            #f
+            'stream-blocked?
+            #f))
+  (define prov
+    (make-provider (lambda () "test-provider")
+                   (lambda () (hash 'streaming #t 'token-counting #t))
+                   (lambda (req) (hasheq))
+                   (lambda (req) '())))
+  (build-stream-result stream-data '() bus "test-session" "test-turn" st #f prov #f)
+  (check-equal? (length (unbox warning-events)) 0))
+
+(test-case "NF4: warning fires for whitespace-only response"
+  (define bus (make-event-bus))
+  (define warning-events (box '()))
+  (subscribe! bus
+              (lambda (evt)
+                (when (equal? (event-ev evt) "runtime.warning")
+                  (set-box! warning-events (cons evt (unbox warning-events))))))
+  (define st (make-loop-state "test-session" "test-turn"))
+  (define ws-chunk (make-stream-chunk "   \n  " #f #f #f #:finish-reason 'stop))
+  (define stream-data
+    (hasheq 'text
+            "   \n  "
+            'tool-calls
+            '()
+            'thinking
+            ""
+            'all-chunks
+            (list ws-chunk)
+            'cancelled?
+            #f
+            'stream-blocked?
+            #f))
+  (define prov
+    (make-provider (lambda () "test-provider")
+                   (lambda () (hash 'streaming #t 'token-counting #t))
+                   (lambda (req) (hasheq))
+                   (lambda (req) '())))
+  (build-stream-result stream-data '() bus "test-session" "test-turn" st #f prov #f)
+  ;; Whitespace-only should trigger the warning (string-trim makes it empty)
+  (check-equal? (length (unbox warning-events)) 1)
+  (check-equal? (hash-ref (event-payload (car (unbox warning-events))) 'warning)
+                "empty-assistant-response"))

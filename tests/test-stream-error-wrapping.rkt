@@ -4,12 +4,18 @@
 
 ;; tests/test-stream-error-wrapping.rkt -- A6-02 + A7-02: streaming error wrapping tests
 
-(require rackunit
+(require racket/generator
+         rackunit
          rackunit/text-ui
          "../llm/provider-errors.rkt"
          "../llm/http-helpers.rkt"
          "../agent/streaming-message.rkt"
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         "../agent/state.rkt"
+         "../agent/event-bus.rkt"
+         "../llm/provider.rkt"
+         "../llm/model.rkt"
+         (only-in "../agent/loop-stream.rkt" stream-from-provider))
 
 (define stream-error-suite
   (test-suite "streaming error wrapping"
@@ -18,93 +24,140 @@
 
     ;; Test 1: provider-error struct is exn:fail subtype
     (test-case "provider-error is exn:fail"
-      (check-exn exn:fail?
-                 (lambda () (raise-provider-error "test" 'network))))
+      (check-exn exn:fail? (lambda () (raise-provider-error "test" 'network))))
 
     ;; Test 2: provider-error category is 'network for streaming
     (test-case "provider-error has network category"
-      (with-handlers ([provider-error?
-                       (lambda (e)
-                         (check-equal? (provider-error-category e) 'network)
-                         (check-false (provider-error-status-code e)))])
+      (with-handlers ([provider-error? (lambda (e)
+                                         (check-equal? (provider-error-category e) 'network)
+                                         (check-false (provider-error-status-code e)))])
         (raise-provider-error "network failure" 'network #f)))
 
     ;; Test 3: raise-provider-error defaults status-code to #f
     (test-case "raise-provider-error without status-code defaults to #f"
-      (with-handlers ([provider-error?
-                       (lambda (e)
-                         (check-false (provider-error-status-code e)))])
+      (with-handlers ([provider-error? (lambda (e) (check-false (provider-error-status-code e)))])
         (raise-provider-error "no status" 'timeout)))
 
     ;; Test 4: provider-error roundtrip preserves message
     (test-case "provider-error preserves original message"
       (with-handlers ([provider-error?
-                       (lambda (e)
-                         (check-true (string-contains? (exn-message e) "test message")))])
+                       (lambda (e) (check-true (string-contains? (exn-message e) "test message")))])
         (raise-provider-error "test message for roundtrip" 'network)))
 
     ;; Test 5: provider-error is transparent
     (test-case "provider-error is transparent struct"
-      (with-handlers ([provider-error?
-                       (lambda (e)
-                         (check-true (vector? (struct->vector e))))])
+      (with-handlers ([provider-error? (lambda (e) (check-true (vector? (struct->vector e))))])
         (raise-provider-error "transparency test" 'auth 401)))
 
     ;; ── Wrapping pattern tests (A7-02) ──
 
     ;; Test 6: Wrapping pattern converts raw exn:fail to provider-error
     (test-case "wrapping pattern: raw exn:fail becomes provider-error"
-      (with-handlers ([provider-error?
-                       (lambda (e)
-                         (check-true (string-contains? (exn-message e) "raw error"))
-                         (check-equal? (provider-error-category e) 'network))])
-        (with-handlers ([exn:fail?
-                         (lambda (e)
-                           (if (provider-error? e)
-                               (raise e)
-                               (raise (provider-error
-                                       (format "Wrapped: ~a" (exn-message e))
-                                       (current-continuation-marks)
-                                       #f
-                                       'network))))])
+      (with-handlers ([provider-error? (lambda (e)
+                                         (check-true (string-contains? (exn-message e) "raw error"))
+                                         (check-equal? (provider-error-category e) 'network))])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (if (provider-error? e)
+                                         (raise e)
+                                         (raise (provider-error (format "Wrapped: ~a" (exn-message e))
+                                                                (current-continuation-marks)
+                                                                #f
+                                                                'network))))])
           (raise (exn:fail "raw error" (current-continuation-marks))))))
 
     ;; Test 7: Wrapping pattern passes through existing provider-error
     (test-case "wrapping pattern: provider-error passes through without re-wrapping"
-      (with-handlers ([provider-error?
-                       (lambda (e)
-                         ;; Must see ORIGINAL provider-error, not re-wrapped
-                         (check-equal? (provider-error-category e) 'timeout)
-                         (check-equal? (provider-error-status-code e) 408))])
-        (with-handlers ([exn:fail?
-                         (lambda (e)
-                           (if (provider-error? e)
-                               (raise e)
-                               (raise (provider-error
-                                       (format "Wrapped: ~a" (exn-message e))
-                                       (current-continuation-marks)
-                                       #f
-                                       'network))))])
-          (raise (provider-error "timeout error"
-                                 (current-continuation-marks)
-                                 408
-                                 'timeout)))))
+      (with-handlers ([provider-error? (lambda (e)
+                                         ;; Must see ORIGINAL provider-error, not re-wrapped
+                                         (check-equal? (provider-error-category e) 'timeout)
+                                         (check-equal? (provider-error-status-code e) 408))])
+        (with-handlers ([exn:fail? (lambda (e)
+                                     (if (provider-error? e)
+                                         (raise e)
+                                         (raise (provider-error (format "Wrapped: ~a" (exn-message e))
+                                                                (current-continuation-marks)
+                                                                #f
+                                                                'network))))])
+          (raise (provider-error "timeout error" (current-continuation-marks) 408 'timeout)))))
 
     ;; Test 8: check-provider-status! wraps 4xx as provider-error
     (test-case "check-provider-status! wraps 4xx as provider-error"
-      (with-handlers ([exn:fail?
-                       (lambda (e)
-                         (check-pred provider-error? e)
-                         (check-equal? (provider-error-status-code e) 400))])
-        (check-provider-status! "Test"
-                                #"HTTP/1.1 400 Bad Request"
-                                #"{}")))
+      (with-handlers ([exn:fail? (lambda (e)
+                                   (check-pred provider-error? e)
+                                   (check-equal? (provider-error-status-code e) 400))])
+        (check-provider-status! "Test" #"HTTP/1.1 400 Bad Request" #"{}")))
 
     ;; Test 9: check-provider-status! passes 2xx through
     (test-case "check-provider-status! passes 200 through"
-      (check-equal? (check-provider-status! "Test"
-                                            #"HTTP/1.1 200 OK"
-                                            #"{}")
-                    (void)))))
+      (check-equal? (check-provider-status! "Test" #"HTTP/1.1 200 OK" #"{}") (void)))
+
+    ;; ── v0.45.10 NF2: Partial message persistence tests ──
+
+    ;; Test 10: stream-from-provider adds partial message to loop-state on error
+    (test-case "NF1: partial message persisted to loop-state on stream error"
+      ;; Create a provider that streams one chunk then raises
+      (define error-prov
+        (make-provider (lambda () "error-mock")
+                       (lambda () (hash 'streaming #t 'token-counting #t))
+                       (lambda (req) (hasheq))
+                       (lambda (req)
+                         (generator ()
+                                    (yield (make-stream-chunk "Hello partial" #f #f #f))
+                                    (raise (exn:fail "stream timeout"
+                                                     (current-continuation-marks)))))))
+      (define bus (make-event-bus))
+      (define st (make-loop-state "test-session" "test-turn"))
+      ;; Subscribe to events to avoid them piling up
+      (define events-received (box '()))
+      (subscribe! bus (lambda (evt) (set-box! events-received (cons evt (unbox events-received)))))
+      ;; stream-from-provider should raise after adding partial message
+      (check-exn exn:fail?
+                 (lambda ()
+                   (stream-from-provider error-prov
+                                         (make-model-request '() #f (hasheq))
+                                         bus
+                                         "test-session"
+                                         "test-turn"
+                                         st
+                                         #f ;; no hook dispatcher
+                                         #f))) ;; no cancellation token
+      ;; Verify partial message was added to loop-state
+      (define msgs (loop-state-messages st))
+      (check-equal? (length msgs) 1)
+      (define partial-msg (car msgs))
+      (check-equal? (message-role partial-msg) 'assistant)
+      (check-equal? (message-kind partial-msg) 'message)
+      (check-true (hash-ref (message-meta partial-msg) 'partial #f))
+      ;; Verify content contains the partial text
+      (define content (message-content partial-msg))
+      (check-true (and (list? content) (= (length content) 1)))
+      (check-equal? (text-part-text (car content)) "Hello partial"))
+
+    ;; Test 11: no partial message when stream error with no text
+    (test-case "NF1: no partial message when stream error with empty text"
+      ;; Create a provider that raises before emitting any content
+      (define error-prov-no-text
+        (make-provider (lambda () "error-mock-empty")
+                       (lambda () (hash 'streaming #t 'token-counting #t))
+                       (lambda (req) (hasheq))
+                       (lambda (req)
+                         (generator ()
+                                    (raise (exn:fail "stream error before content"
+                                                     (current-continuation-marks)))))))
+      (define bus2 (make-event-bus))
+      (define st2 (make-loop-state "test-session2" "test-turn2"))
+      (subscribe! bus2 (lambda (evt) (void)))
+      (check-exn exn:fail?
+                 (lambda ()
+                   (stream-from-provider error-prov-no-text
+                                         (make-model-request '() #f (hasheq))
+                                         bus2
+                                         "test-session2"
+                                         "test-turn2"
+                                         st2
+                                         #f
+                                         #f)))
+      ;; Verify NO message was added to loop-state
+      (check-equal? (loop-state-messages st2) '()))))
 
 (run-tests stream-error-suite 'verbose)
