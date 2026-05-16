@@ -3,6 +3,17 @@
 ## v0.45.10 — 2026-05-16
 
 ### Fixed
+- **NF1**: Partial messages from stream errors now persist to session.jsonl via loop-state flush
+- **NF2**: Added test coverage for partial message persistence (2 tests)
+- **NF3**: Replaced log-warning with event bus emission for empty-response detection (observable by TUI/extensions)
+- **NF4**: Fixed whitespace-only response false-negative (uses string-trim)
+- **NF5**: Added thinking-length and model context to empty-response warning
+- **NF6**: Retry context pollution prevention verified — error path returns original context, not loop-state
+
+
+## v0.45.10 — 2026-05-16
+
+### Fixed
 - **NF1**: Partial messages from stream errors now flushed to session.jsonl via
   `current-loop-state-for-error-recovery` parameter (was in-memory only)
 - **NF3**: Empty-response warning now uses event bus (`runtime.warning`) instead
