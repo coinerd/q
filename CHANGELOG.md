@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.45.9 — 2026-05-16
+
+### Fixed
+- **AF1+AF2+AF3**: Removed 8 dead imports from session-lifecycle.rkt and selection.rkt
+- **AF4/RC1**: Added empty-response detection — warns when model returns thinking-only output with no text content
+- **AF5/RC2**: Stream timeout now persists partial assistant messages to session.jsonl before re-raising errors
+
+
 ## v0.45.8 — 2026-05-15
 
 ### Fixed
