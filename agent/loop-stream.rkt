@@ -112,6 +112,19 @@
   ;; Error boundary — emit cleanup events on provider crash.
   (with-handlers ([exn:fail?
                    (lambda (e)
+                     ;; AF5 (RC2): Persist partial assistant message before re-raising.
+                     ;; Prevents data loss when stream times out after receiving content.
+                     (define partial-text (streaming-message-text sm))
+                     (when (and partial-text (> (string-length partial-text) 0))
+                       (define partial-msg
+                         (make-message (generate-id)
+                                       #f
+                                       'assistant
+                                       'message
+                                       (list (make-text-part partial-text))
+                                       (now-seconds)
+                                       (hasheq 'turnId turn-id 'partial #t)))
+                       (state-add-message! state partial-msg))
                      (when (streaming-message-message-started? sm)
                        (emit-typed-event! bus
                                           (make-stream-message-end-event #:session-id session-id
