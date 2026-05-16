@@ -332,10 +332,33 @@
                                                      (hasheq 'reason "error")))))])
              (runner text))))])]))
 
+;; v0.45.11 W1: Busy-state watchdog timeout (30 minutes).
+;; If busy? stays true for this long without a turn.completed event,
+;; the watchdog force-clears it and shows a system message.
+(define BUSY-WATCHDOG-MS (* 30 60 1000))
+
 (define (tui-main-loop ctx)
   (let loop ()
     ;; Drain all pending events from the channel (non-blocking)
     (drain-events! ctx)
+
+    ;; v0.45.11 W1: Busy-state watchdog — force-clear stale busy state
+    (define cur-state (unbox (tui-ctx-ui-state-box ctx)))
+    (when (ui-state-busy? cur-state)
+      (define since (ui-state-busy-since cur-state))
+      (when (and since (> (- (current-inexact-milliseconds) since) BUSY-WATCHDOG-MS))
+        (define watchdog-entry
+          (make-entry 'system
+                      "[Watchdog: busy state timed out — force-cleared after 30 min]"
+                      (current-inexact-milliseconds)
+                      (hasheq 'watchdog #t)))
+        (set-box! (tui-ctx-ui-state-box ctx)
+                  (set-status-message (clear-streaming (set-pending-tool-name (set-busy cur-state #f)
+                                                                              #f))
+                                      "watchdog: busy timeout"))
+        (set-box! (tui-ctx-ui-state-box ctx)
+                  (add-transcript-entry (unbox (tui-ctx-ui-state-box ctx)) watchdog-entry))
+        (mark-dirty! ctx)))
 
     ;; Poll for terminal resize (fallback for stub path where SIGWINCH
     ;; doesn't produce tsizemsg events).
