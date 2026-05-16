@@ -58,8 +58,8 @@
       (define cfg (make-mutable-config dir))
       (define sess (make-agent-session cfg))
       (define ws (make-working-set))
-      ;; Pre-populate working set
-      (hash-set! cfg 'working-set ws)
+      ;; Pre-populate working set on session config
+      (set-agent-session-config! sess (dict-set (agent-session-config sess) 'working-set ws))
       (working-set-update! ws
                            (list (hasheq 'name "read" 'arguments (hasheq 'path "/tmp/a.rkt")))
                            (list (make-message "m1"
@@ -81,20 +81,20 @@
       (define dir (make-test-dir))
       (define cfg (make-mutable-config dir))
       (define sess (make-agent-session cfg))
-      (check-false (hash-has-key? cfg 'working-set))
+      (check-false (dict-has-key? (agent-session-config sess) 'working-set))
       (run-prompt-internal sess "hello" 1 100000 ensure-persisted! buffer-or-append!)
-      (check-true (hash-has-key? cfg 'working-set))
-      (check-pred working-set? (hash-ref cfg 'working-set)))
+      (check-true (dict-has-key? (agent-session-config sess) 'working-set))
+      (check-pred working-set? (dict-ref (agent-session-config sess) 'working-set)))
 
     ;; ── T03: run-prompt-internal creates ws in immutable config ──
     (test-case "T03: run-prompt-internal creates working set in immutable config"
       (define dir (make-test-dir))
       (define cfg (make-immutable-config dir))
       (define sess (make-agent-session cfg))
-      (check-false (hash-has-key? (agent-session-config sess) 'working-set))
+      (check-false (dict-has-key? (agent-session-config sess) 'working-set))
       (run-prompt-internal sess "hello" 1 100000 ensure-persisted! buffer-or-append!)
-      (check-true (hash-has-key? (agent-session-config sess) 'working-set))
-      (check-pred working-set? (hash-ref (agent-session-config sess) 'working-set)))
+      (check-true (dict-has-key? (agent-session-config sess) 'working-set))
+      (check-pred working-set? (dict-ref (agent-session-config sess) 'working-set)))
 
     ;; ── T04: run-prompt-internal passes ws through config to iteration loop ──
     (test-case "T04: working set survives through prompt execution"
@@ -102,7 +102,7 @@
       (define cfg (make-mutable-config dir))
       (define sess (make-agent-session cfg))
       (run-prompt-internal sess "hello" 1 100000 ensure-persisted! buffer-or-append!)
-      (define ws (hash-ref cfg 'working-set #f))
+      (define ws (dict-ref (agent-session-config sess) 'working-set #f))
       (check-pred working-set? ws)
       ;; After prompt, ws should still exist (not corrupted)
       (check-true (>= (working-set-entry-count ws) 0)))
@@ -127,7 +127,7 @@
                            (list tool-msg)
                            message-id
                            (lambda (m) 20))
-      (hash-set! cfg 'working-set ws)
+      (set-agent-session-config! sess (dict-set (agent-session-config sess) 'working-set ws))
       ;; build-session-context should produce context including ws message
       (define ctx (build-session-context-for-prompt sess "hello" ensure-persisted! buffer-or-append!))
       ;; Context should contain the tool message (it's in the working set)
