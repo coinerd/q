@@ -7,13 +7,13 @@
 ;;
 ;; STABILITY: stable
 
-(require racket/match
+(require racket/contract
+         racket/match
          "event-payloads.rkt"
-         (only-in "event-macro.rkt"
-                  lookup-event-deserializer))
-(provide payload->hash
-         hash->payload
-         payload-type-tag)
+         (only-in "event-macro.rkt" lookup-event-deserializer))
+(provide (contract-out [payload->hash (-> any/c hash?)]
+                       [hash->payload (-> any/c any/c)]
+                       [payload-type-tag (-> any/c symbol?)]))
 
 ;; Forward to event-payloads.rkt (already exported there, re-exported here
 ;; for codec consolidation).
