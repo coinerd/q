@@ -48,7 +48,8 @@
          (only-in "../runtime/session-context.rkt" extract-path-settings)
          "../util/ids.rkt"
          (only-in "runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
-         (only-in "iteration/main-loop.rkt" run-iteration-loop)
+         (only-in "iteration/main-loop.rkt" run-iteration-loop/v2)
+         (only-in "iteration/loop-config.rkt" make-loop-config)
          (only-in "../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../agent/event-structs/turn-events.rkt" turn-end-event turn-start-event)
          "session-types.rkt"
@@ -289,20 +290,21 @@
           (make-loop-result context-with-system 'error payload))])
     (define ws (config-working-set cfg))
     (define result
-      (run-iteration-loop context-with-system
-                          prov
-                          bus
-                          reg
-                          (agent-session-extension-registry sess)
-                          log-path
-                          sid
-                          max-iterations
-                          #:cancellation-token cancellation-tok
-                          #:config cfg
-                          #:working-set ws
-                          #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
-                          #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
-                          #:session sess))
+      (run-iteration-loop/v2
+       (make-loop-config context-with-system
+                         prov
+                         bus
+                         reg
+                         (agent-session-extension-registry sess)
+                         log-path
+                         sid
+                         max-iterations
+                         #:cancellation-token cancellation-tok
+                         #:config cfg
+                         #:working-set ws
+                         #:shutdown-check (lambda () (agent-session-shutdown-requested? sess))
+                         #:force-shutdown-check (lambda () (agent-session-force-shutdown? sess))
+                         #:session sess)))
     ;; v0.32.0: Stop trace logger on normal completion
     (stop-trace-logger! tracer)
     result))

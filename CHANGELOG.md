@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.46.4 — 2026-05-18
+
+### Changed
+- **F16**: Extracted shared `util/fsm.rkt` generic FSM library — `make-fsm`, `fsm-lookup`, `fsm-valid-transition?`, `fsm-find-path`
+- **F16**: Refactored `runtime/iteration/fsm-types.rkt` and `agent/loop-fsm.rkt` to use shared FSM library
+- **F3**: Added FSM transition validation guards to `agent/turn-reducer.rkt`
+- **F15**: Migrated `runtime/session-lifecycle.rkt` to use `run-iteration-loop/v2` with config struct
+
+### Added
+- `tests/test-fsm-generic.rkt` — 8 tests for generic FSM library
+- `turn-machine` export from `loop-fsm.rkt`
+- 2 new turn-reducer validation tests (19 total)
+
 ## v0.46.3 — 2026-05-18
 
 ### Changed
