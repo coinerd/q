@@ -24,6 +24,7 @@
          (only-in "../util/protocol-types.rkt"
                   message-id
                   message-kind
+                  message?
                   make-message
                   make-text-part
                   loop-result-termination-reason
@@ -79,7 +80,7 @@
                any)]
           [build-session-context-for-prompt
            (-> agent-session?
-               (or/c string? list?)
+               (or/c string? message?)
                (or/c procedure? #f)
                (or/c procedure? #f)
                (listof any/c))]

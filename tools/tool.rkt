@@ -79,7 +79,7 @@
                               ;; event-publisher : (or/c #f (-> string? hash? any))
                               ;; Callback for scheduler lifecycle events. Receives event-type (string)
                               ;; and payload (hash). Called by execute-tool-plan for batch events.
-                              #:event-publisher (or/c procedure? #f symbol?)
+                              #:event-publisher (or/c procedure? #f)
                               #:runtime-settings (or/c hash? q-settings? #f)
                               #:call-id string?
                               #:session-metadata (or/c hash? #f)
