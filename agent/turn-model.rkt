@@ -99,8 +99,7 @@
 ;; Stream completion -- replaces raw hash for decide-after-stream
 ;; ============================================================
 
-(struct stream-completion
-        (cancelled? cancel-reason text tool-calls usage model all-chunks)
+(struct stream-completion (cancelled? cancel-reason text tool-calls usage model all-chunks)
   #:transparent)
 
 (define (make-stream-completion #:cancelled? [cancelled? #f]
@@ -119,12 +118,6 @@
 (struct hook-stage-payload (stage result) #:transparent)
 
 ;; ============================================================
-;; FSM transition -- pure FSM computation
-;; ============================================================
-
-(struct fsm-transition (from-state to-state action) #:transparent)
-
-;; ============================================================
 ;; Provide
 ;; ============================================================
 
@@ -138,8 +131,6 @@
          (contract-out (struct turn-command ([tag turn-command-tag/c] [payload any/c])))
          (contract-out (struct turn-decision
                                ([tag turn-decision-tag/c] [payload any/c] [metadata hash?])))
-         (contract-out (struct fsm-transition
-                               ([from-state symbol?] [to-state symbol?] [action symbol?])))
          make-turn-start
          make-turn-hook-result
          make-turn-stream-complete
@@ -167,10 +158,11 @@
          ;; Stream completion
          (contract-out (struct stream-completion
                                ([cancelled? boolean?] [cancel-reason (or/c string? #f)]
-                                                      [text string?] [tool-calls list?]
-                                                      [usage hash?] [model string?]
+                                                      [text string?]
+                                                      [tool-calls list?]
+                                                      [usage hash?]
+                                                      [model string?]
                                                       [all-chunks list?])))
          make-stream-completion
          ;; Hook stage payload
-         (contract-out (struct hook-stage-payload ([stage symbol?] [result any/c])))
-)
+         (contract-out (struct hook-stage-payload ([stage symbol?] [result any/c]))))
