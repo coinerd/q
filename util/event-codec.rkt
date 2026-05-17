@@ -10,7 +10,8 @@
 (require racket/contract
          racket/match
          "event-payloads.rkt"
-         (only-in "event-macro.rkt" lookup-event-deserializer))
+         (only-in "event-macro.rkt" lookup-event-deserializer)
+         (only-in "event-migration.rkt" run-event-migrations!))
 (provide (contract-out [payload->hash (-> any/c hash?)]
                        [hash->payload (-> any/c any/c)]
                        [payload-type-tag (-> any/c symbol?)]))
@@ -37,13 +38,14 @@
 (define (try-macro-registry h)
   (define type-str (hash-ref h 'type #f))
   (if type-str
-      (let ([deser (lookup-event-deserializer type-str)])
+      (let* ([migrated-h (run-event-migrations! type-str h)]
+             [deser (lookup-event-deserializer type-str)])
         (if deser
             (deser type-str
-                   (hash-ref h 'timestamp 0)
-                   (hash-ref h 'sessionId "")
-                   (hash-ref h 'turnId #f)
-                   h)
+                   (hash-ref migrated-h 'timestamp 0)
+                   (hash-ref migrated-h 'sessionId "")
+                   (hash-ref migrated-h 'turnId #f)
+                   migrated-h)
             #f))
       #f))
 
