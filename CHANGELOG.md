@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.45.19 — 2026-05-17
+
+### Fixed
+- **C1 CRITICAL**: spawn-subagent event-publisher arity mismatch — 1-arg lambda crashed
+  when scheduler called with 2 args. Now uses proper 2-arg convention with emit-session-event!.
+- **H1 HIGH**: scheduler-batch-stats struct converted to proper hash before event emission.
+  New `scheduler-batch-stats->hash` function provides field-level conversion.
+  Downstream consumers (TUI, RPC, SDK) can now read batch stats fields.
+  Removed opaque `(hash 'raw ...)` wrapping from tool-coordinator.
+- **M1 MED**: Stale comments in session-lifecycle updated to `build-session-context-for-prompt`.
+- **M2 MED**: Duplicate `racket/contract` require removed from tool-coordinator.
+- **M4 MED**: event-publisher callback contract documented in tool.rkt.
+- **L1 LOW**: `build-session-context-for-prompt` contract tightened to `(or/c string? list?)`.
+
+### New Export
+- `scheduler-batch-stats->hash` in `tools/scheduler.rkt`
+
 ## v0.45.18 — 2026-05-17
 
 ### Fixed
