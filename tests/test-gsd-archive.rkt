@@ -511,6 +511,35 @@
      (reset-gsm!)
      (cleanup-tmp tmp))))
 
+;; N1: Guard 2 requires BOTH executor AND wave docs.
+;; Wave docs alone (without executor) must NOT trigger auto-complete.
+(test-case "no auto-complete when wave docs exist but no executor set (N1)"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with 2 waves, all [Inbox]
+     (write-plan! tmp
+                  #:status-lines
+                  "- [Inbox] W0: setup → waves/W0-setup.md
+- [Inbox] W1: impl → waves/W1-impl.md
+")
+     ;; Create wave doc files (but do NOT set executor)
+     (write-wave! tmp 0 "setup" "Inbox" "Setup content")
+     (write-wave! tmp 1 "impl" "Inbox" "Impl content")
+     ;; Do NOT set wave executor
+     ;; Do NOT mark any wave complete
+     (sync-executor-to-plan! tmp)
+     ;; Waves should stay [Inbox] — docs alone are not enough
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[Inbox] W0:"))
+     (check-true (string-contains? plan-text "[Inbox] W1:"))
+     (check-false (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
 (test-case "ensure-state-md! does not overwrite existing STATE.md"
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind void

@@ -19,6 +19,8 @@
          "../llm/provider.rkt"
          "../llm/model.rkt"
          "../agent/event-bus.rkt"
+         (only-in "../agent/event-emitter.rkt" emit-session-event!)
+         (only-in "../util/event.rkt" event-ev event-payload)
          "../util/ids.rkt")
 
 ;; ============================================================
@@ -223,3 +225,56 @@
   (check-false (tool-result-is-error? result)
                (format "expected success, got error: ~a" (tool-result-content result)))
   (check-true (tool-result? result)))
+
+;; ── v0.45.21 N5: Direct emit-session-event! 2-arg convention test ──
+;; Verifies that the event-publisher lambda (ev-pub event-type payload) correctly
+;; calls emit-session-event! and that events arrive on the bus with expected type.
+(test-case "N5: emit-session-event! via event-publisher publishes to bus"
+  (define bus (make-event-bus))
+  (define session-id "test-n5-session")
+  (define captured-events (box '()))
+
+  ;; Subscribe to capture events
+  (subscribe! bus
+              (lambda (evt) (set-box! captured-events (append (unbox captured-events) (list evt)))))
+
+  ;; Create the 2-arg event-publisher lambda (same shape as spawn-subagent uses internally)
+  (define ev-pub
+    (lambda (event-type payload) (emit-session-event! bus session-id event-type payload)))
+
+  ;; Emit a test event via the 2-arg convention
+  (define result-evt (ev-pub "subagent.spawn" (hasheq 'task "test")))
+
+  ;; Verify the event was published
+  (check-not-false result-evt "event-publisher should return the event")
+  (define events (unbox captured-events))
+  (check = (length events) 1 (format "expected 1 event, got ~a" (length events)))
+  (when (= (length events) 1)
+    (define evt (car events))
+    (check-equal? (event-ev evt) "subagent.spawn")
+    (check-equal? (hash-ref (event-payload evt) 'task #f) "test")))
+
+;; Also verify the 2-arg convention works with multiple sequential events
+(test-case "N5: multiple events via 2-arg convention"
+  (define bus (make-event-bus))
+  (define session-id "test-n5-multi")
+  (define captured-events (box '()))
+
+  (subscribe! bus
+              (lambda (evt) (set-box! captured-events (append (unbox captured-events) (list evt)))))
+
+  (define ev-pub
+    (lambda (event-type payload) (emit-session-event! bus session-id event-type payload)))
+
+  ;; Emit 3 events
+  (ev-pub "subagent.spawn" (hasheq 'task "first"))
+  (ev-pub "subagent.progress" (hasheq 'msg "working"))
+  (ev-pub "subagent.complete" (hasheq 'result "done"))
+
+  (define events (unbox captured-events))
+  (check = (length events) 3 (format "expected 3 events, got ~a" (length events)))
+  (when (>= (length events) 3)
+    (check-equal? (event-ev (list-ref events 0)) "subagent.spawn")
+    (check-equal? (event-ev (list-ref events 1)) "subagent.progress")
+    (check-equal? (event-ev (list-ref events 2)) "subagent.complete")
+    (check-equal? (hash-ref (event-payload (list-ref events 2)) 'result #f) "done")))
