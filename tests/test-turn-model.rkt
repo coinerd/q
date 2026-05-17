@@ -31,12 +31,6 @@
       (check-true (decision-complete? complete))
       (check-false (decision-blocked? complete)))
 
-    (test-case "fsm-transition construction"
-      (define tx (fsm-transition 'idle 'processing 'next))
-      (check-equal? (fsm-transition-from-state tx) 'idle)
-      (check-equal? (fsm-transition-to-state tx) 'processing)
-      (check-equal? (fsm-transition-action tx) 'next))
-
     (test-case "decision-emit-start constructor and predicate"
       (define d (make-decision-emit-start (hasheq 'session-id "s1")))
       (check-true (decision-emit-start? d))
@@ -77,9 +71,13 @@
       (check-false (turn-cancel? sc)))
 
     (test-case "stream-completion construction"
-      (define sc (make-stream-completion #:cancelled? #t #:cancel-reason "timeout"
-                                         #:text "hello" #:tool-calls '()
-                                         #:usage (hasheq 'tokens 10) #:model "gpt-4"))
+      (define sc
+        (make-stream-completion #:cancelled? #t
+                                #:cancel-reason "timeout"
+                                #:text "hello"
+                                #:tool-calls '()
+                                #:usage (hasheq 'tokens 10)
+                                #:model "gpt-4"))
       (check-true (stream-completion? sc))
       (check-true (stream-completion-cancelled? sc))
       (check-equal? (stream-completion-cancel-reason sc) "timeout")

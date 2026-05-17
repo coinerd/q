@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.46.1 — 2026-05-18
+
+### Changed
+- **F20**: Added `contract-out` to all public functions in `util/event-codec.rkt` (3) and `util/jsonl.rkt` (9) — serialization boundary now enforced
+- **F22**: Removed dead `fsm-transition` struct from `agent/turn-model.rkt` (zero external references)
+
+### Added
+- `test-jsonl-contracts.rkt` — 5 contract boundary tests
+
 ## v0.46.0 — 2026-05-18
 
 ### Changed
