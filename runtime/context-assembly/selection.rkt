@@ -73,6 +73,25 @@
          build-assembled-context/v2
          build-session-context)
 
+;; F23: Pure selection function — testable without infrastructure.
+;; Takes pinned messages, removable messages, a budget, and an estimation function.
+;; Returns (values selected excluded) where selected fits within budget.
+(define (select-messages pinned removable budget estimate-fn)
+  (define pinned-tokens (for/sum ([m (in-list pinned)]) (estimate-fn m)))
+  (define remaining-budget (- budget pinned-tokens))
+  (if (<= remaining-budget 0)
+      (values pinned removable)
+      (let ()
+        (define kept (fit-messages-with-importance-rescue removable remaining-budget estimate-fn))
+        (define kept-ids
+          (for/hash ([m (in-list kept)])
+            (values (message-id m) #t)))
+        (define excluded
+          (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
+        (values (append pinned kept) excluded))))
+
+(provide select-messages)
+
 (define (build-assembled-context idx
                                  config
                                  #:cache [cache #f]
