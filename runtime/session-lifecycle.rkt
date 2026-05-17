@@ -36,7 +36,7 @@
          (only-in "../agent/state.rkt" current-loop-state-for-error-recovery loop-state-messages)
          "../runtime/session-index.rkt"
          (only-in "../util/event-payloads.rkt" error-payload input-payload payload->hash)
-         (only-in "../util/error-helpers.rkt" with-telemetry)
+         (only-in "../util/telemetry.rkt" with-telemetry)
          (only-in "../runtime/context-assembly.rkt"
                   (build-session-context build-session-context/from-index)
                   build-tiered-context-with-hooks
