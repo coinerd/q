@@ -94,6 +94,7 @@
          (only-in "../runtime/provider-factory.rkt" build-provider)
          (only-in "../agent/event-bus.rkt" make-event-bus event-bus? subscribe! publish!)
          (only-in "../util/event.rkt" event?)
+         (only-in "../util/protocol-types.rkt" message?)
          (only-in "../extensions/api.rkt"
                   make-extension-registry
                   register-extension!
@@ -128,7 +129,7 @@
                                #:project-dir (or/c path-string? path? #f))
                 runtime?)]
           [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
-          [run-prompt! (-> runtime? string? (values runtime? (or/c hash? #f)))]
+          [run-prompt! (-> runtime? (or/c string? message?) (values runtime? (or/c hash? #f)))]
           [interrupt! (-> runtime? runtime?)]
           [fork-session! (->* (runtime?) ((or/c string? #f)) (or/c runtime? 'no-active-session))]
           [compact-session! (->* (runtime?) (#:persist? boolean?) any)]
