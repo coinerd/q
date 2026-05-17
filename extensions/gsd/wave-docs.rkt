@@ -26,7 +26,8 @@
                   STATUS-DEFERRED
                   STATUS-FAILED
                   done-or-deferred?
-                  active-status?))
+                  active-status?
+                  normalize-status!))
 
 (provide wave-doc-path
          write-wave-doc!
@@ -106,8 +107,18 @@
 (define (parse-wave-doc-from-string text idx slug [path #f])
   (define status (extract-status text))
   (define content (strip-status-header text))
-  (hasheq 'index idx 'slug slug 'status status 'content content
-          'path (if path (path->string path) #f)))
+  (hasheq 'index
+          idx
+          'slug
+          slug
+          'status
+          status
+          'content
+          content
+          'path
+          (if path
+              (path->string path)
+              #f)))
 
 (define (read-wave-doc base-dir idx slug)
   (define path (wave-doc-path base-dir idx slug))
@@ -140,7 +151,8 @@
   (for/fold ([entries '()]) ([line lines])
     (define m (regexp-match index-line-rx line))
     (if m
-        (let* ([status (cadr m)]
+        (let* ([raw-status (cadr m)]
+               [status (or (normalize-status! raw-status) raw-status)]
                [idx (string->number (caddr m))]
                [title (string-trim (cadddr m))]
                [target (and (list? m) (> (length m) 4) (list-ref m 4))]

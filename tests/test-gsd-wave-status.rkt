@@ -45,12 +45,6 @@
   (check-false (active-status? STATUS-DONE))
   (check-false (active-status? STATUS-DEFERRED)))
 
-(test-case "status-eqv? is case-insensitive"
-  (check-true (status-eqv? "DONE" "done"))
-  (check-true (status-eqv? "Done" "DONE"))
-  (check-true (status-eqv? "deferred" "DEFERRED"))
-  (check-false (status-eqv? "DONE" "DEFERRED")))
-
 (test-case "normalize-status! returns canonical form"
   (check-equal? (normalize-status! "DONE") STATUS-DONE)
   (check-equal? (normalize-status! "Done") STATUS-DONE)

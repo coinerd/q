@@ -196,13 +196,17 @@
   (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (when (file-exists? plan-path)
     (define text (call-with-input-file plan-path port->string))
-    (define entries (parse-plan-index text))
-    (for ([e entries])
-      (define status (wave-index-entry-status e))
-      (define idx (wave-index-entry-idx e))
-      (define canonical (normalize-status! status))
-      (when (and canonical (not (string=? status canonical)))
-        (mark-wave-status! base-dir idx canonical)))))
+    ;; Parse raw: regex-match directly to get RAW status strings
+    ;; (parse-plan-index normalizes, so we can't compare raw vs canonical)
+    (define index-line-rx #rx"^[-*] +\\[([A-Za-z-]+)\\] +W([0-9]+):")
+    (for ([line (in-list (string-split text "\n"))])
+      (define m (regexp-match index-line-rx line))
+      (when m
+        (define raw-status (cadr m))
+        (define idx (string->number (caddr m)))
+        (define canonical (normalize-status! raw-status))
+        (when (and canonical (not (string=? raw-status canonical)))
+          (mark-wave-status! base-dir idx canonical))))))
 
 ;; Auto-complete remaining [Inbox] waves when in executing mode.
 ;; Heuristic 1: if we're in executing mode and at least one wave was

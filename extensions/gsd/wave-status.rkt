@@ -49,10 +49,6 @@
   "Is s a non-terminal status?"
   (not (terminal-status? s)))
 
-(define (status-eqv? a b)
-  "Case-insensitive status comparison."
-  (string=? (string-upcase a) (string-upcase b)))
-
 (define (normalize-status! s)
   "Normalize a case-variant status string to canonical form.
    Returns the canonical string or #f if not recognized."
@@ -79,5 +75,4 @@
          terminal-status?
          done-or-deferred?
          active-status?
-         status-eqv?
          normalize-status!)
