@@ -18,7 +18,6 @@
 ;; header comment for full rationale.
 
 (require racket/contract
-         racket/contract
          racket/list
          racket/path
          json

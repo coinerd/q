@@ -9,7 +9,7 @@
 ;;
 ;; Provides:
 ;;   run-prompt!             — main entry point for running a user prompt
-;;   build-session-context   — build context from history + system instructions
+;;   build-session-context-for-prompt — build context from history + system instructions
 ;;   dispatch-iteration      — model-select hook + iteration loop dispatch
 ;;   run-prompt-internal     — internal prompt execution (after input hook)
 
@@ -132,10 +132,10 @@
             context-messages)))
 
 ;; ============================================================
-;; build-session-context
+;; build-session-context-for-prompt
 ;; ============================================================
 
-;; build-session-context — context preparation:
+;; build-session-context-for-prompt — context preparation:
 ;;   converts user-message, appends to log, builds/updates index,
 ;;   walks tree via context-assembly, injects system instructions.
 ;;   Returns the context message list.

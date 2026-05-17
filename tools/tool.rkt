@@ -75,13 +75,16 @@
          (contract-out [make-exec-context
                         (->* ()
                              (#:working-directory (or/c path-string? path? #f)
-                                                  #:cancellation-token (or/c cancellation-token? #f)
-                                                  #:event-publisher (or/c procedure? #f symbol?)
-                                                  #:runtime-settings (or/c hash? q-settings? #f)
-                                                  #:call-id string?
-                                                  #:session-metadata (or/c hash? #f)
-                                                  #:progress-callback (or/c procedure? #f)
-                                                  #:permission-config (or/c permission-config? #f))
+                              #:cancellation-token (or/c cancellation-token? #f)
+                              ;; event-publisher : (or/c #f (-> string? hash? any))
+                              ;; Callback for scheduler lifecycle events. Receives event-type (string)
+                              ;; and payload (hash). Called by execute-tool-plan for batch events.
+                              #:event-publisher (or/c procedure? #f symbol?)
+                              #:runtime-settings (or/c hash? q-settings? #f)
+                              #:call-id string?
+                              #:session-metadata (or/c hash? #f)
+                              #:progress-callback (or/c procedure? #f)
+                              #:permission-config (or/c permission-config? #f))
                              exec-context?)])
          exec-context?
          exec-context-working-directory
