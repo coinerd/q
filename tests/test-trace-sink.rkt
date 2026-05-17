@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-trace-sink.rkt — Trace sink protocol tests (F9)
 

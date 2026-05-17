@@ -1,6 +1,7 @@
 #lang racket
+;; BOUNDARY: pure
 
-;; BOUNDARY: integration
+;; BOUNDARY: serialization
 
 ;; tests/test-event-serializer-fast-path.rkt — R-13: Verify serializer registry fast path
 

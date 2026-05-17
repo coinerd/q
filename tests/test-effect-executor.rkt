@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-effect-executor.rkt — Step effect executor tests (F2)
 

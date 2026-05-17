@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-loop-phases.rkt — Pure phase function tests (F1)
 

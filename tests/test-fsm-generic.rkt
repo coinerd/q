@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-fsm-generic.rkt — Generic FSM library tests (F16)
 

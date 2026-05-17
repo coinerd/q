@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-schema-versioning.rkt — Per-type schema version tests (F6, S8-F1)
 

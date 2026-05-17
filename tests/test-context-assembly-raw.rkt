@@ -1,4 +1,5 @@
 #lang racket
+;; BOUNDARY: pure
 
 ;; BOUNDARY: integration
 

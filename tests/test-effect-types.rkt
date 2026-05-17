@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-effect-types.rkt — Effect descriptor type tests (F1)
 

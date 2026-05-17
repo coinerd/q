@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: serialization
 
 ;; tests/test-jsonl-contracts.rkt — Contract boundary tests for jsonl.rkt
 
