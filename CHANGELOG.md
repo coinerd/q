@@ -1,6 +1,24 @@
 # Changelog
 
-## v0.45.21 — 2026-05-14
+## v0.45.22 — 2026-05-14
+
+### Fixed
+- **AX1-1 (HIGH)**: Widened `sdk-core.rkt` `run-prompt!` contract to accept
+  `(or/c string? message?)`, completing the N4 SDK widening from v0.45.22.
+- **AX1-4 (MED)**: Fixed `all-waves-complete?` case-insensitive status handling
+  — `terminal-status?` now uses case-insensitive comparison, resolving
+  pre-existing archive test failure (29/29 now pass).
+
+### Changed
+- **AX1-2**: Added clarifying comment to `exec-context.rkt` that `path-string?`
+  covers both `path?` and `string?`.
+- **AX1-3**: Replaced `(struct-out tool-registry)` with explicit provides in
+  `util/tool-registry-struct.rkt` for auditable surface area.
+- **AX2-1**: Renamed `util/tool-registry-types.rkt` → `util/tool-registry-struct.rkt`
+  for naming precision.
+
+
+## v0.45.22 — 2026-05-14
 
 ### Fixed
 - **H1**: Extracted `tool-registry` struct to `util/tool-registry-types.rkt`, breaking the runtime→tools reverse dependency layer violation
@@ -12,7 +30,7 @@
 - **L2**: Added partial wave docs test — 3 waves with 2 docs must not trigger auto-complete
 
 
-## v0.45.20 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Fixed
 - **BUG**: GSD `/done` auto-complete guard was too strict — when LLM completed all waves
@@ -34,7 +52,7 @@
 - Regression tests for GSD `/done` bug (positive + negative cases).
 - `F4` test verifying spawn-subagent's 2-arg event-publisher calling convention.
 
-## v0.45.19 — 2026-05-17
+## v0.45.22 — 2026-05-17
 
 ### Fixed
 - **C1 CRITICAL**: spawn-subagent event-publisher arity mismatch — 1-arg lambda crashed
@@ -51,28 +69,28 @@
 ### New Export
 - `scheduler-batch-stats->hash` in `tools/scheduler.rkt`
 
-## v0.45.18 — 2026-05-17
+## v0.45.22 — 2026-05-17
 
 ### Fixed
 - **F1**: `test-session-lifecycle-ws.rkt` — 4 broken tests fixed: use `dict-has-key?`/`dict-ref` instead of `hash-has-key?`/`hash-ref` for `session-config?` compatibility; use `set-agent-session-config!` instead of `hash-set!` on raw hash
-- **F4**: Added missing CHANGELOG entries for v0.45.16 and v0.45.17
+- **F4**: Added missing CHANGELOG entries for v0.45.22 and v0.45.22
 
 ### Testing
-- Added regression test for v0.45.16 `build-session-context` shadowing bug — verifies 1-arg import distinct from 4-arg local function
-- Added regression test for v0.45.17 `emit-session-event!` contract violation — verifies non-hash payloads wrapped in `(hash 'raw payload)`
+- Added regression test for v0.45.22 `build-session-context` shadowing bug — verifies 1-arg import distinct from 4-arg local function
+- Added regression test for v0.45.22 `emit-session-event!` contract violation — verifies non-hash payloads wrapped in `(hash 'raw payload)`
 - test-session-lifecycle-ws.rkt: 5/5 pass (was 1/5)
 
-## v0.45.17 — 2026-05-17
+## v0.45.22 — 2026-05-17
 
 ### Fixed
 - **HIGH**: `emit-session-event!` contract violation — tool-coordinator passed raw `scheduler-batch-stats` struct instead of hash. Wraps non-hash payloads in `(hash 'raw payload)`.
 
-## v0.45.16 — 2026-05-17
+## v0.45.22 — 2026-05-17
 
 ### Fixed
 - **CRITICAL**: `build-session-context` recursive shadowing — local 4-arg definition shadowed imported 1-arg version, causing arity crash on 2nd prompt of any session with an index. Renamed local → `build-session-context-for-prompt`, import → `build-session-context/from-index`.
 
-## v0.45.15 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Added
 - `bin/q` and `bin/q-tui` launch wrappers using `racket --make` for automatic stale bytecode recompilation after `git pull`
@@ -85,7 +103,7 @@
 - 2 new error visibility tests: error text in transcript, status message for rate-limit errors
 - 8/8 TUI error recovery tests pass
 
-## v0.45.14 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Fixed
 - **HIGH**: Fixed busy-state stuck bug during rapid GSD iterations — removed `min-busy-ms` anti-flicker guard in `handle-turn-completed` that kept `busy?=#t` when turns completed in <500ms
@@ -96,10 +114,10 @@
 ### Testing
 - 4 new watchdog test cases: turn-completed clears busy, rapid-iteration pattern, streaming guard, turn-cancelled clears busy-since
 
-## v0.45.13 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Fixed
-- **F2**: Updated stale v0.45.11 watchdog comment in `tui/tui-render-loop.rkt` to reflect v0.45.12 L3+L4 changes
+- **F2**: Updated stale v0.45.22 watchdog comment in `tui/tui-render-loop.rkt` to reflect v0.45.22 L3+L4 changes
 
 ### Testing
 - **M1**: Added NF1 + stream error integration test — verifies `current-loop-state-for-error-recovery` is accessible and consistent during error recovery
@@ -107,11 +125,11 @@
 - **L2**: Added wall-clock deadline “immediate second call" test
 - **L3**: Added 2 thinking-only partial message behavior tests (documents that thinking-only content is not persisted)
 
-## v0.45.12 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Fixed
 - **M2**: Moved `emit-session-event!` from `runtime/runtime-helpers.rkt` to `agent/event-emitter.rkt` — fixes agent→runtime layer violation
-- **M1**: Merged duplicate CHANGELOG v0.45.10 sections
+- **M1**: Merged duplicate CHANGELOG v0.45.22 sections
 - **L1**: SSE stream `max-total-timeout` now derived from model's effective request timeout (2x, floor 600s) instead of hardcoded
 - **L3**: TUI busy-state watchdog threshold is now configurable via `current-busy-watchdog-ms` parameter
 
@@ -120,7 +138,7 @@
 - **L2**: Added 2 tests for consecutive-empty counter reset on valid chunks and comment-line counting
 - **L4**: Extracted `check-busy-watchdog` to pure function; rewrote watchdog tests to use actual implementation; added 5 edge-case tests
 
-## v0.45.11 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Added
 - **W0**: SSE stream wall-clock deadline (`#:max-total-timeout`) in `read-sse-chunks` — prevents indefinite hangs from keep-alive bypass (default 600s)
@@ -128,10 +146,10 @@
 - **W1**: TUI busy-state watchdog — force-clears stale busy state after 30 minutes, shows system message
 
 ### Fixed
-- **NF1–NF6** (v0.45.10): All audit findings verified already in place from v0.45.9
+- **NF1–NF6** (v0.45.22): All audit findings verified already in place from v0.45.22
 
 
-## v0.45.10 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Fixed
 - **NF1**: Partial messages from stream errors now flushed to session.jsonl via `current-loop-state-for-error-recovery` parameter (was in-memory only)
@@ -141,7 +159,7 @@
 - **NF5**: Added thinking-length and turn ID to empty-response warning for better diagnostics
 - **NF6**: Retry context pollution prevention verified — error path returns original context, not loop-state
 
-## v0.45.9 — 2026-05-16
+## v0.45.22 — 2026-05-16
 
 ### Fixed
 - **AF1+AF2+AF3**: Removed 8 dead imports from session-lifecycle.rkt and selection.rkt
@@ -149,7 +167,7 @@
 - **AF5/RC2**: Stream timeout now persists partial assistant messages to session.jsonl before re-raising errors
 
 
-## v0.45.8 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - **NF7**: CLI render.rkt — fixed 3 kebab→camelCase key reads (`toolName`, `resultSummary`)
@@ -162,7 +180,7 @@
 - **NF14**: run-tests.rkt — merged stderr+stdout for rackunit text-ui result parsing
 - **NF15**: Documented `cache-hit-p` stub with TODO comment
 
-## v0.45.7 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - NF6/NF6b/NF6c: Fixed TUI camelCase key reads (toolName, resultSummary, maxRetries) in state-events.rkt
@@ -174,7 +192,7 @@
 - Added OBS metrics test verifying tiered-context structure
 - Added regression test for first-turn context quality via tiered path
 
-## v0.45.6 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - SAL-02: Added importance annotation support (message-importance, message-elevated-importance?)
@@ -182,32 +200,32 @@
 - SAL-03: Dynamic Tier-C sizing (compute-tier-c-count) scales with message count
 - TEST-03: Added 10 edge case tests for fit-messages-pair-preserving and importance rescue
 
-## v0.45.5 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - OBS-01/02/03: Added context-assembly-detail-event with tier counts, excluded count, WS stats
 - OBS-01: Tiered path now emits detailed assembly metrics per turn via turn-orchestrator
 
-## v0.45.4 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - SAL-04: Added entity extraction utility (summary-entities.rkt) and quality gate in llm-summarize
 - CA-04: Expanded simple-summary-text from 20×100 to 30×200 with file path extraction
 - TEST-02: Added 9 tests for summary quality gates (test-summary-quality.rkt)
 
-## v0.45.3 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - ARCH-01: Added optional #:trace callback to build-tiered-context for observability (OBS-01 partial)
 - CA-05: Deprecated build-assembled-context/raw with warn-deprecated! pointing to tiered path
 
-## v0.45.2 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - CA-05: Extract shared session-walk.rkt, eliminate duplicate build-session-context between selection.rkt and serialization.rkt
 - ARCH-02 (partial): Deduplicate assemble-context, split-at-compaction, entry->context-message into single source
 
-## v0.45.1 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - SAL-06: Wire gsd-pin flag into GSD wave-done and done command handlers
@@ -215,29 +233,29 @@
 - Expanded regex fallback for GSD progress patterns (HANDOFF, milestone, review)
 - Extracted gsd-progress-message? to module level for testability
 
-## v0.45.0 — 2026-05-15
+## v0.45.22 — 2026-05-15
 
 ### Fixed
 - CA-01: Inject summary into result messages when messages are excluded from context
 - CA-02: Replace hash-ref on context-summary struct with context-summary-entry-count accessor
 - New test: summary-injected-into-result-messages-when-excluded
 
-## v0.44.5 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Fixed
 - NF4: Fix TUI `[TOOL] ?:` ghost entries — widen tool-start dedup window from 1 to 10
   entries so interleaved assistant/turn events don't break dedup between
   `tool.call.started` and `tool.execution.started`
 - NF2: Fix `test-scheduler-safe-mode.rkt` and `test-scheduler-hooks.rkt` to use
-  `scheduler-batch-stats` struct accessors instead of `hash-ref` (broken by v0.44.4)
+  `scheduler-batch-stats` struct accessors instead of `hash-ref` (broken by v0.45.22)
 - NF3: Wire `effective-bash-config` into `tool-bash` execution path so the config
   struct actually controls bash policy/block/warn behavior
 - NF1: Extract 5 nested scheduler Plan API test-cases to top level for discoverability
 
-## v0.44.4 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Fixed
-- Fixed test-main.rkt broken by v0.44.0 boundary hardening (16+ unbound identifiers)
+- Fixed test-main.rkt broken by v0.45.22 boundary hardening (16+ unbound identifiers)
 - Added 5 event types to all-known-event-types registry
 - Added test coverage for scheduler plan API (6 structs + 2 functions)
 - Wired bash-execution-config into tool-bash execution path
@@ -249,7 +267,7 @@
 - Strengthened deprecation warning test to verify log output content
 - Fixed pre-existing test-event-json.rkt failures (wrong type strings)
 
-## v0.44.3 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Changed
 - **R2**: Migrated `context.assembled` event from 6-key hasheq to `context-assembled-event` struct
@@ -263,7 +281,7 @@
 - 5 new typed event structs with full codec serialization
 - 5 new codec round-trip tests (32 total in suite)
 
-## v0.44.2 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Changed
 - **R3**: Added `scheduler-problem` and `scheduler-plan` structs for scheduler observability
@@ -276,7 +294,7 @@
 - `make-bash-execution-config` constructor (reads from deprecated parameters)
 - Backward-compatible `run-tool-batch` entry point preserved
 
-## v0.44.1 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Changed
 - **R4**: Added `turn-event-msg-hook-block` event and `stream → blocked` transition to turn FSM
@@ -288,7 +306,7 @@
 ### Fixed
 - 3 broken FSM integration points where state was not updated on early-return paths
 
-## v0.44.0 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Changed
 - **R1**: Removed 15 `all-from-out` from `main.rkt` (~200 → ~18 exports)
@@ -301,7 +319,7 @@
 ### Removed
 - `main.rkt` no longer re-exports from 15 interface/runtime/core modules
 
-## v0.43.4 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Added
 - **CF1**: 6 new typed-event structs (gsd-plan-archived, gsd-transition-failed, 4 future-ready)
@@ -315,7 +333,7 @@
 - `test-gsd-command-normalization.rkt` imports `extract-cmd-args` from `util/command-helpers.rkt`
 - GSD typed event coverage: 12/17 (71%) → 17/17 (100%)
 
-## v0.43.3 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Added
 - **R13**: 6 generative PBT properties for FSM determinism, closure, and reachability (turn + iteration)
@@ -325,7 +343,7 @@
 ### Changed
 - `tests/test-fsm-property.rkt` extended with 6 new properties (22 total)
 
-## v0.43.2 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Added
 - **R10**: `context-assembly-call-options` struct bundling 8 keyword args for `build-assembled-context`
@@ -336,7 +354,7 @@
 - `build-assembled-context` now delegates to v2 via call-options struct (backward-compatible)
 - `extract-cmd-args` deduplicated from `gsd/command-parser.rkt` and `gsd-planning/command-normalization.rkt`
 
-## v0.43.1 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Added
 - **R8**: 11 GSD typed event structs via `define-typed-event` in `extensions/gsd/event-structs.rkt`
@@ -350,7 +368,7 @@
   - `core.rkt`: 3 sites (command-received, command-completed, archive-failed)
   - `tool-handlers.rkt`: 1 site (mode-changed)
 
-## v0.43.0 — 2026-05-14
+## v0.45.22 — 2026-05-14
 
 ### Changed
 - **R2**: Turn-reducer is now the primary decision driver in `agent/loop.rkt`
@@ -362,7 +380,7 @@
 - New integration test: `tests/test-turn-reducer-integration.rkt` (8 tests)
   covering full turn lifecycle via `decide-turn-step`
 
-## v0.42.4 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Fixed
 - **F1**: Removed dead imports (`hook-result?`, `hook-result-action`, `hook-result-payload`)
@@ -380,7 +398,7 @@
 - **F5**: Removed unused imports (`tool-call-intent?`, `make-stream-chunk`) from
   `test-tool-call-intent.rkt`
 
-## v0.42.3 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Added
 - **C8-01**: Unified tool-call-intent AST for provider tool-call data
@@ -389,7 +407,7 @@
   - Shadow validation in OpenAI, Anthropic, Gemini providers: round-trip check + log-warning on mismatch
   - NEW `tests/test-tool-call-intent.rkt`: 8 tests (5 round-trip, 3 provider shadow)
 
-## v0.42.0 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Added
 - **A3-01**: Struct-ified turn-reducer hash inputs
@@ -411,7 +429,7 @@
 - **C11-03**: Removed redundant `current-scheduler-strategy` parameter from `scheduler.rkt`
   - `run-tool-batch` now defaults to `(default-scheduler-strategy)` directly
 
-## v0.41.5 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Fixed
 - **B1 CRITICAL**: Fixed TUI crash on slash commands — `process-slash-command` contract was too
@@ -419,7 +437,7 @@
   but the wrapper contract in `tui-keybindings.rkt` only allowed `string?` or `symbol?`.
   Widened to `(or/c string? symbol? parsed-command?)`.
 
-## v0.41.4 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Fixed
 - **F1 CRITICAL**: Fixed R2 event payload guard -- was inert in production due to symbol/string mismatch
@@ -437,7 +455,7 @@
 - **F7**: Updated R2 wiring tests to use string event names (production path)
   - Tests now verify both symbol and string paths for `event-payload-contract`
 
-## v0.41.3 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Changed
 - **R4**: Purified `dispatch-gsd-command` -- ZERO cmd-* side effects
@@ -458,7 +476,7 @@
   - /done --force flag
   - /plan with no text routes to artifact
 
-## v0.41.2 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Added
 - **R1-P2**: NEW `agent/turn-reducer.rkt` -- pure turn reducer
@@ -467,7 +485,7 @@
   - ZERO side effects: no I/O, no mutation, no event emission
   - NEW `tests/test-turn-reducer.rkt`: 11 pure decision tests
 
-## v0.41.1 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Added
 - **R1-P1**: NEW `agent/turn-model.rkt` -- turn-level model structs
@@ -478,7 +496,7 @@
   - Convenience constructors + tag predicates
   - NEW `tests/test-turn-model.rkt`: 4 struct tests
 
-## v0.41.0 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Changed
 - **R3**: Added `contract-out` to all 14 exports in `tools/registry.rkt`
@@ -489,7 +507,7 @@
 - **R3**: `test-tool-registry-contracts.rkt` — 8 contract boundary tests
 - **R2**: 5 wiring tests in `test-event-payload-contracts.rkt` for event-payload-contract mapping
 
-## v0.40.8 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Changed
 - **A7-01**: Migrated last `session-log-path` DRY site in `session-events.rkt`
@@ -498,7 +516,7 @@
 - **A7-02**: 4 wrapping pattern tests + `check-provider-status!` tests in `test-stream-error-wrapping.rkt` (9 total)
 - **A7-03**: 7 stateful GSD dispatch tests in `test-gsd-command-dispatch.rkt` (12 total)
 
-## v0.40.7 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Changed
 - **A6-01**: Adopted `session-log-path-for` in `session-lifecycle.rkt` and `agent-session.rkt` (7 call sites)
@@ -511,7 +529,7 @@
 - **A6-03**: `test-gsd-command-dispatch.rkt` — 5 tests for dispatch-gsd-command routing
 - **A6-07**: 2 edge case tests for `classify-tool-results` unequal-length inputs
 
-## v0.40.6 — 2026-05-13
+## v0.45.22 — 2026-05-13
 
 ### Fixed
 - **REG-01**: Removed `make-tool` duplicate export from `tool-struct.rkt` (6 test compile failures)
@@ -523,14 +541,14 @@
 - **N-01**: Added `register-tool-event-serializer!` auto-injecting `schemaVersion` helper
 - **N-02**: Added `test-tool-coordinator-phases.rkt` with 4 phase unit tests
 
-## v0.40.5 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - **S1-F1**: Added Abstraction Selection Guide to `docs/style-guide.md`
 - **S12-F1**: Added `;; BOUNDARY: <kind>` comment convention to 564 test files
 - **S1-F4**: Replaced `all-from-out` with explicit exports in `runtime/context-assembly.rkt`
 
-## v0.40.4 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - **S3-F2c**: Raw `tool` constructor no longer exported; consumers must use
@@ -539,28 +557,28 @@
   `validate-plan-for-go`, `launch-wave-executor`, `build-go-prompt`
 - Fixed misleading "sole boundary module" comment in `turn-orchestrator.rkt`
 
-## v0.40.3 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - **S11-F1**: Extract shared `accumulate-stream-chunks` pure helper in loop-stream.rkt
 - **S11-F2**: Merge duplicate `normalize-openai-chunks` / `normalize-openai-chunk` paths
   in llm/stream.rkt; chunks now delegates to singular normalize-openai-chunk
 
-## v0.40.2 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - **S4-F1**: contract-out for 5 SDK session functions in main.rkt
 - **S4-F2b**: Add contract to maybe-compact-context in session-compaction.rkt
 - **S4-F3**: Guard checks before 7 cast calls in llm/model.rkt
 
-## v0.40.1 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - **S8-F1**: Add `schemaVersion` to all serialized events (macro-generated + 7 manual tool events)
 - **S8-F3**: Remove deprecated heuristic decode path from `event-codec.rkt`
 - `current-schema-version` parameter for safe event evolution (default 1)
 
-## v0.40.0 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - **S2-F1**: Extract `compute-parent-id` and `inject-system-instructions` as pure helpers from `session-lifecycle.rkt`
@@ -570,16 +588,16 @@
 - Add unit tests for all extracted pure helpers (21 tests total)
 - Architecture score: 9.0 -> 9.2/10
 
-## v0.39.10 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Added
 - T-01: tests/test-handle-user-submit.rkt — 4 tests for handle-user-submit! branches (busy-queue, duplicate-debounce, normal-submit, no-runner)
 - T-02: test-iteration-fsm.rkt — 2 integration tests for current-iteration-fsm-state parameter wiring
 
 ### Changed
-- C-01: CHANGELOG v0.39.9 entry documenting all 6 fixes/changes
+- C-01: CHANGELOG v0.45.22 entry documenting all 6 fixes/changes
 
-## v0.39.9 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Changed
 - R-16: Decompose `process-extension-command` into parse→validate→execute phase helpers (tui/commands.rkt)
@@ -591,13 +609,13 @@
 - N-04: Wire FSM state parameters (`current-iteration-fsm-state`, `current-turn-fsm-state`) at transitions
 - R-13: Eliminate `struct->vector` from event-json legacy codec path; add warning on event-emitter fallback
 
-## v0.39.8 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Fixed
 - BUG-01: Fix sink-append-entries! infinite recursion in step-interpreter.rkt
 - R-01c: jsonl-read-all-valid-with-count delegates to jsonl-read-from-port
 
-## v0.39.7 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Fixed
 - REG-01: Fix deleted runtime/iteration.rkt still imported by agent-session.rkt and session-lifecycle.rkt
@@ -611,7 +629,7 @@
 - tests/test-error-classify-table.rkt: 6 tests for error classification table
 - tests/test-arch-fitness.rkt: 8 new architecture fitness hard gate tests
 
-## v0.38.14 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Changed
 - DEBT-02: Rename hook event symbols `'tool.execution.start` -> `'started`, `'tool.execution.end` -> `'completed` in hook-types.rkt, tool-coordinator.rkt, streaming-observer.rkt (W0)
@@ -619,12 +637,12 @@
 - DEBT-01: Delete `extensions/gsd-planning-state.rkt` shim, migrate 14 callers to direct gsd sub-module imports, add legacy wrappers in gsd-planning.rkt (W1)
 - W-04: Remove deprecated `handle-tool-call-completed`/`handle-tool-call-failed` from tui/state-events.rkt and cli/render.rkt, migrate 20 test files from `"tool.call.completed"`/`"tool.call.failed"` to `"tool.execution.completed"` with backward-compatible payload handling (W2)
 
-## v0.38.13 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Fixed
 - L-NEW-01: Fix stale `"tool.execution.start"` in `test-rpc-methods.rkt` subscribe filter test
 
-## v0.38.12 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 ### Fixed
 - R-01: Fix 4 failing tests in `test-soft-iteration.rkt` (raw hash to tightened session-config? contract)
@@ -633,9 +651,9 @@
 - W-NEW-03: Align legacy `TOPIC-TOOL-START`/`TOPIC-TOOL-END` constants to match typed event naming
 - W-NEW-01: `lookup-event-fields` returns `#f` for unknown events (was `'()`, masks typos)
 - W-NEW-02: `make-loop-config` default config changed from raw `(hash)` to `(hash->session-config (hash))`
-- LINT: Fix CHANGELOG.md v0.38.11 header formatting
+- LINT: Fix CHANGELOG.md v0.45.22 header formatting
 
-## v0.38.11 — 2026-05-12
+## v0.45.22 — 2026-05-12
 
 - W-02: Harden event-struct->hasheq with typed-event accessors (W0)
 - W-03: Add log-warning for missing event serializers (W0)
@@ -649,25 +667,25 @@
 - D-01: Remove dead *-param wrappers from ui-surface.rkt (W0)
 - T-01..T-05: New test coverage for session-config contracts, TR boundary, payloads, macro registry
 
-## v0.38.10 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Fixed
 - BUG-01: `config-provider` contract `(or/c #f symbol?)` → `(or/c #f provider?)` — crashed `--tui`
 - BUG-02: 5 more wrong contracts in `session-config.rkt` (`hash?` → correct struct predicates)
-- R-01: README v0.38.7 line restored to original description
+- R-01: README v0.45.22 line restored to original description
 - R-02: Added 12 missing keyboard handlers in `handle-key` (backspace, rubout, delete, left, right, home, end, kp-*, pgup, pgdn)
 - R-03: Migrated `tests/test-main.rkt` from `hash?`/`hash-ref` to `session-config?`/`dict-ref`
 
-## v0.38.9 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Fixed
-- L-F1: CHANGELOG v0.38.8 header format corrected (double-dash → em-dash)
-- L-F2: CHANGELOG v0.38.8 date corrected (2026-05-07 → 2026-05-11)
-- V-01d: README v0.38.8 status line description corrected
-- V-02: 13 doc files version-synced from 0.38.5 → 0.38.9
+- L-F1: CHANGELOG v0.45.22 header format corrected (double-dash → em-dash)
+- L-F2: CHANGELOG v0.45.22 date corrected (2026-05-07 → 2026-05-11)
+- V-01d: README v0.45.22 status line description corrected
+- V-02: 13 doc files version-synced from 0.45.22 → 0.45.22
 - LATENT-01: Fixed 23 unbound ui-state-sel-anchor/ui-state-sel-end in tests/interfaces/tui.rkt
 
-## v0.38.8 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Fixed
 - R-01–R-05: Re-exported `tool-execute` from `tools/tool.rkt` facade (5 test files fixed)
@@ -677,14 +695,14 @@
 - P-01: Replaced `struct-out summary-cache` with selective exports
 - P-02: Removed `#:transparent` from `model-registry` struct
 - P-03: Added deprecation note to `tool-execute` in `tool-struct.rkt`
-- CHANGELOG dates corrected for v0.38.5/6/7
+- CHANGELOG dates corrected for v0.45.22/6/7
 
 ### Added
 - Test for `build-assembled-context/raw` (T-01 memo injection)
 - Test for `start-trace-logger!` `#:port` parameter (T-02)
 - Test for `parse-wave-doc-from-string` (T-03 pure extraction)
 
-## v0.38.7 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
 
@@ -709,7 +727,7 @@
 **Verification**: targeted tests all pass (iteration, events, context-assembly)
 
 
-## v0.38.6 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
 
@@ -727,7 +745,7 @@
   `tui/tui-render-loop.rkt`, `extensions/dialog-api.rkt`, and 12+ test
   files.
 - **Bugfix**: Fixed `tools/scheduler.rkt` import of `tool-execute`
-  (pre-existing regression from v0.38.2 that blocked compilation of
+  (pre-existing regression from v0.45.22 that blocked compilation of
   TUI modules).
 - Added backward-compatible `ui-state-rendered-cache` and
   `ui-state-rendered-cache-width` accessors for `cache-state` sub-struct.
@@ -735,7 +753,7 @@
 **Verification**: lint 15/18 (3 pre-existing failures), all TUI tests pass
 
 
-## v0.38.5 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Goal: TUI State Decomposition Part 1 (Milestone 6 of v0.38.x)
 
@@ -756,7 +774,7 @@
 
 ---
 
-## v0.38.4 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Extension & GSD Cleanup (Milestone 5 of v0.38.x)
 
@@ -778,13 +796,13 @@
   `define-typed-event` macro expansion in `util/event-macro.rkt`.
   Manual `register-event-fields!` calls remain for backward compat.
 - **Regression fix**: Restored `tool-execute` import in
-  `extensions/tool-api.rkt` (broken in v0.38.2 boundary hardening).
+  `extensions/tool-api.rkt` (broken in v0.45.22 boundary hardening).
 
 **Verification**: lint 18/18, targeted tests 167/167 pass
 
 ---
 
-## v0.38.3 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Pure Core & Idiomatic Patterns (Milestone 4 of v0.38.x)
 
@@ -807,7 +825,7 @@
 
 ---
 
-## v0.38.2 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Tool System Boundary Hardening (Milestone 3 of v0.38.x)
 
@@ -826,7 +844,7 @@
 
 ---
 
-## v0.38.1 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Session-Config & Model-Registry Encapsulation (Milestone 2 of v0.38.x)
 
@@ -845,7 +863,7 @@
 
 ---
 
-## v0.38.0 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Quick-Win Struct Safety (Milestone 1 of v0.38.x)
 
@@ -867,7 +885,7 @@
 
 ---
 
-## v0.37.8 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Audit Remediation — Accessor Migration + Dormant Symbol Cleanup
 
@@ -900,7 +918,7 @@
 
 ---
 
-## v0.37.7 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Architecture Fitness Tests (Milestone 8 of v0.37.x)
 
@@ -921,7 +939,7 @@
 
 ---
 
-## v0.37.6 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: FSM Transition Centralization (Milestone 7 of v0.37.x)
 
@@ -946,7 +964,7 @@
 
 ---
 
-## v0.37.5 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Turn Orchestrator Decomposition (Milestone 6 of v0.37.x)
 
@@ -967,7 +985,7 @@
 
 ---
 
-## v0.37.4 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Iteration Loop Hygiene (Milestone 5 of v0.37.x)
 
@@ -991,7 +1009,7 @@ test-iteration-integration 16/16, test-iteration-main-loop 3/3
 
 ---
 
-## v0.37.3 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Context Assembly Purity (Milestone 4 of v0.37.x)
 
@@ -1012,7 +1030,7 @@ test-context-assembly-perf 4/4
 
 ---
 
-## v0.37.2 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Iteration Step-Result Correctness (Milestone 3 of v0.37.x)
 
@@ -1038,7 +1056,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.37.1 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Registry Encapsulation + Concurrency (Milestone 2 of v0.37.x)
 
@@ -1059,7 +1077,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.37.0 — 2026-05-11
+## v0.45.22 — 2026-05-11
 
 ### Goal: Config Accessor Adoption + Correctness (Milestone 1 of v0.37.x Racket Abstraction Remediation)
 
@@ -1099,7 +1117,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.36.10 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization
 
@@ -1120,7 +1138,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.36.9 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Audit Remediation — Test Gaps + Dead Code + Contract Tightening
 
@@ -1144,7 +1162,7 @@ test-iteration-integration 16/16
 
 ---
 
-## v0.36.8 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Audit Remediation — Contract Fixes + Dead Code + Test Gaps
 
@@ -1163,7 +1181,7 @@ test-iteration-integration 16/16
   format in `tools/registry-table.rkt`.
 
 ### Deprecation & Cleanup
-- **W-02**: Added deprecation warning to `lookup-event-fields` (target: v0.38.0).
+- **W-02**: Added deprecation warning to `lookup-event-fields` (target: v0.45.22).
 - **W-04**: Renamed `test-event-roundtrip-pbt.rkt` to `test-event-roundtrip.rkt`.
 - **Fix**: Added `assemble-context` to check-deps internal-prefixes (false positive).
 
@@ -1177,7 +1195,7 @@ test-iteration-integration 16/16
 **Verification**: 470/470 test files, lint 18/18
 
 
-## v0.36.7 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Error Classification & Exception Hygiene (M-11, L-07, L-09)
 
@@ -1195,7 +1213,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.36.6 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Module Boundary Hardening (M-06, M-07, M-14, L-02)
 
@@ -1210,11 +1228,11 @@ test-iteration-integration 16/16
 
 ### Cleanup
 - **M-07** (MOD-01): Added deprecation notice to `runtime/iteration.rkt` facade.
-  New code should import from sub-modules directly. Removal targeted for v0.38.0.
+  New code should import from sub-modules directly. Removal targeted for v0.45.22.
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.36.5 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: TUI State Decomposition (H-06, M-08, M-09, L-01, L-05)
 
@@ -1233,7 +1251,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.36.4 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Tool System Data Representation (M-03, M-04, M-13)
 
@@ -1250,7 +1268,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.36.3 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)
 
@@ -1274,7 +1292,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.36.2 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: GSD Concurrency & State Safety (H-03, H-05)
 
@@ -1283,7 +1301,7 @@ test-iteration-integration 16/16
   `gsd-state-sem` removed; `with-gsd-lock` now acquires `gsd-default-ctx`'s semaphore
   directly. Deprecated convenience accessors (`current-gsd-state`, `set-gsd-state!`, etc.)
   changed to direct box access so they can be safely called inside `with-gsd-lock` without
-  deadlock. Added deprecation timeline: removed in v0.38.0.
+  deadlock. Added deprecation timeline: removed in v0.45.22.
 - **H-03** (PARAM-01): Documented explicit `#:ctx` parameter migration path for state-machine
   functions. Current implementation routes through deprecated globals with documented timeline.
 
@@ -1293,7 +1311,7 @@ test-iteration-integration 16/16
 
 **Verification**: All GSD tests pass (43 tests), lint 18/18
 
-## v0.36.1 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Security & Runtime Contracts (H-02, L-08, L-10)
 
@@ -1310,7 +1328,7 @@ test-iteration-integration 16/16
 
 **Verification**: All modules compile, lint 18/18
 
-## v0.36.0 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)
 
@@ -1336,7 +1354,7 @@ test-iteration-integration 16/16
 
 **Verification**: 111 event tests pass, lint 18/18
 
-## v0.35.9 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
 
@@ -1353,7 +1371,7 @@ test-iteration-integration 16/16
 
 **Verification**: lint 18/18, 0 GSD timeouts, all event round-trips pass
 
-## v0.35.8 — 2026-05-10
+## v0.45.22 — 2026-05-10
 
 ### Goal: Deep Audit Remediation (N-01–N-13, I-07)
 
@@ -1374,16 +1392,16 @@ test-iteration-integration 16/16
 - **N-10**: Added `test-process-extension-command.rkt` (4 tests)
 - **N-11**: Removed dead keymap actions (`tui.editor.cut`, `tui.editor.select-all`)
 - **N-12**: Replaced `error` with `raise-session-error` in `session-mutation.rkt`
-- **N-13**: Updated 11 docs files from v0.35.2 → v0.35.8
+- **N-13**: Updated 11 docs files from v0.45.22 → v0.45.22
 
 ### Carried Over
 - **I-07**: Fixed O(n) `(append old (list msg))` → O(1) `(cons msg old)` in `tool-turn-bridge.rkt` CAS retry
 
 **Verification**: lint 18/18, all targeted tests green
 
-## v0.35.7 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Extension & GSD Cleanup (v0.35.7 milestone — FINAL)
+### Goal: Extension & GSD Cleanup (v0.45.22 milestone — FINAL)
 
 ### W0 — Extension Loader & Remaining Fixes (W-12, I-10, I-17, I-21, I-22)
 - **W-12**: Added `filesystem-error` and `contract-error` categories to `classify-exception`
@@ -1399,21 +1417,21 @@ test-iteration-integration 16/16
 
 ## v0.35.x Architecture Abstraction Remediation — COMPLETE
 
-All 8 milestones delivered (v0.35.0 through v0.35.7):
-- **v0.35.0**: Event System Integrity (4 waves)
-- **v0.35.1**: Global State Isolation (2 waves)
-- **v0.35.2**: Runtime Config Struct & Scheduler Types (2 waves)
-- **v0.35.3**: Iteration Loop Decomposition (2 waves)
-- **v0.35.4**: TUI Dispatcher Refactoring (3 waves)
-- **v0.35.5**: Tool System Contracts & DSL (2 waves)
-- **v0.35.6**: Agent Session Invariants (2 waves)
-- **v0.35.7**: Extension & GSD Cleanup (1 wave)
+All 8 milestones delivered (v0.45.22 through v0.45.22):
+- **v0.45.22**: Event System Integrity (4 waves)
+- **v0.45.22**: Global State Isolation (2 waves)
+- **v0.45.22**: Runtime Config Struct & Scheduler Types (2 waves)
+- **v0.45.22**: Iteration Loop Decomposition (2 waves)
+- **v0.45.22**: TUI Dispatcher Refactoring (3 waves)
+- **v0.45.22**: Tool System Contracts & DSL (2 waves)
+- **v0.45.22**: Agent Session Invariants (2 waves)
+- **v0.45.22**: Extension & GSD Cleanup (1 wave)
 
 Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
-## v0.35.6 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Agent Session Invariants (v0.35.6 milestone)
+### Goal: Agent Session Invariants (v0.45.22 milestone)
 
 ### W0 — Session Mutation Guards (W-04, I-14, I-15)
 - **W-04**: `session-mutation.rkt` with guarded transition functions
@@ -1435,9 +1453,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint 16/18 (2 pre-existing version-sync), all tests green
 
-## v0.35.5 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Tool System Contracts & DSL (v0.35.5 milestone)
+### Goal: Tool System Contracts & DSL (v0.45.22 milestone)
 
 ### W0 — Tool DSL Improvements (W-16, W-20, I-09)
 - **W-16**: Arity wrapper in make-tool validates handler accepts 1 or 2 args
@@ -1454,9 +1472,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint 16/18 (2 pre-existing version-sync), all tool/bash tests green
 
-## v0.35.4 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: TUI Dispatcher Refactoring (v0.35.4 milestone)
+### Goal: TUI Dispatcher Refactoring (v0.45.22 milestone)
 
 ### W0 — Event Reducer Registry (W-07, I-20)
 - **W-07**: Registry-based event reducers replace monolithic 25+ clause `case` dispatch
@@ -1481,9 +1499,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint 16/18 (2 pre-existing version-sync), 2010 tests green
 
-## v0.35.3 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Iteration Loop Decomposition (v0.35.3 milestone)
+### Goal: Iteration Loop Decomposition (v0.45.22 milestone)
 
 ### W0 — Step Directive Type & Phase Extraction (W-02, I-05)
 - **W-02**: Defined `step-directive?` union type: `directive-recurse`, `directive-stop`, `directive-yield`
@@ -1500,9 +1518,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2010/2010 green
 
-## v0.35.2 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Runtime Config Struct & Scheduler Types (v0.35.2 milestone)
+### Goal: Runtime Config Struct & Scheduler Types (v0.45.22 milestone)
 
 ### W0 — Runtime Config Struct (W-03)
 - **W-03**: `build-runtime-from-cli` returns `session-config?` instead of mutable hash
@@ -1519,15 +1537,15 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2010/2010 green
 
-## v0.35.1 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Global State Isolation (v0.35.1 milestone)
+### Goal: Global State Isolation (v0.45.22 milestone)
 
 ### W0 — Per-Session GSD Context (C-01)
 - **C-01**: Added 15 per-session accessors (`gsd-ctx-*`) with explicit ctx argument
 - **C-01**: Added `gsd-ctx` field to `extension-ctx` struct (backward-compat, defaults #f)
 - Fixed semaphore deadlock in `gsd-ctx-state-update!` and `gsd-ctx-history-update!` (direct box access inside locked section)
-- Deprecated backward-compat global accessors (removal v0.37.0)
+- Deprecated backward-compat global accessors (removal v0.45.22)
 - 13 new tests for context isolation and extension-ctx integration
 
 ### W1 — GSD Facade Public/Private Split & State Machine Assertion (W-17, I-16, I-18, I-24)
@@ -1539,9 +1557,9 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2031/2031 green
 
-## v0.35.0 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Goal: Event System Integrity (v0.35.0 milestone)
+### Goal: Event System Integrity (v0.45.22 milestone)
 
 ### W0 — Circuit Breaker Isolation (C-02, I-03)
 - **C-02**: Refactored `circuit-broken?`, `record-failure!`, `record-success!` to take explicit `breaker-state` hash arg
@@ -1566,28 +1584,28 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification**: lint-all 18/18, smoke 2031/2031 green
 
-## v0.34.9 — 2026-05-09
+## v0.45.22 — 2026-05-09
 
-### Goal: Documentation integrity fixes (v0.34.8 findings)
+### Goal: Documentation integrity fixes (v0.45.22 findings)
 
 ### W0 — Stale File Cleanup + Documentation Accuracy
 - **N-02**: Removed stale `FUNCTION-QUALITY-AUDIT.md` (was already absent, confirmed)
-- **N-01**: Removed stale inner `q/.planning/` directory (464 files, frozen at v0.32.11; canonical is outer `.planning/`)
-- **N-03**: Merged duplicate CHANGELOG v0.34.8 sections
-- **N-04**: Fixed README v0.34.7 description ("Architecture Decomposition" → "Deep Audit Remediation")
-- **N-05**: Added README v0.34.8 description ("Deep Audit Remediation Round 2")
+- **N-01**: Removed stale inner `q/.planning/` directory (464 files, frozen at v0.45.22; canonical is outer `.planning/`)
+- **N-03**: Merged duplicate CHANGELOG v0.45.22 sections
+- **N-04**: Fixed README v0.45.22 description ("Architecture Decomposition" → "Deep Audit Remediation")
+- **N-05**: Added README v0.45.22 description ("Deep Audit Remediation Round 2")
 - **N-06/N-07**: Verified metrics match canonical `metrics.rkt` output (414 modules, 63,297 LOC). Audit's 415/63,481 was from a stale run; current canonical is 414/63,297.
 
 **Verification**: lint-all 18/18, smoke test suite green
 
-## v0.34.8 — 2026-05-09
+## v0.45.22 — 2026-05-09
 
-### Goal: Deep audit remediation round 2 (v0.34.7 findings)
+### Goal: Deep audit remediation round 2 (v0.45.22 findings)
 
 ### W0a — Critical Documentation Fixes (D-01, D-02)
-- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.34.8 (was stale at v0.34.6)
+- **D-01**: Synced inner `.planning/` STATE.md + PLAN.md to v0.45.22 (was stale at v0.45.22)
 - **D-02**: Confirmed FUNCTION-QUALITY-AUDIT.md absent (already removed)
-- Corrected false claims in v0.34.7 CHANGELOG entry (D-01, D-04 were not actually performed)
+- Corrected false claims in v0.45.22 CHANGELOG entry (D-01, D-04 were not actually performed)
 
 ### W0b — Test Quality Fixes (T-01–T-06)
 - **T-02**: Fixed `make-test-counters` field mapping (stall↔intent collision)
@@ -1604,12 +1622,12 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Verification**: lint-all 18/18, fast test suite green
 
 
-## v0.34.7 — 2026-05-09
+## v0.45.22 — 2026-05-09
 
-### Goal: Deep audit remediation (v0.34.5+v0.34.6 findings)
+### Goal: Deep audit remediation (v0.45.22+v0.45.22 findings)
 
 ### W0a — Code Fixes (A-01–04)
-- **A-01**: Removed `compute-next-loop-state` no-op from `agent/loop.rkt` (was claimed in v0.34.5 but not actually done)
+- **A-01**: Removed `compute-next-loop-state` no-op from `agent/loop.rkt` (was claimed in v0.45.22 but not actually done)
 - **A-02**: Extracted shared `assert-payload` to `runtime/iteration/internal.rkt`
 - **A-03**: Removed dead `compute-termination` + eliminated redundant `decide-next-action` call
 - **A-04**: Normalized `hash` → `hasheq` in `decision.rkt`
@@ -1619,7 +1637,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - **D-03**: Synced module counts across README, overview, wiki-src (414 modules, 63,297 LOC)
 - **D-05**: Fixed `errors.rkt` header comment for provider-error
 - **D-06**: Verified outer `.planning/` current
-- **D-01**: Inner `.planning/` sync deferred to v0.34.8 (was stale at v0.34.6)
+- **D-01**: Inner `.planning/` sync deferred to v0.45.22 (was stale at v0.45.22)
 - **D-04**: FUNCTION-QUALITY-AUDIT.md verified absent (already removed earlier)
 
 ### W0c — Test Coverage + Contracts (T-01–03, C-01)
@@ -1634,7 +1652,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Architecture score: ≥8.5/10
 
 
-## v0.34.6 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Architecture Decomposition (A-01, A-02)
 
@@ -1658,13 +1676,13 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 486/486 fast test files, 2088 tests pass. Lint: 18/18 pass.
 
-## v0.34.5 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Docs/Lint Remediation + Contract Quick Wins + Test Hygiene
 
 **Goal:** Fix stale docs, tighten contracts, remove dead code, and clean tautological tests.
 
-- **Docs sync (D-01–D-04):** Backfilled CHANGELOG for v0.34.0–v0.34.4; synced 16 version refs in docs/wiki; updated architecture overview metrics; synced README status block
+- **Docs sync (D-01–D-04):** Backfilled CHANGELOG for v0.45.22–v0.45.22; synced 16 version refs in docs/wiki; updated architecture overview metrics; synced README status block
 - **Stale bytecode fix (T-01/T-02):** Added `clean-stale-bytecode!` to `scripts/run-tests.rkt` — pre-flight deletion of stale `.zo` files to prevent `instantiate-linklet` mismatches
 - **Dead code removal (A-03):** Removed `compute-next-loop-state` no-op stub from `agent/loop.rkt`; deleted 2 obsolete test files
 - **Upward import fix (A-04):** Moved `typed-event-predicates.rkt` from `util/` to `agent/event-structs/`
@@ -1681,7 +1699,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Verification:** 486/486 fast test files, 2088 tests pass. Lint: 18/18 pass.
 
 
-## v0.34.4 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Session Boundary Encapsulation (RA-05)
 
@@ -1696,7 +1714,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass. Lint: 18/18 pass.
 
-## v0.34.3 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### State Machine Purity Fix (RA-04)
 
@@ -1709,7 +1727,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.34.2 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Error Fixes + Structured Errors + Test Coverage (RA-02, RA-08, RA-14, RA-16, RA-17, RA-26)
 
@@ -1725,7 +1743,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.34.1 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Tool + Message Contracts + Macro Tests + Hook Helper (RA-01, RA-06, RA-13, RA-25, RA-31)
 
@@ -1740,7 +1758,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.34.0 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Dead Code Removal + Trivial Contracts (RA-03, RA-07, RA-10, RA-22, RA-23, RA-24, RA-33, RA-37, RA-39)
 
@@ -1757,11 +1775,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **Verification:** 488/488 test files, 2088 tests pass.
 
-## v0.33.7 — 2026-05-08
+## v0.45.22 — 2026-05-08
 
 ### Deep Audit Remediation
 
-**Goal:** Address 12 actionable findings from 2nd-pass deep audit of v0.33.5/v0.33.6.
+**Goal:** Address 12 actionable findings from 2nd-pass deep audit of v0.45.22/v0.45.22.
 
 **Source cleanup (W0a):**
 - N-A01: Removed dead `compact-context-mid-turn` import from `retry-policy.rkt`
@@ -1777,14 +1795,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - N-D01: Updated README metrics table (source modules 408→409, lines 63889→64055)
 
 **Planning hygiene (W0d):**
-- N-M03: Git tag v0.33.6 created at `c1d402e`
+- N-M03: Git tag v0.45.22 created at `c1d402e`
 - N-M01/N-M02/N-M04/N-M06: Planning artifacts updated
 
-## v0.33.6 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Hotfix — Critical Audit Findings from v0.33.5
+### Hotfix — Critical Audit Findings from v0.45.22
 
-**Goal:** Fix 6 critical findings from `.planning/AUDIT-v0.33.5-IMPLEMENTATION.md`.
+**Goal:** Fix 6 critical findings from `.planning/AUDIT-v0.45.22-IMPLEMENTATION.md`.
 
 **T-01 — Fix `test-mid-turn-compaction.rkt` API mismatch:**
 - Changed 4-arg `check-mid-turn-budget!` call to 3-arg (removed extra `#f` positional arg)
@@ -1807,19 +1825,19 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Module was empty (only `(provide)`) with zero consumers
 
 **Infrastructure:**
-- Git tag `v0.33.5` created for the release
-- Planning artifacts (`PLAN.md`, `STATE.md`) updated to reflect v0.33.5 completion
-- Version bumped to 0.33.6
+- Git tag `v0.45.22` created for the release
+- Planning artifacts (`PLAN.md`, `STATE.md`) updated to reflect v0.45.22 completion
+- Version bumped to 0.45.22
 
 **Verification:** 488/488 test files, 2086 tests, 0 failures. Lint: 18/18 pass.
 
 ---
 
-## v0.33.5 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Audit Remediation (v0.33.5)
+### Audit Remediation (v0.45.22)
 
-**Goal:** Fix all 9 findings from the v0.33.0–v0.33.4 audit series.
+**Goal:** Fix all 9 findings from the v0.45.22–v0.45.22 audit series.
 
 **W0a — Fix TR boundary regression:**
 - Replaced direct `event-bus?`/`session-config?` passing across Typed Racket boundary with callback pattern
@@ -1843,7 +1861,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.33.4 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Event Operators + Cleanup (RA-11, RA-12)
 
@@ -1862,7 +1880,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.33.3 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Module Hygiene (RA-07, RA-09, RA-14)
 
@@ -1881,7 +1899,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.33.2 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Macro Adoption + Tests (RA-04, RA-08)
 
@@ -1899,7 +1917,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.33.1 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Iteration Loop Purity (RA-03)
 
@@ -1920,7 +1938,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 ---
 
-## v0.33.0 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
 ### Boundary Hardening (RA-01, RA-02, RA-05, RA-06)
 
@@ -1936,34 +1954,34 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **W2 — Add contracts to event emitter:**
 - Added `contract-out` to `emit-typed-event!` and `event-struct->hasheq`
-- Introduced TR boundary regression (fixed in v0.33.5)
+- Introduced TR boundary regression (fixed in v0.45.22)
 
 **W3 — Remove dead DI parameter infrastructure:**
 - Removed `resolve-compact-proc`, `resolve-estimate-tokens`, `resolve-inject-topic`
-- Dead keyword args deferred to v0.33.5
+- Dead keyword args deferred to v0.45.22
 
 **Verification:** 488/488 test files, 2065 tests, 0 failures
 
 ---
 
-## v0.32.11 — 2026-05-07
+## v0.45.22 — 2026-05-07
 
-### Test Regression Fix (v0.32.11-W0)
+### Test Regression Fix (v0.45.22-W0)
 
-**Goal:** Fix 10 test files failing after v0.32.9 provider contract change.
+**Goal:** Fix 10 test files failing after v0.45.22 provider contract change.
 
 **Changes:**
 - Relaxed `make-provider` 4th arg contract from `(-> model-request? generator?)` to `(-> model-request? (or/c generator? list?))` to match `stream-result->generator` behavior
 - Fixed `test-trace-events.rkt` — removed `max_tokens` assertion for unimplemented feature
 - Fixed `test-event-ordering.rkt` — changed `(module+ main)` to `(module+ test)` so `raco test` discovers tests
 - Fixed `test-streaming-tool-events.rkt` — changed `(module+ main)` to `(module+ test)` so `raco test` discovers tests
-- Updated 8 docs files version refs from 0.32.9 → 0.32.11
+- Updated 8 docs files version refs from 0.45.22 → 0.45.22
 - 486 files, 2019 tests all pass
-- Version bump to 0.32.11
+- Version bump to 0.45.22
 
-## v0.32.9 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.9 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Audit remediation — dead code removal, import cleanup, DRY fixes.
 
@@ -1975,12 +1993,12 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Converted `delete-lines.rkt` to use `require-safe-path!`
 - Removed dead `safe-mode-predicates` imports from edit/read/write
 - Added `struct-field-names` to `event-emitter.rkt` provide + test
-- Version bump to 0.32.9
+- Version bump to 0.45.22
 - 2 new test files, 6 new tests; 485 files, 2035 tests all pass
 
-## v0.32.8 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.8 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Document agent-session struct field groupings + add convenience accessors.
 
@@ -1988,11 +2006,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Documented 21-field agent-session with 5 logical groupings
 - Added convenience accessors for session fields
 - 7 new tests for session struct accessors
-- Version bump to 0.32.8
+- Version bump to 0.45.22
 
-## v0.32.7 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.7 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Tool pipeline unification — middleware returns tool-result structs, model-bridge facade.
 
@@ -2002,11 +2020,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Created `tools/define-tool.rkt` macro for tool definition
 - Updated `spawn-subagent.rkt` to use model-bridge
 - 3 new test files, 15 new tests
-- Version bump to 0.32.7
+- Version bump to 0.45.22
 
-## v0.32.6 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.6 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** TUI state decomposition + TUI↔GSD decoupling.
 
@@ -2016,11 +2034,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - `current-gsd-mode-query` parameter in `state-events.rkt`
 - Wired in `tui-init.rkt` at startup
 - Fixed exploration.progress format bug
-- Version bump to 0.32.6
+- Version bump to 0.45.22
 
-## v0.32.5 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.5 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** GSD enum + DRY — wave status constants, session-ctx struct.
 
@@ -2030,11 +2048,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Added `extract-plan-title` with default "archived-plan"
 - Converted `wave-status.rkt` to use typed `plan-types.rkt`
 - 4 new test files, 18 new tests
-- Version bump to 0.32.5
+- Version bump to 0.45.22
 
-## v0.32.4 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.4 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Replace CPS hook dispatch with data-return `classify-hook-result`.
 
@@ -2045,11 +2063,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Fixed `loop-stream.rkt` scoping bug (3 helpers promoted to top-level)
 - Updated `lint-ivg.rkt` with classify-hook-result checks
 - 3 new test files, 12 new tests
-- Version bump to 0.32.4
+- Version bump to 0.45.22
 
-## v0.32.3 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.3 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Complete typed event migration for all event structs.
 
@@ -2059,11 +2077,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - TUI consumes events by type string (transparent migration)
 - All event structs now inherit from `typed-event`
 - 5 new test files, 25 new tests
-- Version bump to 0.32.3
+- Version bump to 0.45.22
 
-## v0.32.2 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.2 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Create `define-typed-event` macro for event struct generation.
 
@@ -2073,11 +2091,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Supports `#:optional` fields with defaults
 - Per-tool events left manual (complex constructors)
 - 3 new test files, 20 new tests
-- Version bump to 0.32.2
+- Version bump to 0.45.22
 
-## v0.32.1 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Architecture Abstraction Remediation (v0.32.1 Wave 0)
+### Architecture Abstraction Remediation (v0.45.22 Wave 0)
 
 **Goal:** Quick wins — DRY helpers, dead code removal.
 
@@ -2088,10 +2106,10 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Fixed `cutpoint.rkt`+'`working-set.rkt` import cycles
 - Created `test/test-iteration-tool-bridge.rkt`
 - 4 new test files, 22 new tests
-- Version bump to 0.32.1
+- Version bump to 0.45.22
 
 
-## v0.31.0 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Architecture Abstraction: HOF Combinators for Hook System
 
@@ -2118,7 +2136,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Reduced code duplication in hook dispatch, improved error handling consistency, established HOF combinator pattern for future abstraction waves.
 
 ---
-## v0.31.1 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Event Struct Selectors
 
@@ -2142,7 +2160,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Improved abstraction over event struct internals, easier future refactoring of event representation.
 
 ---
-## v0.31.2 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Typed Event Predicates
 
@@ -2164,7 +2182,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Improved abstraction and centralized predicate access for typed events.
 
 ---
-## v0.31.3 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Pure Kernel: state-machine.rkt
 
@@ -2183,7 +2201,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Separated pure transition logic from effectful state updates, improving testability.
 
 ---
-## v0.31.4 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Pure Kernel: loop.rkt + loop-stream.rkt
 
@@ -2207,7 +2225,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Improved separation of pure and effectful code in agent loop.
 
 ---
-## v0.31.5 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Pure Kernel: wave-executor.rkt + tool-coordinator.rkt
 
@@ -2230,7 +2248,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Continued pure kernel separation for better testability.
 
 ---
-## v0.31.6 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Contract Fix: token-budget.rkt
 
@@ -2249,7 +2267,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Stronger contracts, earlier failure detection.
 
 ---
-## v0.31.7 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Contract Fix: provider.rkt
 
@@ -2267,7 +2285,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Faster debugging for extension authors, earlier contract violation detection.
 
 ---
-## v0.31.8 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Contract Fix: api.rkt + dynamic-tools.rkt.
 
@@ -2287,25 +2305,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 ---
 
 
-## v0.31.9 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
-### Milestone v0.31.9
+### Milestone v0.45.22
 
-**Goal:** Complete milestone v0.31.9 as per roadmap.
-
-**Changes:**
-- Minimal changes to relevant files.
-- Updated CHANGELOG.
-
-**Impact:** Progress on architecture abstraction roadmap.
-
----
-
-## v0.31.10 — 2026-05-06
-
-### Milestone v0.31.10
-
-**Goal:** Complete milestone v0.31.10 as per roadmap.
+**Goal:** Complete milestone v0.45.22 as per roadmap.
 
 **Changes:**
 - Minimal changes to relevant files.
@@ -2314,7 +2318,21 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Progress on architecture abstraction roadmap.
 
 ---
-## v0.31.11 — 2026-05-06
+
+## v0.45.22 — 2026-05-06
+
+### Milestone v0.45.22
+
+**Goal:** Complete milestone v0.45.22 as per roadmap.
+
+**Changes:**
+- Minimal changes to relevant files.
+- Updated CHANGELOG.
+
+**Impact:** Progress on architecture abstraction roadmap.
+
+---
+## v0.45.22 — 2026-05-06
 
 ### TR Migration: model-defaults.rkt.
 
@@ -2332,7 +2350,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** Type safety for model default constants.
 
 ---
-## v0.31.12 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Macro: define-event Prototype.
 
@@ -2353,15 +2371,15 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 ---
 
 
-## v0.30.16 — 2026-05-06
+## v0.45.22 — 2026-05-06
 
 ### Audit Remediation: Version Sync + Contract Safety
 
-**Goal:** Address all actionable findings from v0.30.15 audit (6.5/10 → 8.0/10).
+**Goal:** Address all actionable findings from v0.45.22 audit (6.5/10 → 8.0/10).
 
 **W0 — Version sync (15 files):**
 - Fixed 17 version mismatches: `info.rkt`, `README.md`, 12 doc files, wiki
-- All files now at `0.30.15` (matching `util/version.rkt`)
+- All files now at `0.45.22` (matching `util/version.rkt`)
 - Lint 18/18 restored (was 15/18)
 
 **W1 — Contract fix (1 file):**
@@ -2372,14 +2390,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 
 **W2 — Infrastructure + version bump:**
 - 471/471 tests pass, 18/18 lint, 10/10 IVG
-- Version bumped to 0.30.16
-- All downstream files synced to 0.30.16
+- Version bumped to 0.45.22
+- All downstream files synced to 0.45.22
 
 **Impact:** 471/471 tests pass, 18/18 lint, 0 contract self-blames, 0 latent violations, 0 version drift.
 
 ---
 
-## v0.30.15 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Audit Remediation: Contract Safety + Version Sync + Event Cleanup
 
@@ -2388,14 +2406,14 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Replaced 16 `any/c` pseudo-tightenings with real predicates (`provider?`, `tool-registry?`, `extension-registry?`, `cancellation-token?`, `queue?`, `working-set?`, `agent-session?`, `session-config?`)
 - Added `iteration` field to `turn-cancelled-event` struct + updated 3 callers
 - Synced version across 15 files (docs, README, info.rkt)
-- Fixed CHANGELOG v0.30.14 entry factual accuracy
+- Fixed CHANGELOG v0.45.22 entry factual accuracy
 - Removed 2 dual-emission sites in `session-compaction.rkt` (typed events only)
 
 **Impact:** 471/471 tests pass, 0 contract self-blames, 0 `any/c` in iteration.rkt + turn-orchestrator.rkt (down from 16).
 
 ---
 
-## v0.30.14 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Test Regression Fix + Contract Repair + Event Migration
 
@@ -2415,11 +2433,11 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Added `turn-cancelled-event` to event-emitter field mapping
 - Contract tightening: 18→15 `any/c` (loop-result?, list? return types)
 
-**Impact:** 470/471 tests pass pre-fix, 471/471 post-fix. 0 contract self-blames from v0.30.10-v0.30.11 (was 5 modules). 3 latent self-blames fixed in v0.30.15.
+**Impact:** 470/471 tests pass pre-fix, 471/471 post-fix. 0 contract self-blames from v0.45.22-v0.45.22 (was 5 modules). 3 latent self-blames fixed in v0.45.22.
 
 ---
 
-## v0.30.13 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### DSL Cleanup + Parameter Hygiene (FINAL milestone)
 
@@ -2439,7 +2457,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 ---
 
 
-## v0.30.12 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Match-Driven Deconstruction
 
@@ -2459,7 +2477,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Impact:** 8 dense dispatch blocks converted; match usage significantly increased.
 
 
-## v0.30.11 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Contract Expansion Wave 3 (modules 16–32)
 
@@ -2486,7 +2504,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - `util/cost-tracker.rkt` — 8 functions contracted + struct-out for cost-tracker
 
 
-## v0.30.10 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Contract Expansion Wave 2 (modules 6–15)
 
@@ -2508,7 +2526,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - `interfaces/sessions.rkt` — 10 functions contracted
 
 
-## v0.30.9 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Further TR Migrations
 
@@ -2526,7 +2544,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Deferred to backlog (~2 waves estimated)
 
 
-## v0.30.8 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Module Decomposition: tools/tool.rkt
 
@@ -2542,7 +2560,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **W1 — Verified all 44 consumers unaffected via re-export**
 
 
-## v0.30.7 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Event Payload Structs (Batch 2) + Full Adoption
 
@@ -2571,7 +2589,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 **Coverage:** 21 typed emission sites, 22 raw remaining (loop-stream only)
 
 
-## v0.30.6 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Event Payload Structs (Batch 1)
 
@@ -2601,7 +2619,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Two event systems coexist (hyphenated vs dotted names)
 
 
-## v0.30.5 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Config Migration Complete
 
@@ -2623,7 +2641,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 - Documented key Racket limitation: `hash-ref` does NOT dispatch to `gen:dict`
 
 
-## v0.30.4 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Config Migration Batch 1
 
@@ -2661,7 +2679,7 @@ Total: 18 waves, 48+ new tests, architecture score raised from 7.8 to ~8.5.
 Solution: hash wrapper (not named struct fields) + `dict-ref` at all config sites.
 
 
-## v0.30.3 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Session Config Struct + Dict Compat Layer
 
@@ -2680,11 +2698,11 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 **W1 — dict compat discovery:**
 - Documented: Racket's `hash-ref` does NOT dispatch to `gen:dict`
 - All 44+ consumer sites use `hash-ref`, not `dict-ref`
-- Full wiring deferred to v0.30.4+ (incremental dict-ref migration)
+- Full wiring deferred to v0.45.22+ (incremental dict-ref migration)
 - Session-config ready for incremental adoption as consumers migrate
 
 
-## v0.30.2 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Typed Racket Beachhead: loop-state + retry-policy
 
@@ -2701,7 +2719,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - TR issues resolved: `hash-ref` polymorphism (thunk defaults), `exn-message` casts, `for/first` with `in-hash-keys` (replaced with `for/or`)
 
 
-## v0.30.1 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Top-5 Contract Gaps: Provider Registry + Agent Session + Settings + Iteration + Turn Orchestrator
 
@@ -2717,7 +2735,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - `runtime/turn-orchestrator.rkt`: run-provider-turn, build-assembled-context, register-session-extensions! contracted
 
 
-## v0.30.0 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Architecture Debt Resolution: `any/c` Predicate Tightening
 
@@ -2745,15 +2763,15 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.29.17 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Audit Remediation + Test Coverage + Cleanup
 
 **Scope:** 2 waves (W0: integration tests for struct refactor + duration-ms, W1: CHANGELOG fix + dead code + cleanup + version bump)
 
 **Correctness:**
-- G1: Fixed v0.29.16 CHANGELOG factual errors — `dispatch-loop-action` params: 26→13 (was 26→12); files changed: 20 modified + 1 new (was ~15 + 2); lines changed: 508 added, 376 removed, net +132 (was ~380 + ~280, net +100)
-- G2: Docs version drift fixed — all docs/ and wiki-src/ files synced to 0.29.17
+- G1: Fixed v0.45.22 CHANGELOG factual errors — `dispatch-loop-action` params: 26→13 (was 26→12); files changed: 20 modified + 1 new (was ~15 + 2); lines changed: 508 added, 376 removed, net +132 (was ~380 + ~280, net +100)
+- G2: Docs version drift fixed — all docs/ and wiki-src/ files synced to 0.45.22
 - G5: Deleted dead code `runtime/iteration/transition-logic.rkt` and `tests/test-iteration-transition.rkt`; removed stale assertion from `tests/test-iteration-wiring.rkt`
 - G6: Fixed trailing `)` typo in `runtime/iteration.rkt` comment
 - G7: Added TUI dedup guard — prevents duplicate `[TOOL: ...]` transcript entries when both raw `tool.call.started` and typed `tool-execution-start` fire
@@ -2769,13 +2787,13 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.29.16 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Audit Remediation + Struct Refactor + Completion
 
 **Scope:** 3 waves (W0: loop-state structs, W1: duration fix + error migration + struct refactor, W2: fan-in + IVG + version)
 
-**v0.29.15 audit findings resolved:**
+**v0.45.22 audit findings resolved:**
 - W1: `duration-ms` now computed from batch start time (was hardcoded 0)
 - W2: All 13 remaining bare `(error '` calls in runtime/ migrated to domain error types (session-error, argument-error, extension-error, provider-error). Runtime/ error migration: 100% complete.
 - W3: CHANGELOG metrics verified against actual diff (no estimates)
@@ -2802,7 +2820,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.29.15 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Warning Remediation + Event Wiring + Fan-in Reduction
 
@@ -2833,7 +2851,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.29.14 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Audit Remediation + Deferred Event Adoption
 
@@ -2862,7 +2880,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.29.13 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Architecture Remediation + Event Adoption Phase 1
 
@@ -2887,11 +2905,11 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 
 ---
 
-## v0.29.12 — 2026-05-05
+## v0.45.22 — 2026-05-05
 
 ### Test Health Restoration
 
-- **Fixed handle-hook-result #:on-amend regression**: `on-continue` not called after amend side effect, breaking test-hooks-complete (NEW regression in v0.29.11)
+- **Fixed handle-hook-result #:on-amend regression**: `on-continue` not called after amend side effect, breaking test-hooks-complete (NEW regression in v0.45.22)
 - **Widened lookup-tool contract**: Accept `(or/c string? #f)` — fixes test-soft-iteration contract violation with nil tool names
 - **Widened make-model-request settings type**: `(HashTable Symbol Any)` → `(Option (HashTable Symbol Any))` — fixes test-provider-settings-wiring TR violation
 - **Widened model-response usage type**: `(HashTable Symbol Any)` → `(Option (HashTable Symbol Any))` — fixes test-self-hosting-workflow TR violation
@@ -2903,13 +2921,13 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - Full suite: 476/476 files, 7182/7182 tests, **0 failures** (was 9 failing files)
 - Audit score: **8.5/10** (target met)
 
-## v0.29.11 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
-### Audit Remediation (v0.29.7–v0.29.10 Findings)
+### Audit Remediation (v0.45.22–v0.45.22 Findings)
 
-- **Data correction**: Replaced fabricated v0.29.10 CHANGELOG score (9.0/10) with verified 7.5/10; added grep-count evidence
+- **Data correction**: Replaced fabricated v0.45.22 CHANGELOG score (9.0/10) with verified 7.5/10; added grep-count evidence
 - **Fixed test-doctor**: 5× `check-true (member ...)` → `check-not-false (member ...)` (member returns list, not #t)
-- **Fixed test-gsd-context-factory**: Removed stale `get-workflow` test (action removed in v0.29.9)
+- **Fixed test-gsd-context-factory**: Removed stale `get-workflow` test (action removed in v0.45.22)
 - **Unified hook dispatch**: Extended `handle-hook-result` with `#:on-amend` keyword; replaced 3 inline hook patterns in `loop-stream.rkt` with unified calls
 - **Tightened coordinator contracts**: `handle-tool-calls-pending` now requires `(listof message?)` input and `(or/c tool-registry? #f)` for registry
 - **Mechanical IVG**: New `lint-ivg.rkt` enforcing 5 dead-code/wiring expectations; registered as lint-all check #18
@@ -2917,11 +2935,11 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Deprecated session-bytes-written**: Marked for removal in v0.30.x; retained for backward-compat tests
 - **Lint suite**: 18/18 checks pass (was 17/17)
 
-## v0.29.10 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Architecture Re-Audit (Verification Gate)
 
-- **Architecture score: 7.5/10** (up from 5.5/10 baseline at v0.28.28)
+- **Architecture score: 7.5/10** (up from 5.5/10 baseline at v0.45.22)
 - Test suite: 467 test files, 463 pass within 15s, 2 pre-existing failures (test-doctor), 2 environment-specific timeouts
 - Lint suite: 17/17 checks pass
 - Compilation: clean
@@ -2937,18 +2955,18 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Remaining dead code:** ~350 lines across 3 components
 - **Documented remaining gaps for v0.30.x:** process-chunk bridge, scheduler middleware, emit migration
 
-## v0.29.9 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Contract Tightening + Cleanup
 
 - **Tightened coordinator contracts**: `extract-tool-calls-from-messages` now requires `(listof message?)` returns `(listof tool-call?)`; `make-tool-result-messages` now requires `(listof tool-call?) (listof tool-result?)`
 - **Write budget in exec-context**: Added `bytes-written` field to `exec-context` struct; write tool now reads budget from exec-context when available (backward-compat parameter retained)
-- **Removed dead `termination-decision`**: Function replaced by `decide-next-action` in v0.29.8 W0, now fully removed from `transition-logic.rkt`
+- **Removed dead `termination-decision`**: Function replaced by `decide-next-action` in v0.45.22 W0, now fully removed from `transition-logic.rkt`
 - **Cleaned GSD closure**: Removed dead `'get-workflow`/`'set-workflow` actions; documented two-level locking pattern
 - **Cleaned middleware import**: Removed unused `tool-call-id` import from `tools/middleware.rkt`
 - **Deferred**: Event serialization rewrite (struct->vector + field registry works correctly; accessor-based approach would be 26 match branches with higher bug risk)
 
-## v0.29.8 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Production Wiring
 
@@ -2957,7 +2975,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Moved `handle-hook-result` to shared module** (`loop-messages.rkt`) to break circular dependency
 - **Deferred**: `emit-typed-event!` migration (payload shape incompatibility), `process-chunk` wiring (mutable/immutable accumulator gap), `make-default-pipeline` scheduler integration (high risk)
 
-## v0.29.7 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Test Suite Restoration
 
@@ -2967,7 +2985,7 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 - **Skeleton test**: Accept `#lang typed/racket` as valid module language
 - **Result**: All key tests pass, 17/17 lint checks pass
 
-## v0.29.6 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Tool Middleware HOF + Facade Curation
 
@@ -2992,9 +3010,9 @@ Solution: hash wrapper (not named struct fields) + `dict-ref` at all config site
 ### Architecture Score
 
 This is the final milestone in the v0.29.x architecture refactoring series.
-Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
+Target score: 9.0+/10 (up from 6.5/10 baseline at v0.45.22).
 
-## v0.29.5 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Stream Purity + DI Cleanup
 
@@ -3016,7 +3034,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
 - `test-di-explicit.rkt`: 10 tests for DI parameter removal
 - `test-lazy-context-assembly.rkt`: 7 tests for deferred assembly
 
-## v0.29.4 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Runtime State Encapsulation
 
@@ -3035,7 +3053,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
 - `test-gsd-context-factory.rkt`: 17 tests for GSD closure factory
 - `test-working-set-factory.rkt`: 19 tests for working-set closure factory
 
-## v0.29.3 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Typed Racket at Provider Boundary
 
@@ -3056,7 +3074,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
 
 - Typed Racket modules: 14 → 15
 
-## v0.29.2 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Event Struct Adoption
 
@@ -3072,7 +3090,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
 - `test-typed-event-emission.rkt`: 8 tests for emit-typed-event! bridge
 - `test-event-struct-coverage.rkt`: 3 tests for emission site coverage
 
-## v0.29.1 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Match Dispatch + Pure Decisions
 
@@ -3091,7 +3109,7 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
 - `test-hook-match-dispatch.rkt`: 6 tests for handle-hook-result
 - `test-termination-reasons.rkt`: 3 tests for termination exhaustiveness
 
-## v0.29.0 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Contract Boundaries
 
@@ -3115,20 +3133,20 @@ Target score: 9.0+/10 (up from 6.5/10 baseline at v0.28.28).
 - `test-tool-coordinator-contracts.rkt`: 7 tests for tool coordinator input validation
 - `test-write-budget-encapsulation.rkt`: 6 tests for write budget tracking isolation
 
-## v0.28.28 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Data Corrections + CHANGELOG Date Validator
 
-- Fixed CHANGELOG date errors for v0.28.26, v0.28.27 (2026-05-06 → 2026-05-04)
-- Fixed CHANGELOG date errors for v0.28.24, v0.28.23 (2026-05-05 → 2026-05-04)
-- Fixed CHANGELOG date errors for v0.28.13, v0.28.12, v0.28.11 (2026-05-05 → 2026-05-03)
+- Fixed CHANGELOG date errors for v0.45.22, v0.45.22 (2026-05-06 → 2026-05-04)
+- Fixed CHANGELOG date errors for v0.45.22, v0.45.22 (2026-05-05 → 2026-05-04)
+- Fixed CHANGELOG date errors for v0.45.22, v0.45.22, v0.45.22 (2026-05-05 → 2026-05-03)
 - Added `scripts/lint-changelog-dates.rkt` — validates CHANGELOG date entries
   - ERROR on future dates, ERROR on missing dates, WARNING on chronological order
 - Registered `changelog-dates` in lint-all.rkt (17 checks) and pre-commit.rkt (15 fast checks)
 - Added `tests/test-lint-changelog-dates.rkt` (4 test cases)
 - README Status block re-synced
 
-## v0.28.27 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Audit Remediation — Permanent Tooling Automation
 
@@ -3161,7 +3179,7 @@ lint-alignment CI gate to catch future drift automatically.
 - Mark `arch` check as `continue-on-error` in lint-all.rkt (slow lint).
 - Document automation contract in `docs/tooling.md`.
 
-## v0.28.26 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Status Restoration + Tooling Hardening
 
@@ -3173,7 +3191,7 @@ now 74 chars). Extracts 7-pattern historical-line? guard into shared module.
 **W0 — README Status restoration + shield:**
 - Restore 40 historical entries from pre-mangling commit 44b26ae.
 - Add README.md to EXCLUDED-MD-FILES in both sync-version.rkt and lint-version.rkt.
-- Fix CHANGELOG v0.28.25 date from 2026-05-02 to 2026-05-04.
+- Fix CHANGELOG v0.45.22 date from 2026-05-02 to 2026-05-04.
 - Add run-version-validate step 3c to pre-commit.rkt.
 
 **W1 — sync-readme-status parser + comparison fix:**
@@ -3183,12 +3201,12 @@ now 74 chars). Extracts 7-pattern historical-line? guard into shared module.
 - Add length validation: warn >200 chars, reject >300 chars in --sync.
 - 5 new test cases for parser, comparison, length, and replace behavior.
 
-**W2 — Shared guard + version bump 0.28.26:**
+**W2 — Shared guard + version bump 0.45.22:**
 - Extract historical-line? to scripts/version-guard.rkt shared module.
 - Update sync-version.rkt and lint-version.rkt to require from shared module.
 - Update test-sync-version-historical.rkt to require from shared module.
 
-## v0.28.25 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Audit Remediation — Docs Integrity + Tooling Hardening
 
@@ -3213,16 +3231,16 @@ from mangling historical version references in documentation.
   `exn-fail-migration-analysis.md`, `event-taxonomy.md`, `sdk-guide.md`.
 - 9 test cases in `test-sync-version-historical.rkt` (7 positive + 2 negative).
 
-## v0.28.24 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
-### Audit Remediation (1 Critical, 4 Warnings from v0.28.23)
+### Audit Remediation (1 Critical, 4 Warnings from v0.45.22)
 
 Fixes README Status section (4× recurring critical finding) with correct
-v0.28.21–v0.28.23 descriptions. Extracts shared `compute-mid-turn-estimate`
+v0.45.22–v0.45.22 descriptions. Extracts shared `compute-mid-turn-estimate`
 helper to eliminate token estimation duplication in retry-policy.rkt.
 
 **D1 fix (critical):** README Status section now has correct descriptions for
-v0.28.21, v0.28.22, and v0.28.23. Previous description was from v0.28.12,
+v0.45.22, v0.45.22, and v0.45.22. Previous description was from v0.45.22,
 copied forward unchanged for 4 consecutive milestones.
 
 **A1 fix:** Token estimation logic extracted into `compute-mid-turn-estimate`
@@ -3232,11 +3250,11 @@ helper, eliminating 12-line duplication.
 
 **Tests:** 9 mid-turn integration tests (1 new for shared helper).
 
-## v0.28.23 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
-### Audit Remediation (7 Warnings from v0.28.22)
+### Audit Remediation (7 Warnings from v0.45.22)
 
-Fixes 7 warnings from the v0.28.22 implementation audit. All changes are
+Fixes 7 warnings from the v0.45.22 implementation audit. All changes are
 architectural — no runtime guards or nudges.
 
 **W0 — Code fixes:**
@@ -3261,11 +3279,11 @@ architectural — no runtime guards or nudges.
 **Tests:** 8 mid-turn integration tests, 6 exploration loop tests, 33 context
 assembly tests.
 
-## v0.28.22 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Context Loop Prevention Wiring + Audit Remediation
 
-Wires three v0.28.21 features that were implemented but disconnected from
+Wires three v0.45.22 features that were implemented but disconnected from
 production code paths. Audit scored 6.5/10 with 3 critical findings;
 this release closes all gaps.
 
@@ -3287,7 +3305,7 @@ requiring explicit `gsd-pin` meta flag.
 **Tests:** 4 mid-turn integration tests, 4 exploration loop tests,
 2 context assembly tests (31 total in that suite).
 
-## v0.28.21 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### TUI Thinking Leak Fix + Context Circular Loop Prevention
 
@@ -3326,7 +3344,7 @@ are pinned to Tier A, surviving compaction. Critical GSD state
 remains available to LLM during long sessions.
 
 
-## v0.28.20 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Credential Resolution + Test Isolation + Audit Minor Findings
 
@@ -3355,7 +3373,7 @@ for fast providers. New `busy-since` field in `ui-state`.
 **A3:** Clear `streaming-thinking` on `assistant.message.completed`
 to prevent stale text on protocol anomaly.
 
-## v0.28.19 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Reasoning Content Streaming + Test Regression Fix
 
@@ -3364,9 +3382,9 @@ to prevent stale text on protocol anomaly.
 - **F1 (HIGH):** Fix `test-tui-enter.rkt` tests 7+8 to expect 0 transcript entries (D2 fix: handle-key no longer adds user entries)
 - **Tests:** Added reasoning_content test cases for both singular and batch chunk normalization
 
-## v0.28.18 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
-### v0.28.17 Critical Bug Fixes
+### v0.45.22 Critical Bug Fixes
 
 - **D1 (CRITICAL):** Fix debounce reading oldest transcript entry instead of newest — duplicate prompts never detected
 - **D2 (CRITICAL):** Remove duplicate user entry insertion from handle-key (was adding entry in both keybindings and submit handler)
@@ -3375,7 +3393,7 @@ to prevent stale text on protocol anomaly.
 - **A1 (HIGH):** Remove `llm/provider.rkt` import from `tui-init.rkt` — re-export `provider-name` from `runtime/provider-factory.rkt` (arch boundary restored)
 - **L1 (INFO):** Update stale comment in `status-line.rkt`
 
-## v0.28.17 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### TUI Visibility + Session Persistence
 
@@ -3387,7 +3405,7 @@ to prevent stale text on protocol anomaly.
 - **Crash Log**: Unhandled exceptions logged to `~/.q/crash-<ts>.jsonl` for post-mortem debugging (W2 #3157)
 - **Scrollback Fallback**: Transcript always saved — falls back to `/tmp/q-scrollback-<ts>.jsonl` if session dir unavailable (W2 #3157)
 
-## v0.28.16 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Audit Remediation + TUI Status Bar + Error Visibility
 
@@ -3399,7 +3417,7 @@ to prevent stale text on protocol anomaly.
 - **S2**: Error messages persist in status bar until next prompt
 - **F7**: Fixed CI cache clean step ordering (clean before restore)
 
-## v0.28.15 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### CI Pipeline Improvements
 
@@ -3417,7 +3435,7 @@ to prevent stale text on protocol anomaly.
   testing against future Racket releases.
 - **W2**: Version bump + validation.
 
-## v0.28.14 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### TUI Feedback Fixes + Status Bar Enhancement
 
@@ -3432,16 +3450,16 @@ to prevent stale text on protocol anomaly.
 - **W2**: Expand status-line tests to 14 cases. Update layout tests
   for no-header geometry. Version bump.
 
-## v0.28.13 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Audit Remediation
 
 - **W0**: Fix `translate-stop-reason` arity in test-anthropic.rkt (7 calls)
   and test-gemini.rkt (7 calls). Add provider as first arg.
-- **W1**: Correct CHANGELOG/README v0.28.12 inaccurate test count claims.
+- **W1**: Correct CHANGELOG/README v0.45.22 inaccurate test count claims.
   Fix 429 test expectation to match actual error message. Version bump.
 
-## v0.28.12 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Audit Remediation + Pre-existing Test Fixes
 
@@ -3455,7 +3473,7 @@ to prevent stale text on protocol anomaly.
 - **W2**: Add `util/version.rkt` to ADR 0014 migrated modules. Fix
   `test-types.rkt` `#:version` keyword → positional arg. Version bump.
 
-## v0.28.11 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Audit Remediation
 
@@ -3470,7 +3488,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Update ADR 0014 with complete TR module list + lessons learned. Fix
   metrics-report to exclude test/script files from source counts. Version bump.
 
-## v0.28.10 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Typed Racket Expansion
 
@@ -3484,7 +3502,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Version bump + release.
 
 
-## v0.28.8 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Extension Hardening & Hook Schema Versioning
 
@@ -3497,7 +3515,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Version bump + release.
 
 
-## v0.28.7 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Event Algebra & Boundary Contracts
 
@@ -3510,7 +3528,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Version bump + release.
 
 
-## v0.28.6 — 2026-05-04
+## v0.45.22 — 2026-05-04
 
 ### Error Taxonomy & Effect Policy Completion
 
@@ -3523,7 +3541,7 @@ to prevent stale text on protocol anomaly.
   (`with-logged-error`, `with-safe-fallback`). LLM port-close and TUI cleanup left as-is.
 
 
-## v0.28.5 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Cross-Cutting: Contracts, Boundaries, Polish
 
@@ -3536,7 +3554,7 @@ to prevent stale text on protocol anomaly.
 - **W3**: Final regression + architecture fitness verification — all pass.
 
 
-## v0.28.4 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### Runtime Core Abstraction
 
@@ -3549,7 +3567,7 @@ to prevent stale text on protocol anomaly.
   cond→match (12→5). Type dispatch, null checks, file-exists? guards. 10 safe conversions.
 
 
-## v0.28.3 — 2026-05-03
+## v0.45.22 — 2026-05-03
 
 ### TUI Rendering Abstraction
 
@@ -3563,7 +3581,7 @@ to prevent stale text on protocol anomaly.
   All TUI modules use explicit named provides, no `all-defined-out`.
 
 
-## v0.28.2 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Tool System & GSD Abstraction Cleanup
 
@@ -3576,7 +3594,7 @@ to prevent stale text on protocol anomaly.
 - **W2**: Audit confirms Findings A18/A19 already addressed. Events use
   struct envelope (util/event.rkt), tool results use constructors.
 
-## v0.28.1 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### LLM Provider Protocol Unification
 
@@ -3585,10 +3603,10 @@ to prevent stale text on protocol anomaly.
   providers (anthropic, gemini, openai-compatible, azure-openai). 16 new tests.
 - **W2**: Provider adoption + cleanup. Removed duplicated provider-specific
   check/translate functions. Net reduction: 107 lines.
-- **W3**: Version bump to 0.28.1 + CI fix (apt-get for Linux, test reference
+- **W3**: Version bump to 0.45.22 + CI fix (apt-get for Linux, test reference
   updates for removed provider functions) + release.
 
-## v0.28.0 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
 ### Foundation Abstractions
 
@@ -3598,12 +3616,12 @@ to prevent stale text on protocol anomaly.
   in `util/error-helpers.rkt`, 58 replacements.
 - **W2**: Semaphore Guard HOFs — `with-registry-lock`, `with-event-bus-lock`,
   `with-gsd-lock` in source modules.
-- **W3**: Version bump to 0.28.0 + CI + release.
+- **W3**: Version bump to 0.45.22 + CI + release.
 
 
-## v0.27.4 — 2026-05-02
+## v0.45.22 — 2026-05-02
 
-### Audit Remediation + CI Release (v0.27.3 findings)
+### Audit Remediation + CI Release (v0.45.22 findings)
 
 - **W0**: README version history restoration (43 entries de-corrupted from d9432b2),
   streaming text test fix (correct style expectation `'()` not `'(bright-black)`),
@@ -3612,9 +3630,9 @@ to prevent stale text on protocol anomaly.
 - **W1**: styled-line->ansi O(n²)→O(n) performance fix
   (list-ref replaced with for/fold loop accumulator). No behavior change.
 
-## v0.27.3 — 2026-05-01
+## v0.45.22 — 2026-05-01
 
-### Audit Remediation (v0.27.2 findings)
+### Audit Remediation (v0.45.22 findings)
 
 - **W0**: TUI Core Rendering Fixes. Fix highlight-line-range arity error
   (define→define-values for for/fold), wrap-styled-line actual segment
@@ -3625,7 +3643,7 @@ to prevent stale text on protocol anomaly.
   memo-hit tracking in context-assembly selection, replace local
   overflow-message? with canonical context-overflow-error? in retry-policy.
 
-## v0.27.2 — 2026-05-01
+## v0.45.22 — 2026-05-01
 
 ### Test Regression Remediation
 
@@ -3640,11 +3658,11 @@ to prevent stale text on protocol anomaly.
   topic, phase4-catalog trace emission, audit script version check fix.
 
 
-## v0.27.0 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
-### Deep Module Refactoring + v0.26.0 Remediation
+### Deep Module Refactoring + v0.45.22 Remediation
 
-- **W0**: v0.26.0 remediation quick fixes. Fix pre-commit version drift,
+- **W0**: v0.45.22 remediation quick fixes. Fix pre-commit version drift,
   bash sandbox quote handling, delete-lines off-by-one, edit unique-match
   enforcement, write no-clobber guard, tool registry cleanup, shell-quote
   hardening, and contract fixes.
@@ -3676,7 +3694,7 @@ to prevent stale text on protocol anomaly.
   9 directories. 60+ new tests added.
 
 
-## v0.26.0 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Working Set Memory for Context Assembly
 
@@ -3701,7 +3719,7 @@ to prevent stale text on protocol anomaly.
   is re-read. Add `working-set-entries` and `working-set-tokens` to
   `context.assembled` event payload.
 
-## v0.25.3 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Audit Tooling Quality & Test Coverage
 
@@ -3728,7 +3746,7 @@ to prevent stale text on protocol anomaly.
 - **F9 (MEDIUM)**: Add 6 RA-5 decomposition fitness tests for key modules
   (loop.rkt, gsd/core.rkt, context-policy.rkt, tool.rkt, event-types.rkt).
 
-## v0.25.2 — 2026-04-30
+## v0.45.22 — 2026-04-30
 
 ### Critical & Security Remediation
 
@@ -3746,10 +3764,10 @@ to prevent stale text on protocol anomaly.
   args to prevent `=`/newline injection.
 - **F18 (LOW)**: Document `tool-handlers.rkt` as future decomposition
   candidate.
-- Fix CHANGELOG version header corruption (v0.24.4+ entries restored).
+- Fix CHANGELOG version header corruption (v0.45.22+ entries restored).
 - Add `security.md`, `docs/adr/` to version-lint skip lists.
 
-## v0.25.1 — 2026-04-30
+## v0.45.22 — 2026-04-30
 
 ### Audit CI Discoverability + Enhanced Scanners
 
@@ -3758,7 +3776,7 @@ to prevent stale text on protocol anomaly.
 - Expand risky API patterns: `system*`, `eval-syntax`, `open-input-file`, `call-with-input-file`
 - Lower module size threshold from 900 to 800 lines
 
-## v0.25.0 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Module Decomposition & Breaking Change Cleanup (F1–F6)
 
@@ -3775,7 +3793,7 @@ to prevent stale text on protocol anomaly.
 - Add deprecation deadline linter (`scripts/lint-deprecation-deadlines.rkt`)
 - Remove `known-large` exceptions from dependency policy
 
-## v0.24.9 — 2026-04-30
+## v0.45.22 — 2026-04-30
 
 ### Audit Automation & Deprecation Cleanup (RA-4 + RA-5)
 
@@ -3783,7 +3801,7 @@ to prevent stale text on protocol anomaly.
 - Deprecation TODO annotation in `runtime/context-assembly.rkt`
 - CI audit wiring + CHANGELOG
 
-## v0.24.8 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Module Decomposition (RA-3)
 
@@ -3792,7 +3810,7 @@ to prevent stale text on protocol anomaly.
 - Extract `context-summary.rkt` (272 lines)
 - Arch fitness test for module sizes
 
-## v0.24.7 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Security Hardening
 
@@ -3801,27 +3819,27 @@ to prevent stale text on protocol anomaly.
 - **RA-2**: Configurable secret scrubbing
 - Security docs update
 
-## v0.24.6 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### SDK Regression Fix + Audit Sweep
 
 - Fixed `gsd-status` crash + refactor `/go` transaction
 - Version sync fixes
 
-## v0.24.5 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Audit Remediation
 
 - Shim cleanup + doc fitness gate + TR version regex
 
-## v0.24.4 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Production Integration Wiring
 
 - Unified event system, normalized `/go` pipeline, transaction coverage
 - Write guard policy migration, event taxonomy expansion
 
-## v0.24.3 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Documentation & Fitness Gates
 
@@ -3833,7 +3851,7 @@ to prevent stale text on protocol anomaly.
   event telemetry, normalized plan IR, and full lifecycle integration.
 - Exported `with-gsd-transaction` from core.rkt for testing reuse.
 
-## v0.24.2 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Pipeline Refactor & Observability
 
@@ -3847,7 +3865,7 @@ to prevent stale text on protocol anomaly.
   transitions emit events. Event collector for testing.
 - 8 new event telemetry tests, backward-compatible.
 
-## v0.24.1 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Policy Engine & Transaction Wrappers
 
@@ -3859,7 +3877,7 @@ to prevent stale text on protocol anomaly.
   transaction wrapper for failure atomicity.
 - 3 new transaction tests (39 core total), 18 new policy tests.
 
-## v0.24.0 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### GSD Extension Architecture Remediation
 
@@ -3872,15 +3890,15 @@ to prevent stale text on protocol anomaly.
   ad-hoc hasheq. New `command-types.rkt` module.
 - **F3: Shim Purification** — Removed behavioral logic from `gsd-planning-state.rkt`
   shim. PLAN.md side effects moved to `core.rkt`. Shim is now pure delegation
-  (deprecated, removal planned for v0.25.0).
+  (deprecated, removal planned for v0.45.22).
 - **F4: State Invariants** — Added `gsd-invariants-hold?` to validate runtime
   state structural invariants at any point.
 
-## v0.23.6 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### CI Resilience & Push Safety Net
 
-**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.23.5
+**Goal**: Make CI green whenever local pre-commit passes. Addresses v0.45.22
 incident requiring 4 CI runs and ~2 hours of debugging.
 
 - **ci_preflight parity**: Added `check-deps.rkt` to `ci_preflight()` in
@@ -3895,7 +3913,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 - **Maintenance comment**: Added version-awareness comment to
   `check-deps.rkt` base-packages set.
 
-## v0.23.5 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Performance Fix & Code Hygiene
 
@@ -3921,7 +3939,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** 101 context+compactor tests, 67 assembly+policy tests pass
 
-## v0.23.4 — 2026-04-29
+## v0.45.22 — 2026-04-29
 
 ### Combined Audit Remediation & Hardening
 
@@ -3945,7 +3963,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** All context + lifecycle tests pass
 
-## v0.23.3 — 2026-04-30
+## v0.45.22 — 2026-04-30
 
 ### Audit Remediation
 
@@ -3964,7 +3982,7 @@ incident requiring 4 CI runs and ~2 hours of debugging.
 
 **Tests:** All 149 context+TR tests pass
 
-## v0.23.2 — 2026-04-19 to 2026-04-29
+## v0.45.22 — 2026-04-19 to 2026-04-29
 
 ### Context Performance + Observability
 
@@ -4048,7 +4066,7 @@ and session-store-tree.rkt (129 LOC), converted session-store.rkt to façade (34
 **W3** — sdk.rkt decomposition: extracted sdk-core.rkt (439 LOC) and
 sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 
-**W4** — arch-report.rkt script (CI gate), version bump 0.23.2 → 0.23.2.
+**W4** — arch-report.rkt script (CI gate), version bump 0.45.22 → 0.45.22.
 
 
 ---
@@ -4083,7 +4101,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 **W4 — Hook Golden Tests + Stability Tiers + Version Bump**
 - 20 hook golden payload shape tests (regression canaries)
 - Stability tier annotations (stable/evolving/internal) on 25+ modules
-- Version bump 0.23.2 → 0.23.2
+- Version bump 0.45.22 → 0.45.22
 
 
 ---
@@ -4128,7 +4146,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 
 ### 2026-04-29
 
-### Audit Remediation (v0.23.2 Post-Merge Fixes)
+### Audit Remediation (v0.45.22 Post-Merge Fixes)
 - **FIT-01**: Replaced line-based `extract-requires` with read-based S-expression parser in arch test files
 - **FIT-02**: Module size threshold 900 lines with known-large tracking (tui/state.rkt, extensions/racket-tooling.rkt)
 - **FIT-03**: Updated stale known-exceptions list for runtime layer boundary tests
@@ -4196,7 +4214,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **AUDIT-03**: Strengthened delete-lines out-of-range validation with boundary checks
 - **AUDIT-04**: Removed dead `gsd-tool-guard` from core.rkt (canonical in gsd-planning.rkt)
 - **AUDIT-09**: Deduplicated imports in events.rkt and message-inject.rkt
-- **AUDIT-10**: Verified shell-quote direct import fix (already done in v0.23.2)
+- **AUDIT-10**: Verified shell-quote direct import fix (already done in v0.45.22)
 - **AUDIT-11**: Replaced 3 `check-not-false` with `check-pred values` in GSD planning tests
 - **AUDIT-12**: Added session-lifecycle edge-case tests (empty history, partial writes)
 - **AUDIT-13**: Added delete-lines security boundary tests
@@ -4227,7 +4245,7 @@ sdk-compat.rkt (237 LOC), converted sdk.rkt to thin façade (15 LOC).
 - **ARCH-04**: Added extensions/api.rkt event bus re-exports for extensions
 - **ARCH-05**: Extracted runtime/session-context.rkt for path settings
 - **QUAL-01–04**: Code quality improvements (shell quoting, shadowing, type narrowing)
-- **DOC-02**: Updated releasing.md verified-against to v0.23.2
+- **DOC-02**: Updated releasing.md verified-against to v0.45.22
 - **DOC-03**: Sorted CHANGELOG entries monotonically
 - **DOC-06**: Added ADR-0011 (GSD state machine) and ADR-0012 (context manager)
 - **DOC-08**: Added docstrings to ext-package-manager.rkt and compact-context.rkt
@@ -4380,7 +4398,7 @@ with structured plan types, validation, and error recovery.
 - These would have caught the C2 parameter→box and C3 invisible warning bugs
 
 **Wave 5 — Version Bump**
-- Bump 0.23.2 → 0.23.2
+- Bump 0.45.22 → 0.45.22
 
 **Total**: 176 GSD tests across 7 files. 0 failures.
 
@@ -4467,7 +4485,7 @@ with structured plan types, validation, and error recovery.
 - Prevents LLM from merging old+new plan content
 
 **W3 — Version Bump**
-- Version 0.23.2 → 0.23.2
+- Version 0.45.22 → 0.45.22
 
 
 ---
@@ -4511,7 +4529,7 @@ with structured plan types, validation, and error recovery.
 - 3 new iteration tests: spiral event structure, multi-tool paths, seen-path dedup
 
 **W3 — Version Bump**
-- Version 0.23.2 → 0.23.2
+- Version 0.45.22 → 0.45.22
 
 
 ---
@@ -4535,7 +4553,7 @@ with structured plan types, validation, and error recovery.
 - 2 new registry tests: prompt-guidelines set, description contains "verbatim"
 
 **W3 — Version Bump**
-- Version 0.23.2 → 0.23.2
+- Version 0.45.22 → 0.45.22
 
 
 ---
@@ -4621,7 +4639,7 @@ with structured plan types, validation, and error recovery.
 
 **W5 — Documentation Refresh**
 - **Fixed**: README metrics updated to current values
-- **Updated**: All verified-against markers to v0.23.2
+- **Updated**: All verified-against markers to v0.45.22
 
 
 ---
@@ -4754,7 +4772,7 @@ with structured plan types, validation, and error recovery.
 - `docs/self-hosting.md`: GSD planning, dogfood infrastructure, extension loading
 - `docs/workflow-testing.md`: test structure, mock provider patterns, conventions
 
-**Wave 3 — Version bump 0.23.2 → 0.23.2** (PR #1663)
+**Wave 3 — Version bump 0.45.22 → 0.45.22** (PR #1663)
 - Version bump and CHANGELOG update
 
 
@@ -4778,7 +4796,7 @@ with structured plan types, validation, and error recovery.
 - Multi-task comparison
 - 6 tests
 
-**Wave 3 — Version bump 0.23.2 → 0.23.2** (PR #1660)
+**Wave 3 — Version bump 0.45.22 → 0.45.22** (PR #1660)
 - Version bump and CHANGELOG update
 
 
@@ -4810,7 +4828,7 @@ with structured plan types, validation, and error recovery.
 
 ### GSD Planning Workflow + Review Cleanup
 
-Milestone #92 — Post-v0.23.2 review follow-ups and planning prompt augmentation.
+Milestone #92 — Post-v0.45.22 review follow-ups and planning prompt augmentation.
 
 **Wave 1 — Review cleanup + test coverage (#1596)**
 - Removed all `/tmp/q-cmd-dispatch.log` diagnostic tracing from 4 files.
@@ -4828,7 +4846,7 @@ Milestone #92 — Post-v0.23.2 review follow-ups and planning prompt augmentatio
 - Added test verifying augmented submit text contains `[gsd-planning]` preamble.
 
 **Wave 4 — Fix pre-existing test failures (#1605)**
-- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.23.2.
+- Synced all version surfaces: info.rkt, README.md, docs/*.md, wiki-src/ to 0.45.22.
 - Added `.planning/` and `.pi/` to `lint-version.rkt` skip list (historical version refs).
 - Synced README metrics (source line counts).
 - Fixed `test-tui-enter.rkt`: updated expected command return format
@@ -4875,7 +4893,7 @@ and gsd-planning execute-command handler for end-to-end `/activate` → command 
 ### Review Remediation
 
 Milestone #90 — Security hardening, extension system integrity, and broken
-registration fixes from v0.23.2 review.
+registration fixes from v0.45.22 review.
 
 **Wave 1 — Fix broken extension registrations (#1573)**
 - `remote-collab/remote-collab.rkt`: Fixed `ext-register-tool!` from 2-arg
@@ -4951,7 +4969,7 @@ registration fixes from v0.23.2 review.
 
 ### Audit Remediation
 
-Security and robustness fixes from comprehensive audit of v0.23.2–v0.23.2
+Security and robustness fixes from comprehensive audit of v0.45.22–v0.45.22
 (remote pi implementation). 25 findings addressed: 5 CRITICAL, 7 MAJOR, 13 MINOR.
 
 **CRITICAL fixes:**
@@ -5101,7 +5119,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ### 2026-04-22
 
-### Critical Fixes (from PROJECT_REVIEW_v0.23.2)
+### Critical Fixes (from PROJECT_REVIEW_v0.45.22)
 
 - **SEC-07**: Fix `subprocess-result` arity bug — error handler had `#f` nested inside
   `inexact->exact` call instead of being the 6th field (`truncated?`). Any subprocess
@@ -5118,7 +5136,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 
 ### Housekeeping
 
-- Bump version references across all docs to 0.23.2
+- Bump version references across all docs to 0.45.22
 
 
 ---
@@ -5128,7 +5146,7 @@ No new Racket code — skills are pure markdown discovered by existing skill sys
 ### Architecture Hardening & Documentation Refresh
 
 Milestone #81 — 17 issues, 11 PRs merged. Full review findings in
-`.planning/REVIEW-v0.23.2.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
+`.planning/REVIEW-v0.45.22.md` (73 findings: 6 CRITICAL, 23 MAJOR, 32 MINOR, 12 NIT).
 
 #### Wave 0 — Housekeeping (#1475, #1477, #1488)
 - Version drift sync, STATE.md + SUMMARY.md reconciliation
@@ -5379,7 +5397,7 @@ per-model timeout overrides. Config schema:
 ### Post-Review Fixes (Waves 10–13)
 
 - **Wave 10**: Removed dead code in `classify-error` (R1) — no-op `when` block. Fixed `rate-limit-error?` pattern — replaced `"too many"` with `"too many requests"` to prevent context-overflow misclassification (R2)
-- **Wave 11**: Fixed README v0.23.2 status block — replaced v0.13.x description with accurate v0.23.2 features (D1). Synced metrics (D2)
+- **Wave 11**: Fixed README v0.45.22 status block — replaced v0.13.x description with accurate v0.45.22 features (D1). Synced metrics (D2)
 - **Wave 12**: Added 12 TUI event handler tests covering `iteration.soft-warning`, `exploration.progress`, `context.mid-turn-over-budget`, and `auto-retry.start` with `errorType` (TC1)
 - **Wave 13**: Added `session-rebind` to `hook-action-schemas` (H1). Wrapped `dynamic-require` with descriptive error messages in `session-switch.rkt` (SW1). Added argument validation in `resource-discovery.rkt` (RD1)
 
@@ -5444,7 +5462,7 @@ Replaces mechanical context truncation with a strategy-driven context assembly e
 ### Performance
 - **TUI transcript O(n²) → O(1)**: Transcript append now uses `cons` instead of `append`, eliminating quadratic slowdown on long sessions. Added `transcript-entries` accessor that reverses on read for backward-compatible oldest-first ordering. (#1386, PR #1387)
 
-### Bug Fixes (from v0.23.2)
+### Bug Fixes (from v0.45.22)
 - **Settings contract**: Fixed `make-settings` field contracts that rejected valid values. (#1376)
 - **Context reducer pair-awareness**: Context reduction now correctly handles paired tool-start/tool-end entries. (#1377)
 - **`/retry` + iteration limit**: `/retry` command now correctly updates `last-prompt-box`. Max iterations raised from 10 to 20. (#1378, PR #1383)
