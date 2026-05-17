@@ -23,7 +23,7 @@
 
 (require/typed "../../agent/event-bus.rkt" [#:opaque EventBus event-bus?])
 
-(require/typed "../../util/tool-registry-types.rkt" [#:opaque ToolRegistry tool-registry?])
+(require/typed "../../util/tool-registry-struct.rkt" [#:opaque ToolRegistry tool-registry?])
 
 (require/typed "../../extensions/api.rkt" [#:opaque ExtRegistry extension-registry?])
 
