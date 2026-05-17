@@ -68,6 +68,7 @@
          (struct-out tool-pre-hook-payload)
          (struct-out tool-post-hook-payload)
          (struct-out scheduler-batch-stats)
+         scheduler-batch-stats->hash
          plan-tool-batch
          execute-tool-plan
          run-preflight
@@ -111,6 +112,20 @@
 (struct tool-pre-hook-payload (tool-name args entry-id) #:transparent)
 (struct tool-post-hook-payload (tool-name result entry-id arguments) #:transparent)
 (struct scheduler-batch-stats (total executed blocked errors) #:transparent)
+
+;; Convert scheduler-batch-stats to a hash for event emission.
+;; Preserves struct for internal use while providing serializable hash
+;; for event bus consumers.
+(define (scheduler-batch-stats->hash s)
+  (hasheq 'total
+          (scheduler-batch-stats-total s)
+          'executed
+          (scheduler-batch-stats-executed s)
+          'blocked
+          (scheduler-batch-stats-blocked s)
+          'errors
+          (scheduler-batch-stats-errors s)))
+
 ;; status: 'ready | 'blocked | 'error
 ;; tool: tool? (#f for blocked/error)
 ;; error-message: string? (#f for ready)
@@ -411,7 +426,7 @@
   (define results (run-execution entries exec-ctx parallel? hook-dispatcher))
   (define metadata (compute-metadata results entries))
   (when ev-pub
-    (ev-pub "tool.batch.completed" metadata))
+    (ev-pub "tool.batch.completed" (scheduler-batch-stats->hash metadata)))
   (scheduler-result results metadata))
 
 ;; Main entry point — backward compatible
