@@ -24,7 +24,7 @@
          racket/set
          "../util/protocol-types.rkt"
          "../util/message-helpers.rkt"
-         (only-in "../util/error-helpers.rkt" with-telemetry)
+         (only-in "../util/telemetry.rkt" with-telemetry)
          "../runtime/session-store.rkt"
          (only-in "../runtime/compaction-prompts.rkt"
                   format-messages-for-summary
@@ -55,7 +55,6 @@
                                              #:hook-dispatcher (or/c procedure? #f)
                                              #:token-config any/c)
                              compaction-result?)]
-
                        [compact-and-persist!
                         (->* (list? (or/c path-string? #f))
                              (#:summarize-fn procedure?

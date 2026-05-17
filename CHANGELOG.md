@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.46.0 — 2026-05-18
+
+### Changed
+- **F5**: Unified `provider-error` into `q-error` hierarchy — provider-error now inherits from q-error instead of exn:fail, enabling catch-all `q-error?` handlers
+- **F21**: Extracted `with-telemetry` from `util/error-helpers.rkt` to dedicated `util/telemetry.rkt` module
+
+### Added
+- HTTP 413 context-overflow classification in `classify-http-status`
+- Provider error hierarchy tests (q-error subtype, context field)
+
 ## v0.45.23 — 2026-05-17
 
 ### Fixed
