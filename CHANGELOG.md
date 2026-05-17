@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.45.23 — 2026-05-17
+
+### Fixed
+- **CRITICAL**: Restored CHANGELOG.md, README.md, and 10 docs/ files corrupted
+  by global version replacement in commit `3c250604`. Root cause was brute-force
+  `re.sub` in `ci_preflight()` that replaced ALL `0.X.Y` patterns in ALL `.md`
+  files, overwriting 229 historical version entries. Fixed by replacing Python
+  auto-fix with call to Racket `sync-version.rkt --write` which has proper
+  EXCLUDED-MD-FILES and historical-line? guards.
+- **MEDIUM**: Added CHANGELOG corruption guard to `lint-version.rkt` — validates
+  >= 50 unique `## v` headers to catch future global replacement.
+- **MEDIUM**: Normalized wave status at parse time in `parse-plan-index` using
+  `normalize-status!`, fixing case-sensitive `string=?` comparisons that could
+  miss mixed-case status markers written by LLMs.
+
+### Changed
+- Removed dead `status-eqv?` from `wave-status.rkt` (defined+provided but
+  never called outside tests).
+- Fixed `exec-context.rkt` contract formatting — `(or/c path-string? #f)` on
+  one line with comment above.
+- `normalize-plan-status-markers!` in `archive.rkt` now uses raw regex parsing
+  to detect mixed-case markers (since `parse-plan-index` normalizes at parse).
+
+
 ## v0.45.22 — 2026-05-14
 
 ### Fixed
