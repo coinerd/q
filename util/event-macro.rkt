@@ -35,7 +35,10 @@
          ;; JSON key conversion
          field->json-key
          ;; S8-F1: Schema versioning
-         current-schema-version)
+         current-schema-version
+         current-event-schema-registry
+         register-event-schema-version!
+         lookup-event-schema-version)
 
 ;; ===========================================================
 ;; Event field registry (I-12, I-23) -- canonical runtime mechanism for serialization
@@ -60,6 +63,15 @@
 
 ;; S8-F1: Schema versioning for safe event evolution
 (define current-schema-version (make-parameter 1))
+
+;; Per-type schema version registry: type-string -> version (exact-positive-integer?)
+(define current-event-schema-registry (make-parameter (make-hash)))
+
+(define (register-event-schema-version! type-str version)
+  (hash-set! (current-event-schema-registry) type-str version))
+
+(define (lookup-event-schema-version type-str)
+  (hash-ref (current-event-schema-registry) type-str (current-schema-version)))
 
 (define (register-event-serializer! type-str fn)
   (hash-set! (current-event-serializer-registry) type-str fn))
@@ -196,6 +208,7 @@
                    #:defaults ([(opt-field 1) '()] [(opt-default 1) '()]))
         (~optional (~seq #:json-keys json-keys) #:defaults ([json-keys #'()]))
         (~optional (~seq #:defaults req-defaults) #:defaults ([req-defaults #'()]))
+        (~optional (~seq #:schema-version schema-ver:nat) #:defaults ([schema-ver #'#f]))
         (~optional (~and #:no-serialize ns-flag) #:defaults ([ns-flag #'#f])))
      (define opt-raw (attribute opt-field))
      (define opt-default-raw (attribute opt-default))
@@ -212,6 +225,7 @@
          [(list? opt-default-raw) opt-default-raw]
          [else '()]))
      (define skip-serialize? (eq? (syntax-e (attribute ns-flag)) '#:no-serialize))
+     (define schema-version-val (and (attribute schema-ver) (syntax-e (attribute schema-ver))))
      (define req-fields (syntax->list #'(req-field ...)))
      (define all-fields (append req-fields opt-fields))
      (define all-defaults (append (map (lambda (_) #f) req-fields) opt-defaults))
@@ -257,6 +271,10 @@
                (define fields-name '(all-field ...))
                ;; I-12: Register field names for event-struct->hasheq runtime lookup
                (register-event-fields! 'event-name fields-name)
+               ;; S8-F1: Register per-type schema version
+               (let ([sv schema-ver])
+                 (when sv
+                   (register-event-schema-version! type-str sv)))
                (define (make-name #:session-id session-id
                                   #:turn-id turn-id
                                   #:timestamp [timestamp (current-seconds)]
@@ -272,6 +290,10 @@
                (define fields-name '(all-field ...))
                ;; I-12: Register field names for event-struct->hasheq runtime lookup
                (register-event-fields! 'event-name fields-name)
+               ;; S8-F1: Register per-type schema version
+               (let ([sv schema-ver])
+                 (when sv
+                   (register-event-schema-version! type-str sv)))
                (define (make-name #:session-id session-id
                                   #:turn-id turn-id
                                   #:timestamp [timestamp (current-seconds)]
@@ -283,6 +305,10 @@
                (register-event-deserializer! type-str
                                              (lambda (type ts sid tid h)
                                                (event-name type ts sid tid deser-arg ...)))
+               ;; S8-F1: Register per-type schema version
+               (let ([sv schema-ver])
+                 (when sv
+                   (register-event-schema-version! type-str sv)))
                (provide (struct-out event-name)
                         make-name
                         type-name
