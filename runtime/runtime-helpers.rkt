@@ -12,10 +12,12 @@
 ;; here for backward compatibility with existing runtime callers.
 
 (require (only-in "../agent/event-emitter.rkt" emit-session-event!)
+         (only-in "../agent/event-bus.rkt" make-event-bus)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-payload))
 
 (provide emit-session-event!
+         make-event-bus
          maybe-dispatch-hooks)
 
 ;; emit-session-event! is now defined in agent/event-emitter.rkt
