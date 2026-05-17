@@ -40,7 +40,8 @@
          next-turn-state
          valid-turn-transition?)
 
-(require racket/match)
+(require racket/match
+         (only-in "../util/fsm.rkt" make-fsm fsm-lookup fsm-valid-transition?))
 
 ;; ── States ──
 
@@ -97,11 +98,20 @@
 
 ;; ── Lookup ──
 
+;; FSM machine instance for lookup
+(define turn-machine
+  (make-fsm '(emit-start build-context pre-hook stream post-hook complete blocked)
+            '(start context-built
+                    hook-pass
+                    hook-block
+                    stream-complete
+                    stream-cancel
+                    post-hook-done
+                    msg-hook-block)
+            TURN-TRANSITIONS))
+
 (define (find-turn-transition state-sym event-sym)
-  (for/or ([entry (in-list TURN-TRANSITIONS)])
-    (match entry
-      [`((,s . ,e) . ,next) (and (eq? s state-sym) (eq? e event-sym) next)]
-      [_ #f])))
+  (fsm-lookup turn-machine state-sym event-sym))
 
 (define (next-turn-state state event)
   (define state-sym (turn-state->symbol state))
@@ -120,9 +130,7 @@
     [else (error 'next-turn-state "unknown state: ~a" next-sym)]))
 
 (define (valid-turn-transition? state event)
-  (define state-sym (turn-state->symbol state))
-  (define event-sym (turn-event->symbol event))
-  (and (find-turn-transition state-sym event-sym) #t))
+  (fsm-valid-transition? turn-machine (turn-state->symbol state) (turn-event->symbol event)))
 
 ;; ── FSM state parameter ──
 ;; Tracks current turn FSM state for observability.
