@@ -9,17 +9,20 @@
 ;;;   jsonl-read-all-valid  — read only valid lines (skip partial/corrupted)
 ;;;   jsonl-line-valid?     — check if a line is complete valid JSON
 
-(provide jsonl-append!
-         jsonl-write-to-port!
-         jsonl-append-entries!
-         jsonl-read-from-port
-         jsonl-read-all
-         jsonl-read-all-valid
-         jsonl-read-all-valid-with-count
-         jsonl-read-last
-         jsonl-line-valid?)
+(require racket/contract
+         "../util/error-helpers.rkt")
 
-(require "../util/error-helpers.rkt")
+(provide (contract-out [jsonl-append! (-> path-string? any/c void?)]
+                       [jsonl-write-to-port! (-> output-port? any/c void?)]
+                       [jsonl-append-entries! (-> path-string? (listof any/c) void?)]
+                       [jsonl-read-from-port
+                        (-> input-port? (values (listof any/c) exact-nonnegative-integer?))]
+                       [jsonl-read-all (-> path-string? (listof any/c))]
+                       [jsonl-read-all-valid (-> path-string? (listof any/c))]
+                       [jsonl-read-all-valid-with-count
+                        (-> path-string? (values (listof any/c) exact-nonnegative-integer?))]
+                       [jsonl-read-last (->* (path-string?) (exact-positive-integer?) (listof any/c))]
+                       [jsonl-line-valid? (-> any/c boolean?)]))
 (require json
          racket/port
          racket/string
