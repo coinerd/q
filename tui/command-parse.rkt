@@ -96,6 +96,46 @@
 ;; Returns: symbol | (list symbol args...) | #f
 ;; R-17: Returns parsed-command or #f for non-commands.
 ;; For backward compat, also returns 'unknown for unrecognized slash commands.
+;; F13: Pipeline stage extraction for testability.
+;; tokenize: string -> (values cmd-string (listof string)) or #f
+(define (tokenize text)
+  (define trimmed (string-trim text))
+  (cond
+    [(string=? trimmed "") #f]
+    [(not (char=? (string-ref trimmed 0) #\/)) #f]
+    [else
+     (define parts (string-split trimmed))
+     (values (car parts) (cdr parts))]))
+
+;; lookup: cmd-string table -> (cons canonical arg-kind) or #f
+(define (lookup-command-entry cmd table)
+  (hash-ref table cmd #f))
+
+;; validate-args: entry args -> parsed-command
+(define (validate-args entry args)
+  (cond
+    [(eq? (cdr entry) 'none) (parsed-command (car entry) '() 'none)]
+    [(eq? (cdr entry) 'optional)
+     (parsed-command (car entry)
+                     (if (null? args)
+                         '()
+                         (list (car args)))
+                     'optional)]
+    [(eq? (cdr entry) 'required)
+     (if (null? args)
+         (parsed-command (string->symbol (format "~a-error" (symbol->string (car entry))))
+                         (list (case (car entry)
+                                 [(switch) "Usage: /switch <branch-id>"]
+                                 [(children) "Usage: /children <node-id>"]
+                                 [else (format "Usage: /~a <id>" (symbol->string (car entry)))]))
+                         'error)
+         (parsed-command (car entry) (list (car args)) 'required))]
+    [else (parsed-command (car entry) '() 'none)]))
+
+(provide tokenize
+         lookup-command-entry
+         validate-args)
+
 (define (parse-command-name text)
   (define trimmed (string-trim text))
   (cond
