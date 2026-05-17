@@ -55,6 +55,7 @@
          ;; Valid transitions query
          gsm-valid-next-states
          TRANSITIONS
+         TRANSITIONS-FLAT
          ;; Tool access
          gsm-tool-allowed?
          ;; Snapshot / reset
@@ -92,14 +93,22 @@
 ;; entry/exit actions), the table should be enriched with a proper FSM library.
 ;; Current design is sufficient for the 5-state GSD lifecycle.
 (define TRANSITIONS
-  '((idle . exploring) (exploring . plan-written)
-                       (exploring . idle)
-                       (plan-written . executing)
-                       (plan-written . idle)
-                       (executing . verifying)
-                       (executing . idle)
-                       (verifying . idle)
-                       (verifying . executing)))
+  ;; Enriched transition table (F4): ((from . event) . to)
+  ;; Events name the trigger for each transition, enabling event-driven dispatch.
+  '(((idle . explore) . exploring) ((exploring . plan) . plan-written)
+                                   ((exploring . cancel) . idle)
+                                   ((plan-written . execute) . executing)
+                                   ((plan-written . cancel) . idle)
+                                   ((executing . verify) . verifying)
+                                   ((executing . cancel) . idle)
+                                   ((verifying . done) . idle)
+                                   ((verifying . rework) . executing)))
+
+;; Legacy: flat transition pairs for backward compatibility
+;; (derived from enriched table)
+(define TRANSITIONS-FLAT
+  (for/list ([t TRANSITIONS])
+    (cons (caar t) (cdr t))))
 
 ;; ============================================================
 ;; Transition result types
@@ -134,12 +143,12 @@
 ;; Pure transition kernel (Finding 3.1.3)
 ;; Compute next state without side effects.
 ;; Returns (or/c ok-result? err-result?).
-(define (compute-next-gsm-state current-state target)
+(define (compute-next-gsm-state current-state target #:event [event #f])
   (define current (gsd-runtime-state-mode current-state))
   (cond
     [(not (gsm-state? target))
      (values (err-result (format "invalid state: ~a" target) current target) current-state)]
-    [(valid-transition? current target)
+    [(valid-transition? current target event)
      ;; Clear executor when leaving executing mode
      (define state*
        (if (and (eq? current 'executing) (not (eq? target 'executing)))
@@ -155,7 +164,7 @@
        target)
       current-state)]))
 
-(define (gsm-transition! target)
+(define (gsm-transition! target #:event [event #f])
   ;; R-01: Direct box access inside with-gsd-lock to avoid nested semaphore deadlock.
   ;; gsd-state-snapshot/gsd-state-update! call with-gsd-lock internally,
   ;; causing deadlock on the same non-reentrant semaphore.
@@ -163,23 +172,29 @@
    (lambda ()
      (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
      (define current (gsd-runtime-state-mode state))
-     (emit-gsd-event! 'gsd.transition.attempted
+     (emit-gsd-event!
+      'gsd.transition.attempted
       (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
-     (define-values (result new-state) (compute-next-gsm-state state target))
+     (define-values (result new-state) (compute-next-gsm-state state target #:event event))
      (cond
        [(ok? result)
         (define new-mode (gsd-runtime-state-mode new-state))
         (set-box! (gsd-session-ctx-state-box gsd-default-ctx) new-state)
         (set-gsd-history! (cons (list current new-mode (current-seconds)) (current-gsd-history)))
         (emit-gsd-event! 'gsd.transition.succeeded
-         (make-gsd-transition-succeeded-event #:session-id "" #:turn-id 0 #:from current #:to new-mode))
+                         (make-gsd-transition-succeeded-event #:session-id ""
+                                                              #:turn-id 0
+                                                              #:from current
+                                                              #:to new-mode))
         result]
        [else
-        (emit-gsd-event!
-         'gsd.transition.failed
-         (make-gsd-transition-failed-event #:session-id "" #:turn-id 0
-                                           #:from current #:to target
-                                           #:reason (format "invalid: ~a -> ~a" current target)))
+        (emit-gsd-event! 'gsd.transition.failed
+                         (make-gsd-transition-failed-event
+                          #:session-id ""
+                          #:turn-id 0
+                          #:from current
+                          #:to target
+                          #:reason (format "invalid: ~a -> ~a" current target)))
         result]))))
 
 ;; FF-01: Auto-routing transition — finds shortest path via BFS and follows it.
@@ -191,20 +206,19 @@
     [else
      (define path (find-transition-path current target))
      (if path
-         (for/fold ([result (ok-result current current)])
-                   ([step path])
+         (for/fold ([result (ok-result current current)]) ([step path])
            (gsm-transition! step))
          (gsm-transition! target))]))
 
 (define (gsm-reset!)
   ;; R-01: Direct box access inside with-gsd-lock to avoid nested semaphore deadlock.
-  (with-gsd-lock
-   (lambda ()
-     (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
-     (define old (gsd-runtime-state-mode state))
-     (set-box! (gsd-session-ctx-state-box gsd-default-ctx) (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
-     (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
-     (ok-result old 'idle))))
+  (with-gsd-lock (lambda ()
+                   (define state (unbox (gsd-session-ctx-state-box gsd-default-ctx)))
+                   (define old (gsd-runtime-state-mode state))
+                   (set-box! (gsd-session-ctx-state-box gsd-default-ctx)
+                             (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
+                   (set-gsd-history! (cons (list old 'idle (current-seconds)) (current-gsd-history)))
+                   (ok-result old 'idle))))
 
 (define (reset-gsm!)
   ;; R-01: Use set-gsd-state!/set-gsd-history! directly inside with-gsd-lock.
@@ -249,7 +263,7 @@
           (hash-set! visited node #t)
           (define next-steps
             (for/list ([t TRANSITIONS]
-                       #:when (eq? (car t) node)
+                       #:when (eq? (caar t) node)
                        #:unless (hash-has-key? visited (cdr t)))
               (cdr t)))
           (define new-q
@@ -258,14 +272,14 @@
                       (cons s (cons s path)))))
           (loop new-q)])])))
 
-(define (valid-transition? from to)
+(define (valid-transition? from to [event #f])
   (or (and (eq? from 'idle) (eq? to 'idle))
       (for/or ([t TRANSITIONS])
-        (and (eq? (car t) from) (eq? (cdr t) to)))))
+        (and (eq? (caar t) from) (eq? (cdr t) to) (or (not event) (eq? (cdar t) event))))))
 
 (define (valid-targets from)
   (for/list ([t TRANSITIONS]
-             #:when (eq? (car t) from))
+             #:when (eq? (caar t) from))
     (cdr t)))
 
 ;; ============================================================

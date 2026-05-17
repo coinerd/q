@@ -175,3 +175,36 @@
   (define-values (r2 s2) (compute-next-gsm-state s1 'exploring))
   (check-true (ok? r2))
   (check-equal? (gsd-runtime-state-mode s2) 'exploring))
+
+;; ============================================================
+;; F4: Event-based transition tests
+;; ============================================================
+
+(test-case "F4: valid transition with correct event succeeds"
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'exploring #:event 'explore))
+  (check-true (ok? r))
+  (check-equal? (ok-to r) 'exploring))
+
+(test-case "F4: valid transition with wrong event fails"
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'exploring #:event 'cancel))
+  (check-true (err? r)))
+
+(test-case "F4: transition without event still works (backward compat)"
+  (define-values (r _) (compute-next-gsm-state (make-state 'idle) 'exploring))
+  (check-true (ok? r)))
+
+(test-case "F4: all enriched transitions succeed with their named event"
+  (for ([t TRANSITIONS])
+    (define from (caar t))
+    (define event (cdar t))
+    (define to (cdr t))
+    (define-values (r _) (compute-next-gsm-state (make-state from) to #:event event))
+    (check-true (ok? r) (format "transition ~a --(~a)--> ~a should succeed" from event to))))
+
+(test-case "F4: TRANSITIONS-FLAT derived from enriched table"
+  (check-equal? (length TRANSITIONS-FLAT) (length TRANSITIONS))
+  (for ([t TRANSITIONS])
+    (define flat (cons (caar t) (cdr t)))
+    (check-not-false (for/or ([f TRANSITIONS-FLAT])
+                       (and (equal? (car f) (car flat)) (equal? (cdr f) (cdr flat))))
+                     (format "~a in TRANSITIONS-FLAT" t))))
