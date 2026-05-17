@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.46.3 — 2026-05-18
+
+### Changed
+- **F10**: Removed 4 deprecated bash parameters (`current-block-destructive`, `current-warn-on-destructive`, `current-warning-port`, `current-extra-destructive-patterns`) — `bash-execution-config` struct is now the sole config path
+- **F4**: Enriched GSD FSM transition table with named events — `compute-next-gsm-state` accepts `#:event` keyword for event-driven dispatch
+
+### Added
+- `TRANSITIONS-FLAT` — legacy flat transition pairs derived from enriched table
+- 6 new FSM event tests (29 total), 107 tests pass across bash-related files
+
 ## v0.46.2 — 2026-05-18
 
 ### Changed
