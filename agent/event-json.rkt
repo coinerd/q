@@ -48,7 +48,8 @@
                   lookup-event-deserializer
                   register-event-serializer!
                   register-event-deserializer!
-                  current-schema-version))
+                  current-schema-version
+                  lookup-event-schema-version))
 
 (provide typed-event->jsexpr
          jsexpr->typed-event
@@ -61,7 +62,8 @@
 (define (register-tool-event-serializer! event-type base-serializer)
   (register-event-serializer!
    event-type
-   (lambda (evt) (hash-set (base-serializer evt) 'schemaVersion (current-schema-version)))))
+   (lambda (evt)
+     (hash-set (base-serializer evt) 'schemaVersion (lookup-event-schema-version event-type)))))
 
 ;; ============================================================
 ;; Per-tool event serializer registration (manual structs)
@@ -256,7 +258,7 @@
             'turnId
             (typed-event-turn-id evt)
             'schemaVersion
-            (current-schema-version)))
+            (lookup-event-schema-version (typed-event-type evt))))
   (define type-str (typed-event-type evt))
   (define serializer (lookup-event-serializer type-str))
   (when (not serializer)
