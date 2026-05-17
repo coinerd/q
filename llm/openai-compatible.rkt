@@ -198,6 +198,7 @@
                              (raise (provider-error
                                      (format "Network error contacting ~a: ~a" host (exn-message e))
                                      (current-continuation-marks)
+                                     (hash)
                                      #f
                                      'network))))])
         (call-with-request-timeout (lambda ()

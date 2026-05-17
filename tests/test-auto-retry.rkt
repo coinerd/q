@@ -514,26 +514,30 @@
 ;; ============================================================
 
 (test-case "W-06a: retryable-error? with provider-error rate-limit"
-  (check-not-false (retryable-error?
-                    (provider-error "rate limited" (current-continuation-marks) 429 'rate-limit))))
+  (check-not-false
+   (retryable-error?
+    (provider-error "rate limited" (current-continuation-marks) (hash) 429 'rate-limit))))
 
 (test-case "W-06b: retryable-error? with provider-error auth-error returns #f"
   (check-false (retryable-error?
-                (provider-error "bad key" (current-continuation-marks) 401 'auth-error))))
+                (provider-error "bad key" (current-continuation-marks) (hash) 401 'auth-error))))
 
 (test-case "W-06c: classify-error with provider-error timeout returns 'timeout"
-  (check-equal? (classify-error (provider-error "timed out" (current-continuation-marks) #f 'timeout))
-                'timeout))
+  (check-equal?
+   (classify-error (provider-error "timed out" (current-continuation-marks) (hash) #f 'timeout))
+   'timeout))
 
 (test-case "W-06d: classify-error with provider-error server-error returns 'server-error"
   (check-equal?
-   (classify-error (provider-error "internal error" (current-continuation-marks) 500 'server-error))
+   (classify-error
+    (provider-error "internal error" (current-continuation-marks) (hash) 500 'server-error))
    'server-error))
 
 (test-case "W-06e: retryable-error? with provider-error network returns truthy"
-  (define exn (provider-error "connection reset" (current-continuation-marks) #f 'network))
+  (define exn (provider-error "connection reset" (current-continuation-marks) (hash) #f 'network))
   (check-not-false (retryable-error? exn)))
 
 (test-case "W-06f: retryable-error? with provider-error server-error returns truthy"
-  (define exn (provider-error "internal server error" (current-continuation-marks) 500 'server-error))
+  (define exn
+    (provider-error "internal server error" (current-continuation-marks) (hash) 500 'server-error))
   (check-not-false (retryable-error? exn)))

@@ -63,7 +63,7 @@
 (define (raise-http-error! message [status-code #f])
   (define category (classify-http-status status-code))
   (if category
-      (raise (provider-error message (current-continuation-marks) status-code category))
+      (raise (provider-error message (current-continuation-marks) (hash) status-code category))
       (raise (exn:fail message (current-continuation-marks)))))
 
 ;; ============================================================
