@@ -12,8 +12,6 @@
                   tool-bash
                   destructive-command?
                   destructive-patterns
-                  current-block-destructive
-                  current-warn-on-destructive
                   current-execution-policy
                   current-allowed-commands
                   execution-policy-allows?
@@ -116,18 +114,18 @@
                 (lambda () (check-true (safe-mode?)))
                 (lambda () (current-safe-mode-config orig-config))))
 
-(test-case "SEC-13: explicit #f override disables blocking"
+(test-case "SEC-13: explicit #f config disables blocking"
   (define orig-config (current-safe-mode-config))
-  (define orig-block (current-block-destructive))
   (dynamic-wind (lambda ()
                   (current-safe-mode-config (make-safe-mode-config #:active #t))
-                  (current-block-destructive #f))
+                  (current-bash-execution-config (make-bash-execution-config #:block? #f)))
                 (lambda ()
-                  ;; With explicit #f override, check it's actually #f
-                  (check-false (current-block-destructive)))
+                  ;; With explicit #f override, destructive commands should NOT be blocked
+                  (define cfg (current-bash-execution-config))
+                  (check-false (bash-execution-config-block-destructive? cfg)))
                 (lambda ()
                   (current-safe-mode-config orig-config)
-                  (current-block-destructive orig-block))))
+                  (current-bash-execution-config #f))))
 
 ;; ── RA-1a: Allowlist execution policy (v0.24.7) ──
 
@@ -188,7 +186,7 @@
     (define cfg (make-bash-execution-config))
     (check-pred bash-execution-config? cfg)
     (check-equal? (bash-execution-config-policy cfg) (current-execution-policy))
-    (check-equal? (bash-execution-config-warn-on-destructive? cfg) (current-warn-on-destructive)))
+    (check-true (bash-execution-config-warn-on-destructive? cfg)))
 
   (test-case "make-bash-execution-config accepts keyword overrides"
     (define cfg (make-bash-execution-config #:policy 'allow #:block? #t #:warn? #f))

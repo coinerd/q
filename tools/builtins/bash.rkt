@@ -41,15 +41,11 @@
          (only-in "../../util/safe-mode-predicates.rkt" safe-mode?))
 
 (provide tool-bash
-         current-warn-on-destructive
-         current-block-destructive
-         current-warning-port
-         ;; v0.44.2: Struct-based config
+         ;; Struct-based config (v0.44.2+, sole config path since v0.46.3)
          (struct-out bash-execution-config)
          make-bash-execution-config
          current-bash-execution-config
          effective-bash-config
-         current-extra-destructive-patterns
          destructive-command?
          destructive-patterns
          current-execution-policy
@@ -166,20 +162,11 @@
    #rx"^exec[ ]+" ;; exec replacement
    ))
 
-;; User-configurable extra patterns (loaded from settings).
-;; When non-#f, these EXTEND the default destructive-patterns (SEC-A).
-(define current-extra-destructive-patterns (make-parameter #f))
-
 ;; Check if a command matches any destructive pattern.
 ;; Uses regexp matching for token-awareness to avoid false positives.
 (define (destructive-command? command)
   (define lower (string-downcase command))
-  ;; Extend defaults with extra patterns (never replace)
-  (define patterns
-    (if (current-extra-destructive-patterns)
-        (append destructive-patterns (current-extra-destructive-patterns))
-        destructive-patterns))
-  (for/or ([pattern (in-list patterns)])
+  (for/or ([pattern (in-list destructive-patterns)])
     (regexp-match? pattern lower)))
 
 ;; ── High-risk patterns (RA-1b, v0.24.7) ──
@@ -201,21 +188,14 @@
   (for/or ([pattern (in-list high-risk-patterns)])
     (regexp-match? pattern lower)))
 
-;; Optional settings parameter for destructive command warning.
-;; When #t (default), emit a warning to stderr before executing.
-;; Can be set to #f to suppress warnings.
-;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
-;; Removal target: v0.46.0.
-(define current-warn-on-destructive (make-parameter #t))
-
 ;; v0.44.2 (R5): Struct-based config for per-request bash settings
 (struct bash-execution-config (policy block-destructive? warn-on-destructive? warning-port)
   #:transparent)
 
 (define (make-bash-execution-config #:policy [policy (current-execution-policy)]
-                                    #:block? [block? (current-block-destructive)]
-                                    #:warn? [warn? (current-warn-on-destructive)]
-                                    #:warning-port [port (current-warning-port)])
+                                    #:block? [block? (lambda () (safe-mode?))]
+                                    #:warn? [warn? #t]
+                                    #:warning-port [port #f])
   (bash-execution-config policy block? warn? port))
 
 ;; v0.44.4: Active execution config. When #f, tool-bash reads from deprecated parameters.
@@ -225,24 +205,8 @@
 (define (effective-bash-config)
   (or (current-bash-execution-config) (make-bash-execution-config)))
 
-;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
-;; Removal target: v0.46.0.
-;; Optional settings parameter for destructive command blocking (SEC-01).
-;; When #t, destructive commands return an error result instead of executing.
-;; When #f (default), commands execute (with optional warning).
-;; Blocking takes priority over warning.
-;; SEC-13 (v0.22.0): Default now defers to safe-mode.
-;; When 'safe-mode-default, resolves to (safe-mode?) at call time.
-;; Explicitly setting #t/#f overrides this behavior.
-(define current-block-destructive (make-parameter (lambda () (safe-mode?))))
-
-;; DEPRECATED: Use current-bash-execution-config or make-bash-execution-config instead.
-;; Removal target: v0.46.0.
-;; W-18: Warning output port (default: current-error-port)
-(define current-warning-port (make-parameter #f))
-
 (define (get-warning-port)
-  (or (current-warning-port) (current-error-port)))
+  (current-error-port))
 
 ;; Resolve exec-limits from settings (if provided) or defaults.
 ;; settings may be a q-settings? struct or #f.

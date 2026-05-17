@@ -29,29 +29,31 @@
   (check-true (tool-needs-approval? cfg "bash")))
 
 ;; ============================================================
-;; W-18: Warning port parameterization
+;; W-18: Warning port via bash-execution-config
 ;; ============================================================
 
-(test-case "current-warning-port defaults to #f"
-  (check-false (current-warning-port)))
+(test-case "bash-execution-config warning-port defaults to #f"
+  (define cfg (make-bash-execution-config))
+  (check-false (bash-execution-config-warning-port cfg)))
 
-(test-case "current-warning-port can be set"
+(test-case "bash-execution-config warning-port can be set"
   (define test-port (open-output-string))
-  (parameterize ([current-warning-port test-port])
-    (check-eq? (current-warning-port) test-port)))
+  (define cfg (make-bash-execution-config #:warning-port test-port))
+  (check-eq? (bash-execution-config-warning-port cfg) test-port))
 
 ;; ============================================================
-;; I-13: Thunk resolver for current-block-destructive
+;; I-13: Thunk resolver for block-destructive? in config
 ;; ============================================================
 
-(test-case "current-block-destructive accepts thunk"
+(test-case "bash-execution-config block-destructive? accepts thunk"
   (define called? (box #f))
-  (parameterize ([current-block-destructive (lambda ()
-                                              (set-box! called? #t)
-                                              #t)])
-    (check-true ((current-block-destructive)))
-    (check-true (unbox called?))))
+  (define cfg
+    (make-bash-execution-config #:block? (lambda ()
+                                           (set-box! called? #t)
+                                           #t)))
+  (check-true ((bash-execution-config-block-destructive? cfg)))
+  (check-true (unbox called?)))
 
-(test-case "current-block-destructive accepts plain boolean"
-  (parameterize ([current-block-destructive #f])
-    (check-false (current-block-destructive))))
+(test-case "bash-execution-config block-destructive? accepts plain boolean"
+  (define cfg (make-bash-execution-config #:block? #f))
+  (check-false (bash-execution-config-block-destructive? cfg)))

@@ -125,14 +125,8 @@
       (check-false (destructive-command? "curl http://example.com/api -o output.json"))
       (check-false (destructive-command? "source ./lib.sh")))
 
-    (test-case "current-extra-destructive-patterns extends defaults"
-      (parameterize ([current-extra-destructive-patterns (list #rx"custom-dangerous")])
-        (check-true (destructive-command? "custom-dangerous thing"))
-        ;; SEC-A: extra patterns EXTEND defaults (not replace)
-        (check-true (destructive-command? "rm -rf /"))))
-
-    (test-case "block-destructive blocks execution when enabled"
-      (parameterize ([current-block-destructive #t])
+    (test-case "block-destructive blocks execution via config struct"
+      (parameterize ([current-bash-execution-config (make-bash-execution-config #:block? #t)])
         (define r (tool-bash (hasheq 'command "rm -rf /tmp/test")))
         (check-true (tool-result-is-error? r))))))
 
