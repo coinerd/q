@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.46.8 — 2026-05-18
+
+### Changed
+- **F23**: Extracted pure `select-messages` function from `context-assembly/selection.rkt`
+- **F18**: Retagged 7 codec/jsonl test files as `BOUNDARY: serialization`
+- **F19**: Tagged 14+ pure test files as `BOUNDARY: pure`
+- **F13**: Extracted tokenize/lookup/validate pipeline stages in `tui/command-parse.rkt`
+- **F17**: Added extension struct expansion tests
+
+### Added
+- `tests/test-context-assembly-pure.rkt` — 4 pure selection tests
+- `tests/test-define-extension-expand.rkt` — 3 extension struct tests
+- 21 `BOUNDARY: pure` tags across test suite (target ≥20)
+- 10 `BOUNDARY: serialization` tags across test suite (target ≥10)
+
+### KPI Results (Post v0.46.8)
+- Error hierarchy: unified (`provider-error` inherits from `q-error`)
+- Pure test count: 21 (target ≥20) ✓
+- Serialization test count: 10 (target ≥10) ✓
+- Schema version coverage: all core events have `#:schema-version` clauses
+
 ## v0.46.7 — 2026-05-18
 
 ### Changed
