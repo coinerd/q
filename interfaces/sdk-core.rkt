@@ -86,7 +86,7 @@
                              runtime?)]
                        [open-session (->* (runtime?) ((or/c string? #f)) runtime?)]
                        [run-prompt!
-                        (runtime? string?
+                        (runtime? (or/c string? message?)
                                   . -> .
                                   (values runtime? (or/c loop-result? hash? #f 'no-active-session)))]
                        [make-cancellation-token

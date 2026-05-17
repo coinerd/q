@@ -37,8 +37,9 @@
   (and (string? s) (member s ALL-STATUSES) #t))
 
 (define (terminal-status? s)
-  "Is s a terminal status (DONE or DEFERRED)?"
-  (or (string=? s STATUS-DONE) (string=? s STATUS-DEFERRED)))
+  "Is s a terminal status (DONE or DEFERRED)? Case-insensitive."
+  (define up (string-upcase s))
+  (or (string=? up STATUS-DONE) (string=? up STATUS-DEFERRED)))
 
 (define (done-or-deferred? s)
   "Is s DONE or DEFERRED? (alias for terminal-status?)"
