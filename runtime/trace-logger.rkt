@@ -9,8 +9,10 @@
 (require racket/date
          json
          racket/file
+         racket/class
          "../agent/event-bus.rkt"
-         "../util/protocol-types.rkt")
+         "../util/protocol-types.rkt"
+         "trace-sink.rkt")
 
 (provide make-trace-logger
          trace-logger?
@@ -23,15 +25,20 @@
 ;; ============================================================
 
 (struct trace-logger
-        (bus session-dir enabled? [seq #:mutable] [sub-id #:mutable] [out-port #:mutable])
+        (bus session-dir
+             enabled?
+             [seq #:mutable]
+             [sub-id #:mutable]
+             [out-port #:mutable]
+             [sink #:mutable])
   #:transparent)
 
 ;; ============================================================
 ;; Constructor
 ;; ============================================================
 
-(define (make-trace-logger bus session-dir #:enabled? [enabled? #t])
-  (trace-logger bus session-dir enabled? 0 #f #f))
+(define (make-trace-logger bus session-dir #:enabled? [enabled? #t] #:sink [sink #f])
+  (trace-logger bus session-dir enabled? 0 #f #f sink))
 
 ;; ============================================================
 ;; Start / Stop
@@ -72,6 +79,9 @@
 ;; T02: Synchronous flush for deterministic testing.
 ;; Ensures all buffered trace writes are written to disk.
 (define (flush-trace-logger! logger)
+  (define sink (trace-logger-sink logger))
+  (when (and sink (object? sink))
+    (send sink trace-flush!))
   (define out (trace-logger-out-port logger))
   (when out
     (flush-output out)))
@@ -100,14 +110,23 @@
               (sanitize-for-json (event-payload evt))))
     ;; v0.15.1: Wrap write-json in error handler to prevent
     ;; partial writes from corrupting the JSONL file.
-    (with-handlers ([exn:fail? (lambda (e)
-                                 (log-warning
-                                  "trace-logger: skipping non-serializable event seq=~a: ~a"
-                                  seq
-                                  (exn-message e)))])
-      (write-json entry out)
-      (newline out)
-      (flush-output out))))
+    (define sink (trace-logger-sink logger))
+    (cond
+      [(and sink (object? sink))
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning "trace-logger: sink write error seq=~a: ~a"
+                                                 seq
+                                                 (exn-message e)))])
+         (send sink trace-write! entry))]
+      [out
+       (with-handlers ([exn:fail? (lambda (e)
+                                    (log-warning
+                                     "trace-logger: skipping non-serializable event seq=~a: ~a"
+                                     seq
+                                     (exn-message e)))])
+         (write-json entry out)
+         (newline out)
+         (flush-output out))])))
 
 ;; ============================================================
 ;; Helpers
