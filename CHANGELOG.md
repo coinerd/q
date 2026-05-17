@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.46.5 — 2026-05-18
+
+### Changed
+- **F6**: Added per-type `#:schema-version` clause to `define-typed-event` macro
+- **F6**: Added `current-event-schema-registry`, `register-event-schema-version!`, `lookup-event-schema-version` to `util/event-macro.rkt`
+- **F6**: `event-json.rkt` serialization now uses per-type schema version instead of global default
+
+### Added
+- `util/event-migration.rkt` — Per-type migration function registry with `run-event-migrations!`
+- `util/event-codec.rkt` now runs migrations before deserialization
+- `tests/test-schema-versioning.rkt` — 7 tests for per-type schema versioning
+- `tests/test-event-migration.rkt` — 5 tests for migration chaining
+
 ## v0.46.4 — 2026-05-18
 
 ### Changed
