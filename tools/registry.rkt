@@ -27,7 +27,8 @@
                        [list-tools-jsexpr (-> tool-registry? (listof hash?))]
                        [set-active-tools! (-> tool-registry? (or/c (listof string?) #f) void?)]
                        [tool-active? (-> tool-registry? string? boolean?)]
-                       [with-registry-lock (-> tool-registry? procedure? any)])
+                       [with-registry-lock (-> tool-registry? procedure? any)]
+                       [with-registry-snapshot (-> tool-registry? procedure? any)])
          tool-registry?)
 
 ;; ============================================================
@@ -50,6 +51,13 @@
 ;; same registry WILL deadlock. Do not nest lock acquisition.
 (define (with-registry-lock reg thunk)
   (call-with-semaphore (tool-registry-sem reg) thunk))
+
+;; F12: Snapshot-based read access — no lock held during thunk execution.
+;; Takes a shallow copy of the tools hash while locked, then calls thunk
+;; with the snapshot. Prevents callers from accidentally mutating the registry.
+(define (with-registry-snapshot reg thunk)
+  (define snapshot (with-registry-lock reg (lambda () (hash-copy (tool-registry-tools-box reg)))))
+  (thunk snapshot))
 
 (define (register-tool! reg t)
   (unless (tool? t)

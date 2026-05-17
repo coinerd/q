@@ -24,6 +24,13 @@
          "session-store-integrity.rkt"
          "session-store-tree.rkt")
 
+;; F11: Consumer/Admin tier split:
+;;   Consumer tier (always safe): append-entry!, load-session-log,
+;;     session-exists?, fork-session!, session naming
+;;   Admin tier (integrity tools): verify-hash-chain, repair-session-log!,
+;;     import-session!, migrate-session-log!
+;;   Both tiers are currently in one provide block.
+;;   A future refactor may split into submodules.
 (provide (contract-out [append-entry! (path-string? message? . -> . void?)]
                        [append-entries! (path-string? (listof message?) . -> . void?)]
                        [load-session-log (->* (path-string?) ((or/c #f string?)) (listof message?))]
