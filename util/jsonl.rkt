@@ -12,7 +12,7 @@
 (require racket/contract
          "../util/error-helpers.rkt")
 
-(provide (contract-out [jsonl-append! (-> path-string? any/c void?)]
+(provide (contract-out [jsonl-append! (->* (path-string? any/c) (#:format-header? boolean?) void?)]
                        [jsonl-write-to-port! (-> output-port? any/c void?)]
                        [jsonl-append-entries! (-> path-string? (listof any/c) void?)]
                        [jsonl-read-from-port
@@ -22,13 +22,20 @@
                        [jsonl-read-all-valid-with-count
                         (-> path-string? (values (listof any/c) exact-nonnegative-integer?))]
                        [jsonl-read-last (->* (path-string?) (exact-positive-integer?) (listof any/c))]
-                       [jsonl-line-valid? (-> any/c boolean?)]))
+                       [jsonl-line-valid? (-> any/c boolean?)]
+                       [jsonl-format-version exact-positive-integer?]
+                       [strip-format-header (-> (listof any/c) (listof any/c))]))
 (require json
          racket/port
          racket/string
          racket/file
          racket/list
          racket/path)
+
+;; ── Format versioning (F8) ──
+
+(define jsonl-format-version 1)
+(define jsonl-format-header (hasheq '__format "jsonl" 'version jsonl-format-version))
 
 ;; ── Line validation ──
 
@@ -47,12 +54,17 @@
   (write-json entry out)
   (newline out))
 
-(define (jsonl-append! path entry)
+(define (jsonl-append! path entry #:format-header? [add-header? #f])
   ;; Append a single jsexpr as one JSON line to file.
   ;; Creates the file (and parent dirs) if missing.
+  ;; When #:format-header? #t and file is new, prepends a format header.
   (ensure-parent-dirs! path)
+  (define file-existed? (file-exists? path))
   (call-with-output-file path
-                         (lambda (out) (jsonl-write-to-port! out entry))
+                         (lambda (out)
+                           (when (and add-header? (not file-existed?))
+                             (jsonl-write-to-port! out jsonl-format-header))
+                           (jsonl-write-to-port! out entry))
                          #:mode 'text
                          #:exists 'append))
 
@@ -157,6 +169,17 @@
                                         (with-safe-fallback #f
                                                             (read-json (open-input-string line))))))
                             #:mode 'text)))
+
+;; ── Format header detection (F8) ──
+
+(define (strip-format-header entries)
+  ;; Remove JSONL format header from a list of entries if present.
+  ;; Returns entries unchanged if no header found.
+  (if (and (pair? entries)
+           (hash? (car entries))
+           (equal? (hash-ref (car entries) '__format #f) "jsonl"))
+      (cdr entries)
+      entries))
 
 ;; ── Internal helpers ──
 
