@@ -452,6 +452,65 @@
      (reset-gsm!)
      (cleanup-tmp tmp))))
 
+;; ── v0.45.20 regression: /done fails when LLM skipped /wave-done ──
+;; BUG: auto-complete-inbox-waves! required at least one /wave-done completion.
+;; When LLM completed all waves but never called /wave-done, the guard
+;; (set-empty? completed) blocked auto-complete even though wave doc files
+;; proved execution happened. Fix: secondary guard checks wave docs exist.
+(test-case "auto-complete when LLM skipped /wave-done but wave docs exist"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with 3 waves, all [Inbox]
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Inbox] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: impl \u2192 waves/W1-impl.md\n- [Inbox] W2: test \u2192 waves/W2-test.md\n")
+     ;; Create all wave doc files (evidence of execution)
+     (write-wave! tmp 0 "setup" "Inbox" "Setup content")
+     (write-wave! tmp 1 "impl" "Inbox" "Impl content")
+     (write-wave! tmp 2 "test" "Inbox" "Test content")
+     ;; Set a wave executor (simulates /go having been called)
+     (gsm-set-wave-executor! 'fake-executor)
+     ;; Do NOT call gsm-mark-wave-complete! for any wave
+     ;; Do NOT transition to executing mode
+     ;; Sync should detect wave docs exist + executor → auto-complete
+     (sync-executor-to-plan! tmp)
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[DONE] W0:"))
+     (check-true (string-contains? plan-text "[DONE] W1:"))
+     (check-true (string-contains? plan-text "[DONE] W2:"))
+     (check-true (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
+(test-case "no auto-complete when no wave docs and no completions"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with 2 waves, all [Inbox]
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Inbox] W0: setup \u2192 waves/W0-setup.md\n- [Inbox] W1: impl \u2192 waves/W1-impl.md\n")
+     ;; Do NOT create wave doc files
+     ;; Do NOT set wave executor
+     ;; Do NOT mark any wave complete
+     (sync-executor-to-plan! tmp)
+     ;; Waves should stay [Inbox]
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[Inbox] W0:"))
+     (check-true (string-contains? plan-text "[Inbox] W1:"))
+     (check-false (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
 (test-case "ensure-state-md! does not overwrite existing STATE.md"
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind void
