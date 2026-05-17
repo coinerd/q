@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.46.6 — 2026-05-18
+
+### Changed
+- **F14**: Added `shared-command` and `command-result` structs to `util/command-types.rkt` for cross-subsystem type sharing
+- **F14**: Added `cmd-entry` struct and `register-command!`/`lookup-command` to `util/command-types.rkt` (extracted from palette.rkt)
+- **F9**: Created `runtime/trace-sink.rkt` with `trace-sink<%>` interface and file/port/null implementations
+- **F9**: `trace-logger.rkt` now accepts optional `#:sink` parameter for dependency injection
+- **F11**: Added consumer/admin tier split documentation to `runtime/session-store.rkt`
+- **F12**: Added `with-registry-snapshot` to `tools/registry.rkt` for lock-free read access
+
+### Added
+- `tests/test-command-types.rkt` — 4 tests for shared command types
+- `tests/test-trace-sink.rkt` — 4 tests for trace sink protocol
+- `tests/test-registry-snapshot.rkt` — 2 tests for snapshot isolation
+
 ## v0.46.5 — 2026-05-18
 
 ### Changed
