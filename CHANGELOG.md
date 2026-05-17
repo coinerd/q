@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.45.20 — 2026-05-14
+
+### Fixed
+- **BUG**: GSD `/done` auto-complete guard was too strict — when LLM completed all waves
+  but never called `/wave-done`, the completed set stayed empty and auto-complete never
+  fired. Added secondary evidence: if wave executor exists AND all wave doc files are
+  present on disk, auto-complete fires. (F0)
+- **F2**: `spawn-subagent.rkt` imported `agent/event-emitter.rkt` directly (layer
+  violation). Changed to import through `runtime/runtime-helpers.rkt`.
+- **F1**: Removed dead `symbol?` branch from `event-publisher` contract in `tool.rkt`.
+- **F3**: Tightened `build-session-context-for-prompt` contract from `(or/c string? list?)`
+  to `(or/c string? message?)` to match actual implementation.
+- **F5**: Removed unused `racket/port` import from `spawn-subagent.rkt`.
+- **F6**: Fixed `exec-context.rkt` `runtime-settings` contract to accept `hash?` —
+  both production code and tests pass raw hashes (fixed 10 pre-existing test failures).
+- **F7**: Tightened `run-prompt!` and `run-prompt-internal` contracts from `any/c` to
+  `message?` for better downstream guarantees.
+
+### Added
+- Regression tests for GSD `/done` bug (positive + negative cases).
+- `F4` test verifying spawn-subagent's 2-arg event-publisher calling convention.
+
 ## v0.45.19 — 2026-05-17
 
 ### Fixed
