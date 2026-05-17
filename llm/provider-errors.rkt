@@ -13,7 +13,8 @@
 ;;   'server           — HTTP 5xx
 ;;   'network          — DNS failure, connection refused
 
-(require racket/contract)
+(require racket/contract
+         (only-in "../util/errors.rkt" q-error q-error?))
 
 (provide (struct-out provider-error)
          provider-error?
@@ -27,7 +28,7 @@
 ;; ============================================================
 
 ;; Subtype of exn:fail with structured metadata.
-(struct provider-error exn:fail (status-code category) #:transparent)
+(struct provider-error q-error (status-code category) #:transparent)
 
 ;; ============================================================
 ;; Constructor helper
@@ -35,7 +36,7 @@
 
 ;; Raise a provider-error with the given category and optional HTTP status code.
 (define (raise-provider-error message category [status-code #f])
-  (raise (provider-error message (current-continuation-marks) status-code category)))
+  (raise (provider-error message (current-continuation-marks) (hash) status-code category)))
 
 ;; ============================================================
 ;; HTTP status → category mapping
@@ -48,6 +49,7 @@
     [(not (and (exact-integer? status-code) (>= status-code 400))) #f]
     [(= status-code 401) 'auth]
     [(= status-code 403) 'auth]
+    [(= status-code 413) 'context-overflow]
     [(= status-code 429) 'rate-limit]
     [(>= status-code 500) 'server]
     [else 'network]))

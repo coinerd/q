@@ -15,7 +15,9 @@
   (log-warning (format "DEPRECATED: ~a (will be removed in ~a).~a"
                        symbol-name
                        removal-version
-                       (if extra-notes (format " ~a" extra-notes) ""))))
+                       (if extra-notes
+                           (format " ~a" extra-notes)
+                           ""))))
 
 ;; Error structs and constructors
 (provide warn-deprecated!
@@ -39,7 +41,6 @@
 
 ;; Base error type for all q domain errors
 (struct q-error exn:fail (context) #:transparent)
-
 
 ;; Tool execution errors
 (struct tool-error q-error (tool-name) #:transparent)

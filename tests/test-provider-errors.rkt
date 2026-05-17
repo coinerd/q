@@ -4,7 +4,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../llm/provider-errors.rkt")
+         "../llm/provider-errors.rkt"
+         "../util/errors.rkt")
 
 (define provider-error-tests
   (test-suite "provider-errors"
@@ -30,6 +31,22 @@
 
     (test-case "classify-http-status falls back to network for unknown 4xx"
       (check-equal? (classify-http-status 418) 'network))
+
+    (test-case "provider-error is q-error subtype"
+      (with-handlers ([provider-error? (lambda (e)
+                                         (check-true (q-error? e) "provider-error should be q-error")
+                                         (check-true (provider-error? e)))])
+        (raise-provider-error "test" 'timeout)
+        (check-false "should not reach here")))
+
+    (test-case "provider-error context field accessible via q-error"
+      (with-handlers ([provider-error? (lambda (e) (check-true (hash? (q-error-context e))))]
+                      [exn:fail? (lambda (e) (check-true (provider-error? e)))])
+        (raise-provider-error "test" 'timeout)
+        (check-false "should not reach here")))
+
+    (test-case "classify-http-status handles 413 context-overflow"
+      (check-equal? (classify-http-status 413) 'context-overflow))
 
     (test-case "raise-provider-error without status-code"
       (with-handlers ([provider-error? (lambda (e)
