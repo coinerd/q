@@ -12,8 +12,8 @@
          exec-context?
          (contract-out [make-exec-context
                         (->* ()
-                             (#:working-directory (or/c path-string?
-                                                        #f) ; path-string? covers path? and string?
+                             ;; path-string? covers both path? and string?
+                             (#:working-directory (or/c path-string? #f)
                                                   #:cancellation-token (or/c cancellation-token? #f)
                                                   #:event-publisher (or/c procedure? #f)
                                                   #:runtime-settings (or/c hash? q-settings? #f)
