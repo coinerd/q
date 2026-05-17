@@ -7,7 +7,8 @@
 ;; enumerated as data, and the TRANSITIONS table maps (state, event) pairs
 ;; to next states. Unknown transitions raise explicit errors.
 
-(require racket/match)
+(require racket/match
+         (only-in "../../util/fsm.rkt" make-fsm fsm-lookup fsm-valid-transition?))
 
 ;; States
 (provide iteration-state?
@@ -105,11 +106,21 @@
 
 ;; ── Transition lookup ──
 
+;; fsm machine instance for lookup
+(define iteration-machine
+  (make-fsm '(idle provider-turn tool-exec decision complete retrying aborted)
+            '(start-loop model-response
+                         tool-result
+                         tool-calls-present
+                         termination-reason
+                         hook-block
+                         error
+                         retry-requested
+                         cancel)
+            TRANSITIONS))
+
 (define (find-transition state-sym event-sym)
-  (for/or ([entry (in-list TRANSITIONS)])
-    (match entry
-      [`((,s . ,e) . ,next) (and (eq? s state-sym) (eq? e event-sym) next)]
-      [_ #f])))
+  (fsm-lookup iteration-machine state-sym event-sym))
 
 (define (next-iteration-state state event)
   (define state-sym (state->symbol state))
@@ -128,6 +139,4 @@
     [else (error 'next-iteration-state "unknown state: ~a" next-sym)]))
 
 (define (valid-transition? state event)
-  (define state-sym (state->symbol state))
-  (define event-sym (iteration-event->symbol event))
-  (and (find-transition state-sym event-sym) #t))
+  (fsm-valid-transition? iteration-machine (state->symbol state) (iteration-event->symbol event)))
