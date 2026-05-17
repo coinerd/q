@@ -540,6 +540,39 @@
      (reset-gsm!)
      (cleanup-tmp tmp))))
 
+;; L2: Auto-complete requires ALL wave docs, not just some.
+;; 3 waves with only 2 docs should NOT trigger auto-complete.
+(test-case "no auto-complete when partial wave docs exist (L2)"
+  (reset-gsm!)
+  (define tmp (make-tmp-planning-dir))
+  (dynamic-wind
+   void
+   (lambda ()
+     ;; Create plan with 3 waves, all [Inbox]
+     (write-plan!
+      tmp
+      #:status-lines
+      "- [Inbox] W0: setup → waves/W0-setup.md
+- [Inbox] W1: impl → waves/W1-impl.md
+- [Inbox] W2: test → waves/W2-test.md
+")
+     ;; Create only 2 of 3 wave doc files
+     (write-wave! tmp 0 "setup" "Inbox" "Setup content")
+     (write-wave! tmp 1 "impl" "Inbox" "Impl content")
+     ;; W2 doc intentionally missing
+     ;; Set a wave executor (simulates /go having been called)
+     (gsm-set-wave-executor! 'fake-executor)
+     (sync-executor-to-plan! tmp)
+     ;; Waves should stay [Inbox] — partial docs are not enough
+     (define plan-text (file->string (build-path tmp ".planning" "PLAN.md")))
+     (check-true (string-contains? plan-text "[Inbox] W0:"))
+     (check-true (string-contains? plan-text "[Inbox] W1:"))
+     (check-true (string-contains? plan-text "[Inbox] W2:"))
+     (check-false (all-waves-complete? tmp)))
+   (lambda ()
+     (reset-gsm!)
+     (cleanup-tmp tmp))))
+
 (test-case "ensure-state-md! does not overwrite existing STATE.md"
   (define tmp (make-tmp-planning-dir))
   (dynamic-wind void

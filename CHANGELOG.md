@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.45.21 — 2026-05-14
+
+### Fixed
+- **H1**: Extracted `tool-registry` struct to `util/tool-registry-types.rkt`, breaking the runtime→tools reverse dependency layer violation
+- **N2**: Re-exported `make-event-bus` from `runtime/runtime-helpers.rkt` to fix tools→agent layer violation in `spawn-subagent.rkt`
+- **N3**: Replaced fragile `struct->vector` reflection in `rt-settings-ref` with proper `setting-ref` API from `runtime/settings.rkt`
+- **N4**: Widened SDK `run-prompt!` contract to accept `message?` in addition to `string?`
+- **N1**: Added negative test — wave docs without executor must not trigger auto-complete
+- **N5**: Added deep event-publisher tests verifying event capture via bus subscription
+- **L2**: Added partial wave docs test — 3 waves with 2 docs must not trigger auto-complete
+
+
 ## v0.45.20 — 2026-05-14
 
 ### Fixed
