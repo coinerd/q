@@ -18,6 +18,7 @@
          gsd-failed?)
 
 ;; Structured command result replacing ad-hoc hasheq responses.
+;; NOTE: For new code, prefer shared command-result from util/command-types.rkt (F14).
 (struct gsd-command-result
         (success    ; boolean
          mode       ; symbol (current GSD state after command)

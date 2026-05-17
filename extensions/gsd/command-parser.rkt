@@ -8,7 +8,8 @@
 
 (require racket/match
          racket/string
-         (only-in "../../util/command-helpers.rkt" extract-cmd-args))
+         (only-in "../../util/command-helpers.rkt" extract-cmd-args)
+         (only-in "../../util/command-types.rkt" shared-command shared-command?))
 
 (provide (struct-out parsed-gsd-command)
          (struct-out gsd-cmd-go)
