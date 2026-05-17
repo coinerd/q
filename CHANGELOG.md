@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.46.2 — 2026-05-18
+
+### Changed
+- **F7**: Replaced if/when migration chain with data-driven migration registry in `session-migration.rkt` — adding a new migration is now a single `register-migration!` call
+- **F8**: Added JSONL format version header support — `jsonl-append!` accepts `#:format-header? #t`, plus `strip-format-header` for read-side
+
+### Added
+- `register-migration!` / `run-migrations!` exported from `session-migration.rkt`
+- `jsonl-format-version`, `strip-format-header` exported from `jsonl.rkt`
+- `test-session-migration.rkt` — 2 new registry tests (10 total)
+- `test-jsonl-format-version.rkt` — 7 format header tests
+
 ## v0.46.1 — 2026-05-18
 
 ### Changed
