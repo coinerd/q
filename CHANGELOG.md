@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.46.7 — 2026-05-18
+
+### Changed
+- **F1**: Created `agent/effect-types.rkt` with effect descriptor struct union (emit-event, update-fsm, dispatch-hook, stream-from-provider, none) and `execute-effects!` executor
+- **F1**: Created `agent/loop-phases.rkt` with pure phase functions (phase-emit-start, phase-build-context, phase-build-request, phase-pre-hook) returning `(values result (listof effect?))`
+- **F2**: Created `runtime/iteration/effect-executor.rkt` with step-effect descriptors (append-entries, emit-event, execute-tools, maybe-compact) and `run-step-effects!` executor
+
+### Added
+- `tests/test-effect-types.rkt` — 6 tests for effect descriptors
+- `tests/test-loop-phases.rkt` — 4 tests for pure phase functions
+- `tests/test-effect-executor.rkt` — 5 tests for step effect executor
+
 ## v0.46.6 — 2026-05-18
 
 ### Changed
