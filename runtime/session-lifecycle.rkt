@@ -65,14 +65,14 @@
 
 (provide (contract-out
           [run-prompt!
-           (->* (agent-session? (or/c string? any/c))
+           (->* (agent-session? (or/c string? message?))
                 (#:max-iterations (or/c exact-nonnegative-integer? #f)
                                   #:ensure-persisted! (or/c procedure? #f)
                                   #:buffer-or-append! (or/c procedure? #f))
                 any)]
           [run-prompt-internal
            (-> agent-session?
-               (or/c string? any/c)
+               (or/c string? message?)
                (or/c exact-nonnegative-integer? #f)
                (or/c exact-nonnegative-integer? #f)
                (or/c procedure? #f)

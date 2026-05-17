@@ -10,7 +10,6 @@
 ;; #1203/#1204: Real provider injection — uses parent's provider
 
 (require racket/list
-         racket/port
          racket/string
          "../../tools/tool.rkt"
          "../../agent/event-bus.rkt"
