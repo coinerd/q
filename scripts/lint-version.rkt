@@ -192,6 +192,43 @@
                (list f (first m) (second m))))))
 
 ;; ---------------------------------------------------------------------------
+;; CHANGELOG integrity check (AX1-NEW-1 corruption guard)
+;; ---------------------------------------------------------------------------
+
+(define MIN-UNIQUE-VERSIONS 50)
+
+(define (check-changelog-integrity)
+  ;; Validate CHANGELOG.md has sufficient unique version headers.
+  ;; Returns list of errors (empty = OK).
+  (define changelog-path (build-path (current-directory) "CHANGELOG.md"))
+  (cond
+    [(not (file-exists? changelog-path))
+     (displayln "  WARN: CHANGELOG.md not found")
+     '()]
+    [else
+     (define content (file->string changelog-path))
+     (define lines (string-split content "\n"))
+     (define versions
+       (for/list ([line (in-list lines)])
+         (define m (regexp-match #rx"^## v([0-9]+\\.[0-9]+\\.[0-9]+)" line))
+         (and m (cadr m))))
+     (define unique (remove-duplicates (filter (lambda (x) x) versions)))
+     (printf "  CHANGELOG.md: ~a unique version headers~n" (length unique))
+     (cond
+       [(< (length unique) MIN-UNIQUE-VERSIONS)
+        (printf
+         "  ERROR: CHANGELOG.md appears corrupted (< ~a unique versions). ~
+                 Historical entries may have been overwritten.~n"
+         MIN-UNIQUE-VERSIONS)
+        (list (list changelog-path
+                    0
+                    (format "~a unique versions (< ~a)" (length unique) MIN-UNIQUE-VERSIONS)
+                    (format ">= ~a unique versions" MIN-UNIQUE-VERSIONS)))]
+       [else
+        (displayln "  CHANGELOG integrity: OK")
+        '()])]))
+
+;; ---------------------------------------------------------------------------
 ;; Main
 ;; ---------------------------------------------------------------------------
 
@@ -217,10 +254,13 @@
   (displayln "Checking README.md ...")
   (define readme-errors (check-readme-badge canonical))
 
+  (displayln "Checking CHANGELOG integrity ...")
+  (define changelog-errors (check-changelog-integrity))
+
   (displayln "Checking .md files ...")
   (define md-errors (check-md-files canonical))
 
-  (define errors (append info-errors readme-errors md-errors))
+  (define errors (append info-errors readme-errors changelog-errors md-errors))
 
   ;; --- Report ---
   (displayln "---")

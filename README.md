@@ -275,8 +275,8 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 587 |
-| Source modules | 429 |
-| Source lines | 66087 |
+| Source modules | 430 |
+| Source lines | 66378 |
 | Test lines | 103895 |
 | Test assertions | 16195 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
@@ -413,306 +413,309 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.45.22** — Fixed
-
-**v0.45.22** — Added
 
 **v0.45.22** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.21** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.16** — Added
 
-**v0.45.22** — Added
+**v0.45.14** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.13** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.12** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.11** — Added
 
-**v0.45.22** — Fixed
+**v0.45.11** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.11** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.5** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.4** — Fixed
 
-**v0.45.22** — Fixed
+**v0.45.3** — Fixed
 
-**v0.45.22** — Changed
+**v0.45.2** — Fixed
 
-**v0.45.22** — Changed
+**v0.45.1** — Fixed
 
-**v0.45.22** — Changed
+**v0.45.0** — Fixed
 
-**v0.45.22** — Changed
+**v0.44.3** — Changed
 
-**v0.45.22** — Added
+**v0.44.2** — Changed
 
-**v0.45.22** — Added
+**v0.44.1** — Changed
 
-**v0.45.22** — Added
+**v0.44.0** — Changed
 
-**v0.45.22** — Changed
+**v0.43.4** — Added
 
-**v0.45.22** — Fixed
+**v0.43.3** — Added
 
-**v0.45.22** — Added
+**v0.43.2** — Added
 
-**v0.45.22** — Added
+**v0.43.0** — Changed
 
-**v0.45.22** — Fixed
+**v0.42.4** — Fixed
 
-**v0.45.22** — Changed
+**v0.42.3** — Added
 
-**v0.45.22** — Added
+**v0.42.2** — Added
 
-**v0.45.22** — Changed
+**v0.41.4** — Fixed
 
-**v0.45.22** — Fixed
+**v0.41.3** — Changed
 
-**v0.45.22** — Fixed
+**v0.39.10** — Added
 
-**v0.45.22** — Fixed
+**v0.39.9** — Changed
 
-**v0.45.22** — Goal: Audit Remediation — fix 8 compile regressions, struct-safety, test coverage
+**v0.39.8** — Fixed
 
-**v0.45.22** — Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
+**v0.38.13** — Fixed
 
-**v0.45.22** — Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
+**v0.38.9** — Fixed
 
-**v0.45.22** — Goal: Extension & GSD Cleanup (Milestone 5 of v0.38.x)
+**v0.38.8** — Goal: Audit Remediation — fix 8 compile regressions, struct-safety, test coverage
 
-**v0.45.22** — Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization
+**v0.38.7** — Goal: Runtime Loop Config Struct & Event DSL Polish (Milestone 8 of v0.38.x)
 
-**v0.45.22** — Goal: Audit Remediation — Test Gaps + Dead Code + Contract Tightening
+**v0.38.6** — Goal: TUI State Decomposition Part 2 (Milestone 7 of v0.38.x)
 
-**v0.45.22** — Goal: Audit Remediation — Contract Fixes + Dead Code + Test Gaps
+**v0.38.5** — Goal: Extension & GSD Cleanup (Milestone 5 of v0.38.x)
 
-**v0.45.22** — Goal: Error Classification & Exception Hygiene (M-11, L-07, L-09)
+**v0.38.5** — Goal: Audit Remediation — Comment Cleanup + Import + Test Optimization
 
-**v0.45.22** — Goal: Module Boundary Hardening (M-06, M-07, M-14, L-02)
+**v0.36.9** — Goal: Audit Remediation — Test Gaps + Dead Code + Contract Tightening
 
-**v0.45.22** — Goal: TUI State Decomposition (H-06, M-08, M-09, L-01, L-05)
+**v0.36.8** — Goal: Audit Remediation — Contract Fixes + Dead Code + Test Gaps
 
-**v0.45.22** — Goal: Tool System Data Representation (M-03, M-04, M-13)
+**v0.36.7** — Goal: Error Classification & Exception Hygiene (M-11, L-07, L-09)
 
-**v0.45.22** — Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)
+**v0.36.6** — Goal: Module Boundary Hardening (M-06, M-07, M-14, L-02)
 
-**v0.45.22** — Goal: GSD Concurrency & State Safety (H-03, H-05)
+**v0.36.5** — Goal: TUI State Decomposition (H-06, M-08, M-09, L-01, L-05)
 
-**v0.45.22** — Goal: Security & Runtime Contracts (H-02, L-08, L-10)
+**v0.36.4** — Goal: Tool System Data Representation (M-03, M-04, M-13)
 
-**v0.45.22** — Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)
+**v0.36.3** — Goal: Context Assembly Purity (H-04, M-02, M-05, L-03, L-04)
 
-**v0.45.22** — Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
+**v0.36.2** — Goal: GSD Concurrency & State Safety (H-03, H-05)
 
-**v0.45.22** — Goal: Deep Audit Remediation (N-01–N-13, I-07)
+**v0.36.1** — Goal: Security & Runtime Contracts (H-02, L-08, L-10)
 
-**v0.45.22** — Goal: Extension & GSD Cleanup (v0.45.22 milestone — FINAL)
+**v0.36.0** — Goal: Event Serialization Auto-Generation (H-01, M-10, M-12, L-06)
 
-**v0.45.22** — Goal: Agent Session Invariants (v0.45.22 milestone)
+**v0.35.9** — Goal: Hotfix — Deadlock + Arity Crash + Dead Code Cleanup
 
-**v0.45.22** — Goal: Tool System Contracts & DSL (v0.45.22 milestone)
+**v0.35.8** — Goal: Deep Audit Remediation (N-01–N-13, I-07)
 
-**v0.45.22** — Goal: TUI Dispatcher Refactoring (v0.45.22 milestone)
+**v0.35.7** — Goal: Extension & GSD Cleanup (v0.35.7 milestone — FINAL)
 
-**v0.45.22** — Goal: Iteration Loop Decomposition (v0.45.22 milestone)
+**v0.35.6** — Goal: Agent Session Invariants (v0.35.6 milestone)
 
-**v0.45.22** — Goal: Runtime Config Struct & Scheduler Types (v0.45.22 milestone)
+**v0.35.5** — Goal: Tool System Contracts & DSL (v0.35.5 milestone)
 
-**v0.45.22** — Goal: Global State Isolation (v0.45.22 milestone)
+**v0.35.4** — Goal: TUI Dispatcher Refactoring (v0.35.4 milestone)
 
-**v0.45.22** — Goal: Event System Integrity (v0.45.22 milestone)
+**v0.35.3** — Goal: Iteration Loop Decomposition (v0.35.3 milestone)
 
-**v0.45.22** — Goal: Documentation integrity fixes (v0.45.22 findings)
+**v0.35.2** — Goal: Runtime Config Struct & Scheduler Types (v0.35.2 milestone)
 
-**v0.45.22** — Deep Audit Remediation Round 2
+**v0.35.1** — Goal: Global State Isolation (v0.35.1 milestone)
 
-**v0.45.22** — Deep Audit Remediation
+**v0.35.0** — Goal: Event System Integrity (v0.35.0 milestone)
 
-**v0.45.22** — Architecture Decomposition (A-01, A-02)
+**v0.34.9** — Goal: Documentation integrity fixes (v0.34.8 findings)
 
-**v0.45.22** — Docs/Lint Remediation + Contract Quick Wins + Test Hygiene
+**v0.34.8** — Deep Audit Remediation Round 2
 
-**v0.45.22** — Session Boundary Encapsulation (RA-05)
+**v0.34.7** — Deep Audit Remediation
 
-**v0.45.22** — Deep Audit Remediation
+**v0.34.6** — Architecture Decomposition (A-01, A-02)
 
-**v0.45.22** — Deep Audit Remediation
+**v0.34.5** — Docs/Lint Remediation + Contract Quick Wins + Test Hygiene
 
-**v0.45.22** — Hotfix — Critical Audit Findings from v0.45.22
+**v0.34.4** — Session Boundary Encapsulation (RA-05)
 
-**v0.45.22** — Audit Remediation (v0.45.22)
+**v0.34.0** — Deep Audit Remediation
 
-**v0.45.22** — Test Regression Fix (v0.45.22-W0)
+**v0.33.7** — Deep Audit Remediation
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.33.6** — Hotfix — Critical Audit Findings from v0.33.5
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.33.5** — Audit Remediation (v0.33.5)
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.32.11** — Test Regression Fix (v0.32.11-W0)
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.32.9** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.32.0** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.31.18** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Architecture Abstraction Roadmap Remediation (v0.45.22-W0)
+**v0.31.17** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Architecture Abstraction: HOF Combinators for Hook System
+**v0.31.16** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Test Regression Fix + Contract Repair + Event Migration
+**v0.31.15** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Audit Remediation + Test Coverage + Cleanup
+**v0.31.12** — Architecture Abstraction Roadmap Remediation (v0.31.13-W0)
 
-**v0.45.22** — Audit Remediation + Struct Refactor + Completion
+**v0.30.16** — Architecture Abstraction: HOF Combinators for Hook System
 
-**v0.45.22** — Warning Remediation + Event Wiring + Fan-in Reduction
+**v0.30.14** — Test Regression Fix + Contract Repair + Event Migration
 
-**v0.45.22** — Audit Remediation + Deferred Event Adoption
+**v0.29.17** — Audit Remediation + Test Coverage + Cleanup
 
-**v0.45.22** — Architecture Remediation + Event Adoption Phase 1
+**v0.29.16** — Audit Remediation + Struct Refactor + Completion
 
-**v0.45.22** — Test Health Restoration
+**v0.29.16** — Warning Remediation + Event Wiring + Fan-in Reduction
 
-**v0.45.22** — Audit Remediation (v0.45.22–v0.45.22 Findings)
+**v0.29.14** — Audit Remediation + Deferred Event Adoption
 
-**v0.45.22** — Architecture Re-Audit (Verification Gate)
+**v0.29.13** — Architecture Remediation + Event Adoption Phase 1
 
-**v0.45.22** — Contract Tightening + Cleanup
+**v0.29.12** — Test Health Restoration
 
-**v0.45.22** — Production Wiring
+**v0.29.11** — Audit Remediation (v0.29.7–v0.29.10 Findings)
 
-**v0.45.22** — Test Suite Restoration
+**v0.29.10** — Architecture Re-Audit (Verification Gate)
 
-**v0.45.22** — Tool Middleware HOF + Facade Curation
+**v0.29.9** — Contract Tightening + Cleanup
 
-**v0.45.22** — Stream Purity + DI Cleanup
+**v0.29.8** — Production Wiring
 
-**v0.45.22** — Runtime State Encapsulation
+**v0.29.7** — Test Suite Restoration
 
-**v0.45.22** — Typed Racket at Provider Boundary
+**v0.29.6** — Tool Middleware HOF + Facade Curation
 
-**v0.45.22** — Event Struct Adoption
+**v0.29.5** — Stream Purity + DI Cleanup
 
-**v0.45.22** — Match Dispatch + Pure Decisions
+**v0.29.4** — Runtime State Encapsulation
 
-**v0.45.22** — Contract Boundaries
+**v0.29.3** — Typed Racket at Provider Boundary
 
-**v0.45.22** — Data Corrections + CHANGELOG Date Validator
+**v0.29.2** — Event Struct Adoption
 
-**v0.45.22** — Audit Remediation — Permanent Tooling Automation
+**v0.29.1** — Match Dispatch + Pure Decisions
 
-**v0.45.22** — Status Restoration + Tooling Hardening
+**v0.29.0** — Contract Boundaries
+
+**v0.28.28** — Data Corrections + CHANGELOG Date Validator
+
+**v0.28.27** — Audit Remediation — Permanent Tooling Automation
+
+**v0.28.26** — Status Restoration + Tooling Hardening
 
 <!-- DO NOT EDIT: Status section managed by sync-readme-status.rkt -->
 
-**v0.45.22** — GSD Pin Wiring + Tests. Wire gsd-pin flag into GSD wave-done and done handlers. 12 isolated unit tests for gsd-progress-message?. Expanded regex fallback for GSD patterns.
+**v0.45.1** — GSD Pin Wiring + Tests. Wire gsd-pin flag into GSD wave-done and done handlers. 12 isolated unit tests for gsd-progress-message?. Expanded regex fallback for GSD patterns.
 
-**v0.45.22** — Summary Injection Fix. Inject computed summary into LLM context when messages are excluded. Fix hash-ref on context-summary struct.
+**v0.45.0** — Summary Injection Fix. Inject computed summary into LLM context when messages are excluded. Fix hash-ref on context-summary struct.
 
 
-**v0.45.22** — Audit Remediation — Docs Integrity + Tooling Hardening
+**v0.28.25** — Audit Remediation — Docs Integrity + Tooling Hardening
 
-**v0.45.22** — Audit Remediation (7 Warnings from v0.45.22). GSD role guard prevents false-positive pinning from user messages. `make-text-part` canonicalized in tool summarization. `check-mid-turn-budget!` split into `estimate-mid-turn-tokens` + `maybe-compact-mid-turn`. Integration tests with mock agent-session.
+**v0.28.24** — Audit Remediation (7 Warnings from v0.28.22). GSD role guard prevents false-positive pinning from user messages. `make-text-part` canonicalized in tool summarization. `check-mid-turn-budget!` split into `estimate-mid-turn-tokens` + `maybe-compact-mid-turn`. Integration tests with mock agent-session.
 
-**v0.45.22** — Context Loop Prevention Wiring. Mid-turn compaction wired into iteration loop (session threading). Exploration loop detection emits `iteration.exploration-loop` event. GSD progress auto-detected and pinned in Tier A. 3 critical findings from v0.45.22 resolved.
+**v0.28.22** — Context Loop Prevention Wiring. Mid-turn compaction wired into iteration loop (session threading). Exploration loop detection emits `iteration.exploration-loop` event. GSD progress auto-detected and pinned in Tier A. 3 critical findings from v0.28.21 resolved.
 
-**v0.45.22** — TUI Thinking Leak Fix + Context Circular Loop Prevention. Thinking persisted as transcript entries on tool-call turns. Cyan dim italic styling with truncation. Dynamic Tier-B sizing. Tool result summarization (>8000 chars). Exploration loop detection. GSD progress pinning. Mid-turn compaction trigger.
+**v0.28.21** — TUI Thinking Leak Fix + Context Circular Loop Prevention. Thinking persisted as transcript entries on tool-call turns. Cyan dim italic styling with truncation. Dynamic Tier-B sizing. Tool result summarization (>8000 chars). Exploration loop detection. GSD progress pinning. Mid-turn compaction trigger.
 
-**v0.45.22** — Audit Remediation + Pre-existing Test Fixes. Fix README corruption guard, `check-provider-status!` arity in 4 test files, ADR completion, test-types keyword fix.
+**v0.28.12** — Audit Remediation + Pre-existing Test Fixes. Fix README corruption guard, `check-provider-status!` arity in 4 test files, ADR completion, test-types keyword fix.
 
-**v0.45.22** — Audit Remediation. Fix 9 findings from v0.45.22–v0.45.22 audit: TR type fixes (time/session-id), README version restoration, telemetry migration, event codec type-tags, hook violation events, GitHub helper dedup, ADR update, metrics fix.
+**v0.28.11** — Audit Remediation. Fix 9 findings from v0.28.6–v0.28.10 audit: TR type fixes (time/session-id), README version restoration, telemetry migration, event codec type-tags, hook violation events, GitHub helper dedup, ADR update, metrics fix.
 
-**v0.45.22** — Audit Remediation. TUI core rendering fixes (highlight arity, wrapping, scroll, ANSI, CJK word-breaking), context trace done event with memo-hits, overflow detection consolidation. 4 issues across 2 waves.
+**v0.27.3** — Audit Remediation. TUI core rendering fixes (highlight arity, wrapping, scroll, ANSI, CJK word-breaking), context trace done event with memo-hits, overflow detection consolidation. 4 issues across 2 waves.
 
-**v0.45.22** — Audit Tooling Quality & Test Coverage. Audit script fixes (safe reads, skip-lists, help flag, no double scan), test expansion (+19 tests), with-handlers noise fix, tooling docs, decomposition fitness tests. 3 issues across 3 waves.
+**v0.25.2** — Audit Tooling Quality & Test Coverage. Audit script fixes (safe reads, skip-lists, help flag, no double scan), test expansion (+19 tests), with-handlers noise fix, tooling docs, decomposition fitness tests. 3 issues across 3 waves.
 
-**v0.45.22** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
+**v0.21.9** — Execution Architecture Improvements. `delete-lines` tool, `/wave-done` command, planning path resolution hardening, backup timestamp fix. 4 issues across 4 waves.
 
-**v0.45.22** — GSD Plan Archival + Execution Polish. `/done` command, PLAN.md status auto-update, STATE.md auto-creation, TUI archive notification, iteration label fix, edit chunking guidance. 10 issues across 4 waves.
+**v0.21.8** — GSD Plan Archival + Execution Polish. `/done` command, PLAN.md status auto-update, STATE.md auto-creation, TUI archive notification, iteration label fix, edit chunking guidance. 10 issues across 4 waves.
 
-**v0.45.22** — Security Hardening + GSD Parser Fix. Path traversal guard (safe-manifest-file-path?), backtick stripping (clean-file-path), checksum enforcement, safe-mode canonicalization (resolve-path + boundary matching), OAuth stub predicate, planning prompt hardening. 14 issues across 4 waves.
-**v0.45.22** — GSD Planning Architecture Remediation. Thread-safe state (semaphores), visible budget warnings (tool-result-post), lifecycle management (session-shutdown hook), prompt constants, artifact registry expansion, 176 GSD tests. 13 findings resolved across 6 waves.
-**v0.45.22** — Audit Remediation. Typed event bridge, HTTP helper consolidation, CI version matrix, security hardening, dead code removal, documentation consistency, layer extraction, protocol types split, sandbox config extraction. 44 findings resolved across 10 waves.
+**v0.21.7** — Security Hardening + GSD Parser Fix. Path traversal guard (safe-manifest-file-path?), backtick stripping (clean-file-path), checksum enforcement, safe-mode canonicalization (resolve-path + boundary matching), OAuth stub predicate, planning prompt hardening. 14 issues across 4 waves.
+**v0.20.2** — GSD Planning Architecture Remediation. Thread-safe state (semaphores), visible budget warnings (tool-result-post), lifecycle management (session-shutdown hook), prompt constants, artifact registry expansion, 176 GSD tests. 13 findings resolved across 6 waves.
+**v0.19.6** — Audit Remediation. Typed event bridge, HTTP helper consolidation, CI version matrix, security hardening, dead code removal, documentation consistency, layer extraction, protocol types split, sandbox config extraction. 44 findings resolved across 10 waves.
 
-**v0.45.22** — Self-Hosting Workflow Gaps. Extension tool registration fix (register-tools hook passes proper extension-ctx). Subagent tool execution (children get 7 tools + recursive dispatch). Slash commands (/milestone, /issue, /pr, /fmt, /check, /expand). 5300+ tests.
+**v0.19.5** — Self-Hosting Workflow Gaps. Extension tool registration fix (register-tools hook passes proper extension-ctx). Subagent tool execution (children get 7 tools + recursive dispatch). Slash commands (/milestone, /issue, /pr, /fmt, /check, /expand). 5300+ tests.
 
-**v0.45.22** — Exploration & Generation Robustness. Soft/hard iteration limits, context-aware retry messages, exploration progress hints, adaptive stream timeout, mid-turn token budget check. Architecture boundary fixes: TUI mock-provider lift, resource-discovery move, session-switch DI. Zero TUI layer violations. 5365 tests.
+**v0.14.0** — Exploration & Generation Robustness. Soft/hard iteration limits, context-aware retry messages, exploration progress hints, adaptive stream timeout, mid-turn token budget check. Architecture boundary fixes: TUI mock-provider lift, resource-discovery move, session-switch DI. Zero TUI layer violations. 5365 tests.
 
-**v0.45.22** — Timeout Render Fix + Extensibility + Test Runner. TUI streaming state cleanup on auto-retry/error, extension tool registration API, session tree UX, rich component model, built-in components + overlays, extension lifecycle, event coverage (37 events), custom editor + IME, SDK ergonomics, provider OAuth flow, image rendering, skills frontmatter, graceful shutdown, rewritten test runner with per-file result tracking. 4960+ tests.
+**v0.10.7** — Timeout Render Fix + Extensibility + Test Runner. TUI streaming state cleanup on auto-retry/error, extension tool registration API, session tree UX, rich component model, built-in components + overlays, extension lifecycle, event coverage (37 events), custom editor + IME, SDK ergonomics, provider OAuth flow, image rendering, skills frontmatter, graceful shutdown, rewritten test runner with per-file result tracking. 4960+ tests.
 
-**v0.45.22** — SGR Mouse Fix. SGR mouse event decoding (mode 1006), mouse enable/disable simplified, test assertion corrections, cleanup robustness.
+**v0.10.6** — SGR Mouse Fix. SGR mouse event decoding (mode 1006), mouse enable/disable simplified, test assertion corrections, cleanup robustness.
 
-**v0.45.22** — Mouse Selection Crash Fix. Configurable keybindings via JSON, session import, provider registry, truncation constants.
+**v0.10.5** — Mouse Selection Crash Fix. Configurable keybindings via JSON, session import, provider registry, truncation constants.
 
-**v0.45.22** — CHANGELOG Remediation & Docs. Backfilled CHANGELOG entries, API doc comments, per-method RPC rate limiting, test timing fixes.
+**v0.10.8** — CHANGELOG Remediation & Docs. Backfilled CHANGELOG entries, API doc comments, per-method RPC rate limiting, test timing fixes.
 
-**v0.45.22** — Documentation & Release Pipeline. API stability tiers, migration templates, package ecosystem docs, SDK catalog, release pipeline hardening, single-source version + CI guard.
+**v0.10.7** — Documentation & Release Pipeline. API stability tiers, migration templates, package ecosystem docs, SDK catalog, release pipeline hardening, single-source version + CI guard.
 
-**v0.45.22** — Release Pipeline Hardening & Docs. Single-source version, CI guard, API stability tiers, package ecosystem docs.
+**v0.10.7** — Release Pipeline Hardening & Docs. Single-source version, CI guard, API stability tiers, package ecosystem docs.
 
-**v0.45.22** — TUI Component System & Overlay Composition. Component-based rendering with per-zone caching, overlay composition framework for command palette, token-aware context assembly pipeline, test infrastructure cleanup, 3750+ tests.
+**v0.9.0** — TUI Component System & Overlay Composition. Component-based rendering with per-zone caching, overlay composition framework for command palette, token-aware context assembly pipeline, test infrastructure cleanup, 3750+ tests.
 
-**v0.45.22** — SDK Ergonomics & Provider Improvements. Unified session factory, context usage tracking, thinking level support.
+**v0.9.1** — SDK Ergonomics & Provider Improvements. Unified session factory, context usage tracking, thinking level support.
 
-**v0.45.22** — TUI Component System. Component-based rendering, overlay composition, token-aware context assembly.
+**v0.9.0** — TUI Component System. Component-based rendering, overlay composition, token-aware context assembly.
 
-**v0.45.22** — TUI Polish & Session Tree. Session tree navigation, markdown tokens, configurable keybindings.
+**v0.8.9** — TUI Polish & Session Tree. Session tree navigation, markdown tokens, configurable keybindings.
 
-**v0.45.22** — TUI Component System Foundation. Component abstraction, overlay composition framework, 4000+ tests.
+**v0.8.8** — TUI Component System Foundation. Component abstraction, overlay composition framework, 4000+ tests.
 
-**v0.45.22** — TUI Polish & Release. Markdown tokens, configurable keybindings, session tree foundation, input editor bracketed paste, frame-diff and theme fixes.
+**v0.8.7** — TUI Polish & Release. Markdown tokens, configurable keybindings, session tree foundation, input editor bracketed paste, frame-diff and theme fixes.
 
-**v0.45.22** — TUI Correctness & Input Editor. CSI sequence parsing, bright color support, frame-diff fixes, theme wiring, input editor power features, 3681 tests.
+**v0.8.6** — TUI Correctness & Input Editor. CSI sequence parsing, bright color support, frame-diff fixes, theme wiring, input editor power features, 3681 tests.
 
-**v0.45.22** — Themes & Component Abstraction. Theme system, SGR performance, clipboard support, IME cursor markers, render debounce, component abstraction, OpenAI-compatible provider in init wizard.
+**v0.8.5** — Themes & Component Abstraction. Theme system, SGR performance, clipboard support, IME cursor markers, render debounce, component abstraction, OpenAI-compatible provider in init wizard.
 
-**v0.45.22** — Bug Fixes Wave 1-3. Gemini streaming tool call fix, circuit breaker, markdown, thread leak, anchored regexps, port leak.
+**v0.8.3** — Bug Fixes Wave 1-3. Gemini streaming tool call fix, circuit breaker, markdown, thread leak, anchored regexps, port leak.
 
-**v0.45.22** — Kitty Keyboard & Markdown. Kitty keyboard protocol, buffered stdin parsing, markdown expansion, theme system, grapheme-aware cursor, bracketed paste.
+**v0.8.0** — Kitty Keyboard & Markdown. Kitty keyboard protocol, buffered stdin parsing, markdown expansion, theme system, grapheme-aware cursor, bracketed paste.
 
-**v0.45.22** — Review Remediation & Documentation Accuracy. 28 issues across 6 waves: immediate fixes (stale metrics, CHANGELOG links, version bump), documentation drift (dead links, subcommand docs, wiki metrics), architecture quality (contracts, logging, layer docs), security hardening (destructive blocking, SECURITY section), test coverage (12 new test files, PBT quickcheck invariants), CI maturity (composite action, coverage reporting). PRs #360–#365.
+**v0.8.0** — Review Remediation & Documentation Accuracy. 28 issues across 6 waves: immediate fixes (stale metrics, CHANGELOG links, version bump), documentation drift (dead links, subcommand docs, wiki metrics), architecture quality (contracts, logging, layer docs), security hardening (destructive blocking, SECURITY section), test coverage (12 new test files, PBT quickcheck invariants), CI maturity (composite action, coverage reporting). PRs #360–#365.
 
-**v0.45.22** — Critical Security & Architecture. Destructive-command warnings default on, shared type extraction (hook-types, protocol-types), CLI/TUI decomposition into submodules, agent turn refactor, manifest validation, crypto-random RPC tokens, structured error types, 50 new tests across 5 modules, HTTP request timeouts.
+**v0.8.0** — Critical Security & Architecture. Destructive-command warnings default on, shared type extraction (hook-types, protocol-types), CLI/TUI decomposition into submodules, agent turn refactor, manifest validation, crypto-random RPC tokens, structured error types, 50 new tests across 5 modules, HTTP request timeouts.
 
-**v0.45.22** — Hardening & Developer Tooling. 50 new tests (evaluator, cli-args, run-modes, audit-log, token-budget), HTTP request timeouts (300s), destructive-command warning in bash, audit logging utility, version cross-check linter.
+**v0.8.0** — Hardening & Developer Tooling. 50 new tests (evaluator, cli-args, run-modes, audit-log, token-budget), HTTP request timeouts (300s), destructive-command warning in bash, audit logging utility, version cross-check linter.
 
-**v0.45.22** — Agent Loop Decomposition & Security. Refactored 389-line `run-agent-turn` into 4 helpers, manifest validation before `dynamic-require`, crypto-random RPC handshake tokens, structured error types, Firecrawl error migration.
+**v0.8.0** — Agent Loop Decomposition & Security. Refactored 389-line `run-agent-turn` into 4 helpers, manifest validation before `dynamic-require`, crypto-random RPC handshake tokens, structured error types, Firecrawl error migration.
 
-**v0.45.22** — Architecture Refactor. Extracted shared types to util/, centralized safe-mode at scheduler, decomposed CLI/TUI interfaces into submodules, reorganized runtime run-modes, LRU extension loader cache.
+**v0.8.0** — Architecture Refactor. Extracted shared types to util/, centralized safe-mode at scheduler, decomposed CLI/TUI interfaces into submodules, reorganized runtime run-modes, LRU extension loader cache.
 
-**v0.45.22** — Documentation & Coverage. Documentation metrics bulk refresh, conventions standardization, test coverage gap closure.
+**v0.8.0** — Documentation & Coverage. Documentation metrics bulk refresh, conventions standardization, test coverage gap closure.
 
-**v0.45.22** — Workflow Test Suite. 33 workflow tests across 11 files with 5 fixture modules, covering CLI workflows, tool-use flows, session lifecycle, safety boundaries, SDK-CLI parity, and extension hooks.
+**v0.7.5** — Workflow Test Suite. 33 workflow tests across 11 files with 5 fixture modules, covering CLI workflows, tool-use flows, session lifecycle, safety boundaries, SDK-CLI parity, and extension hooks.
 
-**v0.45.22** — Error Handling & Diagnostics. Extension structured error reporting, error classification with remediation hints, verbose diagnostics mode, provider error surfacing, replay error recovery.
+**v0.7.4** — Error Handling & Diagnostics. Extension structured error reporting, error classification with remediation hints, verbose diagnostics mode, provider error surfacing, replay error recovery.
 
-**v0.45.22** — CLI & Configuration Hardening. `q sessions` command suite (list/info/delete), sessions TUI command, mock-provider detection warning, Bash shebang handling fix.
+**v0.7.3** — CLI & Configuration Hardening. `q sessions` command suite (list/info/delete), sessions TUI command, mock-provider detection warning, Bash shebang handling fix.
 
-**v0.45.22** — Provider & UX Hardening. Anthropic/Gemini streaming (generator-based incremental SSE), API key validation with provider-specific checks, streaming indicator in TUI, improved error messages.
+**v0.7.2** — Provider & UX Hardening. Anthropic/Gemini streaming (generator-based incremental SSE), API key validation with provider-specific checks, streaming indicator in TUI, improved error messages.
 
-**v0.45.22** — TUI Tool Display & UX Polish. Tool result rendering with truncation, scroll-to-top sentinel, Ctrl+J/Ctrl+Enter multi-line input, Enter-to-submit.
+**v0.7.1** — TUI Tool Display & UX Polish. Tool result rendering with truncation, scroll-to-top sentinel, Ctrl+J/Ctrl+Enter multi-line input, Enter-to-submit.
 
-**v0.45.22** — Builder Cookbook and Team Adoption. Team setup guide, builder tutorials for custom tools/providers/extensions.
+**v0.7.0** — Builder Cookbook and Team Adoption. Team setup guide, builder tutorials for custom tools/providers/extensions.
 
-**v0.45.22** — Structural Hardening. Thread safety (semaphores), contracts on critical entry points, per-session safe-mode, safe-mode path checks, dead code cleanup.
+**v0.6.8** — Structural Hardening. Thread safety (semaphores), contracts on critical entry points, per-session safe-mode, safe-mode path checks, dead code cleanup.
 
-**v0.45.22** — Integration Test Infrastructure. E2E tool→API serialization pipeline tests (OpenAI/Anthropic/Gemini), CLI interactive mode tests (34 cases).
+**v0.6.7** — Integration Test Infrastructure. E2E tool→API serialization pipeline tests (OpenAI/Anthropic/Gemini), CLI interactive mode tests (34 cases).
 
-**v0.45.22** — Provider Correctness. Anthropic/Gemini multi-turn tool use message translation, incremental SSE streaming, Gemini tool call unique IDs.
+**v0.6.6** — Provider Correctness. Anthropic/Gemini multi-turn tool use message translation, incremental SSE streaming, Gemini tool call unique IDs.
 
-**v0.45.22** — Critical Bug Fixes. Firecrawl poll deadline, tool registration nesting, Anthropic wiring, TUI event subscribers, hook validation.
+**v0.6.5** — Critical Bug Fixes. Firecrawl poll deadline, tool registration nesting, Anthropic wiring, TUI event subscribers, hook validation.
 
-**v0.45.22** — Developer Tooling & Protocol Consistency. Racket-aware line wrapper, protocol checker, import conflict detector, pre-commit hook.
+**v0.6.4** — Developer Tooling & Protocol Consistency. Racket-aware line wrapper, protocol checker, import conflict detector, pre-commit hook.
 
-**v0.45.22** — Architecture & Test Reliability. Decoupled agent/types ↔ tools/tool, extracted CLI builders, session log backup, RPC handshake tokens.
+**v0.6.3** — Architecture & Test Reliability. Decoupled agent/types ↔ tools/tool, extracted CLI builders, session log backup, RPC handshake tokens.
 
-**v0.45.22** — Hardening & Quality. Test coverage expansion, sandbox hardening, SSRF protection, response size limits.
+**v0.6.2** — Hardening & Quality. Test coverage expansion, sandbox hardening, SSRF protection, response size limits.
 
 **Previous** — Security Hardening through Foundation:
 
