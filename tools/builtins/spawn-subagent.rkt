@@ -14,6 +14,7 @@
          racket/string
          "../../tools/tool.rkt"
          "../../agent/event-bus.rkt"
+         "../../agent/event-emitter.rkt"
          "../model-bridge.rkt"
          "../../util/ids.rkt"
          (only-in "../../util/protocol-types.rkt"
@@ -247,7 +248,8 @@
       (make-exec-context #:working-directory (if exec-ctx
                                                  (exec-context-working-directory exec-ctx)
                                                  (current-directory))
-                         #:event-publisher (lambda (event) (publish! bus event))
+                         #:event-publisher (lambda (event-type payload)
+                                             (emit-session-event! bus session-id event-type payload))
                          #:runtime-settings settings
                          #:call-id (generate-id)
                          #:session-metadata (hasheq 'session-id session-id 'role "subagent")))

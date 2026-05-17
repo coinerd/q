@@ -211,13 +211,7 @@
                                     #:timestamp (current-inexact-milliseconds)
                                     #:tool-name (hash-ref payload 'tool-name)
                                     #:tool-call-id tcid))]
-               [else
-                (emit-session-event! bus
-                                     session-id
-                                     event-type
-                                     (if (hash? payload)
-                                         payload
-                                         (hash 'raw payload)))]))
+               [else (emit-session-event! bus session-id event-type payload)]))
            #:runtime-settings (or (config-settings config)
                                   (make-minimal-settings #:provider (config-provider config)
                                                          #:model (config-model-name config)))

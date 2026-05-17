@@ -73,24 +73,33 @@
       (check-true (string-contains? (result-text (first result)) "read")))
 
     ;; ── v0.45.17 regression: emit-session-event! with non-hash payload ──
-    ;; The bug: tool-coordinator passed raw scheduler-batch-stats struct to
-    ;; emit-session-event! (which expects hash?). Caused contract violation.
-    ;; Fix: wraps non-hash payloads in (hash 'raw payload).
+    ;; Superseded by v0.45.19 fix (scheduler-batch-stats->hash converts at source).
+    ;; Kept as historical regression guard: verifies wrapping fallback works.
     (test-case "v0.45.17 regression: non-hash payload wrapped before emit"
       (define bus (make-event-bus))
       (define stats (scheduler-batch-stats 3 3 0 0))
-      ;; Verify stats is NOT a hash (the condition that triggered the bug)
       (check-false (hash? stats))
-      ;; The wrapping logic from tool-coordinator:
-      ;;   (if (hash? payload) payload (hash 'raw payload))
       (define wrapped
         (if (hash? stats)
             stats
             (hash 'raw stats)))
       (check-true (hash? wrapped))
       (check-equal? (hash-ref wrapped 'raw) stats)
-      ;; emit-session-event! should not crash with the wrapped payload
       (check-not-exn (lambda ()
-                       (emit-session-event! bus "test-session" "tool.batch.completed" wrapped))))))
+                       (emit-session-event! bus "test-session" "tool.batch.completed" wrapped))))
+
+    ;; ── v0.45.19: scheduler-batch-stats→hash conversion ──
+    ;; Replaces opaque (hash 'raw ...) wrapping with proper field-level conversion.
+    ;; Downstream consumers (TUI, RPC, SDK) can now read batch stats fields.
+    (test-case "v0.45.19: scheduler-batch-stats->hash produces correct hash"
+      (define stats (scheduler-batch-stats 5 3 1 1))
+      (define h (scheduler-batch-stats->hash stats))
+      (check-true (hash? h))
+      (check-equal? (hash-ref h 'total) 5)
+      (check-equal? (hash-ref h 'executed) 3)
+      (check-equal? (hash-ref h 'blocked) 1)
+      (check-equal? (hash-ref h 'errors) 1)
+      (define bus (make-event-bus))
+      (check-not-exn (lambda () (emit-session-event! bus "test-session" "tool.batch.completed" h))))))
 
 (run-tests pure-suite 'verbose)
