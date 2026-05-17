@@ -15,7 +15,7 @@
                              (#:working-directory (or/c path-string? #f)
                                                   #:cancellation-token (or/c cancellation-token? #f)
                                                   #:event-publisher (or/c procedure? #f)
-                                                  #:runtime-settings (or/c q-settings? #f)
+                                                  #:runtime-settings (or/c hash? q-settings? #f)
                                                   #:call-id (or/c string? #f)
                                                   #:session-metadata (or/c hash? #f)
                                                   #:progress-callback (or/c procedure? #f)

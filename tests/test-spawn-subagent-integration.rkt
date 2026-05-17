@@ -206,3 +206,20 @@
   ;; Explicitly verify we did NOT get the old mock fallback text
   (check-false (string-contains? text "Subagent task completed.")
                "should NOT contain old mock fallback text"))
+
+;; ── v0.45.20 F4: 2-arg event-publisher calling convention ──
+;; All previous tests use #:event-publisher #f. This test verifies that the
+;; spawn-subagent's internal event-publisher lambda uses the correct 2-argument
+;; calling convention (event-type, payload). Before v0.45.19 C1 fix, the lambda
+;; was 1-arg but called with 2 args, causing an arity mismatch.
+(test-case "F4: spawn-subagent event-publisher uses 2-arg calling convention"
+  (define response-text "event-publisher arity test response")
+  (define prov (make-stub-provider response-text))
+  (define ctx (make-test-exec-ctx prov))
+  ;; Run spawn-subagent — internally creates a bus + event-publisher lambda
+  ;; that calls (emit-session-event! bus session-id event-type payload)
+  ;; If the calling convention were wrong (1-arg), this would fail with arity error.
+  (define result (tool-spawn-subagent (hasheq 'task "test event-publisher arity") ctx))
+  (check-false (tool-result-is-error? result)
+               (format "expected success, got error: ~a" (tool-result-content result)))
+  (check-true (tool-result? result)))
