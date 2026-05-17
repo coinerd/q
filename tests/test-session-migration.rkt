@@ -154,15 +154,17 @@
      (jsonl-append! path (hasheq 'kind "user" 'content "hello" 'id "msg-1"))
      (jsonl-append! path (hasheq 'kind "assistant" 'content "hi there" 'id "msg-2"))
      ;; Read back
-     (define entries (for/list ([line (file->lines path)])
-                       (with-input-from-string line read-json)))
+     (define entries
+       (for/list ([line (file->lines path)])
+         (with-input-from-string line read-json)))
      (check-equal? (length entries) 3)
      (check-equal? (hash-ref (first entries) 'version) 2)
      ;; Append new message
      (jsonl-append! path (hasheq 'kind "user" 'content "follow-up" 'id "msg-3"))
      ;; Read again
-     (define entries-2 (for/list ([line (file->lines path)])
-                         (with-input-from-string line read-json)))
+     (define entries-2
+       (for/list ([line (file->lines path)])
+         (with-input-from-string line read-json)))
      (check-equal? (length entries-2) 4)
      (check-equal? (hash-ref (fourth entries-2) 'content) "follow-up")
      ;; Verify version header preserved
@@ -170,3 +172,36 @@
    (lambda ()
      (when (file-exists? path)
        (delete-file path)))))
+
+(test-case "migration registry: register-migration! + run-migrations!"
+  (define path (make-temp-file))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (write-v1-file! path)
+                  ;; Should still migrate v1->v2 using registry
+                  (migrate-session-log! path)
+                  (check-equal? (read-session-version path) 2)
+                  (define entries (jsonl-read-all-valid path))
+                  (check-equal? (length entries) 3))
+                (lambda ()
+                  (when (file-exists? path)
+                    (delete-file path))
+                  (when (file-exists? (format "~a.v1.bak" path))
+                    (delete-file (format "~a.v1.bak" path))))))
+
+(test-case "migration registry: register-migration! adds to chain"
+  ;; Verify the v1 migration is registered
+  (define path (make-temp-file))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (write-v1-file! path)
+                  ;; v1->v2 migration should fire via registry
+                  (migrate-session-log! path)
+                  (check-equal? (read-session-version path) 2)
+                  ;; Verify backup was created (proves migrate-v1->v2! ran)
+                  (check-true (file-exists? (format "~a.v1.bak" path))))
+                (lambda ()
+                  (when (file-exists? path)
+                    (delete-file path))
+                  (when (file-exists? (format "~a.v1.bak" path))
+                    (delete-file (format "~a.v1.bak" path))))))

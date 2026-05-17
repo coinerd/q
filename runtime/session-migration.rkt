@@ -26,7 +26,9 @@
 (provide current-session-version
          read-session-version
          migrate-session-log!
-         ensure-session-version!)
+         ensure-session-version!
+         register-migration!
+         run-migrations!)
 
 ;; Current format version (synced with session-store.rkt)
 (define current-session-version 2)
@@ -40,38 +42,53 @@
       (let ([first-entry (read-first-log-entry path)])
         (cond
           [(not first-entry) current-session-version]
-          [(session-info-entry? first-entry)
-           (hash-ref (message-meta first-entry) 'version 1)]
+          [(session-info-entry? first-entry) (hash-ref (message-meta first-entry) 'version 1)]
           [else 1]))))
 
 ;; Check if a message is a session-info entry (version header)
 (define (session-info-entry? msg)
-  (and (message? msg)
-       (eq? (message-kind msg) 'session-info)))
+  (and (message? msg) (eq? (message-kind msg) 'session-info)))
 
 ;; Read only the first entry from a JSONL log
 (define (read-first-log-entry path)
   (with-logged-catch #f
-    (lambda ()
-      (call-with-input-file path
-        (lambda (in)
-          (define line (read-line in))
-          (if (eof-object? line)
-              #f
-              (jsexpr->message (string->jsexpr line))))
-        #:mode 'text))))
+                     (lambda ()
+                       (call-with-input-file path
+                                             (lambda (in)
+                                               (define line (read-line in))
+                                               (if (eof-object? line)
+                                                   #f
+                                                   (jsexpr->message (string->jsexpr line))))
+                                             #:mode 'text))))
 
-;; Migrate a session log from one version to another.
-;; Currently supports: v1 → v2 (add version header)
+;; ── Migration registry (F7: data-driven dispatch) ──
+
+;; Internal registry: version → (path → void?)
+(define migration-registry (make-hash))
+
+;; Register a migration function for a given version.
+;; mig-fn: (path-string? -> void?)
+(define (register-migration! from-version mig-fn)
+  (hash-set! migration-registry from-version mig-fn))
+
+;; Run all pending migrations sequentially.
+;; path-string? -> void?
+(define (run-migrations! path)
+  (let loop ([v (read-session-version path)])
+    (when (< v current-session-version)
+      (define mig (hash-ref migration-registry v #f))
+      (when mig
+        (mig path))
+      (loop (read-session-version path)))))
+
+;; Migrate a session log to current version using the registry.
 ;; path-string? -> void?
 (define (migrate-session-log! path)
   (unless (file-exists? path)
     (raise-session-error 'migrate-session-log! "file not found" #f path))
-  (define version (read-session-version path))
-  (when (< version current-session-version)
-    ;; v1 → v2: prepend version header
-    (when (= version 1)
-      (migrate-v1->v2! path))))
+  (run-migrations! path))
+
+;; ── Registered migrations ──
 
 ;; Migration v1 → v2: prepend session-info version header
 (define (migrate-v1->v2! path)
@@ -93,12 +110,15 @@
   (jsonl-append-entries! path (map message->jsexpr (cons header-msg entries)))
   (fprintf (current-error-port)
            "Session migrated v1 -> v~a: ~a entries. Backup: ~a\n"
-           current-session-version (length entries) bak-path))
+           current-session-version
+           (length entries)
+           bak-path))
+
+;; Register existing migrations
+(register-migration! 1 migrate-v1->v2!)
 
 ;; Load session log entries and version header writer (re-export helpers)
-(require (only-in "../runtime/session-store.rkt"
-                  load-session-log
-                  write-session-version-header!))
+(require (only-in "../runtime/session-store.rkt" load-session-log write-session-version-header!))
 
 ;; Ensure session has a version header (write if missing)
 (define (ensure-session-version! path)
