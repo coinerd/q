@@ -79,7 +79,7 @@
                any)]
           [build-session-context-for-prompt
            (-> agent-session?
-               (or/c string? any/c)
+               (or/c string? list?)
                (or/c procedure? #f)
                (or/c procedure? #f)
                (listof any/c))]
