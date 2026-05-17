@@ -14,35 +14,35 @@
                   tool-prompt-snippet
                   tool-prompt-guidelines))
 
-(provide
- (contract-out
-  [make-tool-registry (-> tool-registry?)]
-  [tool-registry-tools (-> tool-registry? (listof tool?))]
-  [register-tool! (-> tool-registry? tool? void?)]
-  [unregister-tool! (-> tool-registry? string? void?)]
-  [lookup-tool (-> tool-registry? (or/c string? #f) (or/c tool? #f))]
-  [list-tools (-> tool-registry? (listof tool?))]
-  [tool-names (-> tool-registry? (listof string?))]
-  [tool->jsexpr (-> tool? hash?)]
-  [list-active-tools (-> tool-registry? (listof tool?))]
-  [list-active-tools-jsexpr (-> tool-registry? (listof hash?))]
-  [list-tools-jsexpr (-> tool-registry? (listof hash?))]
-  [set-active-tools! (-> tool-registry? (or/c (listof string?) #f) void?)]
-  [tool-active? (-> tool-registry? string? boolean?)]
-  [with-registry-lock (-> tool-registry? procedure? any)])
- tool-registry?)
+(provide (contract-out [make-tool-registry (-> tool-registry?)]
+                       [tool-registry-tools (-> tool-registry? (listof tool?))]
+                       [register-tool! (-> tool-registry? tool? void?)]
+                       [unregister-tool! (-> tool-registry? string? void?)]
+                       [lookup-tool (-> tool-registry? (or/c string? #f) (or/c tool? #f))]
+                       [list-tools (-> tool-registry? (listof tool?))]
+                       [tool-names (-> tool-registry? (listof string?))]
+                       [tool->jsexpr (-> tool? hash?)]
+                       [list-active-tools (-> tool-registry? (listof tool?))]
+                       [list-active-tools-jsexpr (-> tool-registry? (listof hash?))]
+                       [list-tools-jsexpr (-> tool-registry? (listof hash?))]
+                       [set-active-tools! (-> tool-registry? (or/c (listof string?) #f) void?)]
+                       [tool-active? (-> tool-registry? string? boolean?)]
+                       [with-registry-lock (-> tool-registry? procedure? any)])
+         tool-registry?)
 
 ;; ============================================================
 ;; Tool registry
 ;; ============================================================
 
-(struct tool-registry (tools-box active-set-box sem))
+;; Import struct from util/ to break runtime→tools reverse dependency (H1).
+(require "../util/tool-registry-types.rkt")
+(provide tool-registry?)
 
 ;; Safe read-only accessor under lock
 (define (tool-registry-tools reg)
   (with-registry-lock reg (lambda () (hash-values (tool-registry-tools-box reg)))))
 (define (make-tool-registry)
-  (tool-registry (make-hash) (box #f) (make-semaphore 1)))
+  (make-tool-registry-internal (make-hash) (box #f) (make-semaphore 1)))
 
 ;; Thread-safe registry lock helper (Finding A2: 7 call sites)
 ;; L-10 WARNING: Racket semaphores are NOT reentrant. Calling

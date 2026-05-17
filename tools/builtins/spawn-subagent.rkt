@@ -12,8 +12,8 @@
 (require racket/list
          racket/string
          "../../tools/tool.rkt"
-         "../../agent/event-bus.rkt"
-         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event!)
+         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
+         (only-in "../../runtime/settings.rkt" q-settings? setting-ref)
          "../model-bridge.rkt"
          "../../util/ids.rkt"
          (only-in "../../util/protocol-types.rkt"
@@ -105,18 +105,11 @@
 ;; Resolve the provider from exec-context runtime-settings.
 ;; Returns the real provider if available, or falls back to a mock.
 ;; Extract a value from runtime-settings which may be a q-settings struct or a plain hash.
-;; #1241: After settings-contract fix, runtime-settings is a q-settings struct.
-;; Uses struct->vector for transparent struct access (no runtime import needed).
+;; v0.45.21 N3: Replaced struct->vector reflection with proper setting-ref API.
 (define (rt-settings-ref rt key [default #f])
   (cond
     [(hash? rt) (hash-ref rt key default)]
-    [(struct? rt)
-     ;; q-settings is transparent: fields are global, project, merged
-     ;; merged is at vector index 3 (0=name, 1=global, 2=project, 3=merged)
-     (define merged (vector-ref (struct->vector rt) 3))
-     (if (hash? merged)
-         (hash-ref merged key default)
-         default)]
+    [(q-settings? rt) (setting-ref rt key default)]
     [else default]))
 
 ;; #1204: Provider injection from parent session.
