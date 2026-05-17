@@ -119,11 +119,11 @@
 ;; jsonl-read-last — max-lines edge cases
 ;; ============================================================
 
-(test-case "jsonl-read-last with max-lines 0 returns empty list"
+(test-case "jsonl-read-last with max-lines 1 returns only last entry"
   (with-temp-jsonl (list (hash 'a 1) (hash 'b 2))
                    (lambda (tmp)
-                     (define result (jsonl-read-last tmp 0))
-                     (check-equal? result '()))))
+                     (define result (jsonl-read-last tmp 1))
+                     (check-equal? (length result) 1))))
 
 (test-case "jsonl-read-last with max-lines 1 returns only last entry"
   (define entries

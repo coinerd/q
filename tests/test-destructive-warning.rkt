@@ -3,24 +3,29 @@
 ;; BOUNDARY: integration
 
 ;; test-destructive-warning.rkt — SEC-02 tests for destructive command warning
+;; Updated: uses bash-execution-config struct (v0.46.3 F10)
 
 (require rackunit
          racket/string
          racket/port
          (only-in "../tools/builtins/bash.rkt"
-                  current-warn-on-destructive
-                  current-block-destructive
                   destructive-command?
-                  tool-bash)
+                  tool-bash
+                  make-bash-execution-config
+                  current-bash-execution-config
+                  bash-execution-config-warn-on-destructive?
+                  bash-execution-config-block-destructive?)
          (only-in "../util/protocol-types.rkt"
                   tool-result?
                   tool-result-content
                   tool-result-is-error?))
 
 ;; --------------------------------------------------
-;; Test 1: Parameter defaults to #t
+;; Test 1: Default config warns on destructive
 ;; --------------------------------------------------
-(check-eq? (current-warn-on-destructive) #t "current-warn-on-destructive should default to #t")
+(let ([cfg (make-bash-execution-config)])
+  (check-true (bash-execution-config-warn-on-destructive? cfg)
+              "default config should warn on destructive"))
 
 ;; --------------------------------------------------
 ;; Test 2: destructive-command? correctly identifies destructive commands
@@ -35,7 +40,7 @@
 ;; --------------------------------------------------
 (let ([captured-stderr (open-output-string)])
   (parameterize ([current-error-port captured-stderr]
-                 [current-warn-on-destructive #t])
+                 [current-bash-execution-config (make-bash-execution-config #:warn? #t)])
     (tool-bash (hasheq 'command "rm -rf /tmp/nonexistent_test_path_for_sec02")))
   (define stderr-str (get-output-string captured-stderr))
   (check-not-false (and (string-contains? stderr-str "WARNING")
@@ -47,38 +52,31 @@
 ;; --------------------------------------------------
 (let ([captured-stderr (open-output-string)])
   (parameterize ([current-error-port captured-stderr]
-                 [current-warn-on-destructive #t])
+                 [current-bash-execution-config (make-bash-execution-config #:warn? #t)])
     (tool-bash (hasheq 'command "ls")))
   (define stderr-str (get-output-string captured-stderr))
   (check-false (string-contains? stderr-str "Destructive command detected")
                "ls should NOT produce a destructive-command warning on stderr"))
 
 ;; --------------------------------------------------
-;; Test 5: Setting parameter to #f suppresses warnings on destructive commands
+;; Test 5: Setting warn? #f suppresses warnings on destructive commands
 ;; --------------------------------------------------
 (let ([captured-stderr (open-output-string)])
   (parameterize ([current-error-port captured-stderr]
-                 [current-warn-on-destructive #f])
+                 [current-bash-execution-config (make-bash-execution-config #:warn? #f)])
     (tool-bash (hasheq 'command "rm -rf /tmp/nonexistent_test_path_for_sec02")))
   (define stderr-str (get-output-string captured-stderr))
   (check-false (string-contains? stderr-str "Destructive command detected")
                "rm -rf with warning disabled should NOT produce a warning"))
 
 ;; ==================================================
-;; SEC-01: current-block-destructive tests
+;; SEC-01: block-destructive via config struct
 ;; ==================================================
 
 ;; --------------------------------------------------
-;; Test 6: current-block-destructive defaults to 'safe-mode-default
+;; Test 6: block-destructive? #t blocks destructive commands
 ;; --------------------------------------------------
-(check-eq? (current-block-destructive)
-           'safe-mode-default
-           "current-block-destructive should default to 'safe-mode-default")
-
-;; --------------------------------------------------
-;; Test 7: current-block-destructive #t blocks destructive commands
-;; --------------------------------------------------
-(let ([result (parameterize ([current-block-destructive #t])
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:block? #t)])
                 (tool-bash (hasheq 'command "rm -rf /tmp/blocked_test_path")))])
   (check-true (tool-result-is-error? result)
               "blocked destructive command should return error tool-result")
@@ -87,21 +85,20 @@
                    "error message should mention blocked destructive command"))
 
 ;; --------------------------------------------------
-;; Test 8: current-block-destructive #f allows non-destructive commands
+;; Test 7: block-destructive? #f allows non-destructive commands
 ;; --------------------------------------------------
-(let ([result (parameterize ([current-block-destructive #f]
-                             [current-warn-on-destructive #f])
+(let ([result (parameterize ([current-bash-execution-config (make-bash-execution-config #:block? #f
+                                                                                        #:warn? #f)])
                 (tool-bash (hasheq 'command "echo blocked_test")))])
   (check-false (tool-result-is-error? result)
                "non-destructive command should succeed regardless of block setting"))
 
 ;; --------------------------------------------------
-;; Test 9: blocking takes priority over warning
+;; Test 8: blocking takes priority over warning
 ;; --------------------------------------------------
 (let ([captured-stderr (open-output-string)])
   (parameterize ([current-error-port captured-stderr]
-                 [current-warn-on-destructive #t]
-                 [current-block-destructive #t])
+                 [current-bash-execution-config (make-bash-execution-config #:warn? #t #:block? #t)])
     (define result (tool-bash (hasheq 'command "rm -rf /tmp/blocked_test_path")))
     (check-true (tool-result-is-error? result)
                 "blocked destructive command should return error even with warning on")
