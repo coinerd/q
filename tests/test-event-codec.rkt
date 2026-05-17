@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; BOUNDARY: integration
+;; BOUNDARY: serialization
 
 (require rackunit
          "../util/event-codec.rkt"

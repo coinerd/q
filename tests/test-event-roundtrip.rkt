@@ -1,6 +1,6 @@
 #lang racket/base
 
-;; BOUNDARY: integration
+;; BOUNDARY: serialization
 
 ;; tests/test-event-roundtrip.rkt — Round-trip tests for event serialization
 ;; M-12: Verify that all registered events survive JSON serialization round-trip.

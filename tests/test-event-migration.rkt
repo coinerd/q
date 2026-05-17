@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-event-migration.rkt — Event migration registry tests (F6, W1)
 

@@ -1,6 +1,6 @@
 #lang racket
 
-;; BOUNDARY: integration
+;; BOUNDARY: serialization
 
 (require rackunit
          rackunit/text-ui

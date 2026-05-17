@@ -1,4 +1,5 @@
 #lang racket/base
+;; BOUNDARY: pure
 
 ;; tests/test-command-types.rkt — Shared command AST type tests (F14)
 
