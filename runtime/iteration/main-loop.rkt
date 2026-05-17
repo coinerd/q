@@ -287,7 +287,8 @@
                      (loop new-ctx new-counters ws2)])])]))))))
 
 ;; ============================================================
-;; run-iteration-loop (backward-compatible wrapper)
+;; run-iteration-loop (DEPRECATED: use run-iteration-loop/v2 with loop-config struct)
+;; Kept for backward compatibility with existing tests.
 ;; ============================================================
 
 (define (run-iteration-loop context
