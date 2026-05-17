@@ -12,7 +12,14 @@
 (require racket/contract
          racket/match
          "turn-model.rkt"
-         (only-in "loop-messages.rkt" classify-hook-result))
+         (only-in "loop-messages.rkt" classify-hook-result)
+         (only-in "loop-fsm.rkt"
+                  turn-state-emit-start
+                  turn-state-build-context
+                  turn-state->symbol
+                  valid-turn-transition?
+                  turn-event-start
+                  turn-event-context-built))
 
 ;; ============================================================
 ;; Decision functions
@@ -20,11 +27,15 @@
 
 ;; After turn start -- always build context
 (define (decide-after-start ctx)
-  (make-decision-build-context ctx))
+  (if (valid-turn-transition? turn-state-emit-start turn-event-start)
+      (make-decision-build-context ctx)
+      (make-decision-blocked "invalid-start-transition")))
 
 ;; After context built -- always check pre-hook
 (define (decide-after-context ctx)
-  (make-decision-check-pre-hook ctx))
+  (if (valid-turn-transition? turn-state-build-context turn-event-context-built)
+      (make-decision-check-pre-hook ctx)
+      (make-decision-blocked "invalid-context-transition")))
 
 ;; After pre-hook classification
 (define (decide-after-pre-hook hook-result)

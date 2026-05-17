@@ -37,6 +37,7 @@
 
          ;; Transition table + lookup
          TURN-TRANSITIONS
+         turn-machine
          next-turn-state
          valid-turn-transition?)
 
