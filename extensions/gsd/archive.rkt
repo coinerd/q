@@ -205,24 +205,34 @@
         (mark-wave-status! base-dir idx canonical)))))
 
 ;; Auto-complete remaining [Inbox] waves when in executing mode.
-;; Heuristic: if we're in executing mode and at least one wave was
-;; completed via /wave-done, the LLM ran the execution. Remaining
-;; [Inbox] waves were likely completed but the LLM forgot to mark them.
+;; Heuristic 1: if we're in executing mode and at least one wave was
+;; completed via /wave-done, the LLM ran the execution.
+;; Heuristic 2: if a wave executor exists AND all wave doc files are present,
+;; the execution likely ran even though the LLM never called /wave-done.
+(define (wave-docs-all-exist? base-dir entries)
+  (for/and ([e entries])
+    (wave-exists? base-dir (wave-index-entry-idx e) (wave-index-entry-slug e))))
+
 (define (auto-complete-inbox-waves! base-dir)
   (define mode (gsm-current))
   (define completed (gsm-completed-waves))
+  (define exec (gsm-wave-executor))
+  (define plan-path (build-path base-dir ".planning" "PLAN.md"))
   (cond
-    [(and (eq? mode 'executing) (not (set-empty? completed)))
-     ;; In executing mode with some completions → auto-complete remaining
-     (define plan-path (build-path base-dir ".planning" "PLAN.md"))
-     (when (file-exists? plan-path)
-       (define text (call-with-input-file plan-path port->string))
-       (define entries (parse-plan-index text))
+    [(not (file-exists? plan-path)) (void)]
+    [else
+     (define text (call-with-input-file plan-path port->string))
+     (define entries (parse-plan-index text))
+     (define should-auto-complete?
+       ;; Guard 1: In executing mode with at least one /wave-done completion
+       (or (and (eq? mode 'executing) (not (set-empty? completed)))
+           ;; Guard 2: Executor exists + all wave doc files exist
+           (and exec (wave-docs-all-exist? base-dir entries))))
+     (when should-auto-complete?
        (for ([e entries])
          (define status (string-upcase (wave-index-entry-status e)))
          (when (or (string=? status "INBOX") (string=? status "IN-PROGRESS"))
-           (mark-wave-status! base-dir (wave-index-entry-idx e) "DONE"))))]
-    [else (void)]))
+           (mark-wave-status! base-dir (wave-index-entry-idx e) "DONE"))))]))
 
 ;; Update all wave status markers in PLAN.md to [DONE] before archiving.
 ;; base-dir is the directory CONTAINING .planning/ (not .planning/ itself).

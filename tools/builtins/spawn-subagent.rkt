@@ -14,7 +14,7 @@
          racket/string
          "../../tools/tool.rkt"
          "../../agent/event-bus.rkt"
-         "../../agent/event-emitter.rkt"
+         (only-in "../../runtime/runtime-helpers.rkt" emit-session-event!)
          "../model-bridge.rkt"
          "../../util/ids.rkt"
          (only-in "../../util/protocol-types.rkt"
