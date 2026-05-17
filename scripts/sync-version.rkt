@@ -3,6 +3,13 @@
 
 ;; sync-version.rkt — Synchronise version strings across the repo.
 ;;
+;; IMPORTANT SAFETY NOTE (v0.45.23):
+;;   NEVER run global sed or global version replacement on CHANGELOG.md or
+;;   README.md Status section. These files contain HISTORICAL version refs
+;;   that must be preserved. Use targeted replacements only. The
+;;   lint-version.rkt script includes a corruption guard that validates
+;;   CHANGELOG.md has >= 50 unique version headers.
+;;
 ;; Canonical source: util/version.rkt  (define q-version "X.Y.Z")
 ;; Targets synced:
 ;;   1. info.rkt           (define version "X.Y.Z")

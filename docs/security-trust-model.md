@@ -270,7 +270,7 @@ credential leakage into child processes.
 Environment variables matching these case-insensitive patterns are scrubbed:
 
 - `API.?KEY`, `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `PRIVATE`
-- `AUTH` (narrowed in v0.45.22 to match only `AUTH`, `AUTH_*`, `*_AUTH_*)
+- `AUTH` (narrowed in v0.28.22 to match only `AUTH`, `AUTH_*`, `*_AUTH_*)
 - `GH_PAT`, and any var ending in `_PAT`
 
 ### Implicit allowlist

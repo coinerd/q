@@ -313,7 +313,7 @@ Key hook points where extensions can intercept:
 
 For the complete list, see `util/hook-types.rkt`.
 
-## Contract-Validated Events (v0.45.22)
+## Contract-Validated Events (v0.28.22)
 
 The following high-value events have payload contracts enforced at emission
 time in `runtime/iteration.rkt`. These events are consumed by extensions and
