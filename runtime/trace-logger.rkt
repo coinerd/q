@@ -6,7 +6,8 @@
 ;; Subscribes to the event bus and writes trace.jsonl entries
 ;; with sequence numbers, ISO timestamps, and event data.
 
-(require racket/date
+(require racket/contract
+         racket/date
          json
          racket/file
          racket/class
@@ -14,11 +15,15 @@
          "../util/protocol-types.rkt"
          "trace-sink.rkt")
 
-(provide make-trace-logger
-         trace-logger?
-         start-trace-logger!
-         stop-trace-logger!
-         flush-trace-logger!)
+(provide (contract-out [make-trace-logger
+                        (->* (event-bus? path-string?)
+                             (#:enabled? boolean? #:sink (or/c (is-a?/c trace-sink<%>) #f))
+                             trace-logger?)]
+                       [trace-logger? (-> any/c boolean?)]
+                       [start-trace-logger!
+                        (->* (trace-logger?) (#:port (or/c output-port? #f)) void?)]
+                       [stop-trace-logger! (-> trace-logger? void?)]
+                       [flush-trace-logger! (-> trace-logger? void?)]))
 
 ;; ============================================================
 ;; Trace logger struct
