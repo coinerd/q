@@ -3,13 +3,90 @@
 ;; agent/loop-fsm.rkt — Agent turn FSM states (R-06, R-07)
 ;; STABILITY: evolving
 ;;
-;; Defines FSM states for a single agent turn. Each phase of the turn
-;; is a named state with explicit transitions. This provides observability
-;; and testability for the turn lifecycle.
+;; Defines FSM states for a single agent turn using define-fsm-machine
+;; from util/fsm.rkt. Backward-compatible exports maintained.
 
-;; Turn states
+(require (only-in "../util/fsm.rkt"
+                  define-fsm-machine
+                  fsm-state
+                  fsm-state-name
+                  fsm-event
+                  fsm-event-name
+                  fsm?
+                  fsm-states
+                  fsm-transitions
+                  fsm-lookup
+                  fsm-valid-transition?))
+
+;; ── Machine definition ──
+
+(define-fsm-machine turn
+  #:states (emit-start build-context pre-hook stream post-hook complete blocked)
+  #:events (start context-built hook-pass hook-block stream-complete stream-cancel post-hook-done msg-hook-block)
+  #:transitions
+  [(emit-start -> build-context) start]
+  [(build-context -> pre-hook) context-built]
+  [(pre-hook -> stream) hook-pass]
+  [(pre-hook -> blocked) hook-block]
+  [(stream -> post-hook) stream-complete]
+  [(stream -> blocked) msg-hook-block]
+  [(stream -> complete) stream-cancel]
+  [(post-hook -> complete) post-hook-done]
+  [(complete -> complete) start]
+  [(blocked -> blocked) start])
+
+;; ── Backward-compatible exports ──
+
+;; State singletons (old names: turn-state-<name>)
+(define turn-state-emit-start turn-emit-start)
+(define turn-state-build-context turn-build-context)
+(define turn-state-pre-hook turn-pre-hook)
+(define turn-state-stream turn-stream)
+(define turn-state-post-hook turn-post-hook)
+(define turn-state-complete turn-complete)
+(define turn-state-blocked turn-blocked)
+
+;; Event singletons (old names: turn-event-<name>)
+(define turn-event-start turn-start)
+(define turn-event-context-built turn-context-built)
+(define turn-event-hook-pass turn-hook-pass)
+(define turn-event-hook-block turn-hook-block)
+(define turn-event-stream-complete turn-stream-complete)
+(define turn-event-stream-cancel turn-stream-cancel)
+(define turn-event-post-hook-done turn-post-hook-done)
+(define turn-event-msg-hook-block turn-msg-hook-block)
+
+;; State predicate: turn-state? now checks fsm-state? with turn state names
+;; (this is what the macro generates — compatible with old struct predicate)
+;; Event predicate: turn-event? — same
+
+;; Converters
+(define (turn-state->symbol s) (fsm-state-name s))
+(define (turn-event->symbol e) (fsm-event-name e))
+
+;; Transition table (backward compat — derived from machine)
+(define TURN-TRANSITIONS
+  (fsm-transitions turn-machine))
+
+;; Next-state with error (backward compat)
+(define (next-turn-state state event)
+  (define result (turn-next-state state event))
+  (unless result
+    (error 'next-turn-state
+           "invalid turn FSM transition: (~a, ~a)"
+           (fsm-state-name state)
+           (fsm-event-name event)))
+  result)
+
+;; Valid transition check (backward compat)
+(define (valid-turn-transition? state event)
+  (turn-valid-transition? state event))
+
+;; FSM state parameter
+(define current-turn-fsm-state (make-parameter turn-state-emit-start))
+
+;; ── Provides ──
 (provide turn-state?
-         turn-state
          turn-state-emit-start
          turn-state-build-context
          turn-state-pre-hook
@@ -19,9 +96,7 @@
          turn-state-blocked
          turn-state->symbol
 
-         ;; Turn events
          turn-event?
-         turn-event
          turn-event-start
          turn-event-context-built
          turn-event-hook-pass
@@ -32,109 +107,9 @@
          turn-event-msg-hook-block
          turn-event->symbol
 
-         ;; FSM state parameter
          current-turn-fsm-state
 
-         ;; Transition table + lookup
          TURN-TRANSITIONS
          turn-machine
          next-turn-state
          valid-turn-transition?)
-
-(require racket/match
-         (only-in "../util/fsm.rkt" make-fsm fsm-lookup fsm-valid-transition?))
-
-;; ── States ──
-
-(struct turn-state (name) #:transparent)
-
-(define turn-state-emit-start (turn-state 'emit-start))
-(define turn-state-build-context (turn-state 'build-context))
-(define turn-state-pre-hook (turn-state 'pre-hook))
-(define turn-state-stream (turn-state 'stream))
-(define turn-state-post-hook (turn-state 'post-hook))
-(define turn-state-complete (turn-state 'complete))
-(define turn-state-blocked (turn-state 'blocked))
-
-(define (turn-state->symbol s)
-  (turn-state-name s))
-
-;; ── Events ──
-
-(struct turn-event (name) #:transparent)
-
-(define turn-event-start (turn-event 'start))
-(define turn-event-context-built (turn-event 'context-built))
-(define turn-event-hook-pass (turn-event 'hook-pass))
-(define turn-event-hook-block (turn-event 'hook-block))
-(define turn-event-stream-complete (turn-event 'stream-complete))
-(define turn-event-stream-cancel (turn-event 'stream-cancel))
-(define turn-event-post-hook-done (turn-event 'post-hook-done))
-(define turn-event-msg-hook-block (turn-event 'msg-hook-block))
-
-(define (turn-event->symbol e)
-  (turn-event-name e))
-
-;; ── Transition table ──
-
-(define TURN-TRANSITIONS
-  ;; emit-start -> build-context
-  ;; build-context -> pre-hook
-  '([(emit-start . start) . build-context] [(build-context . context-built) . pre-hook]
-                                           ;; pre-hook -> stream (hook passes)
-                                           [(pre-hook . hook-pass) . stream]
-                                           ;; pre-hook -> blocked (hook blocks)
-                                           [(pre-hook . hook-block) . blocked]
-                                           ;; stream -> post-hook (normal completion)
-                                           [(stream . stream-complete) . post-hook]
-                                           ;; stream -> blocked (msg-hook blocks)
-                                           [(stream . msg-hook-block) . blocked]
-                                           ;; stream -> complete (cancelled)
-                                           [(stream . stream-cancel) . complete]
-                                           ;; post-hook -> complete
-                                           [(post-hook . post-hook-done) . complete]
-                                           ;; Terminal states
-                                           [(complete . start) . complete]
-                                           [(blocked . start) . blocked]))
-
-;; ── Lookup ──
-
-;; FSM machine instance for lookup
-(define turn-machine
-  (make-fsm '(emit-start build-context pre-hook stream post-hook complete blocked)
-            '(start context-built
-                    hook-pass
-                    hook-block
-                    stream-complete
-                    stream-cancel
-                    post-hook-done
-                    msg-hook-block)
-            TURN-TRANSITIONS))
-
-(define (find-turn-transition state-sym event-sym)
-  (fsm-lookup turn-machine state-sym event-sym))
-
-(define (next-turn-state state event)
-  (define state-sym (turn-state->symbol state))
-  (define event-sym (turn-event->symbol event))
-  (define next-sym (find-turn-transition state-sym event-sym))
-  (unless next-sym
-    (error 'next-turn-state "invalid turn FSM transition: (~a, ~a)" state-sym event-sym))
-  (case next-sym
-    [(emit-start) turn-state-emit-start]
-    [(build-context) turn-state-build-context]
-    [(pre-hook) turn-state-pre-hook]
-    [(stream) turn-state-stream]
-    [(post-hook) turn-state-post-hook]
-    [(complete) turn-state-complete]
-    [(blocked) turn-state-blocked]
-    [else (error 'next-turn-state "unknown state: ~a" next-sym)]))
-
-(define (valid-turn-transition? state event)
-  (fsm-valid-transition? turn-machine (turn-state->symbol state) (turn-event->symbol event)))
-
-;; ── FSM state parameter ──
-;; Tracks current turn FSM state for observability.
-;; Moved here from loop.rkt so turn-orchestrator can import it
-;; without pulling in the full agent loop.
-(define current-turn-fsm-state (make-parameter turn-state-emit-start))

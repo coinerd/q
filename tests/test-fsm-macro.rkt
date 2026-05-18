@@ -22,12 +22,12 @@
     [(running -> stopped) stop]
     [(stopped -> idle) reset])
   ;; Should generate constructor: test-mach-<state>
-  (check-true (fsm-state? (test-mach-idle)))
-  (check-true (fsm-state? (test-mach-running)))
-  (check-true (fsm-state? (test-mach-stopped)))
-  (check-equal? (fsm-state-name (test-mach-idle)) 'idle)
-  (check-equal? (fsm-state-name (test-mach-running)) 'running)
-  (check-equal? (fsm-state-name (test-mach-stopped)) 'stopped))
+  (check-true (fsm-state? test-mach-idle))
+  (check-true (fsm-state? test-mach-running))
+  (check-true (fsm-state? test-mach-stopped))
+  (check-equal? (fsm-state-name test-mach-idle) 'idle)
+  (check-equal? (fsm-state-name test-mach-running) 'running)
+  (check-equal? (fsm-state-name test-mach-stopped) 'stopped))
 
 (test-case "define-fsm-machine generates event constructors"
   (define-fsm-machine test-mach
@@ -36,10 +36,10 @@
     #:transitions
     [(idle -> running) start]
     [(running -> idle) stop])
-  (check-true (fsm-event? (test-mach-start)))
-  (check-true (fsm-event? (test-mach-stop)))
-  (check-equal? (fsm-event-name (test-mach-start)) 'start)
-  (check-equal? (fsm-event-name (test-mach-stop)) 'stop))
+  (check-true (fsm-event? test-mach-start))
+  (check-true (fsm-event? test-mach-stop))
+  (check-equal? (fsm-event-name test-mach-start) 'start)
+  (check-equal? (fsm-event-name test-mach-stop) 'stop))
 
 (test-case "define-fsm-machine generates valid-transition? predicate"
   (define-fsm-machine test-mach
@@ -50,9 +50,9 @@
     [(running -> stopped) stop]
     [(stopped -> idle) reset])
   ;; valid transition
-  (check-true (test-mach-valid-transition? (test-mach-idle) (test-mach-start)))
+  (check-true (test-mach-valid-transition? test-mach-idle test-mach-start))
   ;; invalid transition
-  (check-false (test-mach-valid-transition? (test-mach-idle) (test-mach-stop))))
+  (check-false (test-mach-valid-transition? test-mach-idle test-mach-stop)))
 
 (test-case "define-fsm-machine generates next-state lookup"
   (define-fsm-machine test-mach
@@ -62,10 +62,10 @@
     [(idle -> running) start]
     [(running -> stopped) stop]
     [(stopped -> idle) reset])
-  (define next (test-mach-next-state (test-mach-idle) (test-mach-start)))
+  (define next (test-mach-next-state test-mach-idle test-mach-start))
   (check-equal? (fsm-state-name next) 'running)
   ;; invalid transition returns #f
-  (check-false (test-mach-next-state (test-mach-idle) (test-mach-stop))))
+  (check-false (test-mach-next-state test-mach-idle test-mach-stop)))
 
 (test-case "define-fsm-machine generates machine instance"
   (define-fsm-machine test-mach
@@ -84,8 +84,8 @@
     #:events (start)
     #:transitions
     [(idle -> running) start])
-  (check-true (test-mach-state? (test-mach-idle)))
-  (check-true (test-mach-state? (test-mach-running)))
+  (check-true (test-mach-state? test-mach-idle))
+  (check-true (test-mach-state? test-mach-running))
   (check-false (test-mach-state? 'not-a-state)))
 
 (test-case "define-fsm-machine generates event? predicate"
@@ -95,8 +95,8 @@
     #:transitions
     [(idle -> running) start]
     [(running -> idle) stop])
-  (check-true (test-mach-event? (test-mach-start)))
-  (check-true (test-mach-event? (test-mach-stop)))
+  (check-true (test-mach-event? test-mach-start))
+  (check-true (test-mach-event? test-mach-stop))
   (check-false (test-mach-event? 'not-an-event)))
 
 (test-case "define-fsm-machine handles terminal/self-loop transitions"
@@ -107,8 +107,8 @@
     [(idle -> done) finish]
     [(done -> done) finish])
   ;; Self-loop
-  (check-true (test-mach-valid-transition? (test-mach-done) (test-mach-finish)))
-  (define next (test-mach-next-state (test-mach-done) (test-mach-finish)))
+  (check-true (test-mach-valid-transition? test-mach-done test-mach-finish))
+  (define next (test-mach-next-state test-mach-done test-mach-finish))
   (check-equal? (fsm-state-name next) 'done))
 
 (test-case "define-fsm-machine with single transition"
@@ -117,8 +117,8 @@
     #:events (go)
     #:transitions
     [(a -> b) go])
-  (check-true (simple-valid-transition? (simple-a) (simple-go)))
-  (check-false (simple-valid-transition? (simple-b) (simple-go))))
+  (check-true (simple-valid-transition? simple-a simple-go))
+  (check-false (simple-valid-transition? simple-b simple-go)))
 
 (test-case "fsm-state-name returns correct symbol"
   (define-fsm-machine names
@@ -127,6 +127,6 @@
     #:transitions
     [(alpha -> beta) advance]
     [(beta -> gamma) advance])
-  (check-equal? (fsm-state-name (names-alpha)) 'alpha)
-  (check-equal? (fsm-state-name (names-beta)) 'beta)
-  (check-equal? (fsm-state-name (names-gamma)) 'gamma))
+  (check-equal? (fsm-state-name names-alpha) 'alpha)
+  (check-equal? (fsm-state-name names-beta) 'beta)
+  (check-equal? (fsm-state-name names-gamma) 'gamma))
