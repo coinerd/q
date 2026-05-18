@@ -6,19 +6,13 @@
 ;; Extracted from tui/palette.rkt so that extensions/ can use cmd-entry
 ;; without importing from the TUI layer (ARCH-02 layer boundary fix).
 ;;
-;; F14: Added shared-command and command-result for cross-subsystem type sharing.
+;; F14: Added shared-command for cross-subsystem type sharing.
 
 (provide (struct-out cmd-entry)
          register-command!
          lookup-command
          ;; F14: Shared command AST types
-         (struct-out shared-command)
-         (struct-out command-result)
-         command-ok
-         command-err
-         command-success?
-         command-failed?)
-
+         (struct-out shared-command))
 ;; ---------------------------------------------------------------------------
 ;; TUI command registry types (ARCH-02)
 ;; ---------------------------------------------------------------------------
@@ -51,18 +45,3 @@
 ;; kind: symbol — 'none, 'optional, 'required (arg expectation)
 ;; source: symbol — 'tui or 'gsd (where the command originated)
 (struct shared-command (name args kind source) #:transparent)
-
-;; Shared command result: success/failure with message and optional data.
-(struct command-result (success message data) #:transparent)
-
-(define (command-ok msg [data (hash)])
-  (command-result #t msg data))
-
-(define (command-err msg [data (hash)])
-  (command-result #f msg data))
-
-(define (command-success? r)
-  (command-result-success r))
-
-(define (command-failed? r)
-  (not (command-result-success r)))

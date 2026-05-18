@@ -16,16 +16,6 @@
       (check-equal? (shared-command-kind cmd) 'required)
       (check-equal? (shared-command-source cmd) 'gsd))
 
-    (test-case "command-result ok/err"
-      (define ok (command-ok "done"))
-      (check-true (command-success? ok))
-      (check-false (command-failed? ok))
-      (check-equal? (command-result-message ok) "done")
-
-      (define err (command-err "failed"))
-      (check-false (command-success? err))
-      (check-true (command-failed? err)))
-
     (test-case "cmd-entry registry"
       (define entry (cmd-entry "/test" "Test command" 'general '() '("t")))
       (check-equal? (cmd-entry-name entry) "/test")

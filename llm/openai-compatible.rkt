@@ -247,6 +247,7 @@
                                        (raise (provider-error (format "Stream setup error: ~a"
                                                                       (exn-message e))
                                                               (current-continuation-marks)
+                                                              (hash)
                                                               #f
                                                               'network))))])
         (openai-stream-request req)))
