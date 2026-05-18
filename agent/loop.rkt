@@ -119,13 +119,12 @@
          MAX-STREAM-CHUNKS
          usage-empty?
          parts->text-string
-         classify-hook-result
-         emit-turn-start!
-         build-turn-context)
+         classify-hook-result)
 ;; ============================================================
 ;; Extracted helpers (I-01)
 ;; ============================================================
 
+;; DEPRECATED v0.46.10: Use phase-emit-start from loop-phases.rkt instead
 ;; Phase 1: Emit turn-started event and dispatch agent-start hook
 (define (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
   (emit-typed-event! bus
@@ -140,6 +139,7 @@
      'agent-start
      (hasheq 'session-id session-id 'turn-id turn-id 'message-count (length context)))))
 
+;; DEPRECATED v0.46.10: Use phase-build-context from loop-phases.rkt instead
 ;; Phase 2: Build normalized context and emit context.built event
 (define (build-turn-context bus session-id turn-id st context)
   (define raw-messages (build-raw-messages context))
