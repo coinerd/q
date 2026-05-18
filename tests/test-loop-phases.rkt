@@ -34,8 +34,9 @@
                              (list (message "id1" #f 'user 'user "hello" 0 (hash)))))
       (check-true (list? raw))
       (check = (length raw) 1)
-      (check = (length effs) 1)
-      (check-true (effect:update-fsm? (car effs))))
+      (check = (length effs) 2)
+      (check-true (effect:emit-event? (car effs)))
+      (check-true (effect:update-fsm? (cadr effs))))
 
     (test-case "phase-build-request returns model request"
       (define-values (req effs) (phase-build-request '() #f #f))

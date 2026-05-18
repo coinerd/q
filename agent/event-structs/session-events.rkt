@@ -37,7 +37,8 @@
  context-assembled-event
  "context.assembled"
  (iteration total-messages assembled-messages token-count working-set-entries working-set-tokens)
- #:defaults (working-set-entries 0 working-set-tokens 0))
+ #:defaults (working-set-entries 0 working-set-tokens 0)
+ #:schema-version 1)
 
 (define-typed-event context-blocked-event "context.assembly.blocked" (reason) #:schema-version 1)
 

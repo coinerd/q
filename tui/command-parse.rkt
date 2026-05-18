@@ -137,35 +137,21 @@
          validate-args)
 
 (define (parse-command-name text)
-  (define trimmed (string-trim text))
+  ;; v0.46.10 (I-4): Compose from extracted pipeline stages instead of duplicating logic.
+  ;; tokenize returns (values cmd-string args-list) or #f.
+  ;; Use call-with-values to safely handle both return shapes.
+  (define tok (call-with-values (λ () (tokenize text)) vector))
   (cond
-    [(string=? trimmed "") #f]
-    [(not (char=? (string-ref trimmed 0) #\/)) #f]
-    [else
-     (define parts (string-split trimmed))
-     (define cmd (car parts))
-     (define args (cdr parts))
+    [(eq? tok #f) #f]
+    [(and (vector? tok) (= (vector-length tok) 2))
+     (define cmd (vector-ref tok 0))
+     (define args (vector-ref tok 1))
      (define table (make-command-table))
-     (define entry (hash-ref table cmd #f))
+     (define entry (lookup-command-entry cmd table))
      (cond
        [(not entry) 'unknown]
-       [(eq? (cdr entry) 'none) (parsed-command (car entry) '() 'none)]
-       [(eq? (cdr entry) 'optional)
-        (parsed-command (car entry)
-                        (if (null? args)
-                            '()
-                            (list (car args)))
-                        'optional)]
-       [(eq? (cdr entry) 'required)
-        (if (null? args)
-            (parsed-command (string->symbol (format "~a-error" (symbol->string (car entry))))
-                            (list (case (car entry)
-                                    [(switch) "Usage: /switch <branch-id>"]
-                                    [(children) "Usage: /children <node-id>"]
-                                    [else (format "Usage: /~a <id>" (symbol->string (car entry)))]))
-                            'error)
-            (parsed-command (car entry) (list (car args)) 'required))]
-       [else (parsed-command (car entry) '() 'none)])]))
+       [else (validate-args entry args)])]
+    [else #f]))
 
 ;; Resolve a command name (with alias) to canonical symbol.
 ;; Returns: symbol or #f

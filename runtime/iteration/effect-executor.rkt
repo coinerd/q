@@ -18,8 +18,6 @@
 
 (provide (struct-out step-effect:append-entries)
          (struct-out step-effect:emit-event)
-         (struct-out step-effect:execute-tools)
-         (struct-out step-effect:maybe-compact)
          step-effect?
          run-step-effects!)
 
@@ -33,18 +31,9 @@
 ;; Emit a session event
 (struct step-effect:emit-event (name payload) #:transparent)
 
-;; Execute pending tool calls
-(struct step-effect:execute-tools (messages infra config ws) #:transparent)
-
-;; Maybe compact context mid-turn
-(struct step-effect:maybe-compact (context session-id config session) #:transparent)
-
 ;; Predicate
-(define step-effect?
-  (or/c step-effect:append-entries?
-        step-effect:emit-event?
-        step-effect:execute-tools?
-        step-effect:maybe-compact?))
+(define (step-effect? v)
+  (or (step-effect:append-entries? v) (step-effect:emit-event? v)))
 
 ;; ---------------------------------------------------------------------------
 ;; Executor
@@ -60,6 +49,4 @@
        (emit-session-event! (loop-infra-bus infra)
                             (loop-infra-session-id infra)
                             (step-effect:emit-event-name eff)
-                            (step-effect:emit-event-payload eff))]
-      [(step-effect:execute-tools? eff) (void)] ;; handled separately
-      [(step-effect:maybe-compact? eff) (void)]))) ;; handled separately
+                            (step-effect:emit-event-payload eff))])))
