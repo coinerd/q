@@ -12,7 +12,6 @@
 (require racket/match
          racket/class
          racket/list
-         racket/dict
          (only-in "loop-state.rkt"
                   loop-infra
                   iteration-snapshot
@@ -32,20 +31,13 @@
                   loop-counters
                   loop-counters-iteration
                   loop-counters-consecutive-tool-count
-                  loop-counters-explore-count
-                  loop-counters-seen-paths
-                  loop-counters-consecutive-error-count
                   loop-counters-recent-tool-names)
          (only-in "../../util/protocol-types.rkt"
                   message-role
                   message-id
-                  make-message
-                  make-text-part
                   tool-call-name
                   tool-call-arguments
-                  tool-result-part?
-                  tool-result-part-is-error?)
-         (only-in "../../runtime/tool-coordinator.rkt"
+)         (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
@@ -61,10 +53,8 @@
                   loop-result-metadata
                   loop-result-termination-reason
                   loop-result-messages)
-         (only-in "../../util/ids.rkt" generate-id now-seconds)
          (only-in "../../runtime/session-store.rkt" append-entries!)
          (only-in "../../runtime/session-config.rkt" config-max-context-tokens)
-         (only-in "../../agent/queue.rkt" queue-status)
          (only-in "../../runtime/working-set.rkt"
                   working-set-update!
                   ws-entry-path

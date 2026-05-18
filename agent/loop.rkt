@@ -1,8 +1,9 @@
 #lang racket/base
 
-;; agent/loop.rkt — pure agent turn execution (facade)
+;; agent/loop.rkt — effectful agent turn orchestrator
 ;;
-;; Re-exports from loop-messages.rkt and loop-stream.rkt.
+;; Orchestrates the agent turn lifecycle: emit-start, build-context,
+;; build-request, pre-hook, streaming, and turn completion.
 ;; This module is the public API surface for the agent loop.
 ;; v0.32.4: Flattened CPS hook dispatch to data-return classify-hook-result + match.
 ;;
