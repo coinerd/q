@@ -58,16 +58,59 @@
          (only-in "permission-gate.rkt" permission-config? tool-needs-approval? request-approval))
 
 ;; ── Result struct ──
-(provide (struct-out scheduler-result)
+(provide (contract-out [scheduler-result (-> (listof any/c) any/c scheduler-result?)]
+                       [scheduler-result? (-> any/c boolean?)]
+                       [scheduler-result-results (-> scheduler-result? (listof any/c))]
+                       [scheduler-result-metadata (-> scheduler-result? any/c)])
          ;; R-15: Strategy support
-         (struct-out preflight-entry)
+         (contract-out [preflight-entry (-> symbol? any/c any/c (or/c string? #f) preflight-entry?)]
+                       [preflight-entry? (-> any/c boolean?)]
+                       [preflight-entry-status (-> preflight-entry? symbol?)]
+                       [preflight-entry-tool-call (-> preflight-entry? any/c)]
+                       [preflight-entry-tool (-> preflight-entry? any/c)]
+                       [preflight-entry-error-message (-> preflight-entry? (or/c string? #f))])
          ;; v0.44.2: Planning structs
-         (struct-out scheduler-problem)
-         (struct-out scheduler-plan)
+         (contract-out [scheduler-problem
+                        (-> (listof any/c) any/c any/c any/c any/c boolean? scheduler-problem?)]
+                       [scheduler-problem? (-> any/c boolean?)]
+                       [scheduler-problem-calls (-> scheduler-problem? (listof any/c))]
+                       [scheduler-problem-registry (-> scheduler-problem? any/c)]
+                       [scheduler-problem-strategy (-> scheduler-problem? any/c)]
+                       [scheduler-problem-hook-dispatcher (-> scheduler-problem? any/c)]
+                       [scheduler-problem-exec-context (-> scheduler-problem? any/c)]
+                       [scheduler-problem-parallel? (-> scheduler-problem? boolean?)])
+         (contract-out [scheduler-plan
+                        (-> (listof any/c) (listof any/c) symbol? any/c scheduler-plan?)]
+                       [scheduler-plan? (-> any/c boolean?)]
+                       [scheduler-plan-entries (-> scheduler-plan? (listof any/c))]
+                       [scheduler-plan-ordered-calls (-> scheduler-plan? (listof any/c))]
+                       [scheduler-plan-execution-order (-> scheduler-plan? symbol?)]
+                       [scheduler-plan-metadata (-> scheduler-plan? any/c)])
          ;; v0.44.2: Typed payloads
-         (struct-out tool-pre-hook-payload)
-         (struct-out tool-post-hook-payload)
-         (struct-out scheduler-batch-stats)
+         (contract-out [tool-pre-hook-payload (-> string? any/c string? tool-pre-hook-payload?)]
+                       [tool-pre-hook-payload? (-> any/c boolean?)]
+                       [tool-pre-hook-payload-tool-name (-> tool-pre-hook-payload? string?)]
+                       [tool-pre-hook-payload-args (-> tool-pre-hook-payload? any/c)]
+                       [tool-pre-hook-payload-entry-id (-> tool-pre-hook-payload? string?)])
+         (contract-out [tool-post-hook-payload
+                        (-> string? any/c string? any/c tool-post-hook-payload?)]
+                       [tool-post-hook-payload? (-> any/c boolean?)]
+                       [tool-post-hook-payload-tool-name (-> tool-post-hook-payload? string?)]
+                       [tool-post-hook-payload-result (-> tool-post-hook-payload? any/c)]
+                       [tool-post-hook-payload-entry-id (-> tool-post-hook-payload? string?)]
+                       [tool-post-hook-payload-arguments (-> tool-post-hook-payload? any/c)])
+         (contract-out
+          [scheduler-batch-stats
+           (-> exact-nonnegative-integer?
+               exact-nonnegative-integer?
+               exact-nonnegative-integer?
+               exact-nonnegative-integer?
+               scheduler-batch-stats?)]
+          [scheduler-batch-stats? (-> any/c boolean?)]
+          [scheduler-batch-stats-total (-> scheduler-batch-stats? exact-nonnegative-integer?)]
+          [scheduler-batch-stats-executed (-> scheduler-batch-stats? exact-nonnegative-integer?)]
+          [scheduler-batch-stats-blocked (-> scheduler-batch-stats? exact-nonnegative-integer?)]
+          [scheduler-batch-stats-errors (-> scheduler-batch-stats? exact-nonnegative-integer?)])
          scheduler-batch-stats->hash
          plan-tool-batch
          execute-tool-plan

@@ -7,19 +7,32 @@
 
 (require racket/contract)
 
-(provide (struct-out text-part)
-         (struct-out tool-call-part)
-         (struct-out tool-result-part)
-         ;; Re-export parent struct accessors
-         content-part?
-         content-part-type
-         (contract-out [make-text-part (-> string? text-part?)]
-                       [make-tool-call-part
-                        (-> (or/c string? #f) (or/c string? #f) (or/c string? hash?) tool-call-part?)]
-                       [make-tool-result-part
-                        (-> string? (or/c string? bytes?) any/c tool-result-part?)]
-                       [content-part->jsexpr (-> content-part? hash?)]
-                       [jsexpr->content-part (-> hash? content-part?)]))
+(provide (contract-out
+          [text-part (-> string? string? text-part?)]
+          [text-part? (-> any/c boolean?)]
+          [text-part-text (-> text-part? string?)]
+          [text-part-type (-> text-part? string?)]
+          [tool-call-part
+           (-> string? (or/c string? #f) (or/c string? #f) (or/c string? hash?) tool-call-part?)]
+          [tool-call-part? (-> any/c boolean?)]
+          [tool-call-part-id (-> tool-call-part? (or/c string? #f))]
+          [tool-call-part-name (-> tool-call-part? (or/c string? #f))]
+          [tool-call-part-arguments (-> tool-call-part? (or/c string? hash?))]
+          [tool-call-part-type (-> tool-call-part? string?)]
+          [tool-result-part (-> string? string? (or/c string? bytes?) any/c tool-result-part?)]
+          [tool-result-part? (-> any/c boolean?)]
+          [tool-result-part-tool-call-id (-> tool-result-part? string?)]
+          [tool-result-part-content (-> tool-result-part? (or/c string? bytes?))]
+          [tool-result-part-is-error? (-> tool-result-part? any/c)]
+          [tool-result-part-type (-> tool-result-part? string?)]
+          [content-part? (-> any/c boolean?)]
+          [content-part-type (-> content-part? string?)]
+          [make-text-part (-> string? text-part?)]
+          [make-tool-call-part
+           (-> (or/c string? #f) (or/c string? #f) (or/c string? hash?) tool-call-part?)]
+          [make-tool-result-part (-> string? (or/c string? bytes?) any/c tool-result-part?)]
+          [content-part->jsexpr (-> content-part? hash?)]
+          [jsexpr->content-part (-> hash? content-part?)]))
 
 ;; Base struct — not exported directly; use type-specific constructors.
 (struct content-part (type) #:transparent)
@@ -32,6 +45,15 @@
 
 ;; Tool-result content part
 (struct tool-result-part content-part (tool-call-id content is-error?) #:transparent)
+
+;; Wrapper accessors for inherited fields (struct-out creates these automatically,
+;; but with explicit exports we must define them ourselves).
+(define (text-part-type cp)
+  (content-part-type cp))
+(define (tool-call-part-type cp)
+  (content-part-type cp))
+(define (tool-result-part-type cp)
+  (content-part-type cp))
 
 ;; Convenience constructors
 (define (make-text-part text)

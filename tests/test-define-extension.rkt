@@ -43,3 +43,8 @@
   (define reg (make-extension-registry))
   (register-extension! reg reg-ext)
   (check-equal? (lookup-extension reg "reg-ext") reg-ext))
+
+(test-case "define-q-extension rejects invalid hook point"
+  (check-exn exn:fail:syntax?
+             (lambda ()
+               (expand #'(define-q-extension bad-ext #:on invalid-hook-point-xyz (lambda (p) p))))))

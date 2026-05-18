@@ -26,17 +26,34 @@
          (struct-out q-llm-error)
          ;; Branch 2: Tool
          (struct-out q-tool-error)
-         (struct-out tool-error)
+         (contract-out [tool-error (-> string? any/c hash? symbol? string? tool-error?)]
+                       [tool-error? (-> any/c boolean?)]
+                       [tool-error-tool-name (-> tool-error? string?)])
          ;; Branch 3: Extension
          (struct-out q-extension-error)
-         (struct-out extension-error)
+         (contract-out [extension-error
+                        (-> string? any/c hash? symbol? symbol? symbol? extension-error?)]
+                       [extension-error? (-> any/c boolean?)]
+                       [extension-error-extension-name (-> extension-error? string?)]
+                       [extension-error-hook-point (-> extension-error? string?)])
          ;; Branch 4: Session
          (struct-out q-session-error)
-         (struct-out session-error)
+         (contract-out [session-error (-> string? any/c hash? symbol? string? session-error?)]
+                       [session-error? (-> any/c boolean?)]
+                       [session-error-session-id (-> session-error? string?)])
          ;; Other error types
-         (struct-out ui-error)
-         (struct-out policy-error)
-         (struct-out credential-error)
+         (contract-out [ui-error (-> string? any/c hash? string? ui-error?)]
+                       [ui-error? (-> any/c boolean?)]
+                       [ui-error-component (-> ui-error? string?)])
+         (contract-out [policy-error (-> string? any/c hash? string? string? policy-error?)]
+                       [policy-error? (-> any/c boolean?)]
+                       [policy-error-policy-name (-> policy-error? string?)]
+                       [policy-error-violation (-> policy-error? string?)])
+         (contract-out [credential-error
+                        (-> string? any/c hash? string? (or/c #f string?) credential-error?)]
+                       [credential-error? (-> any/c boolean?)]
+                       [credential-error-backend (-> credential-error? string?)]
+                       [credential-error-details (-> credential-error? (or/c #f string?))])
          ;; Category-based predicates
          llm-timeout?
          llm-rate-limit?

@@ -12,11 +12,21 @@
 (require racket/contract)
 
 ;; UI request structs
-(provide (struct-out ui-request)
-         (struct-out ui-confirm-request)
-         (struct-out ui-select-request)
-         (struct-out ui-input-request)
-         (struct-out ui-response)
+(provide (contract-out
+          (struct ui-request ((type symbol?) (response-ch channel?) (prompt string?)))
+          (struct ui-confirm-request
+                  ((type symbol?) (response-ch channel?) (prompt string?) (default boolean?)))
+          (struct ui-select-request
+                  ((type symbol?) (response-ch channel?)
+                                  (prompt string?)
+                                  (options (listof (cons/c string? string?)))
+                                  (multi? boolean?)))
+          (struct ui-input-request
+                  ((type symbol?) (response-ch channel?)
+                                  (prompt string?)
+                                  (default (or/c string? #f))
+                                  (placeholder (or/c string? #f))))
+          (struct ui-response ((value any/c) (cancelled? boolean?))))
 
          ;; High-level API for extensions
          ui-confirm!

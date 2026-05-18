@@ -20,13 +20,16 @@
 
 (require racket/contract)
 
-(provide (struct-out fsm)
-         (struct-out fsm-state)
-         (struct-out fsm-event)
+(provide fsm
+         fsm?
          fsm-states
          fsm-events
          fsm-transitions
+         fsm-state
+         fsm-state?
          fsm-state-name
+         fsm-event
+         fsm-event?
          fsm-event-name
          (contract-out [make-fsm
                         (-> (listof symbol?)

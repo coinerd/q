@@ -28,11 +28,27 @@
          default-rate-limit-base-delay-ms
          default-max-delay-ms
          ;; Struct for retry stats
-         (struct-out retry-stats)
+         retry-stats
+         retry-stats?
+         retry-stats-attempts
+         retry-stats-final-delay-ms
+         retry-stats-succeeded?
          ;; Struct for retry exhaustion (A3)
-         (struct-out retry-exhausted)
+         retry-exhausted
+         retry-exhausted?
+         retry-exhausted-original-exn
+         retry-exhausted-attempts
+         retry-exhausted-last-error-type
+         retry-exhausted-total-delay-ms
+         retry-exhausted-error-history
          ;; Struct for retry policy (A21)
-         (struct-out retry-policy)
+         retry-policy
+         retry-policy?
+         retry-policy-max-retries
+         retry-policy-base-delay-ms
+         retry-policy-rate-limit-base-delay-ms
+         retry-policy-max-delay-ms
+         retry-policy-per-type-budgets
          make-default-retry-policy
          with-retry-policy)
 
