@@ -7,7 +7,8 @@
 ;; Manages message layout, status line, diff rendering, and theme application.
 ;; Consumes runtime events via state-events.rkt and renders to virtual buffer.
 
-(require racket/keyword
+(require racket/contract
+         racket/keyword
          racket/list
          racket/logging
          racket/string
@@ -34,27 +35,46 @@
 ;;   reset   = fg=7, bg=0, bold=#f (default values)
 
 ;; Main rendering function
-(provide render-frame!
-
-         ;; Component-based rendering
-         make-render-components
-         render-components-transcript
-         render-components-status
-         render-components-invalidate!
-
-         ;; Style mapping (for testing)
-         style->ubuf-kws
-
-         ;; Ubuf operations (settable for testing)
-         current-ubuf-clear
-         current-ubuf-putstring
-
-         ;; Width safety net
-         current-assert-width
-         assert-line-width!
-
-         ;; Low-level draw (for testing)
-         draw-styled-line!)
+(provide (contract-out
+          [render-frame!
+           (-> any/c
+               ui-state?
+               input-state?
+               tui-layout?
+               (values exact-nonnegative-integer?
+                       exact-nonnegative-integer?
+                       ui-state?
+                       (listof string?)))]
+          ;; Component-based rendering
+          [make-render-components (-> render-components?)]
+          [render-components-transcript
+           (-> render-components?
+               ui-state?
+               exact-nonnegative-integer?
+               exact-nonnegative-integer?
+               (values (listof styled-line?) ui-state?))]
+          [render-components-status
+           (-> render-components? ui-state? exact-nonnegative-integer? (listof styled-line?))]
+          [render-components-invalidate! (-> render-components? void?)]
+          ;; Style mapping (for testing)
+          [style->ubuf-kws (-> (listof symbol?) (values (listof keyword?) list?))]
+          ;; Ubuf operations (settable for testing)
+          [current-ubuf-clear (parameter/c (-> any/c any))]
+          [current-ubuf-putstring
+           (parameter/c (->* (any/c exact-nonnegative-integer? exact-nonnegative-integer? string?)
+                             (#:fg exact-nonnegative-integer?
+                                   #:bg exact-nonnegative-integer?
+                                   #:bold boolean?
+                                   #:underline boolean?
+                                   #:italic boolean?
+                                   #:blink boolean?)
+                             any))]
+          ;; Width safety net
+          [current-assert-width (parameter/c boolean?)]
+          [assert-line-width! (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          ;; Low-level draw (for testing)
+          [draw-styled-line!
+           (-> any/c styled-line? exact-nonnegative-integer? exact-nonnegative-integer? any)]))
 
 ;; ============================================================
 ;; Ubuf operations (parameterized for testability)

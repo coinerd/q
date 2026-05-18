@@ -6,13 +6,23 @@
 ;; No dependency on render.rkt, input.rkt, or commands.rkt.
 ;; Consumed by palette.rkt (for alias resolution) and input.rkt (for parsing).
 
-(require racket/string)
+(require racket/contract
+         racket/string)
 
-(provide make-command-table
-         parse-command-name
-         resolve-command-name
-         ;; R-17: Structured command result
-         (struct-out parsed-command))
+(provide (contract-out
+          [make-command-table (-> (hash/c string? (cons/c symbol? symbol?)))]
+          [parse-command-name (-> string? (or/c parsed-command? symbol? #f))]
+          [resolve-command-name (-> string? (or/c symbol? #f))]
+          ;; R-17: Structured command result
+          [parsed-command? (-> any/c boolean?)]
+          [parsed-command-canonical-name (-> parsed-command? symbol?)]
+          [parsed-command-args (-> parsed-command? list?)]
+          [parsed-command-arg-kind (-> parsed-command? symbol?)]
+          ;; Pipeline stage extraction for testability
+          [tokenize (-> string? any/c)]
+          [lookup-command-entry
+           (-> string? (hash/c string? (cons/c symbol? symbol?)) (or/c #f (cons/c symbol? symbol?)))]
+          [validate-args (-> (cons/c symbol? symbol?) (listof string?) parsed-command?)]))
 
 ;; Command table: maps command name strings (including aliases) to
 ;; (cons canonical-symbol arg-kind)
@@ -131,10 +141,6 @@
                          'error)
          (parsed-command (car entry) (list (car args)) 'required))]
     [else (parsed-command (car entry) '() 'none)]))
-
-(provide tokenize
-         lookup-command-entry
-         validate-args)
 
 (define (parse-command-name text)
   ;; v0.47.0 (D-5): Cleaner handling of tokenize multi-value or #f return.
