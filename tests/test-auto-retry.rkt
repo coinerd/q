@@ -516,28 +516,28 @@
 (test-case "W-06a: retryable-error? with provider-error rate-limit"
   (check-not-false
    (retryable-error?
-    (provider-error "rate limited" (current-continuation-marks) (hash) 429 'rate-limit))))
+    (provider-error "rate limited" (current-continuation-marks) (hash) 'rate-limit 429))))
 
 (test-case "W-06b: retryable-error? with provider-error auth-error returns #f"
   (check-false (retryable-error?
-                (provider-error "bad key" (current-continuation-marks) (hash) 401 'auth-error))))
+                (provider-error "bad key" (current-continuation-marks) (hash) 'auth-error 401))))
 
 (test-case "W-06c: classify-error with provider-error timeout returns 'timeout"
   (check-equal?
-   (classify-error (provider-error "timed out" (current-continuation-marks) (hash) #f 'timeout))
+   (classify-error (provider-error "timed out" (current-continuation-marks) (hash) 'timeout #f))
    'timeout))
 
 (test-case "W-06d: classify-error with provider-error server-error returns 'server-error"
   (check-equal?
    (classify-error
-    (provider-error "internal error" (current-continuation-marks) (hash) 500 'server-error))
+    (provider-error "internal error" (current-continuation-marks) (hash) 'server-error 500))
    'server-error))
 
 (test-case "W-06e: retryable-error? with provider-error network returns truthy"
-  (define exn (provider-error "connection reset" (current-continuation-marks) (hash) #f 'network))
+  (define exn (provider-error "connection reset" (current-continuation-marks) (hash) 'network #f))
   (check-not-false (retryable-error? exn)))
 
 (test-case "W-06f: retryable-error? with provider-error server-error returns truthy"
   (define exn
-    (provider-error "internal server error" (current-continuation-marks) (hash) 500 'server-error))
+    (provider-error "internal server error" (current-continuation-marks) (hash) 'server-error 500))
   (check-not-false (retryable-error? exn)))

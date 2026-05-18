@@ -22,37 +22,73 @@
 ;; Error structs and constructors
 (provide warn-deprecated!
          (struct-out q-error)
+         ;; Branch 1: LLM
+         (struct-out q-llm-error)
+         ;; Branch 2: Tool
+         (struct-out q-tool-error)
          (struct-out tool-error)
-         (struct-out session-error)
-         (struct-out ui-error)
+         ;; Branch 3: Extension
+         (struct-out q-extension-error)
          (struct-out extension-error)
+         ;; Branch 4: Session
+         (struct-out q-session-error)
+         (struct-out session-error)
+         ;; Other error types
+         (struct-out ui-error)
          (struct-out policy-error)
          (struct-out credential-error)
+         ;; Category-based predicates
+         llm-timeout?
+         llm-rate-limit?
+         llm-auth-error?
+         tool-permission-denied?
+         tool-execution-timeout?
+         session-corrupted?
+         session-migration-failed?
          (contract-out [raise-q-error (->* (string?) (hash?) exn:fail?)]
                        [raise-tool-error (->* (string? string?) (hash?) exn:fail?)]
                        [raise-session-error (->* (string? string?) (hash?) exn:fail?)]
                        [raise-ui-error (->* (string? string?) (hash?) exn:fail?)]
                        [raise-extension-error (->* (string? string? string?) (hash?) exn:fail?)]
                        [raise-policy-error (->* (string? string? string?) (hash?) exn:fail?)]
-                       [raise-credential-error (->* (string? string? string?) (hash?) exn:fail?)])
+                       [raise-credential-error (->* (string? string?) (string? hash?) exn:fail?)])
          ;; Quality macros (Q06/Q07)
          with-cleanup
          with-logged-catch)
 
-;; Base error type for all q domain errors
+;; Base error type for all q domain errors.
+;; All q errors carry a context hash for structured metadata.
 (struct q-error exn:fail (context) #:transparent)
 
-;; Tool execution errors
-(struct tool-error q-error (tool-name) #:transparent)
+;; ── Branch 1: LLM errors ────────────────────────────────────
+;; Intermediate branch for all LLM/provider errors.
+;; provider-error (in llm/provider-errors.rkt) inherits from this.
+(struct q-llm-error q-error (category) #:transparent)
 
-;; Session lifecycle errors
-(struct session-error q-error (session-id) #:transparent)
+;; ── Branch 2: Tool errors ───────────────────────────────────
+;; Tool execution failures (permission-denied, execution-timeout, invalid-args).
+(struct q-tool-error q-error (category) #:transparent)
 
+;; Legacy tool-error (backward-compat) — inherits from q-tool-error.
+(struct tool-error q-tool-error (tool-name) #:transparent)
+
+;; ── Branch 3: Extension errors ──────────────────────────────
+;; Extension lifecycle/hook violation errors (load-failure, hook-error, timeout).
+(struct q-extension-error q-error (category) #:transparent)
+
+;; Legacy extension-error (backward-compat).
+(struct extension-error q-extension-error (extension-name hook-point) #:transparent)
+
+;; ── Branch 4: Session errors ────────────────────────────────
+;; Session lifecycle errors (corrupted-journal, migration-failure, write-failure).
+(struct q-session-error q-error (category) #:transparent)
+
+;; Legacy session-error (backward-compat).
+(struct session-error q-session-error (session-id) #:transparent)
+
+;; ── Other error types (flat under q-error) ──────────────────
 ;; TUI rendering/input errors (recoverable, don't crash session)
 (struct ui-error q-error (component) #:transparent)
-
-;; Extension lifecycle/hook violation errors
-(struct extension-error q-error (extension-name hook-point) #:transparent)
 
 ;; GSD policy violation errors (blocked tools, budget exceeded)
 (struct policy-error q-error (policy-name violation) #:transparent)
@@ -65,22 +101,55 @@
   (raise (q-error message (current-continuation-marks) context)))
 
 (define (raise-tool-error message tool-name [context (hash)])
-  (raise (tool-error message (current-continuation-marks) context tool-name)))
+  (raise (tool-error message (current-continuation-marks) context 'tool-error tool-name)))
 
 (define (raise-session-error message session-id [context (hash)])
-  (raise (session-error message (current-continuation-marks) context session-id)))
+  (raise (session-error message (current-continuation-marks) context 'session-error session-id)))
 
 (define (raise-ui-error message component [context (hash)])
   (raise (ui-error message (current-continuation-marks) context component)))
 
 (define (raise-extension-error message extension-name hook-point [context (hash)])
-  (raise (extension-error message (current-continuation-marks) context extension-name hook-point)))
+  (raise (extension-error message
+                          (current-continuation-marks)
+                          context
+                          'extension-error
+                          extension-name
+                          hook-point)))
 
 (define (raise-policy-error message policy-name violation [context (hash)])
   (raise (policy-error message (current-continuation-marks) context policy-name violation)))
 
 (define (raise-credential-error message backend [details #f] [context (hash)])
   (raise (credential-error message (current-continuation-marks) context backend details)))
+
+;; ============================================================
+;; Category-based predicates for convenient error matching
+;; ============================================================
+
+;; LLM category predicates
+(define (llm-timeout? e)
+  (and (q-llm-error? e) (eq? (q-llm-error-category e) 'timeout)))
+
+(define (llm-rate-limit? e)
+  (and (q-llm-error? e) (eq? (q-llm-error-category e) 'rate-limit)))
+
+(define (llm-auth-error? e)
+  (and (q-llm-error? e) (memq (q-llm-error-category e) '(auth context-overflow))))
+
+;; Tool category predicates
+(define (tool-permission-denied? e)
+  (and (q-tool-error? e) (eq? (q-tool-error-category e) 'permission-denied)))
+
+(define (tool-execution-timeout? e)
+  (and (q-tool-error? e) (eq? (q-tool-error-category e) 'execution-timeout)))
+
+;; Session category predicates
+(define (session-corrupted? e)
+  (and (q-session-error? e) (eq? (q-session-error-category e) 'corrupted-journal)))
+
+(define (session-migration-failed? e)
+  (and (q-session-error? e) (eq? (q-session-error-category e) 'migration-failure)))
 
 ;; ============================================================
 ;; Quality macros (Q06/Q07)
