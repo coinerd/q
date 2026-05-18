@@ -74,7 +74,7 @@
                   detect-exploration-loop)
          (only-in "decision.rkt" step-result step-result-action step-result-new-counters)
          (only-in "internal.rkt" assert-payload)
-         (only-in "directive.rkt" directive-recurse directive-stop directive-yield))
+         (only-in "directive.rkt" directive-recurse directive-stop))
 
 (provide interpret-step
          handle-stop-action

@@ -41,9 +41,10 @@
 (struct effect:none () #:transparent)
 
 ;; Predicate: is this an effect descriptor?
-(define effect?
-  (or/c effect:emit-event?
-        effect:update-fsm?
-        effect:dispatch-hook?
-        effect:stream-from-provider?
-        effect:none?))
+;; v0.46.10 (M-1): Proper predicate instead of or/c alias.
+(define (effect? v)
+  (or (effect:emit-event? v)
+      (effect:update-fsm? v)
+      (effect:dispatch-hook? v)
+      (effect:stream-from-provider? v)
+      (effect:none? v)))

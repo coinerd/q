@@ -28,8 +28,6 @@
                        [set-active-tools! (-> tool-registry? (or/c (listof string?) #f) void?)]
                        [tool-active? (-> tool-registry? string? boolean?)]
                        [with-registry-snapshot (-> tool-registry? procedure? any)])
-         ;; Internal — do not use outside this module
-         with-registry-lock
          tool-registry?)
 
 ;; ============================================================
