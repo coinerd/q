@@ -10,87 +10,91 @@
 ;;
 ;; This file keeps only the slash-command dispatch and re-exports the full public API.
 
-(require racket/string
+(require racket/contract
+         racket/string
          "command-parse.rkt"
          "input/state-types.rkt"
          "input/editing-ops.rkt"
          "input/history-ops.rkt"
          "input/completion-ops.rkt")
 
+;; input-state is used with struct-copy in many consumers (tests + sub-modules),
+;; so we keep struct-out for it.  mouse-event is not used with struct-copy,
+;; so we export it via contract-out.
 (provide (struct-out input-state)
-         (struct-out mouse-event)
-
-         ;; Constructors
-         initial-input-state
-
-         ;; Editing
-         input-insert-char
-         input-insert-newline
-         input-backspace
-         input-delete
-         input-cursor-left
-         input-cursor-right
-         input-home
-         input-end
-         input-clear
-
-         ;; Undo/Redo
-         input-undo
-         input-redo
-
-         ;; Kill ring
-         input-kill-word-backward
-         input-kill-to-beginning
-         input-kill-to-end
-         input-yank
-
-         ;; Word navigation
-         input-cursor-word-left
-         input-cursor-word-right
-
-         ;; Paste
-         input-insert-string
-
-         ;; History
-         input-history-push
-         input-history-up
-         input-history-down
-
-         ;; Submission
-         input-submit
-         input-current-text
-         input-at-beginning?
-         input-at-end?
-         input-empty?
-
-         ;; Slash commands
-         input-slash-command
-         parse-tui-slash-command
-
-         ;; Horizontal scroll
-         input-visible-window
-         INPUT-PROMPT-WIDTH
-
-         ;; Mouse events
-         parse-mouse-event
-         decode-mouse-x10
-         decode-mouse-tui-term
-
-         ;; Selection helpers
-         normalize-selection-range
-
-         ;; IME cursor markers
-         CURSOR_MARKER
-         cursor-marker-string
-         strip-cursor-markers
-         has-cursor-markers?
-         insert-cursor-marker
-
-         ;; File reference expansion
-         input-expand-file-ref
-
-         ;; Inline bash expansion
-         expand-inline-bash)
+         (contract-out
+          [mouse-event? (-> any/c boolean?)]
+          [mouse-event (->* (symbol? exact-integer? exact-integer? exact-integer?) () mouse-event?)]
+          [mouse-event-type (-> mouse-event? symbol?)]
+          [mouse-event-button (-> mouse-event? exact-integer?)]
+          [mouse-event-x (-> mouse-event? exact-integer?)]
+          [mouse-event-y (-> mouse-event? exact-integer?)]
+          ;; Constructors
+          [initial-input-state (-> input-state?)]
+          ;; Editing
+          [input-insert-char (-> input-state? char? input-state?)]
+          [input-insert-newline (-> input-state? input-state?)]
+          [input-backspace (-> input-state? input-state?)]
+          [input-delete (-> input-state? input-state?)]
+          [input-cursor-left (-> input-state? input-state?)]
+          [input-cursor-right (-> input-state? input-state?)]
+          [input-home (-> input-state? input-state?)]
+          [input-end (-> input-state? input-state?)]
+          [input-clear (-> input-state? input-state?)]
+          ;; Undo/Redo
+          [input-undo (-> input-state? input-state?)]
+          [input-redo (-> input-state? input-state?)]
+          ;; Kill ring
+          [input-kill-word-backward (-> input-state? input-state?)]
+          [input-kill-to-beginning (-> input-state? input-state?)]
+          [input-kill-to-end (-> input-state? input-state?)]
+          [input-yank (-> input-state? input-state?)]
+          ;; Word navigation
+          [input-cursor-word-left (-> input-state? input-state?)]
+          [input-cursor-word-right (-> input-state? input-state?)]
+          ;; Paste
+          [input-insert-string (-> input-state? string? input-state?)]
+          ;; History
+          [input-history-push (-> input-state? string? input-state?)]
+          [input-history-up (-> input-state? input-state?)]
+          [input-history-down (-> input-state? input-state?)]
+          ;; Submission
+          [input-submit (-> input-state? (values (or/c string? #f) input-state?))]
+          [input-current-text (-> input-state? string?)]
+          [input-at-beginning? (-> input-state? boolean?)]
+          [input-at-end? (-> input-state? boolean?)]
+          [input-empty? (-> input-state? boolean?)]
+          ;; Slash commands
+          [input-slash-command (-> string? boolean?)]
+          [parse-tui-slash-command (-> string? (or/c parsed-command? symbol? #f))]
+          ;; Horizontal scroll
+          [input-visible-window
+           (-> input-state?
+               exact-nonnegative-integer?
+               (values string? exact-integer? exact-integer?))]
+          [INPUT-PROMPT-WIDTH exact-nonnegative-integer?]
+          ;; Mouse events
+          [parse-mouse-event (-> any/c (or/c mouse-event? #f))]
+          [decode-mouse-x10 (-> exact-integer? exact-integer? exact-integer? (or/c list? #f))]
+          [decode-mouse-tui-term (-> any/c (or/c list? #f))]
+          ;; Selection helpers
+          [normalize-selection-range
+           (-> (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)
+               (cons/c exact-nonnegative-integer? exact-nonnegative-integer?)
+               (values exact-nonnegative-integer?
+                       exact-nonnegative-integer?
+                       exact-nonnegative-integer?
+                       exact-nonnegative-integer?))]
+          ;; IME cursor markers
+          [CURSOR_MARKER char?]
+          [cursor-marker-string (-> string?)]
+          [strip-cursor-markers (-> string? string?)]
+          [has-cursor-markers? (-> string? boolean?)]
+          [insert-cursor-marker (-> string? exact-nonnegative-integer? string?)]
+          ;; File reference expansion
+          [input-expand-file-ref (-> input-state? input-state?)]
+          ;; Inline bash expansion
+          [expand-inline-bash (-> string? (or/c string? #f) string?)]))
 
 ;; ============================================================
 ;; Slash commands (kept here -- trivial dispatch)

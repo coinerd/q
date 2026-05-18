@@ -9,7 +9,8 @@
 ;; v0.32.3: Migrated from raw emit! to emit-typed-event! with typed structs.
 ;; v0.32.4: Replaced CPS handle-hook-result with classify-hook-result + match.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string
          "../llm/provider.rkt"
          "../llm/model.rkt"
@@ -24,6 +25,7 @@
          (only-in "event-emitter.rkt" emit-typed-event!)
          ;; v0.45.12 M2: emit-session-event! moved to agent layer (was runtime/runtime-helpers.rkt)
          (only-in "event-emitter.rkt" emit-session-event!)
+         (only-in "event-bus.rkt" event-bus?)
          ;; Stream event types
          (only-in "event-structs/stream-events.rkt"
                   make-stream-completed-event
@@ -46,10 +48,13 @@
 (define MAX-STREAM-CHUNKS (make-parameter 10000))
 
 (provide MAX-STREAM-CHUNKS
-         accumulate-stream-chunks
-         stream-from-provider
-         handle-cancellation
-         build-stream-result)
+         (contract-out [accumulate-stream-chunks (-> any/c hash?)])
+         (contract-out [stream-from-provider
+                        (-> any/c any/c any/c any/c any/c any/c any/c any/c hash?)])
+         (contract-out [handle-cancellation
+                        (->* (any/c any/c any/c any/c) (#:hook-dispatcher any/c) any/c)])
+         (contract-out [build-stream-result
+                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)]))
 
 ;; ============================================================
 ;; accumulate-stream-chunks : pure helper (S11-F1)

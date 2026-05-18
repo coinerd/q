@@ -12,14 +12,28 @@
 
 (require racket/contract)
 
-(provide (struct-out effect:emit-event)
-         (struct-out effect:update-fsm)
-         (struct-out effect:dispatch-hook)
-         (struct-out effect:stream-from-provider)
-         (struct-out effect:none)
-         (struct-out streaming-plan)
-         effect?
-         streaming-plan?)
+(provide (contract-out (struct effect:emit-event ([type any/c] [payload any/c])))
+         (contract-out (struct effect:update-fsm ([from-state any/c] [event any/c])))
+         (contract-out (struct effect:dispatch-hook ([hook-point any/c] [payload any/c])))
+         (contract-out (struct effect:stream-from-provider
+                               ([provider any/c] [request any/c]
+                                                 [bus any/c]
+                                                 [session-id string?]
+                                                 [turn-id any/c]
+                                                 [state any/c]
+                                                 [hook-dispatcher (or/c procedure? #f)]
+                                                 [cancellation-token any/c])))
+         (contract-out (struct effect:none ()))
+         (contract-out (struct streaming-plan
+                               ([session-id string?] [turn-id any/c]
+                                                     [raw-messages (listof hash?)]
+                                                     [req any/c]
+                                                     [provider any/c]
+                                                     [tools list?]
+                                                     [hook-dispatcher (or/c procedure? #f)]
+                                                     [cancellation-token any/c]
+                                                     [expected-effects (listof effect?)])))
+         effect?)
 
 ;; ---------------------------------------------------------------------------
 ;; Effect descriptors
@@ -49,16 +63,15 @@
 ;; Pure result from compute-streaming-plan: describes what the streaming
 ;; phase needs to do, without actually doing it.
 (struct streaming-plan
-        (session-id
-         turn-id
-         raw-messages      ; (listof hash?) — validated message sequence
-         req               ; model-request?
-         provider          ; provider?
-         tools             ; (listof any/c)
-         hook-dispatcher   ; (or/c procedure? #f)
-         cancellation-token ; any/c
-         expected-effects  ; (listof effect?) — effects to emit before streaming
-         )
+        (session-id turn-id
+                    raw-messages ; (listof hash?) — validated message sequence
+                    req ; model-request?
+                    provider ; provider?
+                    tools ; (listof any/c)
+                    hook-dispatcher ; (or/c procedure? #f)
+                    cancellation-token ; any/c
+                    expected-effects ; (listof effect?) — effects to emit before streaming
+                    )
   #:transparent)
 
 ;; ---------------------------------------------------------------------------

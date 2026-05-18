@@ -6,61 +6,100 @@
 ;; Contains both data definitions and cache/entry utility logic.
 ;; Split from state.rkt (v0.22.6 W2) to keep each module under 400 lines.
 
-(require racket/string
+(require racket/contract
+         racket/set
+         racket/string
          racket/list
          json
          "../util/cost-tracker.rkt")
 
+;; Structs that need struct-copy support in consumers must use struct-out.
+;; We add contracts on functions only.
 (provide (struct-out transcript-entry)
          (struct-out ui-state)
-         (struct-out selection-state)
-         (struct-out cache-state)
          (struct-out streaming-state)
-         (struct-out branch-info)
          (struct-out overlay-state)
-         (struct-out tree-browser-state)
+         (struct-out branch-info)
 
-         ;; Constructors
-         initial-ui-state
+         ;; These structs are not used with struct-copy externally,
+         ;; so we export via contract-out for stronger guarantees.
+         (contract-out
+          [selection-state? (-> any/c boolean?)]
+          [selection-state
+           (-> (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f)
+               (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f)
+               selection-state?)]
+          [selection-state-anchor
+           (-> selection-state?
+               (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f))]
+          [selection-state-end
+           (-> selection-state?
+               (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f))]
+          [cache-state? (-> any/c boolean?)]
+          [cache-state
+           (-> hash?
+               (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f)
+               cache-state?)]
+          [cache-state-entries (-> cache-state? hash?)]
+          [cache-state-width
+           (-> cache-state? (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f))]
+          [tree-browser-state? (-> any/c boolean?)]
+          [tree-browser-state
+           (->* ((listof (list/c any/c any/c symbol? string? number?)) exact-integer?
+                                                                       set?
+                                                                       (listof string?))
+                ()
+                tree-browser-state?)]
+          [tree-browser-state-nodes
+           (-> tree-browser-state? (listof (list/c any/c any/c symbol? string? number?)))]
+          [tree-browser-state-selected-idx (-> tree-browser-state? exact-integer?)]
+          [tree-browser-state-folded-set (-> tree-browser-state? set?)]
+          [tree-browser-state-rendered-lines (-> tree-browser-state? (listof string?))]
+          ;; Constructors
+          [initial-ui-state
+           (->* ()
+                (#:session-id (or/c string? #f) #:model-name (or/c string? #f) #:mode symbol?)
+                ui-state?)]
+          ;; Entry helpers
+          [make-entry (-> symbol? string? number? hash? transcript-entry?)]
+          [make-system-entry (-> string? transcript-entry?)]
+          [make-error-entry (-> string? transcript-entry?)]
+          [assign-entry-id (-> transcript-entry? ui-state? (values transcript-entry? ui-state?))]
+          [next-entry-id (-> ui-state? exact-nonnegative-integer?)]
+          ;; Render cache helpers
+          [rendered-cache-ref (-> ui-state? any/c (or/c (listof styled-line?) #f))]
+          [rendered-cache-set (-> ui-state? any/c (listof styled-line?) ui-state?)]
+          [rendered-cache-clear (-> ui-state? ui-state?)]
+          [rendered-cache-invalidate-entry (-> ui-state? any/c ui-state?)]
+          [rendered-cache-width-valid? (-> ui-state? exact-nonnegative-integer? boolean?)]
+          [rendered-cache-set-width (-> ui-state? exact-nonnegative-integer? ui-state?)]
+          [ui-state-rendered-cache (-> ui-state? hash?)]
+          [ui-state-rendered-cache-width
+           (-> ui-state? (or/c (cons/c exact-nonnegative-integer? exact-nonnegative-integer?) #f))]
+          ;; Backward-compatible streaming accessors (v0.38.6 migration)
+          [ui-state-busy? (-> ui-state? boolean?)]
+          [ui-state-status-message (-> ui-state? (or/c string? #f))]
+          [ui-state-pending-tool-name (-> ui-state? (or/c string? #f))]
+          [ui-state-streaming-text (-> ui-state? (or/c string? #f))]
+          [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
+          [ui-state-busy-since (-> ui-state? any/c)]
+          ;; Streaming update helpers
+          [update-streaming (-> ui-state? (-> streaming-state? streaming-state?) ui-state?)]
+          [set-busy (-> ui-state? boolean? ui-state?)]
+          [set-status-message (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-pending-tool-name (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-streaming-text (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-streaming-thinking (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-busy-since (-> ui-state? any/c ui-state?)]
+          [clear-streaming (-> ui-state? ui-state?)]
+          ;; String helpers
+          [truncate-string (-> string? exact-nonnegative-integer? string?)]
+          [extract-arg-summary (-> string? string?)]))
 
-         ;; Entry helpers
-         make-entry
-         make-system-entry
-         make-error-entry
-         assign-entry-id
-         next-entry-id
-
-         ;; Render cache helpers
-         rendered-cache-ref
-         rendered-cache-set
-         rendered-cache-clear
-         rendered-cache-invalidate-entry
-         rendered-cache-width-valid?
-         rendered-cache-set-width
-         ui-state-rendered-cache
-         ui-state-rendered-cache-width
-
-         ;; Backward-compatible streaming accessors (v0.38.6 migration)
-         ui-state-busy?
-         ui-state-status-message
-         ui-state-pending-tool-name
-         ui-state-streaming-text
-         ui-state-streaming-thinking
-         ui-state-busy-since
-
-         ;; Streaming update helpers
-         update-streaming
-         set-busy
-         set-status-message
-         set-pending-tool-name
-         set-streaming-text
-         set-streaming-thinking
-         set-busy-since
-         clear-streaming
-
-         ;; String helpers
-         truncate-string
-         extract-arg-summary)
+;; Forward declarations for types referenced in contracts but defined elsewhere
+;; (These are provided by other modules and re-exported through state.rkt)
+(define styled-line? any/c) ;; placeholder — actual definition is in render/message-layout.rkt
+(define q-component? any/c) ;; placeholder — actual definition is in component.rkt
 
 ;; A single line in the transcript display
 (struct transcript-entry

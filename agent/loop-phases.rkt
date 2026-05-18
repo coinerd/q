@@ -7,7 +7,8 @@
 ;; (values result (listof effect?)). Effects describe what should
 ;; happen; the orchestrator (loop.rkt) decides how to execute them.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/list
          "../util/ids.rkt"
          "../util/protocol-types.rkt"
@@ -37,18 +38,28 @@
                   hook-stage-payload)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "event-emitter.rkt" emit-typed-event!)
+         (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
          (only-in "state.rkt" current-loop-state-for-error-recovery)
          "../util/loop-result.rkt")
 
-(provide phase-emit-start
-         phase-build-context
-         phase-build-request
-         phase-pre-hook
-         phase-msg-hook
-         phase-stream
-         run-streaming-phase
-         compute-streaming-plan)
+(provide (contract-out [phase-emit-start
+                        (-> any/c any/c any/c any/c (values any/c (listof effect?)))])
+         (contract-out [phase-build-context
+                        (-> any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
+         (contract-out [phase-build-request (-> any/c any/c any/c (values any/c (listof effect?)))])
+         (contract-out [phase-pre-hook
+                        (-> any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
+         (contract-out
+          [phase-msg-hook
+           (-> any/c any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
+         (contract-out
+          [phase-stream
+           (-> any/c any/c any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
+         (contract-out [run-streaming-phase
+                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)])
+         (contract-out [compute-streaming-plan
+                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c streaming-plan?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
