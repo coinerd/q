@@ -17,7 +17,8 @@
 (provide make-multi-mock-provider
          make-simple-mock-provider
          make-tool-call-mock-provider
-         make-test-config)
+         make-test-config
+         make-mock-provider-builder)
 
 ;; Multi-response mock provider: returns different responses for
 ;; successive turns.  stream is called first (no advance), then
@@ -151,3 +152,99 @@
 ;; Create a standard test config hash for agent-session.
 (define (make-test-config dir bus prov [reg #f])
   (hash 'provider prov 'tool-registry (or reg (make-tool-registry)) 'event-bus bus 'session-dir dir))
+
+;; ============================================================
+;; Builder API for composing mock provider behavior
+;; ============================================================
+
+;; make-mock-provider-builder returns a mutable builder that accumulates
+;; responses. Call (build) to produce a multi-mock-provider.
+;; Usage:
+;;   (define prov ((make-mock-provider-builder)
+;;                 (add-text "hello")
+;;                 (add-text "world")
+;;                 (build)))
+(define (make-mock-provider-builder)
+  (define responses (box '()))
+  (lambda (method . args)
+    (case method
+      [(add-text)
+       (define text (car args))
+       (set-box! responses
+                 (append (unbox responses)
+                         (list (make-model-response
+                                (list (hash 'type "text" 'text text))
+                                (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                                "mock-builder"
+                                'stop))))
+       (make-mock-provider-builder-internal responses)]
+      [(add-tool-call)
+       (define name (car args))
+       (define arguments
+         (if (null? (cdr args))
+             (hash)
+             (cadr args)))
+       (set-box!
+        responses
+        (append
+         (unbox responses)
+         (list (make-model-response
+                (list (hash 'type "tool-call" 'id "tc-builder" 'name name 'arguments arguments))
+                (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                "mock-builder"
+                'tool-calls))))
+       (make-mock-provider-builder-internal responses)]
+      [(add-error)
+       (define category (car args))
+       (set-box! responses
+                 (append (unbox responses)
+                         (list (make-model-response
+                                (list (hash 'type "text" 'text (format "error: ~a" category)))
+                                (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
+                                "mock-builder"
+                                'stop))))
+       (make-mock-provider-builder-internal responses)]
+      [(build) (make-multi-mock-provider (unbox responses))]
+      [else (error 'mock-provider-builder "unknown method: ~a" method)])))
+
+(define (make-mock-provider-builder-internal responses)
+  (lambda (method . args)
+    (case method
+      [(add-text)
+       (define text (car args))
+       (set-box! responses
+                 (append (unbox responses)
+                         (list (make-model-response
+                                (list (hash 'type "text" 'text text))
+                                (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                                "mock-builder"
+                                'stop))))
+       (make-mock-provider-builder-internal responses)]
+      [(add-tool-call)
+       (define name (car args))
+       (define arguments
+         (if (null? (cdr args))
+             (hash)
+             (cadr args)))
+       (set-box!
+        responses
+        (append
+         (unbox responses)
+         (list (make-model-response
+                (list (hash 'type "tool-call" 'id "tc-builder" 'name name 'arguments arguments))
+                (hasheq 'prompt-tokens 10 'completion-tokens 5 'total-tokens 15)
+                "mock-builder"
+                'tool-calls))))
+       (make-mock-provider-builder-internal responses)]
+      [(add-error)
+       (define category (car args))
+       (set-box! responses
+                 (append (unbox responses)
+                         (list (make-model-response
+                                (list (hash 'type "text" 'text (format "error: ~a" category)))
+                                (hasheq 'prompt-tokens 5 'completion-tokens 3 'total-tokens 8)
+                                "mock-builder"
+                                'stop))))
+       (make-mock-provider-builder-internal responses)]
+      [(build) (make-multi-mock-provider (unbox responses))]
+      [else (error 'mock-provider-builder "unknown method: ~a" method)])))
