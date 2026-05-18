@@ -11,6 +11,7 @@
          (only-in "../util/protocol-types.rkt" message-role message-kind message-id)
          (only-in "../runtime/context-policy.rkt"
                   estimate-message-tokens
+                  estimate-message-tokens-cached
                   ensure-first-user-pinned
                   fit-messages-with-importance-rescue))
 
@@ -27,7 +28,7 @@
 (define (truncate-messages-to-budget messages max-tokens)
   (cond
     [(null? messages) '()]
-    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens m)) max-tokens) messages]
+    [(<= (for/sum ([m (in-list messages)]) (estimate-message-tokens-cached m)) max-tokens) messages]
     [else
      (define-values (protected removable)
        (partition (lambda (m) (memq (message-kind m) '(system-instruction compaction-summary)))
@@ -36,10 +37,10 @@
        (for/first ([m (in-list messages)]
                    #:when (eq? (message-role m) 'user))
          m))
-     (define protected-tokens (for/sum ([m (in-list protected)]) (estimate-message-tokens m)))
+     (define protected-tokens (for/sum ([m (in-list protected)]) (estimate-message-tokens-cached m)))
      (define pinned-tokens
        (if (and first-user-msg (not (member first-user-msg protected)))
-           (estimate-message-tokens first-user-msg)
+           (estimate-message-tokens-cached first-user-msg)
            0))
      (define remaining-budget (- max-tokens protected-tokens pinned-tokens))
      (cond

@@ -55,6 +55,7 @@
          (contract-out
           [resolve-model (-> model-registry? (or/c string? #f) (or/c model-resolution? #f))]
           [resolve-model-by-provider (-> model-registry? string? (or/c model-resolution? #f))]
+          [invalidate-model-resolution-cache! (-> void?)]
           [available-models (-> model-registry? (listof model-entry?))]
           [default-model (-> model-registry? (or/c string? #f))]
           [default-model-for-mode (-> model-registry? symbol? (or/c string? #f))]
@@ -88,6 +89,28 @@
          default-provider ; string or #f
          default-model ; string or #f
          ))
+
+;; ============================================================
+;; Resolution cache — v0.47.6
+;; ============================================================
+
+;; Hash-based cache keyed on (model-name-string . registry-hash-code).
+;; Cleared when registry changes (new registry = new hash).
+(define model-resolution-cache (make-hash))
+
+(define (cache-key registry model-name)
+  (cons model-name (equal-hash-code registry)))
+
+(define (cached-resolve-model registry model-name)
+  (define key (cache-key registry model-name))
+  (hash-ref model-resolution-cache key (lambda () #f)))
+
+(define (cache-resolve-model! registry model-name result)
+  (define key (cache-key registry model-name))
+  (hash-set! model-resolution-cache key result))
+
+(define (invalidate-model-resolution-cache!)
+  (hash-clear! model-resolution-cache))
 
 ;; ============================================================
 ;; Config key normalization
@@ -215,20 +238,28 @@
 ;; ============================================================
 
 (define (resolve-model registry model-name)
-  ;; If model-name is #f, resolve default
-  (match model-name
-    [#f (resolve-default registry)]
-    [_
-     ;; Check for provider prefix: "provider/model"
-     (define parts (string-split model-name "/" #:trim? #f))
-     (cond
-       [(= (length parts) 2)
-        ;; Provider prefix syntax
-        (define prov-name (car parts))
-        (define model (cadr parts))
-        (resolve-with-provider registry prov-name model)]
-       ;; Exact match across all providers
-       [else (resolve-exact registry model-name)])]))
+  ;; Check cache first
+  (define cached (cached-resolve-model registry model-name))
+  (cond
+    [cached cached]
+    [else
+     ;; Compute and cache
+     (define result
+       (match model-name
+         [#f (resolve-default registry)]
+         [_
+          ;; Check for provider prefix: "provider/model"
+          (define parts (string-split model-name "/" #:trim? #f))
+          (cond
+            [(= (length parts) 2)
+             ;; Provider prefix syntax
+             (define prov-name (car parts))
+             (define model (cadr parts))
+             (resolve-with-provider registry prov-name model)]
+            ;; Exact match across all providers
+            [else (resolve-exact registry model-name)])]))
+     (cache-resolve-model! registry model-name result)
+     result]))
 
 (define (resolve-default registry)
   (define dm (model-registry-default-model registry))

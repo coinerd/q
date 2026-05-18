@@ -19,6 +19,8 @@
 
 ;; Token estimation
 (provide (contract-out [estimate-message-tokens (-> message? exact-nonnegative-integer?)]
+                       [estimate-message-tokens-cached (-> message? exact-nonnegative-integer?)]
+                       [invalidate-token-estimate-cache! (-> void?)]
                        [ensure-first-user-pinned
                         (-> (listof message?) (listof message?) (listof message?))]
                        [fit-messages-pair-preserving
@@ -52,6 +54,25 @@
                #:when (text-part? part))
       (text-part-text part)))
   (estimate-text-tokens (string-join text-parts " ")))
+
+;; ---------------------------------------------------------------------------
+;; Memoized token estimation — v0.47.6
+;; ---------------------------------------------------------------------------
+
+;; Hash-based cache keyed on message content fingerprint.
+;; Thread-safe via atomic hash operations.
+(define token-estimate-cache (make-hash))
+
+;; Cached version of estimate-message-tokens.
+;; Uses (message-id msg) and content hash as cache key.
+(define (estimate-message-tokens-cached msg)
+  (define key (cons (message-id msg) (equal-hash-code (message-content msg))))
+  (hash-ref! token-estimate-cache key (lambda () (estimate-message-tokens msg))))
+
+;; Invalidate the token estimation cache.
+;; Call when message content changes (e.g., compaction, editing).
+(define (invalidate-token-estimate-cache!)
+  (hash-clear! token-estimate-cache))
 
 ;; ============================================================
 ;; Predicates

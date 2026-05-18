@@ -35,7 +35,5 @@
       [(effect:dispatch-hook? eff)
        (when hook-disp
          (hook-disp (effect:dispatch-hook-hook-point eff) (effect:dispatch-hook-payload eff)))]
-      [(effect:stream-from-provider? eff)
-       (log-warning "effect:stream-from-provider should not reach execute-effects!")]
       [(effect:none? eff) (void)]
       [else (void)])))

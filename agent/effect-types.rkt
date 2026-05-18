@@ -15,14 +15,6 @@
 (provide (contract-out (struct effect:emit-event ([type any/c] [payload any/c])))
          (contract-out (struct effect:update-fsm ([from-state any/c] [event any/c])))
          (contract-out (struct effect:dispatch-hook ([hook-point any/c] [payload any/c])))
-         (contract-out (struct effect:stream-from-provider
-                               ([provider any/c] [request any/c]
-                                                 [bus any/c]
-                                                 [session-id string?]
-                                                 [turn-id any/c]
-                                                 [state any/c]
-                                                 [hook-dispatcher (or/c procedure? #f)]
-                                                 [cancellation-token any/c])))
          (contract-out (struct effect:none ()))
          (contract-out (struct streaming-plan
                                ([session-id string?] [turn-id any/c]
@@ -47,11 +39,6 @@
 
 ;; Dispatch a hook at the given hook point
 (struct effect:dispatch-hook (hook-point payload) #:transparent)
-
-;; Stream from provider with given config and messages
-(struct effect:stream-from-provider
-        (provider request bus session-id turn-id state hook-dispatcher cancellation-token)
-  #:transparent)
 
 ;; No-op effect (identity)
 (struct effect:none () #:transparent)
@@ -81,8 +68,4 @@
 ;; Predicate: is this an effect descriptor?
 ;; v0.46.10 (M-1): Proper predicate instead of or/c alias.
 (define (effect? v)
-  (or (effect:emit-event? v)
-      (effect:update-fsm? v)
-      (effect:dispatch-hook? v)
-      (effect:stream-from-provider? v)
-      (effect:none? v)))
+  (or (effect:emit-event? v) (effect:update-fsm? v) (effect:dispatch-hook? v) (effect:none? v)))
