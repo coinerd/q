@@ -47,7 +47,8 @@
          phase-pre-hook
          phase-msg-hook
          phase-stream
-         run-streaming-phase)
+         run-streaming-phase
+         compute-streaming-plan)
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
@@ -147,21 +148,63 @@
   (values stream-data '()))
 
 ;; ---------------------------------------------------------------------------
+;; ---------------------------------------------------------------------------
+;; Phase 6b: Pure streaming plan computation
+;; ---------------------------------------------------------------------------
+
+;; compute-streaming-plan : ... -> streaming-plan
+;; Pure: computes what the streaming phase needs to do without doing it.
+;; Validates messages, builds the request, and records expected effects.
+(define (compute-streaming-plan provider
+                                req
+                                bus
+                                session-id
+                                turn-id
+                                st
+                                raw-messages
+                                tools
+                                hook-dispatcher
+                                cancellation-token)
+  (define pre-effects
+    (list (effect:emit-event 'provider-request
+                             (hasheq 'session-id
+                                     session-id
+                                     'turn-id
+                                     turn-id
+                                     'model
+                                     (hash-ref (model-request-settings req)
+                                               'model
+                                               (lambda () (format "~a" (provider-name provider))))
+                                     'provider
+                                     (format "~a" (provider-name provider))))
+          (effect:update-fsm turn-state-pre-hook turn-event-hook-pass)))
+  (streaming-plan session-id
+                  turn-id
+                  raw-messages
+                  req
+                  provider
+                  tools
+                  hook-dispatcher
+                  cancellation-token
+                  pre-effects))
+
+;; ---------------------------------------------------------------------------
+
 ;; Phase 7: Full post-pre-hook streaming dispatch
 ;; ---------------------------------------------------------------------------
 
 ;; Returns loop-result directly (this is an effectful dispatch function)
 ;; Handles: msg-hook dispatch, streaming, cancellation, result building
 (define (run-streaming-phase provider
-                                  req
-                                  bus
-                                  session-id
-                                  turn-id
-                                  st
-                                  raw-messages
-                                  tools
-                                  hook-dispatcher
-                                  cancellation-token)
+                             req
+                             bus
+                             session-id
+                             turn-id
+                             st
+                             raw-messages
+                             tools
+                             hook-dispatcher
+                             cancellation-token)
   (parameterize ([current-turn-fsm-state (current-turn-fsm-state)])
     ;; FSM: pre-hook -> stream
     (current-turn-fsm-state (next-turn-state turn-state-pre-hook turn-event-hook-pass))
