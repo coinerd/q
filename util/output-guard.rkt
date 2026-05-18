@@ -10,14 +10,16 @@
 (require racket/match
          racket/port)
 
-(provide
- ;; Guard lifecycle
- call-with-output-guard
- with-output-guard
- ;; Access the real terminal port inside the guard
- guarded-real-output-port
- ;; Escape hatch for intentional raw output
- call-with-raw-output)
+(require racket/contract)
+
+;; Parameter
+(provide guarded-real-output-port
+         ;; Macro
+         with-output-guard
+         ;; Guarded functions
+         (contract-out [call-with-output-guard
+                        (->* (procedure?) (#:redirect-to (or/c output-port? #f)) any)]
+                       [call-with-raw-output (-> procedure? any)]))
 
 ;; ============================================================
 ;; Parameters
@@ -37,8 +39,7 @@
 
 ;; Call `thunk` with current-output-port redirected to a null sink.
 ;; The real terminal port is available via (guarded-real-output-port).
-(define (call-with-output-guard thunk
-                                #:redirect-to [redirect-port #f])
+(define (call-with-output-guard thunk #:redirect-to [redirect-port #f])
   (define real-port (current-output-port))
   (define sink (or redirect-port (make-null-sink)))
   (parameterize ([current-output-port sink]
@@ -47,7 +48,9 @@
 
 ;; Macro form
 (define-syntax-rule (with-output-guard #:redirect-to port body ...)
-  (call-with-output-guard (lambda () body ...) #:redirect-to port))
+  (call-with-output-guard (lambda ()
+                            body ...)
+                          #:redirect-to port))
 
 ;; ============================================================
 ;; Escape hatch

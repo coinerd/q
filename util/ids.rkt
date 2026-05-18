@@ -9,8 +9,13 @@
 ;;; Within the same millisecond, the random portion is incremented
 ;;; to maintain sort order (ULID spec behavior).
 
-(provide generate-id
-         now-seconds)
+(require racket/contract)
+
+(provide (contract-out [generate-id (-> string?)] [now-seconds (-> exact-nonnegative-integer?)])
+         ;; Predicates (non-contracted for internal use)
+         id?
+         id->string
+         string->id)
 
 ;; ── Crockford Base32 encoding ──
 ;; Characters: 0-9, A-Z excluding I, L, O, U = 32 symbols

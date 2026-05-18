@@ -16,14 +16,14 @@
 ;; Tool execution lifecycle (typed-event parent)
 ;; ============================================================
 
-(define-typed-event tool-execution-start-event "tool.execution.started" (tool-name tool-call-id))
+(define-typed-event tool-execution-start-event "tool.execution.started" (tool-name tool-call-id) #:schema-version 1)
 
-(define-typed-event tool-execution-update-event "tool.execution.updated" (tool-name progress))
+(define-typed-event tool-execution-update-event "tool.execution.updated" (tool-name progress) #:schema-version 1)
 
 (define-typed-event tool-execution-end-event
                     "tool.execution.completed"
                     (tool-name duration-ms result-summary)
-                    #:defaults (duration-ms 0))
+                    #:defaults (duration-ms 0) #:schema-version 1)
 
 ;; ============================================================
 ;; Generic tool call/result (typed-event parent)
@@ -32,12 +32,12 @@
 (define-typed-event tool-call-event
                     "tool.called"
                     (tool-name arguments tool-call-id)
-                    #:defaults (arguments (hasheq)))
+                    #:defaults (arguments (hasheq)) #:schema-version 1)
 
 (define-typed-event tool-result-event
                     "tool.result"
                     (tool-call-id content is-error?)
-                    #:defaults (is-error? #f))
+                    #:defaults (is-error? #f) #:schema-version 1)
 
 ;; ============================================================
 ;; Per-tool typed events (tool-call-event parent — manual)
@@ -239,3 +239,4 @@
 
 (define custom-tool-call-event-fields tool-call-event-fields)
 (register-event-fields! 'custom-tool-call-event custom-tool-call-event-fields)
+

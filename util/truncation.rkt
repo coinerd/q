@@ -22,15 +22,17 @@
          racket/list
          racket/path)
 
+(require racket/contract)
+
 (provide MAX-OUTPUT-BYTES
          MAX-OUTPUT-LINES
          MAX-OUTPUT-CHARS
-         truncate-output
-         truncate-to-n-lines
-         truncate-to-n-chars
-         output-exceeds-limits?
-         truncate-output-with-overflow
-         output-overflow-dir)
+         output-overflow-dir
+         (contract-out [truncate-output (-> string? string?)]
+                       [truncate-to-n-lines (-> string? exact-nonnegative-integer? string?)]
+                       [truncate-to-n-chars (-> string? exact-nonnegative-integer? string?)]
+                       [output-exceeds-limits? (-> string? boolean?)]
+                       [truncate-output-with-overflow (->* (string?) (string?) string?)]))
 
 ;; Constants
 (define MAX-OUTPUT-BYTES 50000) ; 50KB

@@ -7,30 +7,30 @@
 
 ;; Session lifecycle
 
-(define-typed-event session-start-event "session.started" (model))
+(define-typed-event session-start-event "session.started" (model) #:schema-version 1)
 
-(define-typed-event session-shutdown-event "session.shutdown" (reason))
+(define-typed-event session-shutdown-event "session.shutdown" (reason) #:schema-version 1)
 
 ;; Input events
 
-(define-typed-event input-event "input" (input-type content))
+(define-typed-event input-event "input" (input-type content) #:schema-version 1)
 
 ;; Model events
 
-(define-typed-event model-select-event "model.selected" (model provider))
+(define-typed-event model-select-event "model.selected" (model provider) #:schema-version 1)
 
 ;; Agent events
 
-(define-typed-event agent-start-event "agent.started" (model))
+(define-typed-event agent-start-event "agent.started" (model) #:schema-version 1)
 
-(define-typed-event agent-end-event "agent.completed" (reason duration-ms) #:defaults (duration-ms 0))
+(define-typed-event agent-end-event "agent.completed" (reason duration-ms) #:defaults (duration-ms 0) #:schema-version 1)
 
 ;; Context events
 
 (define-typed-event context-event
                     "context.built"
                     (token-count window-size)
-                    #:defaults (token-count 0 window-size 0))
+                    #:defaults (token-count 0 window-size 0) #:schema-version 1)
 
 ;; v0.44.3 (R2): Context assembly lifecycle events — replaces raw hasheq payloads
 (define-typed-event
@@ -39,9 +39,9 @@
  (iteration total-messages assembled-messages token-count working-set-entries working-set-tokens)
  #:defaults (working-set-entries 0 working-set-tokens 0))
 
-(define-typed-event context-blocked-event "context.assembly.blocked" (reason))
+(define-typed-event context-blocked-event "context.assembly.blocked" (reason) #:schema-version 1)
 
-(define-typed-event working-set-injected-event "working-set.injected" (entries tokens))
+(define-typed-event working-set-injected-event "working-set.injected" (entries tokens) #:schema-version 1)
 
 ;; v0.45.5 (OBS-01/02/03): Detailed assembly metrics for observability
 (define-typed-event context-assembly-detail-event
@@ -74,4 +74,5 @@
                                              ws-tokens
                                              0
                                              cache-hit-p
-                                             #f))
+                                             #f) #:schema-version 1)
+

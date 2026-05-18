@@ -29,8 +29,7 @@
 ;;     session-exists?, fork-session!, session naming
 ;;   Admin tier (integrity tools): verify-hash-chain, repair-session-log!,
 ;;     import-session!, migrate-session-log!
-;;   Both tiers are currently in one provide block.
-;;   A future refactor may split into submodules.
+;;   Submodules provide tiered re-exports; main module re-exports both.
 (provide (contract-out [append-entry! (path-string? message? . -> . void?)]
                        [append-entries! (path-string? (listof message?) . -> . void?)]
                        [load-session-log (->* (path-string?) ((or/c #f string?)) (listof message?))]
@@ -391,3 +390,27 @@
 
 (define (session-info-entry? msg)
   (and (message? msg) (eq? (message-kind msg) 'session-info)))
+
+;; ---------------------------------------------------------------------------
+;; F11: Consumer/Admin submodule split
+;; ---------------------------------------------------------------------------
+
+(module+ consumer
+  (provide (contract-out [append-entry! (path-string? message? . -> . void?)]
+                         [append-entries! (path-string? (listof message?) . -> . void?)]
+                         [load-session-log (->* (path-string?) ((or/c #f string?)) (listof message?))]
+                         [replay-session (path-string? . -> . (listof message?))])
+           fork-session!
+           write-session-name!))
+
+(module+ admin
+  (provide GENESIS-HASH
+           compute-event-hash
+           verify-hash-chain
+           verify-session-integrity
+           repair-session-log!
+           import-session!
+           migrate-session-log!
+           CURRENT-SESSION-VERSION
+           write-session-version-header!
+           ensure-session-version-header!))

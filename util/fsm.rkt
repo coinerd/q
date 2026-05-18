@@ -13,15 +13,21 @@
 
 (require racket/match)
 
+(require racket/contract)
+
 (provide (struct-out fsm)
-         make-fsm
          fsm-states
          fsm-events
          fsm-transitions
-         fsm-lookup
-         fsm-valid-transition?
-         fsm-valid-targets
-         fsm-find-path)
+         (contract-out [make-fsm
+                        (-> (listof symbol?)
+                            (listof symbol?)
+                            (listof (cons/c (cons/c symbol? symbol?) symbol?))
+                            fsm?)]
+                       [fsm-lookup (-> fsm? symbol? symbol? (or/c symbol? #f))]
+                       [fsm-valid-transition? (-> fsm? symbol? symbol? boolean?)]
+                       [fsm-valid-targets (-> fsm? symbol? (listof symbol?))]
+                       [fsm-find-path (-> fsm? symbol? symbol? (or/c (listof symbol?) #f))]))
 
 ;; ── Struct ──
 

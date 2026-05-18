@@ -5,19 +5,18 @@
 ;; Extracted from runtime/iteration.rkt and tools/tool.rkt to eliminate
 ;; duplication (QUAL-01).  The version with the warning fprintf is canonical.
 
-(require racket/format
+(require racket/contract
+         racket/format
          racket/string
          json
          (only-in "errors.rkt" raise-tool-error))
 
 ;; JSON argument normalization
-(provide ensure-hash-args
-         ;; JSON file I/O
-         read-json-file
-         write-json-file
-         ;; R-01/R-02: Port-based I/O
-         read-json-from-port
-         write-json-to-port)
+(provide (contract-out [ensure-hash-args (->* (any/c) (#:graceful? boolean?) hash?)]
+                       [read-json-file (-> path-string? any/c)]
+                       [write-json-file (->* (path-string? any/c) (#:exists symbol?) void?)]
+                       [read-json-from-port (-> input-port? any/c)]
+                       [write-json-to-port (-> output-port? any/c void?)]))
 
 ;; Parse tool-call arguments from string to hash if needed.
 ;; Streaming produces arguments as JSON strings; tools expect hashes.
