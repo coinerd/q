@@ -120,10 +120,10 @@
                    [(trans-event ...) (syntax->list #'(t.event-sym ...))]
                    [(trans-to ...) (syntax->list #'(t.to-sym ...))])
        #'(begin
-           ;; State constructors (thunks returning fsm-state)
-           (define (state-constructor) (fsm-state 'state-name)) ...
-           ;; Event constructors (thunks returning fsm-event)
-           (define (event-constructor) (fsm-event 'event-name)) ...
+           ;; State singletons
+           (define state-constructor (fsm-state 'state-name)) ...
+           ;; Event singletons
+           (define event-constructor (fsm-event 'event-name)) ...
            ;; Predicates
            (define (prefix-state? v)
              (and (fsm-state? v) (member (fsm-state-name v) '(state ...)) #t))
@@ -145,5 +145,5 @@
                (fsm-lookup prefix-machine (fsm-state-name state-obj) (fsm-event-name event-obj)))
              (and next-sym
                   (case next-sym
-                    [(state-name) (state-constructor)] ...
+                    [(state-name) state-constructor] ...
                     [else #f])))))]))
