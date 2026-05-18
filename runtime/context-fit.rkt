@@ -6,7 +6,8 @@
 ;; Functions for fitting messages within token budgets while preserving
 ;; system instructions and first-user pinning.
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/set
          (only-in "../util/protocol-types.rkt" message-role message-kind message-id)
          (only-in "../runtime/context-policy.rkt"
@@ -15,8 +16,9 @@
                   ensure-first-user-pinned
                   fit-messages-with-importance-rescue))
 
-(provide truncate-messages-to-budget
-         fit-messages-from-recent)
+(provide (contract-out
+          [truncate-messages-to-budget (-> (listof any/c) exact-nonnegative-integer? (listof any/c))]
+          [fit-messages-from-recent (-> (listof any/c) exact-nonnegative-integer? (listof any/c))]))
 
 ;; Fit messages from recent end within budget (pair-preserving + importance rescue).
 ;; v0.45.7 (NF2): Now uses importance-aware rescue to preserve critical/high messages.

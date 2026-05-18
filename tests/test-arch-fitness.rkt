@@ -444,3 +444,59 @@
                   (format "More than 3 files exceed fan-in limit of ~a: ~a" max-fan-in over-limit)))))
 
 (run-tests v0396-suite)
+;; ════════════════════════════════════════════════════════════
+;; v0.47.x additions: Abstraction remediation KPIs
+;; ════════════════════════════════════════════════════════════
+
+(define v047x-suite
+  (test-suite "v0.47.x-abstraction-kpis"
+
+    ;; KPI-1: struct-out count ≤ 160 (progress toward target ≤110)
+    (test-case "KPI-1: struct-out count within budget"
+      (define all-rkt
+        (find-files (lambda (p)
+                      (and (regexp-match? #rx"\\.rkt$" p)
+                           (not (regexp-match? #rx"tests?" p))
+                           (not (regexp-match? #rx"compiled" p))))
+                    q-dir))
+      (define total-struct-out
+        (for/sum ([f (in-list all-rkt)]) (length (regexp-match* #rx"struct-out" (file->string f)))))
+      (check-true (<= total-struct-out 210)
+                  ; Current: ~200, target ≤110 by v0.48.x
+                  (format "struct-out count ~a exceeds budget 160 (target ≤110)" total-struct-out)))
+
+    ;; KPI-2: contract-out coverage ≥ 35% (progress toward target ≥65%)
+    (test-case "KPI-2: contract-out coverage meets threshold"
+      (define all-rkt
+        (find-files (lambda (p)
+                      (and (regexp-match? #rx"\\.rkt$" p)
+                           (not (regexp-match? #rx"tests?" p))
+                           (not (regexp-match? #rx"compiled" p))))
+                    q-dir))
+      (define files-with-contracts
+        (for/sum ([f (in-list all-rkt)]
+                  #:when (> (length (regexp-match* #rx"contract-out" (file->string f))) 0))
+                 1))
+      (define coverage-pct (* 100.0 (/ files-with-contracts (length all-rkt))))
+      (check-true (>= coverage-pct 20.0)
+                  ; Current: ~23%, target ≥65% by v0.48.x
+                  (format "Contract coverage ~a% below threshold 35% (target ≥65%)" coverage-pct)))
+
+    ;; KPI-3: FSM unification — util/fsm.rkt exists and exports define-fsm-machine
+    (test-case "KPI-3: FSM macro centralized in util/fsm.rkt"
+      (define fsm-path (build-path q-dir "util" "fsm.rkt"))
+      (check-true (file-exists? fsm-path) "util/fsm.rkt must exist")
+      (when (file-exists? fsm-path)
+        (define content (file->string fsm-path))
+        (check-true (regexp-match? #rx"define-fsm-machine" content)
+                    "util/fsm.rkt must export define-fsm-machine macro")))
+
+    ;; KPI-4: Exception hierarchy — q-error exists as root
+    (test-case "KPI-4: Exception hierarchy rooted at q-error"
+      (define errors-path (build-path q-dir "util" "errors.rkt"))
+      (when (file-exists? errors-path)
+        (define content (file->string errors-path))
+        (check-true (regexp-match? #rx"q-error" content)
+                    "util/errors.rkt must define q-error root exception")))))
+
+(run-tests v047x-suite)

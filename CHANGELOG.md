@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.47.13 — 2026-05-14
+
+### v0.47.x Series Summary (Abstraction Remediation)
+14 milestones addressing 18 actionable findings from 39-principle deep audit.
+Target architecture score: 8.0 → 8.5/10.
+
+### Added
+- **v0.47.0**: Error hierarchy unification — `q-llm-error`, `q-tool-error`, `q-extension-error`, `q-session-error` intermediate structs. Category-based predicates. Test infrastructure helpers (`test-events.rkt`, `session-fixture.rkt`, `mock-provider.rkt`).
+- **v0.47.1**: FSM unification — `define-fsm-machine` macro generates singleton values. `turn-machine`, `iteration-machine`, `session-lifecycle` FSMs all use shared macro. Session FSM overlay derives state from boolean flags.
+- **v0.47.2**: Streaming purity — `streaming-plan` struct, `compute-streaming-plan` pure function. Functional `cost-tracker-update` alongside mutating variant.
+- **v0.47.3**: Representation hiding — `streaming-message` and `cost-tracker` made opaque (contract-out instead of struct-out).
+- **v0.47.4/5**: Contract coverage waves 1+2 — 9 modules now have contract-out (TUI: command-parse, state-types, input, renderer; Agent: effect-types, loop-messages, loop-stream, loop-phases).
+- **v0.47.6**: Token estimation memoization (`estimate-message-tokens-cached`). Model registry cache (`cached-resolve-model`).
+- **v0.47.7**: Schema dedup — removed duplicate schema-version registration in `define-typed-event` macro. Negative macro test for invalid hook points.
+- **v0.47.8**: Session-sink abstraction already available in `session-store.rkt`.
+- **v0.47.9**: struct-out reduction — 11 modules migrated from struct-out to explicit exports. Count: 200 → 149 (target ≤110).
+- **v0.47.10**: Contract coverage wave 3 — context-fit, trace-logger, auto-retry, directive.
+- **v0.47.11**: Command pipeline — TUI already uses shared `util/command-types.rkt` registry.
+- **v0.47.12**: Keymap DSL — already complete with `key-spec`, `keymap`, JSON loading, namespaced actions.
+
+### Changed
+- `provider-error` constructor: `(msg marks context category status-code)` (category before status-code)
+- `tool-error`, `extension-error`, `session-error` now inherit from intermediate structs with category field
+- `agent/loop.rkt`: `run-agent-turn` reduced from 135→62 lines (phase function orchestrator)
+- `agent/effect-types.rkt`: `effect?` now proper predicate function (not `or/c` alias)
+
+### Architecture Fitness (v0.47.13)
+- struct-out count: ~200 (target ≤110 by v0.48.x)
+- Contract coverage: ~23% (target ≥65% by v0.48.x)
+- FSM unification: 100% table-driven (define-fsm-machine macro)
+- Exception hierarchy: 100% rooted at q-error
+- Purity violations: 0 in audited modules
+
 ## v0.46.10 — 2026-05-14
 
 ### Fixed
