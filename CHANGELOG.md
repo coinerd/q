@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.46.10 — 2026-05-14
+
+### Fixed
+- W0: Added #:schema-version 1 to context-assembled-event (46/46 events now covered)
+- W0: Removed with-registry-lock from bare provide in tools/registry.rkt (I-3)
+- W0: Removed unused directive-yield import from step-interpreter.rkt (M-2)
+- W0: Rewrote parse-command-name as compose of tokenize/lookup/validate pipeline (I-4)
+- W0: Fixed effect? to be proper predicate function, not or/c alias (M-1)
+- W0: Removed void step-effect:execute-tools/step-effect:maybe-compact stubs (M-5)
+- W1: Extracted streaming phase dispatch to loop-phases.rkt (run-agent-turn: 135→62 lines)
+- W2: Rewrote test-define-extension-expand.rkt to test define-q-extension macro (M-4)
+- W2: Deprecated emit-turn-start!/build-turn-context, removed from provide (M-3)
+- W2: Migrated test-stream-loop-w1.rkt to use phase functions
+
 ## v0.46.9 — 2026-05-14
 
 ### Added
