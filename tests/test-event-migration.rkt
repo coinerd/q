@@ -12,7 +12,8 @@
                   current-event-migration-registry)
          (only-in "../util/event-macro.rkt"
                   register-event-schema-version!
-                  lookup-event-schema-version))
+                  lookup-event-schema-version
+                  with-fresh-event-registries))
 
 (define migration-tests
   (test-suite "event-migration"
@@ -64,4 +65,4 @@
       (check-equal? (hash-ref result 'data) "original")
       (check-equal? (hash-ref result 'schemaVersion) 3))))
 
-(run-tests migration-tests)
+(with-fresh-event-registries (run-tests migration-tests))

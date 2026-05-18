@@ -28,13 +28,13 @@
          (struct-out extension-error)
          (struct-out policy-error)
          (struct-out credential-error)
-         raise-q-error
-         raise-tool-error
-         raise-session-error
-         raise-ui-error
-         raise-extension-error
-         raise-policy-error
-         raise-credential-error
+         (contract-out [raise-q-error (->* (string?) (hash?) exn:fail?)]
+                       [raise-tool-error (->* (string? string?) (hash?) exn:fail?)]
+                       [raise-session-error (->* (string? string?) (hash?) exn:fail?)]
+                       [raise-ui-error (->* (string? string?) (hash?) exn:fail?)]
+                       [raise-extension-error (->* (string? string? string?) (hash?) exn:fail?)]
+                       [raise-policy-error (->* (string? string? string?) (hash?) exn:fail?)]
+                       [raise-credential-error (->* (string? string? string?) (hash?) exn:fail?)])
          ;; Quality macros (Q06/Q07)
          with-cleanup
          with-logged-catch)

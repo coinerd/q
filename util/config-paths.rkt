@@ -11,14 +11,15 @@
 ;;   - Project-local: .q/ first, .pi/ as fallback
 ;;   - Global:        ~/.q/
 
-(provide project-config-dirs
-         global-config-dir)
+(require racket/contract)
+
+(provide (contract-out [project-config-dirs (-> (or/c path-string? #f) (listof path?))]
+                       [global-config-dir (-> path?)]))
 
 ;; Returns list of possible project config directory paths in priority order.
 ;; ".q/" first, then ".pi/" as fallback.
 (define (project-config-dirs project-dir)
-  (list (build-path project-dir ".q")
-        (build-path project-dir ".pi")))
+  (list (build-path project-dir ".q") (build-path project-dir ".pi")))
 
 ;; Returns global config directory path (~/.q).
 (define (global-config-dir)

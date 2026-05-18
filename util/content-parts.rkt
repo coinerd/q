@@ -13,11 +13,12 @@
          ;; Re-export parent struct accessors
          content-part?
          content-part-type
-         make-text-part
-         make-tool-call-part
-         make-tool-result-part
-         content-part->jsexpr
-         jsexpr->content-part)
+         (contract-out [make-text-part (-> string? text-part?)]
+                       [make-tool-call-part (-> string? string? (listof hash?) tool-call-part?)]
+                       [make-tool-result-part
+                        (-> string? string? (or/c 'error 'success) tool-result-part?)]
+                       [content-part->jsexpr (-> content-part? hash?)]
+                       [jsexpr->content-part (-> hash? content-part?)]))
 
 ;; Base struct — not exported directly; use type-specific constructors.
 (struct content-part (type) #:transparent)
@@ -63,9 +64,7 @@
              (tool-result-part-content cp)
              'isError
              (tool-result-part-is-error? cp))]
-    [else (raise-arguments-error 'content-part->jsexpr
-                                 "unknown content part type"
-                                 "type" cp)]))
+    [else (raise-arguments-error 'content-part->jsexpr "unknown content part type" "type" cp)]))
 
 ;; Deserialization
 (define (jsexpr->content-part h)
@@ -75,8 +74,6 @@
     [("tool-call") (make-tool-call-part (hash-ref h 'id) (hash-ref h 'name) (hash-ref h 'arguments))]
     [("tool-result")
      (make-tool-result-part (hash-ref h 'toolCallId) (hash-ref h 'content) (hash-ref h 'isError))]
-    [else (raise-arguments-error 'jsexpr->content-part
-                                 "unknown content part type"
-                                 "type" tp)]))
+    [else (raise-arguments-error 'jsexpr->content-part "unknown content part type" "type" tp)]))
 
 ;; Get the type tag from a content part (struct accessor from content-part)
