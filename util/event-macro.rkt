@@ -305,10 +305,6 @@
                (register-event-deserializer! type-str
                                              (lambda (type ts sid tid h)
                                                (event-name type ts sid tid deser-arg ...)))
-               ;; S8-F1: Register per-type schema version
-               (let ([sv schema-ver])
-                 (when sv
-                   (register-event-schema-version! type-str sv)))
                (provide (struct-out event-name)
                         make-name
                         type-name
