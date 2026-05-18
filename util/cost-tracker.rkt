@@ -15,6 +15,10 @@
           [calculate-cost
            (-> exact-nonnegative-integer? exact-nonnegative-integer? (or/c string? #f) real?)]
           [format-cost (-> real? string?)]
+          [cost-tracker-update
+           (->* (cost-tracker? exact-nonnegative-integer? exact-nonnegative-integer?)
+                ((or/c string? #f))
+                cost-tracker?)]
           [cost-tracker-update!
            (->* (cost-tracker? exact-nonnegative-integer? exact-nonnegative-integer?)
                 ((or/c string? #f))
@@ -78,6 +82,15 @@
 ;; ============================================================
 ;; Thread-safe mutators
 ;; ============================================================
+
+;; Functional (non-mutating) update: returns a NEW cost-tracker with
+;; updated values. The old tracker is not modified.
+;; Use this in pure functions that must not mutate state.
+(define (cost-tracker-update tracker input-tokens output-tokens [model-name #f])
+  (cost-tracker (box (+ (unbox (cost-tracker-input-tokens tracker)) input-tokens))
+                (box (+ (unbox (cost-tracker-output-tokens tracker)) output-tokens))
+                (box (or model-name (unbox (cost-tracker-model-name tracker))))
+                (make-semaphore 1)))
 
 ;; Add tokens to the tracker. Thread-safe.
 (define (cost-tracker-update! tracker input-tokens output-tokens [model-name #f])
