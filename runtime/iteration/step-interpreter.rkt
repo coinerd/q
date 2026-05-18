@@ -36,11 +36,15 @@
                   message-role
                   message-id
                   tool-call-name
-                  tool-call-arguments
-)         (only-in "../../runtime/tool-coordinator.rkt"
+                  tool-call-arguments)
+         (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! maybe-dispatch-hooks)
+         (only-in "effect-executor.rkt"
+                  step-effect:append-entries
+                  step-effect:emit-event
+                  run-step-effects!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../util/event-contracts.rkt"
@@ -187,18 +191,19 @@
      (define stop-result (handle-stop-action result new-msgs infra counters ws config))
      (directive-stop stop-result)]
     ['stop-hard-limit
-     (sink-append-entries! infra new-msgs)
-     (emit-session-event! (loop-infra-bus infra)
-                          (loop-infra-session-id infra)
-                          "runtime.error"
-                          (assert-payload "runtime.error"
-                                          (hasheq 'error
-                                                  "max-iterations-exceeded"
-                                                  'iteration
-                                                  (loop-counters-iteration counters)
-                                                  'maxIterations
-                                                  max-iterations-hard)
-                                          error-detail-payload/c))
+     ;; W3-T3: effect extraction for fire-and-forget side effects
+     (run-step-effects!
+      (list (step-effect:append-entries new-msgs)
+            (step-effect:emit-event "runtime.error"
+                                    (assert-payload "runtime.error"
+                                                    (hasheq 'error
+                                                            "max-iterations-exceeded"
+                                                            'iteration
+                                                            (loop-counters-iteration counters)
+                                                            'maxIterations
+                                                            max-iterations-hard)
+                                                    error-detail-payload/c)))
+      infra)
      (directive-stop (make-loop-result
                       new-msgs
                       'max-iterations-exceeded
@@ -237,7 +242,8 @@
              updated-ctx)))
      (directive-recurse ctx-after-budget (make-next-counters counters) ws)]
     ['continue
-     (sink-append-entries! infra new-msgs)
+     ;; W3-T3: fire-and-forget effect for entry persistence
+     (run-step-effects! (list (step-effect:append-entries new-msgs)) infra)
      (define updated-ctx (execute-pending-tool-calls new-msgs infra config ws))
      (define new-counters (step-result-new-counters step-res))
      (define loop-warning
