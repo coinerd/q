@@ -7,6 +7,8 @@
 ;; without importing from the TUI layer (ARCH-02 layer boundary fix).
 ;;
 ;; F14: Added shared-command for cross-subsystem type sharing.
+;; NOTE: shared-command is GSD-specific (used by extensions/gsd/ subsystems).
+;; The TUI layer uses cmd-entry and its own local parsed-command struct.
 
 (provide (struct-out cmd-entry)
          register-command!

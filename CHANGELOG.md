@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.46.9 — 2026-05-14
+
+### Added
+- Contract-out for 7 `raise-*` functions in `util/errors.rkt`
+- Contract-out for 5 functions in `util/json-helpers.rkt`
+- Contract-out for `generate-id`, `now-seconds` in `util/ids.rkt`
+- Contract-out for 5 functions in `util/truncation.rkt`
+- Contract-out for 2 functions in `util/config-paths.rkt`
+- Contract-out for 5 functions in `util/content-parts.rkt`
+- Contract-out for 5 functions in `util/fsm.rkt`
+- Contract-out for 2 functions in `util/output-guard.rkt`
+- `#:schema-version 1` annotation on all 45 core event types
+- `consumer`/`admin` submodules in `runtime/session-store.rkt`
+- `agent/effect-executor.rkt` — extracted from `effect-types.rkt` (layering fix)
+
+### Changed
+- Fixed `phase-build-context` purity violation — now returns effects instead of emitting directly
+- Wired loop-phases pipeline into `run-agent-turn` (phases 1-4)
+- `execute-effects!` now supports `#:hook-dispatcher` for hook dispatch
+- Tightened `hash->payload` contract in `util/event-codec.rkt`
+- `with-registry-lock` unexported from public API
+- Step-interpreter: selective effect extraction in `stop-hard-limit` and `continue` branches
+- `test-event-migration.rkt` now uses `with-fresh-event-registries` for test isolation
+
+### Fixed
+- `provider-error` arity mismatch (4→5 args) in `llm/openai-compatible.rkt`
+- Dead `command-result` struct removed from `util/command-types.rkt`
+- 10 dead imports removed from `runtime/iteration/step-interpreter.rkt`
+- Misleading header in `agent/loop.rkt` corrected
+
 ## v0.46.8 — 2026-05-18
 
 ### Changed
