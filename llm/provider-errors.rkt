@@ -14,21 +14,31 @@
 ;;   'network          — DNS failure, connection refused
 
 (require racket/contract
-         (only-in "../util/errors.rkt" q-error q-error?))
+         (only-in "../util/errors.rkt"
+                  q-error
+                  q-error?
+                  q-llm-error
+                  q-llm-error?
+                  q-llm-error-category))
 
 (provide (struct-out provider-error)
          provider-error?
          provider-error-category
          provider-error-status-code
          raise-provider-error
-         classify-http-status)
+         classify-http-status
+         q-llm-error?)
 
 ;; ============================================================
 ;; Struct
 ;; ============================================================
 
-;; Subtype of exn:fail with structured metadata.
-(struct provider-error q-error (status-code category) #:transparent)
+;; Subtype of q-llm-error (Branch 1: LLM errors).
+;; provider-error inherits category from q-llm-error and adds status-code.
+(struct provider-error q-llm-error (status-code) #:transparent)
+
+;; Backward-compat: provider-error-category reads from q-llm-error parent field.
+(define provider-error-category q-llm-error-category)
 
 ;; ============================================================
 ;; Constructor helper
@@ -36,7 +46,7 @@
 
 ;; Raise a provider-error with the given category and optional HTTP status code.
 (define (raise-provider-error message category [status-code #f])
-  (raise (provider-error message (current-continuation-marks) (hash) status-code category)))
+  (raise (provider-error message (current-continuation-marks) (hash) category status-code)))
 
 ;; ============================================================
 ;; HTTP status → category mapping

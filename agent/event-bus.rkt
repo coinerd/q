@@ -213,6 +213,8 @@
     (with-event-bus-lock bus (lambda () (reverse (unbox (event-bus-subscriptions-box bus))))))
   (define breaker-state (event-bus-breaker-state bus))
   (define err-handler (current-event-bus-error-handler))
+  (when (null? subs)
+    (log-warning "q-event-bus: event ~a dropped, no subscribers" (event-ev evt)))
   (for ([s (in-list subs)])
     (define sub-id (subscription-id s))
     (define pred (subscription-filter s))

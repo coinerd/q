@@ -248,8 +248,8 @@
                                                                       (exn-message e))
                                                               (current-continuation-marks)
                                                               (hash)
-                                                              #f
-                                                              'network))))])
+                                                              'network
+                                                              #f))))])
         (openai-stream-request req)))
     ;; Response port and timeout from openai-stream-request (W-06)
     ;; Status OK — return an incremental generator that reads SSE lines

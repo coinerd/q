@@ -64,8 +64,8 @@
                                          (raise (provider-error (format "Wrapped: ~a" (exn-message e))
                                                                 (current-continuation-marks)
                                                                 (hash)
-                                                                #f
-                                                                'network))))])
+                                                                'network
+                                                                #f))))])
           (raise (exn:fail "raw error" (current-continuation-marks))))))
 
     ;; Test 7: Wrapping pattern passes through existing provider-error
@@ -80,8 +80,8 @@
                                          (raise (provider-error (format "Wrapped: ~a" (exn-message e))
                                                                 (current-continuation-marks)
                                                                 (hash)
-                                                                #f
-                                                                'network))))])
+                                                                'network
+                                                                #f))))])
           (raise (provider-error "timeout error" (current-continuation-marks) (hash) 408 'timeout)))))
 
     ;; Test 8: check-provider-status! wraps 4xx as provider-error
