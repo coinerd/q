@@ -78,7 +78,10 @@
                   phase-emit-start
                   phase-build-context
                   phase-build-request
-                  phase-pre-hook))
+                  phase-pre-hook
+                  phase-msg-hook
+                  phase-stream
+                  phase-dispatch-streaming))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -215,87 +218,14 @@
                                                #:duration-ms 0))
        (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
       [_
-       ;; R-06/R-07: FSM: pre-hook -> stream
-       (current-turn-fsm-state (next-turn-state turn-state-pre-hook turn-event-hook-pass))
-       ;; DEBUG: validate raw-messages before sending
-       (unless (valid-api-message-sequence? raw-messages)
-         (log-warning "INVALID message sequence detected! Dumping raw messages:")
-         (for ([rm (in-list raw-messages)]
-               [i (in-naturals)])
-           (log-warning "  msg[~a]: role=~a keys=~a" i (hash-ref rm 'role #f) (hash-keys rm)))
-         (log-warning "End of invalid sequence dump"))
-
-       (emit-typed-event! bus
-                          (make-provider-request-event
-                           #:session-id session-id
-                           #:turn-id turn-id
-                           #:timestamp (current-inexact-milliseconds)
-                           #:model (hash-ref (model-request-settings req)
-                                             'model
-                                             (lambda () (format "~a" (provider-name provider))))
-                           #:provider (format "~a" (provider-name provider)))
-                          #:state st)
-
-       (define msg-start-result
-         (and hook-dispatcher
-              (hook-dispatcher 'message-start
-                               (hasheq 'session-id
-                                       session-id
-                                       'turn-id
-                                       turn-id
-                                       'model-name
-                                       (provider-name provider)
-                                       'message-count
-                                       (length raw-messages)))))
-
-       ;; v0.43.0: Reducer-driven msg-hook dispatch
-       (define d-msg (decide-after-msg-hook msg-start-result))
-       (match (turn-decision-tag d-msg)
-         ['blocked
-          (current-turn-fsm-state (next-turn-state turn-state-stream turn-event-msg-hook-block))
-          (emit-typed-event! bus
-                             (make-message-blocked-event #:session-id session-id
-                                                         #:turn-id turn-id
-                                                         #:timestamp (current-inexact-milliseconds)
-                                                         #:hook "message-start"
-                                                         #:reason "blocked"))
-          (emit-typed-event! bus
-                             (make-turn-end-event #:session-id session-id
-                                                  #:turn-id turn-id
-                                                  #:timestamp (current-inexact-milliseconds)
-                                                  #:reason "hook-blocked"
-                                                  #:duration-ms 0))
-          (loop-result raw-messages 'hook-blocked (hasheq 'hook 'message-start))]
-         [_
-          ;; 5-7. Stream from provider
-          (define stream-data
-            (stream-from-provider provider
-                                  req
-                                  bus
-                                  session-id
-                                  turn-id
-                                  st
-                                  hook-dispatcher
-                                  cancellation-token))
-
-          ;; v0.43.0: Reducer-driven stream-complete dispatch
-          (define sc
-            (make-stream-completion #:cancelled? (hash-ref stream-data 'cancelled? #f)
-                                    #:cancel-reason (hash-ref stream-data 'cancel-reason #f)
-                                    #:text (hash-ref stream-data 'text "")
-                                    #:tool-calls (hash-ref stream-data 'tool-calls '())))
-          (define d-stream (decide-after-stream sc))
-          (match (turn-decision-tag d-stream)
-            ['cancelled
-             (current-turn-fsm-state (next-turn-state turn-state-stream turn-event-stream-cancel))
-             (handle-cancellation bus session-id turn-id st #:hook-dispatcher hook-dispatcher)]
-            [_
-             (build-stream-result stream-data
-                                  raw-messages
-                                  bus
-                                  session-id
-                                  turn-id
-                                  st
-                                  tools
-                                  provider
-                                  hook-dispatcher)])])])))
+       ;; v0.46.10 (I-1): Streaming dispatch extracted to phase-dispatch-streaming
+       (phase-dispatch-streaming provider
+                                 req
+                                 bus
+                                 session-id
+                                 turn-id
+                                 st
+                                 raw-messages
+                                 tools
+                                 hook-dispatcher
+                                 cancellation-token)])))
