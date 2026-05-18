@@ -81,7 +81,7 @@
                   phase-pre-hook
                   phase-msg-hook
                   phase-stream
-                  phase-dispatch-streaming))
+                  run-streaming-phase))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -120,38 +120,6 @@
          usage-empty?
          parts->text-string
          classify-hook-result)
-;; ============================================================
-;; Extracted helpers (I-01)
-;; ============================================================
-
-;; DEPRECATED v0.46.10: Use phase-emit-start from loop-phases.rkt instead
-;; Phase 1: Emit turn-started event and dispatch agent-start hook
-(define (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
-  (emit-typed-event! bus
-                     (make-turn-start-event #:session-id session-id
-                                            #:turn-id turn-id
-                                            #:timestamp (current-inexact-milliseconds)
-                                            #:model ""
-                                            #:provider "")
-                     #:state st)
-  (when hook-dispatcher
-    (hook-dispatcher
-     'agent-start
-     (hasheq 'session-id session-id 'turn-id turn-id 'message-count (length context)))))
-
-;; DEPRECATED v0.46.10: Use phase-build-context from loop-phases.rkt instead
-;; Phase 2: Build normalized context and emit context.built event
-(define (build-turn-context bus session-id turn-id st context)
-  (define raw-messages (build-raw-messages context))
-  (define token-count (estimate-context-tokens raw-messages))
-  (emit-typed-event! bus
-                     (make-context-event #:session-id session-id
-                                         #:turn-id turn-id
-                                         #:timestamp (current-inexact-milliseconds)
-                                         #:token-count token-count
-                                         #:window-size (length raw-messages))
-                     #:state st)
-  raw-messages)
 
 ;; ============================================================
 ;; Main entry point — thin orchestrator
@@ -218,8 +186,8 @@
                                                #:duration-ms 0))
        (loop-result raw-messages 'hook-blocked (hasheq 'hook 'model-request-pre))]
       [_
-       ;; v0.46.10 (I-1): Streaming dispatch extracted to phase-dispatch-streaming
-       (phase-dispatch-streaming provider
+       ;; v0.46.10 (I-1): Streaming dispatch extracted to run-streaming-phase
+       (run-streaming-phase provider
                                  req
                                  bus
                                  session-id

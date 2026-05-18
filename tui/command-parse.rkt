@@ -137,15 +137,14 @@
          validate-args)
 
 (define (parse-command-name text)
-  ;; v0.46.10 (I-4): Compose from extracted pipeline stages instead of duplicating logic.
-  ;; tokenize returns (values cmd-string args-list) or #f.
-  ;; Use call-with-values to safely handle both return shapes.
-  (define tok (call-with-values (λ () (tokenize text)) vector))
+  ;; v0.47.0 (D-5): Cleaner handling of tokenize multi-value or #f return.
+  ;; tokenize returns (values cmd-string args-list) or a single #f.
+  (define result (call-with-values (λ () (tokenize text)) list))
   (cond
-    [(eq? tok #f) #f]
-    [(and (vector? tok) (= (vector-length tok) 2))
-     (define cmd (vector-ref tok 0))
-     (define args (vector-ref tok 1))
+    [(null? result) #f]
+    [(= (length result) 2)
+     (define cmd (car result))
+     (define args (cadr result))
      (define table (make-command-table))
      (define entry (lookup-command-entry cmd table))
      (cond

@@ -47,7 +47,7 @@
          phase-pre-hook
          phase-msg-hook
          phase-stream
-         phase-dispatch-streaming)
+         run-streaming-phase)
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
@@ -152,7 +152,7 @@
 
 ;; Returns loop-result directly (this is an effectful dispatch function)
 ;; Handles: msg-hook dispatch, streaming, cancellation, result building
-(define (phase-dispatch-streaming provider
+(define (run-streaming-phase provider
                                   req
                                   bus
                                   session-id
