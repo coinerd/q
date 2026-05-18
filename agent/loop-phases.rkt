@@ -18,7 +18,6 @@
          "loop-messages.rkt"
          "loop-fsm.rkt"
          "state.rkt"
-         "event-emitter.rkt"
          (only-in "event-structs.rkt"
                   make-turn-start-event
                   make-context-event
@@ -62,9 +61,10 @@
                         #:timestamp (current-inexact-milliseconds)
                         #:token-count token-count
                         #:window-size (length raw-messages)))
-  ;; Emit the context event directly (it needs the bus)
-  (emit-typed-event! bus ctx-event #:state st)
-  (define effects (list (effect:update-fsm turn-state-build-context turn-event-context-built)))
+  ;; Return effect instead of emitting directly (purity fix W2-T1)
+  (define effects
+    (list (effect:emit-event 'context ctx-event)
+          (effect:update-fsm turn-state-build-context turn-event-context-built)))
   (values raw-messages effects))
 
 ;; ---------------------------------------------------------------------------

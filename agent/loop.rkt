@@ -72,7 +72,13 @@
                   make-provider-request-event
                   make-context-event
                   make-model-request-blocked-event
-                  make-message-blocked-event))
+                  make-message-blocked-event)
+         "effect-executor.rkt"
+         (only-in "loop-phases.rkt"
+                  phase-emit-start
+                  phase-build-context
+                  phase-build-request
+                  phase-pre-hook))
 
 (provide (contract-out [run-agent-turn
                         (->i ([ctx (listof message?)] [prov provider?] [bus event-bus?])
@@ -175,31 +181,20 @@
   ;; handler can recover partial messages from stream errors.
   (parameterize ([current-loop-state-for-error-recovery st])
 
-    ;; Phase 1: Emit turn-started + agent-start hook (I-01)
-    (emit-turn-start! bus session-id turn-id st hook-dispatcher context)
-    ;; R-06/R-07: FSM: emit-start -> build-context
-    (current-turn-fsm-state (next-turn-state turn-state-emit-start turn-event-start))
+    ;; Phase 1: Emit turn-started (via phase pipeline + effect executor)
+    (define-values (ctx1 fx1) (phase-emit-start session-id turn-id st context))
+    (execute-effects! fx1 #:bus bus #:state st #:hook-dispatcher hook-dispatcher)
 
-    ;; Phase 2: Build context + emit context.built (I-01)
-    (define raw-messages (build-turn-context bus session-id turn-id st context))
-    ;; R-06/R-07: FSM: build-context -> pre-hook
-    (current-turn-fsm-state (next-turn-state turn-state-build-context turn-event-context-built))
+    ;; Phase 2: Build context (via phase pipeline + effect executor)
+    (define-values (raw-messages fx2) (phase-build-context bus session-id turn-id st ctx1))
+    (execute-effects! fx2 #:bus bus #:state st)
 
-    ;; Phase 3: Build model-request
-    (define req (make-model-request raw-messages tools (or provider-settings (hasheq))))
+    ;; Phase 3: Build model-request (via phase pipeline)
+    (define-values (req _fx3) (phase-build-request raw-messages tools provider-settings))
 
-    ;; R2-7: model-request-pre hook
-    (define pre-hook-result
-      (and hook-dispatcher
-           (hook-dispatcher 'model-request-pre
-                            (hasheq 'model-name
-                                    (provider-name provider)
-                                    'message-count
-                                    (length raw-messages)
-                                    'messages
-                                    raw-messages
-                                    'settings
-                                    (model-request-settings req)))))
+    ;; Phase 4: Pre-hook (via phase pipeline)
+    (define-values (pre-hook-result _)
+      (phase-pre-hook hook-dispatcher provider raw-messages req session-id turn-id))
 
     ;; v0.43.0: Reducer-driven dispatch
     (define d-pre (decide-after-pre-hook pre-hook-result))

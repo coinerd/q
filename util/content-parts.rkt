@@ -14,9 +14,10 @@
          content-part?
          content-part-type
          (contract-out [make-text-part (-> string? text-part?)]
-                       [make-tool-call-part (-> string? string? (listof hash?) tool-call-part?)]
+                       [make-tool-call-part
+                        (-> (or/c string? #f) (or/c string? #f) (or/c string? hash?) tool-call-part?)]
                        [make-tool-result-part
-                        (-> string? string? (or/c 'error 'success) tool-result-part?)]
+                        (-> string? (or/c string? bytes?) any/c tool-result-part?)]
                        [content-part->jsexpr (-> content-part? hash?)]
                        [jsexpr->content-part (-> hash? content-part?)]))
 
