@@ -9,7 +9,7 @@
          racket/match
          racket/string)
 
-(provide (struct-out cost-tracker)
+(provide cost-tracker?
          (contract-out
           [make-cost-tracker (->* () ((or/c string? #f)) cost-tracker?)]
           [calculate-cost
