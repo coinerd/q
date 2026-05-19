@@ -470,8 +470,8 @@
       (define total-struct-out
         (for/sum ([f (in-list all-files)])
                  (length (regexp-match* #rx"\\(struct-out\\s+" (file->string f)))))
-      (check-true (<= total-struct-out 105)
-                  (format "struct-out count is ~a (v0.48.9 floor <= 105; v0.49.x target <= 90)"
+      (check-true (<= total-struct-out 99)
+                  (format "struct-out count is ~a (v0.49.0 floor <= 99; v0.49.x target <= 60)"
                           total-struct-out)))
 
     (test-case "KPI: contract-out coverage non-regression (v0.48.0 floor, v0.48.x target tracked)"
@@ -499,7 +499,7 @@
       (check-true
        (>= coverage 28.0)
        (format
-        "contract-out coverage is ~a% (v0.48.9 floor >= 28.0%; v0.49.x target >= 40%) [~a/~a files]"
+        "contract-out coverage is ~a% (v0.49.0 floor >= 28.0%; v0.49.x target >= 45%) [~a/~a files]"
         (real->decimal-string coverage 2)
         files-with-contract-out
         (length all-files))))))

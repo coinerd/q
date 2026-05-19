@@ -112,6 +112,9 @@ jobs:
         with:
           racket-version: ${{ github.event.inputs.racket-version || matrix.racket-version }}
 
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
       - name: Run tests
         run: racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
 
@@ -193,6 +196,9 @@ jobs:
       - uses: ./.github/actions/setup-racket
         with:
           racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
       - name: Version smoke check
         run: |
