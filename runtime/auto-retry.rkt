@@ -5,7 +5,8 @@
 ;;; Provides retry logic for transient provider errors (429, 5xx, timeouts).
 ;;; Wraps a thunk with configurable retry attempts and exponential backoff.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string
          "../util/protocol-types.rkt"
          "../llm/provider-errors.rkt")
@@ -21,20 +22,52 @@
          ERROR-CLASSIFICATION-TABLE
          classify-error-from-table
          ;; Retry execution
-         with-auto-retry
+         (contract-out [with-auto-retry
+                        (->* (procedure?)
+                             (#:max-retries exact-nonnegative-integer?
+                                            #:base-delay-ms exact-nonnegative-integer?
+                                            #:rate-limit-base-delay-ms exact-nonnegative-integer?
+                                            #:max-delay-ms exact-nonnegative-integer?
+                                            #:on-retry (or/c procedure? #f)
+                                            #:per-type-budgets hash?)
+                             any/c)]
+                       [with-retry-policy
+                        (->* (any/c procedure?) (#:on-retry (or/c procedure? #f)) any/c)]
+                       [make-default-retry-policy
+                        (->* ()
+                             (#:max-retries exact-nonnegative-integer?
+                                            #:base-delay-ms exact-nonnegative-integer?
+                                            #:rate-limit-base-delay-ms exact-nonnegative-integer?
+                                            #:max-delay-ms exact-nonnegative-integer?
+                                            #:per-type-budgets hash?)
+                             any/c)])
          ;; Configuration
          default-max-retries
          default-base-delay-ms
          default-rate-limit-base-delay-ms
          default-max-delay-ms
          ;; Struct for retry stats
-         (struct-out retry-stats)
+         retry-stats
+         retry-stats?
+         retry-stats-attempts
+         retry-stats-final-delay-ms
+         retry-stats-succeeded?
          ;; Struct for retry exhaustion (A3)
-         (struct-out retry-exhausted)
+         retry-exhausted
+         retry-exhausted?
+         retry-exhausted-original-exn
+         retry-exhausted-attempts
+         retry-exhausted-last-error-type
+         retry-exhausted-total-delay-ms
+         retry-exhausted-error-history
          ;; Struct for retry policy (A21)
-         (struct-out retry-policy)
-         make-default-retry-policy
-         with-retry-policy)
+         retry-policy
+         retry-policy?
+         retry-policy-max-retries
+         retry-policy-base-delay-ms
+         retry-policy-rate-limit-base-delay-ms
+         retry-policy-max-delay-ms
+         retry-policy-per-type-budgets)
 
 ;; ============================================================
 ;; Configuration

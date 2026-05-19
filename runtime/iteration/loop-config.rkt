@@ -86,5 +86,40 @@
                working-set
                session))
 
-(provide (struct-out loop-config)
-         make-loop-config)
+(provide loop-config
+         loop-config?
+         loop-config-context
+         loop-config-provider
+         loop-config-bus
+         loop-config-registry
+         loop-config-ext-registry
+         loop-config-log-path
+         loop-config-session-id
+         loop-config-max-iterations
+         loop-config-cancellation-token
+         loop-config-config
+         loop-config-queue
+         loop-config-follow-up-delivery-mode
+         loop-config-injected-box
+         loop-config-shutdown-check
+         loop-config-force-shutdown-check
+         loop-config-working-set
+         loop-config-session
+         (contract-out [make-loop-config
+                        (->* ((listof any/c) (or/c any/c #f)
+                                             any/c
+                                             (or/c any/c #f)
+                                             (or/c any/c #f)
+                                             (or/c path-string? path?)
+                                             string?
+                                             exact-nonnegative-integer?)
+                             (#:cancellation-token (or/c any/c #f)
+                              #:config any/c
+                              #:queue (or/c any/c #f)
+                              #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
+                              #:injected-box (or/c box? #f)
+                              #:shutdown-check (or/c procedure? #f)
+                              #:force-shutdown-check (or/c procedure? #f)
+                              #:working-set (or/c any/c #f)
+                              #:session (or/c any/c #f))
+                             loop-config?)]))

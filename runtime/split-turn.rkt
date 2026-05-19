@@ -23,7 +23,12 @@
          racket/string
          "../util/protocol-types.rkt")
 
-(provide (struct-out split-turn-result)
+(provide split-turn-result
+         split-turn-result?
+         split-turn-result-split-index
+         split-turn-result-turn-start-index
+         split-turn-result-turn-messages
+         split-turn-result-is-split?
          (contract-out
           [find-split-turn (-> (listof any/c) exact-nonnegative-integer? split-turn-result?)]
           [generate-turn-prefix (-> (listof any/c) string?)]
