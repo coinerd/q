@@ -20,7 +20,21 @@
 ;; ============================================================
 
 ;; Struct & predicate
-(provide (struct-out qpm-manifest)
+(provide qpm-manifest
+         qpm-manifest?
+         qpm-manifest-name
+         qpm-manifest-version
+         qpm-manifest-api-version
+         qpm-manifest-type
+         qpm-manifest-description
+         qpm-manifest-author
+         qpm-manifest-compat
+         qpm-manifest-compatibility
+         qpm-manifest-files
+         qpm-manifest-checksum
+         qpm-manifest-entry
+         qpm-manifest-homepage
+         qpm-manifest-license
          qpm-type?
          ;; Constructor with keyword args
          (contract-out [make-qpm-manifest
