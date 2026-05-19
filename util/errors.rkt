@@ -21,22 +21,48 @@
 
 ;; Error structs and constructors
 (provide warn-deprecated!
-         (struct-out q-error)
+         ;; Base error
+         q-error
+         q-error?
+         q-error-context
          ;; Branch 1: LLM
-         (struct-out q-llm-error)
+         q-llm-error
+         q-llm-error?
+         q-llm-error-category
          ;; Branch 2: Tool
-         (struct-out q-tool-error)
-         (struct-out tool-error)
+         q-tool-error
+         q-tool-error?
+         q-tool-error-category
+         tool-error
+         tool-error?
+         tool-error-tool-name
          ;; Branch 3: Extension
-         (struct-out q-extension-error)
-         (struct-out extension-error)
+         q-extension-error
+         q-extension-error?
+         q-extension-error-category
+         extension-error
+         extension-error?
+         extension-error-extension-name
+         extension-error-hook-point
          ;; Branch 4: Session
-         (struct-out q-session-error)
-         (struct-out session-error)
+         q-session-error
+         q-session-error?
+         q-session-error-category
+         session-error
+         session-error?
+         session-error-session-id
          ;; Other error types
-         (struct-out ui-error)
-         (struct-out policy-error)
-         (struct-out credential-error)
+         ui-error
+         ui-error?
+         ui-error-component
+         policy-error
+         policy-error?
+         policy-error-policy-name
+         policy-error-violation
+         credential-error
+         credential-error?
+         credential-error-backend
+         credential-error-details
          ;; Category-based predicates
          llm-timeout?
          llm-rate-limit?
