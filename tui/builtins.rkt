@@ -27,7 +27,11 @@
          ;; SettingsList
          make-settings-list
          settings-entry
-         (struct-out settings-entry)
+         settings-entry?
+         settings-entry-key
+         settings-entry-label
+         settings-entry-value
+         settings-entry-type
 
          ;; Helpers
          filter-options

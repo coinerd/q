@@ -21,7 +21,17 @@
 ;; input-state is used with struct-copy in many consumers (tests + sub-modules),
 ;; so we keep struct-out for it.  mouse-event is not used with struct-copy,
 ;; so we export it via contract-out.
-(provide (struct-out input-state)
+(provide input-state
+         input-state?
+         input-state-buffer
+         input-state-cursor
+         input-state-history
+         input-state-history-idx
+         input-state-saved-text
+         input-state-scroll-offset
+         input-state-undo-stack
+         input-state-redo-stack
+         input-state-kill-ring
          (contract-out
           [mouse-event? (-> any/c boolean?)]
           [mouse-event (->* (symbol? exact-integer? exact-integer? exact-integer?) () mouse-event?)]
