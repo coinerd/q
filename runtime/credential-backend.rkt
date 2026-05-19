@@ -22,7 +22,14 @@
          racket/port)
 
 ;; Backend struct
-(provide (struct-out credential-backend)
+(provide credential-backend
+         credential-backend?
+         credential-backend-name
+         credential-backend-store-fn
+         credential-backend-load-fn
+         credential-backend-delete-fn
+         credential-backend-list-fn
+         credential-backend-available?-fn
          (contract-out
           [make-file-credential-backend (->* () ((or/c path-string? #f)) credential-backend?)]
           [make-env-credential-backend (-> credential-backend?)]
@@ -348,8 +355,6 @@
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Helpers
 ;; ═══════════════════════════════════════════════════════════════════
-
-
 
 (define (shell-escape s)
   (string-replace s "'" "'\\''"))

@@ -91,7 +91,11 @@
          build-blocked-tool-results)
 
 ;; v0.31.5 W1: export struct
-(provide (struct-out tool-call-actions))
+(provide tool-call-actions
+         tool-call-actions?
+         tool-call-actions-calls-to-run
+         tool-call-actions-blocked?
+         tool-call-actions-final-calls)
 
 ;; ============================================================
 ;; Helpers (QUAL-01: emit-session-event! and maybe-dispatch-hooks

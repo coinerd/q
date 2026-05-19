@@ -20,7 +20,12 @@
          "../util/protocol-types.rkt")
 
 ;; Compact request struct
-(provide (struct-out ctx-compact-request)
+(provide ctx-compact-request
+         ctx-compact-request?
+         ctx-compact-request-instructions
+         ctx-compact-request-on-complete
+         ctx-compact-request-on-error
+         ctx-compact-request-requested-at
          ctx-compact?
 
          ;; Main API
