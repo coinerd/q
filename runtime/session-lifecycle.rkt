@@ -90,6 +90,7 @@
           [buffer-or-append! (-> agent-session? any/c void?)]
           [write-crash-log! (-> (or/c string? #f) string? string? void?)]
           [compute-parent-id (->* ((listof any/c)) ((or/c any/c #f)) (or/c any/c #f))]
+          [build-user-message (-> string? (or/c any/c #f) any/c)]
           [inject-system-instructions (-> (listof any/c) (listof string?) (listof any/c))]))
 
 ;; ============================================================
@@ -102,6 +103,17 @@
 ;; ============================================================
 ;; Pure helpers (extracted for testability)
 ;; ============================================================
+
+;; build-user-message : string? (or/c message-id? #f) -> message?
+;; Pure: creates a user message from a string prompt.
+(define (build-user-message text parent-id)
+  (make-message (generate-id)
+                parent-id
+                'user
+                'message
+                (list (make-text-part text))
+                (now-seconds)
+                (hasheq)))
 
 ;; compute-parent-id : (listof message?) (or/c index? #f) -> (or/c message-id? #f)
 ;; Pure: determines the parent message ID from entries or index.
@@ -164,13 +176,7 @@
                                    (load-session-log log-path)
                                    '())
                                idx))
-          (make-message (generate-id)
-                        parent-id
-                        'user
-                        'message
-                        (list (make-text-part user-message))
-                        (now-seconds)
-                        (hasheq)))
+          (build-user-message user-message parent-id))
         user-message))
 
   ;; v0.26.0: Reset working set on new user message
