@@ -12,7 +12,25 @@
 ;; Match the ORIGINAL provide list exactly — do NOT use all-from-out
 ;; because some internal helpers (truncate-string, render-tokens, etc.)
 ;; would conflict with other modules (e.g., tui/state.rkt).
-(provide (struct-out cli-config)
+;; cli-config — explicit re-exports (struct-out removed from cli/args.rkt in v0.48.1)
+(provide cli-config
+         cli-config?
+         cli-config-command
+         cli-config-session-id
+         cli-config-prompt
+         cli-config-model
+         cli-config-mode
+         cli-config-project-dir
+         cli-config-config-path
+         cli-config-verbose?
+         cli-config-max-turns
+         cli-config-no-tools?
+         cli-config-tools
+         cli-config-session-dir
+         cli-config-sessions-subcommand
+         cli-config-sessions-args
+         cli-config-keybindings-path
+         cli-config-print-mode?
          ;; from args.rkt
          parse-cli-args
          cli-config->runtime-config
