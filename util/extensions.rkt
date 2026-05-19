@@ -10,7 +10,12 @@
 ;; The extension registry (extension-registry, register-extension!, etc.)
 ;; remains in extensions/api.rkt.
 
-(provide (struct-out extension))
+(provide extension
+         extension?
+         extension-name
+         extension-version
+         extension-api-version
+         extension-hooks)
 
 ;; ============================================================
 ;; Extension struct

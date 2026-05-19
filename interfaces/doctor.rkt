@@ -25,7 +25,11 @@
          "../util/config-paths.rkt")
 
 ;; Struct
-(provide (struct-out check-result)
+(provide check-result
+         check-result?
+         check-result-name
+         check-result-status
+         check-result-message
 
          ;; Main entry
          run-doctor
