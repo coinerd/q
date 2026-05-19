@@ -4,7 +4,11 @@
 ;;
 ;; Extracted from protocol-types.rkt (ARCH-05 split).
 
-(provide (struct-out loop-result)
+(provide loop-result
+         loop-result?
+         loop-result-messages
+         loop-result-termination-reason
+         loop-result-metadata
          make-loop-result)
 
 (struct loop-result (messages termination-reason metadata) #:transparent)
