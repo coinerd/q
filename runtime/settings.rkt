@@ -30,7 +30,11 @@
                   sandbox-max-processes))
 
 ;; Structs
-(provide (struct-out q-settings)
+(provide q-settings
+         q-settings?
+         q-settings-global
+         q-settings-project
+         q-settings-merged
 
          ;; Loading — contracted
          (contract-out [load-settings

@@ -21,7 +21,11 @@
          "../llm/token-budget.rkt"
          "context-policy.rkt")
 
-(provide (struct-out token-compaction-config)
+(provide token-compaction-config
+         token-compaction-config?
+         token-compaction-config-keep-recent-tokens
+         token-compaction-config-reserve-tokens
+         token-compaction-config-max-context-tokens
          (contract-out
           [build-token-summary-window
            (-> (listof any/c) token-compaction-config? (values (listof any/c) (listof any/c)))]

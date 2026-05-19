@@ -17,8 +17,17 @@
          (only-in "../llm/provider.rkt" provider?))
 
 ;; Summary cache
-(provide (struct-out catalog-entry)
-         (struct-out context-summary)
+(provide catalog-entry
+         catalog-entry?
+         catalog-entry-id
+         catalog-entry-role
+         catalog-entry-summary
+         context-summary
+         context-summary?
+         context-summary-from-id
+         context-summary-to-id
+         context-summary-text
+         context-summary-entry-count
          summary-cache?
          summary-cache-table
          summary-cache-order

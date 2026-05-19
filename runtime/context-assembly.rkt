@@ -62,7 +62,16 @@
          build-assembled-context/raw
          build-assembled-context/v2
          build-session-context
-         (struct-out context-assembly-call-options)
+         context-assembly-call-options
+         context-assembly-call-options?
+         context-assembly-call-options-cache
+         context-assembly-call-options-provider
+         context-assembly-call-options-model-name
+         context-assembly-call-options-trace-callback
+         context-assembly-call-options-working-set
+         context-assembly-call-options-generate-summary-proc
+         context-assembly-call-options-generate-catalog-proc
+         context-assembly-call-options-estimate-text-proc
          make-context-assembly-call-options
          tiered-context
          tiered-context?

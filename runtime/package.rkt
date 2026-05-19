@@ -20,7 +20,11 @@
 ;; Provides
 ;; ============================================================
 
-(provide (struct-out qpm-package)
+(provide qpm-package
+         qpm-package?
+         qpm-package-manifest
+         qpm-package-install-dir
+         qpm-package-status
          (contract-out [current-packages-dir (parameter/c path?)]
                        [list-packages (-> (listof qpm-package?))]
                        [package-installed? (-> string? boolean?)]
