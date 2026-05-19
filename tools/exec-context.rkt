@@ -8,8 +8,17 @@
          (only-in "../runtime/settings.rkt" q-settings?)
          (only-in "../tools/permission-gate.rkt" permission-config?))
 
-(provide (struct-out exec-context)
+(provide exec-context
          exec-context?
+         exec-context-working-directory
+         exec-context-cancellation-token
+         exec-context-event-publisher
+         exec-context-runtime-settings
+         exec-context-call-id
+         exec-context-session-metadata
+         exec-context-progress-callback
+         exec-context-permission-config
+         exec-context-bytes-written
          (contract-out [make-exec-context
                         (->* ()
                              ;; path-string? covers both path? and string?

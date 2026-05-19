@@ -14,7 +14,14 @@
 
 (define-logger subprocess)
 
-(provide (struct-out subprocess-result)
+(provide subprocess-result
+         subprocess-result?
+         subprocess-result-exit-code
+         subprocess-result-stdout
+         subprocess-result-stderr
+         subprocess-result-timed-out?
+         subprocess-result-elapsed-ms
+         subprocess-result-truncated?
          run-subprocess
          kill-subprocess!
          default-timeout-seconds

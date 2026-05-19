@@ -5,7 +5,12 @@
 ;; Provides structured execution limits, preset configurations, merge logic,
 ;; and a predicate to check whether observed resource usage is within bounds.
 
-(provide (struct-out exec-limits)
+(provide exec-limits
+         exec-limits?
+         exec-limits-timeout-seconds
+         exec-limits-max-output-bytes
+         exec-limits-max-memory-bytes
+         exec-limits-max-processes
          default-exec-limits
          strict-exec-limits
          permissive-exec-limits
