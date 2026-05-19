@@ -51,6 +51,7 @@
          compaction-strategy-keep-recent-count
          compaction-result
          compaction-result?
+         struct:compaction-result
          compaction-result-summary-message
          compaction-result-removed-count
          compaction-result-kept-messages

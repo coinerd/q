@@ -20,9 +20,20 @@
 ;; Notification: {"jsonrpc": "2.0", "method": "...", "params": {...}}
 
 ;; Structs
-(provide (struct-out rpc-request)
-         (struct-out rpc-response)
-         (struct-out rpc-notification)
+(provide rpc-request
+         rpc-request?
+         rpc-request-id
+         rpc-request-method
+         rpc-request-params
+         rpc-response
+         rpc-response?
+         rpc-response-id
+         rpc-response-result
+         rpc-response-error
+         rpc-notification
+         rpc-notification?
+         rpc-notification-method
+         rpc-notification-params
 
          ;; Parsing
          parse-rpc-request

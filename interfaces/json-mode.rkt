@@ -6,7 +6,10 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt")
 
-(provide (struct-out intent)
+(provide intent
+         intent?
+         intent-type
+         intent-payload
          (contract-out [start-json-mode!
                         (->* (any/c #:session-id string?)
                              (#:output-port (or/c output-port? #f))
