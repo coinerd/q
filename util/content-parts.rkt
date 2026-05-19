@@ -7,9 +7,19 @@
 
 (require racket/contract)
 
-(provide (struct-out text-part)
-         (struct-out tool-call-part)
-         (struct-out tool-result-part)
+(provide text-part
+         text-part?
+         text-part-text
+         tool-call-part
+         tool-call-part?
+         tool-call-part-id
+         tool-call-part-name
+         tool-call-part-arguments
+         tool-result-part
+         tool-result-part?
+         tool-result-part-tool-call-id
+         tool-result-part-content
+         tool-result-part-is-error?
          ;; Re-export parent struct accessors
          content-part?
          content-part-type

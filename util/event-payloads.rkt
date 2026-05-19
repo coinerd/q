@@ -17,14 +17,40 @@
 ;; See ADR-0013 (planned) for TR migration strategy.
 ;; ──────────────────────────────────────────────────────────────
 
-(provide (struct-out session-start-payload)
-         (struct-out session-end-payload)
-         (struct-out tool-call-event-payload)
-         (struct-out gsd-mode-payload)
-         (struct-out session-switch-payload)
-         (struct-out session-id-payload)
-         (struct-out error-payload)
-         (struct-out input-payload)
+(provide session-start-payload
+         session-start-payload?
+         session-start-payload-session-id
+         session-start-payload-config
+         session-start-payload-reason
+         session-end-payload
+         session-end-payload?
+         session-end-payload-session-id
+         session-end-payload-duration
+         tool-call-event-payload
+         tool-call-event-payload?
+         tool-call-event-payload-session-id
+         tool-call-event-payload-turn-id
+         tool-call-event-payload-tool-name
+         tool-call-event-payload-tool-call-id
+         gsd-mode-payload
+         gsd-mode-payload?
+         gsd-mode-payload-old-mode
+         gsd-mode-payload-new-mode
+         session-switch-payload
+         session-switch-payload?
+         session-switch-payload-session-id
+         session-switch-payload-operation
+         session-id-payload
+         session-id-payload?
+         session-id-payload-session-id
+         error-payload
+         error-payload?
+         error-payload-error
+         error-payload-error-type
+         input-payload
+         input-payload?
+         input-payload-session-id
+         input-payload-message
          payload->hash
          payload-session-id)
 
