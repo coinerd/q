@@ -1,6 +1,8 @@
 #lang racket/base
 
 ;; runtime/session-types.rkt — agent-session struct definition
+
+(require racket/contract)
 ;; STABILITY: internal
 ;;
 ;; Extracted from agent-session.rkt (ARCH-05).
@@ -33,15 +35,49 @@
 ;; not sub-structs. See v0.32.6 TUI state decomposition for the
 ;; rationale (75 struct-copy callsites make nested structs worse).
 
-(provide (struct-out agent-session)
+(provide agent-session
+         agent-session?
+         agent-session-session-id
+         agent-session-session-dir
+         agent-session-provider
+         agent-session-tool-registry
+         agent-session-event-bus
+         agent-session-extension-registry
+         agent-session-model-name
+         agent-session-system-instructions
+         agent-session-index
+         agent-session-queue
+         agent-session-config
+         agent-session-active?
+         agent-session-start-time
+         agent-session-compacting?
+         agent-session-last-compaction-time
+         agent-session-persisted?
+         agent-session-pending-entries
+         agent-session-thinking-level
+         agent-session-shutdown-requested?
+         agent-session-force-shutdown?
+         agent-session-prompt-running?
+         set-agent-session-model-name!
+         set-agent-session-index!
+         set-agent-session-config!
+         set-agent-session-active?!
+         set-agent-session-start-time!
+         set-agent-session-compacting?!
+         set-agent-session-last-compaction-time!
+         set-agent-session-persisted?!
+         set-agent-session-pending-entries!
+         set-agent-session-thinking-level!
+         set-agent-session-shutdown-requested?!
+         set-agent-session-force-shutdown?!
+         set-agent-session-prompt-running?!
          session-log-path
          session-index-path
-         session-log-path-for
-         ;; Convenience accessors by group
-         session-provider
-         session-tool-registry
-         session-event-bus
-         session-extension-registry)
+         (contract-out [session-log-path-for (-> agent-session? path?)]
+                       [session-provider (-> agent-session? any/c)]
+                       [session-tool-registry (-> agent-session? any/c)]
+                       [session-event-bus (-> agent-session? any/c)]
+                       [session-extension-registry (-> agent-session? any/c)]))
 
 ;; ============================================================
 ;; agent-session struct
