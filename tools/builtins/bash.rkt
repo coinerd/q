@@ -42,7 +42,12 @@
 
 (provide tool-bash
          ;; Struct-based config (v0.44.2+, sole config path since v0.46.3)
-         (struct-out bash-execution-config)
+         bash-execution-config
+         bash-execution-config?
+         bash-execution-config-policy
+         bash-execution-config-block-destructive?
+         bash-execution-config-warn-on-destructive?
+         bash-execution-config-warning-port
          make-bash-execution-config
          current-bash-execution-config
          effective-bash-config

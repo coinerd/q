@@ -63,7 +63,11 @@
 ;; Provides
 ;; ============================================================
 
-(provide (struct-out permission-config)
+(provide permission-config
+         permission-config?
+         permission-config-auto-approved-tools
+         permission-config-needs-approval-tools
+         permission-config-approval-callback
          (contract-out [make-default-permission-config
                         (->* ()
                              (#:auto-approved (or/c (set/c string?) #f)
