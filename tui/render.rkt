@@ -11,8 +11,13 @@
          "render/status-line.rkt"
          "render/diff-render.rkt")
 
-(provide (struct-out styled-line)
-         (struct-out styled-segment)
+(provide styled-line
+         styled-line?
+         styled-line-segments
+         styled-segment
+         styled-segment?
+         styled-segment-text
+         styled-segment-style
 
          ;; From message-layout
          plain-line

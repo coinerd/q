@@ -10,7 +10,15 @@
          compute-layout-with-widgets
 
          ;; Layout struct
-         (struct-out tui-layout))
+         tui-layout
+         tui-layout?
+         tui-layout-cols
+         tui-layout-rows
+         tui-layout-header-row
+         tui-layout-transcript-start-row
+         tui-layout-transcript-height
+         tui-layout-status-row
+         tui-layout-input-row)
 
 ;; Screen layout: where each panel starts and how tall it is
 (struct tui-layout

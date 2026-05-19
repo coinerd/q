@@ -37,8 +37,12 @@
          ANCHOR-CENTER
          ANCHOR-BOTTOM-RIGHT
          anchor?
-         (struct-out overlay-config)
+         overlay-config
          overlay-config?
+         overlay-config-anchor
+         overlay-config-width-spec
+         overlay-config-height-spec
+         overlay-config-margin
          make-overlay-config
          show-overlay-with-config
          overlay-compute-bounds

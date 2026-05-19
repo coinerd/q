@@ -15,11 +15,61 @@
 
 ;; Structs that need struct-copy support in consumers must use struct-out.
 ;; We add contracts on functions only.
-(provide (struct-out transcript-entry)
-         (struct-out ui-state)
-         (struct-out streaming-state)
-         (struct-out overlay-state)
-         (struct-out branch-info)
+(provide transcript-entry
+         transcript-entry?
+         transcript-entry-kind
+         transcript-entry-text
+         transcript-entry-timestamp
+         transcript-entry-meta
+         transcript-entry-id
+         ui-state
+         ui-state?
+         ui-state-transcript
+         ui-state-scroll-offset
+         ui-state-session-id
+         ui-state-model-name
+         ui-state-mode
+         ui-state-streaming
+         ui-state-current-branch
+         ui-state-visible-branches
+         ui-state-selection
+         ui-state-cache
+         ui-state-next-entry-id
+         ui-state-active-overlay
+         ui-state-queue-counts
+         ui-state-extension-widgets
+         ui-state-custom-header
+         ui-state-custom-footer
+         ui-state-mock-provider?
+         ui-state-focused-component
+         ui-state-editor-component
+         ui-state-context-tokens
+         ui-state-cost-tracker
+         streaming-state
+         streaming-state?
+         streaming-state-busy?
+         streaming-state-status-message
+         streaming-state-pending-tool-name
+         streaming-state-streaming-text
+         streaming-state-streaming-thinking
+         streaming-state-busy-since
+         overlay-state
+         overlay-state?
+         overlay-state-type
+         overlay-state-content
+         overlay-state-input
+         overlay-state-anchor
+         overlay-state-width
+         overlay-state-height
+         overlay-state-margin
+         overlay-state-extra
+         branch-info
+         branch-info?
+         branch-info-id
+         branch-info-parent-id
+         branch-info-role
+         branch-info-leaf?
+         branch-info-active?
 
          ;; These structs are not used with struct-copy externally,
          ;; so we export via contract-out for stronger guarantees.

@@ -2,7 +2,11 @@
 
 (require racket/list)
 
-(provide (struct-out diff-cmd)
+(provide diff-cmd
+         diff-cmd?
+         diff-cmd-type
+         diff-cmd-row
+         diff-cmd-content
          diff-frames
          frame->string-lines)
 
@@ -66,6 +70,5 @@
                      #:when (not (string=? p c)))
             (diff-cmd 'write i c)))
         ;; Clear rows from curr-len to prev-len-1
-        (define cleared
-          (list (diff-cmd 'clear-from curr-len #f)))
+        (define cleared (list (diff-cmd 'clear-from curr-len #f)))
         (append common-diffs cleared)])]))

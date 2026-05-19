@@ -38,7 +38,24 @@
          "keybindings/mode-map.rkt")
 
 ;; ── tui-ctx struct ──
-(provide (struct-out tui-ctx)
+(provide tui-ctx
+         tui-ctx?
+         tui-ctx-ui-state-box
+         tui-ctx-input-state-box
+         tui-ctx-event-bus
+         tui-ctx-session-runner
+         tui-ctx-running-box
+         tui-ctx-event-ch
+         tui-ctx-session-dir
+         tui-ctx-needs-redraw-box
+         tui-ctx-term-box
+         tui-ctx-ubuf-box
+         tui-ctx-model-registry-box
+         tui-ctx-previous-frame-box
+         tui-ctx-last-prompt-box
+         tui-ctx-extension-registry-box
+         tui-ctx-session-queue-box
+         tui-ctx-session-factory-runner
          ;; Re-exports (no contract needed — re-exported from other modules)
          copy-text!
          copy-selection!
