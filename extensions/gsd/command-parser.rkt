@@ -11,18 +11,39 @@
          (only-in "../../util/command-helpers.rkt" extract-cmd-args)
          (only-in "../../util/command-types.rkt" shared-command shared-command?))
 
-(provide (struct-out parsed-gsd-command)
-         (struct-out gsd-cmd-go)
-         (struct-out gsd-cmd-plan)
-         (struct-out gsd-cmd-skip)
-         (struct-out gsd-cmd-done)
-         (struct-out gsd-cmd-status)
-         (struct-out gsd-cmd-replan)
-         (struct-out gsd-cmd-reset)
-         (struct-out gsd-cmd-wave-done)
-         (struct-out gsd-cmd-artifact)
-         (struct-out gsd-command-spec)
+(provide parsed-gsd-command
          parsed-gsd-command?
+         parsed-gsd-command-canonical-name
+         parsed-gsd-command-args
+         gsd-cmd-go
+         gsd-cmd-go?
+         gsd-cmd-go-wave-arg
+         gsd-cmd-plan
+         gsd-cmd-plan?
+         gsd-cmd-plan-plan-text
+         gsd-cmd-skip
+         gsd-cmd-skip?
+         gsd-cmd-skip-skip-arg
+         gsd-cmd-done
+         gsd-cmd-done?
+         gsd-cmd-done-force?
+         gsd-cmd-status
+         gsd-cmd-status?
+         gsd-cmd-replan
+         gsd-cmd-replan?
+         gsd-cmd-reset
+         gsd-cmd-reset?
+         gsd-cmd-wave-done
+         gsd-cmd-wave-done?
+         gsd-cmd-wave-done-wave-arg
+         gsd-cmd-artifact
+         gsd-cmd-artifact?
+         gsd-cmd-artifact-artifact-name
+         gsd-command-spec
+         gsd-command-spec?
+         gsd-command-spec-canonical
+         gsd-command-spec-description
+         gsd-command-spec-aliases
          parse-gsd-command
          gsd-command-specs
          aliases-for)

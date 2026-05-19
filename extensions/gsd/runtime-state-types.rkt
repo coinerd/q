@@ -9,7 +9,17 @@
 
 (require racket/set)
 
-(provide (struct-out gsd-runtime-state)
+(provide gsd-runtime-state
+         gsd-runtime-state?
+         gsd-runtime-state-mode
+         gsd-runtime-state-total-waves
+         gsd-runtime-state-current-wave
+         gsd-runtime-state-completed-waves
+         gsd-runtime-state-wave-executor
+         gsd-runtime-state-plan-path
+         gsd-runtime-state-pinned-dir
+         gsd-runtime-state-edit-limit
+         gsd-runtime-state-transition-history
          make-initial-gsd-state)
 
 ;; Single canonical runtime state aggregate (F1 fix).
