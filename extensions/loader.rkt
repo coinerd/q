@@ -28,7 +28,11 @@
          "tiers.rkt")
 
 ;; Extension loading errors
-(provide (struct-out extension-load-error)
+(provide extension-load-error
+         extension-load-error?
+         extension-load-error-path
+         extension-load-error-message
+         extension-load-error-category
          classify-exception
          (contract-out [discover-extensions (-> path-string? (listof any/c))]
                        [load-extension!

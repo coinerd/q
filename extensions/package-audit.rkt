@@ -33,46 +33,44 @@
 ;; Provides
 ;; ============================================================
 
-(provide
- (struct-out finding)
- (struct-out audit-result)
- (contract-out
-  [audit-package        (-> path-string? audit-result?)]
-  [scan-rkt-files       (-> path-string? (listof finding?))]
-  [classify-risk        (-> (listof finding?) (or/c 'extension 'skill 'bundle) (or/c 'low 'medium 'high))]
-  [format-audit-report  (-> audit-result? string?)]
-  [format-audit-warning (-> audit-result? string?)]))
+(provide finding
+         finding?
+         finding-severity
+         finding-message
+         audit-result
+         audit-result?
+         audit-result-risk-level
+         audit-result-findings
+         audit-result-checksum-verified?
+         (contract-out
+          [audit-package (-> path-string? audit-result?)]
+          [scan-rkt-files (-> path-string? (listof finding?))]
+          [classify-risk
+           (-> (listof finding?) (or/c 'extension 'skill 'bundle) (or/c 'low 'medium 'high))]
+          [format-audit-report (-> audit-result? string?)]
+          [format-audit-warning (-> audit-result? string?)]))
 
 ;; ============================================================
 ;; Pattern definitions
 ;; ============================================================
 
-(define network-pattern
-  #rx"require.*net/(http|url|headless)")
+(define network-pattern #rx"require.*net/(http|url|headless)")
 
-(define subprocess-pattern
-  #rx"(subprocess|system|shell-execute|process)")
+(define subprocess-pattern #rx"(subprocess|system|shell-execute|process)")
 
-(define file-write-pattern
-  #rx"(call-with-output-file|write-bytes|delete-file|delete-directory)")
+(define file-write-pattern #rx"(call-with-output-file|write-bytes|delete-file|delete-directory)")
 
-(define file-read-pattern
-  #rx"(file->string|call-with-input-file|read-bytes)")
+(define file-read-pattern #rx"(file->string|call-with-input-file|read-bytes)")
 
-(define eval-pattern
-  #px"\\beval\\b|\\bcompile\\b")
+(define eval-pattern #px"\\beval\\b|\\bcompile\\b")
 
-(define dynamic-require-pattern
-  #rx"dynamic-require")
+(define dynamic-require-pattern #rx"dynamic-require")
 
-(define ffi-pattern
-  #rx"require.*ffi/")
+(define ffi-pattern #rx"require.*ffi/")
 
-(define env-modification-pattern
-  #rx"(putenv|setenv|current-environment-variables)")
+(define env-modification-pattern #rx"(putenv|setenv|current-environment-variables)")
 
-(define unsafe-io-pattern
-  #rx"(read-byte|read-char|read\\b)")  ;; unchecked deserialization
+(define unsafe-io-pattern #rx"(read-byte|read-char|read\\b)") ;; unchecked deserialization
 
 ;; ============================================================
 ;; scan-rkt-files : path-string? -> (listof finding?)
@@ -82,12 +80,10 @@
   (define rkt-files
     (find-files (lambda (p)
                   (let ([ext (filename-extension p)])
-                    (and ext (or (bytes=? ext #"rkt")
-                                 (bytes=? ext #"zo")))))
+                    (and ext (or (bytes=? ext #"rkt") (bytes=? ext #"zo")))))
                 dir))
-  (append*
-   (for/list ([fpath (in-list rkt-files)])
-     (scan-one-file fpath dir))))
+  (append* (for/list ([fpath (in-list rkt-files)])
+             (scan-one-file fpath dir))))
 
 (define (scan-one-file fpath base-dir)
   (define rel (path->string (find-relative-path base-dir fpath)))
@@ -130,10 +126,10 @@
   (define baseline
     (case pkg-type
       [(extension) 'medium]
-      [(bundle)    'medium]
-      [(skill)     'low]))
+      [(bundle) 'medium]
+      [(skill) 'low]))
   ;; Count findings by severity
-  (define high-count   (count (lambda (f) (eq? (finding-severity f) 'high))   findings))
+  (define high-count (count (lambda (f) (eq? (finding-severity f) 'high)) findings))
   (define medium-count (count (lambda (f) (eq? (finding-severity f) 'medium)) findings))
   ;; Escalation logic
   (cond
@@ -150,19 +146,15 @@
   (define qpm-path (build-path dir "qpm.json"))
   (define manifest (read-qpm-manifest qpm-path))
   (cond
-    [(not manifest)
-     ;; No manifest found
-     (audit-result 'medium
-                   (list (finding 'medium "no manifest found"))
-                   #f)]
+    ;; No manifest found
+    [(not manifest) (audit-result 'medium (list (finding 'medium "no manifest found")) #f)]
     [else
      ;; Scan .rkt files
      (define code-findings (scan-rkt-files dir))
      ;; Check entry point
      (define entry-findings
        (if (qpm-manifest-entry manifest)
-           (list (finding 'info
-                          (format "entry point: ~a" (qpm-manifest-entry manifest))))
+           (list (finding 'info (format "entry point: ~a" (qpm-manifest-entry manifest))))
            '()))
      ;; Checksum verification
      (define expected-checksum (qpm-manifest-checksum manifest))
@@ -185,13 +177,12 @@
   (define findings (audit-result-findings result))
   (define checksum-ok (audit-result-checksum-verified? result))
   (define lines
-    (list*
-     (format "Package Audit Report")
-     (format "  Risk Level: ~a" level)
-     (format "  Checksum Verified: ~a" (if checksum-ok "yes" "no"))
-     (format "  Findings (~a):" (length findings))
-     (for/list ([f (in-list findings)])
-       (format "    [~a] ~a" (finding-severity f) (finding-message f)))))
+    (list* (format "Package Audit Report")
+           (format "  Risk Level: ~a" level)
+           (format "  Checksum Verified: ~a" (if checksum-ok "yes" "no"))
+           (format "  Findings (~a):" (length findings))
+           (for/list ([f (in-list findings)])
+             (format "    [~a] ~a" (finding-severity f) (finding-message f)))))
   (string-join lines "\n"))
 
 ;; ============================================================
@@ -201,5 +192,4 @@
 (define (format-audit-warning result)
   (define level (audit-result-risk-level result))
   (define count (length (audit-result-findings result)))
-  (format "⚠ Package risk level: ~a (~a finding~a)"
-          level count (if (= count 1) "" "s")))
+  (format "⚠ Package risk level: ~a (~a finding~a)" level count (if (= count 1) "" "s")))

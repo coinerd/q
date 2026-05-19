@@ -11,16 +11,22 @@
          racket/match)
 
 ;; #726: Message renderer registry
-(provide (struct-out message-renderer)
+(provide message-renderer
+         message-renderer?
+         message-renderer-message-type
+         message-renderer-renderer-fn
+         message-renderer-ext-name
          make-message-renderer
          register-message-renderer!
          unregister-message-renderer!
          lookup-message-renderer
          list-message-renderers
          render-custom-message
-
          ;; #727: Registry struct
-         (struct-out renderer-registry)
+         renderer-registry
+         renderer-registry?
+         renderer-registry-renderers-box
+         renderer-registry-semaphore
          make-renderer-registry)
 
 ;; ============================================================
