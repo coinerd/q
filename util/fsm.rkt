@@ -20,9 +20,12 @@
 
 (require racket/contract)
 
-(provide (struct-out fsm)
-         (struct-out fsm-state)
-         (struct-out fsm-event)
+(provide fsm
+         fsm?
+         fsm-state
+         fsm-state?
+         fsm-event
+         fsm-event?
          fsm-states
          fsm-events
          fsm-transitions
