@@ -12,19 +12,19 @@
          (only-in "model-registry.rkt" available-models model-entry-name)
          "session-types.rkt")
 
-(provide set-model!
-         cycle-model!
-         ;; Thinking level control (#1153)
-         thinking-levels
-         thinking-level?
-         thinking-level->budget
-         set-thinking-level!
-         ;; Graceful shutdown (#1158)
-         request-shutdown!
-         force-shutdown!
-         shutdown-requested?
-         force-shutdown-requested?
-         reset-shutdown-flags!)
+(provide (contract-out [set-model! (-> agent-session? string? void?)]
+                       [cycle-model! (-> agent-session? any/c (or/c string? #f))]
+                       ;; Thinking level control (#1153)
+                       [thinking-levels (listof symbol?)]
+                       [thinking-level? (-> any/c boolean?)]
+                       [thinking-level->budget (-> symbol? exact-nonnegative-integer?)]
+                       [set-thinking-level! (-> agent-session? symbol? void?)]
+                       ;; Graceful shutdown (#1158)
+                       [request-shutdown! (-> agent-session? void?)]
+                       [force-shutdown! (-> agent-session? void?)]
+                       [shutdown-requested? (-> agent-session? boolean?)]
+                       [force-shutdown-requested? (-> agent-session? boolean?)]
+                       [reset-shutdown-flags! (-> agent-session? void?)]))
 
 ;; ============================================================
 ;; FEAT-65: Runtime model control
