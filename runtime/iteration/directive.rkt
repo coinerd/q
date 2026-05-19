@@ -9,9 +9,20 @@
 ;; directive-stop    : terminal, return loop-result
 ;; directive-yield   : events produced, continue (for future use)
 
-(provide (struct-out directive-recurse)
-         (struct-out directive-stop)
-         (struct-out directive-yield)
+(provide directive-recurse
+         directive-recurse?
+         directive-recurse-new-ctx
+         directive-recurse-new-counters
+         directive-recurse-ws
+         directive-stop
+         directive-stop?
+         directive-stop-result
+         directive-yield
+         directive-yield?
+         directive-yield-events
+         directive-yield-new-ctx
+         directive-yield-new-counters
+         directive-yield-ws
          step-directive?)
 
 (struct directive-recurse (new-ctx new-counters ws) #:transparent)

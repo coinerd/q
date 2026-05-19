@@ -16,9 +16,22 @@
          net/uri-codec)
 
 ;; OAuth config struct
-(provide (struct-out oauth-config)
+(provide oauth-config
+         oauth-config?
+         oauth-config-authorize-url
+         oauth-config-token-url
+         oauth-config-client-id
+         oauth-config-client-secret
+         oauth-config-scopes
+         oauth-config-redirect-port
          ;; OAuth token struct
-         (struct-out oauth-token)
+         oauth-token
+         oauth-token?
+         oauth-token-access-token
+         oauth-token-refresh-token
+         oauth-token-expires-at
+         oauth-token-token-type
+         oauth-token-scope
          ;; Feature availability predicate
          oauth-available?
          ;; Predicates / validation

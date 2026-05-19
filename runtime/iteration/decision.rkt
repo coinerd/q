@@ -39,7 +39,13 @@
 
 (define step-action? (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit))
 
-(provide (struct-out iteration-ctx)
+(provide iteration-ctx
+         iteration-ctx?
+         iteration-ctx-iteration
+         iteration-ctx-consecutive-tool-count
+         iteration-ctx-explore-count
+         iteration-ctx-max-iterations
+         iteration-ctx-max-iterations-hard
          (contract-out (struct step-result
                                ([action (or/c 'continue 'stop 'stop-hard-limit 'stop-soft-limit)]
                                 [termination (or/c symbol? #f)]
