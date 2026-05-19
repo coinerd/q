@@ -8,14 +8,29 @@
 
 (require "tool-struct.rkt")
 
-(provide (struct-out scheduler-strategy)
-         (struct-out tool-invocation-result)
-         (struct-out tool-success)
-         (struct-out tool-structured-failure)
-         (struct-out tool-retryable-failure)
-         (struct-out tool-policy-denied)
-         default-scheduler-strategy
+(provide scheduler-strategy
+         scheduler-strategy?
+         scheduler-strategy-preflight-filter
+         scheduler-strategy-execution-order
+         tool-invocation-result
          tool-invocation-result?
+         tool-invocation-result-tool-name
+         tool-success
+         tool-success?
+         tool-success-content
+         tool-success-details
+         tool-structured-failure
+         tool-structured-failure?
+         tool-structured-failure-message
+         tool-structured-failure-details
+         tool-retryable-failure
+         tool-retryable-failure?
+         tool-retryable-failure-message
+         tool-retryable-failure-error
+         tool-policy-denied
+         tool-policy-denied?
+         tool-policy-denied-reason
+         default-scheduler-strategy
          tool-result->invocation-result)
 
 ;; ── Tool invocation result tagged union ──
