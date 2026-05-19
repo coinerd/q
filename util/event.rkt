@@ -11,7 +11,14 @@
 ;; auto-generated contracts from TR boundary system. Struct
 ;; constructors enforce field types at call sites in untyped modules.
 
-(provide (struct-out event)
+(provide event
+         event?
+         event-version
+         event-ev
+         event-time
+         event-session-id
+         event-turn-id
+         event-payload
          event-event
          make-event
          event->jsexpr
