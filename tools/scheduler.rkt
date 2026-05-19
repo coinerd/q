@@ -58,16 +58,50 @@
          (only-in "permission-gate.rkt" permission-config? tool-needs-approval? request-approval))
 
 ;; ── Result struct ──
-(provide (struct-out scheduler-result)
+(provide scheduler-result
+         scheduler-result?
+         scheduler-result-results
+         scheduler-result-metadata
          ;; R-15: Strategy support
-         (struct-out preflight-entry)
+         preflight-entry
+         preflight-entry?
+         preflight-entry-status
+         preflight-entry-tool-call
+         preflight-entry-tool
+         preflight-entry-error-message
          ;; v0.44.2: Planning structs
-         (struct-out scheduler-problem)
-         (struct-out scheduler-plan)
+         scheduler-problem
+         scheduler-problem?
+         scheduler-problem-calls
+         scheduler-problem-registry
+         scheduler-problem-strategy
+         scheduler-problem-hook-dispatcher
+         scheduler-problem-exec-context
+         scheduler-problem-parallel?
+         scheduler-plan
+         scheduler-plan?
+         scheduler-plan-entries
+         scheduler-plan-ordered-calls
+         scheduler-plan-execution-order
+         scheduler-plan-metadata
          ;; v0.44.2: Typed payloads
-         (struct-out tool-pre-hook-payload)
-         (struct-out tool-post-hook-payload)
-         (struct-out scheduler-batch-stats)
+         tool-pre-hook-payload
+         tool-pre-hook-payload?
+         tool-pre-hook-payload-tool-name
+         tool-pre-hook-payload-args
+         tool-pre-hook-payload-entry-id
+         tool-post-hook-payload
+         tool-post-hook-payload?
+         tool-post-hook-payload-tool-name
+         tool-post-hook-payload-result
+         tool-post-hook-payload-entry-id
+         tool-post-hook-payload-arguments
+         scheduler-batch-stats
+         scheduler-batch-stats?
+         scheduler-batch-stats-total
+         scheduler-batch-stats-executed
+         scheduler-batch-stats-blocked
+         scheduler-batch-stats-errors
          scheduler-batch-stats->hash
          plan-tool-batch
          execute-tool-plan

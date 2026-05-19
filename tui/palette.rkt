@@ -10,7 +10,13 @@
          "render.rkt"
          "../util/command-types.rkt")
 
-(provide (struct-out cmd-entry)
+(provide cmd-entry
+         cmd-entry?
+         cmd-entry-name
+         cmd-entry-summary
+         cmd-entry-category
+         cmd-entry-args-spec
+         cmd-entry-aliases
          make-command-registry
          register-command!
          lookup-command
