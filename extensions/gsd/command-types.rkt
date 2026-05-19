@@ -6,13 +6,14 @@
 ;; Replaces ad-hoc hasheq responses from GSD command handlers with
 ;; a proper struct. All command handlers return gsd-command-result.
 
-(provide (struct-out gsd-command-result)
-         gsd-ok
-         gsd-err
+(provide gsd-command-result
+         gsd-command-result?
          gsd-command-result-success
          gsd-command-result-mode
          gsd-command-result-message
          gsd-command-result-data
+         gsd-ok
+         gsd-err
          gsd-result?
          gsd-success?
          gsd-failed?)
@@ -20,10 +21,10 @@
 ;; Structured command result replacing ad-hoc hasheq responses.
 ;; NOTE: For new code, prefer shared command-result from util/command-types.rkt (F14).
 (struct gsd-command-result
-        (success    ; boolean
-         mode       ; symbol (current GSD state after command)
-         message    ; string (human-readable)
-         data)      ; any — optional extra (wave index, archive path, etc.)
+        (success ; boolean
+         mode ; symbol (current GSD state after command)
+         message ; string (human-readable)
+         data) ; any — optional extra (wave index, archive path, etc.)
   #:transparent)
 
 ;; Constructor for successful results
@@ -40,10 +41,8 @@
 
 ;; Was the command successful?
 (define (gsd-success? r)
-  (and (gsd-command-result? r)
-       (gsd-command-result-success r)))
+  (and (gsd-command-result? r) (gsd-command-result-success r)))
 
 ;; Did the command fail?
 (define (gsd-failed? r)
-  (and (gsd-command-result? r)
-       (not (gsd-command-result-success r))))
+  (and (gsd-command-result? r) (not (gsd-command-result-success r))))
