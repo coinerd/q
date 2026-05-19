@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.48.0 — 2026-05-19
+
+### Changed
+- Started v0.48.x abstraction remediation series (KPI recovery).
+- Added v0.48.0 architecture fitness hard gates:
+  - struct-out count must be <= 130
+  - contract-out coverage must be >= 45%
+- Added v0.47.x retrospective wave index in planning artifacts.
+- Synced version surfaces to `0.48.0` (util/version.rkt, info.rkt, README badge/status).
+
+### Notes
+- This milestone begins v0.48.x execution and locks KPI regression gates before further remediation waves.
+
 ## v0.47.13 — 2026-05-19
 
 ### Changed
