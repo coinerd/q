@@ -16,8 +16,13 @@
          (only-in "../../util/markdown.rkt" md-token-content md-token-type)
          "../../extensions/custom-renderer-registry.rkt")
 
-(provide (struct-out styled-line)
-         (struct-out styled-segment)
+(provide styled-line
+         styled-line?
+         styled-line-segments
+         styled-segment
+         styled-segment?
+         styled-segment-text
+         styled-segment-style
          plain-line
          theme->style
          format-entry

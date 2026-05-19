@@ -10,8 +10,23 @@
          "../char-width.rkt"
          "../terminal.rkt")
 
-(provide (struct-out input-state)
-         (struct-out mouse-event)
+(provide input-state
+         input-state?
+         input-state-buffer
+         input-state-cursor
+         input-state-history
+         input-state-history-idx
+         input-state-saved-text
+         input-state-scroll-offset
+         input-state-undo-stack
+         input-state-redo-stack
+         input-state-kill-ring
+         mouse-event
+         mouse-event?
+         mouse-event-type
+         mouse-event-button
+         mouse-event-x
+         mouse-event-y
 
          ;; Constructor
          initial-input-state

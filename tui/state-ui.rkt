@@ -40,8 +40,12 @@
          anchor?
 
          ;; Overlay config (#1145)
-         (struct-out overlay-config)
+         overlay-config
          overlay-config?
+         overlay-config-anchor
+         overlay-config-width-spec
+         overlay-config-height-spec
+         overlay-config-margin
          make-overlay-config
          show-overlay-with-config
          overlay-compute-bounds
@@ -124,13 +128,17 @@
   (struct-copy ui-state state [selection (selection-state (cons col row) (cons col row))]))
 
 (define (set-selection-end state col row)
-  (struct-copy ui-state state [selection (selection-state (selection-state-anchor (ui-state-selection state)) (cons col row))]))
+  (struct-copy
+   ui-state
+   state
+   [selection (selection-state (selection-state-anchor (ui-state-selection state)) (cons col row))]))
 
 (define (clear-selection state)
   (struct-copy ui-state state [selection (selection-state #f #f)]))
 
 (define (has-selection? state)
-  (and (selection-state-anchor (ui-state-selection state)) (selection-state-end (ui-state-selection state))))
+  (and (selection-state-anchor (ui-state-selection state))
+       (selection-state-end (ui-state-selection state))))
 
 ;; ============================================================
 ;; Queries

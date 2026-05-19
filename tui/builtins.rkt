@@ -18,7 +18,6 @@
 ;; SelectList
 (provide make-select-list
          select-list-state
-         (struct-out select-list-state)
 
          ;; BorderedLoader
          make-bordered-loader
