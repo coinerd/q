@@ -26,7 +26,11 @@
          ;; — OpenAI chunk normalization —
          normalize-openai-chunks
          normalize-openai-chunk
-         (struct-out tool-call-accum)
+         tool-call-accum
+         tool-call-accum?
+         tool-call-accum-id
+         tool-call-accum-name
+         tool-call-accum-arguments
          accumulate-tool-call-deltas
          ;; — Incremental SSE reading —
          read-sse-chunks

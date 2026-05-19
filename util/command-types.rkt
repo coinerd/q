@@ -10,11 +10,22 @@
 ;; NOTE: shared-command is GSD-specific (used by extensions/gsd/ subsystems).
 ;; The TUI layer uses cmd-entry and its own local parsed-command struct.
 
-(provide (struct-out cmd-entry)
+(provide cmd-entry
+         cmd-entry?
+         cmd-entry-name
+         cmd-entry-summary
+         cmd-entry-category
+         cmd-entry-args-spec
+         cmd-entry-aliases
          register-command!
          lookup-command
          ;; F14: Shared command AST types
-         (struct-out shared-command))
+         shared-command
+         shared-command?
+         shared-command-name
+         shared-command-args
+         shared-command-kind
+         shared-command-source)
 ;; ---------------------------------------------------------------------------
 ;; TUI command registry types (ARCH-02)
 ;; ---------------------------------------------------------------------------

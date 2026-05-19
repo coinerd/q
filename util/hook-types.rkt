@@ -8,7 +8,10 @@
 ;; This is a #lang typed/racket module. Untyped consumers receive
 ;; auto-generated contracts from TR boundary system.
 
-(provide (struct-out hook-result)
+(provide hook-result
+         hook-result?
+         hook-result-action
+         hook-result-payload
          hook-pass
          hook-amend
          hook-block
