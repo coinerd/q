@@ -13,27 +13,28 @@
 ;; In-memory session manager (from session-store.rkt) also satisfies
 ;; session-manager? via the in-memory-session-manager struct.
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/path
          "session-store.rkt"
          (only-in "../util/protocol-types.rkt" message?)
          (only-in "../util/errors.rkt" raise-session-error))
 
-(provide session-manager?
-         persistent-session-manager?
-         in-memory-session-manager?
-         make-persistent-session-manager
-         make-in-memory-session-manager
-         sm-append!
-         sm-load
-         sm-list
-         sm-fork!
-         ;; Re-export in-memory operations for backward compat
-         in-memory-append!
-         in-memory-append-entries!
-         in-memory-load
-         in-memory-list-sessions
-         in-memory-fork!)
+(provide (contract-out [session-manager? (-> any/c boolean?)]
+                       [persistent-session-manager? (-> any/c boolean?)]
+                       [in-memory-session-manager? (-> any/c boolean?)]
+                       [make-persistent-session-manager (-> path-string? any/c)]
+                       [make-in-memory-session-manager (-> any/c)]
+                       [sm-append! (-> any/c string? any/c void?)]
+                       [sm-load (-> any/c string? (listof any/c))]
+                       [sm-list (-> any/c (listof string?))]
+                       [sm-fork! (->* (any/c string? string?) (string?) void?)]
+                       ;; Re-export in-memory operations for backward compat
+                       [in-memory-append! (-> any/c string? any/c void?)]
+                       [in-memory-append-entries! (-> any/c string? (listof any/c) void?)]
+                       [in-memory-load (-> any/c string? (listof any/c))]
+                       [in-memory-list-sessions (-> any/c (listof string?))]
+                       [in-memory-fork! (->* (any/c string? string?) (string?) void?)]))
 
 ;; ============================================================
 ;; Persistent session manager — wraps file-backed session-store

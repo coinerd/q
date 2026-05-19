@@ -10,7 +10,13 @@
 ;;;   jsonl-line-valid?     — check if a line is complete valid JSON
 
 (require racket/contract
-         "../util/error-helpers.rkt")
+         "../util/error-helpers.rkt"
+         json
+         racket/port
+         racket/string
+         racket/file
+         racket/list
+         racket/path)
 
 (provide (contract-out [jsonl-append! (->* (path-string? any/c) (#:format-header? boolean?) void?)]
                        [jsonl-write-to-port! (-> output-port? any/c void?)]
@@ -25,12 +31,6 @@
                        [jsonl-line-valid? (-> any/c boolean?)]
                        [jsonl-format-version exact-positive-integer?]
                        [strip-format-header (-> (listof any/c) (listof any/c))]))
-(require json
-         racket/port
-         racket/string
-         racket/file
-         racket/list
-         racket/path)
 
 ;; ── Format versioning (F8) ──
 

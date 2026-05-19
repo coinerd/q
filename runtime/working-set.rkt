@@ -14,7 +14,8 @@
 ;;   bash  → no change (transient output)
 ;;   reset → clear all entries (new user message)
 
-(require racket/list
+(require racket/contract
+         racket/list
          (only-in "../util/errors.rkt" raise-session-error))
 
 ;; ────────────────────────────────────────────────────────────
@@ -188,18 +189,26 @@
             (set! entries (filter (lambda (e) (not (equal? (ws-entry-path e) path))) entries))]
            [else (raise-session-error (format "unknown action: ~a" action) #f)]))))))
 
-(provide working-set?
-         make-working-set
-         make-ws-context
-         working-set-entries
-         working-set-entry-count
-         working-set-token-count
-         working-set-reset!
-         working-set-update!
-         working-set-resolve-messages
-         ws-entry
-         ws-entry?
-         ws-entry-path
-         ws-entry-message-id
-         ws-entry-token-estimate
-         ws-entry-timestamp)
+(provide (contract-out
+          [working-set? (-> any/c boolean?)]
+          [make-working-set
+           (->* ()
+                (#:max-entries exact-nonnegative-integer? #:max-tokens exact-nonnegative-integer?)
+                working-set?)]
+          [make-ws-context
+           (->* ()
+                (#:max-entries exact-nonnegative-integer? #:max-tokens exact-nonnegative-integer?)
+                procedure?)]
+          [working-set-entries (-> working-set? list?)]
+          [working-set-entry-count (-> working-set? exact-nonnegative-integer?)]
+          [working-set-token-count (-> working-set? exact-nonnegative-integer?)]
+          [working-set-reset! (-> working-set? void?)]
+          [working-set-update! (-> working-set? list? list? procedure? procedure? working-set?)]
+          [working-set-resolve-messages (-> working-set? list? procedure? list?)]
+          [ws-entry
+           (-> string? any/c exact-nonnegative-integer? exact-nonnegative-integer? ws-entry?)]
+          [ws-entry? (-> any/c boolean?)]
+          [ws-entry-path (-> ws-entry? string?)]
+          [ws-entry-message-id (-> ws-entry? any/c)]
+          [ws-entry-token-estimate (-> ws-entry? exact-nonnegative-integer?)]
+          [ws-entry-timestamp (-> ws-entry? exact-nonnegative-integer?)]))
