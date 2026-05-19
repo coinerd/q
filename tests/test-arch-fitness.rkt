@@ -444,3 +444,64 @@
                   (format "More than 3 files exceed fan-in limit of ~a: ~a" max-fan-in over-limit)))))
 
 (run-tests v0396-suite)
+
+;; ════════════════════════════════════════════════════════════
+;; v0.48.0 additions: KPI recovery hard gates
+;; ════════════════════════════════════════════════════════════
+
+(define v0480-suite
+  (test-suite "v0.48.0-kpi-gates"
+
+    (test-case "KPI: struct-out non-regression (v0.48.0 floor, v0.48.x target tracked)"
+      (define dirs-to-check
+        '("runtime" "agent"
+                    "llm"
+                    "tools"
+                    "tui"
+                    "interfaces"
+                    "util"
+                    "extensions"
+                    "cli"
+                    "sandbox"
+                    "wiring"))
+      (define all-files
+        (append* (for/list ([d (in-list dirs-to-check)])
+                   (rkt-files-in d))))
+      (define total-struct-out
+        (for/sum ([f (in-list all-files)])
+                 (length (regexp-match* #rx"\\(struct-out\\s+" (file->string f)))))
+      (check-true (<= total-struct-out 186)
+                  (format "struct-out count is ~a (v0.48.0 floor <= 186; v0.48.x target <= 130)"
+                          total-struct-out)))
+
+    (test-case "KPI: contract-out coverage non-regression (v0.48.0 floor, v0.48.x target tracked)"
+      (define dirs-to-check
+        '("runtime" "agent"
+                    "llm"
+                    "tools"
+                    "tui"
+                    "interfaces"
+                    "util"
+                    "extensions"
+                    "cli"
+                    "sandbox"
+                    "wiring"))
+      (define all-files
+        (append* (for/list ([d (in-list dirs-to-check)])
+                   (rkt-files-in d))))
+      (define files-with-contract-out
+        (for/sum ([f (in-list all-files)])
+                 (if (string-contains? (file->string f) "(contract-out") 1 0)))
+      (define coverage
+        (if (zero? (length all-files))
+            0
+            (* 100.0 (/ files-with-contract-out (length all-files)))))
+      (check-true
+       (>= coverage 25.9)
+       (format
+        "contract-out coverage is ~a% (v0.48.0 floor >= 25.9%; v0.48.x target >= 45%) [~a/~a files]"
+        (real->decimal-string coverage 2)
+        files-with-contract-out
+        (length all-files))))))
+
+(run-tests v0480-suite)
