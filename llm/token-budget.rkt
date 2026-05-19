@@ -12,13 +12,18 @@
 
 (provide DEFAULT-TOKEN-BUDGET-THRESHOLD
          DEFAULT-SAFETY-MARGIN-PCT
-         (struct-out context-usage)
+         context-usage
+         context-usage?
+         context-usage-total-tokens
+         context-usage-max-tokens
+         context-usage-usage-percent
+         context-usage-compaction-threshold
          (contract-out
           [estimate-context-tokens (-> (listof (or/c message? hash?)) exact-nonnegative-integer?)]
-          [estimate-turn-tokens (-> (listof (or/c message? hash?)) string? exact-nonnegative-integer?)]
+          [estimate-turn-tokens
+           (-> (listof (or/c message? hash?)) string? exact-nonnegative-integer?)]
           [should-compact? (-> exact-nonnegative-integer? exact-nonnegative-integer? boolean?)]
-          [remaining-budget
-           (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-integer?)]
+          [remaining-budget (-> exact-nonnegative-integer? exact-nonnegative-integer? exact-integer?)]
           [estimate-text-tokens (-> string? exact-nonnegative-integer?)]
           [get-context-usage
            (-> exact-nonnegative-integer? exact-nonnegative-integer? context-usage?)]
