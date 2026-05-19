@@ -20,19 +20,23 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt")
 
-(provide
- (struct-out replay-result)
- replay-tool-calls
- replay-session-report
- replay-session-safe
- format-replay-report)
+(provide replay-result
+         replay-result?
+         replay-result-tool-name
+         replay-result-arguments
+         replay-result-original-result
+         replay-result-drifted?
+         replay-result-reason
+         replay-tool-calls
+         replay-session-report
+         replay-session-safe
+         format-replay-report)
 
 ;; ============================================================
 ;; replay-result struct
 ;; ============================================================
 
-(struct replay-result (tool-name arguments original-result drifted? reason)
-  #:transparent)
+(struct replay-result (tool-name arguments original-result drifted? reason) #:transparent)
 ;; tool-name       : string?
 ;; arguments        : string?
 ;; original-result  : string?
@@ -60,26 +64,24 @@
   ;; by tool-call-id. Report drift for unmatched entries.
 
   ;; Sort messages by timestamp for deterministic walk
-  (define sorted
-    (sort messages < #:key message-timestamp))
+  (define sorted (sort messages < #:key message-timestamp))
 
   ;; Collect all tool-call-parts and tool-result-parts
   (define call-parts
     (for*/list ([msg (in-list sorted)]
-                [cp  (in-list (message-content msg))]
+                [cp (in-list (message-content msg))]
                 #:when (tool-call-part? cp))
       cp))
 
   (define result-parts
     (for*/list ([msg (in-list sorted)]
-                [cp  (in-list (message-content msg))]
+                [cp (in-list (message-content msg))]
                 #:when (tool-result-part? cp))
       cp))
 
   ;; Index results by tool-call-id
   (define results-by-id
-    (for/fold ([acc (hash)])
-              ([rp (in-list result-parts)])
+    (for/fold ([acc (hash)]) ([rp (in-list result-parts)])
       (hash-set acc (tool-result-part-tool-call-id rp) rp)))
 
   ;; Track which result-ids have been consumed
@@ -93,32 +95,24 @@
       (cond
         [matched
          (hash-set! consumed tc-id #t)
-         (replay-result
-          (tool-call-part-name tc)
-          (tool-call-part-arguments tc)
-          (tool-result-part-content matched)
-          #f
-          #f)]
+         (replay-result (tool-call-part-name tc)
+                        (tool-call-part-arguments tc)
+                        (tool-result-part-content matched)
+                        #f
+                        #f)]
         [else
          ;; No matching result — drift
-         (replay-result
-          (tool-call-part-name tc)
-          (tool-call-part-arguments tc)
-          ""
-          #t
-          "missing result")])))
+         (replay-result (tool-call-part-name tc)
+                        (tool-call-part-arguments tc)
+                        ""
+                        #t
+                        "missing result")])))
 
   ;; Find orphan results (results with no matching call)
   (define orphan-results
     (for/list ([rp (in-list result-parts)]
-               #:when (not (hash-has-key? consumed
-                                           (tool-result-part-tool-call-id rp))))
-      (replay-result
-       ""
-       ""
-       (tool-result-part-content rp)
-       #t
-       "orphan result")))
+               #:when (not (hash-has-key? consumed (tool-result-part-tool-call-id rp))))
+      (replay-result "" "" (tool-result-part-content rp) #t "orphan result")))
 
   (append call-results orphan-results))
 
@@ -144,30 +138,33 @@
 
   ;; Collect non-deterministic tool names that appear in this session
   (define nd-in-session
-    (remove-duplicates
-     (for/list ([r (in-list results)]
-                #:when (non-deterministic-tool? (replay-result-tool-name r)))
-       (replay-result-tool-name r))))
+    (remove-duplicates (for/list ([r (in-list results)]
+                                  #:when (non-deterministic-tool? (replay-result-tool-name r)))
+                         (replay-result-tool-name r))))
 
   ;; Count non-deterministic tool calls (skipped from deterministic analysis)
   (define skipped
-    (for/sum ([r (in-list results)])
-      (if (non-deterministic-tool? (replay-result-tool-name r)) 1 0)))
+    (for/sum ([r (in-list results)]) (if (non-deterministic-tool? (replay-result-tool-name r)) 1 0)))
 
   ;; Build drift descriptions
   (define drift-descriptions
     (for/list ([r (in-list drifted)])
-      (format "~a: ~a"
-              (replay-result-tool-name r)
-              (replay-result-reason r))))
+      (format "~a: ~a" (replay-result-tool-name r) (replay-result-reason r))))
 
-  (hasheq 'total-entries (length messages)
-          'tool-call-count (length results)
-          'drift-count (length drifted)
-          'drifts drift-descriptions
-          'non-deterministic nd-in-session
-          'skipped skipped
-          'replay-results results))
+  (hasheq 'total-entries
+          (length messages)
+          'tool-call-count
+          (length results)
+          'drift-count
+          (length drifted)
+          'drifts
+          drift-descriptions
+          'non-deterministic
+          nd-in-session
+          'skipped
+          skipped
+          'replay-results
+          results))
 
 ;; ============================================================
 ;; replay-session-safe : path-string? -> hash?
@@ -179,25 +176,40 @@
 
   (cond
     [(not (file-exists? path))
-     (hasheq 'error "file not found"
-             'total-entries 0
-             'tool-call-count 0
-             'drift-count 0
-             'drifts '()
-             'non-deterministic '()
-             'skipped 0
-             'replay-results '())]
+     (hasheq 'error
+             "file not found"
+             'total-entries
+             0
+             'tool-call-count
+             0
+             'drift-count
+             0
+             'drifts
+             '()
+             'non-deterministic
+             '()
+             'skipped
+             0
+             'replay-results
+             '())]
     [else
-     (with-handlers ([exn:fail?
-                      (lambda (e)
-                        (hasheq 'error (exn-message e)
-                                'total-entries 0
-                                'tool-call-count 0
-                                'drift-count 0
-                                'drifts '()
-                                'non-deterministic '()
-                                'skipped 0
-                                'replay-results '()))])
+     (with-handlers ([exn:fail? (lambda (e)
+                                  (hasheq 'error
+                                          (exn-message e)
+                                          'total-entries
+                                          0
+                                          'tool-call-count
+                                          0
+                                          'drift-count
+                                          0
+                                          'drifts
+                                          '()
+                                          'non-deterministic
+                                          '()
+                                          'skipped
+                                          0
+                                          'replay-results
+                                          '()))])
        (replay-session-report path))]))
 
 ;; ============================================================
@@ -208,42 +220,41 @@
   ;; Formats the replay report as a human-readable CLI string.
 
   (define lines
-    (list
-     (format "Entries:        ~a" (hash-ref h 'total-entries 0))
-     (format "Tool calls:     ~a" (hash-ref h 'tool-call-count 0))
-     (format "Drift detected: ~a" (hash-ref h 'drift-count 0))
-     (format "Skipped (ND):   ~a" (hash-ref h 'skipped 0))
-     (let ([nd (hash-ref h 'non-deterministic '())])
-       (if (null? nd)
-           "Non-deterministic: (none)"
-           (format "Non-deterministic: ~a" (string-join nd ", "))))
-     (let ([drifts (hash-ref h 'drifts '())])
-       (if (null? drifts)
-           "Drifts:         (none)"
-           (format "Drifts:\n~a"
-                   (string-join
-                    (for/list ([d (in-list drifts)])
-                      (format "  - ~a" d))
-                    "\n"))))
-     (let ([results (hash-ref h 'replay-results '())])
-       (if (null? results)
-           ""
-           (format "Results:\n~a"
-                   (string-join
-                    (for/list ([r (in-list results)])
-                      (format "  [~a] ~a ~a → ~a~a"
-                              (if (replay-result-drifted? r) "DRIFT" "OK")
-                              (replay-result-tool-name r)
-                              (let ([args (replay-result-arguments r)])
-                                (if (> (string-length args) 40)
-                                    (string-append (substring args 0 40) "...")
-                                    args))
-                              (let ([res (replay-result-original-result r)])
-                                (if (> (string-length res) 40)
-                                    (string-append (substring res 0 40) "...")
-                                    res))
-                              (let ([reason (replay-result-reason r)])
-                                (if reason (format " (~a)" reason) ""))))
-                    "\n"))))))
+    (list (format "Entries:        ~a" (hash-ref h 'total-entries 0))
+          (format "Tool calls:     ~a" (hash-ref h 'tool-call-count 0))
+          (format "Drift detected: ~a" (hash-ref h 'drift-count 0))
+          (format "Skipped (ND):   ~a" (hash-ref h 'skipped 0))
+          (let ([nd (hash-ref h 'non-deterministic '())])
+            (if (null? nd)
+                "Non-deterministic: (none)"
+                (format "Non-deterministic: ~a" (string-join nd ", "))))
+          (let ([drifts (hash-ref h 'drifts '())])
+            (if (null? drifts)
+                "Drifts:         (none)"
+                (format "Drifts:\n~a"
+                        (string-join (for/list ([d (in-list drifts)])
+                                       (format "  - ~a" d))
+                                     "\n"))))
+          (let ([results (hash-ref h 'replay-results '())])
+            (if (null? results)
+                ""
+                (format "Results:\n~a"
+                        (string-join (for/list ([r (in-list results)])
+                                       (format "  [~a] ~a ~a → ~a~a"
+                                               (if (replay-result-drifted? r) "DRIFT" "OK")
+                                               (replay-result-tool-name r)
+                                               (let ([args (replay-result-arguments r)])
+                                                 (if (> (string-length args) 40)
+                                                     (string-append (substring args 0 40) "...")
+                                                     args))
+                                               (let ([res (replay-result-original-result r)])
+                                                 (if (> (string-length res) 40)
+                                                     (string-append (substring res 0 40) "...")
+                                                     res))
+                                               (let ([reason (replay-result-reason r)])
+                                                 (if reason
+                                                     (format " (~a)" reason)
+                                                     ""))))
+                                     "\n"))))))
 
   (string-join (filter (lambda (s) (> (string-length s) 0)) lines) "\n"))

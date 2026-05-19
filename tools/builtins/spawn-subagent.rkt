@@ -48,7 +48,13 @@
          tool-spawn-subagents
          resolve-role-prompt
          parse-subagent-config
-         (struct-out subagent-config))
+         subagent-config
+         subagent-config?
+         subagent-config-task
+         subagent-config-role
+         subagent-config-max-turns
+         subagent-config-tools
+         subagent-config-model)
 
 ;; Subagent configuration struct — replaces ad-hoc hash extraction
 (struct subagent-config (task role max-turns tools model) #:transparent)
