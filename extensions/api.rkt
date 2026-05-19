@@ -12,7 +12,13 @@
 (require racket/contract
          racket/list
          ;; v0.33.0 W1: extension struct moved to foundation layer
-         "../util/extensions.rkt"
+         (only-in "../util/extensions.rkt"
+                  extension
+                  extension?
+                  extension-name
+                  extension-version
+                  extension-api-version
+                  extension-hooks)
          ;; ARCH-04 (v0.22.0): event bus re-exports for extensions
          (only-in "../agent/event-bus.rkt" publish! subscribe! unsubscribe! make-event-bus event-bus?)
          ;; Backward-compat: re-export injection-event-topic
@@ -39,7 +45,12 @@
          ;; Extension struct and registry
          json-schema?
          injection-event-topic
-         (struct-out extension)
+         extension
+         extension?
+         extension-name
+         extension-version
+         extension-api-version
+         extension-hooks
          extension-registry?
          (contract-out [make-extension-registry (-> extension-registry?)]
                        [register-extension! (-> extension-registry? extension? void?)]

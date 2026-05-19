@@ -19,11 +19,29 @@
          NOTIFY-ERROR
          NOTIFY-SUCCESS
          notify-level?
-         (struct-out notification)
-         (struct-out confirm-result)
-         (struct-out select-option)
-         (struct-out select-result)
-         (struct-out notification-state)
+         notification
+         notification?
+         notification-level
+         notification-message
+         notification-timestamp
+         notification-duration
+         confirm-result
+         confirm-result?
+         confirm-result-value
+         confirm-result-timed-out?
+         select-option
+         select-option?
+         select-option-id
+         select-option-label
+         select-option-description
+         select-result
+         select-result?
+         select-result-selected-id
+         select-result-timed-out?
+         notification-state
+         notification-state?
+         notification-state-active
+         notification-state-queue
          (contract-out
           [ctx-notify
            (->* (notify-level? string?) (#:duration exact-nonnegative-integer?) notification?)]

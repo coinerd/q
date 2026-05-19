@@ -12,21 +12,33 @@
 (require racket/contract)
 
 ;; UI request structs
-(provide (struct-out ui-request)
-         (struct-out ui-confirm-request)
-         (struct-out ui-select-request)
-         (struct-out ui-input-request)
-         (struct-out ui-response)
-
+(provide ui-request
+         ui-request?
+         ui-request-type
+         ui-request-response-ch
+         ui-request-prompt
+         ui-confirm-request
+         ui-confirm-request?
+         ui-confirm-request-default
+         ui-select-request
+         ui-select-request?
+         ui-select-request-options
+         ui-select-request-multi?
+         ui-input-request
+         ui-input-request?
+         ui-input-request-default
+         ui-input-request-placeholder
+         ui-response
+         ui-response?
+         ui-response-value
+         ui-response-cancelled?
          ;; High-level API for extensions
          ui-confirm!
          ui-select!
          ui-input!
-
          ;; Channel creation
          make-ui-channel
          ui-channel?
-
          ;; Response waiting
          wait-for-ui-response)
 
