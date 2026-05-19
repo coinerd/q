@@ -17,7 +17,24 @@
          racket/format
          "../util/version.rkt")
 
-(provide (struct-out cli-config)
+(provide cli-config
+         cli-config?
+         cli-config-command
+         cli-config-session-id
+         cli-config-prompt
+         cli-config-model
+         cli-config-mode
+         cli-config-project-dir
+         cli-config-config-path
+         cli-config-verbose?
+         cli-config-max-turns
+         cli-config-no-tools?
+         cli-config-tools
+         cli-config-session-dir
+         cli-config-sessions-subcommand
+         cli-config-sessions-args
+         cli-config-keybindings-path
+         cli-config-print-mode?
          parse-cli-args
          cli-config->runtime-config
          print-usage

@@ -15,8 +15,16 @@
          racket/path)
 
 ;; Structs
-(provide (struct-out credential)
-         (struct-out redacted-credential)
+(provide credential
+         credential?
+         credential-provider-name
+         credential-api-key
+         credential-source
+         redacted-credential
+         redacted-credential?
+         redacted-credential-provider-name
+         redacted-credential-masked-api-key
+         redacted-credential-source
          ;; H-02: Contract-wrapped exports
          (contract-out
           [lookup-credential
