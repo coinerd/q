@@ -16,8 +16,13 @@
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event!)
          (only-in "../../runtime/session-store.rkt" append-entries!))
 
-(provide (struct-out step-effect:append-entries)
-         (struct-out step-effect:emit-event)
+(provide step-effect:append-entries
+         step-effect:append-entries?
+         step-effect:append-entries-entries
+         step-effect:emit-event
+         step-effect:emit-event?
+         step-effect:emit-event-name
+         step-effect:emit-event-payload
          step-effect?
          run-step-effects!)
 

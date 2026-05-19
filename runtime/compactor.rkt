@@ -45,8 +45,15 @@
                   split-turn-result-turn-messages
                   generate-turn-prefix))
 
-(provide (struct-out compaction-strategy)
-         (struct-out compaction-result)
+(provide compaction-strategy
+         compaction-strategy?
+         compaction-strategy-summary-window-size
+         compaction-strategy-keep-recent-count
+         compaction-result
+         compaction-result?
+         compaction-result-summary-message
+         compaction-result-removed-count
+         compaction-result-kept-messages
          ;; H-02: Contract-wrapped compaction functions
          (contract-out [compact-history
                         (->* (list?)

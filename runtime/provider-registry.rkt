@@ -39,8 +39,20 @@
           [provider-summary (-> provider-registry? string? (or/c hash? #f))])
          provider-registry?
          ;; Model info struct
-         (struct-out provider-info)
-         (struct-out registered-model))
+         provider-info
+         provider-info?
+         provider-info-name
+         provider-info-provider
+         provider-info-config
+         provider-info-registered-at
+         registered-model
+         registered-model?
+         registered-model-id
+         registered-model-name
+         registered-model-provider-name
+         registered-model-context-window
+         registered-model-max-tokens
+         registered-model-capabilities)
 
 ;; ============================================================
 ;; Structs
