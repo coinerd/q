@@ -88,7 +88,7 @@
                       (define payload (event-payload evt))
                       (set-box! ctx-sizes
                                 (append (unbox ctx-sizes)
-                                        (list (hash-ref payload 'total-messages 0)))))))
+                                        (list (hash-ref payload 'totalMessages 0)))))))
 
       (enqueue-steering! queue (make-user-message "First steering"))
       (enqueue-steering! queue (make-user-message "Second steering"))
@@ -107,7 +107,7 @@
       ;; Context should have had 3 messages (1 initial + 2 steering)
       (define sizes (unbox ctx-sizes))
       (when (not (null? sizes))
-        (check >= (car sizes) 3 "total-messages should include initial + 2 steering messages")))
+        (check >= (car sizes) 3 "totalMessages should include initial + 2 steering messages")))
 
     (test-case "empty queue does not affect context"
       (define bus (make-event-bus))

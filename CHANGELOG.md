@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.47.13 — 2026-05-19
+
+### Changed
+- Finalized v0.47.x release metadata synchronization:
+  - `util/version.rkt` → `0.47.13`
+  - `info.rkt` → `0.47.13`
+  - README version badge/examples updated to `0.47.13`
+- Added post-implementation GSD audit and remediation tracking in `.planning/`.
+
+### Audit
+- Post-series audit report: `.planning/AUDIT-v0.47.x-POST-IMPLEMENTATION-GSD.md`
+- Current status: implementation materially complete with remaining process/test debt tracked in remediation items R0–R3.
+
 ## v0.46.10 — 2026-05-14
 
 ### Fixed

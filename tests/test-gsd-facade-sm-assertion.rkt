@@ -15,8 +15,9 @@
 (test-case "all TRANSITIONS states are valid GSD-STATES"
   ;; If the assertion in state-machine.rkt didn't fire at module load time,
   ;; all transition states are valid. This test verifies programmatically.
+  ;; TRANSITIONS is enriched: (((from . event) . to) ...)
   (for ([t TRANSITIONS])
-    (check-true (gsm-state? (car t)) (format "from-state ~a not in GSD-STATES" (car t)))
+    (check-true (gsm-state? (caar t)) (format "from-state ~a not in GSD-STATES" (caar t)))
     (check-true (gsm-state? (cdr t)) (format "to-state ~a not in GSD-STATES" (cdr t)))))
 
 (test-case "GSD-STATES contains expected states"
@@ -29,11 +30,11 @@
   (check-not-false (member 'verifying GSD-STATES)))
 
 (test-case "TRANSITIONS has expected from-idle entries"
-  (define idle-targets (map cdr (filter (lambda (t) (eq? (car t) 'idle)) TRANSITIONS)))
+  (define idle-targets (map cdr (filter (lambda (t) (eq? (caar t) 'idle)) TRANSITIONS)))
   (check-not-false (member 'exploring idle-targets)))
 
 (test-case "TRANSITIONS has expected from-executing entries"
-  (define exec-targets (map cdr (filter (lambda (t) (eq? (car t) 'executing)) TRANSITIONS)))
+  (define exec-targets (map cdr (filter (lambda (t) (eq? (caar t) 'executing)) TRANSITIONS)))
   (check-not-false (member 'verifying exec-targets))
   (check-not-false (member 'idle exec-targets)))
 

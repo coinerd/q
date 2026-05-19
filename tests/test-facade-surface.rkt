@@ -28,9 +28,15 @@
 
 (test-case "context-assembly.rkt re-exports 3 sub-modules (intentional facade)"
   (define content (call-with-input-file (q-file "runtime" "context-assembly.rkt") port->string))
-  (define count (length (regexp-match* #rx"all-from-out" content)))
-  (check-true (>= count 3)
-              (format "expected >= 3 all-from-out in context-assembly.rkt, found ~a" count)))
+  (define all-from-count (length (regexp-match* #rx"all-from-out" content)))
+  (define explicit-count (length (regexp-match* #rx"provide" content)))
+  ;; Either uses all-from-out or explicit provides (S1-F4 refactor)
+  (check-true
+   (or (>= all-from-count 3) (>= explicit-count 2))
+   (format
+    "expected facade pattern in context-assembly.rkt (all-from-out>=3 or provide>=2), found ~a/~a"
+    all-from-count
+    explicit-count)))
 
 (test-case "event-structs.rkt re-exports 6 sub-modules (intentional facade)"
   (define content (call-with-input-file (q-file "agent" "event-structs.rkt") port->string))

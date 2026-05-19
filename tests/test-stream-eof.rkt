@@ -78,7 +78,7 @@
       (when (>= (length completions) 1)
         (define comp (car completions))
         (check-equal? (hash-ref comp 'finish_reason #f) "eof")
-        (check-true (hash-ref comp 'truncated? #f) "truncated? should be #t for silent EOF")))
+        (check-true (hash-ref comp 'truncated #f) "truncated? should be #t for silent EOF")))
 
     ;; ── Case 2: Normal completion — done chunk present ──
     (test-case "normal completion does NOT emit synthetic model.stream.completed"
@@ -104,7 +104,7 @@
         (define comp (car completions))
         (check-equal? (hash-ref comp 'finish_reason #f) "stop")
         ;; Normal completion should NOT have truncated?
-        (check-false (hash-ref comp 'truncated? #f) "normal completion should NOT have truncated?")))
+        (check-false (hash-ref comp 'truncated #f) "normal completion should NOT have truncated?")))
 
     ;; ── Case 3: Empty stream — generator yields #f immediately ──
     (test-case "empty stream yields #f immediately — no synthetic event"

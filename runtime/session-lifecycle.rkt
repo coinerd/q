@@ -403,6 +403,9 @@
   (emit-typed-event! bus
                      (turn-start-event "turn.started" (current-inexact-milliseconds) sid #f #f #f))
   (define base-cfg (agent-session-config sess))
+  ;; Safety-net control: emit cleanup turn.completed only on abnormal exit.
+  ;; Normal turn flow already emits turn.completed from the core loop.
+  (define emit-cleanup-turn-completed? (box #t))
   ;; #1391: Inject session index into config for session_recall tool access
   (dynamic-wind
    void
@@ -432,7 +435,13 @@
           (if (and input-hook-res (eq? (hook-result-action input-hook-res) 'amend))
               (hash-ref (hook-result-payload input-hook-res) 'message user-message)
               user-message))
-        (run-prompt-internal sess effective-input max-iterations token-budget-threshold ep! ba!)]))
+        (begin0 (run-prompt-internal sess
+                                     effective-input
+                                     max-iterations
+                                     token-budget-threshold
+                                     ep!
+                                     ba!)
+          (set-box! emit-cleanup-turn-completed? #f))]))
    ;; Cleanup: always reset prompt-running? even on error
    ;; v0.45.14: Safety-net turn.completed ensures TUI busy? is always cleared,
    ;; even if a regression prevents normal event flow.
@@ -440,12 +449,14 @@
    (lambda ()
      (guarded-set-prompt-running! sess #f)
      ;; v0.45.14 W0a: Safety-net turn.completed for TUI busy-state recovery
-     (with-handlers ([exn:fail? void])
-       (define sid (agent-session-session-id sess))
-       (define bus (agent-session-event-bus sess))
-       (emit-typed-event!
-        bus
-        (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "cleanup" 0)))
+     ;; only on abnormal/early-exit paths.
+     (when (unbox emit-cleanup-turn-completed?)
+       (with-handlers ([exn:fail? void])
+         (define sid (agent-session-session-id sess))
+         (define bus (agent-session-event-bus sess))
+         (emit-typed-event!
+          bus
+          (turn-end-event "turn.completed" (current-inexact-milliseconds) sid #f "cleanup" 0))))
      (unless (agent-session-persisted? sess)
        (with-handlers ([exn:fail? void])
          (ensure-persisted! sess))))))

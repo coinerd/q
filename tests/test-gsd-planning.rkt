@@ -442,9 +442,9 @@
 ;; W0 (#1864): /plan prompt content tests
 ;; ============================================================
 
-(test-case "planning-system-prompt limits exploration to 5 tool calls"
+(test-case "planning-system-prompt limits exploration to 8 file reads"
   (define p (planning-system-prompt ""))
-  (check-true (string-contains? p "MAXIMUM 5 tool calls")))
+  (check-true (string-contains? p "Do NOT read more than 8 files")))
 
 (test-case "planning-system-prompt requires root cause identification"
   (define p (planning-system-prompt ""))
@@ -684,8 +684,8 @@
 
 (test-case "planning-system-prompt-no-unlimited-exploration"
   (define p (planning-system-prompt ""))
-  (check-true (string-contains? p "MAXIMUM 5 tool calls")
-              "prompt should limit exploration to 5 calls"))
+  (check-true (string-contains? p "Do NOT read more than 8 files")
+              "prompt should limit exploration to 8 file reads"))
 
 ;; ============================================================
 ;; W2: /plan Overwrite Stale Plans Tests

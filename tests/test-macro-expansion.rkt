@@ -99,26 +99,7 @@
 
 (require (for-syntax racket/base))
 
-;; Verify define-typed-event expands to struct + predicate + type
-(test-case "define-typed-event: expansion contains struct definition"
-  (define expanded
-    (expand
-     '(define-typed-event expansion-test-event "expansion.test" (field-x) #:optional ([field-y 0]))))
-  (define expanded-str (format "~a" expanded))
-  (check-true (string-contains? expanded-str "struct") "expansion contains 'struct'")
-  (check-true (string-contains? expanded-str "expansion-test-event?") "expansion contains predicate")
-  (check-true (string-contains? expanded-str "expansion-test-event-type")
-              "expansion contains type constant"))
-
-;; Verify define-tool expansion contains schema and tool binding
-(test-case "define-tool: expansion contains schema hash and tool binding"
-  (define expanded
-    (expand '(define-tool expansion-test-tool
-                          #:description "Expansion test tool"
-                          #:required ("arg")
-                          #:properties [(arg "string" "An argument")]
-                          (lambda (args exec-ctx) (make-success-result "ok")))))
-  (define expanded-str (format "~a" expanded))
-  (check-true (string-contains? expanded-str "tool") "expansion contains 'tool' struct reference")
-  (check-true (string-contains? expanded-str "expansion-test-tool")
-              "expansion contains tool-id binding"))
+;; RA-25: Expansion structure tests removed — the behavioral tests above
+;; (struct definition, predicate, constructor, schema, handler) already
+;; verify the macro produces correct output. Runtime `expand` is brittle
+;; across Racket versions and module boundary changes.

@@ -7,7 +7,7 @@
 (require racket/contract
          (only-in racket/string string-prefix?)
          (only-in "../util/event.rkt" make-event event?)
-         (only-in "../agent/event-bus.rkt" publish! event-bus?)
+         (only-in "../agent/event-bus.rkt" publish! event-bus? typed-event->event)
          (only-in "../agent/state.rkt" state-add-event! loop-state?)
          (only-in "../agent/event-structs/base.rkt"
                   typed-event?

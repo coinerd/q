@@ -13,7 +13,13 @@
          rackunit/text-ui
          "../../tui/input.rkt"
          "../../tui/state.rkt"
-         "../../tui/render.rkt")
+         "../../tui/render.rkt"
+         (only-in "../../tui/command-parse.rkt"
+                  parsed-command
+                  parsed-command-canonical-name
+                  parsed-command-args
+                  parsed-command-arg-kind
+                  parsed-command?))
 
 (define branch-tests
   (test-suite "TUI Branch Inspection"
@@ -21,23 +27,36 @@
     ;; ── Slash Command Parsing ──
 
     (test-case "/branches parses correctly"
-      (check-equal? (parse-tui-slash-command "/branches") 'branches))
+      (check-equal? (parse-tui-slash-command "/branches") (parsed-command 'branches '() 'none)))
 
     (test-case "/leaves parses correctly"
-      (check-equal? (parse-tui-slash-command "/leaves") 'leaves))
+      (check-equal? (parse-tui-slash-command "/leaves") (parsed-command 'leaves '() 'none)))
 
     (test-case "/switch with argument parses correctly"
-      (check-equal? (parse-tui-slash-command "/switch abc123") '(switch "abc123")))
+      (define cmd (parse-tui-slash-command "/switch abc123"))
+      (check-true (parsed-command? cmd))
+      (check-equal? (parsed-command-canonical-name cmd) 'switch)
+      (check-equal? (parsed-command-args cmd) '("abc123"))
+      (check-equal? (parsed-command-arg-kind cmd) 'required))
 
     (test-case "/switch without argument returns error"
-      (check-equal? (parse-tui-slash-command "/switch") '(switch-error "Usage: /switch <branch-id>")))
+      (define cmd (parse-tui-slash-command "/switch"))
+      (check-true (parsed-command? cmd))
+      (check-equal? (parsed-command-canonical-name cmd) 'switch-error)
+      (check-equal? (parsed-command-arg-kind cmd) 'error))
 
     (test-case "/children with argument parses correctly"
-      (check-equal? (parse-tui-slash-command "/children msg-1") '(children "msg-1")))
+      (define cmd (parse-tui-slash-command "/children msg-1"))
+      (check-true (parsed-command? cmd))
+      (check-equal? (parsed-command-canonical-name cmd) 'children)
+      (check-equal? (parsed-command-args cmd) '("msg-1"))
+      (check-equal? (parsed-command-arg-kind cmd) 'required))
 
     (test-case "/children without argument returns error"
-      (check-equal? (parse-tui-slash-command "/children")
-                    '(children-error "Usage: /children <node-id>")))
+      (define cmd (parse-tui-slash-command "/children"))
+      (check-true (parsed-command? cmd))
+      (check-equal? (parsed-command-canonical-name cmd) 'children-error)
+      (check-equal? (parsed-command-arg-kind cmd) 'error))
 
     ;; ── branch-info struct ──
 

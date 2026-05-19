@@ -13,7 +13,7 @@
   (check-true (>= (length names) 37) (format "expected >= 37 hook points, got ~a" (length names))))
 
 (test-case "tool lifecycle events exist"
-  (for ([name '(tool.execution.start tool.execution.update tool.execution.end)])
+  (for ([name '(tool.execution.started tool.execution.update tool.execution.completed)])
     (check-not-false (member name (hook-point-names)) (format "~a not in hook points" name))))
 
 (test-case "message lifecycle events exist"
@@ -53,21 +53,21 @@
 
 (test-case "all new hooks have valid action schemas"
   (define advisory-hooks
-    '(tool.execution.start tool.execution.end
-                           message.stream.delta
-                           context.window.changed
-                           provider.stream.delta
-                           provider.error
-                           model.selected
-                           model.changed
-                           session.created
-                           session.loaded
-                           session.compacted
-                           extension.loaded
-                           extension.unloaded
-                           agent.started
-                           agent.idle
-                           agent.error))
+    '(tool.execution.started tool.execution.completed
+                             message.stream.delta
+                             context.window.changed
+                             provider.stream.delta
+                             provider.error
+                             model.selected
+                             model.changed
+                             session.created
+                             session.loaded
+                             session.compacted
+                             extension.loaded
+                             extension.unloaded
+                             agent.started
+                             agent.idle
+                             agent.error))
   (for ([name advisory-hooks])
     (define schema (hash-ref hook-action-schemas name #f))
     (check-not-false schema (format "~a missing from hook-action-schemas" name))

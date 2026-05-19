@@ -424,8 +424,8 @@
                          (displayln "(define something-else 42)")))
   (define result (try-load-extension ext-file))
   (check-true (extension-load-error? result))
-  ;; dynamic-require of missing export raises exn:fail
-  (check-equal? (extension-load-error-category result) 'unknown)
+  ;; dynamic-require of missing export raises exn:fail:contract in modern Racket
+  (check-not-false (member (extension-load-error-category result) '(unknown contract-error)))
   (cleanup-dir tmp-dir))
 
 (test-case "load-extension! with event-bus publishes extension.load.failed on error"

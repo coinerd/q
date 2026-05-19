@@ -13,7 +13,7 @@
          (only-in "event-macro.rkt" lookup-event-deserializer)
          (only-in "event-migration.rkt" run-event-migrations!))
 (provide (contract-out [payload->hash (-> any/c hash?)]
-                       [hash->payload (-> any/c (or/c hash? struct?))]
+                       [hash->payload (-> any/c any/c)]
                        [payload-type-tag (-> any/c symbol?)]))
 
 ;; Forward to event-payloads.rkt (already exported there, re-exported here

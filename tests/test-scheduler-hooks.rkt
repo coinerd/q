@@ -213,7 +213,8 @@
                                          (lambda ()
                                            (set-box! active-writers (sub1 (unbox active-writers)))))
                     (set-box! write-count (add1 (unbox write-count)))
-                    (make-success-result "written"))))
+                    (make-success-result "written"))
+                  #:dangerous? #t))
       (define tcs
         (for/list ([i (in-range 3)])
           (make-tool-call

@@ -237,7 +237,7 @@
 ;; This ensures bus-emit-typed! produces payloads compatible with TUI handlers.
 (define (json-key->racket-key k)
   (define s (symbol->string k))
-  (string->symbol (regexp-replace* #rx"([a-z])([A-Z])" s "\\1-\\2")))
+  (string->symbol (string-downcase (regexp-replace* #rx"([a-z])([A-Z])" s "\\1-\\2"))))
 
 ;; Convert a typed-event to a raw event struct for bus transport.
 ;; The typed event's type field becomes the event name.

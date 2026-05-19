@@ -17,7 +17,13 @@
          (only-in "../runtime/runtime-helpers.rkt" maybe-dispatch-hooks)
          "../runtime/agent-session.rkt"
          "../skills/types.rkt"
-         (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result)
+         (only-in "../tools/scheduler.rkt"
+                  run-tool-batch
+                  scheduler-result
+                  tool-pre-hook-payload
+                  tool-pre-hook-payload-tool-name
+                  tool-post-hook-payload
+                  tool-post-hook-payload-result)
          (only-in "../tools/tool.rkt"
                   make-tool
                   make-tool-registry
@@ -133,12 +139,15 @@
       (define hook-called? (box #f))
       (define captured-name (box #f))
       (define reg
-        (make-test-extension-registry (list 'tool-call-pre
-                                            (lambda (payload)
-                                              (set-box! hook-called? #t)
-                                              (set-box! captured-name
-                                                        (hash-ref payload 'tool-name #f))
-                                              (hook-pass payload)))))
+        (make-test-extension-registry
+         (list 'tool-call-pre
+               (lambda (payload)
+                 (set-box! hook-called? #t)
+                 (set-box! captured-name
+                           (if (hash? payload)
+                               (hash-ref payload 'tool-name #f)
+                               (tool-pre-hook-payload-tool-name payload)))
+                 (hook-pass payload)))))
       (define hook-dispatcher (make-hook-dispatcher reg))
 
       (define test-tool
@@ -164,7 +173,10 @@
         (make-test-extension-registry (list 'tool-result-post
                                             (lambda (payload)
                                               (set-box! hook-called? #t)
-                                              (set-box! captured-result (hash-ref payload 'result #f))
+                                              (set-box! captured-result
+                                                        (if (hash? payload)
+                                                            (hash-ref payload 'result #f)
+                                                            (tool-post-hook-payload-result payload)))
                                               (hook-pass payload)))))
       (define hook-dispatcher (make-hook-dispatcher reg))
 

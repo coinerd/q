@@ -7,7 +7,13 @@
 (require rackunit
          rackunit/text-ui
          "../../../q/tui/input.rkt"
-         "../../../q/tui/char-width.rkt")
+         "../../../q/tui/char-width.rkt"
+         (only-in "../../../q/tui/command-parse.rkt"
+                  parsed-command
+                  parsed-command-canonical-name
+                  parsed-command-args
+                  parsed-command-arg-kind
+                  parsed-command?))
 
 (define input-tests
   (test-suite "TUI Input"
@@ -296,37 +302,69 @@
     ;; parse-tui-slash-command
     ;; ============================================================
     (test-case "parse-tui-slash-command parses simple commands"
-      (check-equal? (parse-tui-slash-command "/help") 'help)
-      (check-equal? (parse-tui-slash-command "/h") 'help)
-      (check-equal? (parse-tui-slash-command "/?") 'help)
-      (check-equal? (parse-tui-slash-command "/clear") 'clear)
-      (check-equal? (parse-tui-slash-command "/cls") 'clear)
-      (check-equal? (parse-tui-slash-command "/compact") 'compact)
-      (check-equal? (parse-tui-slash-command "/interrupt") 'interrupt)
-      (check-equal? (parse-tui-slash-command "/stop") 'interrupt)
-      (check-equal? (parse-tui-slash-command "/cancel") 'interrupt)
-      (check-equal? (parse-tui-slash-command "/quit") 'quit)
-      (check-equal? (parse-tui-slash-command "/exit") 'quit)
-      (check-equal? (parse-tui-slash-command "/q") 'quit))
+      (define (pc? cmd expected-name)
+        (and (parsed-command? cmd)
+             (eq? (parsed-command-canonical-name cmd) expected-name)
+             (null? (parsed-command-args cmd))
+             (eq? (parsed-command-arg-kind cmd) 'none)))
+      (check-true (pc? (parse-tui-slash-command "/help") 'help))
+      (check-true (pc? (parse-tui-slash-command "/h") 'help))
+      (check-true (pc? (parse-tui-slash-command "/?") 'help))
+      (check-true (pc? (parse-tui-slash-command "/clear") 'clear))
+      (check-true (pc? (parse-tui-slash-command "/cls") 'clear))
+      (check-true (pc? (parse-tui-slash-command "/compact") 'compact))
+      (check-true (pc? (parse-tui-slash-command "/interrupt") 'interrupt))
+      (check-true (pc? (parse-tui-slash-command "/stop") 'interrupt))
+      (check-true (pc? (parse-tui-slash-command "/cancel") 'interrupt))
+      (check-true (pc? (parse-tui-slash-command "/quit") 'quit))
+      (check-true (pc? (parse-tui-slash-command "/exit") 'quit))
+      (check-true (pc? (parse-tui-slash-command "/q") 'quit)))
 
     (test-case "parse-tui-slash-command parses branch inspection commands"
-      (check-equal? (parse-tui-slash-command "/branches") 'branches)
-      (check-equal? (parse-tui-slash-command "/leaves") 'leaves)
-      (check-equal? (parse-tui-slash-command "/switch branch-123") '(switch "branch-123"))
-      (check-equal? (parse-tui-slash-command "/children node-456") '(children "node-456")))
+      (define (pc? cmd expected-name)
+        (and (parsed-command? cmd)
+             (eq? (parsed-command-canonical-name cmd) expected-name)
+             (null? (parsed-command-args cmd))
+             (eq? (parsed-command-arg-kind cmd) 'none)))
+      (check-true (pc? (parse-tui-slash-command "/branches") 'branches))
+      (check-true (pc? (parse-tui-slash-command "/leaves") 'leaves))
+      (define sw (parse-tui-slash-command "/switch branch-123"))
+      (check-true (parsed-command? sw))
+      (check-equal? (parsed-command-canonical-name sw) 'switch)
+      (check-equal? (parsed-command-args sw) '("branch-123"))
+      (define ch (parse-tui-slash-command "/children node-456"))
+      (check-true (parsed-command? ch))
+      (check-equal? (parsed-command-canonical-name ch) 'children)
+      (check-equal? (parsed-command-args ch) '("node-456")))
 
     (test-case "parse-tui-slash-command returns error for commands missing args"
-      (check-equal? (parse-tui-slash-command "/switch") '(switch-error "Usage: /switch <branch-id>"))
-      (check-equal? (parse-tui-slash-command "/children")
-                    '(children-error "Usage: /children <node-id>")))
+      (define sw (parse-tui-slash-command "/switch"))
+      (check-true (parsed-command? sw))
+      (check-equal? (parsed-command-canonical-name sw) 'switch-error)
+      (check-equal? (parsed-command-args sw) '("Usage: /switch <branch-id>"))
+      (check-equal? (parsed-command-arg-kind sw) 'error)
+      (define ch (parse-tui-slash-command "/children"))
+      (check-true (parsed-command? ch))
+      (check-equal? (parsed-command-canonical-name ch) 'children-error)
+      (check-equal? (parsed-command-args ch) '("Usage: /children <node-id>"))
+      (check-equal? (parsed-command-arg-kind ch) 'error))
 
     (test-case "parse-tui-slash-command handles unknown and non-slash input"
       (check-equal? (parse-tui-slash-command "/foo") 'unknown)
       (check-false (parse-tui-slash-command "hello"))
       (check-false (parse-tui-slash-command ""))
-      (check-equal? (parse-tui-slash-command "  /help  ") 'help)
-      (check-equal? (parse-tui-slash-command "  /branches  ") 'branches)
-      (check-equal? (parse-tui-slash-command "/switch  my-branch  ") '(switch "my-branch")))
+      (define (pc? cmd expected-name)
+        (and (parsed-command? cmd)
+             (eq? (parsed-command-canonical-name cmd) expected-name)
+             (null? (parsed-command-args cmd))
+             (eq? (parsed-command-arg-kind cmd) 'none)))
+      (check-true (pc? (parse-tui-slash-command "  /help  ") 'help))
+      (check-true (pc? (parse-tui-slash-command "  /branches  ") 'branches))
+      (define sw (parse-tui-slash-command "/switch  my-branch  "))
+      (check-true (parsed-command? sw))
+      (check-equal? (parsed-command-canonical-name sw) 'switch)
+      (check-equal? (parsed-command-args sw) '("my-branch"))
+      (check-equal? (parsed-command-arg-kind sw) 'required))
 
     ;; ============================================================
     ;; parse-mouse-event

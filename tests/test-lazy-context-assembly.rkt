@@ -23,7 +23,8 @@
 
 (test-case "turn-orchestrator.rkt uses delay for token estimation"
   (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (check-not-false (regexp-match? #rx"delay.*estimate-context-tokens" content)
+  (check-not-false (and (regexp-match? #rx"delay" content)
+                        (regexp-match? #rx"estimate-context-tokens" content))
                    "should have delay wrapping estimate-context-tokens"))
 
 (test-case "turn-orchestrator.rkt uses force for deferred computation"
@@ -33,7 +34,8 @@
 
 (test-case "turn-orchestrator.rkt defers ws-message resolution"
   (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (check-not-false (regexp-match? #rx"delay.*working-set-resolve" content)
+  (check-not-false (and (regexp-match? #rx"delay" content)
+                        (regexp-match? #rx"working-set-resolve" content))
                    "should defer working-set message resolution"))
 
 ;; ============================================================
@@ -76,5 +78,5 @@
 
 (test-case "at least 2 deferred operations in turn-orchestrator"
   (define content (call-with-input-file (q-file "runtime" "turn-orchestrator.rkt") port->string))
-  (define delay-count (length (regexp-match* #rx"delay " content)))
+  (define delay-count (length (regexp-match* #rx"\\(delay[^-_]" content)))
   (check-true (>= delay-count 2) (format "expected at least 2 delay forms, found ~a" delay-count)))

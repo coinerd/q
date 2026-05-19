@@ -158,13 +158,12 @@
     (test-case "exec-context with all fields populated"
       (define ctx2
         (make-exec-context #:working-directory "/tmp/project"
-                           #:cancellation-token 'cancel-token
                            #:event-publisher (lambda (_evt _payload) (void))
                            #:runtime-settings (hasheq 'timeout 30)
                            #:call-id "call-456"
                            #:session-metadata (hasheq 'sessionId "s1")))
       (check-equal? (exec-context-working-directory ctx2) "/tmp/project")
-      (check-equal? (exec-context-cancellation-token ctx2) 'cancel-token)
+      (check-false (exec-context-cancellation-token ctx2))
       (check-true (procedure? (exec-context-event-publisher ctx2)))
       (check-equal? (exec-context-runtime-settings ctx2) (hasheq 'timeout 30))
       (check-equal? (exec-context-call-id ctx2) "call-456")

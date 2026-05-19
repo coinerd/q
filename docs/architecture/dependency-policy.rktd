@@ -10,7 +10,7 @@
 
 ;; Layer definitions with max boundary exceptions
 ((layers (runtime
-          (max-exceptions . 9)
+          (max-exceptions . 10)
           (forbidden-from . (llm tools extensions))
           (rationale
            .
@@ -28,7 +28,7 @@
  ;; Format: ((filename . rationale) ...)
  (known-exceptions
   (runtime . ((agent-session.rkt . "extension registry + DI parameter setup")
-              (iteration.rkt . "injection-event-topic value import (cannot lazy-require)")
+              (iteration/loop-state.rkt . "typed require from extensions/api.rkt for opaque ExtRegistry")
               (session-lifecycle.rkt
                . "injection-event-topic import (extracted from agent-session/iteration)")
               (runtime-helpers.rkt . "hook dispatch for session events")
@@ -37,7 +37,9 @@
               (package.rkt . "package audit reads extension manifests")
               (extension-catalog.rkt . "extension loading/discovery")
               (session-switch.rkt
-               . "dynamic-require to extensions for lazy loading (avoids circular dependency)")))
+               . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
+              (session-config.rkt
+               . "central typed config referencing cross-layer type predicates")))
   (extensions
    .
    ((dialog-api.rkt . "TUI dialog interface")

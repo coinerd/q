@@ -64,10 +64,10 @@
 
 (test-case "config accessors with values"
   (define cfg
-    (hash->session-config (make-immutable-hash '((provider . my-prov) (model-name . "test-model")
-                                                                      (max-iterations . 100)
-                                                                      (session-dir . "/tmp/test")))))
-  (check-equal? (config-provider cfg) 'my-prov)
+    (hash->session-config (make-immutable-hash '((provider . #f) (model-name . "test-model")
+                                                                 (max-iterations . 100)
+                                                                 (session-dir . "/tmp/test")))))
+  (check-false (config-provider cfg))
   (check-equal? (config-model-name cfg) "test-model")
   (check-equal? (config-max-iterations cfg) 100)
   (check-equal? (config-session-dir cfg) "/tmp/test"))

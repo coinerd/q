@@ -40,14 +40,14 @@
 
     (test-case "update-seen-paths: non-read tool resets"
       (define tcs (list (make-tool-call #f "edit" (hash 'path "foo.rkt"))))
-      (define-values (new-paths inc?) (update-seen-paths tcs (set "bar.rkt")))
-      (check-equal? new-paths (set))
+      (define-values (new-paths inc?) (update-seen-paths tcs '("bar.rkt")))
+      (check-equal? new-paths '())
       (check-false inc?))
 
     (test-case "update-seen-paths: read tool with new path"
       (define tcs (list (make-tool-call #f "read" (hash 'path "new.rkt"))))
-      (define-values (new-paths inc?) (update-seen-paths tcs (set)))
-      (check-true (set-member? new-paths "new.rkt"))
+      (define-values (new-paths inc?) (update-seen-paths tcs '()))
+      (check-not-false (member "new.rkt" new-paths))
       (check-true inc?))
 
     (test-case "detect-read-spiral: no spiral on empty ws"

@@ -19,7 +19,7 @@
 
 ;; ── Content parts (from facade and direct) ─────────────────
 (check-equal? (text-part-text (make-text-part "hello")) "hello")
-(check-equal? (tool-call-part-name (make-tool-call-part "1" "bash" '{})) "bash")
+(check-equal? (tool-call-part-name (make-tool-call-part "1" "bash" (hash))) "bash")
 (check-equal? (tool-result-part-tool-call-id (make-tool-result-part "1" "ok" #f)) "1")
 
 ;; JSON round-trip

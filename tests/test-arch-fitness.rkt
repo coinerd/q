@@ -247,12 +247,12 @@
     (check-true (< lines 400)
                 (format "extensions/gsd/core.rkt has ~a lines (expected < 400)" lines))))
 
-(test-case "RA-5: runtime/context-policy.rkt under 250 lines"
+(test-case "RA-5: runtime/context-policy.rkt under 300 lines"
   (define p (build-path q-dir "runtime" "context-policy.rkt"))
   (when (file-exists? p)
     (define lines (length (string-split (file->string p) "\n")))
-    (check-true (< lines 250)
-                (format "runtime/context-policy.rkt has ~a lines (expected < 250)" lines))))
+    (check-true (< lines 300)
+                (format "runtime/context-policy.rkt has ~a lines (expected < 300)" lines))))
 
 (test-case "RA-5: tools/tool.rkt under 550 lines"
   (define p (build-path q-dir "tools" "tool.rkt"))

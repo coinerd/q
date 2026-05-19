@@ -53,9 +53,9 @@
     [(string=? action "encode")
      (define path (hash-ref args 'path ""))
      (when (string=? path "")
-       (raise-extension-error "path is required for encode" 'image-input 'encode))
+       (raise-extension-error "path is required for encode" "image-input" "encode"))
      (unless (file-exists? path)
-       (raise-extension-error (format "File not found: ~a" path) 'image-input 'encode))
+       (raise-extension-error (format "File not found: ~a" path) "image-input" "encode"))
      (define b64 (image->base64 path))
      (make-success-result (list (hasheq 'type
                                         "text"
@@ -68,7 +68,7 @@
      (define text (hash-ref args 'text ""))
      (define path (hash-ref args 'path ""))
      (when (string=? path "")
-       (raise-extension-error "path is required for message" 'image-input 'message))
+       (raise-extension-error "path is required for message" "image-input" "message"))
      (define msg (make-image-message text path))
      (make-success-result
       (list (hasheq 'type "text" 'text (format "Multi-modal message created with image ~a" path))

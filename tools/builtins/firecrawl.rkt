@@ -21,7 +21,7 @@
                        [truncate-string (-> string? exact-nonnegative-integer? string?)]
                        [validate-url (-> string? (or/c string? #f))]
                        [private-host? (-> string? boolean?)]
-                       [poll-crawl-status (-> string? string? any/c)]))
+                       [poll-crawl-status (-> string? exact-integer? any/c)]))
 
 ;; ============================================================
 ;; SSRF Protection (SEC-14)
@@ -36,7 +36,7 @@
         (regexp "^0\\.0\\.0\\.0$")))
 
 (define (private-host? host)
-  (or (member host '("localhost" "0.0.0.0" "[::]"))
+  (or (and (member host '("localhost" "0.0.0.0" "[::]")) #t)
       (for/or ([pat (in-list private-ip-ranges)])
         (regexp-match? pat host))))
 
@@ -48,7 +48,8 @@
   (define host (url-host uri))
   (when (or (not host) (private-host? host))
     (raise-tool-error (format "Blocked: URL points to private/internal address: ~a" url-str)
-                      "firecrawl")))
+                      "firecrawl"))
+  #f)
 
 ;; ============================================================
 ;; Configuration
@@ -287,10 +288,10 @@
   (truncate-to-n-chars s max-len))
 
 (define (valid-action? s)
-  (member s '("search" "scrape" "crawl" "map")))
+  (and (member s '("search" "scrape" "crawl" "map")) #t))
 
 (define (valid-formats? fmts)
-  (and (list? fmts) (andmap (lambda (f) (member f '("markdown" "html" "rawHtml"))) fmts)))
+  (and (list? fmts) (and (andmap (lambda (f) (member f '("markdown" "html" "rawHtml"))) fmts) #t)))
 
 ;; ============================================================
 ;; Main tool function

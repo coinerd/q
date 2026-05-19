@@ -17,7 +17,7 @@
       (define c (make-initial-counters))
       (check-equal? (loop-counters-iteration c) 0)
       (check-equal? (loop-counters-consecutive-tool-count c) 0)
-      (check-equal? (loop-counters-seen-paths c) (set))
+      (check-equal? (loop-counters-seen-paths c) '())
       (check-equal? (loop-counters-intent-retry-count c) 0)
       (check-equal? (loop-counters-consecutive-error-count c) 0)
       (check-equal? (loop-counters-recent-tool-names c) '())
@@ -26,10 +26,10 @@
       (check-equal? (loop-counters-stall-retry-count c) 0))
 
     (test-case "loop-counters accessor round-trip"
-      (define c (loop-counters 5 3 (set "a" "b") 2 1 '("read" "write") 4 7 6))
+      (define c (loop-counters 5 3 '("a" "b") 2 1 '("read" "write") 4 7 6))
       (check-equal? (loop-counters-iteration c) 5)
       (check-equal? (loop-counters-consecutive-tool-count c) 3)
-      (check-equal? (loop-counters-seen-paths c) (set "a" "b"))
+      (check-equal? (loop-counters-seen-paths c) '("a" "b"))
       (check-equal? (loop-counters-intent-retry-count c) 2)
       (check-equal? (loop-counters-consecutive-error-count c) 1)
       (check-equal? (loop-counters-recent-tool-names c) '("read" "write"))
@@ -48,7 +48,7 @@
       (check-false (loop-infra-token infra)))
 
     (test-case "loop-counters is transparent"
-      (define c (loop-counters 1 2 (set) 0 0 '() 0 0 0))
+      (define c (loop-counters 1 2 '() 0 0 '() 0 0 0))
       (check-true (loop-counters? c))
       (check-false (loop-counters? 42)))
 

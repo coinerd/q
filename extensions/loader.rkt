@@ -35,7 +35,8 @@
                         (->* (extension-registry? path-string?) (#:event-bus (or/c any/c #f)) void?)]
                        [try-load-extension (-> path-string? (or/c any/c extension-load-error?))]
                        [get-extension-name-from-path (-> path-string? string?)]
-                       [reload-extensions! (-> extension-registry? (listof path-string?) void?)]
+                       [reload-extensions!
+                        (-> extension-registry? (listof path-string?) (listof string?))]
                        [discover-extension-files (-> (listof path-string?) (listof path-string?))]))
 
 ;; ============================================================

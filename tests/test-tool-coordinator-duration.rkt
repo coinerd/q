@@ -52,7 +52,7 @@
                 (when (equal? (event-event evt) "tool.execution.completed")
                   (define payload (event-payload evt))
                   (set-box! collected-durations
-                            (cons (hash-ref payload 'duration-ms 0) (unbox collected-durations))))))
+                            (cons (hash-ref payload 'durationMs 0) (unbox collected-durations))))))
   (define new-msgs (list (make-assistant-msg-with-sleep 50)))
   (handle-tool-calls-pending new-msgs '() #f reg bus "test-session" "/tmp/test.log" #f (hash))
   (define durations (unbox collected-durations))
@@ -69,7 +69,7 @@
                 (when (equal? (event-event evt) "tool.execution.completed")
                   (define payload (event-payload evt))
                   (set-box! collected-durations
-                            (cons (hash-ref payload 'duration-ms 0) (unbox collected-durations))))))
+                            (cons (hash-ref payload 'durationMs 0) (unbox collected-durations))))))
   (define new-msgs (list (make-assistant-msg-with-sleep 80)))
   (handle-tool-calls-pending new-msgs '() #f reg bus "test-session" "/tmp/test.log" #f (hash))
   (define durations (unbox collected-durations))

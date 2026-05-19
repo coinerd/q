@@ -569,14 +569,15 @@
   (define base-events
     (list (make-test-event "turn.started" (hasheq))
           (make-test-event "assistant.message.completed" (hasheq 'messageId "m1" 'content "Answer"))))
-  ;; Add 10 tool entries
+  ;; Add 10 tool entries (use unique tool names to bypass dedup guard)
   (define tool-events
     (for*/list ([i (in-range 5)])
       (list
-       (make-test-event "tool.call.started"
-                        (hasheq 'id (format "tc-~a" i) 'name "read" 'arguments (format "/tmp/f~a" i)))
+       (make-test-event
+        "tool.call.started"
+        (hasheq 'id (format "tc-~a" i) 'name (format "tool~a" i) 'arguments (format "/tmp/f~a" i)))
        (make-test-event "tool.execution.completed"
-                        (hasheq 'name "read" 'result (format "data-~a" i))))))
+                        (hasheq 'name (format "tool~a" i) 'result (format "data-~a" i))))))
   (define state (simulate-events s0 (append base-events (apply append tool-events))))
   (define input-st (initial-input-state))
   (define layout (compute-layout 40 5))

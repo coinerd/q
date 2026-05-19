@@ -13,16 +13,8 @@
 (define (make-test-session [model #f])
   (define bus (make-event-bus))
   (define reg (make-tool-registry))
-  (make-agent-session (hasheq 'provider
-                              (make-hash)
-                              'tool-registry
-                              reg
-                              'event-bus
-                              bus
-                              'session-dir
-                              "/tmp"
-                              'model-name
-                              model)))
+  (make-agent-session
+   (hasheq 'provider #f 'tool-registry reg 'event-bus bus 'session-dir "/tmp" 'model-name model)))
 
 (define (make-test-model-registry . model-names)
   (define entries

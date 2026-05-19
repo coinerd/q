@@ -35,9 +35,7 @@
       ;; Just test that the call compiles and runs — the resource-loader
       ;; is stored for later use during extension discovery
       (check-not-exn (lambda ()
-                       (create-agent-session #:provider (hasheq 'type 'test)
-                                             #:session-dir dir
-                                             #:resource-loader #f)))
+                       (create-agent-session #:provider #f #:session-dir dir #:resource-loader #f)))
       (cleanup-dir dir))
 
     (test-case "in-memory-session-manager works independently"

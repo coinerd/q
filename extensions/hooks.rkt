@@ -114,7 +114,7 @@
                   (log-debug "hook ~a/~a error: ~a" ext-name hook-point (exn-message e))
                   (error-default-thunk))))
   ;; Validate hook result
-  (with-hook-validation (if (symbol? ext-name) ext-name (string->symbol ext-name)) hook-point raw-result error-default-thunk))
+  (with-hook-validation ext-name hook-point raw-result error-default-thunk))
 ;; ============================================================
 ;; with-hook-block-guard helper (RA-31)
 ;; ============================================================

@@ -20,7 +20,7 @@
 (define (make-test-ext hook-name hooks-box)
   (extension (format "lifecycle-test-~a" hook-name)
              "1.0"
-             1
+             "1"
              (hash hook-name
                    (lambda (payload)
                      (set-box! hooks-box
@@ -63,7 +63,7 @@
   (define sw-ext
     (extension "switch-test"
                "1.0"
-               1
+               "1"
                (hash 'session-before-switch
                      (lambda (payload)
                        (set-box! hooks-fired
@@ -78,7 +78,7 @@
   (define fork-ext
     (extension "fork-test"
                "1.0"
-               1
+               "1"
                (hash 'session-before-fork
                      (lambda (payload)
                        (set-box! hooks-fired
@@ -106,7 +106,7 @@
    (extension
     "lifecycle-integration"
     "1.0"
-    1
+    "1"
     (hash 'session-start
           (lambda (p) (set-box! events (cons (list 'start (hash-ref p 'reason #f)) (unbox events))))
           'session-shutdown

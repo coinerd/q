@@ -93,6 +93,10 @@
 
 ;; Helper: non-empty string? — string that is not empty and not only whitespace
 
+;; Helper: non-empty string that is not only whitespace
+(define (non-blank-string? s)
+  (and (non-empty-string? s) (not (string=? (string-trim s) ""))))
+
 ;; Helper: get a value from a hash by either symbol or string key
 ;; Returns the first found value, or #f if neither key exists
 (define (config-ref cfg key-sym key-str [default #f])
@@ -123,11 +127,11 @@
      (let* ([env-var-name (config-ref provider-config 'api-key-env "api-key-env")]
             [env-val (and env-var-name (getenv env-var-name))])
        (cond
-         [(and env-val (non-empty-string? env-val)) (credential norm-name env-val 'environment)]
+         [(and env-val (non-blank-string? env-val)) (credential norm-name env-val 'environment)]
          [else
           (let ([config-key (config-ref provider-config 'api-key "api-key")])
             (cond
-              [(and config-key (non-empty-string? config-key))
+              [(and config-key (non-blank-string? config-key))
                (credential norm-name config-key 'config)]
               ;; Fall back to credential file (project-local first, then global)
               [else (credential-from-file norm-name #:project-dir project-dir)]))]))]))
@@ -153,7 +157,7 @@
        [(test-key? key)
         (log-warning "credential-from-file: ~a has test key in ~a — ignoring" provider-name path)
         #f]
-       [(and key (non-empty-string? key)) (credential provider-name key 'stored)]
+       [(and key (non-blank-string? key)) (credential provider-name key 'stored)]
        [else #f])]))
 
 ;; Lookup credential from the dedicated credential file.
@@ -240,7 +244,7 @@
           (not (string-prefix? api-key "sk-ant-")))
      #f]
     ;; Unknown providers — accept anything non-empty
-    [else (non-empty-string? api-key)]))
+    [else (non-blank-string? api-key)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Credential file operations

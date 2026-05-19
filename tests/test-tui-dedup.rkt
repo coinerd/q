@@ -26,7 +26,7 @@
               (current-inexact-milliseconds)
               "test-session"
               #f
-              (hasheq 'tool-name name 'arguments args)))
+              (hasheq 'toolName name 'arguments args)))
 
 (define (make-raw-tool-start-event name args)
   (make-event "tool.call.started"

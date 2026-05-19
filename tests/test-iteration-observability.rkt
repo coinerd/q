@@ -22,7 +22,8 @@
          (only-in "helpers/mock-provider.rkt"
                   make-multi-mock-provider
                   make-tool-call-mock-provider
-                  make-test-config))
+                  make-test-config)
+         (only-in "../runtime/session-config.rkt" hash->session-config))
 
 ;; ── Helpers ──
 
@@ -110,7 +111,9 @@
                                                (hasheq)))
                            message-id
                            (lambda (m) 20))
-      (define config (hasheq 'working-set ws 'tier-b-count 5 'tier-c-count 1 'max-tokens 10000))
+      (define config
+        (hash->session-config
+         (hasheq 'working-set ws 'tier-b-count 5 'tier-c-count 1 'max-tokens 10000)))
       (define ctx
         (list (make-message "u1"
                             #f
@@ -124,10 +127,10 @@
       (define assembled-events (events-with-name collected "context.assembled"))
       (check-equal? (length assembled-events) 1)
       (define payload (event-payload (first assembled-events)))
-      (check-true (hash-has-key? payload 'working-set-entries))
-      (check-true (hash-has-key? payload 'working-set-tokens))
-      (check-equal? (hash-ref payload 'working-set-entries) 1)
-      (check-true (>= (hash-ref payload 'working-set-tokens) 0)))
+      (check-true (hash-has-key? payload 'workingSetEntries))
+      (check-true (hash-has-key? payload 'workingSetTokens))
+      (check-equal? (hash-ref payload 'workingSetEntries) 1)
+      (check-true (>= (hash-ref payload 'workingSetTokens) 0)))
 
     ;; ── T02: working-set.update event after tool execution ──
     (test-case "T02: working-set.update emitted after read tool execution"

@@ -41,8 +41,9 @@
   (check-equal? (hash-count result) 0))
 
 (test-case "ensure-hash-args handles malformed JSON gracefully"
-  (define result (ensure-hash-args "not json"))
-  (check-true (hash-has-key? result '_parse_failed)))
+  (define result (ensure-hash-args "not json" #:graceful? #t))
+  (check-true (hash? result))
+  (check-equal? (hash-count result) 0))
 
 ;; ============================================================
 ;; check-mid-turn-budget! edge cases

@@ -109,7 +109,9 @@
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
                               "")]
-             [text arg-summary]
+             [text (if (string=? arg-summary "")
+                       (format "[TOOL: ~a]" name)
+                       (format "[TOOL: ~a] ~a" name arg-summary))]
              [ts (event-time evt)]
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])
@@ -126,7 +128,9 @@
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
                               "")]
-             [text arg-summary]
+             [text (if (string=? arg-summary "")
+                       (format "[TOOL: ~a]" name)
+                       (format "[TOOL: ~a] ~a" name arg-summary))]
              [ts (event-time evt)]
              [meta (hasheq 'name name 'arguments (or args-raw ""))]
              [new-state (append-entry state (make-entry 'tool-start text ts meta))])

@@ -9,11 +9,12 @@
 (require racket/contract
          racket/string)
 
+(provide parsed-command) ; raw struct constructor for use in or/c contracts elsewhere
 (provide (contract-out
           [make-command-table (-> (hash/c string? (cons/c symbol? symbol?)))]
           [parse-command-name (-> string? (or/c parsed-command? symbol? #f))]
           [resolve-command-name (-> string? (or/c symbol? #f))]
-          ;; R-17: Structured command result
+          ;; R-17: Structured command result / R-0: test structural equality
           [parsed-command? (-> any/c boolean?)]
           [parsed-command-canonical-name (-> parsed-command? symbol?)]
           [parsed-command-args (-> parsed-command? list?)]

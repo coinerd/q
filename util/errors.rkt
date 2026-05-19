@@ -45,13 +45,15 @@
          tool-execution-timeout?
          session-corrupted?
          session-migration-failed?
-         (contract-out [raise-q-error (->* (string?) (hash?) exn:fail?)]
-                       [raise-tool-error (->* (string? string?) (hash?) exn:fail?)]
-                       [raise-session-error (->* (string? string?) (hash?) exn:fail?)]
-                       [raise-ui-error (->* (string? string?) (hash?) exn:fail?)]
-                       [raise-extension-error (->* (string? string? string?) (hash?) exn:fail?)]
-                       [raise-policy-error (->* (string? string? string?) (hash?) exn:fail?)]
-                       [raise-credential-error (->* (string? string?) (string? hash?) exn:fail?)])
+         (contract-out
+          [raise-q-error (->* (string?) (hash?) exn:fail?)]
+          [raise-tool-error (->* (string? (or/c string? symbol?)) (hash?) exn:fail?)]
+          [raise-session-error (->* (string? string?) (hash?) exn:fail?)]
+          [raise-ui-error (->* (string? string?) (hash?) exn:fail?)]
+          [raise-extension-error
+           (->* (string? (or/c string? symbol?) (or/c string? symbol?)) (hash?) exn:fail?)]
+          [raise-policy-error (->* (string? string? string?) (hash?) exn:fail?)]
+          [raise-credential-error (->* (string? string?) (string? hash?) exn:fail?)])
          ;; Quality macros (Q06/Q07)
          with-cleanup
          with-logged-catch)

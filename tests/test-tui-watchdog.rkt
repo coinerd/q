@@ -161,7 +161,7 @@
   ;; Even with busy-since very recent (< 500ms), handle-turn-completed must clear busy?
   (define now (current-inexact-milliseconds))
   (define st
-    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") #t) now))
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") now) #t))
   ;; Create a turn.completed event
   (define evt (make-test-event "turn.completed" (hasheq) #:time (+ now 100)))
   (define result (apply-event-to-state st evt))
@@ -195,7 +195,7 @@
 (test-case "v0.45.14: watchdog does not fire during active streaming"
   ;; Even with expired busy-since, watchdog returns #f if streaming text is present
   (define now (+ (current-inexact-milliseconds) (* 31 60 1000)))
-  (define base (set-busy (set-busy-since (initial-ui-state) #t) (- now (* 31 60 1000))))
+  (define base (set-busy (set-busy-since (initial-ui-state) (- now (* 31 60 1000))) #t))
   ;; Set streaming text — agent is clearly alive and streaming
   (define st (set-streaming-text base "partial response text..."))
   (define result (check-busy-watchdog st now (* 30 60 1000)))
@@ -205,7 +205,7 @@
 (test-case "v0.45.14: turn-cancelled clears busy-since"
   (define now (current-inexact-milliseconds))
   (define st
-    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") #t) now))
+    (set-busy (set-busy-since (initial-ui-state #:session-id "test" #:model-name "m") now) #t))
   (define evt (make-test-event "turn.cancelled" (hasheq) #:time (+ now 100)))
   (define result (apply-event-to-state st evt))
   (check-false (ui-state-busy? result))

@@ -29,7 +29,7 @@
                                  ("id4" "id3" assistant "Fine thanks" 1003)))
 
 (define (make-test-tbs [idx 0] [folded (set)])
-  (tree-browser-state sample-nodes idx folded sample-nodes))
+  (tree-browser-state sample-nodes idx folded '("line1" "line2" "line3" "line4")))
 
 (define (make-test-overlay tbs)
   (overlay-state 'tree-browser '() "" 'top-left 80 20 0 tbs))

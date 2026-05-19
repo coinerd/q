@@ -13,10 +13,10 @@
          "../agent/event-bus.rkt")
 
 ;; Mock provider that returns a simple response
+(require (only-in "../llm/provider.rkt" make-provider))
+
 (define (make-mock-provider)
-  (lambda (messages tools config)
-    (values (list (hasheq 'role "assistant" 'content (hasheq 'type "text" 'text "mock response")))
-            (hasheq 'prompt-tokens 10 'completion-tokens 5))))
+  (make-provider (lambda () "mock") (lambda () (hasheq)) (lambda (req) (hasheq)) (lambda (req) '())))
 
 (define steer-tests
   (test-suite "SDK steer! and follow-up!"

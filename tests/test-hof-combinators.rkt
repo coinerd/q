@@ -20,6 +20,6 @@
   (check-equal? (with-timeout 1000 (lambda () 'done)) 'done))
 
 (test-case "with-error-policy basic usage"
-  (check-equal? (with-error-policy #t (lambda () 'ok) (lambda (e) 'errored)) 'ok))
+  (check-equal? (with-error-policy #t (lambda () 'ok) (lambda () 'errored)) 'ok))
 
 ;; End of tests

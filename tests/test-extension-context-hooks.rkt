@@ -48,7 +48,7 @@
       (register-extension! reg
                            (extension "test-ext"
                                       "1.0.0"
-                                      1
+                                      "1"
                                       (hasheq 'any-hook
                                               (lambda (ctx payload)
                                                 (set-box! received-ctx ctx)

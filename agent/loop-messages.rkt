@@ -16,12 +16,13 @@
          (only-in "../util/content-helpers.rkt" result-content->string)
          (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
-(provide (contract-out [usage-empty? (-> hash? boolean?)]
+(provide (contract-out [usage-empty? (-> (or/c hash? #f) boolean?)]
                        [parts->text-string (-> (or/c string? list? any/c) string?)]
                        [valid-api-message-sequence? (-> (listof hash?) boolean?)]
                        [merge-consecutive-roles (-> (listof hash?) (listof hash?))]
                        [build-raw-messages (-> (listof message?) (listof hash?))]
-                       [classify-hook-result (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]))
+                       [classify-hook-result
+                        (-> any/c (or/c 'pass (list/c 'block any/c) (list/c 'amend any/c)))]))
 
 ;; ============================================================
 ;; Helpers

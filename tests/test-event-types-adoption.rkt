@@ -138,7 +138,7 @@
   (check-pred tool-execution-start-event? te)
   (check-equal? (tool-execution-start-event-tool-name te) "bash")
   (define evt (typed-event->event te))
-  (check-equal? (hash-ref (event-payload evt) 'toolName) "bash"))
+  (check-equal? (hash-ref (event-payload evt) 'tool-name) "bash"))
 
 (test-case "session lifecycle typed events"
   (define te

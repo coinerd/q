@@ -11,7 +11,8 @@
          rackunit/text-ui
          "../interfaces/tui.rkt"
          "../tui/input.rkt"
-         "../tui/state.rkt")
+         "../tui/state.rkt"
+         (only-in "../tui/command-parse.rkt" parsed-command))
 
 ;; Helper: create a tui-ctx with a collector for submitted text
 (define (make-test-ctx)
@@ -56,7 +57,7 @@
       (define ctx (make-test-ctx))
       (type-text ctx "/quit")
       (define result (handle-key ctx 'return))
-      (check-equal? result '(command quit "/quit")))
+      (check-equal? result (list 'command (parsed-command 'quit '() 'none) "/quit")))
 
     ;; --------------------------------------------------
     ;; Test 4: 'return with /help returns command
@@ -65,7 +66,7 @@
       (define ctx (make-test-ctx))
       (type-text ctx "/help")
       (define result (handle-key ctx 'return))
-      (check-equal? result '(command help "/help")))
+      (check-equal? result (list 'command (parsed-command 'help '() 'none) "/help")))
 
     ;; --------------------------------------------------
     ;; Test 5: 'return with /clear returns command
@@ -74,7 +75,7 @@
       (define ctx (make-test-ctx))
       (type-text ctx "/clear")
       (define result (handle-key ctx 'return))
-      (check-equal? result '(command clear "/clear")))
+      (check-equal? result (list 'command (parsed-command 'clear '() 'none) "/clear")))
 
     ;; --------------------------------------------------
     ;; Test 6: 'kp-return (numpad enter) also submits

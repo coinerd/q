@@ -77,11 +77,7 @@
                      #f))
   (register-custom-renderer! r)
   (define entry
-    (transcript-entry 'tool-start
-                      "my-tool running"
-                      0
-                      (hasheq 'tool-name "my-tool" 'args "file.rkt")
-                      #f))
+    (transcript-entry 'tool-start "my-tool running" 0 (hasheq 'name "my-tool" 'args "file.rkt") #f))
   (define lines (format-entry entry 80))
   (check > (length lines) 0)
   (check-not-false (string-contains? (styled-line->text (car lines)) "CUSTOM-CALL"))
@@ -97,7 +93,7 @@
                        (list (styled-line (list (styled-segment (format "CUSTOM-OK: ~a" result)
                                                                 '(green))))))))
   (register-custom-renderer! r)
-  (define entry (transcript-entry 'tool-end "done" 0 (hasheq 'tool-name "result-tool") #f))
+  (define entry (transcript-entry 'tool-end "done" 0 (hasheq 'name "result-tool") #f))
   (define lines (format-entry entry 80))
   (check > (length lines) 0)
   (check-not-false (string-contains? (styled-line->text (car lines)) "CUSTOM-OK"))
@@ -107,7 +103,7 @@
 (test-case "format-entry falls back to default when no custom renderer"
   (unregister-custom-renderer! "default-tool")
   (define entry
-    (transcript-entry 'tool-start "default-tool running" 0 (hasheq 'tool-name "default-tool") #f))
+    (transcript-entry 'tool-start "default-tool running" 0 (hasheq 'name "default-tool") #f))
   (define lines (format-entry entry 80))
   (check > (length lines) 0)
   ;; Should use default rendering (contains the text)

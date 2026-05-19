@@ -39,20 +39,21 @@
 (define cumulative-write-budget (make-parameter 52428800))
 
 ;; Track cumulative bytes written in current session.
-;; I-19 (v0.35.5): Removed deprecated session-bytes-written parameter.
-;; Bytes tracking is now exclusively through exec-context-bytes-written.
+;; I-19 (v0.35.5): Primary tracking is via exec-context-bytes-written.
+;; Fallback: module-level box for callers without exec-ctx (tests, direct calls).
+(define session-bytes-written-box (box 0))
 
 (define (init-session-writes!)
-  (void)) ;; No-op: tracking is via exec-context
+  (set-box! session-bytes-written-box 0))
 
 (define (reset-cumulative-writes!)
-  (void)) ;; No-op: tracking is via exec-context
+  (set-box! session-bytes-written-box 0))
 
 ;; Get the bytes-written box from exec-ctx (required post I-19).
 (define (get-bytes-box exec-ctx)
   (if (and exec-ctx (exec-context-bytes-written exec-ctx))
       (exec-context-bytes-written exec-ctx)
-      (box 0))) ;; Fallback: fresh box for callers without exec-ctx
+      session-bytes-written-box)) ;; Fallback: shared box for callers without exec-ctx
 
 ;; Main tool function
 (define (tool-write args [exec-ctx #f])

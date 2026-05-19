@@ -82,7 +82,7 @@
                                                                 (hash)
                                                                 'network
                                                                 #f))))])
-          (raise (provider-error "timeout error" (current-continuation-marks) (hash) 408 'timeout)))))
+          (raise (provider-error "timeout error" (current-continuation-marks) (hash) 'timeout 408)))))
 
     ;; Test 8: check-provider-status! wraps 4xx as provider-error
     (test-case "check-provider-status! wraps 4xx as provider-error"

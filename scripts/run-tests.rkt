@@ -224,8 +224,12 @@
         (simplify-path (build-path base-dir test-path))))
   (define stdout-out (open-output-bytes))
   (define stderr-out (open-output-bytes))
-  (define racket-bin (find-executable-path "racket"))
-  (define args (list racket-bin resolved-path))
+  ;; Use `raco test` per file (not `racket <file>`):
+  ;; - runs (module+ test ...) submodules consistently
+  ;; - returns non-zero on rackunit failures
+  ;; - avoids false file-level failures from helper/entry modules
+  (define raco-bin (find-executable-path "raco"))
+  (define args (list raco-bin "test" resolved-path))
 
   (define t0 (current-inexact-milliseconds))
 

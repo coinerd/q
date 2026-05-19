@@ -22,7 +22,7 @@
 
     (test-case "append and load single message"
       (define mgr (make-in-memory-session-manager))
-      (define msg (make-message "m1" #f "user" "text" (list (make-text-part "hello")) 1000 (hash)))
+      (define msg (make-message "m1" #f 'user 'text (list (make-text-part "hello")) 1000 (hash)))
       (in-memory-append! mgr "s1" msg)
       (define loaded (in-memory-load mgr "s1"))
       (check-equal? (length loaded) 1)
@@ -34,8 +34,8 @@
         (for/list ([i (in-range 5)])
           (make-message (format "m~a" i)
                         #f
-                        "user"
-                        "text"
+                        'user
+                        'text
                         (list (make-text-part (format "msg ~a" i)))
                         (+ 1000 i)
                         (hash))))
@@ -51,7 +51,7 @@
 
     (test-case "list-sessions returns all session IDs"
       (define mgr (make-in-memory-session-manager))
-      (define msg (make-message "m1" #f "user" "text" (list (make-text-part "x")) 1000 (hash)))
+      (define msg (make-message "m1" #f 'user 'text (list (make-text-part "x")) 1000 (hash)))
       (in-memory-append! mgr "s1" msg)
       (in-memory-append! mgr "s2" msg)
       (in-memory-append! mgr "s3" msg)
@@ -67,8 +67,8 @@
         (define msg
           (make-message (format "m~a" i)
                         #f
-                        "user"
-                        "text"
+                        'user
+                        'text
                         (list (make-text-part (format "msg ~a" i)))
                         (+ 1000 i)
                         (hash)))
@@ -84,8 +84,8 @@
         (define msg
           (make-message (format "m~a" i)
                         #f
-                        "user"
-                        "text"
+                        'user
+                        'text
                         (list (make-text-part (format "msg ~a" i)))
                         (+ 1000 i)
                         (hash)))
@@ -100,8 +100,8 @@
         (define msg
           (make-message (format "m~a" i)
                         #f
-                        "user"
-                        "text"
+                        'user
+                        'text
                         (list (make-text-part (format "msg ~a" i)))
                         (+ 1000 i)
                         (hash)))
@@ -111,8 +111,8 @@
 
     (test-case "multiple sessions are independent"
       (define mgr (make-in-memory-session-manager))
-      (define msg1 (make-message "m1" #f "user" "text" (list (make-text-part "a")) 1000 (hash)))
-      (define msg2 (make-message "m2" #f "user" "text" (list (make-text-part "b")) 2000 (hash)))
+      (define msg1 (make-message "m1" #f 'user 'text (list (make-text-part "a")) 1000 (hash)))
+      (define msg2 (make-message "m2" #f 'user 'text (list (make-text-part "b")) 2000 (hash)))
       (in-memory-append! mgr "s1" msg1)
       (in-memory-append! mgr "s2" msg2)
       (check-equal? (length (in-memory-load mgr "s1")) 1)

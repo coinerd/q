@@ -29,12 +29,15 @@
 ;; Listing
 (provide (contract-out [sessions-list
                         (->* (path-string?)
-                             (#:limit exact-nonnegative-integer? #:sort (or/c 'by-date 'by-name))
+                             (#:limit exact-nonnegative-integer? #:sort (or/c 'by-date 'by-size))
                              (listof hash?))]
                        [sessions-list->strings (-> (listof hash?) (listof string?))]
                        [sessions-info (-> path-string? string? (or/c hash? #f))]
-                       [sessions-info->string (-> hash? string?)]
-                       [sessions-delete (->* (path-string? string?) (#:confirm? boolean?) boolean?)]
+                       [sessions-info->string (-> (or/c hash? #f) string?)]
+                       [sessions-delete
+                        (->* (path-string? string?)
+                             (#:confirm? boolean? #:in input-port? #:out output-port?)
+                             (or/c 'ok 'not-found 'cancelled))]
                        [run-sessions-command (-> hash? void?)]
                        [scan-session-dirs (-> path-string? (listof list?))]
                        [read-session-metadata (-> string? (or/c path-string? #f) (or/c hash? #f))]

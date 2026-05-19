@@ -65,9 +65,9 @@
 
     (test-case "same file read 10 times → counter stays at 1"
       ;; First read: counter goes 0→1
-      (define-values (sp1 inc1?) (update-seen-paths (list (make-read-tool "file.rkt")) (set)))
+      (define-values (sp1 inc1?) (update-seen-paths (list (make-read-tool "file.rkt")) '()))
       (check-true inc1?)
-      (check-equal? (set-count sp1) 1)
+      (check-equal? (length sp1) 1)
 
       ;; Subsequent reads of same file: no increment
       (for ([_ (in-range 9)])
@@ -76,7 +76,7 @@
         (set! sp1 sp)))
 
     (test-case "different files read → each increments"
-      (define-values (sp1 inc1?) (update-seen-paths (list (make-read-tool "a.rkt")) (set)))
+      (define-values (sp1 inc1?) (update-seen-paths (list (make-read-tool "a.rkt")) '()))
       (check-true inc1?)
 
       (define-values (sp2 inc2?) (update-seen-paths (list (make-read-tool "b.rkt")) sp1))
@@ -85,25 +85,25 @@
       (define-values (sp3 inc3?) (update-seen-paths (list (make-read-tool "c.rkt")) sp2))
       (check-true inc3?)
 
-      (check-equal? (set-count sp3) 3))
+      (check-equal? (length sp3) 3))
 
     (test-case "write tool resets seen-paths to empty"
-      (define-values (sp1 _w1) (update-seen-paths (list (make-read-tool "a.rkt")) (set)))
-      (check-equal? (set-count sp1) 1)
+      (define-values (sp1 _w1) (update-seen-paths (list (make-read-tool "a.rkt")) '()))
+      (check-equal? (length sp1) 1)
 
       (define-values (sp2 inc2?) (update-seen-paths (list (make-write-tool "a.rkt")) sp1))
-      (check-equal? (set-count sp2) 0 "Write should reset seen-paths")
+      (check-equal? (length sp2) 0 "Write should reset seen-paths")
       (check-false inc2? "Write should not cause increment"))
 
     (test-case "edit tool resets seen-paths to empty"
-      (define-values (sp1 _e1) (update-seen-paths (list (make-read-tool "a.rkt")) (set)))
+      (define-values (sp1 _e1) (update-seen-paths (list (make-read-tool "a.rkt")) '()))
 
       (define-values (sp2 inc2?) (update-seen-paths (list (make-edit-tool "a.rkt")) sp1))
-      (check-equal? (set-count sp2) 0 "Edit should reset seen-paths")
+      (check-equal? (length sp2) 0 "Edit should reset seen-paths")
       (check-false inc2?))
 
     (test-case "mix: same file 5x then different file → increments once for each unique"
-      (define-values (sp1 _m1) (update-seen-paths (list (make-read-tool "bigfile.py")) (set)))
+      (define-values (sp1 _m1) (update-seen-paths (list (make-read-tool "bigfile.py")) '()))
 
       ;; Read same file 4 more times — no increment
       (for ([_ (in-range 4)])
@@ -117,7 +117,7 @@
 
     (test-case "bash tool: no path → uses 'no-path sentinel"
       (define tc (make-bash-tool "grep -rn def ."))
-      (define-values (sp inc?) (update-seen-paths (list tc) (set)))
+      (define-values (sp inc?) (update-seen-paths (list tc) '()))
       ;; bash is not in read-tools, so it won't be collected
       ;; But it's also not a write tool, so has-new-path? depends on whether
       ;; new-paths is empty
@@ -125,24 +125,24 @@
 
     (test-case "find tool with path → collected in seen-paths"
       (define tc (make-find-tool "src/"))
-      (define-values (sp inc?) (update-seen-paths (list tc) (set)))
+      (define-values (sp inc?) (update-seen-paths (list tc) '()))
       (check-true inc? "find with new path should increment")
-      (check-equal? (set-count sp) 1))
+      (check-equal? (length sp) 1))
 
     (test-case "same file via read then find → deduped"
-      (define-values (sp1 _w2) (update-seen-paths (list (make-read-tool "foo.rkt")) (set)))
-      (check-equal? (set-count sp1) 1)
+      (define-values (sp1 _w2) (update-seen-paths (list (make-read-tool "foo.rkt")) '()))
+      (check-equal? (length sp1) 1)
 
       (define-values (sp2 inc2?) (update-seen-paths (list (make-find-tool "foo.rkt")) sp1))
       (check-false inc2? "Same path via different tool should not increment"))
 
     (test-case "write then read same file → counter restarts"
       ;; Read first
-      (define-values (sp1 _s1) (update-seen-paths (list (make-read-tool "foo.rkt")) (set)))
+      (define-values (sp1 _s1) (update-seen-paths (list (make-read-tool "foo.rkt")) '()))
 
       ;; Write (resets)
       (define-values (sp2 _s2) (update-seen-paths (list (make-write-tool "foo.rkt")) sp1))
-      (check-equal? (set-count sp2) 0)
+      (check-equal? (length sp2) 0)
 
       ;; Read same file again — should increment (seen-paths was reset)
       (define-values (sp3 inc3?) (update-seen-paths (list (make-read-tool "foo.rkt")) sp2))
@@ -150,9 +150,9 @@
 
     (test-case "multiple reads in one batch: all deduped against seen set"
       (define batch (list (make-read-tool "a.rkt") (make-read-tool "b.rkt")))
-      (define-values (sp1 inc1?) (update-seen-paths batch (set)))
+      (define-values (sp1 inc1?) (update-seen-paths batch '()))
       (check-true inc1? "New files in batch should increment")
-      (check-equal? (set-count sp1) 2)
+      (check-equal? (length sp1) 2)
 
       ;; Same batch again — no increment
       (define-values (sp2 inc2?) (update-seen-paths batch sp1))
@@ -168,7 +168,7 @@
       ;; This test validates the threshold constants via simulation
       (define (simulate-n-reads n)
         (for/fold ([count 0]
-                   [paths (set)]
+                   [paths '()]
                    #:result count)
                   ([i (in-range n)])
           (define-values (new-paths inc?)
@@ -186,7 +186,7 @@
         ;; Read 5 unique files
         (define-values (c1 sp1)
           (for/fold ([c 0]
-                     [sp (set)])
+                     [sp '()])
                     ([i (in-range 5)])
             (define-values (new-sp inc?)
               (update-seen-paths (list (make-read-tool (format "f~a.rkt" i))) sp))
@@ -221,15 +221,15 @@
     ;; ══════════════════════════════════════════════════════════
 
     (test-case "empty tool calls list → no change"
-      (define-values (sp inc?) (update-seen-paths '() (set)))
+      (define-values (sp inc?) (update-seen-paths '() '()))
       (check-false inc? "No tools → no increment")
-      (check-equal? (set-count sp) 0))
+      (check-equal? (length sp) 0))
 
     (test-case "seen-paths survives across iterations (non-empty set)"
-      (define sp-init (set "already.seen.rkt"))
+      (define sp-init '("already.seen.rkt"))
       (define-values (sp inc?) (update-seen-paths (list (make-read-tool "already.seen.rkt")) sp-init))
       (check-false inc? "Already-seen file should not increment")
-      (check-equal? (set-count sp) 1))))
+      (check-equal? (length sp) 1))))
 
 ;; ══════════════════════════════════════════════════════════
 ;; Configurable thresholds (Wave 2)

@@ -126,12 +126,3 @@
                      hook-point
                      raw-result)
         (default-result))))
-
-;; ============================================================
-;; Internal: hook validation (re-exported from hooks.rkt context)
-;; ============================================================
-
-;; Validate that hook-result action is valid for hook-point.
-;; Returns #t if valid, #f otherwise.
-(define (validate-hook-result hook-point result)
-  (member (hook-result-action result) '(pass amend block)))
