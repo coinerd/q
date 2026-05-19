@@ -5,7 +5,23 @@
 ;; Contains only the struct definition with NO runtime/ or llm/ imports.
 ;; Runtime-dependent convenience methods stay in extensions/context.rkt.
 
-(provide (struct-out extension-ctx))
+(provide extension-ctx
+         extension-ctx?
+         extension-ctx-session-id
+         extension-ctx-session-dir
+         extension-ctx-event-bus
+         extension-ctx-extension-registry
+         extension-ctx-model-name
+         extension-ctx-cancellation-token
+         extension-ctx-working-directory
+         extension-ctx-session-store
+         extension-ctx-tool-registry
+         extension-ctx-command-registry
+         extension-ctx-ui-channel
+         extension-ctx-provider-registry
+         extension-ctx-session-messages
+         extension-ctx-session-token-usage
+         extension-ctx-gsd-ctx)
 
 ;; Extension context struct — bundles all session/runtime state that
 ;; extension handlers may need. All fields are read-only after construction.
