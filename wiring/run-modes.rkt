@@ -8,7 +8,8 @@
 ;;   - mode-for-config: determine interface mode from cli-config
 ;;   - Re-exports all mode runners from run-interactive.rkt and run-json-rpc.rkt
 
-(require racket/dict
+(require racket/contract
+         racket/dict
          racket/file
          racket/string
          "../interfaces/cli.rkt"
@@ -44,19 +45,18 @@
 (require "run-interactive.rkt"
          "run-json-rpc.rkt")
 
-(provide build-runtime-from-cli
+(provide (contract-out
+          [build-runtime-from-cli (-> any/c any/c)]
+          [mode-for-config (-> any/c symbol?)]
+          [reload-config! (-> any/c any/c)])
+         ;; Direct re-exports (no contracts needed — re-exported)
          load-extensions-from-dir!
-         mode-for-config
-         reload-config!
-         ;; Re-exported from run-interactive.rkt
          make-terminal-subscriber
          run-interactive
          run-single-shot
          run-resume
-         ;; Re-exported from run-json-rpc.rkt
          run-json
          run-rpc
-         ;; Re-exported from run-interactive.rkt
          run-print-mode)
 
 ;; ============================================================
