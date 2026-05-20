@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.50.3 — 2026-05-20
+
+### Changed
+- T2-1: `agent/state.rkt` — `loop-state` struct made opaque (removed `#:transparent`).
+  Mutable boxes hidden from consumers; all access via contracted accessors.
+- T2-2: `agent/queue.rkt` — `queue` and `sub-queue` structs made opaque.
+  Semaphore and internal boxes hidden; all access via contracted API.
+- T2-3: `interfaces/sdk-core.rkt` — `runtime` and `runtime-config` structs made opaque.
+  Constructor access retained via `struct-out`; transparent printing removed.
+
+### Metrics
+- #:transparent structs reduced by 5
+- arch-fitness tests: 33/33 ✅
+- Test failures: 0
+
+### Waves
+- W0: loop-state opaque (PR #4796)
+- W1: queue opaque (PR #4798)
+- W2: SDK opaque + version bump (this release)
+
 ## v0.50.2 — 2026-05-20
 
 ### Changed
