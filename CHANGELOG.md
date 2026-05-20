@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.49.12 — 2026-05-20
+
+### Changed
+- Added contract-out to 9 files: util/version.rkt, llm/model-defaults.rkt, agent/event-json.rkt,
+  agent/state.rkt, cli/args.rkt, tools/tool-struct.rkt, util/cancellation.rkt, agent/event-types.rkt,
+  agent/queue.rkt.
+- Fixed 47 test regressions from v0.49.11 — explicit `(void)` returns in session event handlers,
+  corrected require paths, parsed-command struct handling, event bus make-event wrapping,
+  auto-retry lifecycle key (`maxRetries` camelCase).
+- Reverted util/version.rkt from `#lang typed/racket` to `#lang racket/base` for contract-out support.
+- agent/event-types.rkt: added `valid-typed-event-type?` contract-gated helper alongside all-from-out facade.
+
+### Metrics (verified from source)
+- struct-out forms (arch-fitness dirs): 31 (KPI gate ≤55 ✅)
+- contract-out files (KPI-dirs): 158/350 = 45.1% (KPI gate ≥45% ✅, was 42.5%)
+- arch-fitness tests: 33/33 ✅
+
+### Waves
+- W0: Fix 47 test regressions from v0.49.11 (PR #4763)
+- W1: Contract-out coverage gap close — +9 files (PR #4765)
+- W2: CHANGELOG, retrospective, version bump (this release)
+
 ## v0.49.11 — 2026-05-20
 
 ### Fixed
