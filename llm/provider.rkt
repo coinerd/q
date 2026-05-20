@@ -14,6 +14,7 @@
 ;;   provider-count-tokens → (model-request → (or/c #f integer?))
 
 (require racket/contract
+         racket/match
          racket/generator
          racket/generic
          racket/string
@@ -82,17 +83,18 @@
 ;; ============================================================
 
 (define (stream-result->generator result)
-  (cond
-    [(procedure? result) result]
-    [(list? result)
+  (match result
+    [(? procedure?) result]
+    [(? list?)
      (generator ()
                 (for ([ch (in-list result)])
                   (yield ch))
                 (yield #f))]
-    [else
+    [_
      (raise-arguments-error 'stream-result->generator
                             "expected generator or list of stream-chunks"
-                            "got" result)]))
+                            "got"
+                            result)]))
 
 ;; ============================================================
 ;; Internal struct implementing gen:provider
