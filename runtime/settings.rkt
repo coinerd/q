@@ -197,15 +197,16 @@
     (and (file-exists? cfg-path) (try-read-json-file cfg-path)))
   (or (try-load-from-dir (first dirs)) (try-load-from-dir (second dirs)) (hash)))
 
-;; Load and merge both global and project settings.
-;; Returns a q-settings struct.
-(define (load-settings [project-dir (current-directory)]
-                       #:home-dir [home-dir (find-system-path 'home-dir)]
-                       #:config-path [config-path #f])
+;; Settings memoization cache (T3-5)
+;; Key: (list project-dir home-dir), Value: (cons mtime q-settings)
+(define settings-cache (make-hash))
+
+;; Internal: load settings from disk (no caching).
+(define (load-settings-from-disk project-dir home-dir config-path)
   (define global-hash
     (if config-path
         (if (file-exists? config-path)
-            (with-handlers ([exn:fail? (λ (_) (hash))])
+            (with-handlers ([exn:fail? (lambda (_) (hash))])
               (let ([result (read-json-file config-path)])
                 (if (hash? result)
                     result
@@ -215,6 +216,24 @@
   (define project-hash (load-project-settings project-dir))
   (define merged-hash (merge-settings global-hash project-hash))
   (q-settings global-hash project-hash merged-hash))
+
+;; Load and merge both global and project settings.
+;; Returns a q-settings struct. Memoized by (project-dir, home-dir).
+(define (load-settings [project-dir (current-directory)]
+                       #:home-dir [home-dir (find-system-path 'home-dir)]
+                       #:config-path [config-path #f])
+  (cond
+    [config-path (load-settings-from-disk project-dir home-dir config-path)]
+    [else
+     (define key (list project-dir home-dir))
+     (define cfg-path (build-path (car (project-config-dirs project-dir)) "config.json"))
+     (define current-mtime (and (file-exists? cfg-path) (file-or-directory-modify-seconds cfg-path)))
+     (define cached (hash-ref settings-cache key #f))
+     (if (and cached (equal? (car cached) current-mtime))
+         (cdr cached)
+         (let ([result (load-settings-from-disk project-dir home-dir #f)])
+           (hash-set! settings-cache key (cons current-mtime result))
+           result))]))
 
 ;; Create a minimal q-settings with defaults.
 ;; Used when no config files exist (e.g., SDK path, tests).

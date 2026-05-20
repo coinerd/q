@@ -16,7 +16,8 @@
 (require racket/string
          racket/match
          racket/contract
-         (only-in "../llm/provider-errors.rkt" raise-provider-error))
+         (only-in "../llm/provider-errors.rkt" raise-provider-error)
+         "../util/hash-helpers.rkt")
 
 ;; ── URL Validation ──────────────────────────────────────────
 
@@ -117,37 +118,7 @@
 ;; ============================================================
 
 ;; Normalize a key to string for consistent lookup
-(define (key->string k)
-  (if (symbol? k)
-      (symbol->string k)
-      k))
-
-;; Normalize all keys in a hash to strings
-(define (normalize-keys h)
-  (for/hash ([(k v) (in-hash h)])
-    (values (key->string k) v)))
-
-;; Flexible hash-ref: tries both string and symbol keys (I-17: documented)
-;; Key normalization: automatically tries both 'key and "key" variants.
-;; This handles the common case where JSON configs use string keys
-;; but Racket code uses symbol keys.
-(define (flex-ref h
-                  key
-                  [default
-                   (lambda () (raise (make-exn:fail "key not found" (current-continuation-marks))))])
-  (define str-key
-    (if (symbol? key)
-        (symbol->string key)
-        key))
-  (define sym-key
-    (if (string? key)
-        (string->symbol key)
-        key))
-  (cond
-    [(hash-has-key? h str-key) (hash-ref h str-key)]
-    [(hash-has-key? h sym-key) (hash-ref h sym-key)]
-    [(procedure? default) (default)]
-    [else default]))
+;; flex-ref and normalize-keys now imported from util/hash-helpers.rkt
 
 ;; ============================================================
 ;; Model ID extraction — supports both string and object-style models
