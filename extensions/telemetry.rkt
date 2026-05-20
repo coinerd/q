@@ -21,13 +21,14 @@
          telemetry-event-start-time
          telemetry-event-end-time
          telemetry-event-elapsed-ms
-         telemetry-event-metadata
-         ;; Timing functions
-         telemetry-start
-         telemetry-end
-         ;; Metrics
-         telemetry-report
-         telemetry-summary)
+         telemetry-event-metadata)
+
+(require racket/contract)
+
+(provide (contract-out [telemetry-start (->* (string?) (#:metadata hash?) hash?)]
+                       [telemetry-end (-> hash? telemetry-event?)]
+                       [telemetry-report (-> (listof telemetry-event?) hash?)]
+                       [telemetry-summary (-> telemetry-event? string?)]))
 
 ;; ============================================================
 ;; Structs
