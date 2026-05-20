@@ -25,9 +25,7 @@
          tool-calls-box ; (box (listof tool-call-delta)) — accumulated tool calls
          thinking-box ; (box string) — accumulated thinking/reasoning (FEAT-72)
          chunks-box ; (box (listof stream-chunk)) — all chunks for replay
-         cancelled-box ; (box boolean)
-         blocked-box ; (box boolean)
-         started-box ; (box boolean) — whether message.start was emitted
+         state-box ; (box symbol) — FSM state: not-started | streaming | done | blocked | cancelled
          message-id ; string — unique message identifier
          )
   #:transparent) ;; Keep transparent internally for debugging
@@ -37,7 +35,7 @@
 ;; ============================================================
 
 (define (make-streaming-message message-id)
-  (streaming-message (box "") (box '()) (box "") (box '()) (box #f) (box #f) (box #f) message-id))
+  (streaming-message (box "") (box '()) (box "") (box '()) (box 'not-started) message-id))
 
 ;; ============================================================
 ;; Accumulator operations
@@ -60,13 +58,17 @@
   (set-box! b (cons chunk (unbox b))))
 
 (define (streaming-message-set-cancelled! sm)
-  (set-box! (streaming-message-cancelled-box sm) #t))
+  (set-box! (streaming-message-state-box sm) 'cancelled))
 
 (define (streaming-message-set-blocked! sm)
-  (set-box! (streaming-message-blocked-box sm) #t))
+  (set-box! (streaming-message-state-box sm) 'blocked))
 
 (define (streaming-message-set-message-started! sm)
-  (set-box! (streaming-message-started-box sm) #t))
+  (set-box! (streaming-message-state-box sm) 'streaming))
+
+;; FSM state accessor
+(define (streaming-message-fsm-state sm)
+  (unbox (streaming-message-state-box sm)))
 
 ;; ============================================================
 ;; Value accessors (unbox)
@@ -85,13 +87,13 @@
   (unbox (streaming-message-chunks-box sm)))
 
 (define (streaming-message-cancelled? sm)
-  (unbox (streaming-message-cancelled-box sm)))
+  (eq? (unbox (streaming-message-state-box sm)) 'cancelled))
 
 (define (streaming-message-blocked? sm)
-  (unbox (streaming-message-blocked-box sm)))
+  (eq? (unbox (streaming-message-state-box sm)) 'blocked))
 
 (define (streaming-message-message-started? sm)
-  (unbox (streaming-message-started-box sm)))
+  (and (memq (unbox (streaming-message-state-box sm)) '(streaming done blocked cancelled)) #t))
 
 ;; ============================================================
 ;; Finalization
@@ -152,7 +154,8 @@
                        [streaming-message-set-blocked! (-> streaming-message? void?)]
                        [streaming-message-set-message-started! (-> streaming-message? void?)])
          ;; Read accessors
-         (contract-out [streaming-message-text (-> streaming-message? string?)]
+         (contract-out [streaming-message-fsm-state (-> streaming-message? symbol?)]
+                       [streaming-message-text (-> streaming-message? string?)]
                        [streaming-message-tool-calls (-> streaming-message? (listof any/c))]
                        [streaming-message-thinking (-> streaming-message? string?)]
                        [streaming-message-chunks (-> streaming-message? (listof any/c))]

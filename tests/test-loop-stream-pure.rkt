@@ -6,7 +6,8 @@
 (require rackunit
          racket/match
          "../llm/model.rkt"
-         "../agent/loop-stream.rkt")
+         "../agent/loop-stream.rkt"
+         "../agent/streaming-message.rkt")
 
 ;; Helper: make a stream-chunk with specific fields
 (define (make-test-chunk #:delta-text [dt #f]
@@ -87,3 +88,60 @@
 
 (test-case "chunk-has-data?: #t for tool-call chunk"
   (check-true (chunk-has-data? (make-test-chunk #:delta-tool-call (hasheq)))))
+
+;; ============================================================
+;; Streaming message FSM state tests (T2-7)
+;; ============================================================
+
+(test-case "streaming-message: initial FSM state is not-started"
+  (define sm (make-streaming-message "msg-test"))
+  (check-equal? (streaming-message-fsm-state sm) 'not-started)
+  (check-false (streaming-message-message-started? sm))
+  (check-false (streaming-message-cancelled? sm))
+  (check-false (streaming-message-blocked? sm)))
+
+(test-case "streaming-message: set-message-started! transitions to streaming"
+  (define sm (make-streaming-message "msg-test"))
+  (streaming-message-set-message-started! sm)
+  (check-equal? (streaming-message-fsm-state sm) 'streaming)
+  (check-true (streaming-message-message-started? sm)))
+
+(test-case "streaming-message: set-cancelled! transitions to cancelled"
+  (define sm (make-streaming-message "msg-test"))
+  (streaming-message-set-cancelled! sm)
+  (check-equal? (streaming-message-fsm-state sm) 'cancelled)
+  (check-true (streaming-message-cancelled? sm)))
+
+(test-case "streaming-message: set-blocked! transitions to blocked"
+  (define sm (make-streaming-message "msg-test"))
+  (streaming-message-set-blocked! sm)
+  (check-equal? (streaming-message-fsm-state sm) 'blocked)
+  (check-true (streaming-message-blocked? sm)))
+
+(test-case "streaming-message: message-started? true in all non-initial states"
+  (define sm (make-streaming-message "msg-test"))
+  (streaming-message-set-message-started! sm)
+  (check-true (streaming-message-message-started? sm))
+  ;; After blocking, still "started"
+  (streaming-message-set-blocked! sm)
+  (check-true (streaming-message-message-started? sm)))
+
+(test-case "streaming-message: accumulate text"
+  (define sm (make-streaming-message "msg-test"))
+  (streaming-message-append-text! sm "hello ")
+  (streaming-message-append-text! sm "world")
+  (check-equal? (streaming-message-text sm) "hello world"))
+
+(test-case "streaming-message: accumulate tool calls"
+  (define sm (make-streaming-message "msg-test"))
+  (define tc (hasheq 'id "tc-1" 'name "read"))
+  (streaming-message-append-tool-call! sm tc)
+  (check-equal? (length (streaming-message-tool-calls sm)) 1)
+  (check-equal? (streaming-message-tool-calls sm) (list tc)))
+
+(test-case "streaming-message: ->hash includes FSM state data"
+  (define sm (make-streaming-message "msg-test"))
+  (streaming-message-set-message-started! sm)
+  (define h (streaming-message->hash sm))
+  (check-equal? (hash-ref h 'cancelled?) #f)
+  (check-equal? (hash-ref h 'stream-blocked?) #f))
