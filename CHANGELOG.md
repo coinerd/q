@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.49.10 — 2026-05-20
+
+### Changed
+- Closed v0.49.x audit remediation series.
+- Fixed critical session-index export regression (RC1): restored `session-index` constructor and accessors via `all-from-out`.
+- Fixed `sm-fork!`/`in-memory-fork!` contracts (RC3): changed return from `void?` to `any/c`.
+- Updated KPI gates: struct-out floor ≤55, contract-out coverage floor ≥35%.
+- Migrated 3 struct-out files to explicit exports: `llm/provider-errors.rkt`, `skills/resource-loader.rkt`, `skills/context-files.rkt`.
+- Added `contract-out` to 46 files across runtime/, tools/, util/, agent/.
+- Fixed contract arity bugs: `make-model-response` (4 args), `publish-compaction-start!/end!` (return `any/c`).
+- Fixed directive.rkt match-pattern compatibility: struct constructors kept outside `contract-out`.
+
+### Metrics
+- struct-out forms: 52 → 34 (−18)
+- contract-out files: 106 → 149 (+43)
+- contract-out coverage: 30.2% → 42.5%
+- arch-fitness tests: 33/33 passing
+
+### Waves
+- W0: Critical regression fixes + KPI gates (PR #4744)
+- W1: Remaining struct-out migration (PR #4746)
+- W2: Contract-out wave 1 — runtime/ (PR #4748)
+- W3: Contract-out wave 2 — tools/util/agent (PR #4750)
+- W4: Process hygiene + version bump (this release)
+
 ## v0.48.0 — 2026-05-19
 
 ### Changed
