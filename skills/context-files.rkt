@@ -13,7 +13,7 @@
          (only-in "resource-loader.rkt" try-read-file)
          racket/path)
 
-(provide (struct-out agent-context)
+(provide agent-context
          agent-context?
          agent-context-name
          agent-context-description
