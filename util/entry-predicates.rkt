@@ -53,4 +53,4 @@
   (and (message? msg) (eq? (message-kind msg) 'bash-execution)))
 
 (define (any-tool-result-entry? msg)
-  (and (message? msg) (memq (message-kind msg) '(tool-result bash-execution))))
+  (and (message? msg) (and (memq (message-kind msg) '(tool-result bash-execution)) #t)))

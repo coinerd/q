@@ -6,7 +6,6 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../tools/tool-internal.rkt" tool-execute tool-dangerous?)
          (only-in "../tools/tool-struct.rkt" tool? tool-name tool-execute tool-dangerous?)
          (only-in "../tools/tool.rkt" make-tool)
          (only-in "../tools/registry-table.rkt"

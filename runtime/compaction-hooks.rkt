@@ -26,10 +26,12 @@
 (provide (contract-out
           ;; #697: Enriched hook
           [build-enriched-compact-payload
-           (->* (list? any/c) (#:previous-summary (or/c #f string?) #:session-id string?) hash?)]
+           (->* (list? any/c)
+                (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
+                hash?)]
           [dispatch-enriched-before-compact
            (->* (any/c list? any/c)
-                (#:previous-summary (or/c #f string?) #:session-id string?)
+                (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
                 (values any/c hash?))]
           [maybe-use-custom-summary (-> any/c (or/c string? #f))]
           ;; #698: Compaction events

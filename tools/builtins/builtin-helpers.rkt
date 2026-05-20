@@ -11,7 +11,7 @@
                   allowed-path?
                   safe-mode-project-root))
 
-(provide (contract-out [require-safe-path! (-> string? string? (or/c #f string?))]))
+(provide (contract-out [require-safe-path! (-> (or/c path? string?) string? (or/c #f string?))]))
 
 ;; require-safe-path! : string? string? -> (or/c #f string?)
 ;; Validates that a path is allowed under safe-mode constraints.

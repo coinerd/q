@@ -12,7 +12,7 @@
 
 ;; Path utility
 (provide (contract-out [path-only (-> (or/c path? string?) (or/c path? #f))]
-                       [expand-home-path (-> string? string?)]
+                       [expand-home-path (-> (or/c path? string?) (or/c path? string?))]
                        [contains-null-bytes? (-> bytes? boolean?)]
                        [bytes->display-lines
                         (-> bytes? (values (listof string?) exact-nonnegative-integer?))]))
@@ -47,10 +47,19 @@
 ;; This is needed because Racket's file-exists?, directory-exists?, etc.
 ;; do NOT expand ~ — they treat it as a literal directory name.
 (define (expand-home-path path-str)
-  (if (and (string? path-str) (> (string-length path-str) 0) (char=? (string-ref path-str 0) #\~))
-      (let ([home (find-system-path 'home-dir)])
-        (if (and (> (string-length path-str) 1) (char=? (string-ref path-str 1) #\/))
-            (path->string (simplify-path (string->path (string-append (path->string home)
-                                                                      (substring path-str 1)))))
-            (path->string home)))
-      path-str))
+  (define was-path? (path? path-str))
+  (define s
+    (if was-path?
+        (path->string path-str)
+        path-str))
+  (define result
+    (if (and (string? s) (> (string-length s) 0) (char=? (string-ref s 0) #\~))
+        (let ([home (find-system-path 'home-dir)])
+          (if (and (> (string-length s) 1) (char=? (string-ref s 1) #\/))
+              (path->string (simplify-path (string->path (string-append (path->string home)
+                                                                        (substring s 1)))))
+              (path->string home)))
+        s))
+  (if was-path?
+      (string->path result)
+      result))

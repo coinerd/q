@@ -19,7 +19,7 @@
 
 ;; Is the name a VCS or noise directory?
 (define (vcs-dir? name)
-  (member name skip-dirs))
+  (and (member name skip-dirs) #t))
 
 ;; Does the name start with a dot?
 (define (hidden-name? name)

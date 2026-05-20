@@ -5,7 +5,7 @@
 (require racket/contract
          racket/string)
 
-(provide (contract-out [glob->regexp (-> string? #:allow-slash? boolean? regexp?)]))
+(provide (contract-out [glob->regexp (->* (string?) (#:allow-slash? boolean?) regexp?)]))
 
 ;; Convert a glob pattern to a regexp.
 ;; #:allow-slash? #t means * matches / (for path-based tools like find)

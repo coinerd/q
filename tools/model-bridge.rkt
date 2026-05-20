@@ -17,4 +17,5 @@
                        [model-response-content (-> any/c any/c)]
                        [model-response-stop-reason (-> any/c any/c)]
                        [make-model-response (-> any/c any/c any/c any/c any/c)]
-                       [make-mock-provider (-> any/c #:name string? #:stream-chunks any/c any/c)]))
+                       [make-mock-provider
+                        (->* (any/c) (#:name string? #:stream-chunks any/c) any/c)]))

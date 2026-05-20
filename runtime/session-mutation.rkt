@@ -16,7 +16,7 @@
 
 ;; Valid session phases derived from boolean flags
 (define (valid-session-phase? phase)
-  (memq phase '(idle running compacting shutting-down)))
+  (and (memq phase '(idle running compacting shutting-down)) #t))
 
 ;; Get current phase from session flags
 (define (session-phase sess)
