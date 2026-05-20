@@ -12,15 +12,19 @@
 - Reverted util/version.rkt from `#lang typed/racket` to `#lang racket/base` for contract-out support.
 - agent/event-types.rkt: added `valid-typed-event-type?` contract-gated helper alongside all-from-out facade.
 
-### Metrics (verified from source)
-- struct-out forms (arch-fitness dirs): 31 (KPI gate ≤55 ✅)
-- contract-out files (KPI-dirs): 158/350 = 45.1% (KPI gate ≥45% ✅, was 42.5%)
+### Metrics (verified from source, corrected)
+- struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)
+- contract-out files (KPI-dirs): 158/344 = 45.9% (KPI gate ≥45% ✅, was 43.3%)
 - arch-fitness tests: 33/33 ✅
+
+NOTE: Original entry claimed "158/350 = 45.1%, was 42.5%". Per-tag verification
+shows actual KPI-dir count is 344 files (not 350), coverage is 45.9% (not 45.1%),
+and previous version was 43.3% (not 42.5%). Corrected 2026-05-20.
 
 ### Waves
 - W0: Fix 47 test regressions from v0.49.11 (PR #4763)
 - W1: Contract-out coverage gap close — +9 files (PR #4765)
-- W2: CHANGELOG, retrospective, version bump (this release)
+- W2: CHANGELOG, version bump (retrospective was NOT delivered in this release)
 
 ## v0.49.11 — 2026-05-20
 
@@ -38,13 +42,18 @@
 - RC-D extra: `require-safe-path!` — accept `path?` input.
 
 ### Changed
-- Corrected CHANGELOG v0.49.10 metrics: struct-out 52→31 (not 34), contract-out baseline 113 (not 106).
-- Wrote comprehensive RETROSPECTIVE-v0.49.x.md covering v0.49.0–v0.49.11 series.
+- Corrected CHANGELOG v0.49.10 metrics: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
+- Claimed RETROSPECTIVE-v0.49.x.md was written — this was incorrect (file was never created at this point).
+  Retrospective actually written in v0.49.13.
 
-### Metrics (verified from source)
-- struct-out forms (arch-fitness dirs): 31 (KPI gate ≤55 ✅)
-- contract-out files (all source): 149/351 = 42.5% (KPI gate ≥35% ✅)
+### Metrics (verified from source, corrected)
+- struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)
+- contract-out files (KPI-dirs): 149/344 = 43.3% (KPI gate ≥35% ✅)
 - arch-fitness tests: 33/33 ✅
+
+NOTE: Original entry claimed "149/351 = 42.5%". Per-tag verification shows
+actual KPI-dir count is 344 files, not 351. Coverage was 43.3%, not 42.5%.
+Corrected 2026-05-20 during v0.49.13 audit remediation.
 
 ### Waves
 - W0: Fix all 17 contract regressions (PR #4756)
@@ -64,11 +73,14 @@
 - Fixed contract arity bugs: `make-model-response` (4 args), `publish-compaction-start!/end!` (return `any/c`).
 - Fixed directive.rkt match-pattern compatibility: struct constructors kept outside `contract-out`.
 
-### Metrics (verified from source at tag)
-- struct-out forms (arch-fitness dirs): 52 → 31 (−21)
-- contract-out files (all source): 113 → 149 (+36)
-- contract-out coverage (all source): 32.2% → 42.5% (+10.3pp)
+### Metrics (verified from source at tag, corrected)
+- struct-out forms (KPI-dirs): 78 → 31 (−47, −60.3%)
+- contract-out files (KPI-dirs): 101 → 149 (+48, coverage 29.4%→43.3%)
 - arch-fitness tests: 33/33 passing
+
+NOTE: Original entry claimed "52→31" baseline and "113→149" baseline.
+Per-tag verification shows actual baselines were 78 and 101 respectively.
+Corrected 2026-05-20 during v0.49.13 audit remediation.
 
 ### Waves
 - W0: Critical regression fixes + KPI gates (PR #4744)
