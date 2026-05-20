@@ -6,7 +6,8 @@
 ;; Extracted from agent-session.rkt (ARCH-05b).
 ;; Handles fork.requested and compact.requested events from TUI/CLI.
 
-(require "../agent/event-bus.rkt"
+(require racket/contract
+         "../agent/event-bus.rkt"
          "../runtime/session-store.rkt"
          "../runtime/compactor.rkt"
          "../runtime/session-index.rkt"
@@ -14,7 +15,7 @@
          (only-in "runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt")
 
-(provide wire-session-event-handlers!)
+(provide (contract-out [wire-session-event-handlers! (-> any/c any/c void?)]))
 
 ;; ============================================================
 ;; Event bus wiring

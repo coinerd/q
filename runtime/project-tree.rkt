@@ -9,18 +9,21 @@
 ;; v0.19.3 Wave 3: Context Seeding with Project File Tree (C4)
 
 (require "../util/error-helpers.rkt")
-(require racket/list
+(require racket/contract
+         racket/list
          racket/match
          racket/string
          racket/set
          racket/path)
 
-(provide generate-project-tree
-         project-tree->string
-         DEFAULT_TREE_MAX_DEPTH
-         DEFAULT_TREE_MAX_ENTRIES
-         IGNORED-DIRS
-         IGNORED-EXTENSIONS)
+(provide (contract-out [generate-project-tree
+                        (-> path? #:max-depth integer? #:max-entries integer? (listof string?))]
+                       [project-tree->string
+                        (-> path? #:max-depth integer? #:max-entries integer? string?)]
+                       [DEFAULT_TREE_MAX_DEPTH integer?]
+                       [DEFAULT_TREE_MAX_ENTRIES integer?]
+                       [IGNORED-DIRS any/c]
+                       [IGNORED-EXTENSIONS any/c]))
 
 ;; ============================================================
 ;; Configuration

@@ -23,19 +23,15 @@
                   tool-result-part?
                   tool-result-part-is-error?
                   tool-call-name)
-         (only-in "../../runtime/tool-coordinator.rkt"
-                  extract-tool-calls-from-messages)
-         (only-in "tool-turn-bridge.rkt"
-                  update-seen-paths
-                  take-at-most)
+         (only-in "../../runtime/tool-coordinator.rkt" extract-tool-calls-from-messages)
+         (only-in "tool-turn-bridge.rkt" update-seen-paths take-at-most)
          (only-in "../../agent/event-emitter.rkt" emit-typed-event!)
          (only-in "../../agent/event-structs/hook-events.rkt" turn-cancelled-event)
          (only-in "../../util/loop-result.rkt" make-loop-result)
-         (only-in "../../util/cancellation.rkt"
-                  cancellation-token?
-                  cancellation-token-cancelled?))
+         (only-in "../../util/cancellation.rkt" cancellation-token? cancellation-token-cancelled?))
 
-(provide compute-next-counters check-cancellation)
+(provide (contract-out [compute-next-counters (-> any/c (listof any/c) any/c)]
+                       [check-cancellation (-> any/c any/c any/c any/c any/c any/c any/c any/c)]))
 
 ;; ============================================================
 ;; compute-next-counters

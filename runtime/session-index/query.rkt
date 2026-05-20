@@ -4,7 +4,8 @@
 ;;
 ;; Read-only query operations on session-index.
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/set
          (only-in "../../util/protocol-types.rkt"
                   message-id
@@ -14,16 +15,16 @@
                   text-part-text)
          "schema.rkt")
 
-(provide lookup-entry
-         children-of
-         leaf-nodes
-         resolve-active-leaf
-         active-leaf
-         get-branch
-         find-common-ancestor
-         collect-branch-entries
-         leaf-depth
-         estimate-entry-tokens)
+(provide (contract-out [lookup-entry (-> any/c any/c any/c)]
+                       [children-of (-> any/c any/c (listof any/c))]
+                       [leaf-nodes (-> any/c (listof any/c))]
+                       [resolve-active-leaf (-> any/c any/c)]
+                       [active-leaf (-> any/c any/c)]
+                       [get-branch (-> any/c any/c (or/c list? #f))]
+                       [find-common-ancestor (-> any/c any/c any/c any/c)]
+                       [collect-branch-entries (-> any/c any/c any/c integer? (listof any/c))]
+                       [estimate-entry-tokens (-> any/c integer?)]
+                       [leaf-depth (-> any/c any/c (or/c integer? #f))]))
 
 (define (lookup-entry idx id)
   (hash-ref (session-index-by-id idx) id #f))
@@ -39,7 +40,9 @@
 
 (define (resolve-active-leaf idx)
   (define leaves (leaf-nodes idx))
-  (if (null? leaves) #f (last leaves)))
+  (if (null? leaves)
+      #f
+      (last leaves)))
 
 (define (active-leaf idx)
   (define marked-id (unbox (session-index-active-leaf-id idx)))
@@ -59,7 +62,9 @@
       [else
        (define new-acc (cons entry acc))
        (define pid (message-parent-id entry))
-       (if pid (walk-up pid new-acc) new-acc)]))
+       (if pid
+           (walk-up pid new-acc)
+           new-acc)]))
   (walk-up entry-id '()))
 
 (define (find-common-ancestor idx id-a id-b)
@@ -73,7 +78,8 @@
        (loop (and msg (message-parent-id msg)))])))
 
 (define (ancestor-set idx id)
-  (let loop ([current id] [acc (set)])
+  (let loop ([current id]
+             [acc (set)])
     (cond
       [(not current) acc]
       [(set-member? acc current) acc]
@@ -82,7 +88,9 @@
        (loop (and msg (message-parent-id msg)) (set-add acc current))])))
 
 (define (collect-branch-entries idx old-leaf-id ancestor-id token-budget)
-  (let loop ([current old-leaf-id] [acc '()] [tokens-used 0])
+  (let loop ([current old-leaf-id]
+             [acc '()]
+             [tokens-used 0])
     (cond
       [(not current) acc]
       [(equal? current ancestor-id) acc]
@@ -98,10 +106,12 @@
 (define (estimate-entry-tokens msg)
   (define content (message-content msg))
   (for/sum ([part (in-list content)])
-    (cond
-      [(text-part? part) (quotient (string-length (text-part-text part)) 4)]
-      [else 10])))
+           (cond
+             [(text-part? part) (quotient (string-length (text-part-text part)) 4)]
+             [else 10])))
 
 (define (leaf-depth idx entry-id)
   (define path (get-branch idx entry-id))
-  (if path (sub1 (length path)) #f))
+  (if path
+      (sub1 (length path))
+      #f))

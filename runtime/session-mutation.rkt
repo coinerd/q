@@ -5,13 +5,14 @@
 ;; Wraps all set-agent-session-...! calls with transition checks.
 ;; Prevents invalid state transitions like #t→#t on prompt-running?.
 
-(require "session-types.rkt"
+(require racket/contract
+         "session-types.rkt"
          (only-in "../util/errors.rkt" raise-session-error))
 
-(provide guarded-set-prompt-running!
-         guarded-set-compacting!
-         guarded-set-shutdown-requested!
-         valid-session-phase?)
+(provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? any/c)]
+                       [guarded-set-compacting! (-> agent-session? boolean? any/c)]
+                       [guarded-set-shutdown-requested! (-> agent-session? boolean? any/c)]
+                       [valid-session-phase? (-> any/c boolean?)]))
 
 ;; Valid session phases derived from boolean flags
 (define (valid-session-phase? phase)

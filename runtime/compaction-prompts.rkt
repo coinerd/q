@@ -5,7 +5,8 @@
 ;; Provides structured summary prompt and iterative update prompt
 ;; for the compaction system.
 
-(require racket/string
+(require racket/contract
+         racket/string
          (only-in "../util/protocol-types.rkt"
                   message?
                   message-role
@@ -14,11 +15,11 @@
                   text-part?
                   text-part-text))
 
-(provide summary-prompt
-         iterative-update-prompt
-         format-messages-for-summary
-         MAX-TOOL-RESULT-CHARS
-         MAX-SUMMARY-WORDS)
+(provide (contract-out [summary-prompt (-> string? (or/c #f hash?) string?)]
+                       [iterative-update-prompt (-> string? string? (or/c #f hash?) string?)]
+                       [format-messages-for-summary (-> list? string?)]
+                       [MAX-TOOL-RESULT-CHARS exact-positive-integer?]
+                       [MAX-SUMMARY-WORDS exact-positive-integer?]))
 
 (define MAX-TOOL-RESULT-CHARS 2000)
 (define MAX-SUMMARY-WORDS 500)

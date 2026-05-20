@@ -6,12 +6,13 @@
 ;; Defines a trace-sink<%> interface that abstracts trace output.
 ;; Allows swapping file/port/null sinks without changing trace-logger.
 
-(require racket/class)
+(require racket/class
+         racket/contract)
 
-(provide trace-sink<%>
-         file-trace-sink%
-         port-trace-sink%
-         null-trace-sink%)
+(provide (contract-out [trace-sink<%> any/c]
+                       [file-trace-sink% any/c]
+                       [port-trace-sink% any/c]
+                       [null-trace-sink% any/c]))
 
 ;; Interface: trace-sink<%>
 (define trace-sink<%>
