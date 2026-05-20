@@ -10,6 +10,7 @@
 ;; #1203/#1204: Real provider injection — uses parent's provider
 
 (require racket/contract
+         racket/match
          racket/list
          racket/string
          "../../tools/tool.rkt"
@@ -45,9 +46,8 @@
          (only-in "../builtins/ls.rkt" tool-ls)
          (only-in "../builtins/skill-router.rkt" tool-skill-route))
 
-(provide (contract-out
-          [resolve-role-prompt (-> any/c string?)]
-          [parse-subagent-config (-> any/c subagent-config?)])
+(provide (contract-out [resolve-role-prompt (-> any/c string?)]
+                       [parse-subagent-config (-> any/c subagent-config?)])
          ;; Tool entries (direct — used by scheduler)
          tool-spawn-subagent
          tool-spawn-subagents
@@ -295,18 +295,14 @@
        ;; Build assistant message from response content parts
        (define content-parts
          (for/list ([c (in-list content)])
-           (cond
-             [(hash-ref c 'type #f)
-              =>
-              (lambda (t)
-                (cond
-                  [(equal? t "text") (hash-ref c 'text (format "~a" c))]
-                  [(equal? t "tool_call")
-                   (make-tool-call-part (hash-ref c 'id (generate-id))
-                                        (hash-ref c 'name "")
-                                        (ensure-hash-args (hash-ref c 'arguments "{}")))]
-                  [else (format "~a" c)]))]
-             [else (hash-ref c 'text (format "~a" c))])))
+           (match (hash-ref c 'type #f)
+             ["text" (hash-ref c 'text (format "~a" c))]
+             ["tool_call"
+              (make-tool-call-part (hash-ref c 'id (generate-id))
+                                   (hash-ref c 'name "")
+                                   (ensure-hash-args (hash-ref c 'arguments "{}")))]
+             [#f (hash-ref c 'text (format "~a" c))]
+             [_ (format "~a" c)])))
        (define assistant-msg
          (make-message (generate-id) #f 'assistant 'message content-parts (current-seconds) (hasheq)))
        (define new-all (append all-results (list assistant-msg)))
