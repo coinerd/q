@@ -48,4 +48,5 @@
                        [collect-branch-entries
                         (-> session-index? string? string? exact-nonnegative-integer? list?)]
                        [leaf-depth (-> session-index? string? (or/c exact-nonnegative-integer? #f))]
-                       [estimate-entry-tokens (-> any/c exact-nonnegative-integer?)]))
+                       [estimate-entry-tokens (-> any/c exact-nonnegative-integer?)]
+                       [session-index-entry-order (-> session-index? vector?)]))
