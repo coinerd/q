@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.49.13 — 2026-05-20
+
+### Fixed
+- R01: `cancel-token!` contract return type corrected from `void?` to `cancellation-token?`
+  (function returns `tok` for chaining — test verified this was intentional).
+- R02: `valid-typed-event-type?` now returns `#t`/`#f` boolean instead of list from `member`.
+- R03: `emit-queue-event!` hardened with explicit `(void)` return.
+- R04: `write-compaction-entry!` hardened with explicit `(void)` return.
+
+### Changed
+- Corrected CHANGELOG metrics across v0.49.10/11/12 — removed fabricated baselines and denominators.
+  v0.49.10: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
+  v0.49.11: KPI-dir count is 344 (not 351), coverage was 43.3% (not 42.5%).
+  v0.49.12: KPI-dir count is 344 (not 350), coverage was 45.9% (not 45.1%).
+- Rewrote RETROSPECTIVE-v0.49.x.md with comprehensive per-milestone assessment covering v0.49.0–v0.49.13.
+
+### Metrics (verified from source)
+- struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)
+- contract-out files (KPI-dirs): 158/344 = 45.9% (KPI gate ≥45% ✅)
+- arch-fitness tests: 33/33 ✅
+- Test failures: 0 (was 34)
+
+### Waves
+- W0: Critical contract fixes (PR #4770)
+- W1: CHANGELOG correction + retrospective (PR #4772)
+- W2: Version bump + release (this release)
+
 ## v0.49.12 — 2026-05-20
 
 ### Changed
