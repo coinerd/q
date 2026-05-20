@@ -19,36 +19,47 @@
 (struct tool-call-accum (id name arguments) #:transparent)
 
 ;; — SSE line-level helpers —
-(provide parse-sse-lines
-         parse-sse-line
-         parse-sse-data-line
-         sse-done?
-         ;; — OpenAI chunk normalization —
-         normalize-openai-chunks
-         normalize-openai-chunk
+(provide (contract-out
+          ;; SSE parsing
+          [parse-sse-lines (-> string? (listof hash?))]
+          [parse-sse-line (-> string? (or/c hash? 'done #f))]
+          [parse-sse-data-line (-> string? (or/c string? #f))]
+          [sse-done? (-> string? boolean?)]
+          ;; OpenAI chunk normalization
+          [normalize-openai-chunks (-> (listof hash?) (listof (or/c stream-chunk? any/c)))]
+          [normalize-openai-chunk (-> hash? (or/c stream-chunk? any/c))]
+          [accumulate-tool-call-deltas (-> list? (listof hash?))]
+          ;; Incremental SSE reading (generator yields stream-chunk? or #f)
+          [read-sse-chunks
+           (->* (input-port?)
+                (#:initial-timeout positive? #:stream-timeout positive? #:max-total-timeout positive?)
+                generator?)]
+          ;; Response body reading
+          [read-response-body (-> input-port? bytes?)]
+          [read-response-body/timeout (->* (input-port?) (#:timeout positive?) bytes?)]
+          ;; Timeout-aware line reading
+          [read-line/timeout (->* (input-port?) (#:timeout positive?) any/c)]
+          ;; Timeout helpers
+          [effective-request-timeout-for (-> (or/c string? #f) positive?)]
+          [call-with-request-timeout
+           (->* (procedure?) (#:timeout positive? #:cleanup procedure?) any/c)])
+         ;; Struct and predicates (direct export for match compatibility)
          tool-call-accum
          tool-call-accum?
          tool-call-accum-id
          tool-call-accum-name
          tool-call-accum-arguments
-         accumulate-tool-call-deltas
-         ;; — Incremental SSE reading —
-         read-sse-chunks
-         ;; — Response body reading (bounded) —
-         read-response-body
-         read-response-body/timeout
+         ;; Constants
          max-response-size
-         ;; — Timeout infrastructure —
-         read-line/timeout
-         exn:fail:network:timeout
-         exn:fail:network:timeout?
          http-read-timeout-default
          http-stream-timeout-default
          http-request-timeout-default
+         ;; Parameters
          current-http-request-timeout
          current-model-timeouts
-         effective-request-timeout-for
-         call-with-request-timeout)
+         ;; Exception struct
+         exn:fail:network:timeout
+         exn:fail:network:timeout?)
 
 ;; ============================================================
 ;; Timeout configuration
