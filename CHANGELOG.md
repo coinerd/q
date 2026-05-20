@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.49.11 — 2026-05-20
+
+### Fixed
+- Fixed 17 test regressions from v0.49.10 contract-out wave (RC-A through RC-J).
+- RC-A: `valid-session-phase?` — wrap `memq` in boolean for contract compliance.
+- RC-B: `vcs-dir?` — wrap `member` in boolean for contract compliance.
+- RC-C: `any-tool-result-entry?` — wrap `memq` in boolean for contract compliance.
+- RC-D: `expand-home-path` — accept `path?` input, preserve type on output.
+- RC-E: `generate-project-tree`/`project-tree->string` — use `->*` for optional keywords, accept `string?` or `path?`.
+- RC-F: `glob->regexp` — use `->*` for optional keyword.
+- RC-G: `make-mock-provider` — use `->*` for optional keywords.
+- RC-H: `test-tool-internal-gate` — remove duplicate import.
+- RC-I: `build-enriched-compact-payload` — accept `#f` for `session-id`.
+- RC-D extra: `require-safe-path!` — accept `path?` input.
+
+### Changed
+- Corrected CHANGELOG v0.49.10 metrics: struct-out 52→31 (not 34), contract-out baseline 113 (not 106).
+- Wrote comprehensive RETROSPECTIVE-v0.49.x.md covering v0.49.0–v0.49.11 series.
+
+### Metrics (verified from source)
+- struct-out forms (arch-fitness dirs): 31 (KPI gate ≤55 ✅)
+- contract-out files (all source): 149/351 = 42.5% (KPI gate ≥35% ✅)
+- arch-fitness tests: 33/33 ✅
+
+### Waves
+- W0: Fix all 17 contract regressions (PR #4756)
+- W1: Fix CHANGELOG + process artifacts (PR #4758)
+- W2: Version bump + series close (this release)
+
+
 ## v0.49.10 — 2026-05-20
 
 ### Changed
