@@ -35,7 +35,8 @@
          "../../../q/tui/layout.rkt"
          "../../../q/util/protocol-types.rkt"
          "../../../q/agent/event-bus.rkt"
-         "../../../q/interfaces/tui.rkt")
+         "../../../q/interfaces/tui.rkt"
+         (only-in "../../../q/tui/command-parse.rkt" parsed-command? parsed-command-canonical-name))
 
 (test-case "make-tui-ctx returns a valid tui-ctx with default values"
   (let ([ctx (make-tui-ctx)])
@@ -153,7 +154,10 @@
     (define result (handle-key ctx #\return))
     (check-true (pair? result) "slash command returns a list")
     (check-equal? (car result) 'command "slash command result starts with 'command")
-    (check-equal? (cadr result) 'help "slash command parsed as 'help")))
+    (check-true (let ([cmd (cadr result)])
+                  (or (equal? cmd 'help)
+                      (and (parsed-command? cmd) (eq? (parsed-command-canonical-name cmd) 'help))))
+                "slash command parsed as 'help")))
 
 (test-case "handle-key: unknown slash /zz command returns 'unknown"
   (let ([ctx (make-tui-ctx)])

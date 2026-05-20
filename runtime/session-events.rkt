@@ -68,7 +68,8 @@
                                   "session.compact.completed"
                                   (hasheq 'removedCount
                                           (compaction-result-removed-count compact-result)))))))
-     #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))))
+     #:filter (lambda (evt) (equal? (event-ev evt) "compact.requested")))
+    (void)))
 
 ;; ============================================================
 ;; Helpers

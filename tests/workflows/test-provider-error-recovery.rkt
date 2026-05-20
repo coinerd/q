@@ -52,7 +52,7 @@
      (list (make-evt "model.stream.delta" '((delta . "Hello ")))
            (make-evt "runtime.error"
                      '((error . "HTTP read timeout after 120s") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 1) (max-retries . 2) (delay-ms . 1000)))
+           (make-evt "auto-retry.start" '((attempt . 1) (maxRetries . 2) (delay-ms . 1000)))
            (make-evt "model.stream.delta" '((delta . "Retried response")))
            (make-evt "model.stream.completed" '())
            (make-evt "turn.completed" '())))
@@ -72,7 +72,7 @@
    (define events
      (list (make-evt "runtime.error"
                      '((error . "HTTP 429 rate limit exceeded") (errorType . rate-limit)))
-           (make-evt "auto-retry.start" '((attempt . 1) (max-retries . 3) (delay-ms . 2000)))
+           (make-evt "auto-retry.start" '((attempt . 1) (maxRetries . 3) (delay-ms . 2000)))
            (make-evt "model.stream.delta" '((delta . "Success after rate limit")))
            (make-evt "model.stream.completed" '())
            (make-evt "turn.completed" '())))
@@ -161,7 +161,7 @@
    ;; First turn fails
    (define events-turn1
      (list (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 1) (max-retries . 2) (delay-ms . 1000)))
+           (make-evt "auto-retry.start" '((attempt . 1) (maxRetries . 2) (delay-ms . 1000)))
            (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
            (make-evt "turn.completed" '())))
    (define s1 (simulate-events s0 events-turn1))
@@ -181,11 +181,11 @@
    (define s0 (initial-ui-state))
    (define events
      (list (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 1) (max-retries . 3) (delay-ms . 1000)))
+           (make-evt "auto-retry.start" '((attempt . 1) (maxRetries . 3) (delay-ms . 1000)))
            (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 2) (max-retries . 3) (delay-ms . 2000)))
+           (make-evt "auto-retry.start" '((attempt . 2) (maxRetries . 3) (delay-ms . 2000)))
            (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 3) (max-retries . 3) (delay-ms . 4000)))
+           (make-evt "auto-retry.start" '((attempt . 3) (maxRetries . 3) (delay-ms . 4000)))
            (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
            (make-evt "turn.completed" '())))
    (define sf (simulate-events s0 events))
@@ -226,9 +226,9 @@
    (define s0 (initial-ui-state))
    (define events
      (list (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 1) (max-retries . 2) (delay-ms . 1000)))
+           (make-evt "auto-retry.start" '((attempt . 1) (maxRetries . 2) (delay-ms . 1000)))
            (make-evt "runtime.error" '((error . "HTTP read timeout") (errorType . timeout)))
-           (make-evt "auto-retry.start" '((attempt . 2) (max-retries . 2) (delay-ms . 2000)))
+           (make-evt "auto-retry.start" '((attempt . 2) (maxRetries . 2) (delay-ms . 2000)))
            (make-evt "model.stream.delta" '((delta . "Finally succeeded")))
            (make-evt "model.stream.completed" '())
            (make-evt "turn.completed" '())))
