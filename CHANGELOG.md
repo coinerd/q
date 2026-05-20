@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.50.4 — 2026-05-20
+
+### Changed
+- T2-5: 10 `cond`→`match` conversions across 8 files for exhaustiveness and idiomatic Racket:
+  - `llm/provider.rkt`: stream-result->generator dispatches on type
+  - `tui/state-events.rkt`: classify-error-type uses match+regexp; handle-compaction-lifecycle uses or-patterns
+  - `extensions/loader.rkt`: classify-exception on exception type; load-extension-validate on state symbols
+  - `extensions/gsd-planning.rkt`: gsd-mode and set-gsd-mode! on symbols
+  - `runtime/settings.rkt`: deep-merge-hash inner uses match* on type pairs
+  - `interfaces/sdk-core.rkt`: navigate! dispatches on target type
+  - `tools/builtins/spawn-subagent.rkt`: content part dispatch on type field
+
+### Metrics
+- cond→match conversions: 10
+- arch-fitness tests: 33/33 ✅
+- Test failures: 0
+
+### Waves
+- W0: Agent+LLM+TUI cond→match (PR #4803)
+- W1: Runtime+Extensions cond→match (PR #4805)
+- W2: Interface+Tools cond→match + version bump (this release)
+
 ## v0.50.3 — 2026-05-20
 
 ### Changed

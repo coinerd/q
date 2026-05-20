@@ -11,6 +11,7 @@
 ;; thinking level, and context usage types.
 
 (require racket/contract
+         racket/match
          racket/math
          racket/list
          "../llm/provider.rkt"
@@ -393,16 +394,18 @@
 
 (define (navigate! rt target)
   (define sess (rt-sess rt))
-  (cond
-    [(not sess) 'no-active-session]
-    [else
+  (match sess
+    [#f 'no-active-session]
+    [_
      (define idx (session:agent-session-index sess))
-     (cond
-       [(not idx) 'no-active-session]
-       [(string? target) (or (navigate-to-entry! idx target) 'invalid-target)]
-       [(and (exact-integer? target) (> target 0)) (navigate-next-leaf! idx)]
-       [(and (exact-integer? target) (< target 0)) (navigate-prev-leaf! idx)]
-       [else 'invalid-target])]))
+     (match idx
+       [#f 'no-active-session]
+       [_
+        (match target
+          [(? string?) (or (navigate-to-entry! idx target) 'invalid-target)]
+          [(? exact-positive-integer?) (navigate-next-leaf! idx)]
+          [(? (lambda (x) (and (exact-integer? x) (negative? x)))) (navigate-prev-leaf! idx)]
+          [_ 'invalid-target])])]))
 
 ;; ============================================================
 ;; create-agent-session (#1152)
