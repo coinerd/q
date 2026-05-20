@@ -11,6 +11,7 @@
 ;;   - Provide `the-extension` bound to an extension? struct
 
 (require racket/contract
+         racket/match
          racket/file
          (only-in racket/path file-name-from-path)
          (only-in "../util/path-helpers.rkt" path-only)
@@ -101,9 +102,9 @@
 (define (load-extension-validate path)
   (define ext-name (get-extension-name-from-path path))
   (define state (extension-state ext-name))
-  (cond
-    [(or (eq? state 'disabled) (eq? state 'quarantined)) state]
-    [else 'ok]))
+  (match state
+    [(or 'disabled 'quarantined) state]
+    [_ 'ok]))
 
 ;; Phase 2: Attempt to load extension with optional timeout
 (define (load-extension-attempt path)
@@ -286,13 +287,13 @@
 
 ;; Classify an exception into a category symbol.
 (define (classify-exception e)
-  (cond
-    [(exn:fail:syntax? e) 'syntax-error]
-    [(exn:fail:read? e) 'syntax-error]
-    [(exn:fail:filesystem? e) 'filesystem-error]
-    [(exn:fail:contract? e) 'contract-error]
-    [(not-found-error? e) 'not-found]
-    [else 'unknown]))
+  (match e
+    [(? exn:fail:syntax?) 'syntax-error]
+    [(? exn:fail:read?) 'syntax-error]
+    [(? exn:fail:filesystem?) 'filesystem-error]
+    [(? exn:fail:contract?) 'contract-error]
+    [(? not-found-error?) 'not-found]
+    [_ 'unknown]))
 
 ;; Internal exception type for missing files.
 (struct not-found-error exn:fail () #:transparent)

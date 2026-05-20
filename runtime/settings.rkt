@@ -16,6 +16,7 @@
 
 (require "../util/json-helpers.rkt")
 (require racket/contract
+         racket/match
          racket/file
          racket/port
          racket/hash
@@ -153,9 +154,9 @@
     [else
      (for/fold ([acc left]) ([(k v) (in-hash right)])
        (define left-v (hash-ref acc k #f))
-       (cond
-         [(and (hash? left-v) (hash? v)) (hash-set acc k (deep-merge-hash left-v v))]
-         [else (hash-set acc k v)]))]))
+       (match* (left-v v)
+         [((? hash?) (? hash?)) (hash-set acc k (deep-merge-hash left-v v))]
+         [(_ _) (hash-set acc k v)]))]))
 
 ;; Sentinel for distinguishing "not found" from "found #f"
 (define NOT-FOUND (gensym 'not-found))
