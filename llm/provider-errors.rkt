@@ -21,7 +21,7 @@
                   q-llm-error?
                   q-llm-error-category))
 
-(provide (struct-out provider-error)
+(provide provider-error
          provider-error?
          provider-error-category
          provider-error-status-code

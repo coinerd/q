@@ -18,29 +18,39 @@
          racket/list
          json
          "../util/config-paths.rkt"
-         (only-in "../util/hook-types.rkt"
-                  hook-result? hook-result-action hook-result-payload))
+         (only-in "../util/hook-types.rkt" hook-result? hook-result-action hook-result-payload))
 
-(provide
- ;; Structs
- (struct-out resource)
- (struct-out resource-set)
- empty-resource-set
+;; Structs
+;; resource struct exports
+(provide resource
+         resource?
+         resource-kind
+         resource-name
+         resource-source
+         resource-content
+         ;; resource-set struct exports
+         resource-set
+         resource-set?
+         resource-set-instructions
+         resource-set-skills
+         resource-set-templates
+         resource-set-config
+         empty-resource-set
 
- ;; Resource loading
- load-global-resources
- load-project-resources
- merge-resources
+         ;; Resource loading
+         load-global-resources
+         load-project-resources
+         merge-resources
 
- ;; Progressive skill disclosure
- skill-summary-text
- skills-summary-section
+         ;; Progressive skill disclosure
+         skill-summary-text
+         skills-summary-section
 
- ;; Parsing (exposed for testing)
- parse-skill
+         ;; Parsing (exposed for testing)
+         parse-skill
 
- ;; File reading
- try-read-file)
+         ;; File reading
+         try-read-file)
 
 ;; ============================================================
 ;; Structs
@@ -82,9 +92,9 @@
 (define (try-read-json path)
   (with-handlers ([exn:fail? (λ (_) #f)])
     (call-with-input-file path
-      (λ (in)
-        (define result (read-json in))
-        (if (hash? result) result #f)))))
+                          (λ (in)
+                            (define result (read-json in))
+                            (if (hash? result) result #f)))))
 
 ;; Note: project-config-dirs is imported from ../util/config-paths.rkt
 
@@ -98,11 +108,11 @@
 
 ;; Split a list of strings at the first blank line
 (define (split-at-blank-line lines)
-  (let loop ([remaining lines] [acc '()])
+  (let loop ([remaining lines]
+             [acc '()])
     (cond
       [(null? remaining) (values (reverse acc) '())]
-      [(string=? (string-trim (car remaining)) "")
-       (values (reverse acc) (cdr remaining))]
+      [(string=? (string-trim (car remaining)) "") (values (reverse acc) (cdr remaining))]
       [else (loop (cdr remaining) (cons (car remaining) acc))])))
 
 ;; Parse a SKILL.md file into a hash with name, description, content
@@ -115,8 +125,7 @@
 (define (parse-skill name raw-content)
   (define lines (string-split raw-content "\n"))
   (cond
-    [(null? lines)
-     (hash 'name name 'description "" 'content "")]
+    [(null? lines) (hash 'name name 'description "" 'content "")]
     [else
      ;; Skip the first line if it starts with "# "
      (define after-header
@@ -124,21 +133,21 @@
            (cdr lines)
            lines))
      ;; Skip any leading blank lines after header
-     (define rest-lines (dropf after-header
-                               (λ (l) (string=? (string-trim l) ""))))
+     (define rest-lines (dropf after-header (λ (l) (string=? (string-trim l) ""))))
      (cond
-       [(null? rest-lines)
-        (hasheq 'name name 'description "" 'content "")]
+       [(null? rest-lines) (hasheq 'name name 'description "" 'content "")]
        [else
         ;; Find first blank line — everything before is description,
         ;; everything after is content
-        (define-values (desc-part content-part)
-          (split-at-blank-line rest-lines))
+        (define-values (desc-part content-part) (split-at-blank-line rest-lines))
         (define description (string-trim (string-join desc-part "\n")))
         (define content (string-trim (string-join content-part "\n")))
-        (hasheq 'name name
-              'description (if (non-empty-string? description) description "")
-              'content content)])]))
+        (hasheq 'name
+                name
+                'description
+                (if (non-empty-string? description) description "")
+                'content
+                content)])]))
 
 ;; Load skills from a skills/ subdirectory
 ;; Each skill is a subdirectory containing SKILL.md
@@ -150,14 +159,13 @@
      (define entries
        (with-handlers ([exn:fail? (λ (_) '())])
          (directory-list skills-dir)))
-     (filter
-      values
-      (for/list ([entry (in-list entries)]
-                 #:when (directory-exists? (build-path skills-dir entry)))
-        (define skill-name (path->string entry))
-        (define skill-file (build-path skills-dir entry "SKILL.md"))
-        (define content (try-read-file skill-file))
-        (and content (parse-skill skill-name content))))]))
+     (filter values
+             (for/list ([entry (in-list entries)]
+                        #:when (directory-exists? (build-path skills-dir entry)))
+               (define skill-name (path->string entry))
+               (define skill-file (build-path skills-dir entry "SKILL.md"))
+               (define content (try-read-file skill-file))
+               (and content (parse-skill skill-name content))))]))
 
 ;; Load templates from a templates/ subdirectory
 (define (load-templates dir)
@@ -186,8 +194,7 @@
   (define discover-result
     (and hook-dispatcher (hook-dispatcher 'resources-discover discover-payload)))
   (cond
-    [(and (hook-result? discover-result)
-          (eq? (hook-result-action discover-result) 'block))
+    [(and (hook-result? discover-result) (eq? (hook-result-action discover-result) 'block))
      ;; Block: return empty resource set
      (empty-resource-set)]
     [(and (hook-result? discover-result)
@@ -207,16 +214,15 @@
 ;; ============================================================
 
 (define (load-global-resources [base-dir (find-system-path 'home-dir)]
-                            #:hook-dispatcher [hook-dispatcher #f])
+                               #:hook-dispatcher [hook-dispatcher #f])
   ;; Scan <base-dir>/.q/ for global resources.
   (define q-dir (car (project-config-dirs base-dir)))
   (cond
-    [(directory-exists? q-dir)
-     (load-resources-from-dir q-dir #:hook-dispatcher hook-dispatcher)]
+    [(directory-exists? q-dir) (load-resources-from-dir q-dir #:hook-dispatcher hook-dispatcher)]
     [else (empty-resource-set)]))
 
 (define (load-project-resources [project-dir (current-directory)]
-                             #:hook-dispatcher [hook-dispatcher #f])
+                                #:hook-dispatcher [hook-dispatcher #f])
   ;; Scan <project>/.q/ first, then fall back to <project>/.pi/
   (define dirs (project-config-dirs project-dir))
   (cond
@@ -232,24 +238,21 @@
 
 ;; Merge two skill lists; project skills override global by name
 (define (merge-skill-lists global-skills project-skills)
-  (define proj-by-name (for/hash ([s (in-list project-skills)])
-                         (values (hash-ref s 'name) s)))
+  (define proj-by-name
+    (for/hash ([s (in-list project-skills)])
+      (values (hash-ref s 'name) s)))
   ;; Keep global skills that are not overridden by project
   (define kept-global
-    (filter (λ (s) (not (hash-has-key? proj-by-name (hash-ref s 'name))))
-            global-skills))
+    (filter (λ (s) (not (hash-has-key? proj-by-name (hash-ref s 'name)))) global-skills))
   (append kept-global project-skills))
 
 ;; Deep merge two hashes; right side wins on conflicts
 (define (deep-merge-hash left right)
-  (for/fold ([acc left])
-            ([(k v) (in-hash right)])
+  (for/fold ([acc left]) ([(k v) (in-hash right)])
     (define left-v (hash-ref acc k #f))
     (cond
-      [(and left-v (hash? left-v) (hash? v))
-       (hash-set acc k (deep-merge-hash left-v v))]
-      [else
-       (hash-set acc k v)])))
+      [(and left-v (hash? left-v) (hash? v)) (hash-set acc k (deep-merge-hash left-v v))]
+      [else (hash-set acc k v)])))
 
 ;; ============================================================
 ;; Progressive Skill Disclosure
@@ -290,17 +293,13 @@
   ;; Skills: project overrides global by name
   ;; Templates: project overrides global by key
   ;; Config: deep merge, project wins on conflicts
-  (resource-set
-   ;; Instructions: concatenate global then project
-   (append (resource-set-instructions global-rs)
-           (resource-set-instructions project-rs))
-   ;; Skills: project overrides global by name
-   (merge-skill-lists (resource-set-skills global-rs)
-                      (resource-set-skills project-rs))
-   ;; Templates: project overrides global by key
-   (hash-union (resource-set-templates global-rs)
-               (resource-set-templates project-rs)
-               #:combine (λ (global-val project-val) project-val))
-   ;; Config: deep merge with project precedence
-   (deep-merge-hash (resource-set-config global-rs)
-                    (resource-set-config project-rs))))
+  ;; Instructions: concatenate global then project
+  (resource-set (append (resource-set-instructions global-rs) (resource-set-instructions project-rs))
+                ;; Skills: project overrides global by name
+                (merge-skill-lists (resource-set-skills global-rs) (resource-set-skills project-rs))
+                ;; Templates: project overrides global by key
+                (hash-union (resource-set-templates global-rs)
+                            (resource-set-templates project-rs)
+                            #:combine (λ (global-val project-val) project-val))
+                ;; Config: deep merge with project precedence
+                (deep-merge-hash (resource-set-config global-rs) (resource-set-config project-rs))))
