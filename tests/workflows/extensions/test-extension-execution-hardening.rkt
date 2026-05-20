@@ -25,7 +25,8 @@
          "../../../agent/event-bus.rkt"
          "../../../runtime/compactor.rkt"
          "../../../runtime/session-store.rkt"
-         "../../../util/jsonl.rkt")
+         "../../../util/jsonl.rkt"
+         (only-in "../../../util/event.rkt" make-event))
 
 ;; ── Helpers ──
 
@@ -199,7 +200,12 @@
       (define received (box '()))
       (subscribe! bus (lambda (evt) (set-box! received (cons evt (unbox received)))))
       ;; Fire an event
-      (publish! bus (hasheq 'tool "planning-write" 'args (hasheq 'artifact "PLAN")))
+      (publish! bus
+                (make-event "extension.tool-invoked"
+                            (current-inexact-milliseconds)
+                            #f
+                            #f
+                            (hasheq 'tool "planning-write" 'args (hasheq 'artifact "PLAN"))))
       ;; Small delay for async delivery
       (sleep 0.1)
       (check-true (>= (length (unbox received)) 1) "Should have at least one event"))))

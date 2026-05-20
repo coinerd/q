@@ -5,18 +5,18 @@
 
 (require rackunit
          rackunit/text-ui
-         (only-in "../../runtime/session-lifecycle.rkt"
+         (only-in "../runtime/session-lifecycle.rkt"
                   build-user-message
                   compute-parent-id
                   inject-system-instructions)
-         (only-in "../../util/protocol-types.rkt"
+         (only-in "../util/protocol-types.rkt"
                   message?
                   message-role
                   message-kind
                   message-parent-id
                   make-message
                   make-text-part)
-         (only-in "../../util/message.rkt" message-content))
+         (only-in "../util/message.rkt" message-content))
 
 (define (make-test-message id parent-id role kind)
   (make-message id parent-id role kind (list (make-text-part "test")) 0 (hasheq)))
