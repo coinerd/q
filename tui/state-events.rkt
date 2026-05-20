@@ -105,7 +105,7 @@
   (define payload (event-payload evt))
   (define name (hash-ref payload 'name "?"))
   (if (recent-tool-start? state name)
-      (set-pending-tool-name (set-busy state #t) name)
+      (set-streaming-phase (set-pending-tool-name (set-busy state #t) name) 'tool-pending)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
@@ -124,7 +124,7 @@
   (define payload (event-payload evt))
   (define name (hash-ref payload 'toolName "?"))
   (if (recent-tool-start? state name)
-      (set-pending-tool-name (set-busy state #t) name)
+      (set-streaming-phase (set-pending-tool-name (set-busy state #t) name) 'tool-pending)
       (let* ([args-raw (hash-ref payload 'arguments #f)]
              [arg-summary (if args-raw
                               (extract-arg-summary args-raw)
@@ -246,22 +246,29 @@
   (define delta (hash-ref payload 'delta ""))
   (define current-streaming (ui-state-streaming-text state))
   (define new-streaming (string-append (or current-streaming "") delta))
-  (set-streaming-text (set-busy state #t) new-streaming))
+  (set-streaming-phase (set-streaming-text (set-busy state #t) new-streaming) 'streaming))
 
 (define (handle-turn-started state evt)
   (set-status-message
-   (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #t) (event-time evt)) #f))
+   (clear-streaming (set-pending-tool-name (set-streaming-phase (set-busy-since (set-busy state #t)
+                                                                                (event-time evt))
+                                                                'thinking)
+                                           #f))
    #f))
 
 ;; v0.45.14: Removed min-busy-ms anti-flicker guard. Always clear busy? on turn.completed.
 ;; The old guard caused busy? to stay #t during rapid iterations (< 500ms each),
 ;; leading to false watchdog fires after 30 minutes.
 (define (handle-turn-completed state evt)
-  (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f)))
+  (set-streaming-phase (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
+                                                               #f))
+                       'idle))
 
 ;; v0.45.14: Also clear busy-since for consistency with handle-turn-completed.
 (define (handle-turn-cancelled state evt)
-  (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f) #f)))
+  (set-streaming-phase (clear-streaming (set-pending-tool-name (set-busy-since (set-busy state #f) #f)
+                                                               #f))
+                       'idle))
 
 (define (handle-compaction-warning state evt)
   (define payload (event-payload evt))
