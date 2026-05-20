@@ -47,7 +47,9 @@
 
 (define MAX-STREAM-CHUNKS (make-parameter 10000))
 
-(provide MAX-STREAM-CHUNKS
+(provide classify-chunk
+         chunk-has-data?
+         MAX-STREAM-CHUNKS
          (contract-out [accumulate-stream-chunks (-> list? hash?)]
                        [stream-from-provider
                         (-> any/c ; provider
@@ -100,6 +102,44 @@
           usage
           'finish-reason
           finish-reason))
+
+;; ============================================================
+;; Pure chunk classification (T2-6)
+;; ============================================================
+
+;; classify-chunk : stream-chunk -> (listof (list symbol any))
+;; Pure: returns a list of (type, data) pairs describing what the chunk contains.
+;; Each pair is (cons type-symbol data) where:
+;;   ('text-delta . string)          — text content to accumulate
+;;   ('thinking-delta . string)      — thinking/reasoning content
+;;   ('tool-call-delta . hash)       — tool call delta
+;;   ('done . (hash 'usage _ 'finish-reason _)) — stream completion
+;; Returns '() if chunk has no useful data.
+(define (classify-chunk chunk)
+  (append (let ([dt (stream-chunk-delta-text chunk)])
+            (if dt
+                (list (cons 'text-delta dt))
+                '()))
+          (let ([th (stream-chunk-delta-thinking chunk)])
+            (if th
+                (list (cons 'thinking-delta th))
+                '()))
+          (let ([tc (stream-chunk-delta-tool-call chunk)])
+            (if tc
+                (list (cons 'tool-call-delta tc))
+                '()))
+          (if (stream-chunk-done? chunk)
+              (list (cons 'done
+                          (hasheq 'usage
+                                  (or (stream-chunk-usage chunk) (hasheq))
+                                  'finish-reason
+                                  (or (stream-chunk-finish-reason chunk) "unknown"))))
+              '())))
+
+;; chunk-has-data? : stream-chunk -> boolean
+;; Pure: returns #t if chunk carries any useful payload.
+(define (chunk-has-data? chunk)
+  (pair? (classify-chunk chunk)))
 
 ;; ============================================================
 ;; stream-from-provider
