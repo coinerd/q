@@ -25,10 +25,10 @@
          "provider-errors.rkt")
 
 ;; Provider constructor
-(provide (contract-out [make-openai-compatible-provider (-> hash? provider?)])
-         ;; Request/response helpers (exported for testing)
-         openai-build-request-body
-         openai-parse-response)
+(provide (contract-out
+          [make-openai-compatible-provider (-> hash? provider?)]
+          [openai-build-request-body (->* (any/c) (#:stream? boolean?) hash?)]
+          [openai-parse-response (-> any/c any/c)]))
 
 ;; ============================================================
 ;; Request body construction
