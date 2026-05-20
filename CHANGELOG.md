@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.50.2 — 2026-05-20
+
+### Changed
+- T1-3: `runtime/context-assembly.rkt` — 76 any/c → 24 (reduced by 52). Struct accessors, builders,
+  and cache operations now have precise type contracts.
+- T1-4: `agent/loop-stream.rkt` — 17 any/c → 10 (reduced by 7). Stream functions typed with
+  string? session/turn IDs, procedure? hooks, list? chunks.
+- T2-4: `llm/openai-compatible.rkt` — added contracts to build-request-body and parse-response helpers.
+
+### Metrics
+- any/c reduction: 93 → 34 (63% reduction in degenerate any/c)
+- arch-fitness tests: 33/33 ✅
+- Test failures: 0
+
+### Waves
+- W0: context-assembly.rkt any/c → specific types (PR #4789)
+- W1: loop-stream.rkt any/c → specific types (PR #4791)
+- W2: openai-compatible.rkt contracts + version bump (this release)
+
 ## v0.50.1 — 2026-05-20
 
 ### Added
