@@ -1,25 +1,23 @@
 #lang racket/base
+
+(require racket/contract)
 ;; tools/tool-struct.rkt -- Tool struct definition
 ;; Extracted from tools/tool.rkt (v0.30.8 W0)
 ;; STABILITY: stable
 
-(provide tool?
+(provide (contract-out [tool? (-> any/c boolean?)]
+                       [tool-name (-> tool? string?)]
+                       [tool-description (-> tool? string?)]
+                       [tool-schema (-> tool? any/c)]
+                       [tool-execute (-> tool? procedure?)]
+                       [tool-prompt-snippet (-> tool? (or/c string? #f))]
+                       [tool-prompt-guidelines (-> tool? (or/c string? #f))]
+                       [tool-dangerous? (-> tool? boolean?)]
+                       [tool-render-call (-> tool? (or/c procedure? #f))]
+                       [tool-render-result (-> tool? (or/c procedure? #f))])
          ;; Raw struct constructor -- ONLY for use by tools/tool.rkt make-tool.
          ;; All external construction MUST use make-tool from tools/tool.rkt.
-         tool
-         tool-name
-         tool-description
-         tool-schema
-         ;; NOTE: tool-execute is exported for test/internal use only.
-         ;;       Production code should use tools/scheduler.rkt for invocation.
-         ;;       A future breaking change may gate this behind a test-only module.
-         tool-execute
-         tool-prompt-snippet
-         tool-prompt-guidelines
-         tool-dangerous?
-         tool-render-call
-         tool-render-result
-)
+         tool)
 
 (struct tool
         (name description
@@ -31,5 +29,3 @@
               render-result
               dangerous?)
   #:transparent)
-
-

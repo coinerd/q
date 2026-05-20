@@ -6,7 +6,8 @@
 ;; Event types auto-register serializers/deserializers via define-typed-event.
 ;; Per-tool events (manual structs) register explicitly below.
 
-(require racket/match
+(require racket/contract
+         racket/match
          "event-structs/typed-event-predicates.rkt"
          ;; Per-tool event imports for manual serializer registration
          (only-in "event-structs/tool-events.rkt"
@@ -51,11 +52,11 @@
                   current-schema-version
                   lookup-event-schema-version))
 
-(provide typed-event->jsexpr
-         jsexpr->typed-event
-         all-known-event-types
-         event-name->tool-name
-         register-tool-event-serializer!)
+(provide (contract-out [typed-event->jsexpr (-> typed-event? hash?)]
+                       [jsexpr->typed-event (-> hash? (or/c typed-event? #f))]
+                       [all-known-event-types (-> (listof string?))]
+                       [event-name->tool-name (-> string? (or/c string? #f))]
+                       [register-tool-event-serializer! (-> string? (-> typed-event? hash?) void?)]))
 
 ;; register-tool-event-serializer! : string? (-> typed-event? hash?) -> void?
 ;; Wraps a base serializer with auto-injected schemaVersion.

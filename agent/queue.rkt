@@ -11,17 +11,16 @@
 (require racket/contract)
 
 ;; Agent steering/followup message queue
-(provide make-queue
-         queue?
-         enqueue-steering!
-         enqueue-followup!
-         dequeue-steering!
-         dequeue-followup!
-         dequeue-all-followups!
-         queue-empty?
-         queue-status
-         ;; FEAT-67: event emission callback
-         queue-set-event-callback!)
+(provide (contract-out [make-queue (-> queue?)]
+                       [queue? (-> any/c boolean?)]
+                       [enqueue-steering! (-> queue? any/c void?)]
+                       [enqueue-followup! (-> queue? any/c void?)]
+                       [dequeue-steering! (-> queue? (or/c any/c #f))]
+                       [dequeue-followup! (-> queue? (or/c any/c #f))]
+                       [dequeue-all-followups! (-> queue? list?)]
+                       [queue-empty? (-> queue? boolean?)]
+                       [queue-status (-> queue? hash?)]
+                       [queue-set-event-callback! (-> queue? (or/c procedure? #f) void?)]))
 
 ;; ============================================================
 ;; Queue struct — two-list FIFO for O(1) amortized ops

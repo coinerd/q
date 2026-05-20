@@ -13,7 +13,8 @@
 ;;   print-version       -- version display
 ;;   q-version           -- version constant
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/format
          "../util/version.rkt")
 
@@ -35,10 +36,10 @@
          cli-config-sessions-args
          cli-config-keybindings-path
          cli-config-print-mode?
-         parse-cli-args
-         cli-config->runtime-config
-         print-usage
-         print-version
+         (contract-out [parse-cli-args (-> any/c cli-config?)]
+                       [cli-config->runtime-config (-> cli-config? hash?)]
+                       [print-usage (->* () ((or/c output-port? #f)) void?)]
+                       [print-version (-> void?)])
          ;; q-version imported from util/version.rkt (Issue #203)
          q-version)
 

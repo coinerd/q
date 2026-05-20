@@ -8,16 +8,15 @@
 (require racket/contract)
 
 ;; Agent loop mutable state
-(provide make-loop-state
-         loop-state?
-         loop-state-session-id
-         loop-state-turn-id
-         loop-state-messages
-         loop-state-events
-         state-add-message!
-         state-add-event!
-         ;; v0.45.10 NF1: Parameter for error-path partial message recovery
-         current-loop-state-for-error-recovery)
+(provide (contract-out [make-loop-state (-> string? string? loop-state?)]
+                       [loop-state? (-> any/c boolean?)]
+                       [loop-state-session-id (-> loop-state? string?)]
+                       [loop-state-turn-id (-> loop-state? string?)]
+                       [loop-state-messages (-> loop-state? (listof any/c))]
+                       [loop-state-events (-> loop-state? (listof any/c))]
+                       [state-add-message! (-> loop-state? any/c void?)]
+                       [state-add-event! (-> loop-state? any/c void?)]
+                       [current-loop-state-for-error-recovery (parameter/c (or/c loop-state? #f))]))
 
 ;; ============================================================
 ;; v0.45.10 NF1: Error-path recovery parameter
