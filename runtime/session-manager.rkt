@@ -28,13 +28,13 @@
                        [sm-append! (-> any/c string? any/c void?)]
                        [sm-load (-> any/c string? (listof any/c))]
                        [sm-list (-> any/c (listof string?))]
-                       [sm-fork! (->* (any/c string? string?) (string?) void?)]
+                       [sm-fork! (->* (any/c string? string?) (string?) any/c)]
                        ;; Re-export in-memory operations for backward compat
                        [in-memory-append! (-> any/c string? any/c void?)]
                        [in-memory-append-entries! (-> any/c string? (listof any/c) void?)]
                        [in-memory-load (-> any/c string? (listof any/c))]
                        [in-memory-list-sessions (-> any/c (listof string?))]
-                       [in-memory-fork! (->* (any/c string? string?) (string?) void?)]))
+                       [in-memory-fork! (->* (any/c string? string?) (string?) any/c)]))
 
 ;; ============================================================
 ;; Persistent session manager — wraps file-backed session-store

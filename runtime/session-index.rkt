@@ -10,13 +10,8 @@
          "session-index/mutations.rkt"
          "session-index/query.rkt")
 
-(provide (contract-out [session-index? (-> any/c boolean?)]
-                       [bookmark? (-> any/c boolean?)]
-                       [navigate-result? (-> any/c boolean?)]
-                       [make-bookmark
-                        (-> string? string? string? exact-nonnegative-integer? bookmark?)]
-                       [make-empty-index (-> session-index?)]
-                       [build-index! (-> path-string? path-string? session-index?)]
+(provide (all-from-out "session-index/schema.rkt")
+         (contract-out [build-index! (-> path-string? path-string? session-index?)]
                        [load-index (-> path-string? session-index?)]
                        [save-index! (-> path-string? session-index? void?)]
                        [switch-leaf! (-> session-index? string? (or/c string? #f))]
@@ -48,5 +43,4 @@
                        [collect-branch-entries
                         (-> session-index? string? string? exact-nonnegative-integer? list?)]
                        [leaf-depth (-> session-index? string? (or/c exact-nonnegative-integer? #f))]
-                       [estimate-entry-tokens (-> any/c exact-nonnegative-integer?)]
-                       [session-index-entry-order (-> session-index? vector?)]))
+                       [estimate-entry-tokens (-> any/c exact-nonnegative-integer?)]))
