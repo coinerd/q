@@ -17,18 +17,19 @@
 ;;;
 ;;; #773
 
-(require racket/file
+(require racket/contract
+         racket/file
          json
          "../util/jsonl.rkt"
          "../util/protocol-types.rkt"
          (only-in "../util/errors.rkt" with-logged-catch raise-session-error))
 
-(provide current-session-version
-         read-session-version
-         migrate-session-log!
-         ensure-session-version!
-         register-migration!
-         run-migrations!)
+(provide (contract-out [current-session-version exact-nonnegative-integer?]
+                       [read-session-version (-> path-string? exact-nonnegative-integer?)]
+                       [migrate-session-log! (-> path-string? void?)]
+                       [ensure-session-version! (-> path-string? void?)]
+                       [register-migration! (-> exact-nonnegative-integer? procedure? void?)]
+                       [run-migrations! (-> path-string? void?)]))
 
 ;; Current format version (synced with session-store.rkt)
 (define current-session-version 2)

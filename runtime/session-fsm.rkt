@@ -17,7 +17,8 @@
 ;;   (session-current-state sess) → fsm-state
 ;;   (session-valid-lifecycle? sess) → boolean
 
-(require (only-in "../util/fsm.rkt"
+(require racket/contract
+         (only-in "../util/fsm.rkt"
                   define-fsm-machine
                   fsm-state
                   fsm-state-name
@@ -34,22 +35,25 @@
 ;; ── Session FSM ──
 
 (define-fsm-machine session-lifecycle
-  #:states (created active streaming compacting idle terminated)
-  #:events (session-started stream-requested stream-complete
-            compaction-needed compaction-complete
-            turn-complete new-turn session-ended)
-  #:transitions
-  [(created -> active) session-started]
-  [(active -> streaming) stream-requested]
-  [(active -> compacting) compaction-needed]
-  [(active -> idle) turn-complete]
-  [(streaming -> active) stream-complete]
-  [(compacting -> active) compaction-complete]
-  [(idle -> active) new-turn]
-  [(active -> terminated) session-ended]
-  [(streaming -> terminated) session-ended]
-  [(compacting -> terminated) session-ended]
-  [(idle -> terminated) session-ended])
+                    #:states (created active streaming compacting idle terminated)
+                    #:events (session-started stream-requested
+                                              stream-complete
+                                              compaction-needed
+                                              compaction-complete
+                                              turn-complete
+                                              new-turn
+                                              session-ended)
+                    #:transitions [(created -> active) session-started]
+                    [(active -> streaming) stream-requested]
+                    [(active -> compacting) compaction-needed]
+                    [(active -> idle) turn-complete]
+                    [(streaming -> active) stream-complete]
+                    [(compacting -> active) compaction-complete]
+                    [(idle -> active) new-turn]
+                    [(active -> terminated) session-ended]
+                    [(streaming -> terminated) session-ended]
+                    [(compacting -> terminated) session-ended]
+                    [(idle -> terminated) session-ended])
 
 ;; ── Derived state computation ──
 
@@ -57,14 +61,10 @@
 ;; Computes the FSM state from the session's boolean flags.
 (define (session-current-state sess)
   (cond
-    [(not (agent-session-active? sess))
-     session-lifecycle-terminated]
-    [(agent-session-compacting? sess)
-     session-lifecycle-compacting]
-    [(agent-session-prompt-running? sess)
-     session-lifecycle-streaming]
-    [else
-     session-lifecycle-active]))
+    [(not (agent-session-active? sess)) session-lifecycle-terminated]
+    [(agent-session-compacting? sess) session-lifecycle-compacting]
+    [(agent-session-prompt-running? sess) session-lifecycle-streaming]
+    [else session-lifecycle-active]))
 
 ;; session-current-state-name : agent-session? -> symbol
 (define (session-current-state-name sess)
@@ -78,20 +78,18 @@
 ;; session-can-transition? : agent-session? symbol -> boolean
 ;; Whether the session can accept the given event from its current state.
 (define (session-can-transition? sess event-sym)
-  (fsm-valid-transition? session-lifecycle-machine
-                         (session-current-state-name sess)
-                         event-sym))
+  (fsm-valid-transition? session-lifecycle-machine (session-current-state-name sess) event-sym))
 
-(provide session-lifecycle-machine
-         session-lifecycle-state?
-         session-lifecycle-event?
-         session-lifecycle-terminated
-         session-lifecycle-active
-         session-lifecycle-streaming
-         session-lifecycle-compacting
-         session-lifecycle-idle
-         session-lifecycle-created
-         session-current-state
-         session-current-state-name
-         session-valid-lifecycle?
-         session-can-transition?)
+(provide (contract-out [session-lifecycle-machine any/c]
+                       [session-lifecycle-state? (-> any/c boolean?)]
+                       [session-lifecycle-event? (-> any/c boolean?)]
+                       [session-lifecycle-terminated any/c]
+                       [session-lifecycle-active any/c]
+                       [session-lifecycle-streaming any/c]
+                       [session-lifecycle-compacting any/c]
+                       [session-lifecycle-idle any/c]
+                       [session-lifecycle-created any/c]
+                       [session-current-state (-> any/c any/c)]
+                       [session-current-state-name (-> any/c symbol?)]
+                       [session-valid-lifecycle? (-> any/c boolean?)]
+                       [session-can-transition? (-> any/c symbol? boolean?)]))

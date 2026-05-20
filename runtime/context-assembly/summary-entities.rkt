@@ -5,14 +5,15 @@
 ;; SAL-04 fix: Extracts key entities (file paths, function/module names) from
 ;; messages so summaries can be checked for entity preservation.
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/list
          (only-in "../../util/message.rkt" message-content)
          (only-in "../../util/content-parts.rkt" text-part? text-part-text))
 
-(provide extract-key-entities
-         check-entity-preservation
-         entity-preservation-appendix)
+(provide (contract-out [extract-key-entities (->* (list?) (exact-positive-integer?) any/c)]
+                       [check-entity-preservation (-> list? string? list?)]
+                       [entity-preservation-appendix (-> list? string?)]))
 
 ;; File path patterns: /path/to/file.rkt, ./relative/path.rkt, src/file.rkt
 (define FILE-PATH-RE

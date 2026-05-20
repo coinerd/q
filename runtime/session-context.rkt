@@ -5,9 +5,8 @@
 ;; ARCH-05 partial (v0.22.0): Extracted from agent-session.rkt.
 ;; Pure functions for context message analysis.
 
-(require (only-in "../util/protocol-types.rkt"
-                  message-kind
-                  message-meta))
+(require racket/contract
+         (only-in "../util/protocol-types.rkt" message-kind message-meta))
 
 ;; extract-path-settings — walk context messages to find latest
 ;;   model-change and thinking-level-change entries.
@@ -22,4 +21,4 @@
        (hash-set settings 'thinking-level (hash-ref (message-meta msg) 'level #f))]
       [else settings])))
 
-(provide extract-path-settings)
+(provide (contract-out [extract-path-settings (-> list? any/c)]))

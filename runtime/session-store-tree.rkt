@@ -13,12 +13,15 @@
          racket/lazy-require
          "../util/protocol-types.rkt")
 
-(provide append-tree-entry!
-         load-tree
-         get-tree-branch
-         get-children
-         resolve-active-branch
-         tree-info)
+(provide (contract-out [append-tree-entry!
+                        (->* (path-string? message?)
+                             (#:before-hook (or/c #f procedure?) #:after-hook (or/c #f procedure?))
+                             void?)]
+                       [load-tree (-> path-string? hash?)]
+                       [get-tree-branch (-> hash? string? list?)]
+                       [get-children (-> hash? string? list?)]
+                       [resolve-active-branch (-> hash? list?)]
+                       [tree-info (-> hash? hash?)]))
 
 ;; Lazy-require to break circular dependency with session-store.rkt
 (lazy-require ["session-store.rkt" (load-session-log append-entry!)])

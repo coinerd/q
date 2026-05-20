@@ -11,14 +11,16 @@
 ;; layer violation (agent core should not import from runtime). Re-exported
 ;; here for backward compatibility with existing runtime callers.
 
-(require (only-in "../agent/event-emitter.rkt" emit-session-event!)
+(require racket/contract
+         (only-in "../agent/event-emitter.rkt" emit-session-event!)
          (only-in "../agent/event-bus.rkt" make-event-bus)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-payload))
 
 (provide emit-session-event!
          make-event-bus
-         maybe-dispatch-hooks)
+         (contract-out [maybe-dispatch-hooks
+                        (->* (any/c any/c any/c) (#:ctx any/c) (values any/c any/c))]))
 
 ;; emit-session-event! is now defined in agent/event-emitter.rkt
 ;; and re-exported here for backward compatibility.

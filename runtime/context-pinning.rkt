@@ -7,12 +7,13 @@
 ;; (system prompt, first user message, compaction summaries) and
 ;; partitions them from removable messages.
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/set
          (only-in "../util/protocol-types.rkt" message-role message-kind message-id))
 
-(provide partition-messages
-         partition-messages/working-set)
+(provide (contract-out [partition-messages (-> list? (values list? list?))]
+                       [partition-messages/working-set (-> list? list? (values list? list?))]))
 
 ;; ============================================================
 ;; Phase 1: Pin system prompt + first user + compaction summaries

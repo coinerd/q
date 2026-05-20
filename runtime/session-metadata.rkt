@@ -11,27 +11,32 @@
          racket/list
          racket/port
          (only-in "../util/protocol-types.rkt"
-                  message? message-content message-meta message-kind
-                  make-message make-text-part content-part->jsexpr)
+                  message?
+                  message-content
+                  message-meta
+                  message-kind
+                  make-message
+                  make-text-part
+                  content-part->jsexpr)
          "../util/jsonl.rkt"
          "../runtime/session-store.rkt")
 
-(provide
- ;; #710: Session naming
- set-session-name!
- get-session-name
- session-name-entry?
-
- ;; #711: Entry labeling
- set-entry-label!
- get-entry-label
- entry-label?
- label-type?
- list-labeled-entries
- ;; Label types
- LABEL-CHECKPOINT
- LABEL-MILESTONE
- LABEL-BRANCH-POINT)
+(provide (contract-out
+          ;; #710: Session naming
+          [set-session-name! (-> path-string? string? void?)]
+          [get-session-name (-> path-string? (or/c string? #f))]
+          [session-name-entry? (-> any/c boolean?)]
+          ;; #711: Entry labeling
+          [set-entry-label!
+           (->* (path-string? string? label-type?) (#:description (or/c string? #f)) void?)]
+          [get-entry-label (-> list? string? (or/c symbol? #f))]
+          [entry-label? (-> any/c boolean?)]
+          [label-type? (-> any/c boolean?)]
+          [list-labeled-entries (-> list? list?)]
+          ;; Label types
+          [LABEL-CHECKPOINT symbol?]
+          [LABEL-MILESTONE symbol?]
+          [LABEL-BRANCH-POINT symbol?]))
 
 ;; ============================================================
 ;; Constants
@@ -42,10 +47,7 @@
 (define LABEL-BRANCH-POINT 'branch-point)
 
 (define (label-type? v)
-  (and (symbol? v)
-       (or (eq? v LABEL-CHECKPOINT)
-           (eq? v LABEL-MILESTONE)
-           (eq? v LABEL-BRANCH-POINT))))
+  (and (symbol? v) (or (eq? v LABEL-CHECKPOINT) (eq? v LABEL-MILESTONE) (eq? v LABEL-BRANCH-POINT))))
 
 ;; ============================================================
 ;; #710: Session naming
@@ -59,8 +61,7 @@
 ;; Returns the last set name, or #f if no name is set.
 (define (get-session-name log-path)
   (define entries (load-session-log log-path))
-  (define name-entries
-    (filter session-name-entry? entries))
+  (define name-entries (filter session-name-entry? entries))
   (if (null? name-entries)
       #f
       (hash-ref (message-meta (car (reverse name-entries))) 'name #f)))
@@ -77,8 +78,7 @@
 
 ;; Set a label on a specific entry in the session log.
 ;; Appends a label entry that references the target entry.
-(define (set-entry-label! log-path target-entry-id label-type
-                           #:description [description #f])
+(define (set-entry-label! log-path target-entry-id label-type #:description [description #f])
   (unless (label-type? label-type)
     (raise-argument-error 'set-entry-label! "label-type?" label-type))
   (define label-msg
@@ -87,38 +87,43 @@
                   'system
                   'entry-label
                   (list (make-text-part (or description
-                                           (format "~a label for ~a" label-type target-entry-id))))
+                                            (format "~a label for ~a" label-type target-entry-id))))
                   (current-seconds)
-                  (hasheq 'label-type (symbol->string label-type)
-                          'target-id target-entry-id
-                          'description description)))
+                  (hasheq 'label-type
+                          (symbol->string label-type)
+                          'target-id
+                          target-entry-id
+                          'description
+                          description)))
   (append-entry! log-path label-msg))
 
 ;; Get the label for a specific entry, if any.
 ;; Returns the label-type symbol or #f.
 (define (get-entry-label entries target-entry-id)
   (define label-entries
-    (filter (lambda (e) (and (eq? (message-kind e) 'entry-label)
-                              (equal? (hash-ref (message-meta e) 'target-id #f)
-                                      target-entry-id)))
+    (filter (lambda (e)
+              (and (eq? (message-kind e) 'entry-label)
+                   (equal? (hash-ref (message-meta e) 'target-id #f) target-entry-id)))
             entries))
   (if (null? label-entries)
       #f
       (let ([raw (hash-ref (message-meta (car (reverse label-entries))) 'label-type #f)])
-        (if (string? raw) (string->symbol raw) raw))))
+        (if (string? raw)
+            (string->symbol raw)
+            raw))))
 
 ;; Check if an entry is a label entry.
 (define (entry-label? entry)
-  (and (message? entry)
-       (eq? (message-kind entry) 'entry-label)))
+  (and (message? entry) (eq? (message-kind entry) 'entry-label)))
 
 ;; List all labeled entries from a session log.
 ;; Returns list of (cons target-id label-type).
 (define (list-labeled-entries entries)
-  (filter-map
-   (lambda (e)
-     (and (entry-label? e)
-          (let ([raw (hash-ref (message-meta e) 'label-type #f)])
-            (cons (hash-ref (message-meta e) 'target-id #f)
-                  (if (string? raw) (string->symbol raw) raw)))))
-   entries))
+  (filter-map (lambda (e)
+                (and (entry-label? e)
+                     (let ([raw (hash-ref (message-meta e) 'label-type #f)])
+                       (cons (hash-ref (message-meta e) 'target-id #f)
+                             (if (string? raw)
+                                 (string->symbol raw)
+                                 raw)))))
+              entries))

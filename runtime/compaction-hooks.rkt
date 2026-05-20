@@ -23,19 +23,27 @@
          "split-turn.rkt"
          "token-compaction.rkt")
 
-(provide
- ;; #697: Enriched hook
- build-enriched-compact-payload
- dispatch-enriched-before-compact
- maybe-use-custom-summary
- ;; #698: Compaction events
- publish-compaction-start!
- publish-compaction-end!
- compaction-start-topic
- compaction-end-topic
- ;; Event construction helpers
- make-compaction-start-event
- make-compaction-end-event)
+(provide (contract-out
+          ;; #697: Enriched hook
+          [build-enriched-compact-payload
+           (->* (list? any/c) (#:previous-summary (or/c #f string?) #:session-id string?) hash?)]
+          [dispatch-enriched-before-compact
+           (->* (any/c list? any/c)
+                (#:previous-summary (or/c #f string?) #:session-id string?)
+                (values any/c hash?))]
+          [maybe-use-custom-summary (-> any/c (or/c string? #f))]
+          ;; #698: Compaction events
+          [publish-compaction-start! (-> any/c any/c any/c any/c string? string? any/c)]
+          [publish-compaction-end!
+           (->* (any/c any/c any/c any/c any/c string? string?)
+                (#:summary-generated? boolean?)
+                any/c)]
+          [compaction-start-topic string?]
+          [compaction-end-topic string?]
+          ;; Event construction helpers
+          [make-compaction-start-event (-> any/c any/c any/c string? string? any/c)]
+          [make-compaction-end-event
+           (->* (any/c any/c any/c any/c string? string?) (#:summary-generated? boolean?) any/c)]))
 
 ;; ============================================================
 ;; Constants
@@ -50,7 +58,8 @@
 
 ;; Build the enriched payload for session-before-compact.
 ;; This gives extensions full context about what's about to be compacted.
-(define (build-enriched-compact-payload messages strategy
+(define (build-enriched-compact-payload messages
+                                        strategy
                                         #:previous-summary [prev-summary #f]
                                         #:session-id [session-id "unknown"])
   (define total (length messages))
@@ -65,29 +74,41 @@
   ;; Estimate tokens
   (define tokens-before (estimate-messages-tokens messages))
   ;; Build payload hash
-  (hasheq 'message-count total
-          'messages-to-summarize (length old)
-          'messages-to-keep (length recent)
-          'turn-prefix turn-prefix-text
-          'previous-summary (or prev-summary "")
-          'tokens-before tokens-before
-          'split-index split-idx
-          'is-split-turn (split-turn-result-is-split? split-info)
-          'session-id session-id
-          'strategy strategy))
+  (hasheq 'message-count
+          total
+          'messages-to-summarize
+          (length old)
+          'messages-to-keep
+          (length recent)
+          'turn-prefix
+          turn-prefix-text
+          'previous-summary
+          (or prev-summary "")
+          'tokens-before
+          tokens-before
+          'split-index
+          split-idx
+          'is-split-turn
+          (split-turn-result-is-split? split-info)
+          'session-id
+          session-id
+          'strategy
+          strategy))
 
 ;; Dispatch the enriched before-compact hook.
 ;; Returns (values hook-result-or-#f enriched-payload)
 ;; The hook-result may contain a custom summary in its payload.
-(define (dispatch-enriched-before-compact hook-dispatcher messages strategy
+(define (dispatch-enriched-before-compact hook-dispatcher
+                                          messages
+                                          strategy
                                           #:previous-summary [prev-summary #f]
                                           #:session-id [session-id "unknown"])
-  (define payload (build-enriched-compact-payload messages strategy
-                                                   #:previous-summary prev-summary
-                                                   #:session-id session-id))
-  (define hook-res
-    (and hook-dispatcher
-         (hook-dispatcher 'session-before-compact payload)))
+  (define payload
+    (build-enriched-compact-payload messages
+                                    strategy
+                                    #:previous-summary prev-summary
+                                    #:session-id session-id))
+  (define hook-res (and hook-dispatcher (hook-dispatcher 'session-before-compact payload)))
   (values hook-res payload))
 
 ;; If the hook returned a custom summary, extract it.
@@ -102,44 +123,58 @@
 ;; ============================================================
 
 ;; Create a compaction-start event.
-(define (make-compaction-start-event reason message-count tokens-before
-                                     session-id turn-id)
+(define (make-compaction-start-event reason message-count tokens-before session-id turn-id)
   (make-event compaction-start-topic
               (current-inexact-milliseconds)
               session-id
               turn-id
-              (hasheq 'reason reason
-                      'message-count message-count
-                      'tokens-before tokens-before)))
+              (hasheq 'reason reason 'message-count message-count 'tokens-before tokens-before)))
 
 ;; Create a compaction-end event.
-(define (make-compaction-end-event reason removed-count tokens-before tokens-after
-                                   session-id turn-id
+(define (make-compaction-end-event reason
+                                   removed-count
+                                   tokens-before
+                                   tokens-after
+                                   session-id
+                                   turn-id
                                    #:summary-generated? [summary-gen? #t])
   (make-event compaction-end-topic
               (current-inexact-milliseconds)
               session-id
               turn-id
-              (hasheq 'reason reason
-                      'removed-count removed-count
-                      'tokens-before tokens-before
-                      'tokens-after tokens-after
-                      'summary-generated? summary-gen?)))
+              (hasheq 'reason
+                      reason
+                      'removed-count
+                      removed-count
+                      'tokens-before
+                      tokens-before
+                      'tokens-after
+                      tokens-after
+                      'summary-generated?
+                      summary-gen?)))
 
 ;; Publish a compaction-start event to the event bus.
-(define (publish-compaction-start! bus reason message-count tokens-before
-                                   session-id turn-id)
+(define (publish-compaction-start! bus reason message-count tokens-before session-id turn-id)
   (when bus
-    (define evt (make-compaction-start-event reason message-count tokens-before
-                                             session-id turn-id))
+    (define evt (make-compaction-start-event reason message-count tokens-before session-id turn-id))
     (publish! bus evt)))
 
 ;; Publish a compaction-end event to the event bus.
-(define (publish-compaction-end! bus reason removed-count tokens-before tokens-after
-                                 session-id turn-id
+(define (publish-compaction-end! bus
+                                 reason
+                                 removed-count
+                                 tokens-before
+                                 tokens-after
+                                 session-id
+                                 turn-id
                                  #:summary-generated? [summary-gen? #t])
   (when bus
-    (define evt (make-compaction-end-event reason removed-count tokens-before tokens-after
-                                           session-id turn-id
-                                           #:summary-generated? summary-gen?))
+    (define evt
+      (make-compaction-end-event reason
+                                 removed-count
+                                 tokens-before
+                                 tokens-after
+                                 session-id
+                                 turn-id
+                                 #:summary-generated? summary-gen?))
     (publish! bus evt)))
