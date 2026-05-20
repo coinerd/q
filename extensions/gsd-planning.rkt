@@ -117,7 +117,28 @@
 
 ;; reset-all-gsd-state! is now in gsd/core.rkt
 
-(provide the-extension
+(provide ;; State accessors (locally defined parameter wrappers)
+         (contract-out [gsd-mode (-> symbol?)]
+                       [gsd-mode? (-> any/c boolean?)]
+                       [set-gsd-mode! (-> symbol? void?)]
+                       [pinned-planning-dir (-> (or/c path? #f))]
+                       [set-pinned-planning-dir! (-> (or/c path? #f) void?)]
+                       [current-max-old-text-len (-> (or/c exact-positive-integer? #f))]
+                       [set-current-max-old-text-len! (-> (or/c exact-positive-integer? #f) void?)]
+                       [completed-waves (-> (listof exact-nonnegative-integer?))]
+                       [total-waves (-> (or/c exact-nonnegative-integer? #f))]
+                       [set-total-waves! (-> (or/c exact-nonnegative-integer? #f) void?)]
+                       [mark-wave-complete! (-> exact-nonnegative-integer? void?)]
+                       [wave-complete? (-> exact-nonnegative-integer? boolean?)]
+                       [next-pending-wave (-> (or/c exact-nonnegative-integer? #f))]
+                       [current-wave-index (-> exact-nonnegative-integer?)]
+                       [set-current-wave-index! (-> exact-nonnegative-integer? void?)]
+                       [emit-gsd-event! (-> symbol? any/c void?)]
+                       [gsd-event-bus (-> (or/c any/c #f))]
+                       [set-gsd-event-bus! (-> (or/c any/c #f) void?)]
+                       [gsd-session-cleanup (-> any/c void?)])
+         ;; Re-exports from sub-modules (kept as direct provides)
+         the-extension
          gsd-planning-extension
          planning-system-prompt
          planning-artifact-path
@@ -127,29 +148,9 @@
          handle-planning-read
          handle-planning-write
          planning-implement-prompt
-         gsd-mode
-         set-gsd-mode!
          gsd-tool-guard
-         gsd-session-cleanup
-         gsd-event-bus
-         set-gsd-event-bus!
-         emit-gsd-event!
-         ;; --- Internal (subject to change, backward compat) ---
-         pinned-planning-dir
-         set-pinned-planning-dir!
-         current-max-old-text-len
-         set-current-max-old-text-len!
          reset-all-gsd-state!
-         gsd-mode?
-         parse-wave-headers
-         completed-waves
-         total-waves
-         set-total-waves!
-         mark-wave-complete!
-         wave-complete?
-         next-pending-wave
-         current-wave-index
-         set-current-wave-index!)
+         parse-wave-headers)
 
 ;; planning-system-prompt is an alias for planning-prompt from prompts.rkt
 (define planning-system-prompt planning-prompt)

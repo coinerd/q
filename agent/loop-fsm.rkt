@@ -6,12 +6,15 @@
 ;; Defines FSM states for a single agent turn using define-fsm-machine
 ;; from util/fsm.rkt. Backward-compatible exports maintained.
 
-(require (only-in "../util/fsm.rkt"
+(require racket/contract
+         (only-in "../util/fsm.rkt"
                   define-fsm-machine
                   fsm-state
                   fsm-state-name
+                  fsm-state?
                   fsm-event
                   fsm-event-name
+                  fsm-event?
                   fsm?
                   fsm-states
                   fsm-transitions
@@ -21,19 +24,24 @@
 ;; ── Machine definition ──
 
 (define-fsm-machine turn
-  #:states (emit-start build-context pre-hook stream post-hook complete blocked)
-  #:events (start context-built hook-pass hook-block stream-complete stream-cancel post-hook-done msg-hook-block)
-  #:transitions
-  [(emit-start -> build-context) start]
-  [(build-context -> pre-hook) context-built]
-  [(pre-hook -> stream) hook-pass]
-  [(pre-hook -> blocked) hook-block]
-  [(stream -> post-hook) stream-complete]
-  [(stream -> blocked) msg-hook-block]
-  [(stream -> complete) stream-cancel]
-  [(post-hook -> complete) post-hook-done]
-  [(complete -> complete) start]
-  [(blocked -> blocked) start])
+                    #:states (emit-start build-context pre-hook stream post-hook complete blocked)
+                    #:events (start context-built
+                                    hook-pass
+                                    hook-block
+                                    stream-complete
+                                    stream-cancel
+                                    post-hook-done
+                                    msg-hook-block)
+                    #:transitions [(emit-start -> build-context) start]
+                    [(build-context -> pre-hook) context-built]
+                    [(pre-hook -> stream) hook-pass]
+                    [(pre-hook -> blocked) hook-block]
+                    [(stream -> post-hook) stream-complete]
+                    [(stream -> blocked) msg-hook-block]
+                    [(stream -> complete) stream-cancel]
+                    [(post-hook -> complete) post-hook-done]
+                    [(complete -> complete) start]
+                    [(blocked -> blocked) start])
 
 ;; ── Backward-compatible exports ──
 
@@ -61,12 +69,13 @@
 ;; Event predicate: turn-event? — same
 
 ;; Converters
-(define (turn-state->symbol s) (fsm-state-name s))
-(define (turn-event->symbol e) (fsm-event-name e))
+(define (turn-state->symbol s)
+  (fsm-state-name s))
+(define (turn-event->symbol e)
+  (fsm-event-name e))
 
 ;; Transition table (backward compat — derived from machine)
-(define TURN-TRANSITIONS
-  (fsm-transitions turn-machine))
+(define TURN-TRANSITIONS (fsm-transitions turn-machine))
 
 ;; Next-state with error (backward compat)
 (define (next-turn-state state event)
@@ -86,7 +95,14 @@
 (define current-turn-fsm-state (make-parameter turn-state-emit-start))
 
 ;; ── Provides ──
-(provide turn-state?
+(provide (contract-out [turn-state->symbol (-> fsm-state? symbol?)]
+                       [turn-event->symbol (-> fsm-event? symbol?)]
+                       [next-turn-state (-> fsm-state? fsm-event? fsm-state?)]
+                       [valid-turn-transition? (-> fsm-state? fsm-event? boolean?)])
+         ;; Predicates (direct for match compatibility)
+         turn-state?
+         turn-event?
+         ;; State singletons (direct for match patterns)
          turn-state-emit-start
          turn-state-build-context
          turn-state-pre-hook
@@ -94,9 +110,7 @@
          turn-state-post-hook
          turn-state-complete
          turn-state-blocked
-         turn-state->symbol
-
-         turn-event?
+         ;; Event singletons (direct for match patterns)
          turn-event-start
          turn-event-context-built
          turn-event-hook-pass
@@ -105,11 +119,7 @@
          turn-event-stream-cancel
          turn-event-post-hook-done
          turn-event-msg-hook-block
-         turn-event->symbol
-
+         ;; Parameters and tables
          current-turn-fsm-state
-
          TURN-TRANSITIONS
-         turn-machine
-         next-turn-state
-         valid-turn-transition?)
+         turn-machine)
