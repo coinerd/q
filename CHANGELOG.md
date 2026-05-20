@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.50.0 — 2026-05-20
+
+### Fixed
+- P1-1/T1-5: `print-version` contract corrected from `(-> void?)` to `(->* () (output-port?) void?)`.
+  The function takes an optional port argument; contract now matches implementation.
+- P2-2: CHANGELOG wording corrected — "Rewrote" → "Created" for RETROSPECTIVE-v0.49.x.md.
+
+### Changed
+- Kicked off v0.50.x abstraction remediation series.
+- P0-1 (RETROSPECTIVE missing) and P0-2 (no v0.49.13 tag) confirmed resolved from v0.49.13.
+
+### Metrics (verified from source)
+- struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)
+- contract-out files (KPI-dirs): 158/344 = 45.9% (KPI gate ≥45% ✅)
+- arch-fitness tests: 33/33 ✅
+- Test failures: 0
+
+### Waves
+- W0: Fix print-version contract + CHANGELOG wording (PR #4777)
+- W1: Version bump + release (this release)
+
 ## v0.49.13 — 2026-05-20
 
 ### Fixed
