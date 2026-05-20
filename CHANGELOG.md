@@ -14,7 +14,7 @@
   v0.49.10: struct-out baseline was 78 (not 52), contract-out baseline was 101 (not 113).
   v0.49.11: KPI-dir count is 344 (not 351), coverage was 43.3% (not 42.5%).
   v0.49.12: KPI-dir count is 344 (not 350), coverage was 45.9% (not 45.1%).
-- Rewrote RETROSPECTIVE-v0.49.x.md with comprehensive per-milestone assessment covering v0.49.0–v0.49.13.
+- Created RETROSPECTIVE-v0.49.x.md (comprehensive per-milestone assessment v0.49.0–v0.49.13).
 
 ### Metrics (verified from source)
 - struct-out forms (KPI-dirs): 31 (KPI gate ≤55 ✅)

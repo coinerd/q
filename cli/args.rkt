@@ -39,7 +39,7 @@
          (contract-out [parse-cli-args (-> any/c cli-config?)]
                        [cli-config->runtime-config (-> cli-config? hash?)]
                        [print-usage (->* () ((or/c output-port? #f)) void?)]
-                       [print-version (-> void?)])
+                       [print-version (->* () (output-port?) void?)])
          ;; q-version imported from util/version.rkt (Issue #203)
          q-version)
 
