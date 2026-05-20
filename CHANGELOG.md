@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.50.6 — 2026-05-20
+
+### Changed
+- T3-5: Memoized `load-settings` with file-mtime cache in `runtime/settings.rkt`
+- T3-6: Extracted `flex-ref`, `normalize-keys`, `key->string` to `util/hash-helpers.rkt`
+- T3-2: Added `current-sessions-fs-ops` parameter for testable I/O in `interfaces/sessions.rkt`
+- T2-4: Added `openai-config` struct with typed fields, backward-compatible hash acceptance
+
+### Added
+- `util/hash-helpers.rkt` — 13 pure hash utility tests
+- `openai-config` struct with `hash->openai-config` converter
+- `streaming-message-fsm-state` introspection accessor (from v0.50.5)
+- `classify-chunk` / `chunk-has-data?` pure streaming helpers (from v0.50.5)
+- `ui-state-streaming-phase` / `set-streaming-phase` TUI accessors (from v0.50.5)
+
+### v0.50.x Series Summary
+- v0.50.0: Struct-out reduction (55→31), contract-out expansion (28%→48%)
+- v0.50.1: Typed event predicates, facade surface verification
+- v0.50.2: any/c reduction (93→34, 63%), contract tightening
+- v0.50.3: Opaque structs (5 `#:transparent` removed from mutable structs)
+- v0.50.4: cond→match conversions (10), pattern matching improvement
+- v0.50.5: Streaming FSM (pure chunk classification + FSM state), TUI streaming phase
+- v0.50.6: Utility relocation, settings memoization, sessions adapter, openai config struct
+
+### Metrics
+- arch-fitness tests: 33/33 ✅
+- Stream tests: 81/81 ✅
+- Hash helpers: 13/13 ✅
+- Session config: 38/38 ✅
+- TUI state: 111/111 ✅
+- Test failures: 0
+
+### Waves
+- W0: Utility relocation + settings memoization (PR #4819)
+- W1: Sessions adapter + OpenAI config struct (PR #4820)
+- W2: Version bump + final metrics (this release)
+
 ## v0.50.5 — 2026-05-20
 
 ### Changed
