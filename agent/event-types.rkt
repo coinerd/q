@@ -23,4 +23,4 @@
 
 ;; Thin validation helper — contract-gated facade utility
 (define (valid-typed-event-type? type-str)
-  (member type-str (all-known-event-types)))
+  (and (member type-str (all-known-event-types)) #t))

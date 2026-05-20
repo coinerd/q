@@ -51,7 +51,8 @@
 (define (emit-queue-event! q event-type details)
   (define cb (unbox (queue-event-callback-box q)))
   (when cb
-    (cb event-type details)))
+    (cb event-type details))
+  (void))
 
 ;; ============================================================
 ;; Internal O(1) two-list queue operations
