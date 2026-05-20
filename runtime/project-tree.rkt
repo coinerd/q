@@ -16,14 +16,17 @@
          racket/set
          racket/path)
 
-(provide (contract-out [generate-project-tree
-                        (-> path? #:max-depth integer? #:max-entries integer? (listof string?))]
-                       [project-tree->string
-                        (-> path? #:max-depth integer? #:max-entries integer? string?)]
-                       [DEFAULT_TREE_MAX_DEPTH integer?]
-                       [DEFAULT_TREE_MAX_ENTRIES integer?]
-                       [IGNORED-DIRS any/c]
-                       [IGNORED-EXTENSIONS any/c]))
+(provide (contract-out
+          [generate-project-tree
+           (->* ((or/c path? string?))
+                (#:max-depth integer? #:max-entries integer?)
+                (listof string?))]
+          [project-tree->string
+           (->* ((or/c path? string?)) (#:max-depth integer? #:max-entries integer?) string?)]
+          [DEFAULT_TREE_MAX_DEPTH integer?]
+          [DEFAULT_TREE_MAX_ENTRIES integer?]
+          [IGNORED-DIRS any/c]
+          [IGNORED-EXTENSIONS any/c]))
 
 ;; ============================================================
 ;; Configuration
