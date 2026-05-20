@@ -153,12 +153,9 @@
                   system-instructions
                   token-budget-threshold
                   resource-loader
-                  session-manager)
-  #:transparent)
+                  session-manager))
 
-(struct runtime (rt-config rt-session rt-cancellation-token)
-  #:transparent
-  #:constructor-name make-runtime-internal)
+(struct runtime (rt-config rt-session rt-cancellation-token) #:constructor-name make-runtime-internal)
 
 ;; ============================================================
 ;; Internal helpers
