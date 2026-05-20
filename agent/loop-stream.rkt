@@ -48,13 +48,23 @@
 (define MAX-STREAM-CHUNKS (make-parameter 10000))
 
 (provide MAX-STREAM-CHUNKS
-         (contract-out [accumulate-stream-chunks (-> any/c hash?)])
-         (contract-out [stream-from-provider
-                        (-> any/c any/c any/c any/c any/c any/c any/c any/c hash?)])
-         (contract-out [handle-cancellation
-                        (->* (any/c any/c any/c any/c) (#:hook-dispatcher any/c) any/c)])
-         (contract-out [build-stream-result
-                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)]))
+         (contract-out [accumulate-stream-chunks (-> list? hash?)]
+                       [stream-from-provider
+                        (-> any/c ; provider
+                            any/c ; req
+                            (or/c any/c #f) ; bus
+                            string? ; session-id
+                            string? ; turn-id
+                            any/c ; state
+                            (or/c procedure? #f) ; hook-dispatcher
+                            (or/c any/c #f) ; cancellation-token
+                            hash?)]
+                       [handle-cancellation
+                        (->* ((or/c any/c #f) string? string? any/c)
+                             (#:hook-dispatcher (or/c procedure? #f))
+                             any/c)]
+                       [build-stream-result
+                        (-> any/c any/c any/c string? string? any/c any/c any/c any/c any/c)]))
 
 ;; ============================================================
 ;; accumulate-stream-chunks : pure helper (S11-F1)
