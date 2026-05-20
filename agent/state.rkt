@@ -31,7 +31,7 @@
 ;; Internal struct — mutable boxes for accumulation
 ;; ============================================================
 
-(struct loop-state (session-id turn-id messages-box events-box) #:transparent)
+(struct loop-state (session-id turn-id messages-box events-box))
 
 ;; ============================================================
 ;; Constructor
