@@ -1,5 +1,7 @@
 #lang racket/base
 
+(require racket/contract)
+
 ;; util/cancellation.rkt — cooperative cancellation token
 ;;
 ;; Shared module for cancellation signalling between SDK and runtime.
@@ -14,10 +16,11 @@
 ;;   cancel-token!              — signal cancellation
 
 (provide cancellation-token
-         cancellation-token?
-         cancellation-token-cancelled?
-         make-cancellation-token
-         cancel-token!)
+         (contract-out [cancellation-token? (-> any/c boolean?)]
+                       [cancellation-token-cancelled? (-> cancellation-token? boolean?)]
+                       [make-cancellation-token
+                        (->* () (#:callback (or/c procedure? #f)) cancellation-token?)]
+                       [cancel-token! (-> cancellation-token? void?)]))
 
 ;; ============================================================
 ;; Struct & constructor

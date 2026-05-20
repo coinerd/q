@@ -18,4 +18,9 @@
 
 (provide (all-from-out "event-structs.rkt")
          (all-from-out "event-json.rkt")
-         (all-from-out "../util/event-access.rkt"))
+         (all-from-out "../util/event-access.rkt")
+         (contract-out [valid-typed-event-type? (-> string? boolean?)]))
+
+;; Thin validation helper — contract-gated facade utility
+(define (valid-typed-event-type? type-str)
+  (member type-str (all-known-event-types)))
