@@ -384,5 +384,6 @@
 (define (write-compaction-entry! session-path compaction-res)
   (define summary (compaction-result-summary-message compaction-res))
   (when summary
-    (append-entry! session-path summary)))
+    (append-entry! session-path summary))
+  (void))
 ;; v0.31.x milestone placeholder

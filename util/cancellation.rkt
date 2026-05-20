@@ -20,7 +20,7 @@
                        [cancellation-token-cancelled? (-> cancellation-token? boolean?)]
                        [make-cancellation-token
                         (->* () (#:callback (or/c procedure? #f)) cancellation-token?)]
-                       [cancel-token! (-> cancellation-token? void?)]))
+                       [cancel-token! (-> cancellation-token? cancellation-token?)]))
 
 ;; ============================================================
 ;; Struct & constructor
