@@ -25,10 +25,37 @@
          "provider-errors.rkt")
 
 ;; Provider constructor
-(provide (contract-out
-          [make-openai-compatible-provider (-> hash? provider?)]
-          [openai-build-request-body (->* (any/c) (#:stream? boolean?) hash?)]
-          [openai-parse-response (-> any/c any/c)]))
+(provide (contract-out [make-openai-compatible-provider (-> (or/c hash? openai-config?) provider?)]
+                       [openai-build-request-body (->* (any/c) (#:stream? boolean?) hash?)]
+                       [openai-parse-response (-> any/c any/c)]))
+
+;; ============================================================
+;; OpenAI Config struct (T2-4)
+;; ============================================================
+
+(struct openai-config
+        (api-key ; string — API key
+         base-url ; string — API base URL
+         model ; string — default model name
+         max-tokens ; (or/c exact-positive-integer? #f) — max tokens
+         temperature) ; (or/c (between/c 0 2) #f) — temperature
+  #:transparent)
+
+(define (hash->openai-config h)
+  (openai-config (hash-ref h 'api-key "")
+                 (hash-ref h 'base-url "https://api.openai.com/v1")
+                 (hash-ref h 'model OPENAI-DEFAULT-MODEL)
+                 (hash-ref h 'max-tokens #f)
+                 (hash-ref h 'temperature #f)))
+
+(provide openai-config
+         openai-config?
+         openai-config-api-key
+         openai-config-base-url
+         openai-config-model
+         openai-config-max-tokens
+         openai-config-temperature
+         (contract-out [hash->openai-config (-> hash? openai-config?)]))
 
 ;; ============================================================
 ;; Request body construction
@@ -145,12 +172,15 @@
 ;; ============================================================
 
 (define (make-openai-compatible-provider config)
-  (validate-api-key! "OpenAI" "OPENAI_API_KEY" config)
-  (define base-url (hash-ref config 'base-url "https://api.openai.com/v1"))
-  (define api-key (hash-ref config 'api-key ""))
-  (define default-model (hash-ref config 'model OPENAI-DEFAULT-MODEL))
-
-  (define default-max-tokens (hash-ref config 'max-tokens #f))
+  (define cfg
+    (if (openai-config? config)
+        config
+        (hash->openai-config config)))
+  (validate-api-key! "OpenAI" "OPENAI_API_KEY" (hasheq 'api-key (openai-config-api-key cfg)))
+  (define base-url (openai-config-base-url cfg))
+  (define api-key (openai-config-api-key cfg))
+  (define default-model (openai-config-model cfg))
+  (define default-max-tokens (openai-config-max-tokens cfg))
 
   (define (ensure-model-settings req)
     ;; Merge default-model and default-max-tokens into request settings if not set
