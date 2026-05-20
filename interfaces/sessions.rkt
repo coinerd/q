@@ -26,8 +26,30 @@
                   cli-config-sessions-args
                   cli-config-session-dir))
 
+;; ============================================================
+;; Filesystem Adapter (T3-2) — testable I/O
+;; ============================================================
+
+;; Default FS ops: real filesystem
+(define default-sessions-fs-ops
+  (hasheq 'directory-list
+          directory-list
+          'file-exists?
+          file-exists?
+          'file->string
+          file->string
+          'delete-directory/files
+          delete-directory/files
+          'build-path
+          build-path))
+
+;; Parameterized FS ops for testing
+(define current-sessions-fs-ops (make-parameter default-sessions-fs-ops))
+
 ;; Listing
-(provide (contract-out [sessions-list
+(provide current-sessions-fs-ops
+         default-sessions-fs-ops
+         (contract-out [sessions-list
                         (->* (path-string?)
                              (#:limit exact-nonnegative-integer? #:sort (or/c 'by-date 'by-size))
                              (listof hash?))]
