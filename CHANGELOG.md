@@ -12,10 +12,10 @@
 - Fixed contract arity bugs: `make-model-response` (4 args), `publish-compaction-start!/end!` (return `any/c`).
 - Fixed directive.rkt match-pattern compatibility: struct constructors kept outside `contract-out`.
 
-### Metrics
-- struct-out forms: 52 → 34 (−18)
-- contract-out files: 106 → 149 (+43)
-- contract-out coverage: 30.2% → 42.5%
+### Metrics (verified from source at tag)
+- struct-out forms (arch-fitness dirs): 52 → 31 (−21)
+- contract-out files (all source): 113 → 149 (+36)
+- contract-out coverage (all source): 32.2% → 42.5% (+10.3pp)
 - arch-fitness tests: 33/33 passing
 
 ### Waves
