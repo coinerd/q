@@ -7,6 +7,7 @@
 ;; apply-event-to-state dispatches via hash lookup.
 
 (require racket/string
+         racket/match
          racket/list
          "../util/protocol-types.rkt"
          "../util/cost-tracker.rkt"
@@ -168,16 +169,15 @@
 
 ;; M-09: Extracted error classification (pure function)
 (define (classify-error-type err payload)
-  (hash-ref
-   payload
-   'errorType
-   (lambda ()
-     (cond
-       [(regexp-match? #rx"[Tt]imeout|timed out" err) 'timeout]
-       [(regexp-match? #rx"429|[Rr]ate.?[Ll]imit" err) 'rate-limit]
-       [(regexp-match? #rx"401|403|[Aa]uth|[Uu]nauthorized" err) 'auth]
-       [(regexp-match? #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens" err) 'context-overflow]
-       [else 'provider-error]))))
+  (hash-ref payload
+            'errorType
+            (lambda ()
+              (match err
+                [(regexp #rx"[Tt]imeout|timed out") 'timeout]
+                [(regexp #rx"429|[Rr]ate.?[Ll]imit") 'rate-limit]
+                [(regexp #rx"401|403|[Aa]uth|[Uu]nauthorized") 'auth]
+                [(regexp #rx"context.*overflow|[Tt]oo.*long|[Mm]ax.*tokens") 'context-overflow]
+                [_ 'provider-error]))))
 
 ;; M-09: Extracted error hint generation (pure function)
 (define (format-error-hint error-type retries-attempted history-types)
@@ -380,11 +380,10 @@
 
 (define (handle-compaction-lifecycle state evt)
   (define ev (event-ev evt))
-  (cond
-    [(member ev '("compaction.started" "compaction.start"))
-     (set-status-message state "Compacting...")]
-    [(member ev '("compaction.completed" "compaction.end")) (set-status-message state #f)]
-    [else state]))
+  (match ev
+    [(or "compaction.started" "compaction.start") (set-status-message state "Compacting...")]
+    [(or "compaction.completed" "compaction.end") (set-status-message state #f)]
+    [_ state]))
 
 (define (handle-auto-retry-lifecycle state evt)
   (define ev (event-ev evt))
