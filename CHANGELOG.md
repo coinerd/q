@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.50.5 — 2026-05-20
+
+### Changed
+- T2-6: Extracted `classify-chunk` and `chunk-has-data?` as pure functions from stream-from-provider
+- T2-7: streaming-message FSM — replaced 3 boolean boxes (started?, blocked?, cancelled?) with single
+  FSM state field (not-started | streaming | done | blocked | cancelled)
+- T2-8: TUI streaming-phase FSM — added streaming-phase field to streaming-state
+  (idle | thinking | streaming | tool-pending), transitions at key event handler points
+
+### Added
+- `tests/test-loop-stream-pure.rkt` — 20 pure function tests
+- `streaming-message-fsm-state` accessor for FSM introspection
+- `ui-state-streaming-phase` / `set-streaming-phase` TUI accessors
+
+### Metrics
+- arch-fitness tests: 33/33 ✅
+- TUI state tests: 111/111 ✅
+- TUI renderer tests: 61/61 ✅
+- Stream tests: 81/81 ✅
+- Test failures: 0
+
+### Waves
+- W0: Extract process-chunk pure function (PR #4810)
+- W1: Streaming Message FSM (PR #4812)
+- W2: TUI streaming FSM + version bump (this release)
+
 ## v0.50.4 — 2026-05-20
 
 ### Changed

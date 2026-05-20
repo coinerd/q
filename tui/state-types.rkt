@@ -132,6 +132,7 @@
           [ui-state-pending-tool-name (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-text (-> ui-state? (or/c string? #f))]
           [ui-state-streaming-thinking (-> ui-state? (or/c string? #f))]
+          [ui-state-streaming-phase (-> ui-state? symbol?)]
           [ui-state-busy-since (-> ui-state? any/c)]
           ;; Streaming update helpers
           [update-streaming (-> ui-state? (-> streaming-state? streaming-state?) ui-state?)]
@@ -140,6 +141,7 @@
           [set-pending-tool-name (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-text (-> ui-state? (or/c string? #f) ui-state?)]
           [set-streaming-thinking (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-streaming-phase (-> ui-state? symbol? ui-state?)]
           [set-busy-since (-> ui-state? any/c ui-state?)]
           [clear-streaming (-> ui-state? ui-state?)]
           ;; String helpers
@@ -174,7 +176,8 @@
          pending-tool-name ; string or #f — name of tool currently executing
          streaming-text ; string or #f — partial streaming text
          streaming-thinking ; string or #f — accumulated thinking text
-         busy-since) ; any/c — timestamp when busy started
+         busy-since ; any/c — timestamp when busy started
+         streaming-phase) ; symbol: idle | thinking | streaming | tool-pending (T2-8)
   #:transparent)
 
 ;; The complete UI state (21 fields, grouped by domain)
@@ -343,7 +346,7 @@
             session-id
             model-name
             mode
-            (streaming-state #f #f #f #f #f #f) ; streaming
+            (streaming-state #f #f #f #f #f #f 'idle) ; streaming
             #f ; current-branch
             '() ; visible-branches
             (selection-state #f #f)
@@ -382,12 +385,21 @@
 (define (ui-state-busy-since state)
   (streaming-state-busy-since (ui-state-streaming state)))
 
+(define (ui-state-streaming-phase state)
+  (streaming-state-streaming-phase (ui-state-streaming state)))
+
 ;; ============================================================
 ;; Streaming update helpers
 ;; ============================================================
 
 (define (update-streaming state f)
   (struct-copy ui-state state [streaming (f (ui-state-streaming state))]))
+
+(define (set-streaming-phase state phase)
+  (struct-copy ui-state
+               state
+               [streaming
+                (struct-copy streaming-state (ui-state-streaming state) [streaming-phase phase])]))
 
 (define (set-busy state busy?)
   (update-streaming state (lambda (s) (struct-copy streaming-state s [busy? busy?]))))
