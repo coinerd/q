@@ -450,9 +450,9 @@
 ;; ════════════════════════════════════════════════════════════
 
 (define v0480-suite
-  (test-suite "v0.48.0-kpi-gates"
+  (test-suite "v0.49.10-kpi-gates"
 
-    (test-case "KPI: struct-out non-regression (v0.48.0 floor, v0.48.x target tracked)"
+    (test-case "KPI: struct-out non-regression (v0.49.10 floor, v0.50.x target tracked)"
       (define dirs-to-check
         '("runtime" "agent"
                     "llm"
@@ -470,11 +470,11 @@
       (define total-struct-out
         (for/sum ([f (in-list all-files)])
                  (length (regexp-match* #rx"\\(struct-out\\s+" (file->string f)))))
-      (check-true (<= total-struct-out 99)
-                  (format "struct-out count is ~a (v0.49.0 floor <= 99; v0.49.x target <= 60)"
+      (check-true (<= total-struct-out 55)
+                  (format "struct-out count is ~a (v0.49.10 floor <= 55; v0.50.x target <= 40)"
                           total-struct-out)))
 
-    (test-case "KPI: contract-out coverage non-regression (v0.48.0 floor, v0.48.x target tracked)"
+    (test-case "KPI: contract-out coverage non-regression (v0.49.10 floor, v0.50.x target tracked)"
       (define dirs-to-check
         '("runtime" "agent"
                     "llm"
@@ -497,9 +497,9 @@
             0
             (* 100.0 (/ files-with-contract-out (length all-files)))))
       (check-true
-       (>= coverage 28.0)
+       (>= coverage 35.0)
        (format
-        "contract-out coverage is ~a% (v0.49.0 floor >= 28.0%; v0.49.x target >= 45%) [~a/~a files]"
+        "contract-out coverage is ~a% (v0.49.10 floor >= 35.0%; v0.50.x target >= 45%) [~a/~a files]"
         (real->decimal-string coverage 2)
         files-with-contract-out
         (length all-files))))))
