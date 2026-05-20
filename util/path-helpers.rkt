@@ -5,16 +5,17 @@
 ;; Extracted from tools/builtins/write.rkt and extensions/loader.rkt
 ;; to eliminate duplication (QUAL-02).
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/path
          racket/string)
 
 ;; Path utility
-(provide path-only
-         expand-home-path
-         ;; Byte helpers
-         contains-null-bytes?
-         bytes->display-lines)
+(provide (contract-out [path-only (-> (or/c path? string?) (or/c path? #f))]
+                       [expand-home-path (-> string? string?)]
+                       [contains-null-bytes? (-> bytes? boolean?)]
+                       [bytes->display-lines
+                        (-> bytes? (values (listof string?) exact-nonnegative-integer?))]))
 
 ;; Extract directory portion of a path string.
 ;; Returns #f when the path has no directory component (i.e. is relative/simple).

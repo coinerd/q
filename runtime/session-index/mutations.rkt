@@ -55,6 +55,11 @@
 (define bm-counter 0)
 (define bm-counter-mutex (make-semaphore 1))
 
+;; Local path-only helper (from util/path-helpers.rkt)
+(define (path-only p)
+  (define-values (dir _base _must-be-dir?) (split-path p))
+  (if (eq? dir 'relative) #f dir))
+
 (define (generate-bookmark-id)
   (semaphore-wait bm-counter-mutex)
   (set! bm-counter (add1 bm-counter))

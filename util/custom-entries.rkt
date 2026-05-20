@@ -5,13 +5,14 @@
 ;; Custom entries are message structs with kind 'custom-message
 ;; and extension metadata in the meta field.
 
-(require "message.rkt")
+(require racket/contract
+         "message.rkt")
 
-(provide make-custom-entry
-         custom-entry?
-         custom-entry-extension
-         custom-entry-key
-         custom-entry-data)
+(provide (contract-out [make-custom-entry (-> string? string? any/c any/c)]
+                       [custom-entry? (-> any/c boolean?)]
+                       [custom-entry-extension (-> any/c any/c)]
+                       [custom-entry-key (-> any/c any/c)]
+                       [custom-entry-data (-> any/c any/c)]))
 
 ;; Creates a message struct with kind 'custom-message and extension metadata.
 (define (make-custom-entry extension-name key data)

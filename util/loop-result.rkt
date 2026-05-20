@@ -4,12 +4,14 @@
 ;;
 ;; Extracted from protocol-types.rkt (ARCH-05 split).
 
-(provide loop-result
-         loop-result?
-         loop-result-messages
-         loop-result-termination-reason
-         loop-result-metadata
-         make-loop-result)
+(require racket/contract)
+
+(provide (contract-out [loop-result? (-> any/c boolean?)]
+                       [loop-result-messages (-> loop-result? any/c)]
+                       [loop-result-termination-reason (-> loop-result? any/c)]
+                       [loop-result-metadata (-> loop-result? any/c)]
+                       [make-loop-result (-> any/c any/c any/c loop-result?)])
+         loop-result)
 
 (struct loop-result (messages termination-reason metadata) #:transparent)
 

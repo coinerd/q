@@ -5,7 +5,8 @@
 ;; R6: Deduplicated extract-cmd-args from gsd/command-parser.rkt
 ;; and gsd-planning/command-normalization.rkt into a single source.
 
-(require racket/string)
+(require racket/contract
+         racket/string)
 
 (define (extract-cmd-args input-text)
   (define trimmed (string-trim input-text))
@@ -16,4 +17,4 @@
             ""))
       ""))
 
-(provide extract-cmd-args)
+(provide (contract-out [extract-cmd-args (-> string? string?)]))

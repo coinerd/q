@@ -8,12 +8,13 @@
 ;;
 ;; Layer: tools → model-bridge → llm (facade pattern)
 
-(require "../llm/provider.rkt"
+(require racket/contract
+         "../llm/provider.rkt"
          "../llm/model.rkt")
 
-(provide make-model-request
-         provider-send
-         model-response-content
-         model-response-stop-reason
-         make-model-response
-         make-mock-provider)
+(provide (contract-out [make-model-request (-> any/c any/c any/c any/c)]
+                       [provider-send (-> any/c any/c any/c)]
+                       [model-response-content (-> any/c any/c)]
+                       [model-response-stop-reason (-> any/c any/c)]
+                       [make-model-response (-> any/c any/c any/c any/c any/c)]
+                       [make-mock-provider (-> any/c #:name string? #:stream-chunks any/c any/c)]))

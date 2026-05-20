@@ -4,18 +4,18 @@
 ;; Provides an abstraction layer over direct struct field access.
 ;; Use these selectors instead of calling event-ev, event-time, etc. directly.
 
-(require "event.rkt")
+(require racket/contract
+         "event.rkt")
 
-(provide
- ;; Selectors
- event-type-ref
- event-timestamp-ref
- event-session-id-ref
- event-turn-id-ref
- event-payload-ref
- ;; Re-export predicates and constructors for convenience
- event?
- make-event)
+;; Selectors (contract-out)
+(provide (contract-out [event-type-ref (-> event? any/c)]
+                       [event-timestamp-ref (-> event? any/c)]
+                       [event-session-id-ref (-> event? (or/c string? #f))]
+                       [event-turn-id-ref (-> event? (or/c string? #f))]
+                       [event-payload-ref (-> event? any/c)])
+         ;; Re-export predicates and constructors for convenience (from typed/racket module)
+         event?
+         make-event)
 
 ;; Selector functions
 ;; The struct field for event type is 'ev' (aliased as event-event).

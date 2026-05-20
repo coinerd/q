@@ -5,13 +5,14 @@
 ;; Provides:
 ;;   session->json-string — (listof message?) -> string?
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/format
          racket/list
          json
          "../util/protocol-types.rkt")
 
-(provide session->json-string)
+(provide (contract-out [session->json-string (-> list? string?)]))
 
 ;; ── Main entry point ──
 
@@ -23,7 +24,5 @@
       (message->jsexpr msg)))
   (define envelope
     (hasheq 'session
-            (hasheq 'entries entries
-                    'exported_at (current-seconds)
-                    'export_format_version "0.5.3")))
+            (hasheq 'entries entries 'exported_at (current-seconds) 'export_format_version "0.5.3")))
   (jsexpr->string envelope))

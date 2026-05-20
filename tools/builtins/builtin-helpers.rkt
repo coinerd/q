@@ -5,12 +5,13 @@
 ;; v0.32.1 Wave 2: Extract repeated safe-mode path validation pattern
 ;; from edit.rkt, write.rkt, and read.rkt into a single helper.
 
-(require (only-in "../../util/safe-mode-predicates.rkt"
+(require racket/contract
+         (only-in "../../util/safe-mode-predicates.rkt"
                   safe-mode?
                   allowed-path?
                   safe-mode-project-root))
 
-(provide require-safe-path!)
+(provide (contract-out [require-safe-path! (-> string? string? (or/c #f string?))]))
 
 ;; require-safe-path! : string? string? -> (or/c #f string?)
 ;; Validates that a path is allowed under safe-mode constraints.

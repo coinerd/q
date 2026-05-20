@@ -4,11 +4,14 @@
 ;; Both runtime/ and tools/ can import from util/ without layer violation.
 ;; STABILITY: stable
 
-(provide tool-registry?
-         make-tool-registry-internal
-         tool-registry-tools-box
-         tool-registry-active-set-box
-         tool-registry-sem)
+(require racket/contract)
+
+(provide (contract-out [tool-registry? (-> any/c boolean?)]
+                       [make-tool-registry-internal (-> any/c any/c any/c tool-registry?)]
+                       [tool-registry-tools-box (-> tool-registry? any/c)]
+                       [tool-registry-active-set-box (-> tool-registry? any/c)]
+                       [tool-registry-sem (-> tool-registry? any/c)])
+         tool-registry)
 
 ;; Thread-safe tool registry struct. Fields are internal; use accessor
 ;; functions from tools/registry.rkt for safe access.

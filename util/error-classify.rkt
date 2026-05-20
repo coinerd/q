@@ -5,7 +5,9 @@
 ;; Issue #165: Classify common Racket exceptions into user-friendly messages.
 ;; Returns (cons user-message suggestions) or #f if no classification matches.
 
-(provide classify-error)
+(require racket/contract)
+
+(provide (contract-out [classify-error (-> exn? (or/c (cons/c string? (listof string?)) #f))]))
 
 ;; classify-error : exn? -> (or/c (cons/c string? (listof string?)) #f)
 ;;
