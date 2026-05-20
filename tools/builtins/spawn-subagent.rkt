@@ -9,7 +9,8 @@
 ;; #1193: Subagent Spawning — Isolated Child Agent Processes
 ;; #1203/#1204: Real provider injection — uses parent's provider
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/string
          "../../tools/tool.rkt"
          (only-in "../../runtime/runtime-helpers.rkt" emit-session-event! make-event-bus)
@@ -44,10 +45,13 @@
          (only-in "../builtins/ls.rkt" tool-ls)
          (only-in "../builtins/skill-router.rkt" tool-skill-route))
 
-(provide tool-spawn-subagent
+(provide (contract-out
+          [resolve-role-prompt (-> any/c string?)]
+          [parse-subagent-config (-> any/c subagent-config?)])
+         ;; Tool entries (direct — used by scheduler)
+         tool-spawn-subagent
          tool-spawn-subagents
-         resolve-role-prompt
-         parse-subagent-config
+         ;; Struct (direct for match compatibility)
          subagent-config
          subagent-config?
          subagent-config-task

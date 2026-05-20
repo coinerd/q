@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.50.1 — 2026-05-20
+
+### Added
+- T1-1: `llm/stream.rkt` — 13 exports contracted (SSE parsing, chunk normalization, timeouts).
+- T1-2: `extensions/gsd-planning.rkt` — 19 locally-defined functions contracted (state accessors, wave management).
+- T1-8: `agent/loop-fsm.rkt` — 4 functions contracted (FSM converters, transition checks).
+- T1-6: `tools/builtins/spawn-subagent.rkt` — 2 functions contracted (resolve-role-prompt, parse-subagent-config).
+- T1-7: `wiring/run-modes.rkt` — 3 functions contracted (build-runtime-from-cli, mode-for-config, reload-config!).
+
+### Metrics (verified from source)
+- Zero-contract modules (target): 0 (was 5)
+- contract-out files (KPI-dirs): 163/344 = 47.4% (was 158/344 = 45.9%)
+- arch-fitness tests: 33/33 ✅
+- Test failures: 0
+
+### Waves
+- W0: llm/stream.rkt contracts (PR #4782)
+- W1: gsd-planning.rkt + loop-fsm.rkt contracts (PR #4784)
+- W2: spawn-subagent.rkt + run-modes.rkt contracts + version bump (this release)
+
 ## v0.50.0 — 2026-05-20
 
 ### Fixed
