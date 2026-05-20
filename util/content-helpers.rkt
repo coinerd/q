@@ -6,12 +6,12 @@
 ;; near-duplication (QUAL-03).  Unified via optional handle-hash?
 ;; parameter (QUAL-13).
 
-(require racket/format
+(require racket/contract
+         racket/format
          racket/string)
 
-;; Content extraction helpers
-(provide result-content->string
-         tool-result-content->string)
+(provide (contract-out [result-content->string (->* (any/c) (#:handle-hash? boolean?) string?)]
+                       [tool-result-content->string (-> any/c string?)]))
 
 ;; Convert result content to a string for the API.
 ;; Content may be a list of content-part hashes, plain strings, or nested data.

@@ -5,7 +5,8 @@
 ;; Extracted from error-helpers.rkt to separate cross-cutting concerns:
 ;; error handling vs. observability.
 
-(require racket/logging)
+(require racket/contract
+         racket/logging)
 
 (provide with-telemetry)
 

@@ -8,10 +8,18 @@
 ;; Tools and scheduler import predicates from HERE so they don't
 ;; depend on the runtime layer directly.
 
-(require (only-in "safe-mode-state.rkt"
-                  safe-mode? allowed-tool? allowed-path?
-                  safe-mode-project-root trust-level
+(require racket/contract
+         (only-in "safe-mode-state.rkt"
+                  safe-mode?
+                  allowed-tool?
+                  allowed-path?
+                  safe-mode-project-root
+                  trust-level
                   blocked-tools))
 
-(provide safe-mode? allowed-tool? allowed-path? safe-mode-project-root
-         trust-level blocked-tools)
+(provide (contract-out [safe-mode? (-> boolean?)]
+                       [allowed-tool? (-> string? boolean?)]
+                       [allowed-path? (-> (or/c path? string?) boolean?)]
+                       [safe-mode-project-root (-> string?)]
+                       [trust-level (-> symbol?)])
+         blocked-tools)

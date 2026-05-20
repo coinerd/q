@@ -9,11 +9,13 @@
 ;; When passed a transparent q-settings? struct, extracts the merged hash
 ;; (field index 2) via vector-ref. When passed a hash, uses it directly.
 
-(provide sandbox-enabled?
-         sandbox-timeout
-         sandbox-memory-limit
-         sandbox-max-output
-         sandbox-max-processes)
+(require racket/contract)
+
+(provide (contract-out [sandbox-enabled? (-> any/c boolean?)]
+                       [sandbox-timeout (-> any/c any/c)]
+                       [sandbox-memory-limit (-> any/c any/c)]
+                       [sandbox-max-output (-> any/c any/c)]
+                       [sandbox-max-processes (-> any/c any/c)]))
 
 ;; ── Internal: extract merged hash ──────────────────────────
 

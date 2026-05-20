@@ -10,12 +10,17 @@
 ;; Layering: effect-types.rkt defines structs (no infrastructure deps).
 ;;           effect-executor.rkt imports infrastructure to execute them.
 
-(require "event-bus.rkt"
+(require racket/contract
+         "event-bus.rkt"
          "event-emitter.rkt"
          "loop-fsm.rkt"
          "effect-types.rkt")
 
-(provide execute-effects!)
+(provide (contract-out
+          [execute-effects!
+           (->* (list?)
+                (#:bus (or/c any/c #f) #:state (or/c any/c #f) #:hook-dispatcher (or/c procedure? #f))
+                void?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Executor

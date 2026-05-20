@@ -6,32 +6,33 @@
 ;; Defines scheduler-strategy struct with function fields for customizing
 ;; tool batch execution behavior. Default strategy preserves current behavior.
 
-(require "tool-struct.rkt")
+(require racket/contract
+         "tool-struct.rkt")
 
-(provide scheduler-strategy
-         scheduler-strategy?
-         scheduler-strategy-preflight-filter
-         scheduler-strategy-execution-order
-         tool-invocation-result
-         tool-invocation-result?
-         tool-invocation-result-tool-name
-         tool-success
-         tool-success?
-         tool-success-content
-         tool-success-details
-         tool-structured-failure
-         tool-structured-failure?
-         tool-structured-failure-message
-         tool-structured-failure-details
-         tool-retryable-failure
-         tool-retryable-failure?
-         tool-retryable-failure-message
-         tool-retryable-failure-error
-         tool-policy-denied
-         tool-policy-denied?
-         tool-policy-denied-reason
-         default-scheduler-strategy
-         tool-result->invocation-result)
+(provide (contract-out [scheduler-strategy (-> procedure? procedure? scheduler-strategy?)]
+                       [scheduler-strategy? (-> any/c boolean?)]
+                       [scheduler-strategy-preflight-filter (-> scheduler-strategy? procedure?)]
+                       [scheduler-strategy-execution-order (-> scheduler-strategy? procedure?)]
+                       [tool-invocation-result (-> string? tool-invocation-result?)]
+                       [tool-invocation-result? (-> any/c boolean?)]
+                       [tool-invocation-result-tool-name (-> tool-invocation-result? string?)]
+                       [tool-success (-> string? any/c any/c tool-success?)]
+                       [tool-success? (-> any/c boolean?)]
+                       [tool-success-content (-> tool-success? any/c)]
+                       [tool-success-details (-> tool-success? any/c)]
+                       [tool-structured-failure (-> string? string? any/c tool-structured-failure?)]
+                       [tool-structured-failure? (-> any/c boolean?)]
+                       [tool-structured-failure-message (-> tool-structured-failure? string?)]
+                       [tool-structured-failure-details (-> tool-structured-failure? any/c)]
+                       [tool-retryable-failure (-> string? string? any/c tool-retryable-failure?)]
+                       [tool-retryable-failure? (-> any/c boolean?)]
+                       [tool-retryable-failure-message (-> tool-retryable-failure? string?)]
+                       [tool-retryable-failure-error (-> tool-retryable-failure? any/c)]
+                       [tool-policy-denied (-> string? string? tool-policy-denied?)]
+                       [tool-policy-denied? (-> any/c boolean?)]
+                       [tool-policy-denied-reason (-> tool-policy-denied? string?)]
+                       [default-scheduler-strategy (-> scheduler-strategy?)]
+                       [tool-result->invocation-result (-> string? any/c tool-invocation-result?)]))
 
 ;; ── Tool invocation result tagged union ──
 

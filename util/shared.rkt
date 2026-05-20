@@ -5,9 +5,10 @@
 ;; v0.32.1 Wave 1: DRY extraction — single canonical definition for
 ;; functions previously duplicated across multiple modules.
 
-(require racket/list)
+(require racket/contract
+         racket/list)
 
-(provide take-at-most)
+(provide (contract-out [take-at-most (-> list? exact-nonnegative-integer? list?)]))
 
 ;; take-at-most : (listof any/c) exact-nonnegative-integer? -> (listof any/c)
 ;; Returns the first n elements of lst, or lst if shorter than n.

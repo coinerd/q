@@ -7,10 +7,10 @@
 ;; dynamic-tools, tests). NOT exported to extensions via tool-api.rkt.
 ;; Extensions must go through the scheduler for tool invocation.
 
-(require "../tools/tool-struct.rkt")
+(require racket/contract
+         "../tools/tool-struct.rkt")
 
-(provide tool-execute
-         tool-dangerous?)
+(provide (contract-out [tool-execute (-> any/c any/c)] [tool-dangerous? (-> any/c boolean?)]))
 
 ;; Re-export from tool-struct for internal use
 ;; tool-execute and tool-dangerous? are already bound by the require

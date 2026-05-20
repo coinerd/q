@@ -2,9 +2,10 @@
 
 ;; util/glob.rkt — Shared glob-to-regexp conversion
 
-(require racket/string)
+(require racket/contract
+         racket/string)
 
-(provide glob->regexp)
+(provide (contract-out [glob->regexp (-> string? #:allow-slash? boolean? regexp?)]))
 
 ;; Convert a glob pattern to a regexp.
 ;; #:allow-slash? #t means * matches / (for path-based tools like find)

@@ -9,15 +9,16 @@
 ;;   - runtime/session-store.rkt
 ;;   - runtime/session-index.rkt
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/path
          racket/file
          "../util/protocol-types.rkt")
 
-(provide has-tool-calls?
-         tool-result-message?
-         get-tool-call-ids
-         ensure-parent-dirs!)
+(provide (contract-out [has-tool-calls? (-> any/c boolean?)]
+                       [tool-result-message? (-> any/c any/c)]
+                       [get-tool-call-ids (-> any/c (listof string?))]
+                       [ensure-parent-dirs! (-> (or/c path? string?) void?)]))
 
 ;; ============================================================
 ;; Message analysis

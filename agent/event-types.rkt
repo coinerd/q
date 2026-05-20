@@ -11,7 +11,8 @@
 ;;   - event-structs.rkt  — struct definitions and constructors
 ;;   - event-json.rkt     — JSON serialization and registry
 
-(require "event-structs.rkt"
+(require racket/contract
+         "event-structs.rkt"
          "event-json.rkt"
          "../util/event-access.rkt")
 

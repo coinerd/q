@@ -8,16 +8,16 @@
 (require racket/contract
          "message.rkt")
 
-(provide message-entry?
-         model-change-entry?
-         thinking-level-change-entry?
-         branch-summary-entry?
-         custom-message-entry?
-         session-info-entry?
-         compaction-summary-entry?
-         tool-result-entry?
-         bash-execution-entry?
-         any-tool-result-entry?)
+(provide (contract-out [message-entry? (-> any/c boolean?)]
+                       [model-change-entry? (-> any/c boolean?)]
+                       [thinking-level-change-entry? (-> any/c boolean?)]
+                       [branch-summary-entry? (-> any/c boolean?)]
+                       [custom-message-entry? (-> any/c boolean?)]
+                       [session-info-entry? (-> any/c boolean?)]
+                       [compaction-summary-entry? (-> any/c boolean?)]
+                       [tool-result-entry? (-> any/c boolean?)]
+                       [bash-execution-entry? (-> any/c boolean?)]
+                       [any-tool-result-entry? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Entry kind predicates (#497)
