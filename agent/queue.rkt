@@ -30,9 +30,9 @@
 ;; Enqueue conses onto tail: O(1)
 ;; Dequeue pops from head, reverses tail if head empty: amortized O(1)
 
-(struct sub-queue (head-box tail-box) #:transparent)
+(struct sub-queue (head-box tail-box))
 
-(struct queue (steering followup semaphore event-callback-box) #:transparent)
+(struct queue (steering followup semaphore event-callback-box))
 
 ;; ============================================================
 ;; Constructor
