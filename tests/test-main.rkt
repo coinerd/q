@@ -278,19 +278,20 @@
                                                            "Q_TEST_PROVIDER_BUILD_KEY")))))
   (putenv "Q_TEST_PROVIDER_BUILD_KEY" "sk-test-key-12345")
   (define orig-val (getenv "Q_TEST_PROVIDER_BUILD_KEY"))
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  (define config
-                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
-                  (define settings (load-settings tmp-dir))
-                  (define p (build-provider config settings))
-                  (check-pred provider? p)
-                  (check-equal? (provider-name p) "openai-compatible"))
-                (lambda ()
-                  (cleanup-temp-dir tmp-dir)
-                  (if orig-val
-                      (putenv "Q_TEST_PROVIDER_BUILD_KEY" orig-val)
-                      (putenv "Q_TEST_PROVIDER_BUILD_KEY" "")))))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define config (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gpt-4o"))))
+     ;; Use #:config-path to bypass global ~/.q/config.json
+     (define settings (load-settings tmp-dir #:config-path "/nonexistent/global-config.json"))
+     (define p (build-provider config settings))
+     (check-pred provider? p)
+     (check-equal? (provider-name p) "openai-compatible"))
+   (lambda ()
+     (cleanup-temp-dir tmp-dir)
+     (if orig-val
+         (putenv "Q_TEST_PROVIDER_BUILD_KEY" orig-val)
+         (putenv "Q_TEST_PROVIDER_BUILD_KEY" "")))))
 
 (test-case "build-provider: creates real provider with default model from config"
   (define tmp-dir
@@ -333,19 +334,20 @@
                                                            "Q_TEST_PROJECT_DIR_KEY")))))
   (putenv "Q_TEST_PROJECT_DIR_KEY" "sk-test-project-dir")
   (define orig-val (getenv "Q_TEST_PROJECT_DIR_KEY"))
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  (define config
-                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "claude-3"))))
-                  (define settings (load-settings tmp-dir))
-                  (define p (build-provider config settings))
-                  (check-pred provider? p)
-                  (check-equal? (provider-name p) "openai-compatible"))
-                (lambda ()
-                  (cleanup-temp-dir tmp-dir)
-                  (if orig-val
-                      (putenv "Q_TEST_PROJECT_DIR_KEY" orig-val)
-                      (putenv "Q_TEST_PROJECT_DIR_KEY" "")))))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define config (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "claude-3"))))
+     ;; Use #:config-path to bypass global ~/.q/config.json
+     (define settings (load-settings tmp-dir #:config-path "/nonexistent/global-config.json"))
+     (define p (build-provider config settings))
+     (check-pred provider? p)
+     (check-equal? (provider-name p) "openai-compatible"))
+   (lambda ()
+     (cleanup-temp-dir tmp-dir)
+     (if orig-val
+         (putenv "Q_TEST_PROJECT_DIR_KEY" orig-val)
+         (putenv "Q_TEST_PROJECT_DIR_KEY" "")))))
 
 ;; ============================================================
 ;; print helpers
@@ -377,12 +379,19 @@
               "extension-registry value should satisfy extension-registry?"))
 
 (test-case "build-runtime-from-cli: extension-registry starts empty"
-  (define cfg (parse-cli-args #()))
-  (define rt (build-runtime-from-cli cfg))
-  (define ext-reg (dict-ref rt 'extension-registry))
-  (check-equal? (length (list-extensions ext-reg))
-                0
-                "extension-registry should start with no extensions"))
+  ;; Use an empty temp dir to avoid picking up .q/extensions from CWD
+  (define tmp-dir (make-temporary-file "q-ext-test~a"))
+  (delete-file tmp-dir)
+  (make-directory tmp-dir)
+  (define cfg (parse-cli-args (vector "--project-dir" (path->string tmp-dir))))
+  (dynamic-wind (lambda () (void))
+                (lambda ()
+                  (define rt (build-runtime-from-cli cfg))
+                  (define ext-reg (dict-ref rt 'extension-registry))
+                  (check-equal? (length (list-extensions ext-reg))
+                                0
+                                "extension-registry should start with no extensions"))
+                (lambda () (delete-directory/files tmp-dir #:must-exist? #f))))
 
 ;; ============================================================
 ;; build-runtime-from-cli: system-instructions (resource loading)
@@ -852,16 +861,17 @@
     (make-temp-project-with-config
      (hasheq 'providers
              (hasheq 'local (hasheq 'base-url "http://localhost:8080/v1" 'models '("llama-3-8b"))))))
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  (define config
-                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "llama-3-8b"))))
-                  (define settings (load-settings tmp-dir))
-                  (define p (build-provider config settings))
-                  ;; Should NOT fall back to mock provider
-                  (check-pred provider? p)
-                  (check-equal? (provider-name p) "openai-compatible"))
-                (lambda () (cleanup-temp-dir tmp-dir))))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define config (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "llama-3-8b"))))
+     ;; Use #:config-path to bypass global ~/.q/config.json
+     (define settings (load-settings tmp-dir #:config-path "/nonexistent/global-config.json"))
+     (define p (build-provider config settings))
+     ;; Should NOT fall back to mock provider
+     (check-pred provider? p)
+     (check-equal? (provider-name p) "openai-compatible"))
+   (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: local provider (192.168.x.x) works without API key"
   (define tmp-dir

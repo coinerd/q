@@ -3,7 +3,7 @@
 > A local-first, extensible coding agent runtime written in Racket
 
 [![CI](https://github.com/coinerd/q/actions/workflows/ci.yml/badge.svg)](https://github.com/coinerd/q/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.50.7-blue.svg)](https://github.com/coinerd/q)
+[![Version](https://img.shields.io/badge/version-0.50.8-blue.svg)](https://github.com/coinerd/q)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/language-Racket-red.svg)](https://racket-lang.org)
 
@@ -203,7 +203,7 @@ bin/q --model gpt-5.4 "write a test"
 ### Verify
 
 ```bash
-bin/q --version            # q version 0.50.7
+bin/q --version            # q version 0.50.8
 raco test tests/           # run the full test suite
 ```
 
@@ -275,9 +275,9 @@ q/
 | Metric | Value |
 |--------|-------|
 | Test files | 608 |
-| Source modules | 439 |
-| Source lines | 68478 |
-| Test lines | 105586 |
+| Source modules | 440 |
+| Source lines | 68724 |
+| Test lines | 105596 |
 | Test assertions | 16506 |
 | Tests passing | 5835+ | `racket scripts/run-tests.rkt` results |
 
@@ -421,11 +421,14 @@ When q executes shell commands on behalf of an LLM, arguments are quoted via `sh
 
 
 
-**v0.50.7** — Fixed
 
-**v0.50.7** — Fixed
+**v0.50.8** — Fixed
 
-**v0.50.7** — Changed
+**v0.50.6** — Changed
+
+**v0.50.6** — Fixed
+
+**v0.50.6** — Changed
 
 **v0.49.10** — Changed
 

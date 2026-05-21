@@ -162,7 +162,7 @@
                #:max-tokens exact-nonnegative-integer?
                (values list? exact-nonnegative-integer?))]
           [entry->context-message (-> any/c any/c)]
-          [load-agents-context (-> (or/c path? string?) list?)]
+          [load-agents-context (-> (or/c path? string?) string?)]
           [build-system-preamble (-> (or/c path? string?) string?)]
           [truncate-messages-to-budget (-> list? exact-nonnegative-integer? list?)])
          ;; Struct constructors (direct for match compatibility)

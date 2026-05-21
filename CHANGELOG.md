@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.50.8 — 2026-05-21
+
+### Fixed
+- D1: `load-agents-context` contract corrected from `list?` to `string?` (returns joined string, same pattern as A1).
+- M1: Corrected v0.50.7 CHANGELOG PR reference from #4825 to #4823.
+- M2a: Isolated 4 `build-provider` tests from global `~/.q/config.json` by adding `#:config-path`.
+- M2b: Isolated `extension-registry` test from CWD `.q/extensions/` by using `--project-dir` with temp dir.
+
+### Metrics
+- Smoke suite: 562/562 files, 7934/7934 assertions passing (0 failures)
+- Arch-fitness: 33/33 ✅
+- Contract bugs remaining: 0
+- Env-dependent test failures: 0
+
+### Waves
+- W0: All fixes (D1, M1, M2a, M2b)
+- W1: CHANGELOG + version bump 0.50.7→0.50.8
+
 ## v0.50.7 — 2026-05-21
 
 ### Fixed
@@ -18,7 +36,7 @@
 - GSD tests: 177/177 ✅
 
 ### Waves
-- W0: Contract fixes (PR #4825)
+- W0: Contract fixes (PR #4823)
 - W1: CHANGELOG + version bump (this release)
 
 ## v0.50.6 — 2026-05-20
