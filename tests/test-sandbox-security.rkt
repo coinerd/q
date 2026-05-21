@@ -40,14 +40,18 @@
    (define result (tool-read (hasheq 'path "../nonexistent-secret-file" 'offset 1)))
    (check-pred tool-result? result)
    (check-true (tool-result-is-error? result)))
- (test-case "write tool fails on path traversal to non-existent parent"
-   ;; Writing to ../../tmp/test should either succeed (if the path is writable
-   ;; as the user) or fail cleanly. The important thing: no crash.
-   (define result (tool-write (hasheq 'path "/tmp/q-sandbox-test-traversal/t.txt" 'content "test")))
+ (test-case "write tool handles absolute path without crash"
+   ;; Writing to a valid absolute path should succeed or fail cleanly — no crash.
+   (define tmp-dir (make-temporary-file "q-write-test-~a"))
+   (delete-file tmp-dir)
+   (make-directory tmp-dir)
+   (define tmp-file (build-path tmp-dir "test.txt"))
+   (define result (tool-write (hasheq 'path (path->string tmp-file) 'content "hello")))
+   (check-pred tool-result? result)
+   (check-false (tool-result-is-error? result))
+   (check-true (file-exists? tmp-file))
    ;; Cleanup
-   (with-handlers ([exn:fail? void])
-     (delete-directory/files "/tmp/q-sandbox-test-traversal" #:must-exist? #f))
-   (check-true (tool-result? result)))
+   (delete-directory/files tmp-dir #:must-exist? #f))
  (test-case "read tool works on real file, rejects sibling traversal"
    ;; Create a temp file, read it, then try reading a non-existent sibling
    (define tmp-dir (make-temporary-file "q-security-test-~a"))
