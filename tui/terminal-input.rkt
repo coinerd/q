@@ -12,8 +12,42 @@
          racket/port
          racket/string)
 
+;; ============================================================
+;; Decoder state encapsulation (v0.51.3 §7)
+;; ============================================================
+;; All mutable state is captured in a single struct instance,
+;; held in a parameter. Factory creates isolated instances.
+(struct decoder-state
+        ([utf8-acc #:mutable] ; (listof char) — cons list, reversed for push
+         [paste-buf #:mutable] ; string — accumulated paste text
+         [in-paste #:mutable] ; boolean — inside bracketed paste?
+         [input-buf #:mutable] ; bytes — read buffer
+         [input-buf-data #:mutable] ; (or/c #f (cons nat nat)) — buffer window
+         [kitty-supp #:mutable]) ; boolean — kitty keyboard protocol detected
+  #:transparent)
+
+(define (make-terminal-input-decoder #:buffer-size [buffer-size 256])
+  (decoder-state (list) "" #f (make-bytes buffer-size) #f #f))
+
+;; Current decoder instance (default)
+(define current-decoder (make-parameter (make-terminal-input-decoder)))
+
+;; Accessor shortcuts via current parameter
+(define (ds)
+  (current-decoder))
+
 ;; Raw stdin reading (used by facade for input selection)
-(provide real-stdin-read-msg
+;; Decoder factory and parameter (v0.51.3)
+(provide make-terminal-input-decoder
+         current-decoder
+         decoder-state?
+         decoder-state-utf8-acc
+         decoder-state-paste-buf
+         decoder-state-in-paste
+         decoder-state-input-buf
+         decoder-state-input-buf-data
+
+         real-stdin-read-msg
          decode-sgr-mouse
          stub-byte-ready?
          buffered-read-byte
@@ -101,32 +135,30 @@
         (string-ref str 0)
         (integer->char 0))))
 
-;; UTF-8 accumulator state (uses cons + reverse for O(1) push, #453)
-(define utf8-accumulator (list))
+;; UTF-8 accumulator — now uses decoder-state struct (v0.51.3)
 
 ;; Reset the accumulator
 (define (utf8-accumulator-reset!)
-  (set! utf8-accumulator (list)))
+  (set-decoder-state-utf8-acc! (ds) (list)))
 
 ;; Get current accumulator length (for testing)
 (define (utf8-accumulator-length)
-  (length utf8-accumulator))
+  (length (decoder-state-utf8-acc (ds))))
 
 ;; Feed a char to the accumulator.
 ;; Returns:
 ;;   - #f if the sequence is incomplete (need more bytes)
 ;;   - char? if the sequence is complete and decoded
 (define (utf8-accumulate-char ch)
-  (set! utf8-accumulator (cons ch utf8-accumulator)) ; O(1) cons
-  (define n (length utf8-accumulator))
-  ;; The lead byte is the last element (was first pushed, now at end of cons list)
-  (define lead-byte (char->integer (list-ref utf8-accumulator (- n 1))))
+  (define acc (decoder-state-utf8-acc (ds)))
+  (set-decoder-state-utf8-acc! (ds) (cons ch acc))
+  (define n (length (decoder-state-utf8-acc (ds))))
+  (define lead-byte (char->integer (list-ref (decoder-state-utf8-acc (ds)) (- n 1))))
   (define expected (utf8-lead-byte-count lead-byte))
   (match (>= n expected)
     [#t
-     ;; Complete sequence — reverse and decode
-     (define decoded (reassemble-utf8-chars (reverse utf8-accumulator)))
-     (set! utf8-accumulator (list))
+     (define decoded (reassemble-utf8-chars (reverse (decoder-state-utf8-acc (ds)))))
+     (set-decoder-state-utf8-acc! (ds) (list))
      decoded]
     [_ #f]))
 
@@ -154,24 +186,23 @@
 (define bracketed-paste-start-seq "\x1b[200~")
 (define bracketed-paste-end-seq "\x1b[201~")
 
-;; Paste buffer state
-(define paste-buffer-str "")
-(define in-paste-state #f)
+;; Paste buffer state — now uses decoder-state struct (v0.51.3)
 
 ;; Maximum paste buffer size (1 MB)
 (define paste-buffer-max-size 1048576)
 
 (define (in-paste?)
-  in-paste-state)
+  (decoder-state-in-paste (ds)))
 (define (set-in-paste! v)
-  (set! in-paste-state v))
+  (set-decoder-state-in-paste! (ds) v))
 (define (paste-buffer-reset!)
-  (set! paste-buffer-str ""))
+  (set-decoder-state-paste-buf! (ds) ""))
 (define (paste-buffer-add! s)
-  (when (<= (+ (string-length paste-buffer-str) (string-length s)) paste-buffer-max-size)
-    (set! paste-buffer-str (string-append paste-buffer-str s))))
+  (define buf (decoder-state-paste-buf (ds)))
+  (when (<= (+ (string-length buf) (string-length s)) paste-buffer-max-size)
+    (set-decoder-state-paste-buf! (ds) (string-append buf s))))
 (define (paste-buffer-get)
-  paste-buffer-str)
+  (decoder-state-paste-buf (ds)))
 
 ;; Make a paste event
 (define (make-paste-event text)
@@ -374,18 +405,18 @@
 ;; Sequences: ESC[<codepoint>;<modifiers>u
 ;; Modifier bitmask: 1=shift, 2=alt, 4=ctrl, 8=super
 
-(define kitty-supported #f)
+;; kitty-supported — now in decoder-state (v0.51.3)
 
 (define (kitty-mode-supported?)
-  kitty-supported)
+  (decoder-state-kitty-supp (ds)))
 
 (define (kitty-mode-enable!)
-  (when kitty-supported
+  (when (decoder-state-kitty-supp (ds))
     (display "\x1b[=1u")
     (flush-output)))
 
 (define (kitty-mode-disable!)
-  (when kitty-supported
+  (when (decoder-state-kitty-supp (ds))
     (display "\x1b[=0u")
     (flush-output)))
 
@@ -403,9 +434,10 @@
 (define (detect-kitty-support!)
   (define term-program (getenv "TERM_PROGRAM"))
   (define term (getenv "TERM"))
-  (set! kitty-supported
-        (or (and term-program (member (string-downcase term-program) '("kitty" "ghostty")))
-            (and term (regexp-match? #rx"^(kitty|ghostty)" term)))))
+  (set-decoder-state-kitty-supp!
+   (ds)
+   (or (and term-program (member (string-downcase term-program) '("kitty" "ghostty")))
+       (and term (regexp-match? #rx"^(kitty|ghostty)" term)))))
 
 ;; Parse a Kitty CSI-u sequence: ESC[<codepoint>;<modifiers>u
 ;; Returns (list 'key key-symbol modifiers) or #f
@@ -482,35 +514,37 @@
 
 ;; Byte buffer for efficient stdin reading.
 ;; read-bytes-avail! fills the buffer; we consume from it.
-(define input-buffer (make-bytes 256))
-(define input-buffer-data #f) ;; #f or (cons start-pos end-pos)
+;; Input buffer — now uses decoder-state struct (v0.51.3)
 
 (define (input-buffer-reset!)
-  (set! input-buffer-data #f))
+  (set-decoder-state-input-buf-data! (ds) #f))
 
 (define (input-buffer-length)
-  (if input-buffer-data
-      (- (cdr input-buffer-data) (car input-buffer-data))
+  (define d (decoder-state-input-buf-data (ds)))
+  (if d
+      (- (cdr d) (car d))
       0))
 
 ;; Read one byte, using the buffer first.
 ;; Returns byte? or #f on timeout.
 (define (buffered-read-byte in timeout)
-  (match (and input-buffer-data (< (car input-buffer-data) (cdr input-buffer-data)))
+  (define d (decoder-state-input-buf-data (ds)))
+  (define buf (decoder-state-input-buf (ds)))
+  (match (and d (< (car d) (cdr d)))
     [#t
-     (define b (bytes-ref input-buffer (car input-buffer-data)))
-     (set! input-buffer-data (cons (add1 (car input-buffer-data)) (cdr input-buffer-data)))
+     (define b (bytes-ref buf (car d)))
+     (set-decoder-state-input-buf-data! (ds) (cons (add1 (car d)) (cdr d)))
      b]
     [_ ;; Buffer exhausted or empty — refill
      (define ready (sync/timeout timeout in))
      (if (not ready)
          #f ;; timeout
-         (let ([n (read-bytes-avail! input-buffer in)])
+         (let ([n (read-bytes-avail! buf in)])
            (match n
              [(? eof-object?) #f]
              [(? (lambda (v) (and (integer? v) (> v 0))))
-              (set! input-buffer-data (cons 0 n))
-              (buffered-read-byte in 0)] ;; recursive call to consume
+              (set-decoder-state-input-buf-data! (ds) (cons 0 n))
+              (buffered-read-byte in 0)]
              [else #f])))]))
 
 ;; ============================================================
