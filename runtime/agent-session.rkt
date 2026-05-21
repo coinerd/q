@@ -98,7 +98,7 @@
          buffer-or-append!
          (contract-out ;; NOTE (W-01): This is the ONLY entry point that accepts raw hashes for backward compat.
           [make-agent-session (-> (or/c hash? session-config?) agent-session?)]
-          [resume-agent-session (-> string? any/c agent-session?)]
+          [resume-agent-session (-> string? (or/c session-config? hash?) agent-session?)]
           [fork-session (->* (agent-session?) ((or/c string? #f)) agent-session?)]
           [run-prompt!
            (->* (agent-session? (or/c string? message?))
