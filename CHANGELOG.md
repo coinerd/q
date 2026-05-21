@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.53.0 — 2026-05-21
+
+### Stream Decomposition & Audit Verification
+
+- **Stream Module Decomposition**: Extracted pure stream functions to `agent/stream-reducer.rkt` (96 LOC)
+  and effectful streaming loop to `agent/stream-runner.rkt` (251 LOC).
+  `agent/loop-stream.rkt` reduced from 587 → 297 LOC.
+- **Facade Contract Tightening**: `session-history` contract narrowed from `list?` to `(listof message?)`.
+- **Audit Verification**: Confirmed `ok?`/`err?` are local-only predicates, permission gate is deny-by-default.
+
+### Metrics
+- Contract coverage: 39.0% (171/438 files)
+- Struct-out: 21 files
+- Source modules: 441, Test files: 608
+
 ## v0.52.0 — 2026-05-21
 
 ### v0.51.x Series Complete
