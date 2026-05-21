@@ -107,7 +107,7 @@
                                   #:buffer-or-append! (or/c procedure? #f))
                 any)]
           [session-id (-> agent-session? string?)]
-          [session-history (-> agent-session? list?)]
+          [session-history (-> agent-session? (listof message?))]
           [session-active? (-> agent-session? boolean?)]
           [close-session! (-> agent-session? void?)])
          ;; v0.42.2: Session control contracts (B5-01)
