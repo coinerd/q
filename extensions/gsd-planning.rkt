@@ -12,7 +12,7 @@
 ;; backward compatibility.
 
 (require racket/contract
-         racket/match
+         racket/set
          racket/match
          racket/string
          json
@@ -119,14 +119,14 @@
 ;; reset-all-gsd-state! is now in gsd/core.rkt
 
 ;; State accessors (locally defined parameter wrappers)
-(provide (contract-out [gsd-mode (-> symbol?)]
+(provide (contract-out [gsd-mode (-> (or/c symbol? #f))]
                        [gsd-mode? (-> any/c boolean?)]
-                       [set-gsd-mode! (-> symbol? void?)]
+                       [set-gsd-mode! (-> (or/c symbol? #f) (or/c ok? err?))]
                        [pinned-planning-dir (-> (or/c path? #f))]
                        [set-pinned-planning-dir! (-> (or/c path? #f) void?)]
                        [current-max-old-text-len (-> (or/c exact-positive-integer? #f))]
                        [set-current-max-old-text-len! (-> (or/c exact-positive-integer? #f) void?)]
-                       [completed-waves (-> (listof exact-nonnegative-integer?))]
+                       [completed-waves (-> (set/c exact-nonnegative-integer?))]
                        [total-waves (-> (or/c exact-nonnegative-integer? #f))]
                        [set-total-waves! (-> (or/c exact-nonnegative-integer? #f) void?)]
                        [mark-wave-complete! (-> exact-nonnegative-integer? void?)]
@@ -137,7 +137,7 @@
                        [emit-gsd-event! (-> symbol? any/c void?)]
                        [gsd-event-bus (-> (or/c any/c #f))]
                        [set-gsd-event-bus! (-> (or/c any/c #f) void?)]
-                       [gsd-session-cleanup (-> any/c void?)])
+                       [gsd-session-cleanup (-> any/c hook-result?)])
          ;; Re-exports from sub-modules (kept as direct provides)
          the-extension
          gsd-planning-extension
