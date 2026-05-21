@@ -1,6 +1,12 @@
 #!/usr/bin/env racket
 #lang racket/base
 
+;; scripts/bump-version.rkt — DEPRECATED: Use scripts/sync-version.rkt instead.
+;;
+;; This script is deprecated as of v0.51.9. The sync-version.rkt script
+;; now handles all version synchronization. This file remains for backward
+;; compatibility but will be removed in a future release.
+
 ;; scripts/bump-version.rkt — Single-command version sweep.
 ;;
 ;; Updates all version surfaces across the project to a new version string.
