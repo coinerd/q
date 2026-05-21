@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.51.x — Racket Concepts Remediation (in progress)
+
+### v0.51.7 — Pattern Matching Conversion (§23)
+- Converted 10 `cond` forms to `match` across 4 files for readability and exhaustiveness
+- `tools/scheduler.rkt`: 3 conversions (hook result dispatch, preflight dispatch, post-hook dispatch)
+- `runtime/session-store.rkt`: 2 conversions (first-entry type dispatch, list traversal)
+- `cli/args.rkt`: 3 conversions (acc-ref list traversal, command dispatch, mode dispatch)
+- `interfaces/doctor.rkt`: 2 conversions (version>=? list comparison)
+
+### v0.51.6 — Representation Hiding (§24)
+- Removed `#:transparent` from `tui-ctx` struct (PR #4865)
+- Removed `#:transparent` from 6 additional TUI structs: overlay-config, render-components,
+  key-spec, tree-node, parsed-command, settings-entry, select-list-state (PR #4866)
+- State/layout structs intentionally kept transparent for debugging
+
+### v0.51.5 — Settings & Session Contracts (§22)
+- `runtime/settings.rkt`: 26 functions contracted (was 6)
+- `runtime/session-config.rkt`: 4 helpers contracted, 31 functions total, zero `any/c`
+- `runtime/session-store.rkt`: 6 functions contracted; fixed `ensure-session-version-header!`
+  return type (`void?` → `exact-nonnegative-integer?`) and `fork-session!` return type
+  (`string?` → `exact-nonnegative-integer?`)
+
+### v0.51.4 — FS Adapter Activation (§21)
+- Activated dead FS adapter in `interfaces/sessions.rkt` with `fs-*` accessor helpers
+- Replaced all 18 raw FS calls with adapter-routed calls
+- 100% FS operation coverage through parameterized adapter
+
+### v0.51.3 — Terminal Decoder Encapsulation (§20)
+- Encapsulated `decoder-state` struct with mutable fields + `current-decoder` parameter
+- Factory `make-terminal-input-decoder` for isolated test instances
+- Parameter-based backward compatibility — callers need zero changes
+
+### v0.51.2 — TUI Contracts (§19)
+- `tui/state-events.rkt`: 5 exported functions contracted (was 0)
+- `tui/state-ui.rkt`: 30+ functions contracted; `has-selection?` fixed to return `boolean?`
+- `tui/renderer.rkt`: 3 `any/c` tightened to `void?`
+
+### v0.51.1 — Agent Loop Contracts (§18)
+- `agent/loop-phases.rkt`: Added required `tool?` import for contract
+- `runtime/agent-session.rkt`: `resume-agent-session` second arg widened to accept `(or/c session-config? hash?)`
+- `tui/session-lifecycle.rkt`: Skipped (too complex for safe contract tightening)
+
 ## v0.50.8 — 2026-05-21
 
 ### Fixed
