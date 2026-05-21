@@ -12,15 +12,16 @@
          "../util/protocol-types.rkt"
          "../util/cost-tracker.rkt"
          "../util/content-helpers.rkt"
-         "state-types.rkt")
+         "state-types.rkt"
+         racket/contract)
 
-(provide apply-event-to-state
-         current-gsd-mode-query
-         register-event-reducer!
-         event-reducer-registered?
-         ;; M-09: Extracted error classification
-         classify-error-type
-         format-error-hint)
+(provide current-gsd-mode-query
+         (contract-out [apply-event-to-state (-> ui-state? event? ui-state?)]
+                       [register-event-reducer! (-> string? procedure? void?)]
+                       [event-reducer-registered? (-> string? boolean?)]
+                       [classify-error-type (-> any/c hash? symbol?)]
+                       [format-error-hint
+                        (-> symbol? exact-nonnegative-integer? (listof symbol?) string?)]))
 
 ;; Injected callback to query GSD mode without direct import.
 (define current-gsd-mode-query (make-parameter (lambda () 'idle)))
