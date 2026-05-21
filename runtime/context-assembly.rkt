@@ -157,10 +157,13 @@
           [payload->tiered-context (-> context-assembly-payload? tiered-context?)]
           [tiered-context->payload
            (->* (tiered-context? exact-nonnegative-integer?) (hash?) context-assembly-payload?)]
-          [build-session-context/tokens (-> any/c #:max-tokens exact-nonnegative-integer? any/c)]
+          [build-session-context/tokens
+           (-> any/c
+               #:max-tokens exact-nonnegative-integer?
+               (values list? exact-nonnegative-integer?))]
           [entry->context-message (-> any/c any/c)]
           [load-agents-context (-> (or/c path? string?) list?)]
-          [build-system-preamble (-> (or/c path? string?) list?)]
+          [build-system-preamble (-> (or/c path? string?) string?)]
           [truncate-messages-to-budget (-> list? exact-nonnegative-integer? list?)])
          ;; Struct constructors (direct for match compatibility)
          context-assembly-config
@@ -195,7 +198,8 @@
                        [context-summary-to-id (-> context-summary? string?)]
                        [context-summary-text (-> context-summary? string?)]
                        [context-summary-entry-count (-> context-summary? exact-nonnegative-integer?)]
-                       [context-summary-prompt (-> context-summary? string?)]
+                       [context-summary-prompt
+                        (->* (list?) (#:previous-summary (or/c string? #f)) string?)]
                        [generate-context-summary
                         (->* (list? (or/c any/c #f) (or/c string? #f))
                              (#:cache (or/c summary-cache? #f))
