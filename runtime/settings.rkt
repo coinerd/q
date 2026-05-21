@@ -44,60 +44,44 @@
                                            #:config-path (or/c path-string? #f))
                              q-settings?)])
 
-         load-global-settings
-         load-project-settings
+         ;; Loading — all contracted
+         (contract-out
+          [load-global-settings (->* () (path-string?) hash?)]
+          [load-project-settings (->* () (path-string?) hash?)]
+          [make-minimal-settings
+           (->* ()
+                (#:provider (or/c string? #f) #:model (or/c string? #f) #:overrides hash?)
+                q-settings?)]
+          [merge-settings (-> hash? hash? hash?)]
+          [deep-merge-hash (-> any/c any/c hash?)]
+          [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
+          [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
+          [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]
+          [provider-names (-> q-settings? (listof symbol?))]
+          [config-parse-error (-> path-string? (or/c string? #f))]
+          [parallel-tools-enabled? (-> q-settings? any/c)]
+          [http-request-timeout (-> q-settings? any/c)]
+          [get-model-timeout (-> q-settings? string? symbol? (or/c number? #f))]
+          [effective-request-timeout (-> q-settings? string? any/c)]
+          [warn-on-destructive? (-> q-settings? any/c)]
+          [security-config-from-settings (-> q-settings? hash?)]
+          [default-session-dir (-> path-string?)]
+          [default-project-dir (-> path?)]
+          [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
+          [project-dir-from-settings (-> q-settings? (or/c path-string? #f))]
+          [trace-enabled? (-> q-settings? any/c)]
+          [trace-max-files (-> q-settings? any/c)]
+          [steering-gentle-threshold (-> q-settings? any/c)]
+          [steering-strong-threshold (-> q-settings? any/c)]
+          [steering-hard-cap (-> q-settings? any/c)]
+          [steering-same-file-dedup? (-> q-settings? any/c)])
 
-         ;; Constructor — contracted
-         (contract-out [make-minimal-settings
-                        (->* () (#:provider any/c #:model any/c #:overrides hash?) q-settings?)])
-
-         ;; Merging
-         merge-settings
-         deep-merge-hash
-
-         ;; Query
-         (contract-out [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
-                       [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
-                       [provider-config (-> q-settings? any/c (or/c hash? #f))]
-                       [provider-names (-> q-settings? list?)]
-                       [config-parse-error (-> path-string? (or/c string? #f))])
-
-         ;; Parallel execution
-         parallel-tools-enabled?
-
-         ;; HTTP request timeout
-         http-request-timeout
-
-         ;; Per-model timeout profiles (v0.14.2)
-         get-model-timeout
-         effective-request-timeout
-
-         ;; Destructive command warning
-         warn-on-destructive?
-
-         ;; Sandbox settings
+         ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
          sandbox-timeout
          sandbox-memory-limit
          sandbox-max-output
-         sandbox-max-processes
-
-         ;; Defaults and derived paths
-         default-session-dir
-         default-project-dir
-         session-dir-from-settings
-         project-dir-from-settings
-
-         ;; Trace logging config (v0.15.0)
-         trace-enabled?
-         trace-max-files
-
-         ;; Steering config (v0.18.0)
-         steering-gentle-threshold
-         steering-strong-threshold
-         steering-hard-cap
-         steering-same-file-dedup?
-         security-config-from-settings)
+         sandbox-max-processes)
 
 ;; ============================================================
 ;; Struct
