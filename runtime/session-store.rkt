@@ -11,6 +11,7 @@
 ;;; Re-exports all symbols from extracted modules for backward compatibility.
 
 (require racket/contract
+         racket/match
          racket/file
          racket/string
          racket/port
@@ -205,12 +206,12 @@
      CURRENT-SESSION-VERSION]
     [else
      (define first-entry (read-first-log-entry log-path))
-     (cond
-       [(not first-entry)
+     (match first-entry
+       [#f
         (write-session-version-header! log-path)
         CURRENT-SESSION-VERSION]
-       [(session-info-entry? first-entry) (hash-ref (message-meta first-entry) 'version 1)]
-       [else
+       [(? session-info-entry?) (hash-ref (message-meta first-entry) 'version 1)]
+       [_
         (migrate-session-log! log-path 1 CURRENT-SESSION-VERSION)
         CURRENT-SESSION-VERSION])]))
 
@@ -359,10 +360,11 @@
     (if entry-id
         (let loop ([es entries]
                    [acc '()])
-          (cond
-            [(null? es) (reverse acc)]
-            [(equal? (message-id (car es)) entry-id) (reverse (cons (car es) acc))]
-            [else (loop (cdr es) (cons (car es) acc))]))
+          (match es
+            ['() (reverse acc)]
+            [(list (? (lambda (e) (equal? (message-id e) entry-id)) found) ___)
+             (reverse (cons found acc))]
+            [(cons e rest) (loop rest (cons e acc))]))
         entries))
   (define box (in-memory-session-manager-sessions-box mgr))
   (define sessions (unbox box))
