@@ -38,6 +38,7 @@
                   hook-stage-payload)
          (only-in "../llm/token-budget.rkt" estimate-context-tokens)
          (only-in "event-emitter.rkt" emit-typed-event!)
+         (only-in "../tools/tool.rkt" tool?)
          (only-in "event-bus.rkt" event-bus?)
          (only-in "loop-stream.rkt" stream-from-provider handle-cancellation build-stream-result)
          (only-in "state.rkt" current-loop-state-for-error-recovery)
@@ -58,8 +59,9 @@
            (-> any/c any/c any/c any/c any/c any/c any/c any/c (values any/c (listof effect?)))])
          (contract-out [run-streaming-phase
                         (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c)])
-         (contract-out [compute-streaming-plan
-                        (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c streaming-plan?)]))
+         (contract-out
+          [compute-streaming-plan
+           (-> any/c any/c any/c any/c any/c any/c any/c any/c any/c any/c streaming-plan?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1: Emit turn-started event
