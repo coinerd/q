@@ -36,13 +36,13 @@
          (only-in "../runtime/session-index/schema.rkt" session-index?))
 
 (provide session-config?
-         session-config
-         hash->session-config
-         session-config->hash
-         resolve-max-iterations-hard
-         normalize-session-config-hash
          ;; Smart accessors with defaults
          (contract-out
+          [hash->session-config (-> hash? session-config?)]
+          [session-config->hash (-> session-config? hash?)]
+          [resolve-max-iterations-hard
+           (-> session-config? exact-positive-integer? exact-positive-integer?)]
+          [normalize-session-config-hash (-> any/c hash?)]
           [config-provider (-> session-config? (or/c #f provider?))]
           [config-tool-registry (-> session-config? (or/c #f tool-registry?))]
           [config-event-bus (-> session-config? (or/c #f event-bus?))]
