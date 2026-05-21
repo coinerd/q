@@ -14,6 +14,7 @@
 ;;   q-version           -- version constant
 
 (require racket/contract
+         racket/match
          racket/string
          racket/format
          "../util/version.rkt")
@@ -98,10 +99,10 @@
 ;;    but an alist is purely functional and easy to test).
 
 (define (acc-ref acc key [default #f])
-  (cond
-    [(null? acc) default]
-    [(eq? (caar acc) key) (cdar acc)]
-    [else (acc-ref (cdr acc) key default)]))
+  (match acc
+    ['() default]
+    [(cons (cons (== key) val) _) val]
+    [(cons _ rest) (acc-ref rest key default)]))
 
 (define (acc-set acc key val)
   (cons (cons key val) (filter (lambda (p) (not (eq? (car p) key))) acc)))
@@ -132,23 +133,27 @@
     (let ([cmd (acc-ref acc 'command)]
           [sid (acc-ref acc 'session-id)]
           [prompt (acc-ref acc 'prompt)])
-      (cond
-        [(eq? cmd 'help) 'help]
-        [(eq? cmd 'version) 'version]
-        [(eq? cmd 'init) 'init]
-        [(eq? cmd 'sessions) 'sessions]
-        [(and sid (eq? cmd 'chat)) 'resume]
-        [prompt 'prompt]
-        [else cmd])))
+      (match (cons cmd sid)
+        [(cons 'help _) 'help]
+        [(cons 'version _) 'version]
+        [(cons 'init _) 'init]
+        [(cons 'sessions _) 'sessions]
+        [(cons 'chat (not #f)) 'resume]
+        [_
+         (match prompt
+           [#f cmd]
+           [_ 'prompt])])))
   (define final-mode
     (let ([m (acc-ref acc 'mode)])
-      (cond
-        [(eq? m 'json) 'json]
-        [(eq? m 'rpc) 'rpc]
-        [(eq? m 'tui) 'tui]
-        [(eq? m 'print) 'print]
-        [(eq? final-command 'prompt) 'single]
-        [else 'interactive])))
+      (match m
+        ['json 'json]
+        ['rpc 'rpc]
+        ['tui 'tui]
+        ['print 'print]
+        [_
+         (match final-command
+           ['prompt 'single]
+           [_ 'interactive])])))
   (cli-config final-command
               (acc-ref acc 'session-id)
               (acc-ref acc 'prompt)
