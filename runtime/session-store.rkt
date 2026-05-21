@@ -36,6 +36,15 @@
                        [replay-session (path-string? . -> . (listof message?))]
                        [has-pending-marker? (path-string? . -> . boolean?)]
                        [pending-marker-path (path-string? . -> . path?)])
+         ;; Versioning, forking, import, naming — contracted (v0.51.5)
+         (contract-out [write-session-version-header! (-> path-string? void?)]
+                       [ensure-session-version-header! (-> path-string? exact-nonnegative-integer?)]
+                       [migrate-session-log!
+                        (-> path-string? exact-nonnegative-integer? exact-nonnegative-integer? void?)]
+                       [fork-session!
+                        (-> path-string? (or/c string? #f) path-string? exact-nonnegative-integer?)]
+                       [import-session! (-> path-string? path-string? string?)]
+                       [write-session-name! (-> path-string? string? void?)])
          ;; Re-exported from session-store-integrity.rkt
          GENESIS-HASH
          compute-event-hash
@@ -49,17 +58,8 @@
          get-children
          resolve-active-branch
          tree-info
-         ;; Session versioning (#499)
+         ;; Session versioning constant
          CURRENT-SESSION-VERSION
-         write-session-version-header!
-         ensure-session-version-header!
-         migrate-session-log!
-         ;; Session forking (#500)
-         fork-session!
-         ;; Session import (#1113)
-         import-session!
-         ;; Session naming
-         write-session-name!
          ;; In-memory session manager (GC-18)
          in-memory-session-manager?
          make-in-memory-session-manager
