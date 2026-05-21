@@ -158,17 +158,20 @@
   (define output (bytes->string* stdout-bytes))
   (define lines (string-split output "\n"))
 
-  ;; Try rackunit/text-ui format first
-  (define text-ui-match
-    (for/first ([line (in-list lines)])
-      (regexp-match
-       #px"([0-9]+) success\\(es\\) ([0-9]+) failure\\(s\\)(?: ([0-9]+) error\\(s\\))? ([0-9]+) test\\(s\\) run"
-       line)))
+  ;; Collect all rackunit/text-ui result lines and sum them
+  ;; NOTE: Avoids for/first — broken in some racket/base contexts for regexp-match
+  (define all-matches
+    (filter
+     values
+     (for/list ([line (in-list lines)])
+       (regexp-match
+        #px"([0-9]+) success\\(es\\) ([0-9]+) failure\\(s\\)(?: ([0-9]+) error\\(s\\))? ([0-9]+) test\\(s\\) run"
+        line))))
 
   (cond
-    [text-ui-match
-     (define passed (string->number (cadr text-ui-match)))
-     (define failed (string->number (caddr text-ui-match)))
+    [(pair? all-matches)
+     (define passed (for/sum ([m (in-list all-matches)]) (string->number (cadr m))))
+     (define failed (for/sum ([m (in-list all-matches)]) (string->number (caddr m))))
      (values passed failed (+ passed failed))]
     [else
      ;; Fall back to legacy raco test format
