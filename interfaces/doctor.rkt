@@ -90,13 +90,11 @@
 ;; Compare two version lists lexicographically.
 ;; Returns #t if actual >= required.
 (define (version>=? actual required)
-  (cond
-    [(and (null? actual) (null? required)) #t]
-    [(null? required) #t]
-    [(null? actual) #f]
-    [else
-     (define a (car actual))
-     (define r (car required))
+  (match (cons actual required)
+    [(cons '() '()) #t]
+    [(cons _ '()) #t]
+    [(cons '() _) #f]
+    [(cons (list a ___) (list r ___))
      (cond
        [(> a r) #t]
        [(< a r) #f]
