@@ -7,7 +7,8 @@
 
 (require racket/list
          racket/string
-         "state-types.rkt")
+         "state-types.rkt"
+         racket/contract)
 
 ;; Transcript helpers
 (provide transcript-entries
