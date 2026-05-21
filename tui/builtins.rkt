@@ -59,7 +59,7 @@
 ;; ═══════════════════════════════════════════════════════════════════
 
 ;; A scrollable, filterable selection list
-(struct select-list-state (options selected-idx filter-text scroll-offset) #:transparent)
+(struct select-list-state (options selected-idx filter-text scroll-offset))
 
 (define (make-select-list options
                           #:on-select [on-select void]
@@ -143,7 +143,7 @@
 ;; SettingsList component
 ;; ═══════════════════════════════════════════════════════════════════
 
-(struct settings-entry (key label value type) #:transparent)
+(struct settings-entry (key label value type))
 
 (define (make-settings-list entries #:on-change [on-change void] #:id [id 'settings])
   (define idx-box (box 0))

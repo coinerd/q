@@ -203,7 +203,7 @@
 ;; Overlay config (#1145)
 ;; ============================================================
 
-(struct overlay-config (anchor width-spec height-spec margin) #:transparent)
+(struct overlay-config (anchor width-spec height-spec margin))
 
 (define make-overlay-config overlay-config)
 

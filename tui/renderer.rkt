@@ -375,7 +375,7 @@
 ;; - Per-zone cache isolation (#642)
 ;; - Foundation for overlay composition (Wave 5)
 ;; - Architecture alignment with component.rkt
-(struct render-components (trans-comp status-comp) #:transparent)
+(struct render-components (trans-comp status-comp))
 
 ;; Create component instances for transcript and status zones.
 ;; Input line is NOT wrapped as a component because it changes every keystroke

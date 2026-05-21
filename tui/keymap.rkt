@@ -51,7 +51,7 @@
 ;; A key-spec identifies a key combination.
 ;; name: char? or symbol? (e.g. #\a, 'up, 'return)
 ;; ctrl, shift, alt: booleans for modifier keys
-(struct key-spec (name ctrl shift alt) #:transparent)
+(struct key-spec (name ctrl shift alt))
 
 ;; Convert a terminal keycode to a key-spec.
 ;; keycode: char?, symbol?, or 'ctrl-c etc.
