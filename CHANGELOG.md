@@ -1,6 +1,35 @@
 # Changelog
 
-## v0.51.x — Racket Concepts Remediation (in progress)
+## v0.52.0 — 2026-05-21
+
+### v0.51.x Series Complete
+
+Completed all 9 sub-milestones of the Racket Concepts Remediation series:
+
+- **v0.51.1** — Agent loop contracts (loop-phases.rkt, agent-session.rkt)
+- **v0.51.2** — TUI contracts (state-events.rkt, state-ui.rkt, renderer.rkt)
+- **v0.51.3** — Terminal decoder encapsulation (decoder-state struct)
+- **v0.51.4** — FS adapter activation (18 raw FS calls → adapter-routed)
+- **v0.51.5** — Settings & session contracts (36 functions contracted)
+- **v0.51.6** — Representation hiding (7 TUI structs made opaque)
+- **v0.51.7** — Pattern matching (10 cond→match across 4 files)
+- **v0.51.8** — Security tests + CHANGELOG precision
+- **v0.51.9** — Deprecation of bump-version.rkt
+
+### Fixed
+- **Test runner critical fix**: `parse-raco-output` silently failed for multi-submodule files
+  due to `for/first` bug with `regexp-match` in `racket/base`. Replaced with
+  `filter`+`values` approach that sums ALL result lines.
+- **test-sandbox-security.rkt**: Fixed struct identity issue under `raco test`
+  (double-loaded module causing `tool-result?` to return `#f`).
+
+### Metrics
+- PRs merged: #4855–#4872 (18 PRs across v0.51.x)
+- Sub-milestones closed: #451–#459 (9 milestones)
+- Test runner: Fixed — now correctly reports pass/fail counts for multi-submodule files
+- Version: 0.50.8 → 0.52.0
+
+## v0.51.x — Racket Concepts Remediation (complete)
 
 ### v0.51.7 — Pattern Matching Conversion (§23)
 - Converted 10 `cond` forms to `match` across 4 files for readability and exhaustiveness
