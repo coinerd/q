@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.50.7 — 2026-05-21
+
+### Fixed
+- A1: `build-system-preamble` contract corrected `list?` → `string?` (returns joined string).
+- A2: `build-session-context/tokens` contract corrected to `(values list? exact-nonnegative-integer?)` (returns 2 values).
+- A3: `context-summary-prompt` contract corrected to `(->* (list?) (#:previous-summary ...) string?)`.
+- B1: `set-gsd-mode!` contract corrected — accepts `(or/c symbol? #f)`, returns `(or/c ok? err?)`.
+- B2: `gsd-session-cleanup` contract corrected `void?` → `hook-result?`.
+- B3: `completed-waves` contract corrected `(listof ...)` → `(set/c ...)`.
+- B4: `gsd-mode` contract corrected `symbol?` → `(or/c symbol? #f)` (returns #f for idle).
+- C1: Removed duplicate `racket/match` require in `extensions/gsd-planning.rkt`.
+
+### Metrics
+- Failing test errors fixed: 38 → 0 (test-gsd-planning-boundary 27, test-gsd-planning 9, test-context-summary 2)
+- Arch-fitness: 33/33 ✅
+- GSD tests: 177/177 ✅
+
+### Waves
+- W0: Contract fixes (PR #4825)
+- W1: CHANGELOG + version bump (this release)
+
 ## v0.50.6 — 2026-05-20
 
 ### Changed
