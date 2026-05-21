@@ -14,6 +14,7 @@
 ;;;   5. emit final results in source order
 
 (require racket/contract
+         racket/match
          (only-in "tool.rkt"
                   tool?
                   tool-name
@@ -185,24 +186,23 @@
                                        (define msg (format "hook error: ~a" (exn-message e)))
                                        (preflight-entry 'error tc #f msg))])
             (define result (hook-dispatcher 'tool-call tc))
-            (cond
-              [(not result) tc] ; no handler → pass through
-              [(hook-result? result)
+            (match result
+              [#f tc] ; no handler → pass through
+              [(? hook-result?)
                (case (hook-result-action result)
                  [(block) 'blocked]
                  [(amend) (hook-result-payload result)]
                  [else tc])]
-              [else result]))
+              [_ result]))
           tc))
-    (cond
+    (match tc-after-hook
       ;; Hook returned 'blocked
-      [(eq? tc-after-hook 'blocked)
+      [(== 'blocked)
        (preflight-entry 'blocked tc #f (format "tool call '~a' blocked by hook" (tool-call-name tc)))]
       ;; Hook threw an exception (returned as list)
-      [(and (preflight-entry? tc-after-hook) (eq? (preflight-entry-status tc-after-hook) 'error))
-       tc-after-hook]
+      [(? preflight-entry? (app preflight-entry-status 'error)) tc-after-hook]
       ;; Hook returned a (possibly modified) tool-call
-      [(tool-call? tc-after-hook)
+      [(? tool-call?)
        (define t (lookup-tool registry (tool-call-name tc-after-hook)))
        (cond
          [(not t)
@@ -328,19 +328,18 @@
                 (hook-dispatcher 'tool-result-post post-payload))
               #f))
 
-        (cond
-          [(and (hook-result? post-hook-result) (eq? (hook-result-action post-hook-result) 'block))
+        (match post-hook-result
+          [(? hook-result? (app hook-result-action 'block))
            ;; Treat block as error
            (make-error-result (format "tool '~a' result blocked by tool-result-post hook" tc-name))]
-          [(and (hook-result? post-hook-result)
-                (eq? (hook-result-action post-hook-result) 'amend)
-                (hash? (hook-result-payload post-hook-result))
-                (hash-has-key? (hook-result-payload post-hook-result) 'result))
-           ;; Validate post-hook amended result is a valid tool-result
-           (let ([amended-result (hash-ref (hook-result-payload post-hook-result) 'result)])
-             (if (validate-tool-result amended-result) amended-result exec-result))]
+          [(? hook-result? (app hook-result-action 'amend) (app hook-result-payload (? hash?)))
+           (define payload (hook-result-payload post-hook-result))
+           (if (hash-has-key? payload 'result)
+               (let ([amended-result (hash-ref payload 'result)])
+                 (if (validate-tool-result amended-result) amended-result exec-result))
+               exec-result)]
           ;; Return original result
-          [else exec-result])])]))
+          [_ exec-result])])]))
 
 ;; ============================================================
 ;; Execution stage
