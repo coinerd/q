@@ -59,7 +59,7 @@
           ;; Style mapping (for testing)
           [style->ubuf-kws (-> (listof symbol?) (values (listof keyword?) list?))]
           ;; Ubuf operations (settable for testing)
-          [current-ubuf-clear (parameter/c (-> any/c any))]
+          [current-ubuf-clear (parameter/c (-> any/c void?))]
           [current-ubuf-putstring
            (parameter/c (->* (any/c exact-nonnegative-integer? exact-nonnegative-integer? string?)
                              (#:fg exact-nonnegative-integer?
@@ -68,13 +68,13 @@
                                    #:underline boolean?
                                    #:italic boolean?
                                    #:blink boolean?)
-                             any))]
+                             void?))]
           ;; Width safety net
           [current-assert-width (parameter/c boolean?)]
           [assert-line-width! (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
           ;; Low-level draw (for testing)
           [draw-styled-line!
-           (-> any/c styled-line? exact-nonnegative-integer? exact-nonnegative-integer? any)]))
+           (-> any/c styled-line? exact-nonnegative-integer? exact-nonnegative-integer? void?)]))
 
 ;; ============================================================
 ;; Ubuf operations (parameterized for testability)
