@@ -45,6 +45,19 @@
 
 ;; Parameterized FS ops for testing
 (define current-sessions-fs-ops (make-parameter default-sessions-fs-ops))
+;; Adapter accessors (v0.51.4)
+(define (fs-op name)
+  (hash-ref (current-sessions-fs-ops) name))
+(define (fs-directory-list dir #:build? [build? #f])
+  ((fs-op 'directory-list) dir #:build? build?))
+(define (fs-file-exists? path)
+  ((fs-op 'file-exists?) path))
+(define (fs-file->string path)
+  ((fs-op 'file->string) path))
+(define (fs-delete-directory/files path)
+  ((fs-op 'delete-directory/files) path))
+(define (fs-build-path . args)
+  (apply (fs-op 'build-path) args))
 
 ;; Listing
 (provide current-sessions-fs-ops
@@ -75,15 +88,15 @@
 (define (scan-session-dirs session-dir)
   (if (not (directory-exists? session-dir))
       '()
-      (let* ([entries (directory-list session-dir #:build? #t)]
+      (let* ([entries (fs-directory-list session-dir #:build? #t)]
              [session-paths (filter (lambda (p)
                                       (and (directory-exists? p)
-                                           (file-exists? (build-path p "session.jsonl"))))
+                                           (fs-file-exists? (fs-build-path p "session.jsonl"))))
                                     entries)])
         ;; Sort by modification time of session.jsonl, newest first
         (define with-time
           (for/list ([p (in-list session-paths)])
-            (define jsonl (build-path p "session.jsonl"))
+            (define jsonl (fs-build-path p "session.jsonl"))
             (define mtime
               (with-handlers ([exn:fail? (lambda (e)
                                            (log-warning "sessions: failed to get mtime for ~a: ~a"
@@ -98,9 +111,9 @@
 ;; Returns a hash with keys:
 ;;   'id, 'message-count, 'model, 'provider, 'size-bytes, 'mtime
 (define (read-session-metadata session-id session-path)
-  (define jsonl-path (build-path session-path "session.jsonl"))
+  (define jsonl-path (fs-build-path session-path "session.jsonl"))
   (define size-bytes
-    (if (file-exists? jsonl-path)
+    (if (fs-file-exists? jsonl-path)
         (file-size jsonl-path)
         0))
   (define mtime
@@ -207,13 +220,13 @@
 ;; Get detailed info for a specific session.
 ;; Returns a hash with session metadata, or #f if not found.
 (define (sessions-info session-dir session-id)
-  (define session-path (build-path session-dir session-id))
+  (define session-path (fs-build-path session-dir session-id))
   (cond
     [(not (directory-exists? session-path)) #f]
     [else
      (define meta (read-session-metadata session-id session-path))
      ;; Count tool calls from messages
-     (define jsonl-path (build-path session-path "session.jsonl"))
+     (define jsonl-path (fs-build-path session-path "session.jsonl"))
      (define entries
        (with-handlers ([exn:fail?
                         (lambda (e)
@@ -284,7 +297,7 @@
                          #:confirm? [confirm? #f]
                          #:in [in (current-input-port)]
                          #:out [out (current-output-port)])
-  (define session-path (build-path session-dir session-id))
+  (define session-path (fs-build-path session-dir session-id))
   (cond
     [(not (directory-exists? session-path)) 'not-found]
     [confirm?
@@ -293,11 +306,11 @@
      (define answer (string-trim (or (read-line in) "")))
      (if (or (string=? answer "y") (string=? answer "Y"))
          (begin
-           (delete-directory/files session-path)
+           (fs-delete-directory/files session-path)
            'ok)
          'cancelled)]
     [else
-     (delete-directory/files session-path)
+     (fs-delete-directory/files session-path)
      'ok]))
 
 ;; ============================================================
@@ -462,12 +475,12 @@
      (define json? (member "--json" args))
      (define summary? (member "--summary" args))
      (if sid
-         (let ([trace-path (build-path session-dir sid "trace.jsonl")])
+         (let ([trace-path (fs-build-path session-dir sid "trace.jsonl")])
            (cond
-             [(not (file-exists? trace-path))
+             [(not (fs-file-exists? trace-path))
               (displayln (format "No trace file for session: ~a" sid))]
              [summary? (display-trace-summary trace-path)]
-             [json? (displayln (file->string trace-path))]
+             [json? (displayln (fs-file->string trace-path))]
              [else (display-trace-formatted trace-path)]))
          (displayln "Usage: q sessions trace <session-id> [--json] [--summary]"))]
     [else (displayln "Usage: q sessions <list|info|delete|verify|trace> [args]")]))
