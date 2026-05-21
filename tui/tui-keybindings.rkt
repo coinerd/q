@@ -120,7 +120,7 @@
          extension-registry-box ; (or/c (boxof (or/c extension-registry? #f)) #f)
          session-queue-box ; (boxof (or/c queue? #f)) — agent queue for followup during streaming (G3.1)
          session-factory-runner) ; (or/c (string -> void) #f) — creates fresh session for /go
-  #:transparent)
+  )
 
 (define (make-tui-ctx #:event-bus [bus #f]
                       #:session-runner [runner (lambda (prompt) (void))]
