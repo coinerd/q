@@ -36,7 +36,7 @@
 ;; ============================================================
 
 ;; Tree node for rendering, with optional timestamp
-(struct tree-node (id role text depth children timestamp) #:transparent)
+(struct tree-node (id role text depth children timestamp))
 
 (define (make-tree-node id role text depth children [timestamp #f])
   (tree-node id role text depth children timestamp))
