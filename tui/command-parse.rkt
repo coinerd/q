@@ -31,7 +31,7 @@
 ;; e.g. "/help" → (cons 'help 'none), "/switch" → (cons 'switch 'required)
 
 ;; R-17: Structured command result replacing ad-hoc symbol/list returns.
-(struct parsed-command (canonical-name args arg-kind))
+(struct parsed-command (canonical-name args arg-kind) #:transparent)
 
 (define (make-command-table)
   ;; General
