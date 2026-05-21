@@ -41,7 +41,7 @@
           [hash->session-config (-> hash? session-config?)]
           [session-config->hash (-> session-config? hash?)]
           [resolve-max-iterations-hard
-           (-> session-config? exact-positive-integer? exact-positive-integer?)]
+           (-> session-config? exact-nonnegative-integer? exact-positive-integer?)]
           [normalize-session-config-hash (-> any/c hash?)]
           [config-provider (-> session-config? (or/c #f provider?))]
           [config-tool-registry (-> session-config? (or/c #f tool-registry?))]

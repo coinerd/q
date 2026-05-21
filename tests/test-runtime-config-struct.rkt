@@ -19,7 +19,7 @@
 
 (test-case "session-config wraps immutable hash"
   (define h (make-immutable-hash '((a . 1) (b . "two"))))
-  (define cfg (session-config h))
+  (define cfg (hash->session-config h))
   (check-true (session-config? cfg))
   (check-equal? (dict-ref cfg 'a) 1)
   (check-equal? (dict-ref cfg 'b) "two"))
