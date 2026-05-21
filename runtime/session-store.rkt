@@ -362,7 +362,7 @@
                    [acc '()])
           (match es
             ['() (reverse acc)]
-            [(list (? (lambda (e) (equal? (message-id e) entry-id)) found) ___)
+            [(cons (? (lambda (e) (equal? (message-id e) entry-id)) found) _)
              (reverse (cons found acc))]
             [(cons e rest) (loop rest (cons e acc))]))
         entries))

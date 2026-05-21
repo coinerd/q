@@ -45,36 +45,35 @@
                              q-settings?)])
 
          ;; Loading — all contracted
-         (contract-out
-          [load-global-settings (->* () (path-string?) hash?)]
-          [load-project-settings (->* () (path-string?) hash?)]
-          [make-minimal-settings
-           (->* ()
-                (#:provider (or/c string? #f) #:model (or/c string? #f) #:overrides hash?)
-                q-settings?)]
-          [merge-settings (-> hash? hash? hash?)]
-          [deep-merge-hash (-> any/c any/c hash?)]
-          [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
-          [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
-          [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]
-          [provider-names (-> q-settings? (listof symbol?))]
-          [config-parse-error (-> path-string? (or/c string? #f))]
-          [parallel-tools-enabled? (-> q-settings? any/c)]
-          [http-request-timeout (-> q-settings? any/c)]
-          [get-model-timeout (-> q-settings? string? symbol? (or/c number? #f))]
-          [effective-request-timeout (-> q-settings? string? any/c)]
-          [warn-on-destructive? (-> q-settings? any/c)]
-          [security-config-from-settings (-> q-settings? hash?)]
-          [default-session-dir (-> path-string?)]
-          [default-project-dir (-> path?)]
-          [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
-          [project-dir-from-settings (-> q-settings? (or/c path-string? #f))]
-          [trace-enabled? (-> q-settings? any/c)]
-          [trace-max-files (-> q-settings? any/c)]
-          [steering-gentle-threshold (-> q-settings? any/c)]
-          [steering-strong-threshold (-> q-settings? any/c)]
-          [steering-hard-cap (-> q-settings? any/c)]
-          [steering-same-file-dedup? (-> q-settings? any/c)])
+         (contract-out [load-global-settings (->* () (path-string?) hash?)]
+                       [load-project-settings (->* () (path-string?) hash?)]
+                       [make-minimal-settings
+                        (->* ()
+                             (#:provider any/c #:model (or/c string? #f) #:overrides (or/c hash? #f))
+                             q-settings?)]
+                       [merge-settings (-> hash? hash? hash?)]
+                       [deep-merge-hash (-> any/c any/c hash?)]
+                       [setting-ref (->* (q-settings? (or/c symbol? string?)) (any/c) any/c)]
+                       [setting-ref* (->* (q-settings? (listof any/c)) (any/c) any/c)]
+                       [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]
+                       [provider-names (-> q-settings? (listof symbol?))]
+                       [config-parse-error (-> path-string? (or/c string? #f))]
+                       [parallel-tools-enabled? (-> q-settings? any/c)]
+                       [http-request-timeout (-> q-settings? any/c)]
+                       [get-model-timeout (-> q-settings? string? symbol? (or/c number? #f))]
+                       [effective-request-timeout (-> q-settings? string? any/c)]
+                       [warn-on-destructive? (-> q-settings? any/c)]
+                       [security-config-from-settings (-> q-settings? hash?)]
+                       [default-session-dir (-> path-string?)]
+                       [default-project-dir (-> path?)]
+                       [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
+                       [project-dir-from-settings (-> q-settings? (or/c path-string? #f))]
+                       [trace-enabled? (-> q-settings? any/c)]
+                       [trace-max-files (-> q-settings? any/c)]
+                       [steering-gentle-threshold (-> q-settings? any/c)]
+                       [steering-strong-threshold (-> q-settings? any/c)]
+                       [steering-hard-cap (-> q-settings? any/c)]
+                       [steering-same-file-dedup? (-> q-settings? any/c)])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?
@@ -226,8 +225,9 @@
 (define (make-minimal-settings #:provider [provider #f]
                                #:model [model #f]
                                #:overrides [overrides (hash)])
+  (define effective-overrides (or overrides (hash)))
   (define merged
-    (for/fold ([acc (hash)]) ([(k v) (in-hash overrides)])
+    (for/fold ([acc (hash)]) ([(k v) (in-hash effective-overrides)])
       (if v
           (hash-set acc k v)
           acc)))
