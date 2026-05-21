@@ -22,9 +22,10 @@
                        [active-leaf (-> any/c any/c)]
                        [get-branch (-> any/c any/c (or/c list? #f))]
                        [find-common-ancestor (-> any/c any/c any/c any/c)]
-                       [collect-branch-entries (-> any/c any/c any/c integer? (listof any/c))]
-                       [estimate-entry-tokens (-> any/c integer?)]
-                       [leaf-depth (-> any/c any/c (or/c integer? #f))]))
+                       [collect-branch-entries
+                        (-> any/c any/c any/c exact-nonnegative-integer? (listof any/c))]
+                       [estimate-entry-tokens (-> any/c exact-nonnegative-integer?)]
+                       [leaf-depth (-> any/c any/c (or/c exact-nonnegative-integer? #f))]))
 
 (define (lookup-entry idx id)
   (hash-ref (session-index-by-id idx) id #f))
