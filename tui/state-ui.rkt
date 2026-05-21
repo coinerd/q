@@ -7,78 +7,77 @@
 
 (require racket/list
          racket/string
-         "state-types.rkt")
+         "state-types.rkt"
+         racket/contract)
 
 ;; Transcript helpers
-(provide transcript-entries
-         add-transcript-entry
-         visible-entries
-         scroll-up
-         scroll-down
-         scroll-to-bottom
-         scroll-to-top
-
-         ;; State queries
-         ui-busy?
-         ui-session-label
-         ui-model-label
-         ui-status-text
-
-         ;; Branch management
-         set-current-branch
-         set-visible-branches
-         clear-visible-branches
-
-         ;; Overlay management (#643)
-         show-overlay
-         update-overlay-input
-         dismiss-overlay
-         overlay-active?
-         ANCHOR-TOP-LEFT
-         ANCHOR-CENTER
-         ANCHOR-BOTTOM-RIGHT
-         anchor?
-
-         ;; Overlay config (#1145)
-         overlay-config
+(provide overlay-config
          overlay-config?
          overlay-config-anchor
          overlay-config-width-spec
          overlay-config-height-spec
          overlay-config-margin
          make-overlay-config
-         show-overlay-with-config
-         overlay-compute-bounds
+         anchor?
+         ANCHOR-TOP-LEFT
+         ANCHOR-CENTER
+         ANCHOR-BOTTOM-RIGHT
 
-         ;; Selection
-         set-selection-anchor
-         set-selection-end
-         clear-selection
-         has-selection?
-
-         ;; Widget management (#714)
-         set-extension-widget
-         remove-extension-widget
-         remove-all-extension-widgets
-         get-widget-lines-above
-         get-widget-lines-below
-
-         ;; Custom header/footer (#717)
-         set-custom-header
-         set-custom-footer
-         clear-custom-header
-         clear-custom-footer
-
-         ;; Focus management
-         set-focused-component
-         clear-focused-component
-
-         ;; Custom editor component (#1150)
-         set-editor-component
-         clear-editor-component
-
-         ;; Retry enrichment (v0.14.2)
-         get-last-turn-tool-summary)
+         (contract-out
+          [transcript-entries (-> ui-state? (listof transcript-entry?))]
+          [add-transcript-entry (-> ui-state? transcript-entry? ui-state?)]
+          [visible-entries (-> ui-state? exact-positive-integer? (listof transcript-entry?))]
+          [scroll-up (->* (ui-state?) (exact-positive-integer?) ui-state?)]
+          [scroll-down (->* (ui-state?) (exact-positive-integer?) ui-state?)]
+          [scroll-to-bottom (-> ui-state? ui-state?)]
+          [scroll-to-top (-> ui-state? ui-state?)]
+          [ui-busy? (-> ui-state? boolean?)]
+          [ui-session-label (-> ui-state? string?)]
+          [ui-model-label (-> ui-state? string?)]
+          [ui-status-text (-> ui-state? string?)]
+          [set-current-branch (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-visible-branches (-> ui-state? (listof any/c) ui-state?)]
+          [clear-visible-branches (-> ui-state? ui-state?)]
+          [show-overlay
+           (->* (ui-state? symbol? any/c)
+                (string? #:anchor symbol?
+                         #:width (or/c exact-positive-integer? #f)
+                         #:height (or/c exact-positive-integer? #f)
+                         #:margin exact-nonnegative-integer?)
+                ui-state?)]
+          [update-overlay-input (-> ui-state? string? ui-state?)]
+          [dismiss-overlay (-> ui-state? ui-state?)]
+          [overlay-active? (-> ui-state? boolean?)]
+          [show-overlay-with-config
+           (->* (ui-state? overlay-config? symbol? any/c) (string?) ui-state?)]
+          [overlay-compute-bounds
+           (-> overlay-state?
+               exact-positive-integer?
+               exact-positive-integer?
+               (values exact-nonnegative-integer?
+                       exact-nonnegative-integer?
+                       exact-nonnegative-integer?
+                       exact-nonnegative-integer?))]
+          [set-selection-anchor
+           (-> ui-state? exact-nonnegative-integer? exact-nonnegative-integer? ui-state?)]
+          [set-selection-end
+           (-> ui-state? exact-nonnegative-integer? exact-nonnegative-integer? ui-state?)]
+          [clear-selection (-> ui-state? ui-state?)]
+          [has-selection? (-> ui-state? boolean?)]
+          [set-extension-widget (-> ui-state? symbol? any/c any/c ui-state?)]
+          [remove-extension-widget (-> ui-state? symbol? any/c ui-state?)]
+          [remove-all-extension-widgets (-> ui-state? symbol? ui-state?)]
+          [get-widget-lines-above (-> ui-state? (listof any/c))]
+          [get-widget-lines-below (-> ui-state? (listof any/c))]
+          [set-custom-header (-> ui-state? (or/c string? #f) ui-state?)]
+          [set-custom-footer (-> ui-state? (or/c string? #f) ui-state?)]
+          [clear-custom-header (-> ui-state? ui-state?)]
+          [clear-custom-footer (-> ui-state? ui-state?)]
+          [set-focused-component (-> ui-state? symbol? ui-state?)]
+          [clear-focused-component (-> ui-state? ui-state?)]
+          [set-editor-component (-> ui-state? any/c ui-state?)]
+          [clear-editor-component (-> ui-state? ui-state?)]
+          [get-last-turn-tool-summary (-> ui-state? (or/c string? #f))]))
 
 ;; ============================================================
 ;; Transcript helpers
@@ -138,7 +137,8 @@
 
 (define (has-selection? state)
   (and (selection-state-anchor (ui-state-selection state))
-       (selection-state-end (ui-state-selection state))))
+       (selection-state-end (ui-state-selection state))
+       #t))
 
 ;; ============================================================
 ;; Queries
