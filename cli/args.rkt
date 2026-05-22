@@ -37,7 +37,8 @@
          cli-config-sessions-args
          cli-config-keybindings-path
          cli-config-print-mode?
-         (contract-out [parse-cli-args (->* () ((or/c (vectorof string?) #f)) cli-config?)]
+         (contract-out [parse-cli-args
+                        (->* () ((or/c (vectorof string?) (listof string?) #f)) cli-config?)]
                        [cli-config->runtime-config (-> cli-config? hash?)]
                        [print-usage (->* () ((or/c output-port? #f)) void?)]
                        [print-version (->* () (output-port?) void?)])
