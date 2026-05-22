@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.54.9 — 2026-05-22
+
+### GSD Transaction Contract Mismatch Fix
+
+- **W0**: Characterization tests for `/go` transaction contract mismatch bug.
+  `with-gsd-transaction` contract `(-> any/c any/c any/c any/c)` incorrectly
+  constrained function to single return value, while `launch-wave-executor`
+  used it as a multi-value producer (`define-values (exec waves) ...`).
+  Tests confirm PRE-FIX behavior.
+- **W1**: Removed `with-gsd-transaction` from `contract-out` in
+  `extensions/gsd/core.rkt` — it now passes through multi-value thunk
+  results correctly. Single-value and error rollback paths unchanged.
+- **W2**: Fixed TUI double-slash formatting (`//go` → `/go`) in blocked
+  command messages. Includes `hook-result-payload` block reason when
+  present for more specific diagnostics (tui/commands.rkt).
+
 ## v0.54.8 — 2026-05-22
 
 ### Entrypoint Hardening — /go Unknown Command Fix
