@@ -6,6 +6,10 @@
 ;;; etc.) must be explicitly approved before execution.  Safe / read-only tools
 ;;; bypass the check entirely.
 ;;;
+;;; Policy modes (v0.54.4):
+;;;   'strict     — unknown tools require approval (deny-by-default). Default.
+;;;   'permissive — unknown tools are auto-approved (allow-by-default).
+;;;
 ;;; Exports:
 ;;;   permission-config, permission-config?     — config struct
 ;;;   make-default-permission-config             — headless-friendly defaults
@@ -14,6 +18,7 @@
 ;;;   permission-config-auto-approved-tools      — accessor
 ;;;   permission-config-needs-approval-tools     — accessor
 ;;;   permission-config-approval-callback        — accessor
+;;;   permission-config-policy-mode              — accessor
 
 (require racket/set
          racket/contract)
@@ -25,7 +30,8 @@
 (struct permission-config
         (auto-approved-tools ; (set/c string?)
          needs-approval-tools ; (set/c string?)
-         approval-callback) ; (string? hash? -> boolean?)
+         approval-callback ; (string? hash? -> boolean?)
+         policy-mode) ; (or/c 'strict 'permissive)
   #:transparent)
 
 ;; ============================================================
@@ -34,7 +40,8 @@
 
 (define (make-default-permission-config #:auto-approved [auto-approved #f]
                                         #:needs-approval [needs-approval #f]
-                                        #:callback [callback #f])
+                                        #:callback [callback #f]
+                                        #:policy-mode [mode 'strict])
   (permission-config
    (or auto-approved
        (set "read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route"))
@@ -48,7 +55,8 @@
             "spawn-subagent"
             "spawn-subagents"
             "firecrawl"))
-   (or callback (lambda (tool-name args) #t))))
+   (or callback (lambda (tool-name args) #t))
+   (if (memq mode '(strict permissive)) mode 'strict)))
 
 ;; ============================================================
 ;; Predicate — does this tool call require approval?
@@ -56,11 +64,13 @@
 
 (define (tool-needs-approval? config tool-name)
   (cond
-    ;; Explicitly auto-approved → no
+    ;; Explicitly auto-approved -> no
     [(set-member? (permission-config-auto-approved-tools config) tool-name) #f]
-    ;; Explicitly in the needs-approval set → yes
+    ;; Explicitly in the needs-approval set -> yes
     [(set-member? (permission-config-needs-approval-tools config) tool-name) #t]
-    ;; Unknown tool → require approval (safe default)
+    ;; Unknown tool -- policy-dependent
+    [(eq? (permission-config-policy-mode config) 'permissive) #f]
+    ;; Strict mode (default) -- unknown tools require approval
     [else #t]))
 
 ;; ============================================================
@@ -79,11 +89,13 @@
          permission-config-auto-approved-tools
          permission-config-needs-approval-tools
          permission-config-approval-callback
+         permission-config-policy-mode
          (contract-out [make-default-permission-config
                         (->* ()
                              (#:auto-approved (or/c (set/c string?) #f)
                                               #:needs-approval (or/c (set/c string?) #f)
-                                              #:callback (or/c (-> string? hash? boolean?) #f))
+                                              #:callback (or/c (-> string? hash? boolean?) #f)
+                                              #:policy-mode (or/c 'strict 'permissive))
                              permission-config?)])
          tool-needs-approval?
          request-approval)
