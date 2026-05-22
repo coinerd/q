@@ -1,3 +1,26 @@
+## v0.53.1 — 2026-05-22
+
+### Test Runner Deadlock Fix + Test Failure Fixes
+
+**Test Runner Fix:**
+- Fixed critical runner deadlock: `raco test` subprocess accumulation caused
+  hangs after ~40-50 files. Switched to `racket <file>` direct execution.
+- Batched thread execution with `(collect-garbage 'major)` between batches.
+- Fixed timeout path: non-blocking wait after kill with thread-kill fallback.
+
+**Test Failure Fixes (v0.53.7 cherry-picks):**
+- `runtime/settings.rkt`: widened `make-minimal-settings` `#:provider` to `any/c`
+  to accept provider structs (not just strings).
+- `runtime/session-store.rkt`: fixed `in-memory-fork!` match pattern (`___` was
+  treated as literal symbol, not ellipsis — fork always copied all entries).
+- `tui/command-parse.rkt`: added `#:transparent` to `parsed-command` struct.
+- `tui/state-ui.rkt`: widened `set-custom-header/footer` contracts for styled-line lists.
+
+**Test Results:**
+- `--suite smoke`: 525/525 passed, 0 timeouts
+- `--suite fast`: 562/562 passed, 0 timeouts
+- Individual test failures: 10 (non-blocking, pre-existing)
+
 # Changelog
 
 ## v0.53.0 — 2026-05-21
