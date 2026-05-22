@@ -11,6 +11,7 @@
          "context-assembly/budgeting.rkt"
          "context-assembly/selection.rkt"
          "context-assembly/serialization.rkt"
+         (only-in "session-index.rkt" session-index?)
          (only-in "context-summary.rkt"
                   DEFAULT-CACHE-MAX-ENTRIES
                   make-summary-cache
@@ -70,41 +71,46 @@
           [context-result-excluded-count (-> context-result? exact-nonnegative-integer?)]
           [context-result-over-budget? (-> context-result? boolean?)]
           [context-result-catalog (-> context-result? list?)]
-          [context-result-summary (-> context-result? (or/c any/c #f))]
+          [context-result-summary (-> context-result? (or/c context-summary? #f))]
           ;; Context builders
           [build-assembled-context
-           (->* (any/c any/c)
-                (#:cache any/c
-                         #:provider any/c
+           (->* (session-index? context-assembly-config?)
+                (#:cache (or/c summary-cache? #f)
+                         #:provider (or/c any/c #f)
                          #:model-name (or/c string? #f)
                          #:trace-callback (or/c procedure? #f)
-                         #:working-set any/c
+                         #:working-set (or/c list? #f)
                          #:generate-summary-proc (or/c procedure? #f)
                          #:generate-catalog-proc (or/c procedure? #f)
                          #:estimate-text-proc (or/c procedure? #f))
-                any/c)]
+                context-result?)]
           [build-assembled-context/raw
-           (->* (list? any/c any/c #:memo any/c)
-                (#:cache any/c
-                         #:provider any/c
+           (->* (list? context-assembly-config? context-assembly-call-options? #:memo (or/c hash? #f))
+                (#:cache (or/c summary-cache? #f)
+                         #:provider (or/c any/c #f)
                          #:model-name (or/c string? #f)
                          #:trace (or/c procedure? #f)
                          #:estimate-text-proc (or/c procedure? #f)
                          #:generate-summary-proc (or/c procedure? #f)
                          #:generate-catalog-proc (or/c procedure? #f))
-                any/c)]
-          [build-assembled-context/v2 (->* (any/c any/c any/c) any/c)]
-          [build-session-context (-> any/c any/c)]
+                context-result?)]
+          [build-assembled-context/v2
+           (-> session-index?
+               context-assembly-config?
+               context-assembly-call-options?
+               context-result?)]
+          [build-session-context (-> session-index? list?)]
           ;; Struct: context-assembly-call-options
           [context-assembly-call-options? (-> any/c boolean?)]
-          [context-assembly-call-options-cache (-> context-assembly-call-options? (or/c any/c #f))]
+          [context-assembly-call-options-cache
+           (-> context-assembly-call-options? (or/c summary-cache? #f))]
           [context-assembly-call-options-provider (-> context-assembly-call-options? (or/c any/c #f))]
           [context-assembly-call-options-model-name
            (-> context-assembly-call-options? (or/c string? #f))]
           [context-assembly-call-options-trace-callback
            (-> context-assembly-call-options? (or/c procedure? #f))]
           [context-assembly-call-options-working-set
-           (-> context-assembly-call-options? (or/c any/c #f))]
+           (-> context-assembly-call-options? (or/c list? #f))]
           [context-assembly-call-options-generate-summary-proc
            (-> context-assembly-call-options? (or/c procedure? #f))]
           [context-assembly-call-options-generate-catalog-proc
@@ -129,18 +135,18 @@
           [tiered-context-tier-c (-> tiered-context? list?)]
           [build-tiered-context
            (->* (list?)
-                (#:tier-b-count any/c
-                                #:tier-c-count any/c
+                (#:tier-b-count (or/c exact-nonnegative-integer? #f)
+                                #:tier-c-count (or/c exact-nonnegative-integer? #f)
                                 #:trace (or/c procedure? #f)
                                 #:working-set-messages (or/c list? #f))
                 tiered-context?)]
           [tiered-context->message-list (-> tiered-context? list?)]
           [build-tiered-context-with-hooks
            (->* (list?)
-                (#:tier-b-count any/c
-                                #:tier-c-count any/c
+                (#:tier-b-count (or/c exact-nonnegative-integer? #f)
+                                #:tier-c-count (or/c exact-nonnegative-integer? #f)
                                 #:hook-dispatcher (or/c procedure? #f)
-                                #:max-tokens any/c
+                                #:max-tokens exact-nonnegative-integer?
                                 #:working-set-messages (or/c list? #f))
                 (values tiered-context? any/c))]
           [compute-dynamic-tier-b-count (-> exact-nonnegative-integer? exact-nonnegative-integer?)]
@@ -158,10 +164,10 @@
           [tiered-context->payload
            (->* (tiered-context? exact-nonnegative-integer?) (hash?) context-assembly-payload?)]
           [build-session-context/tokens
-           (-> any/c
+           (-> session-index?
                #:max-tokens exact-nonnegative-integer?
                (values list? exact-nonnegative-integer?))]
-          [entry->context-message (-> any/c any/c)]
+          [entry->context-message (-> any/c (or/c list? #f))]
           [load-agents-context (-> (or/c path? string?) string?)]
           [build-system-preamble (-> (or/c path? string?) string?)]
           [truncate-messages-to-budget (-> list? exact-nonnegative-integer? list?)])
