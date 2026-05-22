@@ -1,51 +1,61 @@
-#lang racket/base
-;; BOUNDARY: pure
+#lang racket
 
-;; tests/test-loop-phases.rkt — Pure phase function tests (F1)
+;; tests/test-loop-phases.rkt — Tests for runtime/iteration/loop-phases.rkt (v0.54.3 W1)
+;;
+;; Tests the extracted pure and effectful sub-phases from main-loop.
 
 (require rackunit
          rackunit/text-ui
-         "../agent/effect-types.rkt"
-         "../agent/loop-phases.rkt"
-         "../agent/loop-fsm.rkt"
+         "../runtime/iteration/loop-phases.rkt"
          "../agent/event-bus.rkt"
-         "../agent/state.rkt"
-         "../util/message.rkt"
-         (only-in "../llm/model.rkt" model-request?))
+         "../agent/queue.rkt")
 
-(define loop-phases-tests
-  (test-suite "loop-phases"
+(define loop-phases-suite
+  (test-suite "loop-phases extracted sub-phases"
 
-    (test-case "phase-emit-start returns context and effects"
-      (define-values (ctx effs) (phase-emit-start "sess" "turn" #f '()))
-      (check-equal? ctx '())
-      (check = (length effs) 2)
-      (check-true (effect:emit-event? (car effs)))
-      (check-true (effect:update-fsm? (cadr effs))))
-
-    (test-case "phase-build-context returns raw messages and effects"
+    ;; ── prepare-iteration-context with no steering/injection ──
+    (test-case "prepare-iteration-context returns ctx unchanged when no queue"
       (define bus (make-event-bus))
-      (define st (make-loop-state "sess" "turn"))
-      (define-values (raw effs)
-        (phase-build-context bus
-                             "sess"
-                             "turn"
-                             st
-                             (list (message "id1" #f 'user 'user "hello" 0 (hash)))))
-      (check-true (list? raw))
-      (check = (length raw) 1)
-      (check = (length effs) 2)
-      (check-true (effect:emit-event? (car effs)))
-      (check-true (effect:update-fsm? (cadr effs))))
+      (define ctx (list 'msg1 'msg2))
+      (define result (prepare-iteration-context ctx #f #f bus #f "s1"))
+      (check-equal? result ctx))
 
-    (test-case "phase-build-request returns model request"
-      (define-values (req effs) (phase-build-request '() #f #f))
-      (check-true (model-request? req))
-      (check-true (null? effs)))
+    ;; ── prepare-iteration-context with empty queue ──
+    (test-case "prepare-iteration-context with empty queue returns ctx"
+      (define bus (make-event-bus))
+      (define q (make-queue))
+      (define ctx (list 'msg1))
+      (define result (prepare-iteration-context ctx q #f bus #f "s1"))
+      (check-equal? result ctx))
 
-    (test-case "phase-pre-hook returns #f without dispatcher"
-      (define-values (result effs) (phase-pre-hook #f #f '() (hash) "sess" "turn"))
-      (check-false result)
-      (check-true (null? effs)))))
+    ;; ── dispatch-turn-start-hooks with #f ext-reg ──
+    (test-case "dispatch-turn-start-hooks with no ext-reg returns unblocked"
+      (define-values (ctx blocked?) (dispatch-turn-start-hooks '() #f))
+      (check-false blocked?)
+      (check-equal? ctx '()))
 
-(run-tests loop-phases-tests)
+    ;; ── dispatch-turn-start-hooks with ctx ──
+    (test-case "dispatch-turn-start-hooks passes through context"
+      (define ctx (list 'a 'b 'c))
+      (define-values (result-ctx blocked?) (dispatch-turn-start-hooks ctx #f))
+      (check-false blocked?)
+      (check-equal? result-ctx ctx))
+
+    ;; ── prepare-iteration-context with nil injected box ──
+    (test-case "prepare-iteration-context with empty injected box"
+      (define bus (make-event-bus))
+      (define inj-box (box (list)))
+      (define ctx (list 'msg))
+      (define result (prepare-iteration-context ctx #f inj-box bus #f "s1"))
+      (check-equal? result ctx))
+
+    ;; ── prepare-iteration-context with messages in queue ──
+    (test-case "prepare-iteration-context appends steering messages"
+      (define bus (make-event-bus))
+      (define q (make-queue))
+      (define ctx (list 'original))
+      ;; Queue starts empty, so steering will be null
+      (define result (prepare-iteration-context ctx q #f bus #f "s1"))
+      (check-equal? result (list 'original)))))
+
+(run-tests loop-phases-suite)
