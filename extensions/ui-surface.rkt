@@ -22,21 +22,21 @@
          current-ui-registry
 
          ;; Setter/Getter callbacks
-         (contract-out [ui-set-footer! (-> any/c any/c any/c)]
-                       [ui-set-header! (-> any/c any/c any/c)]
-                       [ui-clear-footer! (-> any/c any/c)]
-                       [ui-clear-header! (-> any/c any/c)]
+         (contract-out [ui-set-footer! (-> any/c (or/c string? (listof any/c)) void?)]
+                       [ui-set-header! (-> any/c (or/c string? (listof any/c)) void?)]
+                       [ui-clear-footer! (-> any/c void?)]
+                       [ui-clear-header! (-> any/c void?)]
                        ;; Rendering callbacks
-                       [ui-make-styled-line (-> any/c any/c)]
-                       [ui-make-styled-segment (-> any/c any/c any/c)]
+                       [ui-make-styled-line (-> (listof any/c) any/c)]
+                       [ui-make-styled-segment (-> string? any/c any/c)]
                        ;; Status message callback (dialog-api)
-                       [ui-set-status-message! (-> any/c any/c any/c)]
+                       [ui-set-status-message! (-> any/c string? void?)]
                        ;; Widget callbacks (widget-api)
-                       [ui-set-extension-widget! (-> any/c any/c any/c any/c any/c)]
-                       [ui-remove-extension-widget! (-> any/c any/c any/c any/c)]
-                       [ui-remove-all-extension-widgets! (-> any/c any/c any/c)]
+                       [ui-set-extension-widget! (-> any/c symbol? any/c any/c void?)]
+                       [ui-remove-extension-widget! (-> any/c symbol? any/c void?)]
+                       [ui-remove-all-extension-widgets! (-> any/c symbol? void?)]
                        ;; Installation (called by TUI during init)
-                       [install-ui-callbacks! (-> any/c any/c)]
+                       [install-ui-callbacks! (-> ui-callback-registry? void?)]
                        ;; Check if callbacks are installed
                        [ui-callbacks-installed? (-> boolean?)]))
 

@@ -20,6 +20,7 @@
          racket/string
          json
          "../util/protocol-types.rkt"
+         "../agent/event-bus.rkt"
          "api.rkt"
          "../util/checksum.rkt"
          "../util/version.rkt"
@@ -35,14 +36,14 @@
          extension-load-error-message
          extension-load-error-category
          classify-exception
-         (contract-out [discover-extensions (-> path-string? (listof any/c))]
-                       [load-extension!
-                        (->* (extension-registry? path-string?) (#:event-bus (or/c any/c #f)) void?)]
-                       [try-load-extension (-> path-string? (or/c any/c extension-load-error?))]
-                       [get-extension-name-from-path (-> path-string? string?)]
-                       [reload-extensions!
-                        (-> extension-registry? (listof path-string?) (listof string?))]
-                       [discover-extension-files (-> (listof path-string?) (listof path-string?))]))
+         (contract-out
+          [discover-extensions (-> path-string? (listof path?))]
+          [load-extension!
+           (->* (extension-registry? path-string?) (#:event-bus (or/c event-bus? #f)) void?)]
+          [try-load-extension (-> path-string? (or/c any/c extension-load-error?))]
+          [get-extension-name-from-path (-> path-string? string?)]
+          [reload-extensions! (-> extension-registry? (listof path-string?) (listof string?))]
+          [discover-extension-files (-> (listof path-string?) (listof path-string?))]))
 
 ;; ============================================================
 ;; extension-load-error struct
