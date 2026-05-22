@@ -247,7 +247,7 @@
 ;; launch-wave-executor : gsd-validated-plan? gsd-plan? path? -> (or/c (list/c 'ok any/c (listof exact-nonnegative-integer?)) (list/c 'error string?))
 ;; Configure state machine and create wave executor inside a transaction.
 (define (launch-wave-executor validation plan base-dir)
-  (define-values (executor wave-indices)
+  (define result
     (with-gsd-transaction
      "go"
      (lambda ()
@@ -264,7 +264,7 @@
        (gsm-set-current-wave! 0)
        (define exec (make-wave-executor-from-validated validation))
        (gsm-set-wave-executor! exec)
-       (values exec wis))
+       (list exec wis))
      (lambda (e snap)
        (events:emit-gsd-event! 'gsd.mode.changed
                                (make-gsd-mode-changed-event #:session-id ""
@@ -272,9 +272,11 @@
                                                             #:mode (gsm-current)
                                                             #:reason "transaction-rollback"
                                                             #:error (exn-message e))))))
-  (match executor
-    [(? gsd-command-result?) (list 'error (gsd-command-result-message executor))]
-    [_ (list 'ok executor wave-indices)]))
+  (cond
+    [(gsd-failed? result) (list 'error (gsd-command-result-message result))]
+    [else
+     (match-define (list executor wave-indices) result)
+     (list 'ok executor wave-indices)]))
 
 ;; build-go-prompt : path? string? (or/c gsd-plan? #f) any/c string? gsd-plan? -> (values string? string?)
 ;; Assemble augmented prompt text and display text for /go.
