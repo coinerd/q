@@ -52,6 +52,7 @@
          "../agent/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)
+         (only-in "../tools/permission-gate.rkt" permission-config? make-default-permission-config)
          ;; ARCH-01 upward import via adapter
          (only-in "layer-adapters.rkt" run-tool-batch scheduler-result scheduler-result-results)
          ;; ARCH-01 upward import — runtime→extensions: hooks
@@ -178,7 +179,8 @@
                                   token
                                   config
                                   per-tool-start-ms
-                                  batch-start-ms)
+                                  batch-start-ms
+                                  perm-cfg)
   ;; Dispatch 'tool.execution.started hook before tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
     (maybe-dispatch-hooks
@@ -220,7 +222,8 @@
                                                          #:model (config-model-name config)))
            #:call-id (generate-id)
            #:session-metadata
-           (hasheq 'session-id session-id 'session-index (config-session-index config)))
+           (hasheq 'session-id session-id 'session-index (config-session-index config))
+           #:permission-config (or perm-cfg (make-default-permission-config)))
           #:parallel? (config-parallel-tools config)))]))
   ;; Dispatch 'tool.execution.completed hook after tool batch
   (when (and ext-reg (not (null? tool-calls-to-run)))
@@ -278,7 +281,8 @@
                                    session-id
                                    log-path
                                    token
-                                   config-raw)
+                                   config-raw
+                                   #:permission-config [perm-cfg #f])
   (define config
     (if (session-config? config-raw)
         config-raw

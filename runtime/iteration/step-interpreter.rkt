@@ -37,6 +37,7 @@
                   message-id
                   tool-call-name
                   tool-call-arguments)
+         (only-in "../../tools/permission-gate.rkt" permission-config?)
          (only-in "../../runtime/tool-coordinator.rkt"
                   handle-tool-calls-pending
                   extract-tool-calls-from-messages)
