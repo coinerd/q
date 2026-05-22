@@ -65,8 +65,11 @@
                        [cmd-reset (-> any/c)]
                        [cmd-done (->* (any/c) (boolean?) any/c)]
                        [cmd-wave-done (-> any/c any/c any/c)]
-                       [with-gsd-transaction (-> any/c any/c any/c any/c)]
-                       [reset-all-gsd-state! (-> any/c)]))
+                       [reset-all-gsd-state! (-> any/c)])
+         ;; with-gsd-transaction not in contract-out because it passes
+         ;; through multi-value thunk results; (-> any/c any/c any/c any/c)
+         ;; incorrectly constrains it to a single return value.
+         with-gsd-transaction)
 
 ;; ============================================================
 ;; Command registry
