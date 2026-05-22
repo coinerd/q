@@ -106,20 +106,20 @@
          loop-config-working-set
          loop-config-session
          (contract-out [make-loop-config
-                        (->* ((listof any/c) (or/c any/c #f)
-                                             any/c
-                                             (or/c any/c #f)
-                                             (or/c any/c #f)
+                        (->* ((listof any/c) (or/c provider? #f)
+                                             event-bus?
+                                             (or/c tool-registry? #f)
+                                             (or/c extension-registry? #f)
                                              (or/c path-string? path?)
                                              string?
                                              exact-nonnegative-integer?)
-                             (#:cancellation-token (or/c any/c #f)
-                              #:config any/c
+                             (#:cancellation-token (or/c cancellation-token? #f)
+                              #:config (or/c session-config? #f)
                               #:queue (or/c any/c #f)
                               #:follow-up-delivery-mode (or/c 'all 'one-at-a-time)
                               #:injected-box (or/c box? #f)
                               #:shutdown-check (or/c procedure? #f)
                               #:force-shutdown-check (or/c procedure? #f)
-                              #:working-set (or/c any/c #f)
-                              #:session (or/c any/c #f))
+                              #:working-set (or/c working-set? #f)
+                              #:session (or/c agent-session? #f))
                              loop-config?)]))
