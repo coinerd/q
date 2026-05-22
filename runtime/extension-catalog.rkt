@@ -11,26 +11,27 @@
 ;; - activate-extension!: create symlink in target directory
 ;; - deactivate-extension!: remove symlink
 
-(require "../util/json-helpers.rkt")
-(require "../util/errors.rkt")
-(require racket/file
+(require racket/contract
+         "../util/json-helpers.rkt"
+         "../util/errors.rkt"
+         racket/file
          racket/path
          json
          "../extensions/api.rkt"
          (only-in "../extensions/loader.rkt" get-extension-name-from-path))
 
-(provide known-extensions-dir
-         list-known-extensions
-         list-active-extensions
-         activate-extension!
-         deactivate-extension!
-         valid-extension-name?
-         ext-info
+(provide ext-info
          ext-info?
          ext-info-name
          ext-info-source-path
          ext-info-version
-         ext-info-description)
+         ext-info-description
+         (contract-out [known-extensions-dir (-> path?)]
+                       [list-known-extensions (-> (listof ext-info?))]
+                       [list-active-extensions (-> any/c (listof ext-info?))]
+                       [activate-extension! (-> string? path-string? void?)]
+                       [deactivate-extension! (-> string? path-string? void?)]
+                       [valid-extension-name? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Extension source directory discovery

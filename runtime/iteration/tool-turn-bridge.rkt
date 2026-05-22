@@ -5,7 +5,8 @@
 ;; Helpers for working-set update, seen-paths tracking, exploration counting,
 ;; and tool-turn bridging.
 
-(require racket/list
+(require racket/contract
+         racket/list
          (only-in racket/string string-join)
          (only-in "../../util/protocol-types.rkt"
                   message-role
@@ -27,17 +28,21 @@
          (only-in "../../util/event-types.rkt" injection-event-topic)
          (only-in "../../util/shared.rkt" take-at-most))
 
-(provide extract-tool-target-path
-         take-at-most
-         update-seen-paths
-         update-working-set-after-tools!
-         count-tool-errors
-         compute-tool-counters
-         detect-read-spiral
-         extract-last-assistant-text
-         dequeue-all-steering!
-         drain-injected-messages!
-         make-injected-collector!)
+(provide (contract-out [extract-tool-target-path (-> any/c any/c)]
+                       [take-at-most (-> list? exact-nonnegative-integer? list?)]
+                       [update-seen-paths (-> list? list? (values list? any/c))]
+                       [update-working-set-after-tools! (-> any/c list? list? any/c)]
+                       [count-tool-errors (-> (listof any/c) exact-nonnegative-integer?)]
+                       [compute-tool-counters
+                        (-> list?
+                            exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            (values exact-nonnegative-integer? exact-nonnegative-integer?))]
+                       [detect-read-spiral (-> list? any/c (listof string?))]
+                       [extract-last-assistant-text (-> list? any/c)]
+                       [dequeue-all-steering! (-> any/c list?)]
+                       [drain-injected-messages! (-> any/c any/c any/c (listof any/c))]
+                       [make-injected-collector! (-> any/c any/c)]))
 
 ;; Extract the target file path from a tool call's arguments.
 (define (extract-tool-target-path tc)

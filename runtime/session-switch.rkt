@@ -36,12 +36,12 @@
          session-start-reason?
 
          ;; #707: Full lifecycle
-         switch-session!
          switch-result
          switch-result?
          switch-result-old-session-id
          switch-result-new-session-id
-         switch-result-reason)
+         switch-result-reason
+         (contract-out [switch-session! any/c]))
 
 ;; ============================================================
 ;; Lazy extension imports (DI defaults)

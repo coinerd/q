@@ -6,7 +6,8 @@
 ;; Kontext-Informationen für Agenten (Titel, Beschreibung, Instruktionen,
 ;; Beispiele, Tool-Präferenzen).
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/string
          racket/match
          racket/list
@@ -20,11 +21,11 @@
          agent-context-instructions
          agent-context-examples
          agent-context-tool-preferences
-         load-agent-context
-         parse-agent-file
-         discover-agents-files
-         merge-agent-contexts
-         find-git-root)
+         (contract-out [load-agent-context (->* () (any/c) (or/c agent-context? #f))]
+                       [parse-agent-file (-> string? agent-context?)]
+                       [discover-agents-files (->* () (any/c) (listof path?))]
+                       [merge-agent-contexts (-> (listof agent-context?) agent-context?)]
+                       [find-git-root (-> any/c (or/c path? #f))]))
 
 ;; ============================================================
 ;; Structs

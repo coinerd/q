@@ -16,29 +16,31 @@
                      syntax/parse
                      racket/string
                      racket/list)
+         racket/contract
          racket/string
          (only-in "../agent/event-structs/base.rkt" typed-event))
 
 (provide define-typed-event
-         lookup-event-fields
-         register-event-fields!
-         ;; Serializer registry
-         register-event-serializer!
-         register-event-deserializer!
-         lookup-event-serializer
-         lookup-event-deserializer
-         ;; R-14: Parameterized registries for test isolation
+         with-fresh-event-registries
+         ;; Parameters (plain)
          current-event-field-registry
          current-event-serializer-registry
          current-event-deserializer-registry
-         with-fresh-event-registries
-         ;; JSON key conversion
-         field->json-key
-         ;; S8-F1: Schema versioning
          current-schema-version
          current-event-schema-registry
-         register-event-schema-version!
-         lookup-event-schema-version)
+         ;; Field registry
+         (contract-out [register-event-fields! (-> symbol? (listof symbol?) void?)]
+                       [lookup-event-fields (-> symbol? (or/c (listof symbol?) #f))]
+                       ;; Serializer registry
+                       [register-event-serializer! (-> string? procedure? void?)]
+                       [register-event-deserializer! (-> string? procedure? void?)]
+                       [lookup-event-serializer (-> string? (or/c procedure? #f))]
+                       [lookup-event-deserializer (-> string? (or/c procedure? #f))]
+                       ;; Schema versioning
+                       [register-event-schema-version! (-> string? exact-positive-integer? void?)]
+                       [lookup-event-schema-version (-> string? exact-positive-integer?)]
+                       ;; JSON key conversion
+                       [field->json-key (-> symbol? symbol?)]))
 
 ;; ===========================================================
 ;; Event field registry (I-12, I-23) -- canonical runtime mechanism for serialization

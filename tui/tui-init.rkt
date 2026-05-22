@@ -1,4 +1,5 @@
 #lang racket/base
+(require racket/contract)
 
 (require racket/dict)
 
@@ -30,14 +31,13 @@
          "../extensions/ui-surface.rkt"
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current))
 
-(provide run-tui
-         run-tui-with-runtime
-         subscribe-runtime-events!
-         ;; Extracted phases (W-19)
-         create-tui-session
-         load-tui-scrollback
-         init-tui-terminal
-         run-tui-loop)
+(provide (contract-out [run-tui (->* () () any)]
+                       [run-tui-with-runtime (-> any/c any)]
+                       [subscribe-runtime-events! (-> any/c void?)]
+                       [create-tui-session (->* () () any)]
+                       [load-tui-scrollback (->* () () any)]
+                       [init-tui-terminal (->* () () any)]
+                       [run-tui-loop (->* () () any)]))
 
 ;; ============================================================
 ;; Runtime event subscription

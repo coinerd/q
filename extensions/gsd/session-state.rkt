@@ -9,7 +9,8 @@
 ;; v0.29.4 W1: Originally replaced raw box exports with closure-encapsulated factory.
 ;; This version replaces the closure with a struct for better introspection.
 
-(require racket/set
+(require racket/contract
+         racket/set
          "runtime-state-types.rkt")
 
 ;; ============================================================
@@ -207,8 +208,8 @@
 ;; Provide
 ;; ============================================================
 
-(provide make-gsd-context
-         gsd-session-ctx?
+;; Struct exports (plain)
+(provide gsd-session-ctx?
          gsd-session-ctx-state-box
          gsd-session-ctx-plan-box
          gsd-session-ctx-pinned-dir-box
@@ -219,50 +220,52 @@
          gsd-session-ctx-correlation-id-box
          gsd-session-ctx-transaction-box
          gsd-session-ctx-sem
-         ctx-read
-         ctx-write!
-         ctx-update!
-         ;; Per-session accessors (C-01, v0.35.1)
-         gsd-ctx-state
-         gsd-ctx-set-state!
-         gsd-ctx-mode
-         gsd-ctx-wave-number
-         gsd-ctx-plan
-         gsd-ctx-set-plan!
-         gsd-ctx-pinned-dir
-         gsd-ctx-set-pinned-dir!
-         gsd-ctx-edit-limit
-         gsd-ctx-set-edit-limit!
-         gsd-ctx-event-bus
-         gsd-ctx-set-event-bus!
-         gsd-ctx-history
-         gsd-ctx-set-history!
-         gsd-ctx-correlation-id
-         gsd-ctx-set-correlation-id!
-         with-gsd-transaction
-         gsd-ctx-state-snapshot
-         gsd-ctx-state-update!
-         gsd-ctx-history-update!
-         ;; Backward-compatible accessors (deprecated, removal v0.37.0)
-         current-gsd-state
-         set-gsd-state!
-         current-gsd-mode
-         current-wave-number
-         current-plan-data
-         set-plan-data!
-         current-pinned-dir
-         set-pinned-dir!
-         current-edit-limit
-         set-edit-limit!
-         current-gsd-event-bus
-         set-gsd-event-bus!
-         current-gsd-history
-         set-gsd-history!
-         ;; Atomic operations (deprecated global)
-         gsd-state-snapshot
-         gsd-state-update!
-         gsd-history-snapshot
-         gsd-history-update!
-         with-gsd-lock
-         ;; Global default context (for migration only)
-         gsd-default-ctx)
+         ;; Global default context (plain)
+         gsd-default-ctx
+         ;; Functions (contracted)
+         (contract-out [make-gsd-context (-> any/c)]
+                       [ctx-read (-> any/c any/c any/c)]
+                       [ctx-write! (-> any/c any/c any/c any/c)]
+                       [ctx-update! (-> any/c any/c any/c any/c)]
+                       ;; Per-session accessors (C-01, v0.35.1)
+                       [gsd-ctx-state (-> any/c any/c)]
+                       [gsd-ctx-set-state! (-> any/c any/c any/c)]
+                       [gsd-ctx-mode (-> any/c any/c)]
+                       [gsd-ctx-wave-number (-> any/c any/c)]
+                       [gsd-ctx-plan (-> any/c any/c)]
+                       [gsd-ctx-set-plan! (-> any/c any/c any/c)]
+                       [gsd-ctx-pinned-dir (-> any/c any/c)]
+                       [gsd-ctx-set-pinned-dir! (-> any/c any/c any/c)]
+                       [gsd-ctx-edit-limit (-> any/c any/c)]
+                       [gsd-ctx-set-edit-limit! (-> any/c any/c any/c)]
+                       [gsd-ctx-event-bus (-> any/c any/c)]
+                       [gsd-ctx-set-event-bus! (-> any/c any/c any/c)]
+                       [gsd-ctx-history (-> any/c any/c)]
+                       [gsd-ctx-set-history! (-> any/c any/c any/c)]
+                       [gsd-ctx-correlation-id (-> any/c any/c)]
+                       [gsd-ctx-set-correlation-id! (-> any/c any/c any/c)]
+                       [with-gsd-transaction (-> any/c any/c any/c)]
+                       [gsd-ctx-state-snapshot (-> any/c any/c)]
+                       [gsd-ctx-state-update! (-> any/c any/c any/c)]
+                       [gsd-ctx-history-update! (-> any/c any/c any/c)]
+                       ;; Backward-compatible accessors (deprecated, removal v0.37.0)
+                       [current-gsd-state (-> any/c)]
+                       [set-gsd-state! (-> any/c any/c)]
+                       [current-gsd-mode (-> any/c)]
+                       [current-wave-number (-> any/c)]
+                       [current-plan-data (-> any/c)]
+                       [set-plan-data! (-> any/c any/c)]
+                       [current-pinned-dir (-> any/c)]
+                       [set-pinned-dir! (-> any/c any/c)]
+                       [current-edit-limit (-> any/c)]
+                       [set-edit-limit! (-> any/c any/c)]
+                       [current-gsd-event-bus (-> any/c)]
+                       [set-gsd-event-bus! (-> any/c any/c)]
+                       [current-gsd-history (-> any/c)]
+                       [set-gsd-history! (-> any/c any/c)]
+                       ;; Atomic operations (deprecated global)
+                       [gsd-state-snapshot (-> any/c)]
+                       [gsd-state-update! (-> any/c any/c)]
+                       [gsd-history-snapshot (-> any/c)]
+                       [gsd-history-update! (-> any/c any/c)]
+                       [with-gsd-lock (-> any/c any/c)]))

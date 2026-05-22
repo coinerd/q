@@ -6,7 +6,8 @@
 ;; Extracted from main.rkt. Contains build-provider, local-provider?,
 ;; and build-mock-provider.
 
-(require "settings.rkt"
+(require racket/contract
+         "settings.rkt"
          "auth-store.rkt"
          "model-registry.rkt"
          "../llm/provider.rkt"
@@ -18,12 +19,15 @@
          racket/string
          net/url)
 
-(provide build-provider
-         build-mock-provider
-         local-provider?
-         create-provider-for-name ;; for testing
-         provider-is-mock? ;; v0.14.1: for tui-init without importing llm/
-         provider-name) ;; re-export for tui-init.rkt (A1 fix)
+(provide provider-name ;; re-export for tui-init.rkt (A1 fix)
+         (contract-out [build-provider (-> hash? any/c provider?)]
+                       [build-mock-provider (-> provider?)]
+                       [local-provider? (-> any/c boolean?)]
+                       [create-provider-for-name
+                        (->* (string? (or/c string? #f) (or/c string? #f) string?)
+                             ((or/c exact-nonnegative-integer? #f))
+                             provider?)]
+                       [provider-is-mock? (-> any/c boolean?)]))
 
 ;; Build the appropriate provider based on provider name.
 (define (create-provider-for-name prov-name base-url api-key model-name [max-tokens #f])

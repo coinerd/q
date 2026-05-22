@@ -5,7 +5,8 @@
 ;; Mutation operations on session-index: building, persisting, branching, bookmarking.
 
 (require "../../util/error-helpers.rkt")
-(require racket/string
+(require racket/contract
+         racket/string
          racket/file
          racket/port
          racket/path
@@ -28,28 +29,28 @@
          "schema.rkt"
          "query.rkt")
 
-(provide build-index!
-         load-index
-         save-index!
-         switch-leaf!
-         mark-active-leaf!
-         navigate-to-entry!
-         navigate-to-leaf!
-         navigate-next-leaf!
-         navigate-prev-leaf!
-         branch!
-         branch-with-summary!
-         reset-leaf!
-         append-to-leaf!
-         add-bookmark!
-         remove-bookmark!
-         list-bookmarks
-         find-bookmark-by-label
-         get-bookmark
-         load-bookmarks
-         save-bookmarks!
-         load-index-with-bookmarks
-         bookmarks-path)
+(provide (contract-out [build-index! (-> path-string? path-string? any/c)]
+                       [load-index (-> string? any/c)]
+                       [save-index! (-> string? any/c any/c)]
+                       [switch-leaf! (-> any/c any/c any/c)]
+                       [mark-active-leaf! (-> any/c any/c any/c)]
+                       [navigate-to-entry! (-> any/c any/c any/c)]
+                       [navigate-to-leaf! (-> any/c any/c any/c)]
+                       [navigate-next-leaf! (-> any/c any/c)]
+                       [navigate-prev-leaf! (-> any/c any/c)]
+                       [branch! (-> any/c any/c any/c)]
+                       [branch-with-summary! (-> any/c any/c string? any/c)]
+                       [reset-leaf! (-> any/c void?)]
+                       [append-to-leaf! (-> any/c any/c any/c)]
+                       [add-bookmark! (-> any/c any/c string? any/c)]
+                       [remove-bookmark! (-> any/c any/c boolean?)]
+                       [list-bookmarks (-> any/c (listof any/c))]
+                       [find-bookmark-by-label (-> any/c string? any/c)]
+                       [get-bookmark (-> any/c any/c any/c)]
+                       [load-bookmarks (-> string? (listof any/c))]
+                       [save-bookmarks! (-> string? any/c void?)]
+                       [load-index-with-bookmarks (-> string? string? any/c)]
+                       [bookmarks-path (-> string? string?)]))
 
 ;; Counter for generating unique bookmark IDs
 (define bm-counter 0)

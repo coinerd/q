@@ -17,12 +17,13 @@
 
 (provide the-extension
          q-sync-extension
-         handle-q-sync
-         sync-planning
-         sync-pi-config
-         sync-scripts
-         sync-git
-         sync-status)
+         (contract-out
+          [handle-q-sync (->* (hash?) (any/c) any/c)]
+          [sync-planning (-> string? any/c string? (values exact-integer? string? string?))]
+          [sync-pi-config (-> string? any/c string? (values exact-integer? string? string?))]
+          [sync-scripts (-> string? any/c string? (values exact-integer? string? string?))]
+          [sync-git (-> any/c string? (values exact-integer? string? string?))]
+          [sync-status (-> string? any/c string?)]))
 
 ;; ============================================================
 ;; Sync domain implementations

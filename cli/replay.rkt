@@ -20,6 +20,7 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt")
 
+(require racket/contract)
 (provide replay-result
          replay-result?
          replay-result-tool-name
@@ -27,10 +28,10 @@
          replay-result-original-result
          replay-result-drifted?
          replay-result-reason
-         replay-tool-calls
-         replay-session-report
-         replay-session-safe
-         format-replay-report)
+         (contract-out [replay-tool-calls (-> any/c any)]
+                       [replay-session-report (-> path-string? any)]
+                       [replay-session-safe (-> path-string? any)]
+                       [format-replay-report (-> any/c string?)]))
 
 ;; ============================================================
 ;; replay-result struct

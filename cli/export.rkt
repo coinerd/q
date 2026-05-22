@@ -13,8 +13,9 @@
          "../util/export-html.rkt"
          "../util/export-json.rkt")
 
-(provide export-session
-         export-session-to-file)
+(require racket/contract)
+(provide (contract-out [export-session (-> any/c any)]
+                       [export-session-to-file (-> any/c path-string? any)]))
 
 ;; ── Helpers ──
 
@@ -42,7 +43,6 @@
   (ensure-parent-dirs output-path)
   (define result (export-session session-path format))
   (call-with-output-file output-path
-    (lambda (out)
-      (display result out))
-    #:mode 'text
-    #:exists 'truncate))
+                         (lambda (out) (display result out))
+                         #:mode 'text
+                         #:exists 'truncate))

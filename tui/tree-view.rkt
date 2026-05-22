@@ -13,23 +13,32 @@
 ;;   - Keyboard navigation helpers
 ;;   - Branch abandonment detection
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/string
          racket/set
          "../util/protocol-types.rkt")
 
-(provide render-session-tree
-         render-session-tree-folded
-         tree-node?
+(provide tree-node?
          tree-node-timestamp
-         make-tree-node
-         build-tree-nodes
-         selected-node
-         tree-next-node
-         tree-prev-node
-         tree-toggle-fold
-         tree-enter-node
-         would-abandon-branch?)
+         (contract-out
+          [render-session-tree
+           (->* (any/c any/c exact-nonnegative-integer?)
+                (#:show-timestamps? any/c #:active-path-ids any/c #:bookmarks any/c)
+                (listof string?))]
+          [render-session-tree-folded
+           (->* (any/c any/c exact-nonnegative-integer? any/c)
+                (#:show-timestamps? any/c #:active-path-ids any/c #:bookmarks any/c)
+                (listof string?))]
+          [make-tree-node
+           (->* (any/c any/c any/c exact-nonnegative-integer? (listof any/c)) (any/c) any/c)]
+          [build-tree-nodes (-> (listof any/c) (listof list?))]
+          [selected-node (-> list? any/c)]
+          [tree-next-node (-> (listof any/c) exact-integer? exact-integer?)]
+          [tree-prev-node (-> (listof any/c) exact-integer? exact-integer?)]
+          [tree-toggle-fold (-> any/c any/c any/c)]
+          [tree-enter-node (-> (listof any/c) exact-integer? any/c any/c)]
+          [would-abandon-branch? (-> (listof list?) any/c any/c boolean?)]))
 
 ;; ============================================================
 ;; Tree node struct

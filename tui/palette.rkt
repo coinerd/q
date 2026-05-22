@@ -2,7 +2,8 @@
 
 ;; q/tui/palette.rkt — Slash-command registry + interactive command palette for the TUI
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/list
          racket/function
          racket/set
@@ -17,17 +18,18 @@
          cmd-entry-category
          cmd-entry-args-spec
          cmd-entry-aliases
-         make-command-registry
-         register-command!
-         lookup-command
-         resolve-command
-         all-commands
-         commands-by-category
-         filter-commands
-         render-palette-overlay
-         complete-command
-         commands-from-hashes
-         merge-extension-commands)
+         (contract-out [make-command-registry (-> hash?)]
+                       [register-command! (-> hash? cmd-entry? void?)]
+                       [lookup-command (-> hash? string? any/c)]
+                       [resolve-command (-> hash? string? (values any/c any/c))]
+                       [all-commands (-> hash? (listof cmd-entry?))]
+                       [commands-by-category (-> hash? symbol? (listof cmd-entry?))]
+                       [filter-commands (-> hash? string? (listof cmd-entry?))]
+                       [render-palette-overlay
+                        (-> string? (listof cmd-entry?) exact-nonnegative-integer? (listof any/c))]
+                       [complete-command (-> hash? string? (listof string?))]
+                       [commands-from-hashes (-> (listof hash?) (listof cmd-entry?))]
+                       [merge-extension-commands (-> hash? (listof cmd-entry?) hash?)]))
 
 ;; ---------------------------------------------------------------------------
 ;; cmd-entry struct + register-command!/lookup-command: re-exported from

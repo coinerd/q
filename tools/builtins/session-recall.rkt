@@ -14,7 +14,8 @@
 ;; Results are ephemeral: returned as a tool result for this turn only.
 ;; Max 5 entries per call to prevent context bloat.
 
-(require racket/function
+(require racket/contract
+         racket/function
          racket/list
          racket/string
          "../tool.rkt"
@@ -25,7 +26,7 @@
                   text-part?
                   text-part-text))
 
-(provide tool-session-recall)
+(provide (contract-out [tool-session-recall (->* (hash?) (any/c) any/c)]))
 
 ;; Max entries returned per recall call
 (define MAX-RECALL-ENTRIES 5)

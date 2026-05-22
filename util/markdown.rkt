@@ -10,7 +10,8 @@
 ;;   2. Headers (### ...)
 ;;   3. Inline: code (`...`), bold (**...**), italic (*...*), links ([text](url))
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/match
          racket/list)
 
@@ -18,9 +19,9 @@
          md-token?
          md-token-type
          md-token-content
-         parse-markdown
-         parse-line
-         parse-inline-markdown)
+         (contract-out [parse-markdown (-> string? (listof md-token?))]
+                       [parse-line (-> string? (listof md-token?))]
+                       [parse-inline-markdown (-> string? (listof md-token?))]))
 
 ;; ============================================================
 ;; Core struct — token model with selective nesting

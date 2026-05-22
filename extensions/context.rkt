@@ -32,9 +32,7 @@
 ;; Struct and predicate
 (provide extension-ctx
          extension-ctx?
-         ;; Constructor
-         make-extension-ctx
-         ;; Accessors (original)
+         ;; Accessors (original) — struct accessor aliases
          ctx-session-id
          ctx-session-dir
          ctx-event-bus
@@ -50,15 +48,18 @@
          ;; Accessor (#1114: provider registry access for extensions)
          ctx-provider-registry
          ctx-gsd-ctx
-         ;; #1220: Provider convenience methods
-         ctx-register-provider!
-         ctx-unregister-provider!
-         ctx-list-providers
-         ctx-lookup-provider
-         ;; #1223: Session state query methods
-         ctx-session-messages
-         ctx-session-token-count
-         ctx-session-model)
+         ;; Constructor
+         (contract-out [make-extension-ctx any/c]
+                       ;; #1220: Provider convenience methods
+                       [ctx-register-provider!
+                        (->* (extension-ctx? string? provider?) (#:config any/c) any/c)]
+                       [ctx-unregister-provider! (-> extension-ctx? string? void?)]
+                       [ctx-list-providers (-> extension-ctx? list?)]
+                       [ctx-lookup-provider (-> extension-ctx? string? any/c)]
+                       ;; #1223: Session state query methods
+                       [ctx-session-messages (-> extension-ctx? list?)]
+                       [ctx-session-token-count (-> extension-ctx? hash?)]
+                       [ctx-session-model (-> extension-ctx? (or/c string? #f))]))
 
 ;; M-06: Struct definition moved to util/extension-types.rkt (no runtime imports).
 ;; Re-exported here for backward compatibility.

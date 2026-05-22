@@ -5,7 +5,8 @@
 ;;
 ;; Extracted from extensions/gsd-planning.rkt (v0.34.6 W0b — A-02 decomposition).
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/port
          racket/string
          racket/file
@@ -24,15 +25,17 @@
                   [set-gsd-event-bus! events:set-gsd-event-bus!])
          (only-in "event-structs.rkt" make-gsd-mode-changed-event))
 
+;; Schema data (plain)
 (provide planning-read-schema
          planning-write-schema
-         handle-planning-read
-         handle-planning-write
-         resolve-project-root
-         planning-artifact-path
-         get-base-dir
-         read-planning-artifact
-         write-planning-artifact!)
+         ;; Functions (contracted)
+         (contract-out [handle-planning-read (->* (any/c) (any/c) any/c)]
+                       [handle-planning-write (->* (any/c) (any/c) any/c)]
+                       [resolve-project-root (-> any/c any/c)]
+                       [planning-artifact-path (-> any/c any/c any/c)]
+                       [get-base-dir (->* (any/c) (any/c) any/c)]
+                       [read-planning-artifact (-> any/c any/c any/c)]
+                       [write-planning-artifact! (-> any/c any/c any/c any/c)]))
 
 ;; ============================================================
 ;; Path helpers
@@ -212,8 +215,9 @@
                (begin
                  (when (and (eq? (gsd-mode) 'planning) (string=? name "PLAN"))
                    (set-gsd-mode! 'plan-written)
-                   (events:emit-gsd-event! 'gsd.mode.changed
-                   (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'plan-written)))
+                   (events:emit-gsd-event!
+                    'gsd.mode.changed
+                    (make-gsd-mode-changed-event #:session-id "" #:turn-id 0 #:mode 'plan-written)))
                  (make-success-result (list (hasheq 'type
                                                     "text"
                                                     'text

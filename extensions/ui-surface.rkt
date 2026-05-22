@@ -14,35 +14,31 @@
          (only-in "../tui/state.rkt" ui-state ui-state-extension-widgets))
 
 ;; Setter/Getter parameter callbacks
-(provide ui-set-footer!
-         ui-set-header!
-         ui-clear-footer!
-         ui-clear-header!
-
-         ;; Rendering callbacks
-         ui-make-styled-line
-         ui-make-styled-segment
-
-         ;; Status message callback (dialog-api)
-         ui-set-status-message!
-
-         ;; Widget callbacks (widget-api)
-         ui-set-extension-widget!
-         ui-remove-extension-widget!
-         ui-remove-all-extension-widgets!
-
-         ;; Installation (called by TUI during init)
-         install-ui-callbacks!
-
-         ;; Check if callbacks are installed
-         ui-callbacks-installed?
-
-         ;; M-08: Registry struct and accessor (for advanced use)
-         ui-callback-registry
+;; M-08: Registry struct and accessor (for advanced use)
+(provide ui-callback-registry
          ui-callback-registry?
 
          ;; R-05: Parameterized registry for test isolation
-         current-ui-registry)
+         current-ui-registry
+
+         ;; Setter/Getter callbacks
+         (contract-out [ui-set-footer! (-> any/c any/c any/c)]
+                       [ui-set-header! (-> any/c any/c any/c)]
+                       [ui-clear-footer! (-> any/c any/c)]
+                       [ui-clear-header! (-> any/c any/c)]
+                       ;; Rendering callbacks
+                       [ui-make-styled-line (-> any/c any/c)]
+                       [ui-make-styled-segment (-> any/c any/c any/c)]
+                       ;; Status message callback (dialog-api)
+                       [ui-set-status-message! (-> any/c any/c any/c)]
+                       ;; Widget callbacks (widget-api)
+                       [ui-set-extension-widget! (-> any/c any/c any/c any/c any/c)]
+                       [ui-remove-extension-widget! (-> any/c any/c any/c any/c)]
+                       [ui-remove-all-extension-widgets! (-> any/c any/c any/c)]
+                       ;; Installation (called by TUI during init)
+                       [install-ui-callbacks! (-> any/c any/c)]
+                       ;; Check if callbacks are installed
+                       [ui-callbacks-installed? (-> boolean?)]))
 
 ;; ── Callback registry struct ───────────────────────────────
 

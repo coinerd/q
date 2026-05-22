@@ -25,7 +25,8 @@
          (only-in "builtin-helpers.rkt" require-safe-path!)
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message))
 
-(provide tool-delete-lines)
+(require racket/contract)
+(provide (contract-out [tool-delete-lines (-> hash? any/c)]))
 
 ;; --------------------------------------------------
 ;; Constants

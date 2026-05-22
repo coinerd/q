@@ -140,13 +140,13 @@
 ;; --------------------------------------------------
 
 (define-tool ls
-  #:description "List directory contents with optional long format, hidden files, and sorting."
-  #:required ("path")
-  #:properties
-    [(path "string" "Directory to list")
-     (all? "boolean" "Show hidden files")
-     (long? "boolean" "Long format with size/type")
-     (sort-by "string" "Sort by: name, size, or date")]
-  ls-handler)
+             #:description
+             "List directory contents with optional long format, hidden files, and sorting."
+             #:required ("path")
+             #:properties [(path "string" "Directory to list")
+                           (all? "boolean" "Show hidden files")
+                           (long? "boolean" "Long format with size/type")
+                           (sort-by "string" "Sort by: name, size, or date")]
+             ls-handler)
 
 (provide ls)

@@ -6,30 +6,35 @@
 ;; pattern matching, and template substitution.
 ;; Split from racket-tooling.rkt (v0.22.6 W3).
 
-(require racket/port
+(require racket/contract
+         racket/port
          racket/string
          racket/file
          racket/list)
 
-(provide run-raco
-         find-raco
-         run-command
-         raco-fmt
-         raco-make
-         raco-test
-         raco-expand
-         read-file-string
-         write-file-string!
-         backup-file
-         restore-backup!
-         read-all-forms
-         form->string
-         find-form-boundaries
-         find-form-end
-         pattern-matches?
-         apply-template
-         collect-bindings
-         subst-bindings)
+;; Raco command helpers
+(provide (contract-out [run-raco (->* ((listof any/c)) (any/c) any/c)]
+                       [find-raco (-> (or/c path? #f))]
+                       [run-command (->* (any/c (listof any/c)) (any/c) any/c)]
+                       [raco-fmt (-> any/c any/c)]
+                       [raco-make (-> any/c any/c)]
+                       [raco-test (-> any/c any/c)]
+                       [raco-expand (-> any/c any/c)]
+                       ;; File I/O helpers
+                       [read-file-string (-> any/c string?)]
+                       [write-file-string! (-> any/c any/c any/c)]
+                       [backup-file (-> any/c any/c)]
+                       [restore-backup! (-> any/c any/c any/c)]
+                       ;; S-expression helpers
+                       [read-all-forms (-> string? (listof any/c))]
+                       [form->string (-> any/c string?)]
+                       [find-form-boundaries (-> string? (listof any/c))]
+                       [find-form-end (-> (listof string?) exact-nonnegative-integer? any/c)]
+                       ;; Pattern matching and template substitution
+                       [pattern-matches? (-> any/c any/c boolean?)]
+                       [apply-template (-> any/c any/c any/c any/c)]
+                       [collect-bindings (-> any/c any/c (listof any/c))]
+                       [subst-bindings (-> (listof any/c) any/c any/c)]))
 
 ;; ============================================================
 ;; Raco command helpers

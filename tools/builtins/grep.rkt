@@ -14,7 +14,8 @@
                   expand-home-path)
          (only-in "../../util/path-filters.rkt" hidden-name? should-skip-entry? skip-dirs))
 
-(provide tool-grep)
+(require racket/contract)
+(provide (contract-out [tool-grep (-> hash? any/c)]))
 
 ;; ============================================================
 ;; Defaults

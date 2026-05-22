@@ -10,7 +10,8 @@
 ;;   pure. Then wrap with a thin impure shell that creates the memo. This would allow
 ;;   the core logic to be typed. Estimated effort: ~2 waves. Deferred to backlog.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/list
          racket/set
          (only-in "../../util/protocol-types.rkt"
@@ -66,21 +67,14 @@
                                  catalog-proc
                                  estimate-proc))
 
-(provide context-assembly-call-options
-         context-assembly-call-options?
-         context-assembly-call-options-cache
-         context-assembly-call-options-provider
-         context-assembly-call-options-model-name
-         context-assembly-call-options-trace-callback
-         context-assembly-call-options-working-set
-         context-assembly-call-options-generate-summary-proc
-         context-assembly-call-options-generate-catalog-proc
-         context-assembly-call-options-estimate-text-proc
-         make-context-assembly-call-options
-         build-assembled-context
-         build-assembled-context/raw
-         build-assembled-context/v2
-         build-session-context)
+(provide (struct-out context-assembly-call-options)
+         (contract-out [make-context-assembly-call-options (-> any/c)]
+                       [build-assembled-context (-> any/c any/c any/c)]
+                       [build-assembled-context/raw (-> any/c any/c any/c #:memo any/c any/c)]
+                       [build-assembled-context/v2 (-> any/c any/c any/c any/c)]
+                       [build-session-context (-> any/c any/c)]
+                       [select-messages
+                        (-> list? list? exact-nonnegative-integer? procedure? (values list? list?))]))
 
 ;; F23: Pure selection function — testable without infrastructure.
 ;; Takes pinned messages, removable messages, a budget, and an estimation function.
@@ -98,8 +92,6 @@
         (define excluded
           (filter (lambda (m) (not (hash-has-key? kept-ids (message-id m)))) removable))
         (values (append pinned kept) excluded))))
-
-(provide select-messages)
 
 (define (build-assembled-context idx
                                  config

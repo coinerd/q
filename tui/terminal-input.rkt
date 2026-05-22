@@ -11,6 +11,7 @@
 (require racket/match
          racket/port
          racket/string)
+(require racket/contract)
 
 ;; ============================================================
 ;; Decoder state encapsulation (v0.51.3 §7)
@@ -38,12 +39,12 @@
 
 ;; Raw stdin reading (used by facade for input selection)
 ;; Decoder factory and parameter (v0.51.3)
-(provide make-terminal-input-decoder
-         current-decoder
+(provide current-decoder
          decoder-state?
          decoder-state-utf8-acc
          decoder-state-paste-buf
          decoder-state-in-paste
+         (contract-out [make-terminal-input-decoder (->* () () any/c)])
          decoder-state-input-buf
          decoder-state-input-buf-data
 

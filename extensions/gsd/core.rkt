@@ -17,7 +17,8 @@
 ;;   /reset → go to idle
 ;;   /gsd   → show status
 
-(require racket/string
+(require racket/contract
+         racket/string
          racket/format
          racket/path
          racket/port
@@ -51,22 +52,21 @@
   (set-gsd-event-bus! #f)
   (set-plan-data! #f))
 
-(provide gsd-command-dispatch
-         gsd-write-guard
-         gsd-show-status
-         ;; Individual command handlers for direct wiring
-         cmd-replan
-         cmd-skip
-         cmd-reset
-         cmd-done
-         cmd-wave-done
-         ;; Command names for registration
-         gsd-commands
+;; Command names for registration (data)
+(provide gsd-commands
          ;; Re-export command result types
          (all-from-out "command-types.rkt")
-         ;; Transaction wrapper (v0.24.1)
-         with-gsd-transaction
-         reset-all-gsd-state!)
+         ;; Functions (contracted)
+         (contract-out [gsd-command-dispatch (-> any/c any/c any/c)]
+                       [gsd-write-guard (-> any/c any/c any/c)]
+                       [gsd-show-status (-> any/c)]
+                       [cmd-replan (-> any/c)]
+                       [cmd-skip (-> any/c any/c)]
+                       [cmd-reset (-> any/c)]
+                       [cmd-done (->* (any/c) (boolean?) any/c)]
+                       [cmd-wave-done (-> any/c any/c any/c)]
+                       [with-gsd-transaction (-> any/c any/c any/c any/c)]
+                       [reset-all-gsd-state! (-> any/c)]))
 
 ;; ============================================================
 ;; Command registry
@@ -137,7 +137,8 @@
     (if (string? command)
         (string->symbol command)
         command))
-  (emit-gsd-event! 'gsd.command.received
+  (emit-gsd-event!
+   'gsd.command.received
    (make-gsd-command-received-event #:session-id "" #:turn-id 0 #:command cmd #:args args))
   (define corr-id (gensym 'gsd-cmd))
   (parameterize ([current-gsd-correlation-id corr-id])
@@ -165,8 +166,11 @@
         [else #f]))
     (when result
       (emit-gsd-event! 'gsd.command.completed
-       (make-gsd-command-completed-event #:session-id "" #:turn-id 0
-                                         #:command cmd #:success (gsd-command-result-success result))))
+                       (make-gsd-command-completed-event #:session-id ""
+                                                         #:turn-id 0
+                                                         #:command cmd
+                                                         #:success
+                                                         (gsd-command-result-success result))))
     result))
 
 ;; /plan <text> → exploring
@@ -296,7 +300,9 @@
                         (lambda () (archive-completed-plan! base-dir force?))
                         (lambda (e snapshot)
                           (emit-gsd-event! 'gsd.archive.failed
-                          (make-gsd-archive-failed-event #:session-id "" #:turn-id 0 #:error (exn-message e))))))
+                                           (make-gsd-archive-failed-event #:session-id ""
+                                                                          #:turn-id 0
+                                                                          #:error (exn-message e))))))
 
 ;; ============================================================
 ;; Write guard (hardened — DD-6)

@@ -21,7 +21,8 @@
 ;; GC-02: Sandbox limits now read from runtime/settings when available.
 ;; Process tracking (SEC-12) is wired into every invocation.
 
-(require racket/string
+(require racket/contract
+         racket/string
          (only-in "../tool.rkt"
                   make-success-result
                   make-error-result
@@ -40,23 +41,29 @@
          (only-in "../../util/truncation.rkt" truncate-output)
          (only-in "../../util/safe-mode-predicates.rkt" safe-mode?))
 
-(provide tool-bash
-         ;; Struct-based config (v0.44.2+, sole config path since v0.46.3)
-         bash-execution-config
+;; Struct-based config (v0.44.2+, sole config path since v0.46.3)
+(provide bash-execution-config
          bash-execution-config?
          bash-execution-config-policy
          bash-execution-config-block-destructive?
          bash-execution-config-warn-on-destructive?
          bash-execution-config-warning-port
-         make-bash-execution-config
          current-bash-execution-config
-         effective-bash-config
-         destructive-command?
          destructive-patterns
          current-execution-policy
          current-allowed-commands
-         execution-policy-allows?
-         high-risk-command?)
+         (contract-out [make-bash-execution-config
+                        (->* ()
+                             (#:policy symbol?
+                                       #:block? (or/c boolean? (-> boolean?))
+                                       #:warn? boolean?
+                                       #:warning-port (or/c output-port? #f))
+                             bash-execution-config?)]
+                       [effective-bash-config (-> bash-execution-config?)]
+                       [destructive-command? (-> string? boolean?)]
+                       [execution-policy-allows? (-> string? boolean?)]
+                       [high-risk-command? (-> string? boolean?)]
+                       [tool-bash (->* (hash?) (exec-context?) any/c)]))
 
 ;; Default timeout in seconds (used when no settings available)
 (define DEFAULT-TIMEOUT-SECONDS 120)

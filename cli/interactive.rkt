@@ -21,11 +21,12 @@
          "../cli/render.rkt"
          "../util/ansi.rkt")
 
+(require racket/contract)
 (provide readline-available?
-         read-line-with-history
-         run-cli-interactive
-         run-cli-single
-         parse-slash-command)
+         (contract-out [read-line-with-history (->* () () string?)]
+                       [run-cli-interactive (-> any/c any)]
+                       [run-cli-single (-> any/c any)]
+                       [parse-slash-command (-> string? any/c)]))
 
 ;; ============================================================
 ;; Readline support — imported from util/readline.rkt (Issue #203)

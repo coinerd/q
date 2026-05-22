@@ -5,7 +5,8 @@
 ;;
 ;; Extracted from extensions/gsd-planning.rkt (v0.34.6 W0b -- A-02 decomposition).
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string
          racket/set
          json
@@ -60,12 +61,12 @@
                   current-gsd-event-bus
                   set-gsd-event-bus!))
 
-(provide register-gsd-commands
-         handle-execute-command
-         handle-go-command
-         handle-gsd-status
-         handle-artifact-command
-         dispatch-gsd-command)
+(provide (contract-out [register-gsd-commands (-> any/c any/c)]
+                       [handle-execute-command (-> any/c any/c)]
+                       [handle-go-command (-> any/c any/c any/c)]
+                       [handle-gsd-status (-> any/c)]
+                       [handle-artifact-command (-> any/c any/c any/c any/c any/c)]
+                       [dispatch-gsd-command (-> any/c any/c any/c (values symbol? any/c))]))
 
 ;; ============================================================
 ;; Command registration

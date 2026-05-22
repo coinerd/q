@@ -6,7 +6,8 @@
 ;; Users can override keybindings via ~/.q/keybindings.json.
 
 (require "../util/error-helpers.rkt")
-(require racket/string
+(require racket/contract
+         racket/string
          racket/port
          racket/file
          racket/match
@@ -20,29 +21,26 @@
          key-spec-ctrl
          key-spec-shift
          key-spec-alt
-         keycode->key-spec
-         key-spec->keycode
-         key-spec=?
-         parse-key-string
-
-         make-keymap
-         keymap-add!
-         keymap-remove!
-         keymap-lookup
-         keymap-list
-         keymap-find-conflicts
-         keymap-merge
-
-         default-keymap
-         load-user-keymap
-         load-keybindings
-         shortcut-specs->keymap
-
-         ;; #1189: Namespaced actions
-         namespaced-action?
-         namespace-action
-         migrate-action
-         parse-keybindings-content)
+         (contract-out [keycode->key-spec (-> any/c #:ctrl any/c #:shift any/c #:alt any/c any/c)]
+                       [key-spec->keycode (-> key-spec? symbol?)]
+                       [key-spec=? (-> key-spec? key-spec? boolean?)]
+                       [parse-key-string (-> string? key-spec?)]
+                       [make-keymap (-> any/c)]
+                       [keymap-add! (-> any/c key-spec? symbol? void?)]
+                       [keymap-remove! (-> any/c key-spec? void?)]
+                       [keymap-lookup (-> any/c key-spec? any/c)]
+                       [keymap-list (-> any/c (listof any/c))]
+                       [keymap-find-conflicts (-> any/c (listof any/c))]
+                       [keymap-merge (-> any/c any/c void?)]
+                       [default-keymap (-> any/c)]
+                       [load-user-keymap (-> any/c)]
+                       [load-keybindings (->* [] [any/c] any/c)]
+                       [shortcut-specs->keymap (-> (listof hash?) any/c)]
+                       ;; #1189: Namespaced actions
+                       [namespaced-action? (-> any/c boolean?)]
+                       [namespace-action (->* () #:rest any/c symbol?)]
+                       [migrate-action (-> symbol? symbol?)]
+                       [parse-keybindings-content (->* (string?) (any/c) any/c)]))
 
 ;; ============================================================
 ;; Key specification

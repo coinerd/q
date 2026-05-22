@@ -14,7 +14,8 @@
 ;; The mark-wave-status! helper enforces this. Direct file writes
 ;; that update only one of the two are a bug.
 
-(require racket/format
+(require racket/contract
+         racket/format
          racket/string
          racket/file
          racket/path
@@ -29,27 +30,29 @@
                   active-status?
                   normalize-status!))
 
-(provide wave-doc-path
-         write-wave-doc!
-         read-wave-doc
-         parse-wave-doc-from-string
-         slugify
-         parse-plan-index
-         update-wave-in-index!
-         update-plan-index-text
-         next-inbox-wave
-         find-next-inbox-entry
-         mark-wave-status!
-         plan-overall-status
-         compute-plan-overall-status
-         wave-exists?
-         wave-status-markers
-         wave-index-entry
+;; Struct exports (plain)
+(provide wave-index-entry
          wave-index-entry?
          wave-index-entry-idx
          wave-index-entry-title
          wave-index-entry-slug
-         wave-index-entry-status)
+         wave-index-entry-status
+         ;; Functions (contracted)
+         (contract-out [wave-doc-path (-> any/c any/c any/c any/c)]
+                       [write-wave-doc! (-> any/c any/c any/c any/c any/c any/c)]
+                       [read-wave-doc (-> any/c any/c any/c any/c)]
+                       [parse-wave-doc-from-string (->* (any/c any/c any/c) (any/c) any/c)]
+                       [slugify (-> string? string?)]
+                       [parse-plan-index (-> string? any/c)]
+                       [update-wave-in-index! (-> any/c any/c any/c any/c)]
+                       [update-plan-index-text (-> string? any/c string? string?)]
+                       [next-inbox-wave (-> any/c any/c)]
+                       [find-next-inbox-entry (-> any/c any/c)]
+                       [mark-wave-status! (-> any/c any/c any/c any/c)]
+                       [plan-overall-status (-> any/c symbol?)]
+                       [compute-plan-overall-status (-> any/c symbol?)]
+                       [wave-exists? (-> any/c any/c any/c boolean?)]
+                       [wave-status-markers (-> any/c)]))
 
 ;; ============================================================
 ;; Constants

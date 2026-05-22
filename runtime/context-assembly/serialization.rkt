@@ -1,4 +1,5 @@
 #lang racket/base
+(require racket/contract)
 
 ;; runtime/context-assembly/serialization.rkt — tiered context, entry conversion, agents discovery
 ;;
@@ -60,7 +61,7 @@
 (define (compute-tier-c-count total-messages)
   (min 12 (max 4 (quotient total-messages 50))))
 
-(provide compute-tier-c-count)
+(provide (contract-out [compute-tier-c-count (-> list? exact-nonnegative-integer?)]))
 
 ;; v0.28.21 W4: Dynamic Tier-B sizing
 ;; Scales Tier-B with total message count: min(50, max(20, total/10))

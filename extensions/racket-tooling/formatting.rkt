@@ -21,14 +21,17 @@
                   find-form-end
                   pattern-matches?
                   apply-template)
-         (only-in "../tool-api.rkt" make-success-result make-error-result))
+         (only-in "../tool-api.rkt" make-success-result make-error-result)
+         racket/contract)
 
-(provide handle-racket-edit)
+(provide (contract-out [handle-racket-edit (-> hash? any/c)]))
 
 ;; Validate string before read - reject #reader or #lang injections
 (define (safe-read-string s context)
   (when (or (regexp-match? #rx"#reader" s) (regexp-match? #rx"#lang" s))
-    (raise-extension-error (format "~a contains forbidden #reader or #lang directive" context) 'racket-tooling 'edit))
+    (raise-extension-error (format "~a contains forbidden #reader or #lang directive" context)
+                           'racket-tooling
+                           'edit))
   (read (open-input-string s)))
 
 (define (handle-racket-edit args [exec-ctx #f])

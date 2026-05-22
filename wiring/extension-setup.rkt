@@ -7,7 +7,8 @@
 ;; Creates extension registry, loads extensions from global + project dirs,
 ;; and queries extensions for commands and shortcuts.
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/string
          "../extensions/api.rkt"
          (only-in "../extensions/loader.rkt" load-extension!)
@@ -19,8 +20,9 @@
                   make-command-registry)
          (only-in "../tui/keymap.rkt" shortcut-specs->keymap keymap-merge))
 
-(provide make-wired-extension-registry
-         load-extensions-from-dir!)
+(provide (contract-out
+          [make-wired-extension-registry (-> any/c path-string? (values any/c any/c any/c))]
+          [load-extensions-from-dir! (->* (any/c path-string?) (#:event-bus any/c) void?)]))
 
 ;; ============================================================
 ;; make-wired-extension-registry
