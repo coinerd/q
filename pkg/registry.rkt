@@ -7,7 +7,8 @@
 ;;
 ;; Provides functions to search, resolve, and query the package index.
 
-(require "../util/json-helpers.rkt")
+(require racket/contract
+         "../util/json-helpers.rkt")
 (require json
          racket/string
          racket/list
@@ -19,29 +20,21 @@
          net/url
          net/head)
 
-;; Index operations
-(provide load-package-index
-         fetch-remote-index
-         index-packages
-
-         ;; Search
-         search-packages
-         get-package-info
-         resolve-version
-
-         ;; Install / verify
-         install-package!
-         verify-package
-         list-installed-packages
-         check-updates
-
-         ;; Index validation
-         validate-index-entry
-         validate-index
-
-         ;; Version comparison
-         version<=?
-         version<?)
+;; Functions (contracted)
+(provide (contract-out [load-package-index (->* () (any/c) any/c)]
+                       [fetch-remote-index (->* () (any/c) any/c)]
+                       [index-packages (-> any/c any/c)]
+                       [search-packages (-> any/c string? any/c)]
+                       [get-package-info (-> any/c string? any/c)]
+                       [resolve-version (->* (any/c string?) (any/c) any/c)]
+                       [install-package! (-> any/c any/c)]
+                       [verify-package (-> any/c any/c)]
+                       [list-installed-packages (-> any/c)]
+                       [check-updates (-> any/c any/c)]
+                       [validate-index-entry (-> any/c any/c)]
+                       [validate-index (-> any/c any/c)]
+                       [version<=? (-> string? string? boolean?)]
+                       [version<? (-> string? string? boolean?)]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Configuration

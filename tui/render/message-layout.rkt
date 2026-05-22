@@ -4,7 +4,8 @@
 ;;
 ;; Entry formatting, markdown rendering, styled-line construction.
 
-(require racket/match
+(require racket/contract
+         racket/match
          racket/string
          racket/list
          racket/function
@@ -23,19 +24,24 @@
          styled-segment?
          styled-segment-text
          styled-segment-style
-         plain-line
-         theme->style
-         format-entry
-         md-format-assistant
-         md-token->segment
-         styled-line->text
-         styled-line->ansi
-         styles->sgr
-         wrap-styled-line
-         wrap-text
-         wrap-single-line
-         find-break-pos
-         lookup-custom-renderer-for-tool)
+         (contract-out
+          [plain-line (-> string? styled-line?)]
+          [theme->style (->* (any/c) [(listof symbol?)] (listof symbol?))]
+          [format-entry (->* (any/c) [exact-nonnegative-integer?] (listof styled-line?))]
+          [md-format-assistant (-> string? exact-nonnegative-integer? (listof styled-line?))]
+          [md-token->segment (-> any/c styled-segment?)]
+          [styled-line->text (-> styled-line? string?)]
+          [styled-line->ansi (-> styled-line? string?)]
+          [styles->sgr (-> (listof symbol?) string?)]
+          [wrap-styled-line (-> styled-line? exact-nonnegative-integer? (listof styled-line?))]
+          [wrap-text (-> string? exact-nonnegative-integer? (listof string?))]
+          [wrap-single-line (-> string? exact-nonnegative-integer? (listof string?))]
+          [find-break-pos
+           (-> string?
+               exact-nonnegative-integer?
+               exact-nonnegative-integer?
+               exact-nonnegative-integer?)]
+          [lookup-custom-renderer-for-tool (-> string? symbol? any/c)]))
 
 ;; A styled segment (part of a line)
 (struct styled-segment

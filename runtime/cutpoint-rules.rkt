@@ -34,7 +34,6 @@
          overflow-state-attempted
          overflow-state-max-attempts
          overflow-state-will-retry
-         mark-overflow-attempted!
          can-retry-overflow?
          ;; #695: Auto-retry
          make-retry-context
@@ -42,7 +41,8 @@
          retry-context-original-prompt
          retry-context-compaction-result
          retry-context-retry-messages
-         build-retry-messages)
+         (contract-out [mark-overflow-attempted! (-> overflow-state? void?)]
+                       [build-retry-messages (-> any/c string? any)]))
 
 ;; ============================================================
 ;; #693: Cut-point rules

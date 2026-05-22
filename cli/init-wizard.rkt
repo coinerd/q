@@ -14,7 +14,10 @@
          racket/list
          (only-in "../runtime/auth-store.rkt" save-credential-file!))
 
-(provide run-init-wizard)
+(require racket/contract)
+(provide (contract-out
+          [run-init-wizard
+           (->* () (#:in input-port? #:out output-port? #:config-dir (or/c path-string? #f)) any)]))
 
 ;; ============================================================
 ;; I/O: run-init-wizard (Issue #143)

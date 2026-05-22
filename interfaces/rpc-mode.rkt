@@ -34,16 +34,7 @@
          rpc-notification?
          rpc-notification-method
          rpc-notification-params
-
-         ;; Parsing
-         parse-rpc-request
-
-         ;; Serialization
-         rpc-response->json
-         rpc-notification->json
-
-         ;; Error helper
-         rpc-error
+         rpc-rate-limiter?
 
          ;; Error codes
          RPC-ERROR-PARSE
@@ -54,24 +45,34 @@
          RPC-ERROR-HANDSHAKE-REQUIRED
          RPC-ERROR-RATE-LIMITED
 
-         ;; Handshake
-         generate-handshake-token
-         rpc-handshake-valid?
-
-         ;; Dispatch
-         dispatch-rpc-request
-
-         ;; Rate limiting
-         make-rpc-rate-limiter
-         rpc-rate-limiter?
-         rate-limiter-check
-
-         ;; RPC loop
-         run-rpc-loop
-
-         ;; Event forwarding
-         start-rpc-event-forwarding!
-         stop-rpc-event-forwarding!)
+         (contract-out
+          ;; Parsing
+          [parse-rpc-request (-> string? any/c)]
+          ;; Serialization
+          [rpc-response->json (-> rpc-response? string?)]
+          [rpc-notification->json (-> rpc-notification? string?)]
+          ;; Error helper
+          [rpc-error (-> any/c exact-integer? string? rpc-response?)]
+          ;; Handshake
+          [generate-handshake-token (-> string?)]
+          [rpc-handshake-valid? (-> string? string? boolean?)]
+          ;; Dispatch
+          [dispatch-rpc-request (-> rpc-request? hash? rpc-response?)]
+          ;; Rate limiting
+          [make-rpc-rate-limiter
+           (->* [] [#:max-requests-per-second exact-positive-integer?] rpc-rate-limiter?)]
+          [rate-limiter-check (-> rpc-rate-limiter? symbol? any/c)]
+          ;; RPC loop
+          [run-rpc-loop
+           (->* (hash?)
+                (#:input-port input-port?
+                              #:output-port output-port?
+                              #:handshake-token (or/c string? #f)
+                              #:rate-limiter (or/c rpc-rate-limiter? #f))
+                void?)]
+          ;; Event forwarding
+          [start-rpc-event-forwarding! (-> any/c output-port? exact-nonnegative-integer?)]
+          [stop-rpc-event-forwarding! (-> any/c exact-nonnegative-integer? void?)]))
 
 ;; ============================================================
 ;; Structs

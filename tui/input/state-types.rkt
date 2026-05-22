@@ -5,7 +5,8 @@
 ;; Pure data definitions. No logic.
 
 (require "../../util/error-helpers.rkt")
-(require racket/string
+(require racket/contract
+         racket/string
          racket/list
          "../char-width.rkt"
          "../terminal.rkt")
@@ -28,34 +29,35 @@
          mouse-event-x
          mouse-event-y
 
-         ;; Constructor
-         initial-input-state
-
          ;; Constants
          MAX-UNDO-STACK
          MAX-KILL-RING
          INPUT-PROMPT-WIDTH
-
-         ;; Internal helpers (shared by editing-ops, history-ops)
-         push-undo
-         push-kill
-         strip-for-undo
-
-         ;; Mouse event support
-         parse-mouse-event
-         decode-mouse-x10
-         decode-mouse-tui-term
-         normalize-selection-range
-
-         ;; IME cursor markers
          CURSOR_MARKER
-         cursor-marker-string
-         strip-cursor-markers
-         has-cursor-markers?
-         insert-cursor-marker
 
-         ;; Horizontal scroll
-         input-visible-window)
+         (contract-out
+          ;; Constructor
+          [initial-input-state (-> any/c)]
+          ;; Internal helpers (shared by editing-ops, history-ops)
+          [push-undo (-> any/c any/c any/c)]
+          [push-kill (-> any/c string? any/c)]
+          [strip-for-undo (-> any/c any/c)]
+          ;; Mouse event support
+          [parse-mouse-event (-> any/c any/c)]
+          [decode-mouse-x10 (-> exact-integer? exact-integer? exact-integer? any/c)]
+          [decode-mouse-tui-term (-> any/c any/c)]
+          [normalize-selection-range
+           (-> any/c any/c (values exact-integer? exact-integer? exact-integer? exact-integer?))]
+          ;; IME cursor markers
+          [cursor-marker-string (-> string?)]
+          [strip-cursor-markers (-> string? string?)]
+          [has-cursor-markers? (-> string? boolean?)]
+          [insert-cursor-marker (-> string? exact-nonnegative-integer? string?)]
+          ;; Horizontal scroll
+          [input-visible-window
+           (-> any/c
+               exact-positive-integer?
+               (values string? exact-nonnegative-integer? exact-nonnegative-integer?))]))
 
 ;; Maximum undo stack depth
 (define MAX-UNDO-STACK 100)

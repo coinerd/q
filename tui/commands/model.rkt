@@ -10,8 +10,9 @@
          "../../agent/event-bus.rkt"
          "../../runtime/model-registry.rkt"
          "context.rkt")
+(require racket/contract)
 
-(provide handle-model-command)
+(provide (contract-out [handle-model-command (-> any/c any/c)]))
 
 ;; ============================================================
 ;; /model command handler

@@ -8,19 +8,23 @@
 ;;
 ;; Reference: Unicode East Asian Width property (UAX #11)
 
-(require "../util/error-helpers.rkt")
+(require racket/contract
+         "../util/error-helpers.rkt")
 (require racket/match
          racket/string)
 
-(provide char-width
-         string-visible-width
-         visible-width
-         truncate-to-visible-width
-         display-col->string-offset
-         grapheme-span-at
-         grapheme-count
-         string-grapheme-length
-         substring-by-graphemes)
+(provide (contract-out
+          [char-width (-> char? exact-nonnegative-integer?)]
+          [string-visible-width (-> string? exact-nonnegative-integer?)]
+          [visible-width (-> string? exact-nonnegative-integer?)]
+          [truncate-to-visible-width (-> string? exact-nonnegative-integer? string?)]
+          [display-col->string-offset
+           (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [grapheme-span-at (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [grapheme-count (-> string? exact-nonnegative-integer?)]
+          [string-grapheme-length (-> string? exact-nonnegative-integer?)]
+          [substring-by-graphemes
+           (->* (string? exact-nonnegative-integer?) (exact-nonnegative-integer?) string?)]))
 
 ;; char-width : Char → {0, 1, 2}
 ;; Returns the terminal column width of a single character.
@@ -269,8 +273,9 @@
       (string-length s)
       (+ pos (grapheme-span-at-impl s pos))))
 
-(provide prev-grapheme-start
-         next-grapheme-start)
+(provide (contract-out
+          [prev-grapheme-start (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
+          [next-grapheme-start (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]))
 
 ;; ============================================================
 ;; Display column utilities

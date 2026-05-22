@@ -176,4 +176,4 @@
             #f))
 
 (provide event-payload-contracts
-         event-payload-contract)
+         (contract-out [event-payload-contract (-> (or/c symbol? string?) (or/c contract? #f))]))

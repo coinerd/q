@@ -6,7 +6,8 @@
 ;; Defines an explicit FSM for the iteration loop using define-fsm-machine
 ;; from util/fsm.rkt. Backward-compatible exports maintained.
 
-(require (only-in "../../util/fsm.rkt"
+(require racket/contract
+         (only-in "../../util/fsm.rkt"
                   define-fsm-machine
                   fsm-state
                   fsm-state-name
@@ -19,24 +20,29 @@
 ;; ── Machine definition ──
 
 (define-fsm-machine iteration
-  #:states (idle provider-turn tool-exec decision complete retrying aborted)
-  #:events (start-loop model-response tool-result tool-calls-present
-            termination-reason hook-block error retry-requested cancel)
-  #:transitions
-  [(idle -> provider-turn) start-loop]
-  [(provider-turn -> decision) model-response]
-  [(provider-turn -> aborted) hook-block]
-  [(provider-turn -> aborted) cancel]
-  [(provider-turn -> retrying) error]
-  [(decision -> tool-exec) tool-calls-present]
-  [(decision -> complete) termination-reason]
-  [(decision -> aborted) hook-block]
-  [(tool-exec -> decision) tool-result]
-  [(tool-exec -> retrying) error]
-  [(retrying -> provider-turn) retry-requested]
-  [(retrying -> aborted) error]
-  [(complete -> complete) cancel]
-  [(aborted -> aborted) cancel])
+                    #:states (idle provider-turn tool-exec decision complete retrying aborted)
+                    #:events (start-loop model-response
+                                         tool-result
+                                         tool-calls-present
+                                         termination-reason
+                                         hook-block
+                                         error
+                                         retry-requested
+                                         cancel)
+                    #:transitions [(idle -> provider-turn) start-loop]
+                    [(provider-turn -> decision) model-response]
+                    [(provider-turn -> aborted) hook-block]
+                    [(provider-turn -> aborted) cancel]
+                    [(provider-turn -> retrying) error]
+                    [(decision -> tool-exec) tool-calls-present]
+                    [(decision -> complete) termination-reason]
+                    [(decision -> aborted) hook-block]
+                    [(tool-exec -> decision) tool-result]
+                    [(tool-exec -> retrying) error]
+                    [(retrying -> provider-turn) retry-requested]
+                    [(retrying -> aborted) error]
+                    [(complete -> complete) cancel]
+                    [(aborted -> aborted) cancel])
 
 ;; ── Backward-compatible exports ──
 
@@ -61,8 +67,10 @@
 (define event-cancel iteration-cancel)
 
 ;; Converters
-(define (state->symbol s) (fsm-state-name s))
-(define (iteration-event->symbol e) (fsm-event-name e))
+(define (state->symbol s)
+  (fsm-state-name s))
+(define (iteration-event->symbol e)
+  (fsm-event-name e))
 
 ;; Transition table (backward compat)
 (define TRANSITIONS (fsm-transitions iteration-machine))
@@ -90,7 +98,6 @@
          state-complete
          state-retrying
          state-aborted
-         state->symbol
 
          iteration-event?
          event-start-loop
@@ -102,8 +109,9 @@
          event-error
          event-retry-requested
          event-cancel
-         iteration-event->symbol
 
          TRANSITIONS
-         next-iteration-state
-         valid-transition?)
+         (contract-out [state->symbol (-> any/c symbol?)]
+                       [iteration-event->symbol (-> any/c symbol?)]
+                       [next-iteration-state (-> any/c any/c any)]
+                       [valid-transition? (-> any/c any/c boolean?)]))

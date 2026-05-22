@@ -11,7 +11,8 @@
 ;;   Parsing (parse-skill)
 ;;   Merging (merge-skill-lists, deep-merge-hash, merge-resources)
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/port
          racket/string
          racket/hash
@@ -22,35 +23,16 @@
 
 ;; Structs
 ;; resource struct exports
-(provide resource
-         resource?
-         resource-kind
-         resource-name
-         resource-source
-         resource-content
-         ;; resource-set struct exports
-         resource-set
-         resource-set?
-         resource-set-instructions
-         resource-set-skills
-         resource-set-templates
-         resource-set-config
-         empty-resource-set
-
-         ;; Resource loading
-         load-global-resources
-         load-project-resources
-         merge-resources
-
-         ;; Progressive skill disclosure
-         skill-summary-text
-         skills-summary-section
-
-         ;; Parsing (exposed for testing)
-         parse-skill
-
-         ;; File reading
-         try-read-file)
+(provide (struct-out resource)
+         (struct-out resource-set)
+         (contract-out [empty-resource-set (-> resource-set?)]
+                       [load-global-resources (->* () (path-string?) any/c)]
+                       [load-project-resources (->* () (path-string?) any/c)]
+                       [merge-resources (-> resource-set? resource-set? resource-set?)]
+                       [skill-summary-text (-> list? string?)]
+                       [skills-summary-section (-> list? (or/c string? #f))]
+                       [parse-skill (-> string? string? hash?)]
+                       [try-read-file (-> path-string? (or/c string? #f))]))
 
 ;; ============================================================
 ;; Structs

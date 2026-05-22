@@ -12,7 +12,8 @@
 ;;   - post-edit line-count delta check with auto-revert on corruption
 ;;   - pre-edit backup save to ~/.q/edit-backups/
 
-(require racket/file
+(require racket/contract
+         racket/file
          racket/match
          racket/string
          (only-in racket/list last drop)
@@ -24,9 +25,9 @@
          (only-in "../../util/error-sanitizer.rkt" sanitize-error-message)
          (only-in "builtin-helpers.rkt" require-safe-path!))
 
-(provide tool-edit
-         current-max-old-text-len
-         set-current-max-old-text-len!)
+(provide current-max-old-text-len
+         set-current-max-old-text-len!
+         (contract-out [tool-edit (->* (hash?) (any/c) any/c)]))
 
 ;; --------------------------------------------------
 ;; Backup helpers

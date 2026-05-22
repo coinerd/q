@@ -34,10 +34,8 @@
                   gsd-session-ctx-state-box))
 
 ;; States
-(provide gsm-state?
-         GSD-STATES
-         ;; Runtime state struct
-         gsd-runtime-state
+;; Struct exports (plain)
+(provide gsd-runtime-state
          gsd-runtime-state?
          gsd-runtime-state-mode
          gsd-runtime-state-total-waves
@@ -48,44 +46,40 @@
          gsd-runtime-state-pinned-dir
          gsd-runtime-state-edit-limit
          gsd-runtime-state-transition-history
-         make-initial-gsd-state
-         ;; Current state query
-         gsm-current
-         ;; Transition
-         gsm-transition!
-         gsm-transition-to!
-         gsm-reset!
-         compute-next-gsm-state
-         ;; Transition result
          ok?
          ok-from
          ok-to
          err?
          err-reason
-         ;; Valid transitions query
-         gsm-valid-next-states
+         ;; Data constants (plain)
+         GSD-STATES
          TRANSITIONS
          TRANSITIONS-FLAT
-         ;; Tool access
-         gsm-tool-allowed?
-         ;; Snapshot / reset
-         gsm-snapshot
-         reset-gsm!
-         ;; History
-         gsm-history
-         ;; Wave state (F4)
-         gsm-wave-executor
-         gsm-set-wave-executor!
-         gsm-total-waves
-         gsm-set-total-waves!
-         gsm-current-wave
-         gsm-set-current-wave!
-         gsm-completed-waves
-         gsm-mark-wave-complete!
-         gsm-wave-complete?
-         gsm-next-pending-wave
-         ;; Invariants
-         gsd-invariants-hold?)
+         ;; Functions (contracted)
+         (contract-out [gsm-state? (-> any/c boolean?)]
+                       [make-initial-gsd-state (-> any/c)]
+                       [gsm-current (-> symbol?)]
+                       [gsm-transition! (->* (symbol?) (#:event any/c) any/c)]
+                       [gsm-transition-to! (-> symbol? any/c)]
+                       [gsm-reset! (-> any/c)]
+                       [compute-next-gsm-state
+                        (->* (any/c symbol?) (#:event any/c) (values any/c any/c))]
+                       [gsm-valid-next-states (-> (listof symbol?))]
+                       [gsm-tool-allowed? (-> string? boolean?)]
+                       [gsm-snapshot (-> any/c)]
+                       [reset-gsm! (-> void?)]
+                       [gsm-history (-> any/c)]
+                       [gsm-wave-executor (-> any/c)]
+                       [gsm-set-wave-executor! (-> any/c any/c)]
+                       [gsm-total-waves (-> any/c)]
+                       [gsm-set-total-waves! (-> any/c any/c)]
+                       [gsm-current-wave (-> any/c)]
+                       [gsm-set-current-wave! (-> any/c any/c)]
+                       [gsm-completed-waves (-> any/c)]
+                       [gsm-mark-wave-complete! (-> any/c any/c)]
+                       [gsm-wave-complete? (-> any/c boolean?)]
+                       [gsm-next-pending-wave (-> any/c)]
+                       [gsd-invariants-hold? (-> (values boolean? any/c))]))
 
 ;; ============================================================
 ;; States and transitions

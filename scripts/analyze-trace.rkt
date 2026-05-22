@@ -16,7 +16,8 @@
 ;;   racket scripts/analyze-trace.rkt --json <trace.jsonl>
 ;;   racket scripts/analyze-trace.rkt --summary <trace.jsonl>
 
-(require racket/cmdline
+(require racket/contract
+         racket/cmdline
          racket/file
          racket/format
          racket/list
@@ -37,9 +38,9 @@
                   tool-call-part-name
                   tool-call-part-id))
 
-(provide extract-metrics
-         format-report
-         metrics->json)
+(provide (contract-out [extract-metrics (-> any/c any/c)]
+                       [format-report (-> any/c string?)]
+                       [metrics->json (-> any/c string?)]))
 
 ;; ============================================================
 ;; Metrics extraction

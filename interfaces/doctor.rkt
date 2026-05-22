@@ -8,7 +8,8 @@
 ;;
 ;; Exit code: 0 if no errors, 1 if any error found.
 
-(require racket/list
+(require racket/contract
+         racket/list
          racket/string
          racket/format
          racket/match
@@ -25,23 +26,15 @@
          "../util/config-paths.rkt")
 
 ;; Struct
-(provide check-result
-         check-result?
-         check-result-name
-         check-result-status
-         check-result-message
-
-         ;; Main entry
-         run-doctor
-
-         ;; Individual checks (exported for testing)
-         check-racket-version
-         check-packages
-         check-config-dir
-         check-config-file
-         check-credentials
-         check-session-dir
-         check-tui-packages)
+(provide (struct-out check-result)
+         (contract-out [run-doctor (-> exact-nonnegative-integer?)]
+                       [check-racket-version (-> check-result?)]
+                       [check-packages (-> check-result?)]
+                       [check-config-dir (-> check-result?)]
+                       [check-config-file (-> check-result?)]
+                       [check-credentials (-> check-result?)]
+                       [check-session-dir (-> check-result?)]
+                       [check-tui-packages (-> check-result?)]))
 
 ;; ============================================================
 ;; Struct

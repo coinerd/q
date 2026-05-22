@@ -50,17 +50,17 @@
          default-dark-theme
          default-light-theme
          current-tui-theme
-         theme-ref
-         theme-color
-         theme-color->sgr
-         theme-color->sgr-bg
-         theme-style->sgr
-         register-theme!
          tui-theme-field-names
-         validate-color-value
-         load-theme-from-json
-         json-hash->theme
-         theme-field-accessor)
+         (contract-out [theme-ref (-> symbol? any/c)]
+                       [theme-color (-> symbol? (or/c string? #f))]
+                       [theme-color->sgr (-> any/c (or/c string? #f))]
+                       [theme-color->sgr-bg (-> any/c (or/c string? #f))]
+                       [theme-style->sgr (-> (listof any/c) string?)]
+                       [register-theme! (-> symbol? tui-theme? void?)]
+                       [validate-color-value (-> any/c any/c)]
+                       [load-theme-from-json (-> any/c (or/c tui-theme? #f))]
+                       [json-hash->theme (-> hash? tui-theme?)]
+                       [theme-field-accessor (-> symbol? procedure?)]))
 
 ;; ============================================================
 ;; Theme struct — all fields are ANSI color names or #f for default

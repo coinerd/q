@@ -24,14 +24,14 @@
 
 ;; Quarantine state
 (provide current-quarantine-dir
-         quarantine-state-file
-         ;; Extension state queries and mutations
-         extension-state
-         disable-extension!
-         quarantine-extension!
-         restore-extension!
-         list-quarantined
-         format-extension-status)
+         (contract-out [quarantine-state-file (-> path?)]
+                       ;; Extension state queries and mutations
+                       [extension-state (-> string? symbol?)]
+                       [disable-extension! (-> string? void?)]
+                       [quarantine-extension! (-> string? path-string? void?)]
+                       [restore-extension! (-> string? path-string? void?)]
+                       [list-quarantined (-> (listof hash?))]
+                       [format-extension-status (-> string? string?)]))
 
 ;; ============================================================
 ;; Parameters

@@ -8,7 +8,8 @@
 
 (require "../util/json-helpers.rkt")
 (require "../util/errors.rkt")
-(require racket/string
+(require racket/contract
+         racket/string
          racket/format
          json
          racket/file
@@ -32,28 +33,29 @@
          oauth-token-expires-at
          oauth-token-token-type
          oauth-token-scope
-         ;; Feature availability predicate
-         oauth-available?
-         ;; Predicates / validation
-         oauth-token-expired?
-         valid-oauth-config?
-         ;; URL generation
-         oauth-authorize-url
-         ;; Token exchange (stub)
-         oauth-exchange-code
-         ;; Token refresh (stub)
-         oauth-refresh-token
-         ;; Token persistence
-         store-oauth-token!
-         get-oauth-token
-         get-valid-oauth-token
-         ;; OAuth token file
-         oauth-token-file-path
-         load-oauth-tokens
-         save-oauth-token-file!
-         ;; Serialization helpers
-         oauth-token->jsexpr
-         jsexpr->oauth-token)
+         (contract-out
+          ;; Feature availability
+          [oauth-available? (-> boolean?)]
+          ;; Predicates / validation
+          [oauth-token-expired? (->* (oauth-token?) (exact-integer?) boolean?)]
+          [valid-oauth-config? (-> any/c boolean?)]
+          ;; URL generation
+          [oauth-authorize-url (-> oauth-config? string? string?)]
+          ;; Token exchange (stub)
+          [oauth-exchange-code (-> oauth-config? string? any)]
+          ;; Token refresh (stub)
+          [oauth-refresh-token (-> oauth-config? oauth-token? any)]
+          ;; Token persistence
+          [oauth-token-file-path (-> path?)]
+          [load-oauth-tokens (->* () ((or/c path-string? path?)) hash?)]
+          [save-oauth-token-file! (->* (hash?) ((or/c path-string? path?)) void?)]
+          [store-oauth-token! (->* (string? oauth-token?) (#:path (or/c path-string? path?)) void?)]
+          [get-oauth-token (->* (string?) (#:path (or/c path-string? path?)) (or/c oauth-token? #f))]
+          [get-valid-oauth-token
+           (->* (string? oauth-config?) (#:path (or/c path-string? path?)) (or/c oauth-token? #f))]
+          ;; Serialization helpers
+          [oauth-token->jsexpr (-> oauth-token? hash?)]
+          [jsexpr->oauth-token (-> any/c (or/c oauth-token? #f))]))
 
 ;; ═══════════════════════════════════════════════════════════════════
 ;; Structs

@@ -16,10 +16,11 @@
          "../util/protocol-types.rkt"
          "../runtime/session-store.rkt")
 
-(provide inspect-session
-         inspect-session-stats
-         inspect-session-safe
-         format-inspection)
+(require racket/contract)
+(provide (contract-out [inspect-session (-> path-string? any)]
+                       [inspect-session-stats (-> path-string? any)]
+                       [inspect-session-safe (-> path-string? any)]
+                       [format-inspection (-> any/c string?)]))
 
 ;; ── Core analysis ──
 

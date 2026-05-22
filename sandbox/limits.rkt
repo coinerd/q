@@ -5,26 +5,38 @@
 ;; Provides structured execution limits, preset configurations, merge logic,
 ;; and a predicate to check whether observed resource usage is within bounds.
 
+(require racket/contract)
+
 (provide exec-limits
          exec-limits?
          exec-limits-timeout-seconds
          exec-limits-max-output-bytes
          exec-limits-max-memory-bytes
          exec-limits-max-processes
-         default-exec-limits
-         strict-exec-limits
-         permissive-exec-limits
-         merge-limits
-         within-limits?
          default-timeout-seconds
          default-max-output-bytes
-         with-resource-limits
-         get-process-count
          process-count-box
-         reset-process-count!
-         track-process!
-         untrack-process!
-         current-max-processes)
+         current-max-processes
+         (contract-out
+          [default-exec-limits (-> exec-limits?)]
+          [strict-exec-limits (-> exec-limits?)]
+          [permissive-exec-limits (-> exec-limits?)]
+          [merge-limits (-> exec-limits? exec-limits? exec-limits?)]
+          [within-limits?
+           (->* [exec-limits?]
+                [#:elapsed (or/c #f number?)
+                 #:output-size (or/c #f exact-nonnegative-integer?)
+                 #:memory (or/c #f exact-nonnegative-integer?)
+                 #:processes (or/c #f exact-nonnegative-integer?)]
+                boolean?)]
+          [with-resource-limits
+           (->* [(-> any/c any)]
+                [#:timeout number? #:max-output exact-nonnegative-integer? #:custodian custodian?]
+                (values any/c boolean?))]
+          [get-process-count (-> exact-nonnegative-integer?)]
+          [track-process! (-> exact-positive-integer?)]
+          [untrack-process! (-> exact-nonnegative-integer?)]
+          [reset-process-count! (-> void?)]))
 
 ;; --------------------------------------------------
 ;; Standalone defaults (convenient constants)

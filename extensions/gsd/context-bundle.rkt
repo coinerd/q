@@ -7,18 +7,20 @@
 ;; assemble a role-specific context bundle with only what the
 ;; current phase needs.
 
-(require racket/string
+(require racket/contract
+         racket/string
          (only-in "../../util/errors.rkt" raise-extension-error)
          racket/match
          "plan-types.rkt")
 
-(provide assemble-context
-         explorer-bundle
-         executor-bundle
-         verifier-bundle
-         ;; Config
-         max-bundle-size
-         bundle-size-warning?)
+;; Config (plain)
+(provide max-bundle-size
+         ;; Functions (contracted)
+         (contract-out [assemble-context (-> any/c any/c any/c string?)]
+                       [explorer-bundle (-> any/c any/c string?)]
+                       [executor-bundle (-> any/c any/c string?)]
+                       [verifier-bundle (-> any/c any/c string?)]
+                       [bundle-size-warning? (-> any/c boolean?)]))
 
 ;; ============================================================
 ;; Configuration
@@ -113,8 +115,6 @@
 ;; ============================================================
 ;; Internal helpers
 ;; ============================================================
-
-
 
 (define (filter-string parts)
   (filter values parts))

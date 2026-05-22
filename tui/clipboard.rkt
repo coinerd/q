@@ -12,19 +12,14 @@
 ;;   'system — only use system clipboard tools
 ;;   'off    — disable clipboard entirely
 
-(require "../util/error-helpers.rkt")
+(require racket/contract
+         "../util/error-helpers.rkt")
 (require racket/port
          racket/string
          net/base64)
 
 ;; Configuration
 (provide current-clipboard-mode
-
-         ;; Public API
-         copy-text!
-         copy-selection!
-         clipboard-backend-available?
-         clipboard-paste
 
          ;; Status symbols (documented, not exported as values)
          ;; 'ok-osc52   — OSC 52 sequence emitted successfully
@@ -33,10 +28,15 @@
          ;; 'unavailable — no backend available for the selected mode
          ;; 'failed     — backend reported failure
 
-         ;; Re-exported for backward compatibility / testing
-         detect-clipboard-tool
-         clipboard-copy-via-tool
-         osc-52-copy)
+         ;; Public API
+         (contract-out [copy-text! (->* (string?) (any/c) symbol?)]
+                       [copy-selection! (-> any/c any/c any/c symbol?)]
+                       [clipboard-backend-available? (-> boolean?)]
+                       [clipboard-paste (-> (or/c string? #f))]
+                       ;; Re-exported for backward compatibility / testing
+                       [detect-clipboard-tool (-> any/c)]
+                       [clipboard-copy-via-tool (-> any/c any/c string? boolean?)]
+                       [osc-52-copy (->* (string?) (any/c) any/c)]))
 
 ;; ============================================================
 ;; Configuration

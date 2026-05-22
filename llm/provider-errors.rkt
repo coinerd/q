@@ -25,9 +25,9 @@
          provider-error?
          provider-error-category
          provider-error-status-code
-         raise-provider-error
-         classify-http-status
-         q-llm-error?)
+         q-llm-error?
+         (contract-out [raise-provider-error (->* (string? symbol?) ((or/c exact-integer? #f)) any)]
+                       [classify-http-status (-> exact-integer? (or/c symbol? #f))]))
 
 ;; ============================================================
 ;; Struct

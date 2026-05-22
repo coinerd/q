@@ -5,46 +5,44 @@
 ;; All functions take an input-state and return a new input-state.
 ;; No terminal I/O. No side effects.
 
-(require racket/list
+(require racket/contract
+         racket/list
          "../char-width.rkt"
          "state-types.rkt")
 
-(provide input-insert-char
-         input-insert-newline
-         input-backspace
-         input-delete
-         input-cursor-left
-         input-cursor-right
-         input-home
-         input-end
-         input-clear
-
-         ;; Undo/Redo
-         input-undo
-         input-redo
-
-         ;; Kill ring
-         input-kill-word-backward
-         input-kill-to-beginning
-         input-kill-to-end
-         input-yank
-
-         ;; Word navigation
-         input-cursor-word-left
-         input-cursor-word-right
-
-         ;; Paste
-         input-insert-string
-
-         ;; Query
-         input-at-beginning?
-         input-at-end?
-         input-empty?
-         input-current-text
-
-         ;; Internal word helpers (shared with completion)
-         find-word-start-backward
-         find-word-end-forward)
+(provide input-state?
+         (contract-out [input-insert-char (-> any/c char? any/c)]
+                       [input-insert-newline (-> any/c any/c)]
+                       [input-backspace (-> any/c any/c)]
+                       [input-delete (-> any/c any/c)]
+                       [input-cursor-left (-> any/c any/c)]
+                       [input-cursor-right (-> any/c any/c)]
+                       [input-home (-> any/c any/c)]
+                       [input-end (-> any/c any/c)]
+                       [input-clear (-> any/c any/c)]
+                       ;; Undo/Redo
+                       [input-undo (-> any/c any/c)]
+                       [input-redo (-> any/c any/c)]
+                       ;; Kill ring
+                       [input-kill-word-backward (-> any/c any/c)]
+                       [input-kill-to-beginning (-> any/c any/c)]
+                       [input-kill-to-end (-> any/c any/c)]
+                       [input-yank (-> any/c any/c)]
+                       ;; Word navigation
+                       [input-cursor-word-left (-> any/c any/c)]
+                       [input-cursor-word-right (-> any/c any/c)]
+                       ;; Paste
+                       [input-insert-string (-> any/c string? any/c)]
+                       ;; Query
+                       [input-at-beginning? (-> any/c boolean?)]
+                       [input-at-end? (-> any/c boolean?)]
+                       [input-empty? (-> any/c boolean?)]
+                       [input-current-text (-> any/c string?)]
+                       ;; Internal word helpers (shared with completion)
+                       [find-word-start-backward
+                        (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
+                       [find-word-end-forward
+                        (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]))
 
 ;; ============================================================
 ;; Basic editing
