@@ -18,19 +18,19 @@
          racket/list
          racket/path)
 
-(provide (contract-out [jsonl-append! (->* (path-string? any/c) (#:format-header? boolean?) void?)]
-                       [jsonl-write-to-port! (-> output-port? any/c void?)]
-                       [jsonl-append-entries! (-> path-string? (listof any/c) void?)]
-                       [jsonl-read-from-port
-                        (-> input-port? (values (listof any/c) exact-nonnegative-integer?))]
-                       [jsonl-read-all (-> path-string? (listof any/c))]
-                       [jsonl-read-all-valid (-> path-string? (listof any/c))]
-                       [jsonl-read-all-valid-with-count
-                        (-> path-string? (values (listof any/c) exact-nonnegative-integer?))]
-                       [jsonl-read-last (->* (path-string?) (exact-positive-integer?) (listof any/c))]
-                       [jsonl-line-valid? (-> any/c boolean?)]
-                       [jsonl-format-version exact-positive-integer?]
-                       [strip-format-header (-> (listof any/c) (listof any/c))]))
+(provide (contract-out
+          [jsonl-append! (->* (path-string? (or/c hash? list?)) (#:format-header? boolean?) void?)]
+          [jsonl-write-to-port! (-> output-port? (or/c hash? list?) void?)]
+          [jsonl-append-entries! (-> path-string? (listof (or/c hash? list?)) void?)]
+          [jsonl-read-from-port (-> input-port? (values (listof hash?) exact-nonnegative-integer?))]
+          [jsonl-read-all (-> path-string? (listof hash?))]
+          [jsonl-read-all-valid (-> path-string? (listof hash?))]
+          [jsonl-read-all-valid-with-count
+           (-> path-string? (values (listof hash?) exact-nonnegative-integer?))]
+          [jsonl-read-last (->* (path-string?) (exact-positive-integer?) (listof hash?))]
+          [jsonl-line-valid? (-> any/c boolean?)]
+          [jsonl-format-version exact-positive-integer?]
+          [strip-format-header (-> (listof hash?) (listof hash?))]))
 
 ;; ── Format versioning (F8) ──
 
