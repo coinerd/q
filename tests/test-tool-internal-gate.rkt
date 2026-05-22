@@ -1,4 +1,5 @@
 #lang racket
+;; @suite security
 
 ;; BOUNDARY: integration
 
@@ -24,10 +25,11 @@
       (check-pred procedure? tool-execute))
 
     ;; ── dangerous tool metadata ──
-    (test-case "dangerous-tool-names includes write/edit/bash"
+    (test-case "dangerous-tool-names includes write/edit/bash/delete-lines"
       (check-not-false (member "write" dangerous-tool-names))
       (check-not-false (member "edit" dangerous-tool-names))
-      (check-not-false (member "bash" dangerous-tool-names)))
+      (check-not-false (member "bash" dangerous-tool-names))
+      (check-not-false (member "delete-lines" dangerous-tool-names)))
 
     (test-case "non-dangerous tools not in list"
       (check-false (member "read" dangerous-tool-names))
