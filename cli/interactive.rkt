@@ -23,7 +23,8 @@
 
 (require racket/contract)
 (provide readline-available?
-         (contract-out [read-line-with-history (->* () () string?)]
+         (contract-out [read-line-with-history
+                        (->* (string? input-port?) (output-port?) (or/c string? eof-object?))]
                        [run-cli-interactive (-> any/c any)]
                        [run-cli-single (-> any/c any)]
                        [parse-slash-command (-> string? any/c)]))

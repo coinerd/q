@@ -32,12 +32,12 @@
          (only-in "../extensions/gsd/state-machine.rkt" gsm-current))
 
 (provide (contract-out [run-tui (->* () () any)]
-                       [run-tui-with-runtime (-> any/c any)]
+                       [run-tui-with-runtime (-> any/c any/c any)]
                        [subscribe-runtime-events! (-> any/c void?)]
-                       [create-tui-session (->* () () any)]
-                       [load-tui-scrollback (->* () () any)]
-                       [init-tui-terminal (->* () () any)]
-                       [run-tui-loop (->* () () any)]))
+                       [create-tui-session (-> any/c any/c any)]
+                       [load-tui-scrollback (-> any/c any/c any/c any/c any)]
+                       [init-tui-terminal (-> any/c any)]
+                       [run-tui-loop (-> any/c any/c any)]))
 
 ;; ============================================================
 ;; Runtime event subscription
@@ -47,7 +47,8 @@
   (define bus (tui-ctx-event-bus ctx))
   (define ch (tui-ctx-event-ch ctx))
   (when bus
-    (subscribe! bus (lambda (evt) (async-channel-put ch evt)))))
+    (subscribe! bus (lambda (evt) (async-channel-put ch evt))))
+  (void))
 
 ;; ============================================================
 ;; Phase 1: Create session + context (W-19)

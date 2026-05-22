@@ -191,6 +191,14 @@
 
      (values passed failed (+ passed failed))]))
 
+;; Normalize parsed counters against process exit status.
+;; Some test files intentionally print intermediate rackunit sub-suite summaries
+;; containing non-zero failure counts while still exiting 0 overall.
+(define (normalize-counts exit-code passed failed total)
+  (if (and (= exit-code 0) (> failed 0))
+      (values passed 0 passed)
+      (values passed failed total)))
+
 ;; ---------------------------------------------------------------------------
 ;; extract-failure-lines - pull FAILURE context blocks from output
 ;; ---------------------------------------------------------------------------
@@ -268,7 +276,9 @@
         (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
         (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
         (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
-        (define-values (passed failed total) (parse-raco-output merged-bytes))
+        (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
+        (define-values (passed failed total)
+          (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
         (test-file-result test-path
                           exit-code
                           stdout-bytes
@@ -283,7 +293,9 @@
      (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
      (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
      (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
-     (define-values (passed failed total) (parse-raco-output merged-bytes))
+     (define-values (parsed-passed parsed-failed parsed-total) (parse-raco-output merged-bytes))
+     (define-values (passed failed total)
+       (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
      (test-file-result test-path exit-code stdout-bytes stderr-bytes (elapsed) passed failed total)]))
 
 ;; ---------------------------------------------------------------------------

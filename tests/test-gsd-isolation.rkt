@@ -8,8 +8,7 @@
 (require rackunit
          rackunit/text-ui
          "../extensions/gsd/session-state.rkt"
-         "../extensions/gsd/state-machine.rkt"
-         "../extensions/gsd/runtime-state-types.rkt")
+         "../extensions/gsd/state-machine.rkt")
 
 (define-test-suite
  gsd-isolation-suite

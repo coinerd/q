@@ -33,7 +33,7 @@
           [make-tree-node
            (->* (any/c any/c any/c exact-nonnegative-integer? (listof any/c)) (any/c) any/c)]
           [build-tree-nodes (-> (listof any/c) (listof list?))]
-          [selected-node (-> list? any/c)]
+          [selected-node (-> list? exact-integer? any/c)]
           [tree-next-node (-> (listof any/c) exact-integer? exact-integer?)]
           [tree-prev-node (-> (listof any/c) exact-integer? exact-integer?)]
           [tree-toggle-fold (-> any/c any/c any/c)]

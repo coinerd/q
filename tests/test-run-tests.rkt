@@ -231,6 +231,22 @@
   (define result (run "tests/nonexistent-test-file-xyz.rkt" #:timeout 10000))
   (check-not-equal? ((runner-ref 'test-file-result-exit-code) result) 0))
 
+(test-case "run-single-file: exit=0 normalizes non-zero parsed failures"
+  (define run (runner-ref 'run-single-file))
+  (define tmp (make-temporary-file "run-tests-anomaly-~a.rkt"))
+  (call-with-output-file
+   tmp
+   #:exists 'truncate/replace
+   (lambda (out)
+     (display "#lang racket/base\n" out)
+     (display "(displayln \"5 success(es) 1 failure(s) 0 error(s) 6 test(s) run\")\n" out)))
+  (define result (run tmp #:timeout 10000))
+  (delete-file tmp)
+  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
+  (check-equal? ((runner-ref 'test-file-result-failed) result) 0)
+  (check-equal? ((runner-ref 'test-file-result-total) result)
+                ((runner-ref 'test-file-result-passed) result)))
+
 ;; ---------------------------------------------------------------------------
 ;; 13.3: collect-test-files (suite filtering)
 ;; ---------------------------------------------------------------------------

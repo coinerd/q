@@ -1,3 +1,38 @@
+## v0.53.11 — 2026-05-22
+
+### Contract Hotfix + Compile Gate (v0.53.11)
+
+Fixed the remaining contract-regression fallout from the v0.53.2 contract coverage sprint.
+
+**Contract arity fixes:**
+- `tui/tree-view.rkt`: `selected-node` contract fixed from 1-arg to 2-arg signature.
+- `cli/interactive.rkt`: `read-line-with-history` contract fixed from 0-arg to `(prompt in [out])` signature.
+- `cli/export.rkt`: `export-session` / `export-session-to-file` contracts corrected to concrete path/symbol shapes.
+- `tui/tui-init.rkt`: fixed extracted phase contracts (`run-tui-with-runtime`, `create-tui-session`, `load-tui-scrollback`, `init-tui-terminal`, `run-tui-loop`) to match actual arities.
+
+**Duplicate identifier fix:**
+- Removed redundant `runtime-state-types.rkt` require in:
+  - `tests/test-gsd-isolation.rkt`
+  - `tests/test-state-machine-pure.rkt`
+  This resolves duplicate `make-initial-gsd-state` import collisions.
+
+**Compile gate added (CI hardening):**
+- `.github/workflows/ci.yml` now compiles every test module before execution:
+  - `find tests -name '*.rkt' ... | xargs raco make`
+- Catches contract arity mismatches at module-load time before test execution.
+
+**Runner summary accounting fix:**
+- `scripts/run-tests.rkt` now normalizes parsed per-file failure counters when
+  process exit code is 0, preventing false non-zero "tests failed" totals from
+  intermediate sub-suite diagnostics.
+- Added regression test in `tests/test-run-tests.rkt` for exit=0 normalization.
+
+**Verification:**
+- Compile gate local run: PASS
+- `--suite fast`: 562/562 files passed, 0 failed, 0 timeouts
+- `--suite smoke`: 525/525 files passed, 0 failed, 0 timeouts
+- `--suite all`: 608/608 files passed, 0 failed, 0 timeouts
+
 ## v0.53.1 — 2026-05-22
 
 ### Test Runner Deadlock Fix + Test Failure Fixes

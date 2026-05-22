@@ -115,6 +115,11 @@ jobs:
       - name: Clear stale bytecode
         run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
 
+      - name: Compile gate (all test modules)
+        run: |
+          find tests -name '*.rkt' -not -path '*/compiled/*' -print0 \
+            | xargs -0 -n 1 -P 4 raco make
+
       - name: Run tests
         run: racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
 

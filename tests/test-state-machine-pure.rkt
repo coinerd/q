@@ -9,8 +9,7 @@
 
 (require rackunit
          racket/set
-         "../extensions/gsd/state-machine.rkt"
-         "../extensions/gsd/runtime-state-types.rkt")
+         "../extensions/gsd/state-machine.rkt")
 
 ;; ============================================================
 ;; Helpers

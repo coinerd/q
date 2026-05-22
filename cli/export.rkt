@@ -13,9 +13,8 @@
          "../util/export-html.rkt"
          "../util/export-json.rkt")
 
-(require racket/contract)
-(provide (contract-out [export-session (-> any/c any)]
-                       [export-session-to-file (-> any/c path-string? any)]))
+(provide (contract-out [export-session (-> path-string? symbol? string?)]
+                       [export-session-to-file (-> path-string? symbol? path-string? void?)]))
 
 ;; ── Helpers ──
 
