@@ -58,6 +58,8 @@
          agent-session-shutdown-requested?
          agent-session-force-shutdown?
          agent-session-prompt-running?
+         ;; DEPRECATED (v0.54.2): Use guarded setters from session-mutation.rkt
+         ;; These will be removed in a future version.
          set-agent-session-model-name!
          set-agent-session-index!
          set-agent-session-config!
