@@ -75,6 +75,7 @@
                   state->symbol
                   iteration-state?)
          (only-in "internal.rkt" assert-payload)
+         (only-in "loop-phases.rkt" prepare-iteration-context dispatch-turn-start-hooks)
          (only-in "loop-config.rkt"
                   loop-config?
                   loop-config-context
@@ -172,30 +173,8 @@
                      [counters (make-initial-counters)]
                      [ws ws])
 
-            (define ctx-with-steering
-              (if steering-queue
-                  (let ([steering-msgs (dequeue-all-steering! steering-queue)])
-                    (let ([qs (queue-status steering-queue)])
-                      (when (or (> (hash-ref qs 'steering 0) 0) (> (hash-ref qs 'followup 0) 0))
-                        (emit-session-event! bus session-id "queue.status-update" qs)))
-                    (if (null? steering-msgs)
-                        ctx
-                        (append ctx steering-msgs)))
-                  ctx))
             (define ctx-with-injected
-              (if injected-box
-                  (let ([injected (drain-injected-messages! bus injected-box session-id)])
-                    (if (null? injected)
-                        ctx-with-steering
-                        (begin
-                          (emit-session-event! bus
-                                               session-id
-                                               "message.injected.drain"
-                                               (assert-payload "message.injected.drain"
-                                                               (hasheq 'count (length injected))
-                                                               injection-count-payload/c))
-                          (append ctx-with-steering injected))))
-                  ctx-with-steering))
+              (prepare-iteration-context ctx steering-queue injected-box bus ext-reg session-id))
 
             (define cancel-result
               (check-cancellation token
@@ -210,11 +189,7 @@
               [else
                (define turn-id (generate-id))
                (define-values (ctx-to-use turn-blocked?)
-                 (let-values ([(amended-ctx hook-res)
-                               (maybe-dispatch-hooks ext-reg 'turn-start ctx-with-injected)])
-                   (if (and hook-res (eq? (hook-result-action hook-res) 'block))
-                       (values ctx-with-injected #t)
-                       (values amended-ctx #f))))
+                 (dispatch-turn-start-hooks ctx-with-injected ext-reg))
                (cond
                  [turn-blocked?
                   ;; R-06/R-07: FSM: provider-turn + hook-block -> aborted
@@ -251,15 +226,17 @@
                   ;; R-06/R-07: FSM: provider-turn + model-response -> decision
                   (current-iteration-fsm-state (next-iteration-state state-provider-turn
                                                                      event-model-response))
-                  (emit-typed-event! bus (make-iteration-decision-event
-                   #:session-id session-id
-                   #:turn-id ""
-                   #:timestamp (current-inexact-milliseconds)
-                   #:iteration (add1 (loop-counters-iteration counters))
-                   #:termination termination
-                   #:consecutive-tools (loop-counters-consecutive-tool-count counters)
-                   #:max-iterations max-iterations
-                   #:max-iterations-hard max-iterations-hard))
+                  (emit-typed-event! bus
+                                     (make-iteration-decision-event
+                                      #:session-id session-id
+                                      #:turn-id ""
+                                      #:timestamp (current-inexact-milliseconds)
+                                      #:iteration (add1 (loop-counters-iteration counters))
+                                      #:termination termination
+                                      #:consecutive-tools
+                                      (loop-counters-consecutive-tool-count counters)
+                                      #:max-iterations max-iterations
+                                      #:max-iterations-hard max-iterations-hard))
                   (define step-res
                     (compute-step-result
                      (iteration-ctx (loop-counters-iteration counters)
