@@ -20,14 +20,15 @@
          (only-in "shared.rkt" extract-plan-title)
          "wave-status.rkt")
 
-(provide (contract-out [archive-completed-plan! (->* (any/c) (boolean?) any/c)]
-                       [all-waves-complete? (-> any/c any/c)]
-                       [archive-path-for-plan (-> any/c any/c any/c)]
-                       [move-to-archive! (-> any/c any/c any/c)]
-                       [reset-gsd-after-archive! (-> any/c)]
-                       [cleanup-empty-subdirs! (-> any/c any/c)]
-                       [ensure-state-md! (-> any/c any/c)]
-                       [sync-executor-to-plan! (-> any/c any/c)]))
+(provide (contract-out [archive-completed-plan!
+                        (->* ((or/c path-string? #f)) (boolean?) gsd-command-result?)]
+                       [all-waves-complete? (-> path-string? boolean?)]
+                       [archive-path-for-plan (-> path-string? string? path?)]
+                       [move-to-archive! (-> path-string? path? path?)]
+                       [reset-gsd-after-archive! (-> void?)]
+                       [cleanup-empty-subdirs! (-> path-string? void?)]
+                       [ensure-state-md! (-> path-string? void?)]
+                       [sync-executor-to-plan! (-> path-string? void?)]))
 
 ;; ============================================================
 ;; Validation

@@ -29,13 +29,14 @@
 (provide planning-read-schema
          planning-write-schema
          ;; Functions (contracted)
-         (contract-out [handle-planning-read (->* (any/c) (any/c) any/c)]
-                       [handle-planning-write (->* (any/c) (any/c) any/c)]
-                       [resolve-project-root (-> any/c any/c)]
-                       [planning-artifact-path (-> any/c any/c any/c)]
-                       [get-base-dir (->* (any/c) (any/c) any/c)]
-                       [read-planning-artifact (-> any/c any/c any/c)]
-                       [write-planning-artifact! (-> any/c any/c any/c any/c)]))
+         (contract-out [handle-planning-read (->* (hash?) (any/c) any/c)]
+                       [handle-planning-write (->* (hash?) (any/c) any/c)]
+                       [resolve-project-root (-> path-string? path?)]
+                       [planning-artifact-path (-> path-string? string? (or/c path? #f))]
+                       [get-base-dir (->* (hash?) (any/c) path?)]
+                       [read-planning-artifact (-> path-string? string? (or/c hash? string? #f))]
+                       [write-planning-artifact!
+                        (-> path-string? string? (or/c hash? string?) (or/c path? #f))]))
 
 ;; ============================================================
 ;; Path helpers
