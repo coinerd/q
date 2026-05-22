@@ -20,7 +20,9 @@
 (require racket/contract
          (only-in "../util/fsm.rkt"
                   define-fsm-machine
+                  fsm?
                   fsm-state
+                  fsm-state?
                   fsm-state-name
                   fsm-event
                   fsm-event-name
@@ -80,16 +82,16 @@
 (define (session-can-transition? sess event-sym)
   (fsm-valid-transition? session-lifecycle-machine (session-current-state-name sess) event-sym))
 
-(provide (contract-out [session-lifecycle-machine any/c]
+(provide (contract-out [session-lifecycle-machine fsm?]
                        [session-lifecycle-state? (-> any/c boolean?)]
                        [session-lifecycle-event? (-> any/c boolean?)]
-                       [session-lifecycle-terminated any/c]
-                       [session-lifecycle-active any/c]
-                       [session-lifecycle-streaming any/c]
-                       [session-lifecycle-compacting any/c]
-                       [session-lifecycle-idle any/c]
-                       [session-lifecycle-created any/c]
-                       [session-current-state (-> any/c any/c)]
-                       [session-current-state-name (-> any/c symbol?)]
-                       [session-valid-lifecycle? (-> any/c boolean?)]
-                       [session-can-transition? (-> any/c symbol? boolean?)]))
+                       [session-lifecycle-terminated fsm-state?]
+                       [session-lifecycle-active fsm-state?]
+                       [session-lifecycle-streaming fsm-state?]
+                       [session-lifecycle-compacting fsm-state?]
+                       [session-lifecycle-idle fsm-state?]
+                       [session-lifecycle-created fsm-state?]
+                       [session-current-state (-> agent-session? fsm-state?)]
+                       [session-current-state-name (-> agent-session? symbol?)]
+                       [session-valid-lifecycle? (-> agent-session? boolean?)]
+                       [session-can-transition? (-> agent-session? symbol? boolean?)]))

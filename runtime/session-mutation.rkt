@@ -9,20 +9,20 @@
          "session-types.rkt"
          (only-in "../util/errors.rkt" raise-session-error))
 
-(provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? any/c)]
-                       [guarded-set-compacting! (-> agent-session? boolean? any/c)]
-                       [guarded-set-shutdown-requested! (-> agent-session? boolean? any/c)]
-                       [guarded-set-force-shutdown! (-> agent-session? boolean? any/c)]
-                       [guarded-set-active! (-> agent-session? boolean? any/c)]
-                       [guarded-set-model-name! (-> agent-session? (or/c string? #f) any/c)]
-                       [guarded-set-config! (-> agent-session? any/c any/c)]
-                       [guarded-set-index! (-> agent-session? any/c any/c)]
-                       [guarded-set-persisted! (-> agent-session? boolean? any/c)]
-                       [guarded-set-pending-entries! (-> agent-session? list? any/c)]
-                       [guarded-set-start-time! (-> agent-session? any/c any/c)]
-                       [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) any/c)]
-                       [guarded-set-last-compaction-time! (-> agent-session? any/c any/c)]
-                       [valid-session-phase? (-> any/c boolean?)]
+(provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? void?)]
+                       [guarded-set-compacting! (-> agent-session? boolean? void?)]
+                       [guarded-set-shutdown-requested! (-> agent-session? boolean? void?)]
+                       [guarded-set-force-shutdown! (-> agent-session? boolean? void?)]
+                       [guarded-set-active! (-> agent-session? boolean? void?)]
+                       [guarded-set-model-name! (-> agent-session? (or/c string? #f) void?)]
+                       [guarded-set-config! (-> agent-session? any/c void?)]
+                       [guarded-set-index! (-> agent-session? any/c void?)]
+                       [guarded-set-persisted! (-> agent-session? boolean? void?)]
+                       [guarded-set-pending-entries! (-> agent-session? list? void?)]
+                       [guarded-set-start-time! (-> agent-session? any/c void?)]
+                       [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) void?)]
+                       [guarded-set-last-compaction-time! (-> agent-session? any/c void?)]
+                       [valid-session-phase? (-> symbol? boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
 
 ;; Valid session phases derived from boolean flags
