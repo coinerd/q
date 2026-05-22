@@ -23,18 +23,19 @@
 (provide (contract-out [session-manager? (-> any/c boolean?)]
                        [persistent-session-manager? (-> any/c boolean?)]
                        [in-memory-session-manager? (-> any/c boolean?)]
-                       [make-persistent-session-manager (-> path-string? any/c)]
-                       [make-in-memory-session-manager (-> any/c)]
-                       [sm-append! (-> any/c string? any/c void?)]
-                       [sm-load (-> any/c string? (listof any/c))]
-                       [sm-list (-> any/c (listof string?))]
-                       [sm-fork! (->* (any/c string? string?) (string?) any/c)]
+                       [make-persistent-session-manager (-> path-string? session-manager?)]
+                       [make-in-memory-session-manager (-> session-manager?)]
+                       [sm-append! (-> session-manager? string? any/c void?)]
+                       [sm-load (-> session-manager? string? list?)]
+                       [sm-list (-> session-manager? (listof string?))]
+                       [sm-fork! (->* (session-manager? string? string?) (string?) any/c)]
                        ;; Re-export in-memory operations for backward compat
-                       [in-memory-append! (-> any/c string? any/c void?)]
-                       [in-memory-append-entries! (-> any/c string? (listof any/c) void?)]
-                       [in-memory-load (-> any/c string? (listof any/c))]
-                       [in-memory-list-sessions (-> any/c (listof string?))]
-                       [in-memory-fork! (->* (any/c string? string?) (string?) any/c)]))
+                       [in-memory-append! (-> in-memory-session-manager? string? any/c void?)]
+                       [in-memory-append-entries! (-> in-memory-session-manager? string? list? void?)]
+                       [in-memory-load (-> in-memory-session-manager? string? list?)]
+                       [in-memory-list-sessions (-> in-memory-session-manager? (listof string?))]
+                       [in-memory-fork!
+                        (->* (in-memory-session-manager? string? string?) (string?) string?)]))
 
 ;; ============================================================
 ;; Persistent session manager — wraps file-backed session-store
