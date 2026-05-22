@@ -77,6 +77,7 @@
                   config-thinking-level
                   config-session-dir)
          (only-in "model-registry.rkt" model-registry?))
+(require "session-mutation.rkt")
 
 (provide agent-session?
          ;; v0.32.8: Convenience accessors (stable API)
@@ -436,7 +437,7 @@
       (maybe-dispatch-hooks (agent-session-extension-registry sess)
                             'session-shutdown
                             shutdown-payload))
-    (set-agent-session-active?! sess #f)))
+    (guarded-set-active! sess #f)))
 
 ;; ============================================================
 ;; Re-exported from extracted sub-modules

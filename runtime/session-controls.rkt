@@ -11,6 +11,7 @@
          racket/list
          (only-in "model-registry.rkt" available-models model-entry-name)
          "session-types.rkt")
+(require "session-mutation.rkt")
 
 (provide (contract-out [set-model! (-> agent-session? string? void?)]
                        [cycle-model! (-> agent-session? any/c (or/c string? #f))]
@@ -35,7 +36,7 @@
 (define (set-model! sess model-name)
   (unless (string? model-name)
     (raise-argument-error 'set-model! "string?" model-name))
-  (set-agent-session-model-name! sess model-name))
+  (guarded-set-model-name! sess model-name))
 
 ;; cycle-model! : agent-session? model-registry? -> (or/c string? #f)
 ;; Cycles to the next model in the registry's available models list.
@@ -54,7 +55,7 @@
                            (modulo (add1 current-idx) (length unique-names))
                            0)]
              [next-model (list-ref unique-names next-idx)])
-        (set-agent-session-model-name! sess next-model)
+        (guarded-set-model-name! sess next-model)
         next-model)))
 
 ;; ============================================================
@@ -79,17 +80,17 @@
 (define (set-thinking-level! sess level)
   (unless (thinking-level? level)
     (raise-argument-error 'set-thinking-level! "thinking level" level))
-  (set-agent-session-thinking-level! sess level))
+  (guarded-set-thinking-level! sess level))
 
 ;; ============================================================
 ;; Graceful shutdown (#1158)
 ;; ============================================================
 
 (define (request-shutdown! sess)
-  (set-agent-session-shutdown-requested?! sess #t))
+  (guarded-set-shutdown-requested! sess #t))
 
 (define (force-shutdown! sess)
-  (set-agent-session-force-shutdown?! sess #t))
+  (guarded-set-force-shutdown! sess #t))
 
 (define (shutdown-requested? sess)
   (agent-session-shutdown-requested? sess))
@@ -98,5 +99,5 @@
   (agent-session-force-shutdown? sess))
 
 (define (reset-shutdown-flags! sess)
-  (set-agent-session-shutdown-requested?! sess #f)
-  (set-agent-session-force-shutdown?! sess #f))
+  (guarded-set-shutdown-requested! sess #f)
+  (guarded-set-force-shutdown! sess #f))
