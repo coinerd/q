@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.55.0 — 2026-05-22
+
+### Contract Precision Series
+
+Systematic replacement of `any/c` in `contract-out` boundaries with precise domain predicates across 35+ modules.
+
+**Metric:** 1338 → 855 `any/c` (−483, 36.1% reduction) across 148 files.
+
+**Modules tightened:**
+- GSD session-state, state-machine, core, wave-docs, archive, tool-handlers
+- Session-index mutations, session-mutation, session-fsm
+- Settings, context-assembly, iteration (directive, tool-turn-bridge, loop-config)
+- Compaction-hooks, event-bus, streaming-message
+- TUI input/editing-ops, component, state-ui, tree-view, keymap, keybindings, render-loop
+- Extension ui-surface, loader, context
+- Interface json-mode, rpc-mode
+- Utility jsonl, tool-types, event-contracts
+- Runtime session-index, agent effect-types
+
+**Infrastructure:**
+- Contract metrics tool (`scripts/contract-metrics.rkt`)
+- Contract blame test helpers (`tests/helpers/contract-blame.rkt`)
+
 ## v0.54.10 — 2026-05-22
 
 ### Transaction Error-Arity Fix + Planning Drift
