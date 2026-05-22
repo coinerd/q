@@ -11,33 +11,33 @@
          "state-types.rkt")
 
 (provide input-state?
-         (contract-out [input-insert-char (-> any/c char? any/c)]
-                       [input-insert-newline (-> any/c any/c)]
-                       [input-backspace (-> any/c any/c)]
-                       [input-delete (-> any/c any/c)]
-                       [input-cursor-left (-> any/c any/c)]
-                       [input-cursor-right (-> any/c any/c)]
-                       [input-home (-> any/c any/c)]
-                       [input-end (-> any/c any/c)]
-                       [input-clear (-> any/c any/c)]
+         (contract-out [input-insert-char (-> input-state? char? input-state?)]
+                       [input-insert-newline (-> input-state? input-state?)]
+                       [input-backspace (-> input-state? input-state?)]
+                       [input-delete (-> input-state? input-state?)]
+                       [input-cursor-left (-> input-state? input-state?)]
+                       [input-cursor-right (-> input-state? input-state?)]
+                       [input-home (-> input-state? input-state?)]
+                       [input-end (-> input-state? input-state?)]
+                       [input-clear (-> input-state? input-state?)]
                        ;; Undo/Redo
-                       [input-undo (-> any/c any/c)]
-                       [input-redo (-> any/c any/c)]
+                       [input-undo (-> input-state? input-state?)]
+                       [input-redo (-> input-state? input-state?)]
                        ;; Kill ring
-                       [input-kill-word-backward (-> any/c any/c)]
-                       [input-kill-to-beginning (-> any/c any/c)]
-                       [input-kill-to-end (-> any/c any/c)]
-                       [input-yank (-> any/c any/c)]
+                       [input-kill-word-backward (-> input-state? input-state?)]
+                       [input-kill-to-beginning (-> input-state? input-state?)]
+                       [input-kill-to-end (-> input-state? input-state?)]
+                       [input-yank (-> input-state? input-state?)]
                        ;; Word navigation
-                       [input-cursor-word-left (-> any/c any/c)]
-                       [input-cursor-word-right (-> any/c any/c)]
+                       [input-cursor-word-left (-> input-state? input-state?)]
+                       [input-cursor-word-right (-> input-state? input-state?)]
                        ;; Paste
-                       [input-insert-string (-> any/c string? any/c)]
+                       [input-insert-string (-> input-state? string? input-state?)]
                        ;; Query
-                       [input-at-beginning? (-> any/c boolean?)]
-                       [input-at-end? (-> any/c boolean?)]
-                       [input-empty? (-> any/c boolean?)]
-                       [input-current-text (-> any/c string?)]
+                       [input-at-beginning? (-> input-state? boolean?)]
+                       [input-at-end? (-> input-state? boolean?)]
+                       [input-empty? (-> input-state? boolean?)]
+                       [input-current-text (-> input-state? string?)]
                        ;; Internal word helpers (shared with completion)
                        [find-word-start-backward
                         (-> string? exact-nonnegative-integer? exact-nonnegative-integer?)]
