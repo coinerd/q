@@ -79,7 +79,7 @@
          mode-overlay->keymap
          (contract-out [make-tui-ctx
                         (->* ()
-                             (#:event-bus any/c
+                             (#:event-bus (or/c event-bus? #f)
                                           #:session-runner procedure?
                                           #:session-dir (or/c path-string? #f)
                                           #:model-registry any/c
@@ -88,14 +88,15 @@
                                           #:session-factory-runner any/c)
                              tui-ctx?)]
                        [mark-dirty! (-> tui-ctx? void?)]
-                       [handle-key (-> tui-ctx? any/c any/c)]
-                       [handle-mouse (-> tui-ctx? any/c any/c)]
-                       [selection-text (-> tui-ctx? any/c (or/c string? #f))]
+                       [handle-key (-> tui-ctx? any/c (values tui-ctx? any/c))]
+                       [handle-mouse (-> tui-ctx? any/c tui-ctx?)]
+                       [selection-text (-> tui-ctx? ui-state? (or/c string? #f))]
                        [process-slash-command
-                        (->* (tui-ctx? (or/c string? symbol? parsed-command?)) (string?) any/c)]
-                       [tui-ctx->cmd-ctx (-> tui-ctx? any/c)]
+                        (->* (tui-ctx? (or/c string? symbol? parsed-command?)) (string?) tui-ctx?)]
+                       [tui-ctx->cmd-ctx (-> tui-ctx? hash?)]
                        [reload-keymap! (-> void?)]
-                       [current-keybindings-path (->* () ((or/c path-string? #f)) any/c)]
+                       [current-keybindings-path
+                        (->* () ((or/c path-string? #f)) (or/c path-string? #f))]
                        [input-expand-last-prompt (-> string? tui-ctx? string?)]))
 
 ;; ============================================================

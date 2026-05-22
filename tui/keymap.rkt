@@ -21,26 +21,29 @@
          key-spec-ctrl
          key-spec-shift
          key-spec-alt
-         (contract-out [keycode->key-spec (-> any/c #:ctrl any/c #:shift any/c #:alt any/c any/c)]
-                       [key-spec->keycode (-> key-spec? symbol?)]
-                       [key-spec=? (-> key-spec? key-spec? boolean?)]
-                       [parse-key-string (-> string? key-spec?)]
-                       [make-keymap (-> any/c)]
-                       [keymap-add! (-> any/c key-spec? symbol? void?)]
-                       [keymap-remove! (-> any/c key-spec? void?)]
-                       [keymap-lookup (-> any/c key-spec? any/c)]
-                       [keymap-list (-> any/c (listof any/c))]
-                       [keymap-find-conflicts (-> any/c (listof any/c))]
-                       [keymap-merge (-> any/c any/c void?)]
-                       [default-keymap (-> any/c)]
-                       [load-user-keymap (-> any/c)]
-                       [load-keybindings (->* [] [any/c] any/c)]
-                       [shortcut-specs->keymap (-> (listof hash?) any/c)]
-                       ;; #1189: Namespaced actions
-                       [namespaced-action? (-> any/c boolean?)]
-                       [namespace-action (->* () #:rest any/c symbol?)]
-                       [migrate-action (-> symbol? symbol?)]
-                       [parse-keybindings-content (->* (string?) (any/c) any/c)]))
+         keymap?
+         (contract-out
+          [keycode->key-spec
+           (-> (or/c string? symbol?) #:ctrl boolean? #:shift boolean? #:alt boolean? key-spec?)]
+          [key-spec->keycode (-> key-spec? symbol?)]
+          [key-spec=? (-> key-spec? key-spec? boolean?)]
+          [parse-key-string (-> string? key-spec?)]
+          [make-keymap (-> keymap?)]
+          [keymap-add! (-> keymap? key-spec? symbol? void?)]
+          [keymap-remove! (-> keymap? key-spec? void?)]
+          [keymap-lookup (-> keymap? key-spec? (or/c symbol? #f))]
+          [keymap-list (-> keymap? (listof (cons/c key-spec? symbol?)))]
+          [keymap-find-conflicts (-> keymap? (listof (list/c key-spec? (listof symbol?))))]
+          [keymap-merge (-> keymap? keymap? void?)]
+          [default-keymap (-> keymap?)]
+          [load-user-keymap (-> (or/c keymap? #f))]
+          [load-keybindings (->* [] [keymap?] (or/c keymap? #f))]
+          [shortcut-specs->keymap (-> (listof hash?) keymap?)]
+          ;; #1189: Namespaced actions
+          [namespaced-action? (-> any/c boolean?)]
+          [namespace-action (->* () #:rest any/c symbol?)]
+          [migrate-action (-> symbol? symbol?)]
+          [parse-keybindings-content (->* (string?) (any/c) any/c)]))
 
 ;; ============================================================
 ;; Key specification
