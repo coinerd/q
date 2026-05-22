@@ -84,14 +84,14 @@
                (or/c string? message?)
                (or/c procedure? #f)
                (or/c procedure? #f)
-               (listof any/c))]
-          [dispatch-iteration (-> agent-session? (listof any/c) exact-nonnegative-integer? any)]
+               (listof message?))]
+          [dispatch-iteration (-> agent-session? (listof message?) exact-nonnegative-integer? any)]
           [ensure-persisted! (-> agent-session? void?)]
-          [buffer-or-append! (-> agent-session? any/c void?)]
+          [buffer-or-append! (-> agent-session? message? void?)]
           [write-crash-log! (-> (or/c string? #f) string? string? void?)]
-          [compute-parent-id (->* ((listof any/c)) ((or/c any/c #f)) (or/c any/c #f))]
-          [build-user-message (-> string? (or/c any/c #f) any/c)]
-          [inject-system-instructions (-> (listof any/c) (listof string?) (listof any/c))]))
+          [compute-parent-id (->* ((listof message?)) ((or/c session-index? #f)) (or/c string? #f))]
+          [build-user-message (-> string? (or/c string? #f) message?)]
+          [inject-system-instructions (-> (listof message?) (listof string?) (listof message?))]))
 
 ;; ============================================================
 ;; Helpers
