@@ -114,10 +114,11 @@
       (parameterize ([current-hook-timeout-ms 1])
         (process-extension-command cctx state))
 
-      ;; PRE-FIX: we expect "Unknown command" in transcript
-      ;; (this is the BUG — should not happen for /go)
-      (check-true (transcript-contains? cctx "Unknown command")
-                  "PRE-FIX: /go timeout falls through to unknown command message"))
+      ;; POST-FIX (W1+W2): hook returns 'block (critical), TUI shows specific message
+      (check-true (transcript-contains? cctx "could not be dispatched")
+                  "POST-FIX: /go timeout shows command-dispatch failure message")
+      (check-false (transcript-contains? cctx "Unknown command")
+                   "POST-FIX: /go timeout does NOT show generic unknown command"))
 
     (test-case "T0.1b: /go with no extension registry shows unknown command"
       ;; No extension registry → no handler → falls to unknown.

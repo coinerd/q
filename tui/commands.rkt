@@ -172,6 +172,15 @@
     [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'amend))
      (execute-extension-command cctx state (hook-result-payload ext-result))
      'continue]
+    [(and ext-result (hook-result? ext-result) (eq? (hook-result-action ext-result) 'block))
+     (log-debug "command blocked by extension: cmd=~a" cmd-name)
+     (define msg
+       (format
+        "Command /~a could not be dispatched. This may be caused by a large PLAN or a slow extension. Try again or use /help for available commands."
+        cmd-name))
+     (define entry (make-error-entry msg))
+     (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
+     'continue]
     [else
      (log-debug "command fell through: cmd=~a" cmd-name)
      (define entry (make-error-entry "Unknown command. Type /help for commands."))
