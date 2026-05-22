@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.54.8 — 2026-05-22
+
+### Entrypoint Hardening — /go Unknown Command Fix
+
+- **W0**: 5 characterization tests confirming /go unknown-command bug behavior
+- **W1**: Classified `execute-command` as critical hook — timeout/error now returns `hook-block` instead of `hook-pass` (extensions/hooks.rkt)
+- **W2**: UX hardening in TUI — command-dispatch failure now shows specific guidance message instead of generic "Unknown command" (tui/commands.rkt)
+
 ## v0.54.7 — 2026-05-22
 
 ### Project Review Remediation
