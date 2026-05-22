@@ -110,7 +110,7 @@
          (contract-out [run-tool-batch
                         (->* ((listof tool-call?) tool-registry?)
                              (#:hook-dispatcher (or/c procedure? #f)
-                                                #:exec-context (or/c any/c #f)
+                                                #:exec-context (or/c exec-context? #f)
                                                 #:parallel? (or/c boolean? #f))
                              scheduler-result?)]
                        [max-parallel-tools (parameter/c exact-positive-integer?)]))
