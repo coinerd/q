@@ -41,7 +41,8 @@
         (list "deprecation" "scripts/lint-deprecation-deadlines.rkt" '("--ci") #f)
         (list "ci-readiness" "scripts/lint-ci-readiness.rkt" '() #f)
         (list "arch" "scripts/arch-report.rkt" '("--ci") #t)
-        (list "ivg" "scripts/lint-ivg.rkt" '() #f)))
+        (list "ivg" "scripts/lint-ivg.rkt" '() #f)
+        (list "doc-freshness" "scripts/lint-doc-freshness.rkt" '() #f)))
 
 ;; ── Helpers ──
 
