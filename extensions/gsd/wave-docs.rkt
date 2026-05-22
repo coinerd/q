@@ -38,21 +38,22 @@
          wave-index-entry-slug
          wave-index-entry-status
          ;; Functions (contracted)
-         (contract-out [wave-doc-path (-> any/c any/c any/c any/c)]
-                       [write-wave-doc! (-> any/c any/c any/c any/c any/c any/c)]
-                       [read-wave-doc (-> any/c any/c any/c any/c)]
-                       [parse-wave-doc-from-string (->* (any/c any/c any/c) (any/c) any/c)]
-                       [slugify (-> string? string?)]
-                       [parse-plan-index (-> string? any/c)]
-                       [update-wave-in-index! (-> any/c any/c any/c any/c)]
-                       [update-plan-index-text (-> string? any/c string? string?)]
-                       [next-inbox-wave (-> any/c any/c)]
-                       [find-next-inbox-entry (-> any/c any/c)]
-                       [mark-wave-status! (-> any/c any/c any/c any/c)]
-                       [plan-overall-status (-> any/c symbol?)]
-                       [compute-plan-overall-status (-> any/c symbol?)]
-                       [wave-exists? (-> any/c any/c any/c boolean?)]
-                       [wave-status-markers (-> any/c)]))
+         (contract-out
+          [wave-doc-path (-> path-string? exact-nonnegative-integer? string? path?)]
+          [write-wave-doc! (-> path-string? exact-nonnegative-integer? string? string? string? path?)]
+          [read-wave-doc (-> path-string? exact-nonnegative-integer? string? (or/c hash? #f))]
+          [parse-wave-doc-from-string (->* (any/c any/c any/c) (any/c) hash?)]
+          [slugify (-> string? string?)]
+          [parse-plan-index (-> string? (listof wave-index-entry?))]
+          [update-wave-in-index! (-> path-string? exact-nonnegative-integer? string? boolean?)]
+          [update-plan-index-text (-> string? exact-nonnegative-integer? string? string?)]
+          [next-inbox-wave (-> path-string? (or/c wave-index-entry? #f))]
+          [find-next-inbox-entry (-> (listof wave-index-entry?) (or/c wave-index-entry? #f))]
+          [mark-wave-status! (-> path-string? exact-nonnegative-integer? string? boolean?)]
+          [plan-overall-status (-> path-string? symbol?)]
+          [compute-plan-overall-status (-> (listof wave-index-entry?) symbol?)]
+          [wave-exists? (-> path-string? exact-nonnegative-integer? string? boolean?)]
+          [wave-status-markers (-> (listof pair?))]))
 
 ;; ============================================================
 ;; Constants
