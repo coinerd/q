@@ -34,11 +34,13 @@
                       #:handle-input (or/c procedure? #f)
                       #:wants-focus? boolean?)
                 q-component?)]
-          [component-render (-> q-component? any/c exact-nonnegative-integer? any/c)]
+          [component-render
+           (-> q-component? ui-state? exact-nonnegative-integer? (listof styled-line?))]
           [component-invalidate! (-> q-component? void?)]
-          [component-compose (-> any/c any/c any/c (listof styled-line?))]
+          [component-compose
+           (-> (listof q-component?) ui-state? exact-nonnegative-integer? (listof styled-line?))]
           [component-cached-width (-> q-component? (or/c exact-nonnegative-integer? #f))]
-          [component-handle-input (-> q-component? any/c any/c (values any/c any/c))]
+          [component-handle-input (-> q-component? any/c ui-state? (values ui-state? any/c))]
           [input-consumed (-> any/c)]
           [input-bubble (-> any/c)]
           [input-action (-> any/c any/c)]
