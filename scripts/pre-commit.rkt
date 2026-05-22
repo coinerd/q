@@ -104,7 +104,8 @@
                           "tests"
                           "deprecation"
                           "ci-readiness"
-                          "ivg")
+                          "ivg"
+                          "doc-freshness")
                ","))
 
 (define (run-lint-checks #:full? [full? #f])

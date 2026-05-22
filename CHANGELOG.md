@@ -1,3 +1,96 @@
+# Changelog
+
+## v0.54.6 — 2026-05-22
+
+### GSD Coherence & Documentation Anti-Drift
+
+- **Canonical planning root** — resolved `.planning/` vs `q/.planning/` ambiguity.
+  Project root `.planning/` is canonical; `q/.planning/` is a redirect stub.
+  Added CANONICAL.md policy marker.
+- **Planning coherence update** — synchronized PLAN.md, STATE.md, SUMMARY.md
+  with current project state (v0.54.x series through v0.54.5).
+- **Documentation freshness/drift checks** — added `scripts/lint-doc-freshness.rkt`
+  checking 10 canonical docs for version marker consistency. Handles 3 marker
+  patterns: HTML comment (`verified-against`), `## Version` heading, inline
+  `Q x.y.z`. Added to CI lint gate (`lint-all.rkt`). 4 unit tests.
+
+## v0.54.5 — 2026-05-22
+
+### Test Runner Truthfulness + CI Security Gate
+
+- **Strict summary mode** — added `--strict` flag and `STRICT_TEST_RUNNER` env var
+  to `run-tests.rkt`. Exits code 4 on files with zero parsed tests when strict.
+  9 unit tests in `tests/test-strict-runner.rkt`.
+- **CI lane integration** — `STRICT_TEST_RUNNER=1` set in `.github/workflows/ci.yml`
+  (fast suite) and `.github/workflows/release.yml` (2 locations).
+- **Security test suite tier** — added `--suite security` to test runner with
+  explicit 15-file manifest covering sandbox, permission, safe-mode, and tool
+  security tests. New Gate 2b security job in CI.
+
+## v0.54.4 — 2026-05-22
+
+### Safety Policy Hardening
+
+- **Permission-gate policy-mode model** — added `permission-config` struct with
+  strict/permissive policy modes. Strict mode requires explicit approval for all
+  mutating tools. Permissive mode auto-approves read-only tools.
+- **Permission config threading** — threaded `perm-cfg` through runtime tool
+  paths: `handle-tool-calls-pending` → `execute-tool-batch-phase` → scheduler.
+- **Denial-path integration tests** — 5 tests verifying tool denial in strict
+  mode, approval flow, and permissive auto-approval.
+
+## v0.54.3 — 2026-05-22
+
+### Layer Adapter & Iteration Extraction
+
+- **Layer adapter facade** — created `runtime/layer-adapters.rkt` as single import
+  point for ARCH-01 upward imports. Re-exports 13 identifiers from tools/ and
+  extensions/. Migrated turn-orchestrator and tool-coordinator to use adapter.
+- **Iteration sub-phase extraction** — extracted `prepare-iteration-context` (pure)
+  and `dispatch-turn-start-hooks` (effectful) from main-loop into
+  `runtime/iteration/loop-phases.rkt`. Both have contracts.
+- **Event-order golden tests** — 6 golden tests verifying event sequence across
+  turn start → tool execution → turn end lifecycle.
+
+## v0.54.2 — 2026-05-22
+
+### Session Mutation & Tool Taxonomy
+
+- **Session mutation facade expansion** — added 9 new guarded setters to
+  `runtime/session-mutation.rkt` (13 total). One-way guards prevent illegal
+  state transitions (e.g., #f→#t only).
+- **Migrated callers to guarded mutation setters** — updated turn-orchestrator,
+  main-loop, and step-interpreter to use facade setters instead of raw struct
+  mutation.
+- **Mutating-tool taxonomy enforcement** — expanded permission gate from 6+6
+  to 9+9 tool classification covering all 15 built-in tools. Tool names use
+  hyphens (`spawn-subagent`) not underscores.
+
+## v0.54.1 — 2026-05-22
+
+### Contract Facade Tightening
+
+- **Context-assembly facade contract narrowing** — tightened `build-tiered-context`
+  and `build-tiered-context-with-hooks` contracts. Tier count params accept
+  `(or/c exact-nonnegative-integer? #f)`.
+- **Session boundary contract tightening** — replaced `any/c` with `message?`,
+  `session-index?`, `string?` in 6 function contracts across session-lifecycle
+  and session-manager.
+- **Scheduler/tool keyword contract conformance** — changed `any/c` to concrete
+  types for `exec-context?`, `scheduler-result?`, and tool-batch contracts.
+
+## v0.54.0 — 2026-05-22
+
+### Entrypoint Hardening
+
+- **Entrypoint characterization tests** — 12 tests in `tests/test-main-entrypoint.rkt`
+  covering `--version`, `--help`, invalid args, session path resolution.
+- **Fix parse-cli-args contract drift** — widened to accept `(listof string?)`
+  in addition to `(vectorof string?)`. Fixed `cli/interactive.rkt` keyword
+  contracts with proper `->*` forms.
+- **CI entrypoint regression gate** — added `--help` grep check to CI smoke
+  gate alongside existing `--version` check.
+
 ## v0.53.11 — 2026-05-22
 
 ### Contract Hotfix + Compile Gate (v0.53.11)
@@ -56,7 +149,7 @@ Fixed the remaining contract-regression fallout from the v0.53.2 contract covera
 - `--suite fast`: 562/562 passed, 0 timeouts
 - Individual test failures: 10 (non-blocking, pre-existing)
 
-# Changelog
+
 
 ## v0.53.0 — 2026-05-21
 
