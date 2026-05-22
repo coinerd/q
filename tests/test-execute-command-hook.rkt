@@ -7,12 +7,11 @@
 ;; Bug report: .planning/BUG_REPORT-v0.54.x-GSD-GO-UNKNOWN-COMMAND.md
 ;;
 ;; T0.1: execute-command hook timeout should NOT produce generic "Unknown command"
-;; T0.2: execute-command hook is currently advisory (returns 'pass on timeout)
+;; T0.2: execute-command hook is now critical (returns 'block on timeout/error)
 ;;
-;; These tests characterize the PRE-FIX behavior.
-;; After W1 fix (classify execute-command as critical):
-;; - T0.2 should be updated to expect 'block instead of 'pass
-;; - T0.1 should be updated to verify no "Unknown command" message
+;; POST-FIX behavior (W1 applied):
+;; - T0.2/T0.2b/T0.2c expect 'block (critical hook)
+;; - T0.1 still falls to unknown (W2 will fix TUI fallback)
 
 (require rackunit
          rackunit/text-ui
@@ -68,37 +67,33 @@
 
 (define execute-command-hook-tests
   (test-suite "execute-command-hook characterization tests"
-    (test-case "T0.2: execute-command hook timeout returns pass (advisory default)"
-      ;; PRE-FIX characterization: execute-command is NOT in critical-hooks,
-      ;; so timeout returns 'pass (advisory default).
-      ;; After W1 fix, this test should be updated to expect 'block.
+    (test-case "T0.2: execute-command hook timeout returns block (critical default)"
+      ;; POST-FIX: execute-command IS in critical-hooks,
+      ;; so timeout returns 'block (safety-first default).
       (parameterize ([current-hook-timeout-ms 1])
         (define (slow-handler payload)
           (sleep 0.1) ; way longer than 1ms
           (hook-amend (hasheq 'text "should not reach")))
         (define reg (make-ext-reg-with-execute-command slow-handler))
         (define result (dispatch-hooks 'execute-command (hasheq 'command "/go" 'input "/go") reg))
-        ;; PRE-FIX: advisory returns 'pass
+        ;; POST-FIX: critical returns 'block
         (check-equal? (hook-result-action result)
-                      'pass
-                      "PRE-FIX: execute-command timeout returns pass (advisory)")
-        (check-equal? (hook-result-payload result)
-                      (hasheq 'command "/go" 'input "/go")
-                      "original payload preserved on timeout")))
+                      'block
+                      "POST-FIX: execute-command timeout returns block (critical)")))
 
-    (test-case "T0.2b: execute-command hook error returns pass (advisory default)"
-      ;; PRE-FIX: errors also default to pass for advisory hooks
+    (test-case "T0.2b: execute-command hook error returns block (critical default)"
+      ;; POST-FIX: errors also default to block for critical hooks
       (define (failing-handler payload)
         (error "handler crash!"))
       (define reg (make-ext-reg-with-execute-command failing-handler))
       (define result (dispatch-hooks 'execute-command (hasheq 'command "/go" 'input "/go") reg))
       (check-equal? (hook-result-action result)
-                    'pass
-                    "PRE-FIX: execute-command error returns pass (advisory)"))
+                    'block
+                    "POST-FIX: execute-command error returns block (critical)"))
 
-    (test-case "T0.2c: execute-command is NOT in critical-hooks"
-      ;; PRE-FIX: verify execute-command is not currently classified as critical
-      (check-false (critical-hook? 'execute-command) "PRE-FIX: execute-command is not critical"))
+    (test-case "T0.2c: execute-command IS in critical-hooks"
+      ;; POST-FIX: verify execute-command is now classified as critical
+      (check-true (critical-hook? 'execute-command) "POST-FIX: execute-command is critical"))
 
     ;; ============================================================
     ;; T0.1: TUI integration — /go timeout produces unknown command
