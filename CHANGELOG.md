@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.54.10 — 2026-05-22
+
+### Transaction Error-Arity Fix + Planning Drift
+
+- **W0**: Characterization tests for transaction error-path arity crash.
+  `define-values` expects 2 values but `with-gsd-transaction` returns single
+  `gsd-err` on exception — confirms "result arity mismatch" error.
+- **W1**: Changed `launch-wave-executor` from `define-values` to `define` +
+  list wrapping. Thunk returns `(list exec wis)` on success; error path
+  returns single `gsd-err` captured by `define`. No arity mismatch.
+  (`extensions/gsd/command-handlers.rkt`)
+- **W2**: Planning coherence update — STATE.md, PLAN.md, SUMMARY.md
+  reflect v0.54.9 truth. Cleaned `q/.planning/` to redirect stub only.
+- **W3**: Fixed line-length lint in `tui/commands.rkt:185` (152→92 chars
+  via `string-append`). Version bump 0.54.9→0.54.10.
+
 ## v0.54.9 — 2026-05-22
 
 ### GSD Transaction Contract Mismatch Fix
