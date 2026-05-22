@@ -57,15 +57,16 @@
          ;; Re-export command result types
          (all-from-out "command-types.rkt")
          ;; Functions (contracted)
-         (contract-out [gsd-command-dispatch (-> any/c any/c any/c)]
-                       [gsd-write-guard (-> any/c any/c any/c)]
-                       [gsd-show-status (-> any/c)]
-                       [cmd-replan (-> any/c)]
-                       [cmd-skip (-> any/c any/c)]
-                       [cmd-reset (-> any/c)]
-                       [cmd-done (->* (any/c) (boolean?) any/c)]
-                       [cmd-wave-done (-> any/c any/c any/c)]
-                       [reset-all-gsd-state! (-> any/c)])
+         (contract-out [gsd-command-dispatch
+                        (-> (or/c symbol? string?) any/c (or/c gsd-command-result? #f))]
+                       [gsd-write-guard (-> path-string? path-string? gsd-command-result?)]
+                       [gsd-show-status (-> gsd-command-result?)]
+                       [cmd-replan (-> gsd-command-result?)]
+                       [cmd-skip (-> any/c gsd-command-result?)]
+                       [cmd-reset (-> gsd-command-result?)]
+                       [cmd-done (->* ((or/c path-string? #f)) (boolean?) gsd-command-result?)]
+                       [cmd-wave-done (-> (or/c path-string? #f) any/c gsd-command-result?)]
+                       [reset-all-gsd-state! (-> void?)])
          ;; with-gsd-transaction not in contract-out because it passes
          ;; through multi-value thunk results; (-> any/c any/c any/c any/c)
          ;; incorrectly constrains it to a single return value.

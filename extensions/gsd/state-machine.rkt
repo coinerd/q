@@ -57,29 +57,32 @@
          TRANSITIONS-FLAT
          ;; Functions (contracted)
          (contract-out [gsm-state? (-> any/c boolean?)]
-                       [make-initial-gsd-state (-> any/c)]
+                       [make-initial-gsd-state (-> gsd-runtime-state?)]
                        [gsm-current (-> symbol?)]
-                       [gsm-transition! (->* (symbol?) (#:event any/c) any/c)]
-                       [gsm-transition-to! (-> symbol? any/c)]
-                       [gsm-reset! (-> any/c)]
+                       [gsm-transition!
+                        (->* (symbol?) (#:event (or/c symbol? #f)) (or/c ok-result? err-result?))]
+                       [gsm-transition-to! (-> symbol? (or/c ok-result? err-result?))]
+                       [gsm-reset! (-> (or/c ok-result? err-result?))]
                        [compute-next-gsm-state
-                        (->* (any/c symbol?) (#:event any/c) (values any/c any/c))]
+                        (->* (gsd-runtime-state? symbol?)
+                             (#:event (or/c symbol? #f))
+                             (values (or/c ok-result? err-result?) gsd-runtime-state?))]
                        [gsm-valid-next-states (-> (listof symbol?))]
                        [gsm-tool-allowed? (-> string? boolean?)]
-                       [gsm-snapshot (-> any/c)]
+                       [gsm-snapshot (-> gsd-runtime-state?)]
                        [reset-gsm! (-> void?)]
-                       [gsm-history (-> any/c)]
-                       [gsm-wave-executor (-> any/c)]
-                       [gsm-set-wave-executor! (-> any/c any/c)]
-                       [gsm-total-waves (-> any/c)]
-                       [gsm-set-total-waves! (-> any/c any/c)]
-                       [gsm-current-wave (-> any/c)]
-                       [gsm-set-current-wave! (-> any/c any/c)]
-                       [gsm-completed-waves (-> any/c)]
-                       [gsm-mark-wave-complete! (-> any/c any/c)]
-                       [gsm-wave-complete? (-> any/c boolean?)]
-                       [gsm-next-pending-wave (-> any/c)]
-                       [gsd-invariants-hold? (-> (values boolean? any/c))]))
+                       [gsm-history (-> list?)]
+                       [gsm-wave-executor (-> (or/c any/c #f))]
+                       [gsm-set-wave-executor! (-> (or/c any/c #f) void?)]
+                       [gsm-total-waves (-> exact-nonnegative-integer?)]
+                       [gsm-set-total-waves! (-> exact-nonnegative-integer? void?)]
+                       [gsm-current-wave (-> exact-nonnegative-integer?)]
+                       [gsm-set-current-wave! (-> exact-nonnegative-integer? void?)]
+                       [gsm-completed-waves (-> (set/c exact-nonnegative-integer?))]
+                       [gsm-mark-wave-complete! (-> exact-nonnegative-integer? void?)]
+                       [gsm-wave-complete? (-> exact-nonnegative-integer? boolean?)]
+                       [gsm-next-pending-wave (-> (or/c exact-nonnegative-integer? #f))]
+                       [gsd-invariants-hold? (-> (values boolean? (or/c string? #f)))]))
 
 ;; ============================================================
 ;; States and transitions
