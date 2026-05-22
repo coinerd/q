@@ -9,6 +9,7 @@
 ;;
 ;; T0.1: with-gsd-transaction now accepts multi-value thunks (W1 fixed)
 ;; T0.2: TUI block message renders /go correctly (W2 fixed)
+;; T1.0: Error path arity crash — define-values expects 2, gets 1 gsd-err (BUG)
 
 (require rackunit
          rackunit/text-ui
@@ -129,7 +130,38 @@
         (process-extension-command cctx state))
 
       (check-true (transcript-contains? cctx "could not be dispatched")
-                  "block message includes dispatch-failure guidance"))))
+                  "block message includes dispatch-failure guidance"))
+
+    ;; ============================================================
+    ;; v0.54.10 — Error-path arity crash characterization
+    ;; ============================================================
+
+    ;; T1.0: The REAL bug — define-values expects 2 values on error path
+    ;; but with-gsd-transaction returns single gsd-err on exception.
+    ;; This mirrors the actual caller in command-handlers.rkt:250:
+    ;;   (define-values (executor wave-indices) (with-gsd-transaction ...))
+    (test-case "T1.0: Error-path arity crash with define-values (BUG)"
+      ;; PRE-FIX: When the thunk throws, with-gsd-transaction catches the
+      ;; exception and returns a single gsd-err. define-values expects 2 values.
+      ;; This causes: "define-values: expected 2 values, received 1"
+      (check-exn #rx"expected number of values not received"
+                 (lambda ()
+                   (define-values (executor wave-indices)
+                     (with-gsd-transaction "go"
+                                           (lambda () (error "plan file missing"))
+                                           (lambda (e snap) (void))))
+                   (void executor wave-indices))
+                 "PRE-FIX: define-values arity crash on transaction error path"))
+
+    ;; T1.0b: Verify the single-value error path works fine with define
+    (test-case "T1.0b: Single-value define handles gsd-err fine"
+      (define result
+        (with-gsd-transaction "test"
+                              (lambda () (error "plan file missing"))
+                              (lambda (e snap) (void))))
+      (check-false (gsd-success? result) "error returns gsd-err")
+      (check-true (string-contains? (gsd-command-result-message result) "plan file missing")
+                  "error message present"))))
 
 (module+ main
   (run-tests gsd-transaction-contract-tests))
