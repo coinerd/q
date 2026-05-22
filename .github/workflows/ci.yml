@@ -121,7 +121,7 @@ jobs:
             | xargs -0 -n 1 -P 4 raco make
 
       - name: Run tests
-        run: racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
+        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite fast --jobs 4 2>&1 | tee test-output.log
 
       - name: Test failure summary
         if: failure()
