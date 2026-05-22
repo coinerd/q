@@ -13,6 +13,7 @@
 
 (require rackunit
          rackunit/text-ui
+         racket/match
          racket/string
          "../extensions/gsd/core.rkt"
          "../extensions/gsd/command-types.rkt"
@@ -133,35 +134,41 @@
                   "block message includes dispatch-failure guidance"))
 
     ;; ============================================================
-    ;; v0.54.10 — Error-path arity crash characterization
+    ;; v0.54.10 — Error-path arity crash fix
     ;; ============================================================
 
-    ;; T1.0: The REAL bug — define-values expects 2 values on error path
-    ;; but with-gsd-transaction returns single gsd-err on exception.
-    ;; This mirrors the actual caller in command-handlers.rkt:250:
-    ;;   (define-values (executor wave-indices) (with-gsd-transaction ...))
-    (test-case "T1.0: Error-path arity crash with define-values (BUG)"
-      ;; PRE-FIX: When the thunk throws, with-gsd-transaction catches the
-      ;; exception and returns a single gsd-err. define-values expects 2 values.
-      ;; This causes: "define-values: expected 2 values, received 1"
+    ;; T1.0: POST-FIX — Using define (not define-values) with list wrapping
+    ;; avoids the arity crash. The caller pattern now matches
+    ;; command-handlers.rkt: launch-wave-executor.
+    (test-case "T1.0: define + list wrapping handles error path safely"
+      ;; The thunk returns (list exec wis) on success.
+      ;; On error, with-gsd-transaction returns single gsd-err.
+      ;; Both work with (define result ...) — no arity crash.
+      (define result
+        (with-gsd-transaction "go" (lambda () (error "plan file missing")) (lambda (e snap) (void))))
+      (check-false (gsd-success? result) "error returns gsd-err")
+      (check-true (string-contains? (gsd-command-result-message result) "plan file missing")
+                  "error message present"))
+
+    ;; T1.0b: Success path — list wrapping works with define + match
+    (test-case "T1.0b: Success path with list wrapping + define"
+      (define result
+        (with-gsd-transaction "go" (lambda () (list 'my-executor '(0 1 2))) (lambda (e snap) (void))))
+      (check-false (gsd-command-result? result) "success returns list, not gsd-result")
+      (match-define (list exec wis) result)
+      (check-equal? exec 'my-executor "executor preserved")
+      (check-equal? wis '(0 1 2) "wave indices preserved"))
+
+    ;; T1.0c: Raw define-values STILL crashes on error (documenting the hazard)
+    (test-case "T1.0c: Raw define-values on error path still arity-crashes"
+      ;; This confirms why the caller was changed to use define + list.
+      ;; with-gsd-transaction always returns single gsd-err on exception.
       (check-exn #rx"expected number of values not received"
                  (lambda ()
                    (define-values (executor wave-indices)
-                     (with-gsd-transaction "go"
-                                           (lambda () (error "plan file missing"))
-                                           (lambda (e snap) (void))))
+                     (with-gsd-transaction "go" (lambda () (error "boom")) (lambda (e snap) (void))))
                    (void executor wave-indices))
-                 "PRE-FIX: define-values arity crash on transaction error path"))
-
-    ;; T1.0b: Verify the single-value error path works fine with define
-    (test-case "T1.0b: Single-value define handles gsd-err fine"
-      (define result
-        (with-gsd-transaction "test"
-                              (lambda () (error "plan file missing"))
-                              (lambda (e snap) (void))))
-      (check-false (gsd-success? result) "error returns gsd-err")
-      (check-true (string-contains? (gsd-command-result-message result) "plan file missing")
-                  "error message present"))))
+                 "Raw define-values crashes on transaction error path"))))
 
 (module+ main
   (run-tests gsd-transaction-contract-tests))
