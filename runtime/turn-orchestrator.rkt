@@ -54,15 +54,15 @@
          (only-in "../extensions/api.rkt" extension-registry?)
          "../agent/loop.rkt"
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
-         ;; ARCH-01: tool registry queries for LLM tool definitions
-         (only-in "../tools/tool.rkt" list-tools-jsexpr merge-tool-lists)
+         ;; ARCH-01: tool registry queries via adapter
+         (only-in "layer-adapters.rkt" list-tools-jsexpr merge-tool-lists)
          ;; Settings struct for provider settings resolution
          (only-in "../runtime/settings.rkt" setting-ref setting-ref*)
-         ;; Transitive dependency of tool-coordinator
-         "../tools/scheduler.rkt"
-         ;; Context assembly: tiered context build with hooks + importance rescue
-         "../extensions/hooks.rkt"
-         (only-in "../extensions/context.rkt" make-extension-ctx)
+         ;; Transitive dependency of tool-coordinator (via adapter)
+         (only-in "layer-adapters.rkt" tool-result? tool-registry?)
+         ;; Context assembly hooks via adapter
+         (only-in "layer-adapters.rkt" dispatch-hooks)
+         (only-in "layer-adapters.rkt" make-extension-ctx)
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/context-assembly.rkt"

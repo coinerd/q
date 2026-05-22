@@ -30,7 +30,7 @@
                   config-session-index
                   config-parallel-tools)
          (only-in "../util/tool-types.rkt" tool-call?)
-         (only-in "../tools/tool.rkt" tool-result? tool-registry?)
+         (only-in "layer-adapters.rkt" tool-result? tool-registry?)
          (only-in "../util/json-helpers.rkt" ensure-hash-args)
          (only-in "../util/protocol-types.rkt"
                   message?
@@ -51,9 +51,9 @@
                   make-event)
          "../agent/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
-         (only-in "../tools/tool.rkt" make-exec-context make-error-result list-tools-jsexpr)
-         ;; ARCH-01 upward import — runtime→tools: scheduler
-         (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result scheduler-result-results)
+         (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)
+         ;; ARCH-01 upward import via adapter
+         (only-in "layer-adapters.rkt" run-tool-batch scheduler-result scheduler-result-results)
          ;; ARCH-01 upward import — runtime→extensions: hooks
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
          (only-in "../extensions/api.rkt" extension-registry?)
