@@ -8,7 +8,7 @@
 (provide (contract-out [tool? (-> any/c boolean?)]
                        [tool-name (-> tool? string?)]
                        [tool-description (-> tool? string?)]
-                       [tool-schema (-> tool? any/c)]
+                       [tool-schema (-> tool? hash?)]
                        [tool-execute (-> tool? procedure?)]
                        [tool-prompt-snippet (-> tool? (or/c string? #f))]
                        [tool-prompt-guidelines (-> tool? (or/c string? #f))]

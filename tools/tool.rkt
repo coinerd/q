@@ -64,7 +64,7 @@
          tool-result?
          (contract-out [make-tool-result (-> any/c (or/c hash? #f) boolean? tool-result?)]
                        [make-error-result (-> string? tool-result?)]
-                       [make-success-result (->* (any/c) (any/c) tool-result?)])
+                       [make-success-result (->* (any/c) ((or/c hash? #f)) tool-result?)])
          tool-result-content
          tool-result-details
          tool-result-is-error?
