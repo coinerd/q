@@ -7,8 +7,8 @@
 ;; Bug report: .planning/BUG_REPORT-v0.54.x-GSD-GO-TRANSACTION-CONTRACT-MISMATCH.md
 ;; Bug plan: .planning/BUG_PLAN-v0.54.x-GSD-GO-TRANSACTION-CONTRACT-MISMATCH.md
 ;;
-;; T0.1: with-gsd-transaction contract rejects multi-value thunks (the BUG)
-;; T0.2: TUI block message renders //go (double-slash formatting defect)
+;; T0.1: with-gsd-transaction now accepts multi-value thunks (W1 fixed)
+;; T0.2: TUI block message renders //go (double-slash formatting defect — W2 pending)
 
 (require rackunit
          rackunit/text-ui
@@ -72,15 +72,15 @@
     ;; The contract says (-> any/c any/c any/c any/c) — single return value.
     ;; But launch-wave-executor uses (define-values (exec waves) (with-gsd-transaction ...))
     ;; which requires the thunk to return 2 values via (values exec waves).
-    (test-case "T0.1: with-gsd-transaction rejects multi-value thunk (contract mismatch)"
-      ;; PRE-FIX: calling with-gsd-transaction with a thunk that returns
-      ;; multiple values raises a contract violation.
-      (check-exn exn:fail:contract?
-                 (lambda ()
-                   (with-gsd-transaction "test-multi-value"
-                                         (lambda () (values 'executor '(0 1 2)))
-                                         (lambda (e snap) (void))))
-                 "PRE-FIX: multi-value thunk breaks single-value contract"))
+    (test-case "T0.1: with-gsd-transaction accepts multi-value thunk (POST-FIX)"
+      ;; POST-FIX: with-gsd-transaction removed from contract-out so it
+      ;; no longer constrains thunk return arity. Multi-value thunks work.
+      (define-values (exec waves)
+        (with-gsd-transaction "test-multi-value"
+                              (lambda () (values 'executor '(0 1 2)))
+                              (lambda (e snap) (void))))
+      (check-equal? exec 'executor "first value returned")
+      (check-equal? waves '(0 1 2) "second value returned"))
 
     (test-case "T0.1b: with-gsd-transaction accepts single-value thunk"
       ;; Single-value thunks should work fine.
