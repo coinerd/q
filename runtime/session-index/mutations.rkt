@@ -29,28 +29,29 @@
          "schema.rkt"
          "query.rkt")
 
-(provide (contract-out [build-index! (-> path-string? path-string? any/c)]
-                       [load-index (-> string? any/c)]
-                       [save-index! (-> string? any/c any/c)]
-                       [switch-leaf! (-> any/c any/c any/c)]
-                       [mark-active-leaf! (-> any/c any/c any/c)]
-                       [navigate-to-entry! (-> any/c any/c any/c)]
-                       [navigate-to-leaf! (-> any/c any/c any/c)]
-                       [navigate-next-leaf! (-> any/c any/c)]
-                       [navigate-prev-leaf! (-> any/c any/c)]
-                       [branch! (-> any/c any/c any/c)]
-                       [branch-with-summary! (-> any/c any/c string? any/c)]
-                       [reset-leaf! (-> any/c void?)]
-                       [append-to-leaf! (-> any/c any/c any/c)]
-                       [add-bookmark! (-> any/c any/c string? any/c)]
-                       [remove-bookmark! (-> any/c any/c boolean?)]
-                       [list-bookmarks (-> any/c (listof any/c))]
-                       [find-bookmark-by-label (-> any/c string? any/c)]
-                       [get-bookmark (-> any/c any/c any/c)]
-                       [load-bookmarks (-> string? (listof any/c))]
-                       [save-bookmarks! (-> string? any/c void?)]
-                       [load-index-with-bookmarks (-> string? string? any/c)]
-                       [bookmarks-path (-> string? string?)]))
+(provide (contract-out
+          [build-index! (-> path-string? path-string? session-index?)]
+          [load-index (-> path-string? session-index?)]
+          [save-index! (-> path-string? session-index? void?)]
+          [switch-leaf! (-> session-index? (or/c string? #f) (or/c string? #f))]
+          [mark-active-leaf! (-> session-index? (or/c string? #f) (or/c string? #f))]
+          [navigate-to-entry! (-> session-index? (or/c string? #f) (or/c navigate-result? #f))]
+          [navigate-to-leaf! (-> session-index? (or/c string? #f) (or/c navigate-result? #f))]
+          [navigate-next-leaf! (-> session-index? (or/c navigate-result? #f))]
+          [navigate-prev-leaf! (-> session-index? (or/c navigate-result? #f))]
+          [branch! (-> session-index? (or/c string? #f) (or/c any/c #f))]
+          [branch-with-summary! (-> session-index? (or/c string? #f) string? (or/c any/c #f))]
+          [reset-leaf! (-> session-index? void?)]
+          [append-to-leaf! (-> session-index? any/c any/c)]
+          [add-bookmark! (-> session-index? (or/c string? #f) string? (or/c string? #f))]
+          [remove-bookmark! (-> session-index? (or/c string? #f) boolean?)]
+          [list-bookmarks (-> session-index? (listof bookmark?))]
+          [find-bookmark-by-label (-> session-index? string? (or/c bookmark? #f))]
+          [get-bookmark (-> session-index? (or/c string? #f) (or/c bookmark? #f))]
+          [load-bookmarks (-> path-string? (listof bookmark?))]
+          [save-bookmarks! (-> path-string? session-index? void?)]
+          [load-index-with-bookmarks (-> path-string? path-string? session-index?)]
+          [bookmarks-path (-> path-string? path?)]))
 
 ;; Counter for generating unique bookmark IDs
 (define bm-counter 0)
