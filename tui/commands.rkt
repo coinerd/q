@@ -181,9 +181,10 @@
             "Command ~a could not be dispatched: ~a. Try again or use /help for available commands."
             cmd-name
             block-reason)
-           (format
-            "Command ~a could not be dispatched. This may be caused by a large PLAN or a slow extension. Try again or use /help for available commands."
-            cmd-name)))
+           (format (string-append "Command ~a could not be dispatched. "
+                                  "This may be caused by a large PLAN or a slow extension. "
+                                  "Try again or use /help for available commands.")
+                   cmd-name)))
      (define entry (make-error-entry msg))
      (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
      'continue]
