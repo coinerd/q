@@ -36,7 +36,7 @@
           [ui-model-label (-> ui-state? string?)]
           [ui-status-text (-> ui-state? string?)]
           [set-current-branch (-> ui-state? (or/c string? #f) ui-state?)]
-          [set-visible-branches (-> ui-state? (listof any/c) ui-state?)]
+          [set-visible-branches (-> ui-state? (listof string?) ui-state?)]
           [clear-visible-branches (-> ui-state? ui-state?)]
           [show-overlay
            (->* (ui-state? symbol? any/c)
@@ -67,10 +67,10 @@
           [set-extension-widget (-> ui-state? symbol? any/c any/c ui-state?)]
           [remove-extension-widget (-> ui-state? symbol? any/c ui-state?)]
           [remove-all-extension-widgets (-> ui-state? symbol? ui-state?)]
-          [get-widget-lines-above (-> ui-state? (listof any/c))]
-          [get-widget-lines-below (-> ui-state? (listof any/c))]
-          [set-custom-header (-> ui-state? (or/c string? (listof any/c) #f) ui-state?)]
-          [set-custom-footer (-> ui-state? (or/c string? (listof any/c) #f) ui-state?)]
+          [get-widget-lines-above (-> ui-state? (listof string?))]
+          [get-widget-lines-below (-> ui-state? (listof string?))]
+          [set-custom-header (-> ui-state? (or/c string? (listof string?) #f) ui-state?)]
+          [set-custom-footer (-> ui-state? (or/c string? (listof string?) #f) ui-state?)]
           [clear-custom-header (-> ui-state? ui-state?)]
           [clear-custom-footer (-> ui-state? ui-state?)]
           [set-focused-component (-> ui-state? symbol? ui-state?)]

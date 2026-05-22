@@ -23,22 +23,28 @@
          tree-node-timestamp
          (contract-out
           [render-session-tree
-           (->* (any/c any/c exact-nonnegative-integer?)
-                (#:show-timestamps? any/c #:active-path-ids any/c #:bookmarks any/c)
+           (->* (list? (or/c string? #f) exact-nonnegative-integer?)
+                (#:show-timestamps? boolean?
+                                    #:active-path-ids (or/c (set/c string?) #f)
+                                    #:bookmarks (or/c hash? #f))
                 (listof string?))]
           [render-session-tree-folded
-           (->* (any/c any/c exact-nonnegative-integer? any/c)
-                (#:show-timestamps? any/c #:active-path-ids any/c #:bookmarks any/c)
+           (->* (list? (or/c string? #f) exact-nonnegative-integer? (set/c string?))
+                (#:show-timestamps? boolean?
+                                    #:active-path-ids (or/c (set/c string?) #f)
+                                    #:bookmarks (or/c hash? #f))
                 (listof string?))]
           [make-tree-node
-           (->* (any/c any/c any/c exact-nonnegative-integer? (listof any/c)) (any/c) any/c)]
+           (->* ((or/c string? #f) string? string? exact-nonnegative-integer? (listof any/c))
+                ((or/c number? #f))
+                tree-node?)]
           [build-tree-nodes (-> (listof any/c) (listof list?))]
-          [selected-node (-> list? exact-integer? any/c)]
+          [selected-node (-> list? exact-integer? (or/c list? #f))]
           [tree-next-node (-> (listof any/c) exact-integer? exact-integer?)]
           [tree-prev-node (-> (listof any/c) exact-integer? exact-integer?)]
-          [tree-toggle-fold (-> any/c any/c any/c)]
-          [tree-enter-node (-> (listof any/c) exact-integer? any/c any/c)]
-          [would-abandon-branch? (-> (listof list?) any/c any/c boolean?)]))
+          [tree-toggle-fold (-> (set/c string?) (or/c string? #f) (set/c string?))]
+          [tree-enter-node (-> (listof any/c) exact-integer? (or/c string? #f) any/c)]
+          [would-abandon-branch? (-> (listof list?) (set/c string?) (or/c string? #f) boolean?)]))
 
 ;; ============================================================
 ;; Tree node struct
