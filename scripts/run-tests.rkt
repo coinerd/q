@@ -225,33 +225,26 @@
     (if (absolute-path? test-path)
         test-path
         (simplify-path (build-path base-dir test-path))))
-  (define stdout-out (open-output-bytes))
-  (define stderr-out (open-output-bytes))
-  ;; Use `raco test` per file (not `racket <file>`):
-  ;; - runs (module+ test ...) submodules consistently
-  ;; - returns non-zero on rackunit failures
-  ;; - avoids false file-level failures from helper/entry modules
-  (define raco-bin (find-executable-path "raco"))
-  (define args (list raco-bin "test" resolved-path))
-
+  (define racket-bin (find-executable-path "racket"))
   (define t0 (current-inexact-milliseconds))
-
-  (define proc-result (apply process*/ports stdout-out #f stderr-out args))
-  (define sp (first proc-result))
-  (define out-in (second proc-result))
-  (define pid (third proc-result))
-  (define err-in (fourth proc-result))
-  (define ctrl (fifth proc-result))
-
-  ;; Close ports we don't need
-  (when out-in
-    (close-output-port out-in))
-  (when err-in
-    (close-input-port err-in))
-
-  ;; Wait for process with optional timeout
   (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
 
+  ;; Use process*/ports to capture stdout+stderr into string ports.
+  ;; Return values: (list sp out-in pid err-in ctrl)
+  ;;   sp     = #f (stdout redirected)
+  ;;   out-in = output-port (write to subprocess stdin)
+  ;;   err-in = #f (stderr redirected)
+  ;;   ctrl   = control procedure
+  (define stdout-out (open-output-string))
+  (define stderr-out (open-output-string))
+  (define-values (sp out-in pid err-in ctrl)
+    (apply values (process*/ports stdout-out #f stderr-out racket-bin resolved-path)))
+
+  ;; Close stdin port immediately — we don't send input
+  (when out-in
+    (close-output-port out-in))
+
+  ;; Wait for process with optional timeout
   (cond
     [timeout
      (define wait-thread (thread (lambda () (ctrl 'wait))))
@@ -259,20 +252,21 @@
      (cond
        [timed-out?
         (ctrl 'kill)
-        (thread-wait wait-thread)
+        ;; Give the wait thread 5s to clean up after kill
+        (unless (sync/timeout 5.0 wait-thread)
+          (kill-thread wait-thread))
         (test-file-result test-path
-                          2 ; timeout exit code
-                          (get-output-bytes stdout-out)
-                          (get-output-bytes stderr-out)
+                          2
+                          (string->bytes/utf-8 (get-output-string stdout-out))
+                          (string->bytes/utf-8 (get-output-string stderr-out))
                           (elapsed)
                           0
                           0
                           0)]
        [else
         (define exit-code (ctrl 'exit-code))
-        (define stdout-bytes (get-output-bytes stdout-out))
-        (define stderr-bytes (get-output-bytes stderr-out))
-        ;; v0.45.8 (NF14): Merge stdout+stderr — rackunit text-ui outputs to stderr
+        (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
+        (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
         (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
         (define-values (passed failed total) (parse-raco-output merged-bytes))
         (test-file-result test-path
@@ -286,9 +280,8 @@
     [else
      (ctrl 'wait)
      (define exit-code (ctrl 'exit-code))
-     (define stdout-bytes (get-output-bytes stdout-out))
-     (define stderr-bytes (get-output-bytes stderr-out))
-     ;; v0.45.8 (NF14): Merge stdout+stderr — rackunit text-ui outputs to stderr
+     (define stdout-bytes (string->bytes/utf-8 (get-output-string stdout-out)))
+     (define stderr-bytes (string->bytes/utf-8 (get-output-string stderr-out)))
      (define merged-bytes (bytes-append stdout-bytes stderr-bytes))
      (define-values (passed failed total) (parse-raco-output merged-bytes))
      (test-file-result test-path exit-code stdout-bytes stderr-bytes (elapsed) passed failed total)]))
@@ -298,30 +291,36 @@
 ;; ---------------------------------------------------------------------------
 
 (define (run-all-files files jobs timeout)
-  (define sema (make-semaphore jobs))
   (define results (box '()))
   (define results-lock (make-semaphore 1))
+  (define n (length files))
 
   (define (add-result! r)
     (call-with-semaphore results-lock (lambda () (set-box! results (cons r (unbox results))))))
 
-  (define threads
-    (for/list ([f (in-list files)])
-      (thread (lambda ()
-                (call-with-semaphore sema
-                                     (lambda ()
-                                       (define result
-                                         (run-single-file f #:timeout (or timeout 120000)))
-                                       (define exit-code (test-file-result-exit-code result))
-                                       (cond
-                                         [(= exit-code 0) (display ".")]
-                                         [(= exit-code 2) (display "T")]
-                                         [else (display "F")])
-                                       (flush-output)
-                                       (add-result! result)))))))
+  ;; Process files in batches of `jobs` to avoid creating hundreds of threads.
+  ;; This prevents FD/thread exhaustion on large test suites.
+  (define batch-size jobs)
+  (define batches (split-list files batch-size))
 
-  ;; Wait for all threads
-  (for-each thread-wait threads)
+  (for ([batch (in-list batches)]
+        [batch-idx (in-naturals)])
+    (define batch-threads
+      (for/list ([f (in-list batch)])
+        (thread (lambda ()
+                  (define result (run-single-file f #:timeout (or timeout 120000)))
+                  (define exit-code (test-file-result-exit-code result))
+                  (cond
+                    [(= exit-code 0) (display ".")]
+                    [(= exit-code 2) (display "T")]
+                    [else (display "F")])
+                  (flush-output)
+                  (add-result! result)))))
+    ;; Wait for entire batch to complete before starting next
+    (for-each thread-wait batch-threads)
+    ;; Major GC after each batch to prevent port/FD accumulation
+    (collect-garbage 'major))
+
   (newline)
 
   ;; Return results in original file order
@@ -330,6 +329,12 @@
                [i (in-naturals)])
       (values f i)))
   (sort (unbox results) < #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
+
+;; Helper: split list into chunks
+(define (split-list lst n)
+  (cond
+    [(null? lst) '()]
+    [else (cons (take lst (min n (length lst))) (split-list (drop lst (min n (length lst))) n))]))
 
 ;; ---------------------------------------------------------------------------
 ;; print-summary - formatted output
