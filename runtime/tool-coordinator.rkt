@@ -77,16 +77,17 @@
                        [make-tool-result-messages
                         (-> (listof tool-call?) (listof tool-result?) string? (listof message?))]
                        [handle-tool-calls-pending
-                        (-> (listof message?) ; new-msgs
-                            list? ; ctx-with-steering
-                            (or/c extension-registry? #f) ; ext-reg
-                            (or/c tool-registry? #f) ; reg
-                            event-bus? ; bus
-                            string? ; session-id
-                            (or/c path-string? path?) ; log-path
-                            (or/c cancellation-token? #f) ; token
-                            any/c ; config
-                            (listof message?))]))
+                        (->* ((listof message?) ; new-msgs
+                              list? ; ctx-with-steering
+                              (or/c extension-registry? #f) ; ext-reg
+                              (or/c tool-registry? #f) ; reg
+                              event-bus? ; bus
+                              string? ; session-id
+                              (or/c path-string? path?) ; log-path
+                              (or/c cancellation-token? #f) ; token
+                              any/c) ; config
+                             (#:permission-config any/c)
+                             (listof message?))]))
 ;; Pure helpers (W2 #4192)
 (provide classify-tool-results
          build-blocked-tool-results)
@@ -307,7 +308,8 @@
                                   token
                                   config
                                   per-tool-start-ms
-                                  batch-start-ms)))
+                                  batch-start-ms
+                                  perm-cfg)))
   ;; Phase 3: Assembly
   (define validated-msgs
     (assemble-tool-results-phase tool-calls
