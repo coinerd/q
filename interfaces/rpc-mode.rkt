@@ -47,12 +47,12 @@
 
          (contract-out
           ;; Parsing
-          [parse-rpc-request (-> string? any/c)]
+          [parse-rpc-request (-> string? (or/c rpc-request? #f))]
           ;; Serialization
           [rpc-response->json (-> rpc-response? string?)]
           [rpc-notification->json (-> rpc-notification? string?)]
           ;; Error helper
-          [rpc-error (-> any/c exact-integer? string? rpc-response?)]
+          [rpc-error (-> (or/c string? number? #f) exact-integer? string? rpc-response?)]
           ;; Handshake
           [generate-handshake-token (-> string?)]
           [rpc-handshake-valid? (-> string? string? boolean?)]
@@ -61,7 +61,7 @@
           ;; Rate limiting
           [make-rpc-rate-limiter
            (->* [] [#:max-requests-per-second exact-positive-integer?] rpc-rate-limiter?)]
-          [rate-limiter-check (-> rpc-rate-limiter? symbol? any/c)]
+          [rate-limiter-check (-> rpc-rate-limiter? symbol? (or/c #f string?))]
           ;; RPC loop
           [run-rpc-loop
            (->* (hash?)
@@ -71,8 +71,8 @@
                               #:rate-limiter (or/c rpc-rate-limiter? #f))
                 void?)]
           ;; Event forwarding
-          [start-rpc-event-forwarding! (-> any/c output-port? exact-nonnegative-integer?)]
-          [stop-rpc-event-forwarding! (-> any/c exact-nonnegative-integer? void?)]))
+          [start-rpc-event-forwarding! (-> event-bus? output-port? exact-nonnegative-integer?)]
+          [stop-rpc-event-forwarding! (-> event-bus? exact-nonnegative-integer? void?)]))
 
 ;; ============================================================
 ;; Structs

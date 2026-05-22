@@ -4,20 +4,22 @@
          racket/string
          json
          "../util/protocol-types.rkt"
-         "../agent/event-bus.rkt")
+         "../agent/event-bus.rkt"
+         (only-in "../util/event.rkt" event?)
+         (only-in "../util/message.rkt" message?))
 
 (provide intent
          intent?
          intent-type
          intent-payload
          (contract-out [start-json-mode!
-                        (->* (any/c #:session-id string?)
+                        (->* (event-bus? #:session-id string?)
                              (#:output-port (or/c output-port? #f))
                              exact-nonnegative-integer?)]
-                       [stop-json-mode! (-> any/c exact-nonnegative-integer? void?)]
-                       [event->json-line (->* (any/c) ((or/c string? #f)) string?)]
-                       [message->json (-> any/c any/c)]
-                       [json-mode-event-filter (-> any/c boolean?)]
+                       [stop-json-mode! (-> event-bus? exact-nonnegative-integer? void?)]
+                       [event->json-line (->* (event?) ((or/c string? #f)) string?)]
+                       [message->json (-> message? any/c)]
+                       [json-mode-event-filter (-> event? boolean?)]
                        [parse-json-intent (-> string? (or/c intent? #f))]))
 
 ;; ============================================================
