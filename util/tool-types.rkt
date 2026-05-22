@@ -8,15 +8,15 @@
 (require racket/contract)
 
 (provide (contract-out [tool-call? (-> any/c boolean?)]
-                       [tool-call-id (-> tool-call? any/c)]
-                       [tool-call-name (-> tool-call? any/c)]
-                       [tool-call-arguments (-> tool-call? any/c)]
-                       [make-tool-call (-> any/c any/c any/c tool-call?)]
+                       [tool-call-id (-> tool-call? (or/c string? #f))]
+                       [tool-call-name (-> tool-call? string?)]
+                       [tool-call-arguments (-> tool-call? (or/c hash? list?))]
+                       [make-tool-call (-> (or/c string? #f) string? (or/c hash? list?) tool-call?)]
                        [tool-result? (-> any/c boolean?)]
-                       [tool-result-content (-> tool-result? any/c)]
-                       [tool-result-details (-> tool-result? any/c)]
-                       [tool-result-is-error? (-> tool-result? any/c)]
-                       [make-tool-result (-> any/c any/c any/c tool-result?)])
+                       [tool-result-content (-> tool-result? (or/c string? hash? list?))]
+                       [tool-result-details (-> tool-result? (or/c hash? #f))]
+                       [tool-result-is-error? (-> tool-result? boolean?)]
+                       [make-tool-result (-> (or/c string? hash? list?) (or/c hash? #f) boolean? tool-result?)])
          tool-call
          tool-result)
 

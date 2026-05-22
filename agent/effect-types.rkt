@@ -12,9 +12,9 @@
 
 (require racket/contract)
 
-(provide (contract-out (struct effect:emit-event ([type any/c] [payload any/c])))
-         (contract-out (struct effect:update-fsm ([from-state any/c] [event any/c])))
-         (contract-out (struct effect:dispatch-hook ([hook-point any/c] [payload any/c])))
+(provide (contract-out (struct effect:emit-event ([type symbol?] [payload any/c])))
+         (contract-out (struct effect:update-fsm ([from-state symbol?] [event symbol?])))
+         (contract-out (struct effect:dispatch-hook ([hook-point symbol?] [payload any/c])))
          (contract-out (struct effect:none ()))
          (contract-out (struct streaming-plan
                                ([session-id string?] [turn-id any/c]
