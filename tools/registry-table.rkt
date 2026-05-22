@@ -357,7 +357,7 @@
 ;; ============================================================
 
 ;; R-03/R-22: Metadata-driven dangerous tool classification
-(define dangerous-tool-names '("write" "edit" "bash"))
+(define dangerous-tool-names '("write" "edit" "bash" "delete-lines"))
 
 ;; Register tools from tool-spec structs.
 (define (register-tools-from-specs! registry specs #:only [only #f])

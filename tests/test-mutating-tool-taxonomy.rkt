@@ -1,4 +1,5 @@
 #lang racket
+;; @suite security
 
 ;; tests/test-mutating-tool-taxonomy.rkt — Mutating-tool taxonomy enforcement (v0.54.2 W2)
 ;;

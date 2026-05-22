@@ -52,7 +52,8 @@
          save-failure-logs
          format-duration
          summary-exit-code
-         bytes->string*)
+         bytes->string*
+         clean-stale-bytecode!)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -111,7 +112,20 @@
       (string-contains? base "permission")
       (string-contains? base "safe-mode")
       (string-contains? base "sandbox")
-      (string-contains? base "tool-bash")))
+      (string-contains? base "tool-bash")
+      ;; Tag-based: files with ";; @suite security" in first 10 lines
+      (file-has-suite-tag? f "security")))
+
+(define (file-has-suite-tag? f tag)
+  "Check if a test file has a ;; @suite <tag> comment in its first 10 lines."
+  (with-handlers ([exn:fail? (lambda (_) #f)])
+    (call-with-input-file f
+                          (lambda (port)
+                            (define target (string-append "@suite " tag))
+                            (for/or ([_ (in-range 10)]
+                                     #:break (eof-object? (peek-byte port)))
+                              (define line (read-line port))
+                              (and (string? line) (string-contains? line target)))))))
 
 (define (smoke-excluded? f)
   (or (slow-file? f)
@@ -546,7 +560,7 @@
   (define-values (jobs sequential? timeout strict? suite extra-files) (parse-args args))
 
   ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
-  (define cleaned-dirs (clean-stale-bytecode! (build-path (current-directory) "..")))
+  (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
   (when (> cleaned-dirs 0)
     (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
             cleaned-dirs
