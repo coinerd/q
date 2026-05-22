@@ -41,6 +41,7 @@
          make-test-file-result
          ;; Parsing
          parse-raco-output
+         normalize-counts
          extract-failure-lines
          ;; Running
          run-single-file
@@ -483,20 +484,23 @@
              [jobs (processor-count)]
              [sequential? #f]
              [timeout #f]
+             [strict? (equal? (getenv "STRICT_TEST_RUNNER") "1")]
              [suite 'all]
              [extra '()])
     (match rest
-      ['() (values jobs sequential? timeout suite (reverse extra))]
+      ['() (values jobs sequential? timeout strict? suite (reverse extra))]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
-      [(list "--jobs" n rest ...) (loop rest (string->number n) sequential? timeout suite extra)]
-      [(list "--sequential" rest ...) (loop rest 1 #t timeout suite extra)]
+      [(list "--strict" rest ...) (loop rest jobs sequential? timeout #t suite extra)]
+      [(list "--jobs" n rest ...)
+       (loop rest (string->number n) sequential? timeout strict? suite extra)]
+      [(list "--sequential" rest ...) (loop rest 1 #t timeout strict? suite extra)]
       [(list "--timeout" secs rest ...)
-       (loop rest jobs sequential? (string->number secs) suite extra)]
+       (loop rest jobs sequential? (string->number secs) strict? suite extra)]
       [(list "--suite" name rest ...)
-       (loop rest jobs sequential? timeout (string->symbol name) extra)]
-      [(list arg rest ...) (loop rest jobs sequential? timeout suite (cons arg extra))])))
+       (loop rest jobs sequential? timeout strict? (string->symbol name) extra)]
+      [(list arg rest ...) (loop rest jobs sequential? timeout strict? suite (cons arg extra))])))
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-flight: stale bytecode cleanup
@@ -529,7 +533,7 @@
 ;; ---------------------------------------------------------------------------
 
 (define (main args)
-  (define-values (jobs sequential? timeout suite extra-files) (parse-args args))
+  (define-values (jobs sequential? timeout strict? suite extra-files) (parse-args args))
 
   ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
   (define cleaned-dirs (clean-stale-bytecode! (build-path (current-directory) "..")))
@@ -572,6 +576,18 @@
                   (not (= (test-file-result-exit-code r) 2))))
            results))
   (define timeout-files (count (lambda (r) (= (test-file-result-exit-code r) 2)) results))
+
+  ;; Strict mode: flag files that exited 0 but parsed zero tests
+  (when strict?
+    (define suspicious
+      (filter (lambda (r) (and (= (test-file-result-exit-code r) 0) (= (test-file-result-total r) 0)))
+              results))
+    (when (pair? suspicious)
+      (newline)
+      (displayln "⛔ STRICT MODE: files with zero parsed tests:")
+      (for ([s (in-list suspicious)])
+        (printf "  ~a (exit=0 but no rackunit output parsed)~n" (test-file-result-path s)))
+      (exit 4)))
 
   (exit (summary-exit-code failed-files timeout-files)))
 
