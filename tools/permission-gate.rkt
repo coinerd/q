@@ -35,9 +35,20 @@
 (define (make-default-permission-config #:auto-approved [auto-approved #f]
                                         #:needs-approval [needs-approval #f]
                                         #:callback [callback #f])
-  (permission-config (or auto-approved (set "read" "glob" "ls" "find" "grep" "context-files"))
-                     (or needs-approval (set "edit" "write" "bash" "delete" "move" "spawn_subagent"))
-                     (or callback (lambda (tool-name args) #t))))
+  (permission-config
+   (or auto-approved
+       (set "read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route"))
+   (or needs-approval
+       (set "edit"
+            "write"
+            "bash"
+            "delete"
+            "move"
+            "delete-lines"
+            "spawn-subagent"
+            "spawn-subagents"
+            "firecrawl"))
+   (or callback (lambda (tool-name args) #t))))
 
 ;; ============================================================
 ;; Predicate — does this tool call require approval?

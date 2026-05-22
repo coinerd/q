@@ -29,13 +29,13 @@
     ;; ── Auto-approved tools skip permission check ──
     (test-case "auto-approved tools return #f from tool-needs-approval?"
       (define cfg (make-default-permission-config))
-      (for ([name '("read" "glob" "ls" "find" "grep" "context-files")])
+      (for ([name '("read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route")])
         (check-false (tool-needs-approval? cfg name) (format "~a should be auto-approved" name))))
 
     ;; ── Needs-approval tools call the callback ──
     (test-case "needs-approval tools return #t from tool-needs-approval?"
       (define cfg (make-default-permission-config))
-      (for ([name '("edit" "write" "bash" "delete" "move" "spawn_subagent")])
+      (for ([name '("edit" "write" "bash" "delete" "move" "delete-lines" "spawn-subagent" "spawn-subagents" "firecrawl")])
         (check-true (tool-needs-approval? cfg name) (format "~a should need approval" name))))
 
     ;; ── Unknown tools require approval by default ──
@@ -72,14 +72,14 @@
       (define cfg (make-default-permission-config))
       (define auto (permission-config-auto-approved-tools cfg))
       (check-true (set? auto))
-      (for ([name '("read" "glob" "ls" "find" "grep" "context-files")])
+      (for ([name '("read" "glob" "ls" "find" "grep" "context-files" "date" "session_recall" "skill-route")])
         (check-true (set-member? auto name) (format "~a should be in auto-approved set" name))))
 
     (test-case "make-default-permission-config needs-approval set"
       (define cfg (make-default-permission-config))
       (define needs (permission-config-needs-approval-tools cfg))
       (check-true (set? needs))
-      (for ([name '("edit" "write" "bash" "delete" "move" "spawn_subagent")])
+      (for ([name '("edit" "write" "bash" "delete" "move" "delete-lines" "spawn-subagent" "spawn-subagents" "firecrawl")])
         (check-true (set-member? needs name) (format "~a should be in needs-approval set" name))))
 
     (test-case "make-default-permission-config default callback returns #t"
