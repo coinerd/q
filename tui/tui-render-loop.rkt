@@ -44,18 +44,19 @@
          decode-mouse-x10
          decode-mouse-tui-term
          current-busy-watchdog-ms
-         (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
-                       [render-ubuf-to-terminal! (-> any/c void?)]
-                       [tui-ctx-init-terminal! (-> any/c void?)]
-                       [tui-ctx-resize-ubuf! (-> any/c void?)]
-                       [tui-ctx-ubuf (-> any/c any/c)]
-                       [tui-ctx-term (-> any/c any/c)]
-                       [render-frame! (-> any/c void?)]
-                       [draw-frame (-> any/c void?)]
-                       [next-message (->* (any/c) (#:timeout any/c) (or/c any/c #f))]
-                       [tui-main-loop (-> any/c void?)]
-                       [drain-events! (-> any/c void?)]
-                       [handle-user-submit! (-> any/c string? any/c)]))
+         (contract-out [check-busy-watchdog
+                        (-> tui-ctx? number? number? (or/c (list/c number? number?) #f))]
+                       [render-ubuf-to-terminal! (-> tui-ctx? void?)]
+                       [tui-ctx-init-terminal! (-> tui-ctx? void?)]
+                       [tui-ctx-resize-ubuf! (-> tui-ctx? void?)]
+                       [tui-ctx-ubuf (-> tui-ctx? any/c)]
+                       [tui-ctx-term (-> tui-ctx? any/c)]
+                       [render-frame! (-> tui-ctx? void?)]
+                       [draw-frame (-> tui-ctx? void?)]
+                       [next-message (->* (tui-ctx?) (#:timeout number?) (or/c any/c #f))]
+                       [tui-main-loop (-> tui-ctx? void?)]
+                       [drain-events! (-> tui-ctx? void?)]
+                       [handle-user-submit! (-> tui-ctx? string? tui-ctx?)]))
 
 ;; ============================================================
 ;; Ubuf FFI/stubs
