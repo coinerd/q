@@ -8,7 +8,7 @@
 ;; Bug plan: .planning/BUG_PLAN-v0.54.x-GSD-GO-TRANSACTION-CONTRACT-MISMATCH.md
 ;;
 ;; T0.1: with-gsd-transaction now accepts multi-value thunks (W1 fixed)
-;; T0.2: TUI block message renders //go (double-slash formatting defect — W2 pending)
+;; T0.2: TUI block message renders /go correctly (W2 fixed)
 
 (require rackunit
          rackunit/text-ui
@@ -96,12 +96,10 @@
       (check-true (string-contains? (gsd-command-result-message result) "boom")
                   "error message propagated"))
 
-    ;; T0.2: TUI block message renders //go (double-slash)
+    ;; T0.2: TUI block message renders /go (no double-slash)
     ;; parse-extension-command returns "/go" (with slash).
-    ;; The format string "Command /~a ..." then produces "Command //go".
-    (test-case "T0.2: TUI block message has double slash (//go)"
-      ;; PRE-FIX: the blocked-command message template uses "/~a" but
-      ;; cmd-name already contains the leading slash.
+    ;; POST-FIX: format string uses "Command ~a ..." (no extra slash).
+    (test-case "T0.2: TUI block message shows /go (no double slash)"
       ;; Create a handler that triggers 'block by timing out.
       (define (slow-handler payload)
         (sleep 0.1)
@@ -113,8 +111,10 @@
       (parameterize ([current-hook-timeout-ms 1])
         (process-extension-command cctx state))
 
-      ;; PRE-FIX: message contains "//go" (double slash)
-      (check-true (transcript-contains? cctx "//go") "PRE-FIX: block message has double slash //go"))
+      ;; POST-FIX: message contains "/go" (single slash)
+      (check-true (transcript-contains? cctx "/go") "POST-FIX: block message shows /go")
+      ;; And must NOT contain double-slash
+      (check-false (transcript-contains? cctx "//go") "POST-FIX: block message has no double slash"))
 
     (test-case "T0.2b: TUI block message includes useful guidance"
       ;; Even with the formatting bug, the message should contain guidance.
