@@ -12,7 +12,17 @@
 (provide (contract-out [guarded-set-prompt-running! (-> agent-session? boolean? any/c)]
                        [guarded-set-compacting! (-> agent-session? boolean? any/c)]
                        [guarded-set-shutdown-requested! (-> agent-session? boolean? any/c)]
-                       [valid-session-phase? (-> any/c boolean?)]))
+                       [guarded-set-force-shutdown! (-> agent-session? boolean? any/c)]
+                       [guarded-set-active! (-> agent-session? boolean? any/c)]
+                       [guarded-set-model-name! (-> agent-session? (or/c string? #f) any/c)]
+                       [guarded-set-config! (-> agent-session? any/c any/c)]
+                       [guarded-set-index! (-> agent-session? any/c any/c)]
+                       [guarded-set-persisted! (-> agent-session? boolean? any/c)]
+                       [guarded-set-pending-entries! (-> agent-session? list? any/c)]
+                       [guarded-set-start-time! (-> agent-session? any/c any/c)]
+                       [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) any/c)]
+                       [valid-session-phase? (-> any/c boolean?)]
+                       [session-phase (-> agent-session? symbol?)]))
 
 ;; Valid session phases derived from boolean flags
 (define (valid-session-phase? phase)
@@ -47,3 +57,44 @@
 ;; W-04: Guard shutdown-requested? — idempotent (#t→#t allowed for safety)
 (define (guarded-set-shutdown-requested! sess value)
   (set-agent-session-shutdown-requested?! sess value))
+
+;; Guard force-shutdown? — idempotent
+(define (guarded-set-force-shutdown! sess value)
+  (set-agent-session-force-shutdown?! sess value))
+
+;; Guard active? — idempotent
+(define (guarded-set-active! sess value)
+  (set-agent-session-active?! sess value))
+
+;; Guard model-name — type-safe wrapper
+(define (guarded-set-model-name! sess value)
+  (set-agent-session-model-name! sess value))
+
+;; Guard config — type-safe wrapper
+(define (guarded-set-config! sess value)
+  (set-agent-session-config! sess value))
+
+;; Guard index — type-safe wrapper
+(define (guarded-set-index! sess value)
+  (set-agent-session-index! sess value))
+
+;; Guard persisted? — only allows #f→#t transition
+(define (guarded-set-persisted! sess value)
+  (define current (agent-session-persisted? sess))
+  (when (and current (not value))
+    (raise-session-error (format "session ~a: cannot un-mark as persisted"
+                                 (agent-session-session-id sess))
+                         (agent-session-session-id sess)))
+  (set-agent-session-persisted?! sess value))
+
+;; Guard pending-entries — type-safe wrapper
+(define (guarded-set-pending-entries! sess value)
+  (set-agent-session-pending-entries! sess value))
+
+;; Guard start-time — type-safe wrapper
+(define (guarded-set-start-time! sess value)
+  (set-agent-session-start-time! sess value))
+
+;; Guard thinking-level — type-safe wrapper
+(define (guarded-set-thinking-level! sess value)
+  (set-agent-session-thinking-level! sess value))
