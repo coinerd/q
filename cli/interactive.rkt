@@ -25,8 +25,19 @@
 (provide readline-available?
          (contract-out [read-line-with-history
                         (->* (string? input-port?) (output-port?) (or/c string? eof-object?))]
-                       [run-cli-interactive (-> any/c any)]
-                       [run-cli-single (-> any/c any)]
+                       [run-cli-interactive
+                        (->* (any/c)
+                             (#:session-fn any/c
+                                           #:compact-fn any/c
+                                           #:history-fn any/c
+                                           #:fork-fn any/c
+                                           #:model-fn any/c
+                                           #:sessions-fn any/c
+                                           #:provider-name any/c
+                                           #:in any/c
+                                           #:out any/c)
+                             any)]
+                       [run-cli-single (->* (any/c) (#:session-fn any/c #:out any/c) any)]
                        [parse-slash-command (-> string? any/c)]))
 
 ;; ============================================================
