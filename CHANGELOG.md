@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.54.7 — 2026-05-22
+
+### Project Review Remediation
+
+**Architecture fixes:**
+- ARCH-01: Fixed `execute-tool-batch-phase` arity mismatch — thread `perm-cfg`
+  through `handle-tool-calls-pending` → `execute-tool-batch-phase` (11 args).
+  Updated contract to `->*` with optional `#:permission-config` keyword.
+  Regression test in `tests/test-arch-01-regression.rkt`.
+
+**Security hardening:**
+- SEC-01: Added `delete-lines` to `dangerous-tool-names` taxonomy (registry-table.rkt).
+  Already in `needs-approval-tools` (permission-gate.rkt).
+- SEC-02: Narrowed `clean-stale-bytecode!` scope from parent directory to
+  current-directory (repo root only).
+
+**Test infrastructure:**
+- TEST-01: Exported `clean-stale-bytecode!` from run-tests.rkt for testability.
+- TEST-02: Added `@suite` tag-based security test detection. Tagged 3 files
+  (`test-mutating-tool-taxonomy.rkt`, `test-tool-internal-gate.rkt`,
+  `test-destructive-warning.rkt`). Security suite: 15→18 files.
+
+**Coherence:**
+- MAT-01: Updated planning artifacts (STATE.md, SUMMARY.md, PLAN.md) for v0.54.7.
+- MAT-02: Verified `q/.planning/` redirect stub enforcement.
+- MAT-03: Added `doc-freshness` to `pre-commit.rkt` fast-lint-checks.
+- DOC-01: Added v0.54.0–v0.54.6 CHANGELOG entries. Removed duplicate header.
+
+**Metrics:**
+- Contract coverage: 50.0% (221/442 source files)
+- Source modules: 442, Test files: 610+
+
 ## v0.54.6 — 2026-05-22
 
 ### GSD Coherence & Documentation Anti-Drift
