@@ -14,6 +14,7 @@
          (only-in "../util/protocol-types.rkt" event-ev event-payload message-id)
          (only-in "runtime-helpers.rkt" emit-session-event!)
          "session-types.rkt")
+(require "session-mutation.rkt")
 
 (provide (contract-out [wire-session-event-handlers! (-> any/c any/c void?)]))
 
@@ -60,9 +61,9 @@
          (when (file-exists? log-path)
            (define history (load-session-log log-path))
            (when (and (not (null? history)) (not (agent-session-compacting? sess)))
-             (set-agent-session-compacting?! sess #t)
+             (guarded-set-compacting! sess #t)
              (define compact-result (compact-history history))
-             (set-agent-session-compacting?! sess #f)
+             (guarded-set-compacting! sess #f)
              (emit-session-event! bus
                                   (agent-session-session-id sess)
                                   "session.compact.completed"

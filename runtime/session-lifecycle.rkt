@@ -163,7 +163,7 @@
   ;; Ensure index exists (build if first time)
   (unless (agent-session-index sess)
     (when (file-exists? log-path)
-      (set-agent-session-index! sess (build-index! log-path idx-path))))
+      (guarded-set-index! sess (build-index! log-path idx-path))))
   (define idx (agent-session-index sess))
 
   ;; Convert string to message struct if needed
@@ -223,7 +223,7 @@
   ;; Extract settings from path entries (#522)
   (define settings (extract-path-settings context-messages))
   (when (hash-ref settings 'model #f)
-    (set-agent-session-model-name! sess (hash-ref settings 'model)))
+    (guarded-set-model-name! sess (hash-ref settings 'model)))
 
   ;; Inject system instructions as an ephemeral system message prefix
   (inject-system-instructions context-messages (agent-session-system-instructions sess)))
@@ -254,7 +254,7 @@
              (hash? (hook-result-payload model-hook-res))
              (hash-has-key? (hook-result-payload model-hook-res) 'model))
     (define override-model (hash-ref (hook-result-payload model-hook-res) 'model))
-    (set-agent-session-model-name! sess override-model))
+    (guarded-set-model-name! sess override-model))
 
   ;; Run the core agent loop with tool-call iteration
   ;; v0.32.0: Start trace logger for diagnostics
@@ -335,7 +335,7 @@
   (define ws (make-working-set))
   (define base-cfg (agent-session-config sess))
   ;; v0.30.4: dict-set works on both hash? and session-config?
-  (set-agent-session-config! sess (dict-set base-cfg 'working-set ws))
+  (guarded-set-config! sess (dict-set base-cfg 'working-set ws))
 
   ;; 1. Build context: convert message, append to log, load history, inject system instructions
   (define context-with-system
@@ -354,7 +354,7 @@
                     (dispatch-iteration sess context-after-compact max-iterations)))
 
   ;; 5. Rebuild index
-  (set-agent-session-index! sess (build-index! log-path idx-path))
+  (guarded-set-index! sess (build-index! log-path idx-path))
 
   ;; 6. Emit session.updated
   (emit-session-event!
@@ -496,15 +496,15 @@
 (define (ensure-persisted! sess)
   (unless (agent-session-persisted? sess)
     (make-directory* (agent-session-session-dir sess))
-    (set-agent-session-persisted?! sess #t)
+    (guarded-set-persisted! sess #t)
     (define log-path (session-log-path-for sess))
     (write-session-version-header! log-path)
     (when (not (null? (agent-session-pending-entries sess)))
       (for ([entry (in-list (reverse (agent-session-pending-entries sess)))])
         (append-entry! log-path entry))
-      (set-agent-session-pending-entries! sess '()))))
+      (guarded-set-pending-entries! sess '()))))
 
 (define (buffer-or-append! sess entry)
   (if (agent-session-persisted? sess)
       (append-entry! (session-log-path-for sess) entry)
-      (set-agent-session-pending-entries! sess (cons entry (agent-session-pending-entries sess)))))
+      (guarded-set-pending-entries! sess (cons entry (agent-session-pending-entries sess)))))

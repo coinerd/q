@@ -16,9 +16,10 @@
          "../agent/event-emitter.rkt"
          "../agent/event-structs/iteration-events.rkt"
          "session-types.rkt")
+(require "session-mutation.rkt")
 
-(provide (contract-out
-           [maybe-compact-context (-> agent-session? (listof any/c) integer? (listof any/c))])
+(provide (contract-out [maybe-compact-context
+                        (-> agent-session? (listof any/c) integer? (listof any/c))])
          compact-context-mid-turn)
 
 ;; ============================================================
@@ -55,7 +56,7 @@
         context-with-system] ; too soon after last compaction
        [(agent-session-compacting? sess) context-with-system] ; recursive compaction guard
        [else
-        (set-agent-session-compacting?! sess #t)
+        (guarded-set-compacting! sess #t)
         (emit-typed-event! bus
                            (make-compaction-event #:session-id sid
                                                   #:turn-id #f
@@ -72,7 +73,7 @@
                                                         bus
                                                         sid))
                       (lambda ()
-                        (set-agent-session-compacting?! sess #f)
+                        (guarded-set-compacting! sess #f)
                         (set-agent-session-last-compaction-time! sess (current-inexact-milliseconds))
                         (emit-typed-event! bus
                                            (make-compaction-event #:session-id sid

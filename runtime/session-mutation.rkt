@@ -21,6 +21,7 @@
                        [guarded-set-pending-entries! (-> agent-session? list? any/c)]
                        [guarded-set-start-time! (-> agent-session? any/c any/c)]
                        [guarded-set-thinking-level! (-> agent-session? (or/c symbol? #f) any/c)]
+                       [guarded-set-last-compaction-time! (-> agent-session? any/c any/c)]
                        [valid-session-phase? (-> any/c boolean?)]
                        [session-phase (-> agent-session? symbol?)]))
 
@@ -98,3 +99,7 @@
 ;; Guard thinking-level — type-safe wrapper
 (define (guarded-set-thinking-level! sess value)
   (set-agent-session-thinking-level! sess value))
+
+;; Guard last-compaction-time — type-safe wrapper
+(define (guarded-set-last-compaction-time! sess value)
+  (set-agent-session-last-compaction-time! sess value))
