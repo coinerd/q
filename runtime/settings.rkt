@@ -49,7 +49,9 @@
                        [load-project-settings (->* () (path-string?) hash?)]
                        [make-minimal-settings
                         (->* ()
-                             (#:provider any/c #:model (or/c string? #f) #:overrides (or/c hash? #f))
+                             (#:provider (or/c symbol? string? #f)
+                                         #:model (or/c string? #f)
+                                         #:overrides (or/c hash? #f))
                              q-settings?)]
                        [merge-settings (-> hash? hash? hash?)]
                        [deep-merge-hash (-> any/c any/c hash?)]
@@ -58,22 +60,22 @@
                        [provider-config (-> q-settings? (or/c symbol? string?) (or/c hash? #f))]
                        [provider-names (-> q-settings? (listof symbol?))]
                        [config-parse-error (-> path-string? (or/c string? #f))]
-                       [parallel-tools-enabled? (-> q-settings? any/c)]
-                       [http-request-timeout (-> q-settings? any/c)]
+                       [parallel-tools-enabled? (-> q-settings? boolean?)]
+                       [http-request-timeout (-> q-settings? number?)]
                        [get-model-timeout (-> q-settings? string? symbol? (or/c number? #f))]
-                       [effective-request-timeout (-> q-settings? string? any/c)]
-                       [warn-on-destructive? (-> q-settings? any/c)]
+                       [effective-request-timeout (-> q-settings? string? number?)]
+                       [warn-on-destructive? (-> q-settings? boolean?)]
                        [security-config-from-settings (-> q-settings? hash?)]
                        [default-session-dir (-> path-string?)]
                        [default-project-dir (-> path?)]
                        [session-dir-from-settings (-> q-settings? (or/c path-string? #f))]
                        [project-dir-from-settings (-> q-settings? (or/c path-string? #f))]
-                       [trace-enabled? (-> q-settings? any/c)]
-                       [trace-max-files (-> q-settings? any/c)]
-                       [steering-gentle-threshold (-> q-settings? any/c)]
-                       [steering-strong-threshold (-> q-settings? any/c)]
-                       [steering-hard-cap (-> q-settings? any/c)]
-                       [steering-same-file-dedup? (-> q-settings? any/c)])
+                       [trace-enabled? (-> q-settings? boolean?)]
+                       [trace-max-files (-> q-settings? exact-positive-integer?)]
+                       [steering-gentle-threshold (-> q-settings? number?)]
+                       [steering-strong-threshold (-> q-settings? number?)]
+                       [steering-hard-cap (-> q-settings? number?)]
+                       [steering-same-file-dedup? (-> q-settings? boolean?)])
 
          ;; Sandbox settings (re-exported, not locally defined)
          sandbox-enabled?

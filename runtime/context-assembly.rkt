@@ -167,7 +167,7 @@
            (-> session-index?
                #:max-tokens exact-nonnegative-integer?
                (values list? exact-nonnegative-integer?))]
-          [entry->context-message (-> any/c (or/c list? #f))]
+          [entry->context-message (-> (or/c hash? #f) (or/c list? #f))]
           [load-agents-context (-> (or/c path? string?) string?)]
           [build-system-preamble (-> (or/c path? string?) string?)]
           [truncate-messages-to-budget (-> list? exact-nonnegative-integer? list?)])
@@ -207,7 +207,7 @@
                        [context-summary-prompt
                         (->* (list?) (#:previous-summary (or/c string? #f)) string?)]
                        [generate-context-summary
-                        (->* (list? (or/c any/c #f) (or/c string? #f))
+                        (->* (list? (or/c procedure? #f) (or/c string? #f))
                              (#:cache (or/c summary-cache? #f))
                              (or/c context-summary? #f))])
          ;; Struct constructors (direct for match compatibility)
