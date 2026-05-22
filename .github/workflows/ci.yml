@@ -140,6 +140,38 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────
+  # Gate 2b: Security tier — sandbox/permission/safe-mode tests
+  # ────────────────────────────────────────────────────────────
+  security:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Cache Racket packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/racket
+          key: racket-pkgs-security-${{ hashFiles('**/info.rkt') }}
+          restore-keys: racket-pkgs-security-
+      - uses: ./.github/actions/setup-racket
+        with:
+          racket-version: ${{ github.event.inputs.racket-version || '8.10' }}
+
+      - name: Clear stale bytecode
+        run: find . -name compiled -type d -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Run security test suite
+        run: STRICT_TEST_RUNNER=1 racket scripts/run-tests.rkt --suite security --sequential 2>&1 | tee test-output.log
+
+      - name: Upload security test log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-test-output
+          path: test-output.log
+          retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
   # Gate 3: Release dry-run — depends on lint passing
   # ────────────────────────────────────────────────────────────
   release-dry-run:

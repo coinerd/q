@@ -105,6 +105,14 @@
 (define (tui-file? f)
   (string-contains? f "/tui/"))
 
+(define (security-file? f)
+  (define base (path->string (file-name-from-path f)))
+  (or (string-contains? base "security")
+      (string-contains? base "permission")
+      (string-contains? base "safe-mode")
+      (string-contains? base "sandbox")
+      (string-contains? base "tool-bash")))
+
 (define (smoke-excluded? f)
   (or (slow-file? f)
       (string-contains? f "/workflows/")
@@ -141,6 +149,7 @@
        [(slow) (filter slow-file? all-files)]
        [(tui) (filter tui-file? all-files)]
        [(smoke) (filter (lambda (f) (not (smoke-excluded? f))) all-files)]
+       [(security) (filter security-file? all-files)]
        [else '("tests/")])]))
 
 ;; ---------------------------------------------------------------------------
@@ -477,7 +486,8 @@
   (displayln "  fast    All tests except slow patterns (per-file spawn)")
   (displayln "  slow    Only sandbox/subprocess tests")
   (displayln "  tui     Files in tests/tui/")
-  (displayln "  smoke   Fast minus workflows/, interfaces/, and provider tests"))
+  (displayln "  smoke   Fast minus workflows/, interfaces/, and provider tests")
+  (displayln "  security  All security/permission/sandbox/safe-mode tests"))
 
 (define (parse-args args)
   (let loop ([rest args]
