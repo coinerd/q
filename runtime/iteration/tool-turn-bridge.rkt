@@ -28,10 +28,10 @@
          (only-in "../../util/event-types.rkt" injection-event-topic)
          (only-in "../../util/shared.rkt" take-at-most))
 
-(provide (contract-out [extract-tool-target-path (-> any/c any/c)]
+(provide (contract-out [extract-tool-target-path (-> any/c (or/c path-string? #f))]
                        [take-at-most (-> list? exact-nonnegative-integer? list?)]
-                       [update-seen-paths (-> list? list? (values list? any/c))]
-                       [update-working-set-after-tools! (-> any/c list? list? any/c)]
+                       [update-seen-paths (-> list? list? (values list? boolean?))]
+                       [update-working-set-after-tools! (-> (or/c any/c #f) list? list? void?)]
                        [count-tool-errors (-> (listof any/c) exact-nonnegative-integer?)]
                        [compute-tool-counters
                         (-> list?
@@ -41,8 +41,8 @@
                        [detect-read-spiral (-> list? any/c (listof string?))]
                        [extract-last-assistant-text (-> list? any/c)]
                        [dequeue-all-steering! (-> any/c list?)]
-                       [drain-injected-messages! (-> any/c any/c any/c (listof any/c))]
-                       [make-injected-collector! (-> any/c any/c)]))
+                       [drain-injected-messages! (-> any/c any/c any/c list?)]
+                       [make-injected-collector! (-> any/c procedure?)]))
 
 ;; Extract the target file path from a tool call's arguments.
 (define (extract-tool-target-path tc)

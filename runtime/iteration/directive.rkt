@@ -16,16 +16,16 @@
          directive-stop
          directive-yield
          (contract-out [directive-recurse? (-> any/c boolean?)]
-                       [directive-recurse-new-ctx (-> directive-recurse? any/c)]
-                       [directive-recurse-new-counters (-> directive-recurse? any/c)]
-                       [directive-recurse-ws (-> directive-recurse? any/c)]
+                       [directive-recurse-new-ctx (-> directive-recurse? list?)]
+                       [directive-recurse-new-counters (-> directive-recurse? hash?)]
+                       [directive-recurse-ws (-> directive-recurse? (or/c any/c #f))]
                        [directive-stop? (-> any/c boolean?)]
                        [directive-stop-result (-> directive-stop? any/c)]
                        [directive-yield? (-> any/c boolean?)]
-                       [directive-yield-events (-> directive-yield? any/c)]
-                       [directive-yield-new-ctx (-> directive-yield? any/c)]
-                       [directive-yield-new-counters (-> directive-yield? any/c)]
-                       [directive-yield-ws (-> directive-yield? any/c)]
+                       [directive-yield-events (-> directive-yield? list?)]
+                       [directive-yield-new-ctx (-> directive-yield? list?)]
+                       [directive-yield-new-counters (-> directive-yield? hash?)]
+                       [directive-yield-ws (-> directive-yield? (or/c any/c #f))]
                        [step-directive? (-> any/c boolean?)]))
 
 (struct directive-recurse (new-ctx new-counters ws) #:transparent)

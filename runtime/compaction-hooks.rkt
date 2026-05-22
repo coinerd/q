@@ -16,6 +16,7 @@
 (require racket/contract
          racket/list
          racket/match
+         (only-in "../util/event.rkt" event?)
          "../util/protocol-types.rkt"
          "../util/hook-types.rkt"
          "../agent/event-bus.rkt"
@@ -23,29 +24,52 @@
          "split-turn.rkt"
          "token-compaction.rkt")
 
-(provide (contract-out
-          ;; #697: Enriched hook
-          [build-enriched-compact-payload
-           (->* (list? any/c)
-                (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
-                hash?)]
-          [dispatch-enriched-before-compact
-           (->* (any/c list? any/c)
-                (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
-                (values any/c hash?))]
-          [maybe-use-custom-summary (-> any/c (or/c string? #f))]
-          ;; #698: Compaction events
-          [publish-compaction-start! (-> any/c any/c any/c any/c string? string? any/c)]
-          [publish-compaction-end!
-           (->* (any/c any/c any/c any/c any/c string? string?)
-                (#:summary-generated? boolean?)
-                any/c)]
-          [compaction-start-topic string?]
-          [compaction-end-topic string?]
-          ;; Event construction helpers
-          [make-compaction-start-event (-> any/c any/c any/c string? string? any/c)]
-          [make-compaction-end-event
-           (->* (any/c any/c any/c any/c string? string?) (#:summary-generated? boolean?) any/c)]))
+;; #697: Enriched hook
+(provide (contract-out [build-enriched-compact-payload
+                        (->* (list? compaction-strategy?)
+                             (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
+                             hash?)]
+                       [dispatch-enriched-before-compact
+                        (->* ((or/c any/c #f) list? compaction-strategy?)
+                             (#:previous-summary (or/c #f string?) #:session-id (or/c #f string?))
+                             (values any/c hash?))]
+                       [maybe-use-custom-summary (-> (or/c any/c #f) (or/c string? #f))]
+                       ;; #698: Compaction events
+                       [publish-compaction-start!
+                        (-> (or/c event-bus? #f)
+                            (or/c symbol? #f)
+                            exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            string?
+                            string?
+                            (or/c event? void?))]
+                       [publish-compaction-end!
+                        (->* ((or/c event-bus? #f) (or/c symbol? #f)
+                                                   exact-nonnegative-integer?
+                                                   exact-nonnegative-integer?
+                                                   exact-nonnegative-integer?
+                                                   string?
+                                                   string?)
+                             (#:summary-generated? boolean?)
+                             (or/c event? void?))]
+                       [compaction-start-topic string?]
+                       [compaction-end-topic string?]
+                       ;; Event construction helpers
+                       [make-compaction-start-event
+                        (-> (or/c symbol? #f)
+                            exact-nonnegative-integer?
+                            exact-nonnegative-integer?
+                            string?
+                            string?
+                            event?)]
+                       [make-compaction-end-event
+                        (->* ((or/c symbol? #f) exact-nonnegative-integer?
+                                                exact-nonnegative-integer?
+                                                exact-nonnegative-integer?
+                                                string?
+                                                string?)
+                             (#:summary-generated? boolean?)
+                             event?)]))
 
 ;; ============================================================
 ;; Constants
