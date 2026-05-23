@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.55.6 — 2026-05-23
+
+### Full-Suite Recovery
+
+**P0 (GSD planning write-guard contract violation):**
+- `extensions/gsd/tool-handlers.rkt`: `handle-planning-write` now passes `(or (current-pinned-dir) base-dir)` to `gsd-write-guard` instead of bare `(current-pinned-dir)`, which could be `#f` and violate the `path-string?` contract
+
+**P0 (bash allowlist contract strict boolean):**
+- `tools/builtins/bash.rkt`: `execution-policy-allows?` wrapped `member` result with `(and ... #t)` to return strict `boolean?` instead of list tail, fixing self-contract breakage in `allowlist` mode
+- Same fix applied to local `policy-allows?` inside `tool-bash`
+
+**P1 (runner context compatibility):**
+- `tests/test-main-entrypoint.rkt`: Replaced relative `./bin/q` with `define-runtime-path` to resolve `../bin/q` relative to the test file, fixing failures under `raco test`
+
+**Verification:**
+- `raco test tests/test-gsd-planning.rkt` → 94/94 pass
+- `raco test tests/test-tool-bash-security.rkt` → 41/41 pass
+- `raco test tests/test-main-entrypoint.rkt` → 4/4 pass
+- `racket scripts/lint-all.rkt` → 19/19 pass
+
 ## v0.55.5 — 2026-05-23
 
 ### Test Runner False-Green Fix
