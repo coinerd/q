@@ -314,39 +314,34 @@
     (if (absolute-path? test-path)
         test-path
         (simplify-path (build-path base-dir test-path))))
-  (define racket-bin (find-executable-path "racket"))
   (define t0 (current-inexact-milliseconds))
   (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
 
   ;; Use process*/ports to capture stdout+stderr into string ports.
   (define stdout-out (open-output-string))
   (define stderr-out (open-output-string))
-  (define-values (sp out-in pid err-in ctrl)
-    (apply values (process*/ports stdout-out #f stderr-out racket-bin resolved-path)))
 
-  ;; Close stdin port immediately — we don't send input
-  (when out-in
-    (close-output-port out-in))
+  ;; Choose the right runner upfront to avoid a wasted fast-path + fallback
+  ;; double-run for files that define rackunit tests but never call run-tests.
+  (define-values (ctrl)
+    (if (file-has-rackunit-tests? resolved-path)
+        ;; Slow path: raco test discovers and runs registered test cases
+        (let ([raco-bin (find-executable-path "raco")])
+          (define-values (sp2 out-in2 pid2 err-in2 ctrl2)
+            (apply values
+                   (process*/ports stdout-out #f stderr-out raco-bin "test" "-t" resolved-path)))
+          (when out-in2
+            (close-output-port out-in2))
+          ctrl2)
+        ;; Fast path: racket <file> for files with run-tests or non-rackunit tests
+        (let ([racket-bin (find-executable-path "racket")])
+          (define-values (sp out-in pid err-in ctrl)
+            (apply values (process*/ports stdout-out #f stderr-out racket-bin resolved-path)))
+          (when out-in
+            (close-output-port out-in))
+          ctrl)))
 
-  ;; Run the file with racket and extract results
-  (define result (build-result-from-process test-path stdout-out stderr-out ctrl timeout elapsed))
-
-  ;; Fallback: if racket produced exit 0 but 0 tests, and the file has rackunit
-  ;; test definitions without a run-tests call, re-run with raco test so the
-  ;; registered tests are actually executed and counted.
-  (if (and (= (test-file-result-exit-code result) 0)
-           (= (test-file-result-total result) 0)
-           (file-has-rackunit-tests? resolved-path))
-      (let ([raco-bin (find-executable-path "raco")])
-        (define stdout-out2 (open-output-string))
-        (define stderr-out2 (open-output-string))
-        (define-values (sp2 out-in2 pid2 err-in2 ctrl2)
-          (apply values
-                 (process*/ports stdout-out2 #f stderr-out2 raco-bin "test" "-t" resolved-path)))
-        (when out-in2
-          (close-output-port out-in2))
-        (build-result-from-process test-path stdout-out2 stderr-out2 ctrl2 timeout elapsed))
-      result))
+  (build-result-from-process test-path stdout-out stderr-out ctrl timeout elapsed))
 
 ;; ---------------------------------------------------------------------------
 ;; run-all-files - parallel dispatcher with progress dots

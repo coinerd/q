@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.55.5 — 2026-05-23
+
+### Test Runner False-Green Fix
+
+**P0 (test runner silently reporting 0 tests for rackunit files):**
+- `scripts/run-tests.rkt`: Fixed `run-single-file` false-green parsing for files using
+  rackunit `test-case` but never calling `run-tests`.
+- Added `file-has-rackunit-tests?` heuristic: detects `(test-case` without `(run-tests`
+- Added `build-result-from-process` helper: extracts timeout/parsing logic for reuse
+- Upfront runner selection: chooses `raco test -t` directly for files needing discovery,
+  preserving fast `racket <file>` path for files with `run-tests` (majority)
+
+**Tests:** Updated `tests/test-run-tests.rkt` with regression tests:
+- `run-single-file` on `test-stream-loop-w1.rkt` must report ≥8 tests
+- `normalize-counts` guard for zero-total edge case
+
+**Performance:** Fast suite unaffected — only ~297/577 files use slow `raco test` path;
+  remaining files still use fast `racket` path (~1s per file).
+
 ## v0.55.4 — 2026-05-23
 
 ### Hotfix — effect:update-fsm Contract Alignment
