@@ -23,7 +23,7 @@
                        [branch! (-> session-index? string? (or/c any/c #f))]
                        [branch-with-summary! (-> session-index? string? string? (or/c any/c #f))]
                        [reset-leaf! (-> session-index? void?)]
-                       [append-to-leaf! (-> session-index? any/c void?)]
+                       [append-to-leaf! (-> session-index? any/c any/c)]
                        [add-bookmark! (-> session-index? string? string? string?)]
                        [remove-bookmark! (-> session-index? string? boolean?)]
                        [list-bookmarks (-> session-index? list?)]
