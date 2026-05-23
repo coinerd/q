@@ -75,6 +75,7 @@
          ;; Main command dispatcher
          process-slash-command
          process-extension-command
+         execute-extension-command
          cmd-ctx-session-factory-runner)
 
 ;; ============================================================
@@ -124,36 +125,60 @@
              (factory new-session-text))))]
        [else
         (define runner (cmd-ctx-session-runner cctx))
-        (when runner
-          (thread
-           (lambda ()
-             (with-handlers
-                 ([exn:fail?
-                   (lambda (e)
-                     (define err-msg (format "[ERROR] Session runner failed: ~a" (exn-message e)))
-                     (define entry (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
-                     (set-box! (cmd-ctx-state-box cctx)
-                               (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
-                     (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
-               (runner new-session-text)))))])]
+        (cond
+          [runner
+           (thread (lambda ()
+                     (with-handlers
+                         ([exn:fail?
+                           (lambda (e)
+                             (define err-msg
+                               (format "[ERROR] Session runner failed: ~a" (exn-message e)))
+                             (define entry
+                               (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                             (set-box! (cmd-ctx-state-box cctx)
+                                       (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                             (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+                       (runner new-session-text))))]
+          [else
+           ;; P1 hardening: no runner/factory available — show explicit error
+           (define err-entry
+             (make-entry
+              'system
+              "[ERROR] No session runner or factory available. The session may not be fully initialized."
+              (current-inexact-milliseconds)
+              (hash)))
+           (set-box! (cmd-ctx-state-box cctx)
+                     (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) err-entry))
+           (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])])]
     [submit-text
      (when display-text
        (define entry (make-system-entry display-text))
        (set-box! (cmd-ctx-state-box cctx)
                  (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry)))
      (define runner (cmd-ctx-session-runner cctx))
-     (when runner
-       (thread
-        (lambda ()
-          (with-handlers ([exn:fail?
-                           (lambda (e)
-                             (define err-msg (format "[ERROR] Prompt failed: ~a" (exn-message e)))
-                             (define entry
-                               (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
-                             (set-box! (cmd-ctx-state-box cctx)
-                                       (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
-                             (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
-            (runner submit-text)))))]
+     (cond
+       [runner
+        (thread
+         (lambda ()
+           (with-handlers ([exn:fail?
+                            (lambda (e)
+                              (define err-msg (format "[ERROR] Prompt failed: ~a" (exn-message e)))
+                              (define entry
+                                (make-entry 'system err-msg (current-inexact-milliseconds) (hash)))
+                              (set-box! (cmd-ctx-state-box cctx)
+                                        (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) entry))
+                              (set-box! (cmd-ctx-needs-redraw-box cctx) #t))])
+             (runner submit-text))))]
+       [else
+        ;; P1 hardening: /plan no-op — when no runner available, show explicit error
+        (define err-entry
+          (make-entry 'system
+                      "[ERROR] No session runner available. The session may not be fully initialized."
+                      (current-inexact-milliseconds)
+                      (hash)))
+        (set-box! (cmd-ctx-state-box cctx)
+                  (add-transcript-entry (unbox (cmd-ctx-state-box cctx)) err-entry))
+        (set-box! (cmd-ctx-needs-redraw-box cctx) #t)])]
     [display-text
      (define entry (make-system-entry display-text))
      (set-box! (cmd-ctx-state-box cctx)

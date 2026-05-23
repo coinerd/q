@@ -45,3 +45,17 @@
   (define cctx (make-test-cctx "/unknown-command arg1"))
   (define result (process-extension-command cctx (initial-ui-state)))
   (check-equal? result 'continue))
+
+;; P1 regression: submit with no runner should produce visible error
+;; Test the execute-extension-command indirectly by mocking the hook result.
+;; When runner=#f and submit payload arrives, transcript must grow.
+(test-case "execute-extension-command submit with no runner shows error"
+  (define cctx (make-test-cctx "/plan test task"))
+  (define initial-transcript (ui-state-transcript (unbox (cmd-ctx-state-box cctx))))
+  ;; Simulate what process-extension-command does on amend with submit payload
+  (execute-extension-command cctx
+                             (unbox (cmd-ctx-state-box cctx))
+                             (hasheq 'submit "plan the project" 'text "Planning: test task"))
+  (define updated-transcript (ui-state-transcript (unbox (cmd-ctx-state-box cctx))))
+  (check > (length updated-transcript) (length initial-transcript)
+         "submit with no runner should add error to transcript"))
