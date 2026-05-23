@@ -37,7 +37,12 @@
                   make-gsd-command-received-event
                   make-gsd-command-completed-event
                   make-gsd-archive-failed-event)
-         (only-in "policy.rkt" gsd-decide-action policy-allowed? policy-blocked? policy-reason)
+         (only-in "policy.rkt"
+                  gsd-decide-action
+                  policy-allowed?
+                  policy-blocked?
+                  policy-reason
+                  policy-decision?)
          (only-in "session-state.rkt"
                   current-pinned-dir
                   set-pinned-dir!
@@ -59,7 +64,7 @@
          ;; Functions (contracted)
          (contract-out [gsd-command-dispatch
                         (-> (or/c symbol? string?) any/c (or/c gsd-command-result? #f))]
-                       [gsd-write-guard (-> path-string? path-string? gsd-command-result?)]
+                       [gsd-write-guard (-> path-string? path-string? policy-decision?)]
                        [gsd-show-status (-> gsd-command-result?)]
                        [cmd-replan (-> gsd-command-result?)]
                        [cmd-skip (-> any/c gsd-command-result?)]
