@@ -5,9 +5,9 @@
 ;; Demonstrates creating a runtime with explicit control over every
 ;; component: event bus, tool registry, and session manager.
 
-(require "../../interfaces/sdk.rkt"
+(require "../../runtime/session-manager.rkt"
+         (only-in "../../interfaces/sdk-core.rkt" create-agent-session session-info)
          (only-in "../../tools/tool.rkt" make-tool-registry)
-         (only-in "../../runtime/session-manager.rkt" make-in-memory-session-manager)
          (only-in "../../agent/event-bus.rkt" make-event-bus))
 
 (define bus (make-event-bus))

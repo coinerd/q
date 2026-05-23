@@ -106,6 +106,21 @@
 (define (tui-file? f)
   (string-contains? f "/tui/"))
 
+;; Tests that mutate repo files or run self-healing linters should not run in
+;; parallel with other tests, otherwise clean-tree assumptions can race.
+(define mutating-patterns
+  '("ci-local" "pre-commit"
+               "check-deps"
+               "sync-version"
+               "sync-readme"
+               "bump-version"
+               "metrics-readme"))
+
+(define (mutating-file? f)
+  (define base (file-name-from-path f))
+  (for/or ([p (in-list mutating-patterns)])
+    (and base (string-contains? (path->string base) p))))
+
 (define (security-file? f)
   (define base (path->string (file-name-from-path f)))
   (or (string-contains? base "security")
@@ -609,7 +624,39 @@
   (newline)
 
   (define t0 (current-inexact-milliseconds))
-  (define results (run-all-files suite-files jobs timeout-ms))
+
+  ;; Run mutation-sensitive files sequentially to avoid cross-test races in
+  ;; parallel mode (e.g., ci-local/pre-commit touching README/info surfaces).
+  (define-values (serial-files parallel-files)
+    (if (and (> jobs 1) (not sequential?))
+        (values (filter mutating-file? suite-files)
+                (filter (lambda (f) (not (mutating-file? f))) suite-files))
+        (values '() suite-files)))
+
+  (when (pair? serial-files)
+    (printf ";; run-tests: serializing ~a mutation-sensitive file~a before parallel batches~n"
+            (length serial-files)
+            (if (= (length serial-files) 1) "" "s")))
+
+  (define serial-results
+    (if (pair? serial-files)
+        (run-all-files serial-files 1 timeout-ms)
+        '()))
+  (define parallel-results
+    (if (pair? parallel-files)
+        (run-all-files parallel-files jobs timeout-ms)
+        '()))
+
+  (define file-order
+    (for/hash ([f (in-list suite-files)]
+               [i (in-naturals)])
+      (values f i)))
+
+  (define results
+    (sort (append serial-results parallel-results)
+          <
+          #:key (lambda (r) (hash-ref file-order (test-file-result-path r) 0))))
+
   (define total-elapsed (exact-round (- (current-inexact-milliseconds) t0)))
 
   (print-summary results total-elapsed)

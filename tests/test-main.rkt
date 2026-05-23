@@ -845,16 +845,17 @@
      (hasheq 'providers
              (hasheq 'local
                      (hasheq 'base-url "http://127.0.0.1:8080/v1" 'models '("gemma-4-e4b-it"))))))
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  (define config
-                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gemma-4-e4b-it"))))
-                  (define settings (load-settings tmp-dir))
-                  (define p (build-provider config settings))
-                  ;; Should NOT fall back to mock provider
-                  (check-pred provider? p)
-                  (check-equal? (provider-name p) "openai-compatible"))
-                (lambda () (cleanup-temp-dir tmp-dir))))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define config (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "gemma-4-e4b-it"))))
+     ;; Use #:config-path to bypass global ~/.q/config.json in parallel runs.
+     (define settings (load-settings tmp-dir #:config-path "/nonexistent/global-config.json"))
+     (define p (build-provider config settings))
+     ;; Should NOT fall back to mock provider
+     (check-pred provider? p)
+     (check-equal? (provider-name p) "openai-compatible"))
+   (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: local provider (localhost hostname) works without API key"
   (define tmp-dir
@@ -879,16 +880,17 @@
      (hasheq 'providers
              (hasheq 'local
                      (hasheq 'base-url "http://192.168.1.100:8080/v1" 'models '("mistral-7b"))))))
-  (dynamic-wind (lambda () (void))
-                (lambda ()
-                  (define config
-                    (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "mistral-7b"))))
-                  (define settings (load-settings tmp-dir))
-                  (define p (build-provider config settings))
-                  ;; Should NOT fall back to mock provider
-                  (check-pred provider? p)
-                  (check-equal? (provider-name p) "openai-compatible"))
-                (lambda () (cleanup-temp-dir tmp-dir))))
+  (dynamic-wind
+   (lambda () (void))
+   (lambda ()
+     (define config (make-hash (list (cons 'project-dir tmp-dir) (cons 'model "mistral-7b"))))
+     ;; Use #:config-path to bypass global ~/.q/config.json in parallel runs.
+     (define settings (load-settings tmp-dir #:config-path "/nonexistent/global-config.json"))
+     (define p (build-provider config settings))
+     ;; Should NOT fall back to mock provider
+     (check-pred provider? p)
+     (check-equal? (provider-name p) "openai-compatible"))
+   (lambda () (cleanup-temp-dir tmp-dir))))
 
 (test-case "build-provider: cloud provider still requires API key"
   (define tmp-dir

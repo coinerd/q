@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.55.9 — 2026-05-23
+
+### Broad-Gate Truthful Closure Remediation
+
+- fixed `examples/sdk/08-full-control.rkt` duplicate import conflict causing `test-examples-compile` failure
+- synchronized stale docs/wiki version markers to canonical version (`sync-version --write --all`)
+- synchronized README metrics/prose counters (`metrics --sync-all`) to restore clean-tree `ci-local`
+
+**Verification:**
+- `raco test tests/test-examples-compile.rkt`
+- `raco test tests/test-ci-local.rkt`
+- `raco test tests/test-pre-commit.rkt tests/test-bump-version.rkt`
+- `racket scripts/lint-all.rkt` → 19/19 pass
+- `racket scripts/run-tests.rkt` → 622/622 files pass
+
 ## v0.55.8 — 2026-05-23
 
 ### Broad Suite Closure
