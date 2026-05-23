@@ -252,31 +252,18 @@
 ;; run-single-file - spawn process for one test file
 ;; ---------------------------------------------------------------------------
 
-(define (run-single-file test-path #:timeout [timeout #f])
-  (define resolved-path
-    (if (absolute-path? test-path)
-        test-path
-        (simplify-path (build-path base-dir test-path))))
-  (define racket-bin (find-executable-path "racket"))
-  (define t0 (current-inexact-milliseconds))
-  (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
+;; Detect files that define rackunit tests but never call run-tests.
+;; These files produce zero output when run with `racket <file>`,
+;; causing the parser to see 0 tests and the runner to false-green.
+(define (file-has-rackunit-tests? path)
+  (and (file-exists? path)
+       (let ([content (file->string path)])
+         (and (regexp-match? #rx"\\(test-case" content)
+              (not (regexp-match? #rx"\\(run-tests" content))))))
 
-  ;; Use process*/ports to capture stdout+stderr into string ports.
-  ;; Return values: (list sp out-in pid err-in ctrl)
-  ;;   sp     = #f (stdout redirected)
-  ;;   out-in = output-port (write to subprocess stdin)
-  ;;   err-in = #f (stderr redirected)
-  ;;   ctrl   = control procedure
-  (define stdout-out (open-output-string))
-  (define stderr-out (open-output-string))
-  (define-values (sp out-in pid err-in ctrl)
-    (apply values (process*/ports stdout-out #f stderr-out racket-bin resolved-path)))
-
-  ;; Close stdin port immediately — we don't send input
-  (when out-in
-    (close-output-port out-in))
-
-  ;; Wait for process with optional timeout
+;; Common result extraction from a running process.
+;; Handles timeout logic and stdout/stderr parsing uniformly.
+(define (build-result-from-process test-path stdout-out stderr-out ctrl timeout elapsed)
   (cond
     [timeout
      (define wait-thread (thread (lambda () (ctrl 'wait))))
@@ -321,6 +308,45 @@
      (define-values (passed failed total)
        (normalize-counts exit-code parsed-passed parsed-failed parsed-total))
      (test-file-result test-path exit-code stdout-bytes stderr-bytes (elapsed) passed failed total)]))
+
+(define (run-single-file test-path #:timeout [timeout #f])
+  (define resolved-path
+    (if (absolute-path? test-path)
+        test-path
+        (simplify-path (build-path base-dir test-path))))
+  (define racket-bin (find-executable-path "racket"))
+  (define t0 (current-inexact-milliseconds))
+  (define elapsed (lambda () (exact-round (- (current-inexact-milliseconds) t0))))
+
+  ;; Use process*/ports to capture stdout+stderr into string ports.
+  (define stdout-out (open-output-string))
+  (define stderr-out (open-output-string))
+  (define-values (sp out-in pid err-in ctrl)
+    (apply values (process*/ports stdout-out #f stderr-out racket-bin resolved-path)))
+
+  ;; Close stdin port immediately — we don't send input
+  (when out-in
+    (close-output-port out-in))
+
+  ;; Run the file with racket and extract results
+  (define result (build-result-from-process test-path stdout-out stderr-out ctrl timeout elapsed))
+
+  ;; Fallback: if racket produced exit 0 but 0 tests, and the file has rackunit
+  ;; test definitions without a run-tests call, re-run with raco test so the
+  ;; registered tests are actually executed and counted.
+  (if (and (= (test-file-result-exit-code result) 0)
+           (= (test-file-result-total result) 0)
+           (file-has-rackunit-tests? resolved-path))
+      (let ([raco-bin (find-executable-path "raco")])
+        (define stdout-out2 (open-output-string))
+        (define stderr-out2 (open-output-string))
+        (define-values (sp2 out-in2 pid2 err-in2 ctrl2)
+          (apply values
+                 (process*/ports stdout-out2 #f stderr-out2 raco-bin "test" "-t" resolved-path)))
+        (when out-in2
+          (close-output-port out-in2))
+        (build-result-from-process test-path stdout-out2 stderr-out2 ctrl2 timeout elapsed))
+      result))
 
 ;; ---------------------------------------------------------------------------
 ;; run-all-files - parallel dispatcher with progress dots
