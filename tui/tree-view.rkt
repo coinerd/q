@@ -35,7 +35,7 @@
                                     #:bookmarks (or/c hash? #f))
                 (listof string?))]
           [make-tree-node
-           (->* ((or/c string? #f) string? string? exact-nonnegative-integer? (listof any/c))
+           (->* ((or/c string? #f) (or/c string? symbol?) string? exact-nonnegative-integer? (listof any/c))
                 ((or/c number? #f))
                 tree-node?)]
           [build-tree-nodes (-> (listof any/c) (listof list?))]
@@ -43,8 +43,8 @@
           [tree-next-node (-> (listof any/c) exact-integer? exact-integer?)]
           [tree-prev-node (-> (listof any/c) exact-integer? exact-integer?)]
           [tree-toggle-fold (-> (set/c string?) (or/c string? #f) (set/c string?))]
-          [tree-enter-node (-> (listof any/c) exact-integer? (or/c string? #f) any/c)]
-          [would-abandon-branch? (-> (listof list?) (set/c string?) (or/c string? #f) boolean?)]))
+          [tree-enter-node (-> (listof any/c) exact-integer? (set/c string?) (set/c string?))]
+          [would-abandon-branch? (-> (listof list?) (or/c string? #f) (or/c string? #f) boolean?)]))
 
 ;; ============================================================
 ;; Tree node struct
