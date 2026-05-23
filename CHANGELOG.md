@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.55.2 — 2026-05-23
+
+### W10 Keybinding Contract Fixes
+
+Fix 4 contract mismatches in `tui/tui-keybindings.rkt` introduced by W10 of the contract precision series.
+
+**P0 (TUI crash):**
+- `handle-key`: reverted to `(-> tui-ctx? any/c any/c)` — returns single value, not 2 values
+
+**P1 (latent mismatches):**
+- `handle-mouse`: reverted to `(-> tui-ctx? any/c any/c)` — returns `'continue`, not `tui-ctx?`
+- `process-slash-command`: return `(or/c 'continue 'quit)` — returns status symbols
+- `tui-ctx->cmd-ctx`: return `cmd-ctx?` — returns struct, not `hash?`
+
 ## v0.55.1 — 2026-05-23
 
 ### Contract Precision Hotfix
