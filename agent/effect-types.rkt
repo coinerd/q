@@ -10,10 +10,11 @@
 ;; Also defines streaming-plan — pure computation result for the
 ;; streaming phase (v0.47.2).
 
-(require racket/contract)
+(require racket/contract
+         (only-in "../util/fsm.rkt" fsm-state? fsm-event?))
 
 (provide (contract-out (struct effect:emit-event ([type symbol?] [payload any/c])))
-         (contract-out (struct effect:update-fsm ([from-state symbol?] [event symbol?])))
+         (contract-out (struct effect:update-fsm ([from-state fsm-state?] [event fsm-event?])))
          (contract-out (struct effect:dispatch-hook ([hook-point symbol?] [payload any/c])))
          (contract-out (struct effect:none ()))
          (contract-out (struct streaming-plan
