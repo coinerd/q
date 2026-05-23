@@ -196,7 +196,7 @@
      (define guard-arg (and art-path (path->string art-path)))
      (define guard-result
        (if guard-arg
-           (gsd-write-guard guard-arg (current-pinned-dir))
+           (gsd-write-guard guard-arg (or (current-pinned-dir) base-dir))
            (policy-decision #t #f '())))
      (match (policy-blocked? guard-result)
        [#t (make-error-result (format "Blocked: ~a" (policy-reason guard-result)))]
