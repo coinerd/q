@@ -119,7 +119,7 @@
     [(warn block) #t] ; warn/block handled by destructive checks
     [(allowlist)
      (define base (extract-base-command command))
-     (member base (current-allowed-commands))]
+     (and (member base (current-allowed-commands)) #t)]
     [else #t])) ; unknown policy defaults to allow
 
 ;; Destructive command patterns (SEC-03, #449)
@@ -265,7 +265,7 @@
          [(warn block) #t]
          [(allowlist)
           (define base (extract-base-command cmd))
-          (member base (current-allowed-commands))]
+          (and (member base (current-allowed-commands)) #t)]
          [else #t]))
      (cond
        [(not (policy-allows? command))
