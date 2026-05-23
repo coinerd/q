@@ -16,8 +16,8 @@
          directive-stop
          directive-yield
          (contract-out [directive-recurse? (-> any/c boolean?)]
-                       [directive-recurse-new-ctx (-> directive-recurse? list?)]
-                       [directive-recurse-new-counters (-> directive-recurse? hash?)]
+                       [directive-recurse-new-ctx (-> directive-recurse? any/c)]
+                       [directive-recurse-new-counters (-> directive-recurse? any/c)]
                        [directive-recurse-ws (-> directive-recurse? (or/c any/c #f))]
                        [directive-stop? (-> any/c boolean?)]
                        [directive-stop-result (-> directive-stop? any/c)]

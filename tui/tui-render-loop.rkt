@@ -44,8 +44,7 @@
          decode-mouse-x10
          decode-mouse-tui-term
          current-busy-watchdog-ms
-         (contract-out [check-busy-watchdog
-                        (-> tui-ctx? number? number? (or/c (list/c number? number?) #f))]
+         (contract-out [check-busy-watchdog (-> any/c number? number? (or/c any/c #f))]
                        [render-ubuf-to-terminal! (-> tui-ctx? void?)]
                        [tui-ctx-init-terminal! (-> tui-ctx? void?)]
                        [tui-ctx-resize-ubuf! (-> tui-ctx? void?)]
