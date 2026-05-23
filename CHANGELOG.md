@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.55.8 — 2026-05-23
+
+### Broad Suite Closure
+
+**P0 (directive/rpc/watchdog contract cluster):**
+- `runtime/iteration/directive.rkt`: widened `directive-recurse-new-ctx` and `directive-recurse-new-counters` return contracts from `list?`/`hash?` to `any/c` to match actual struct field types
+- `interfaces/rpc-mode.rkt`: widened `rate-limiter-check` return from `(or/c #f string?)` to `(or/c boolean? string?)` to allow `#t` returns
+- `tui/tui-render-loop.rkt`: widened `check-busy-watchdog` first arg from `tui-ctx?` to `any/c` and return from `(or/c (list/c number? number?) #f)` to `(or/c any/c #f)` to match actual `ui-state` returns
+
+**P1 (tool-call-id, UI widget, command parse, settings contracts):**
+- `util/tool-types.rkt`: widened `tool-call-name` return and `make-tool-call` 2nd arg from `string?` to `(or/c string? #f)` for LLM responses with missing tool names
+- `extensions/ui-surface.rkt`: widened widget callbacks return from `void?` to `any/c` to match fallback struct-copy returns
+- `tui/state-ui.rkt`: widened `get-widget-lines-above`/`get-widget-lines-below` return from `(listof string?)` to `(listof any/c)` for styled-line objects
+- `runtime/settings.rkt`: widened `make-minimal-settings` `#:provider` from `(or/c symbol? string? #f)` to `any/c` for proc-provider structs
+- `tests/tui/test-command-integration.rkt`: updated tests to handle `parsed-command` struct returns instead of bare symbols
+- `tests/test-self-hosting-deep.rkt`: updated version gate to accept 0.55.x series
+
+**P2 (examples/tooling):**
+- `examples/sdk/06-sessions.rkt`: resolved duplicate `make-in-memory-session-manager` import using `only-in` from `sdk-core.rkt`
+- `extensions/racket-tooling-helpers.rkt`: fixed multi-value return contracts — `run-raco`, `run-command`, `raco-fmt`, `raco-make`, `raco-test`, `raco-expand` now correctly declare `(values any/c any/c any/c)`; `find-form-end` declares `(values any/c any/c)`
+
 ## v0.55.7 — 2026-05-23
 
 ### Contract Cluster Recovery
