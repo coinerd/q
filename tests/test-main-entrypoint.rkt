@@ -10,9 +10,10 @@
          racket/system
          racket/port
          racket/string
+         racket/runtime-path
          (only-in "../interfaces/cli.rkt" parse-cli-args))
 
-(define q-bin "./bin/q")
+(define-runtime-path q-bin "../bin/q")
 
 (define (run-main . args)
   "Run q via bin/q wrapper as subprocess, return (values exit-code stdout stderr)"
