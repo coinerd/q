@@ -37,7 +37,7 @@
          extension-load-error-category
          classify-exception
          (contract-out
-          [discover-extensions (-> path-string? (listof path?))]
+          [discover-extensions (-> path-string? (listof extension?))]
           [load-extension!
            (->* (extension-registry? path-string?) (#:event-bus (or/c event-bus? #f)) void?)]
           [try-load-extension (-> path-string? (or/c any/c extension-load-error?))]
