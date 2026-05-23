@@ -32,9 +32,9 @@
                        ;; Status message callback (dialog-api)
                        [ui-set-status-message! (-> any/c string? void?)]
                        ;; Widget callbacks (widget-api)
-                       [ui-set-extension-widget! (-> any/c symbol? any/c any/c void?)]
-                       [ui-remove-extension-widget! (-> any/c symbol? any/c void?)]
-                       [ui-remove-all-extension-widgets! (-> any/c symbol? void?)]
+                       [ui-set-extension-widget! (-> any/c symbol? any/c any/c any/c)]
+                       [ui-remove-extension-widget! (-> any/c symbol? any/c any/c)]
+                       [ui-remove-all-extension-widgets! (-> any/c symbol? any/c)]
                        ;; Installation (called by TUI during init)
                        [install-ui-callbacks! (-> hash? void?)]
                        ;; Check if callbacks are installed
