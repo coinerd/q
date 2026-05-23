@@ -7,8 +7,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "../../extensions/gsd/session-state.rkt"
-         "../../extensions/gsd/runtime-state-types.rkt")
+         "../extensions/gsd/session-state.rkt"
+         "../extensions/gsd/runtime-state-types.rkt")
 
 (define (run-contract-tests)
   ;; ── make-gsd-context ──────────────────────────────────

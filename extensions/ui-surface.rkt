@@ -36,7 +36,7 @@
                        [ui-remove-extension-widget! (-> any/c symbol? any/c void?)]
                        [ui-remove-all-extension-widgets! (-> any/c symbol? void?)]
                        ;; Installation (called by TUI during init)
-                       [install-ui-callbacks! (-> ui-callback-registry? void?)]
+                       [install-ui-callbacks! (-> hash? void?)]
                        ;; Check if callbacks are installed
                        [ui-callbacks-installed? (-> boolean?)]))
 
