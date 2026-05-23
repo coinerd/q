@@ -42,7 +42,7 @@
                        [extract-last-assistant-text (-> list? any/c)]
                        [dequeue-all-steering! (-> any/c list?)]
                        [drain-injected-messages! (-> any/c any/c any/c list?)]
-                       [make-injected-collector! (-> any/c procedure?)]))
+                       [make-injected-collector! (-> any/c any/c)]))
 
 ;; Extract the target file path from a tool call's arguments.
 (define (extract-tool-target-path tc)

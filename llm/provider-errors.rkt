@@ -27,7 +27,7 @@
          provider-error-status-code
          q-llm-error?
          (contract-out [raise-provider-error (->* (string? symbol?) ((or/c exact-integer? #f)) any)]
-                       [classify-http-status (-> exact-integer? (or/c symbol? #f))]))
+                       [classify-http-status (-> (or/c exact-integer? #f) (or/c symbol? #f))]))
 
 ;; ============================================================
 ;; Struct
