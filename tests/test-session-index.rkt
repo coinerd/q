@@ -649,5 +649,25 @@
    (check-equal? (length branch) 6)
    (delete-directory/files dir)))
 
+;; Regression: append-to-leaf! must return the appended entry (not void)
+;; Bug: facade contract promised void? but implementation returns fixed-entry
+(test-case "append-to-leaf! returns entry, not void"
+  (define dir (make-temp-dir))
+  (define sp (session-path dir))
+  (define ip (index-path dir))
+  (append-entries! sp
+                    (list (make-test-message "sys1" #f 'system 'message)
+                          (make-test-message "user1" "sys1" 'user 'message)))
+  (define idx (build-index! sp ip))
+  ;; Now append a new entry
+  (define new-entry (make-test-message "app1" #f 'assistant 'message))
+  (define returned (append-to-leaf! idx new-entry))
+  ;; Must return a message struct, not void
+  (check-pred message? returned "append-to-leaf! should return the entry")
+  (check-equal? (message-id returned) "app1")
+  ;; Should have auto-linked parent to user1 (active leaf)
+  (check-not-false (message-parent-id returned))
+  (delete-directory/files dir #:must-exist? #f))
+
 ;; Run
 (run-tests test-session-index)
