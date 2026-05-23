@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.55.7 — 2026-05-23
+
+### Contract Cluster Recovery
+
+**P0 (context-assembly contract cluster):**
+- `runtime/context-assembly.rkt`: corrected `entry->context-message` contract to `(-> message? (or/c message? #f))` and imported `message?` from the correct module path
+- `runtime/context-assembly/serialization.rkt`: corrected `compute-tier-c-count` contract input to `exact-nonnegative-integer?`
+
+**P0 (extension loader contract cluster):**
+- `extensions/loader.rkt`: corrected `discover-extensions` contract return from `(listof path?)` to `(listof extension?)` to match actual loaded results
+
+**P0 (iteration + provider contract clusters):**
+- `runtime/iteration/tool-turn-bridge.rkt`: corrected `make-injected-collector!` contract range from `procedure?` to `any/c` (function returns a mutable box collector)
+- `llm/provider-errors.rkt`: widened `classify-http-status` input contract to `(or/c exact-integer? #f)` to handle status parse failures safely
+
+**Verification:**
+- `raco test tests/test-compaction-edge-cases.rkt tests/test-context-policy.rkt` → 50/50 pass
+- `raco test tests/test-extension-loader.rkt tests/test-extensions.rkt` → 52/52 pass
+- `raco test tests/test-message-inject.rkt tests/test-provider.rkt` → 43/43 pass
+
 ## v0.55.6 — 2026-05-23
 
 ### Full-Suite Recovery
