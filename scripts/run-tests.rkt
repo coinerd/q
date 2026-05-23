@@ -47,6 +47,11 @@
          run-single-file
          run-all-files
          collect-test-files
+         ;; Isolation helpers
+         mutating-file?
+         mutating-patterns
+         repo-surface-files
+         restore-repo-surfaces!
          ;; Output
          print-summary
          save-failure-logs
@@ -108,13 +113,16 @@
 
 ;; Tests that mutate repo files or run self-healing linters should not run in
 ;; parallel with other tests, otherwise clean-tree assumptions can race.
+;; Also includes tests that load the full extension system (which triggers
+;; quarantine.rkt lock-file operations on the shared ~/.q/quarantine path).
 (define mutating-patterns
   '("ci-local" "pre-commit"
                "check-deps"
                "sync-version"
                "sync-readme"
                "bump-version"
-               "metrics-readme"))
+               "metrics-readme"
+               "self-hosting"))
 
 (define (mutating-file? f)
   (define base (file-name-from-path f))
@@ -589,6 +597,23 @@
   cleaned)
 
 ;; ---------------------------------------------------------------------------
+;; Post-serial guard: restore repo surfaces after mutation-sensitive tests
+;; ---------------------------------------------------------------------------
+
+;; Key repo files that mutation-sensitive tests may modify (check-deps writes
+;; info.rkt, pre-commit version-drift test writes info.rkt, etc.).  We restore
+;; them from git before starting the parallel batch so parallel tests see a
+;; clean tree.
+(define repo-surface-files '("info.rkt" "README.md" "CHANGELOG.md"))
+
+(define (restore-repo-surfaces! root)
+  (for ([surface (in-list repo-surface-files)])
+    (define path (build-path root surface))
+    (when (file-exists? path)
+      (define git-restore (format "cd ~a && git checkout -- ~a 2>/dev/null" root surface))
+      (system git-restore))))
+
+;; ---------------------------------------------------------------------------
 ;; Main entry point
 ;; ---------------------------------------------------------------------------
 
@@ -642,6 +667,14 @@
     (if (pair? serial-files)
         (run-all-files serial-files 1 timeout-ms)
         '()))
+
+  ;; Post-serial guard: restore repo surfaces that mutation-sensitive tests
+  ;; may have modified (info.rkt, README.md).  This prevents contamination
+  ;; of the parallel batch (e.g., ci-local detecting info.rkt drift from
+  ;; a pre-commit/check-deps test run in the same serial segment).
+  (when (pair? serial-files)
+    (restore-repo-surfaces! base-dir))
+
   (define parallel-results
     (if (pair? parallel-files)
         (run-all-files parallel-files jobs timeout-ms)

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.55.10 — 2026-05-23
+
+### Parallel Test Isolation Fix
+
+- added `self-hosting` to `mutating-patterns` in `scripts/run-tests.rkt` — serializes tests that load the full extension system (triggering quarantine.rkt lock-file ops on shared `~/.q/quarantine/`)
+- added `restore-repo-surfaces!` post-serial guard — runs `git checkout -- info.rkt README.md CHANGELOG.md` after mutation-sensitive serial segment to prevent parallel-batch contamination
+- exported `mutating-file?`, `mutating-patterns`, `repo-surface-files`, `restore-repo-surfaces!` for testability
+- added 5 regression tests to `test-run-tests.rkt` covering the new serial/isolation behavior
+
+**Root cause:** `test-self-hosting-workflow.rkt` loads extensions via `loader.rkt` → `quarantine.rkt`, which acquires `with-quarantine-lock` on `~/.q/quarantine/.state.json.lock`. When running in parallel with itself or other quarantine-touching tests, the exclusive lock creation races. Separately, `test-check-deps.rkt` and `test-pre-commit.rkt` mutate `info.rkt` in-place with `dynamic-wind` restore, but the restore can race with parallel tests checking version sync.
+
+**Verification:**
+- `racket scripts/run-tests.rkt` × 3 consecutive runs → 622/622 files, 8146/8146 tests each
+- `racket scripts/lint-all.rkt` → 19/19 pass
+- `info.rkt` verified clean after all runs (post-serial restore guard working)
+
 ## v0.55.9 — 2026-05-23
 
 ### Broad-Gate Truthful Closure Remediation

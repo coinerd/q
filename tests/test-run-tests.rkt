@@ -291,3 +291,38 @@
   (define collect (runner-ref 'collect-test-files))
   (define files (collect 'all #:extra-files '("tests/test-version.rkt")))
   (check-equal? files '("tests/test-version.rkt")))
+
+;; ---------------------------------------------------------------------------
+;; v0.55.10 regression: mutating-patterns includes self-hosting + restore guard
+;; ---------------------------------------------------------------------------
+
+(test-case "mutating-patterns: includes self-hosting for lock isolation"
+  (define patterns (runner-ref 'mutating-patterns))
+  (check-not-false (member "self-hosting" patterns)
+                   "self-hosting must be in mutating-patterns to serialize quarantine-lock tests"))
+
+(test-case "mutating-file?: detects self-hosting workflow test"
+  (define m? (runner-ref 'mutating-file?))
+  (check-true (m? "tests/test-self-hosting-workflow.rkt"))
+  (check-true (m? "tests/test-self-hosting-deep.rkt"))
+  ;; Non-matching files should not be flagged
+  (check-false (m? "tests/test-version.rkt"))
+  (check-false (m? "tests/test-stream.rkt")))
+
+(test-case "mutating-file?: detects all mutation-sensitive patterns"
+  (define m? (runner-ref 'mutating-file?))
+  (define expected-mutating
+    (list "tests/test-ci-local.rkt"
+          "tests/test-pre-commit.rkt"
+          "tests/test-check-deps.rkt"
+          "tests/test-sync-version.rkt"
+          "tests/test-sync-readme-status.rkt"
+          "tests/test-bump-version.rkt"
+          "tests/test-self-hosting-workflow.rkt"))
+  (for ([p (in-list expected-mutating)])
+    (check-true (m? p) (format "~a should be detected as mutating" p))))
+
+(test-case "repo-surface-files: includes info.rkt"
+  (define surfaces (runner-ref 'repo-surface-files))
+  (check-not-false (member "info.rkt" surfaces))
+  (check-not-false (member "README.md" surfaces)))
