@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.55.1 — 2026-05-23
+
+### Contract Precision Hotfix
+
+Fix regressions introduced by v0.55.0 contract tightening:
+
+**P0 fixes:**
+- Revert `install-ui-callbacks!` contract to `hash?` (TUI startup crash)
+- Fix broken require paths in `test-gsd-contract-precision.rkt`
+- Widen `set-custom-header/footer` to accept styled-line lists
+
+**P1 fixes:**
+- `gsd-write-guard`: return type `policy-decision?` (was `gsd-command-result?`)
+- `tree-enter-node`: 3rd arg and return `(set/c string?)`
+- `make-tree-node`: role accepts `(or/c string? symbol?)`
+- `would-abandon-branch?`: 2nd arg `(or/c string? #f)`
+
 ## v0.55.0 — 2026-05-22
 
 ### Contract Precision Series
