@@ -61,7 +61,7 @@
           ;; Rate limiting
           [make-rpc-rate-limiter
            (->* [] [#:max-requests-per-second exact-positive-integer?] rpc-rate-limiter?)]
-          [rate-limiter-check (-> rpc-rate-limiter? symbol? (or/c #f string?))]
+          [rate-limiter-check (-> rpc-rate-limiter? symbol? (or/c boolean? string?))]
           ;; RPC loop
           [run-rpc-loop
            (->* (hash?)
