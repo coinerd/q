@@ -31,6 +31,7 @@
          "../util/protocol-types.rkt"
          "../agent/event-bus.rkt"
          (prefix-in commands: "../tui/commands.rkt")
+         (only-in "../tui/commands.rkt" cmd-ctx?)
          (only-in "../tui/command-parse.rkt" parsed-command?)
          "../tui/keymap.rkt"
          "keybindings/binding-resolver.rkt"
@@ -88,12 +89,12 @@
                                           #:session-factory-runner any/c)
                              tui-ctx?)]
                        [mark-dirty! (-> tui-ctx? void?)]
-                       [handle-key (-> tui-ctx? any/c (values tui-ctx? any/c))]
-                       [handle-mouse (-> tui-ctx? any/c tui-ctx?)]
+                       [handle-key (-> tui-ctx? any/c any/c)]
+                       [handle-mouse (-> tui-ctx? any/c any/c)]
                        [selection-text (-> tui-ctx? ui-state? (or/c string? #f))]
                        [process-slash-command
-                        (->* (tui-ctx? (or/c string? symbol? parsed-command?)) (string?) tui-ctx?)]
-                       [tui-ctx->cmd-ctx (-> tui-ctx? hash?)]
+                        (->* (tui-ctx? (or/c string? symbol? parsed-command?)) (string?) (or/c 'continue 'quit))]
+                       [tui-ctx->cmd-ctx (-> tui-ctx? cmd-ctx?)]
                        [reload-keymap! (-> void?)]
                        [current-keybindings-path
                         (->* () ((or/c path-string? #f)) (or/c path-string? #f))]
