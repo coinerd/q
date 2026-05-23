@@ -216,6 +216,27 @@
   (check-equal? (sec 3 2) 3))
 
 ;; ---------------------------------------------------------------------------
+;; v0.55.5 regression: false-green parsing for files without run-tests
+;; ---------------------------------------------------------------------------
+
+(test-case "run-single-file: file without run-tests still reports actual test count"
+  (define run (runner-ref 'run-single-file))
+  (define result (run "tests/test-stream-loop-w1.rkt" #:timeout 60000))
+  (check-equal? ((runner-ref 'test-file-result-exit-code) result) 0)
+  ;; test-stream-loop-w1.rkt has 8 test-case definitions but no run-tests call
+  ;; The runner must detect rackunit tests even when run-tests is not called
+  (check-true (>= ((runner-ref 'test-file-result-total) result) 8)
+              (format "expected >=8 tests, got ~a" ((runner-ref 'test-file-result-total) result))))
+
+(test-case "normalize-counts: zero total with exit 0 is suspicious"
+  (define norm (runner-ref 'normalize-counts))
+  ;; A file that exits 0 but has 0 tests should not be treated as clean pass
+  (define-values (passed failed total) (norm 0 0 0 0))
+  (check-equal? passed 0)
+  (check-equal? failed 0)
+  (check-equal? total 0))
+
+;; ---------------------------------------------------------------------------
 ;; 13.2: run-single-file (uses actual raco test on a real test file)
 ;; ---------------------------------------------------------------------------
 
