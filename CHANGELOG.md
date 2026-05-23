@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.55.4 — 2026-05-23
+
+### Hotfix — effect:update-fsm Contract Alignment
+
+**P0 (runtime contract violation on /plan and normal prompt):**
+- `effect:update-fsm` contract in `agent/effect-types.rkt`: `from-state` tightened from `symbol?` to `fsm-state?`, `event` tightened from `symbol?` to `fsm-event?` to match actual call-site usage in `agent/loop-phases.rkt`
+- Import `fsm-state?` and `fsm-event?` from `util/fsm.rkt`
+
+**Tests:** Updated `tests/test-effect-types.rkt` to construct `effect:update-fsm` with FSM structs. Added `tests/test-effect-update-fsm-contract.rkt` with 3 regression tests covering `phase-emit-start`, `phase-build-context`, and direct struct construction.
+
 ## v0.55.3 — 2026-05-23
 
 ### Hotfix — Plan No-op + Append-to-Leaf Contract
