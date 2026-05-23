@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.55.3 — 2026-05-23
+
+### Hotfix — Plan No-op + Append-to-Leaf Contract
+
+**P0 (append-to-leaf! contract crash):**
+- `append-to-leaf!` facade in `runtime/session-index.rkt`: widened return contract from `void?` to `any/c` to match mutations implementation returning the updated index
+
+**P1 (/plan no-op hardening):**
+- `execute-extension-command` submit path: explicit error when `session-runner` is `#f` instead of silent no-op
+- `execute-extension-command` new-session path: explicit error when no factory or runner available
+- Export `execute-extension-command` for testability
+
+**Tests:** +1 regression test (append-to-leaf! contract), +1 regression test (no-runner error)
+
 ## v0.55.2 — 2026-05-23
 
 ### W10 Keybinding Contract Fixes
