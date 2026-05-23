@@ -40,7 +40,8 @@
                   simple-summary-text
                   simple-summary-count
                   extract-message-text
-                  truncate-string))
+                  truncate-string)
+         (only-in "../util/message.rkt" message?))
 
 ;; Explicit re-exports from sub-modules (S1-F4)
 ;; Struct: context-assembly-config
@@ -167,7 +168,7 @@
            (-> session-index?
                #:max-tokens exact-nonnegative-integer?
                (values list? exact-nonnegative-integer?))]
-          [entry->context-message (-> (or/c hash? #f) (or/c list? #f))]
+          [entry->context-message (-> message? (or/c message? #f))]
           [load-agents-context (-> (or/c path? string?) string?)]
           [build-system-preamble (-> (or/c path? string?) string?)]
           [truncate-messages-to-budget (-> list? exact-nonnegative-integer? list?)])
