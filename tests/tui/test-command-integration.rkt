@@ -44,11 +44,16 @@
 ;; Command parsing
 ;; ============================================================
 
+(define (command-name result)
+  (if (parsed-command? result)
+      (parsed-command-canonical-name result)
+      result))
+
 (test-case "cmd-parse: parse-command-name extracts command from slash prefix"
-  (check-equal? (parse-command-name "/help") 'help)
-  (check-equal? (parse-command-name "/clear") 'clear)
-  (check-equal? (parse-command-name "/quit") 'quit)
-  (check-equal? (parse-command-name "/unknown-xyz") 'unknown))
+  (check-equal? (command-name (parse-command-name "/help")) 'help)
+  (check-equal? (command-name (parse-command-name "/clear")) 'clear)
+  (check-equal? (command-name (parse-command-name "/quit")) 'quit)
+  (check-equal? (command-name (parse-command-name "/unknown-xyz")) 'unknown))
 
 (test-case "cmd-parse: parse-command-name handles edge cases"
   ;; Single "/" returns 'unknown (has slash but no command)
@@ -197,11 +202,11 @@
 
 (test-case "cmd-integ: /retry parses from /retry text"
   (define result (parse-command-name "/retry"))
-  (check-equal? result 'retry))
+  (check-equal? (command-name result) 'retry))
 
 (test-case "cmd-integ: /r parses as retry alias"
   (define result (parse-command-name "/r"))
-  (check-equal? result 'retry))
+  (check-equal? (command-name result) 'retry))
 
 (test-case "cmd-integ: /retry with no last prompt shows error"
   (define cctx (make-test-cctx))

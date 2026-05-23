@@ -195,8 +195,9 @@
   (define content (file->string ver-path))
   (check-true (or (string-contains? content "0.20")
                   (string-contains? content "0.21")
-                  (string-contains? content "0.22"))
-              "version must be in 0.20.x/0.21.x/0.22.x series"))
+                  (string-contains? content "0.22")
+                  (string-contains? content "0.55"))
+              "version must be in 0.20.x/0.21.x/0.22.x/0.55.x series"))
 
 ;; ============================================================
 ;; Deep Test 10: Benchmark suite infrastructure
