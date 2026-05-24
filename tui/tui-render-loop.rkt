@@ -36,7 +36,9 @@
          (only-in "../runtime/session-lifecycle.rkt" write-crash-log!)
          "../tui/tree-view.rkt"
          ;; W17: handle-user-submit! extracted to submit-handler.rkt
-         "submit-handler.rkt")
+         "submit-handler.rkt"
+         ;; W18: process-tui-message! extracted to message-dispatch.rkt
+         "message-dispatch.rkt")
 
 (define (tui-output-port)
   (or (guarded-real-output-port) (current-output-port)))
@@ -329,56 +331,11 @@
       (define msg (next-message ctx #:timeout 0.05))
 
       (when msg
-        (case (car msg)
-          ;; Key press: dispatch to handler
-          [(key)
-           (define keycode (cadr msg))
-           ;; G1.1: Intercept tree-browser overlay keys before normal handling
-           (define tree-result (handle-tree-overlay-key ctx keycode))
-           (cond
-             [(eq? tree-result 'handled) (void)]
-             [else
-              (define result (handle-key ctx keycode))
-              (cond
-                [(eq? result 'quit) (set-box! (tui-ctx-running-box ctx) #f)]
-                [(and (list? result) (eq? (car result) 'submit))
-                 (define raw-text (cadr result))
-                 ;; G3.3: Expand !! inline bash prefix
-                 (define text (expand-inline-bash raw-text (unbox (tui-ctx-last-prompt-box ctx))))
-                 ;; Store prompt for /retry (#1378)
-                 (set-box! (tui-ctx-last-prompt-box ctx) text)
-                 (handle-user-submit! ctx text)]
-                [(and (list? result) (eq? (car result) 'command))
-                 (define cmd (cadr result))
-                 (define raw-text
-                   (if (>= (length result) 3)
-                       (caddr result)
-                       ""))
-                 (process-slash-command ctx cmd raw-text)]
-                [else (void)])])]
-          ;; Resize event: resize ubuf and mark dirty
-          [(resize)
-           (define cols (cadr msg))
-           (define rows (caddr msg))
-           (tui-ctx-resize-ubuf! ctx)
-           (tui-screen-size-cache-reset!)
-           (mark-dirty! ctx)]
-
-          ;; Redraw command: mark dirty
-          [(redraw) (mark-dirty! ctx)]
-
-          ;; Paste event: insert as single undo entry
-          [(paste)
-           (define text (cadr msg))
-           (define inp (unbox (tui-ctx-input-state-box ctx)))
-           (set-box! (tui-ctx-input-state-box ctx) (input-insert-string inp text))
-           (mark-dirty! ctx)]
-
-          ;; Mouse event: dispatch to handler
-          [(mouse) (handle-mouse ctx (cdr msg))]
-
-          ;; Unknown message type - ignore
-          [else (void)]))
+        (define result (process-tui-message! ctx msg))
+        (when (eq? result 'resize)
+          (tui-ctx-resize-ubuf! ctx)
+          (tui-screen-size-cache-reset!)
+          (mark-dirty! ctx)))
 
       (when (unbox (tui-ctx-running-box ctx))
         (loop)))))
