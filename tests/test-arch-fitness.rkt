@@ -110,10 +110,10 @@
         "Runtime boundary exceptions (~a) exceed policy maximum (~a). Update dependency-policy.rktd or refactor."
         (length runtime-exceptions)
         max-runtime-exc))
-      ;; At least 5 of the known exceptions should still be importing
+      ;; At least 3 of the known exceptions should still be importing
       (check-true
-       (>= (length still-importing) 5)
-       (format "Too few known exceptions still importing from tools/extensions: ~a (expected >= 5)"
+       (>= (length still-importing) 3)
+       (format "Too few known exceptions still importing from tools/extensions: ~a (expected >= 3)"
                still-importing))
       (check-true (<= (length still-importing) max-runtime-exc)
                   (format "More than ~a runtime files importing from tools/extensions: ~a"

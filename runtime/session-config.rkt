@@ -26,9 +26,9 @@
          racket/contract
          (only-in "../runtime/working-set.rkt" working-set?)
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "../tools/registry.rkt" tool-registry?)
+         (only-in "layer-adapters.rkt" tool-registry?)
          (only-in "../agent/event-bus.rkt" event-bus?)
-         (only-in "../extensions/api.rkt" extension-registry?)
+         (only-in "layer-adapters.rkt" extension-registry?)
          (only-in "../runtime/model-registry.rkt" model-registry?)
          (only-in "../runtime/trace-logger.rkt" trace-logger?)
          (only-in "../runtime/settings.rkt" q-settings?)

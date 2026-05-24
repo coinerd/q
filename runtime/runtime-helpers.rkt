@@ -14,7 +14,7 @@
 (require racket/contract
          (only-in "../agent/event-emitter.rkt" emit-session-event!)
          (only-in "../agent/event-bus.rkt" make-event-bus)
-         (only-in "../extensions/hooks.rkt" dispatch-hooks)
+         (only-in "layer-adapters.rkt" dispatch-hooks)
          (only-in "../util/hook-types.rkt" hook-result-payload))
 
 (provide emit-session-event!

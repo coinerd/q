@@ -35,7 +35,7 @@
          (only-in "../util/event-types.rkt" injection-event-topic)
          "../runtime/compactor.rkt"
          (only-in "../util/extensions.rkt" extension-name)
-         (only-in "../extensions/api.rkt" list-extensions)
+         (only-in "layer-adapters.rkt" list-extensions)
          ;; TR BOUNDARY: event-payloads.rkt is #lang typed/racket.
          (only-in "../util/event-payloads.rkt"
                   session-start-payload
