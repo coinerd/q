@@ -15,7 +15,8 @@
 
 (require rackunit
          rackunit/text-ui
-         "helpers/arch-utils.rkt")
+         "helpers/arch-utils.rkt"
+         racket/date)
 
 ;; Load policy from single source of truth
 (define policy-path (build-path q-dir "docs" "architecture" "dependency-policy.rktd"))
@@ -41,6 +42,7 @@
       (define runtime-files (rkt-files-in-recursive "runtime"))
       (define runtime-exc (policy-ref 'known-exceptions 'runtime))
       ;; Build set of known exception RELATIVE paths (e.g. "runtime/iteration/loop-config.rkt")
+      ;; Each entry is either (filename . "rationale") or (filename (rationale . "...") ...)
       (define known-exceptions
         (for/fold ([acc (set)]) ([entry (in-list runtime-exc)])
           (define name
@@ -81,6 +83,50 @@
       (check-equal? actual-violations
                     '()
                     (format "TUI modules importing from forbidden layers: ~a" actual-violations)))
+
+    (test-case "All boundary exceptions have required metadata (owner, revisit-by)"
+      ;; W25 blocking gate: every known exception must have owner and revisit-by fields.
+      ;; Undocumented exceptions (missing metadata) cause test failure.
+      (define layers-with-exceptions '(runtime extensions))
+      (define missing-metadata
+        (for*/list ([layer (in-list layers-with-exceptions)]
+                    [entry (in-list (policy-ref 'known-exceptions layer))])
+          (define name (car entry))
+          (define fields (cdr entry))
+          (define (has-field? f)
+            (and (pair? fields) (assoc f fields)))
+          (cond
+            [(not (has-field? 'owner)) (format "~a/~a: missing owner" layer name)]
+            [(not (has-field? 'revisit-by)) (format "~a/~a: missing revisit-by" layer name)]
+            [else #f])))
+      (define actual-missing (filter identity missing-metadata))
+      (check-equal? actual-missing
+                    '()
+                    (format "Boundary exceptions missing metadata: ~a" actual-missing)))
+
+    (test-case "No boundary exception has expired revisit-by date"
+      ;; W25 blocking gate: expired revisit-by dates must be addressed.
+      ;; Uses simple YYYY-MM-DD string comparison (ISO format sorts lexicographically).
+      (define layers-with-exceptions '(runtime extensions))
+      (define today-str
+        (parameterize ([date-display-format 'iso-8601])
+          (date->string (seconds->date (current-seconds)))))
+      (define expired
+        (for*/list ([layer (in-list layers-with-exceptions)]
+                    [entry (in-list (policy-ref 'known-exceptions layer))])
+          (define name (car entry))
+          (define fields (cdr entry))
+          (define revisit (and (pair? fields) (assoc 'revisit-by fields)))
+          (if revisit
+              (let ([date-str (cdr revisit)])
+                (if (string<? date-str today-str)
+                    (format "~a/~a: revisit-by ~a has expired" layer name date-str)
+                    #f))
+              #f)))
+      (define actual-expired (filter identity expired))
+      (check-equal? actual-expired
+                    '()
+                    (format "Expired boundary exceptions need reassessment: ~a" actual-expired)))
 
     (test-case "Recursive boundary scan includes subdirectory modules"
       ;; Prove that rkt-files-in-recursive catches files in nested directories

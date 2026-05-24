@@ -25,29 +25,72 @@
               (forbidden-from . (runtime tools extensions))
               (rationale . "LLM providers are leaf modules with no upward imports")))
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
- ;; Format: ((filename . rationale) ...)
+ ;; Format: ((filename (rationale . "...") (owner . "...") (revisit-by . "YYYY-MM-DD")) ...)
+ ;; Owner: responsible module/component. Revisit-by: date to reassess necessity.
+ ;; Gate test: undocumented exceptions (missing owner/revisit-by) will FAIL.
  (known-exceptions
   (runtime . ((layer-adapters.rkt
-               . "explicit adapter facade routing tool/extension deps behind contained boundary")
-              (iteration/loop-state.rkt . "typed require from extensions/api.rkt for opaque ExtRegistry")
-              (agent-session.rkt . "list-extensions via adapter (re-exports extension listing)")
+               (rationale . "explicit adapter facade routing tool/extension deps behind contained boundary")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))
+              (iteration/loop-state.rkt
+               (rationale . "typed require from extensions/api.rkt for opaque ExtRegistry")
+               (owner . "iteration")
+               (revisit-by . "2026-08-01"))
+              (agent-session.rkt
+               (rationale . "list-extensions via adapter (re-exports extension listing)")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))
               (session-lifecycle.rkt
-               . "injection-event-topic import (extracted from agent-session/iteration)")
-              (runtime-helpers.rkt . "hook dispatch for session events (via adapter)")
-              (tool-coordinator.rkt . "tool execution orchestration (all imports via adapter)")
-              (turn-orchestrator.rkt . "context assembly + provider turn (imports via adapter)")
-              (session-config.rkt . "central typed config (imports via adapter)")
-              (package.rkt . "package audit reads extension manifests")
-              (extension-catalog.rkt . "extension loading/discovery")
+               (rationale . "injection-event-topic import (extracted from agent-session/iteration)")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))
+              (runtime-helpers.rkt
+               (rationale . "hook dispatch for session events (via adapter)")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))
+              (tool-coordinator.rkt
+               (rationale . "tool execution orchestration (all imports via adapter)")
+               (owner . "tools")
+               (revisit-by . "2026-07-01"))
+              (turn-orchestrator.rkt
+               (rationale . "context assembly + provider turn (imports via adapter)")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))
+              (session-config.rkt
+               (rationale . "central typed config (imports via adapter)")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))
+              (package.rkt
+               (rationale . "package audit reads extension manifests")
+               (owner . "extensions")
+               (revisit-by . "2026-08-01"))
+              (extension-catalog.rkt
+               (rationale . "extension loading/discovery")
+               (owner . "extensions")
+               (revisit-by . "2026-08-01"))
               (session-switch.rkt
-               . "dynamic-require to extensions for lazy loading (avoids circular dependency)")))
+               (rationale . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
+               (owner . "runtime")
+               (revisit-by . "2026-07-01"))))
   (extensions
    .
-   ((dialog-api.rkt . "TUI dialog interface")
-    (ui-surface.rkt . "TUI UI surface interface")
-    (context.rkt . "imports runtime/session-types.rkt for context assembly (bidirectional — fragile)")
+   ((dialog-api.rkt
+     (rationale . "TUI dialog interface")
+     (owner . "tui")
+     (revisit-by . "2026-07-01"))
+    (ui-surface.rkt
+     (rationale . "TUI UI surface interface")
+     (owner . "tui")
+     (revisit-by . "2026-07-01"))
+    (context.rkt
+     (rationale . "imports runtime/session-types.rkt for context assembly (bidirectional — fragile)")
+     (owner . "extensions")
+     (revisit-by . "2026-07-01"))
     (ext-package-manager.rkt
-     . "imports runtime/ for package lifecycle management (bidirectional — fragile)"))))
+     (rationale . "imports runtime/ for package lifecycle management (bidirectional — fragile)")
+     (owner . "extensions")
+     (revisit-by . "2026-07-01")))))
  ;; Module size configuration
  (module-size (max-lines . 900) (known-large . ()))
  ;; Complexity budgets (informational in v0.22.8, enforced in v0.23.0)
