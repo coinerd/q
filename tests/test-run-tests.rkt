@@ -398,3 +398,54 @@
                            (displayln "(displayln \"hello\")" out)))
   (check-false (has-tests? tmp))
   (delete-file tmp))
+
+;; ---- 14.x: Architecture shard suite classification ----
+
+(test-case "arch-file?: matches architecture boundary/fitness tests"
+  (define arch-file? (runner-ref 'arch-file?))
+  (check-true (arch-file? "tests/test-arch-boundaries.rkt"))
+  (check-true (arch-file? "tests/test-arch-fitness.rkt"))
+  (check-true (arch-file? "tests/test-hotspot-report.rkt"))
+  (check-true (arch-file? "tests/test-gsd-global-fitness.rkt"))
+  (check-false (arch-file? "tests/test-event-bus.rkt"))
+  (check-false (arch-file? "tests/test-tool-registry.rkt")))
+
+(test-case "runtime-file?: matches runtime layer tests"
+  (define runtime-file? (runner-ref 'runtime-file?))
+  (check-true (runtime-file? "tests/test-session-lifecycle-pure.rkt"))
+  (check-true (runtime-file? "tests/test-iteration-pure.rkt"))
+  (check-true (runtime-file? "tests/test-tool-coordinator-pure.rkt"))
+  (check-true (runtime-file? "tests/test-compaction-edge-cases.rkt"))
+  (check-true (runtime-file? "tests/test-turn-model.rkt"))
+  (check-false (runtime-file? "tests/test-event-bus.rkt"))
+  (check-false (runtime-file? "tests/test-tool-registry.rkt")))
+
+(test-case "extensions-file?: matches extension layer tests"
+  (define ext-file? (runner-ref 'extensions-file?))
+  (check-true (ext-file? "tests/test-define-extension.rkt"))
+  (check-true (ext-file? "tests/test-gsd-command-dispatch.rkt"))
+  (check-true (ext-file? "tests/extensions/test-gsd-state-machine.rkt"))
+  (check-true (ext-file? "tests/test-hook-dispatch-transitions.rkt"))
+  (check-false (ext-file? "tests/test-event-bus.rkt"))
+  (check-false (ext-file? "tests/test-session-lifecycle-pure.rkt")))
+
+(test-case "collect-test-files: arch suite returns only arch files"
+  (define collect (runner-ref 'collect-test-files))
+  (define arch-files (collect 'arch))
+  (check-true (> (length arch-files) 0))
+  (for ([f (in-list arch-files)])
+    (check-not-false (or (string-contains? f "arch-")
+                         (string-contains? f "boundary")
+                         (string-contains? f "fitness")
+                         (string-contains? f "hotspot"))
+                     (format "arch suite included non-arch file: ~a" f))))
+
+(test-case "collect-test-files: runtime suite non-empty"
+  (define collect (runner-ref 'collect-test-files))
+  (define rt-files (collect 'runtime))
+  (check-true (> (length rt-files) 0)))
+
+(test-case "collect-test-files: extensions suite non-empty"
+  (define collect (runner-ref 'collect-test-files))
+  (define ext-files (collect 'extensions))
+  (check-true (> (length ext-files) 0)))
