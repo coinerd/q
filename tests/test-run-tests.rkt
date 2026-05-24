@@ -369,6 +369,25 @@
   (check-false (has-tests? tmp))
   (delete-file tmp))
 
+(test-case "parse-args: --repeat N sets repeat count"
+  (define parse (runner-ref 'parse-args))
+  (define-values (jobs seq? timeout strict? suite extra repeat) (parse '("--repeat" "3")))
+  (check-equal? repeat 3))
+
+(test-case "parse-args: --repeat defaults to 1"
+  (define parse (runner-ref 'parse-args))
+  (define-values (jobs seq? timeout strict? suite extra repeat) (parse '()))
+  (check-equal? repeat 1))
+
+(test-case "parse-args: --repeat with --suite smoke"
+  (define parse (runner-ref 'parse-args))
+  (define-values (jobs seq? timeout strict? suite extra repeat)
+    (parse '("--suite" "smoke" "--repeat" "2")))
+  (check-equal? suite 'smoke)
+  (check-equal? repeat 2))
+
+;; ---- end of file ----
+
 (test-case "file-has-rackunit-tests?: returns #f for file with no tests"
   (define has-tests? (runner-ref 'file-has-rackunit-tests?))
   (define tmp (make-temporary-file "false-green-notest-~a.rkt"))
