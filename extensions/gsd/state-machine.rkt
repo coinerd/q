@@ -51,8 +51,13 @@
          ok-to
          err?
          err-reason
-         ;; Data constants (plain)
-         GSD-STATES
+         ;; Wave gate
+         gsd-wave-gate-counter
+         gsd-wave-gate-interval
+         gsd-wave-gate-increment!)
+
+;; Data constants (plain)
+(provide GSD-STATES
          TRANSITIONS
          TRANSITIONS-FLAT
          ;; Functions (contracted)
@@ -82,6 +87,8 @@
                        [gsm-mark-wave-complete! (-> exact-nonnegative-integer? void?)]
                        [gsm-wave-complete? (-> exact-nonnegative-integer? boolean?)]
                        [gsm-next-pending-wave (-> (or/c exact-nonnegative-integer? #f))]
+                       [gsm-clear-wave-gate! (-> void?)]
+                       [gsd-wave-gate-blocked? (-> boolean?)]
                        [gsd-invariants-hold? (-> (values boolean? (or/c string? #f)))]))
 
 ;; ============================================================
@@ -331,6 +338,25 @@
   (for/first ([i (in-range tw)]
               #:when (not (set-member? cw i)))
     i))
+
+;; ============================================================
+;; Wave gate (budget enforcement)
+;; ============================================================
+
+;; Tracks consecutive waves since last gate clear.
+;; Stored in a parameter for simplicity — single-threaded per session.
+(define gsd-wave-gate-counter (make-parameter 0))
+(define gsd-wave-gate-interval (make-parameter 5))
+
+(define (gsd-wave-gate-blocked?)
+  (>= (gsd-wave-gate-counter) (gsd-wave-gate-interval)))
+
+(define (gsm-clear-wave-gate!)
+  (gsd-wave-gate-counter 0))
+
+;; Incremented by wave-start! — called from wave-executor
+(define (gsd-wave-gate-increment!)
+  (gsd-wave-gate-counter (add1 (gsd-wave-gate-counter))))
 
 ;; ============================================================
 ;; State invariants (F3 fix: runtime invariant checks)

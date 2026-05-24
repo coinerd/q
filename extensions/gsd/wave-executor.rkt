@@ -37,7 +37,12 @@
          ;; Exposed for testing
          wave-executor-statuses
          wave-executor-plan
-         compute-next-wave-statuses)
+         compute-next-wave-statuses
+         ;; Wave gate
+         wave-gate-interval
+         wave-gate-counter
+         wave-gate-blocked?
+         wave-gate-clear!)
 
 ;; ============================================================
 ;; Wave status struct
@@ -48,6 +53,12 @@
 ;; ============================================================
 ;; Wave executor (mutable box wrapping plan + statuses)
 ;; ============================================================
+
+;; Wave gate interval: max consecutive waves without broad-gate check
+(define wave-gate-interval (make-parameter 5))
+
+;; Wave gate state: tracks consecutive waves since last gate clear
+(define wave-gate-counter (make-parameter 0))
 
 (struct wave-executor (plan statuses-box) #:transparent)
 
@@ -111,7 +122,18 @@
   (define new-statuses (compute-next-wave-statuses statuses idx update-fn))
   (set-executor-statuses! exec new-statuses))
 
+(define (wave-gate-blocked?)
+  (>= (wave-gate-counter) (wave-gate-interval)))
+
+(define (wave-gate-clear!)
+  (wave-gate-counter 0))
+
 (define (wave-start! exec idx)
+  (when (wave-gate-blocked?)
+    (error 'wave-start!
+           "wave gate blocked: ~a consecutive waves without broad-gate. Clear with wave-gate-clear!"
+           (wave-gate-counter)))
+  (wave-gate-counter (add1 (wave-gate-counter)))
   (update-status!
    exec
    idx
