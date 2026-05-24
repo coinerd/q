@@ -118,7 +118,7 @@
      (match (provider-error? exn)
        [#t
         (define cat (provider-error-category exn))
-        (memq cat '(rate-limit timeout server-error network))]
+        (memq cat '(rate-limit timeout server network))]
        [_
         ;; String fallback for non-structured errors
         (define msg (exn-message exn))
