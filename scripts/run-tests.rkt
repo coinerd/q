@@ -58,7 +58,8 @@
          format-duration
          summary-exit-code
          bytes->string*
-         clean-stale-bytecode!)
+         clean-stale-bytecode!
+         file-has-rackunit-tests?)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
@@ -278,10 +279,15 @@
 ;; Detect files that define rackunit tests but never call run-tests.
 ;; These files produce zero output when run with `racket <file>`,
 ;; causing the parser to see 0 tests and the runner to false-green.
+;;
+;; Matches both:
+;;   (test-case ...) — explicit test cases
+;;   (check- ...)    — bare check forms (check-equal?, check-true, etc.)
+;; but NOT files that have (run-tests ...) — those are self-contained.
 (define (file-has-rackunit-tests? path)
   (and (file-exists? path)
        (let ([content (file->string path)])
-         (and (regexp-match? #rx"\\(test-case" content)
+         (and (or (regexp-match? #rx"\\(test-case" content) (regexp-match? #rx"\\(check-" content))
               (not (regexp-match? #rx"\\(run-tests" content))))))
 
 ;; Common result extraction from a running process.
@@ -537,6 +543,8 @@
   (displayln "  --sequential      Run tests sequentially (jobs=1)")
   (displayln "  --timeout SECS    Per-file timeout in seconds")
   (displayln "  --suite <name>    Run test suite: all (default), fast, slow, tui, smoke")
+  (displayln "  --strict          Enable strict zero-test detection (default: on)")
+  (displayln "  --repeat N        Run suite N times (exit 1 if any run fails)")
   (displayln "  --help            Show this help message")
   (newline)
   (displayln "Suites:")
@@ -552,23 +560,27 @@
              [jobs (processor-count)]
              [sequential? #f]
              [timeout #f]
-             [strict? (equal? (getenv "STRICT_TEST_RUNNER") "1")]
+             [strict? #t] ;; Always-on strict mode (W0: false-green sentinel)
              [suite 'all]
-             [extra '()])
+             [extra '()]
+             [repeat 1])
     (match rest
-      ['() (values jobs sequential? timeout strict? suite (reverse extra))]
+      ['() (values jobs sequential? timeout strict? suite (reverse extra) repeat)]
       [(list "--help" _ ...)
        (usage)
        (exit 0)]
-      [(list "--strict" rest ...) (loop rest jobs sequential? timeout #t suite extra)]
+      [(list "--strict" rest ...) (loop rest jobs sequential? timeout #t suite extra repeat)]
       [(list "--jobs" n rest ...)
-       (loop rest (string->number n) sequential? timeout strict? suite extra)]
-      [(list "--sequential" rest ...) (loop rest 1 #t timeout strict? suite extra)]
+       (loop rest (string->number n) sequential? timeout strict? suite extra repeat)]
+      [(list "--sequential" rest ...) (loop rest 1 #t timeout strict? suite extra repeat)]
       [(list "--timeout" secs rest ...)
-       (loop rest jobs sequential? (string->number secs) strict? suite extra)]
+       (loop rest jobs sequential? (string->number secs) strict? suite extra repeat)]
       [(list "--suite" name rest ...)
-       (loop rest jobs sequential? timeout strict? (string->symbol name) extra)]
-      [(list arg rest ...) (loop rest jobs sequential? timeout strict? suite (cons arg extra))])))
+       (loop rest jobs sequential? timeout strict? (string->symbol name) extra repeat)]
+      [(list "--repeat" n rest ...)
+       (loop rest jobs sequential? timeout strict? suite extra (string->number n))]
+      [(list arg rest ...)
+       (loop rest jobs sequential? timeout strict? suite (cons arg extra) repeat)])))
 
 ;; ---------------------------------------------------------------------------
 ;; Pre-flight: stale bytecode cleanup
@@ -617,43 +629,14 @@
 ;; Main entry point
 ;; ---------------------------------------------------------------------------
 
-(define (main args)
-  (define-values (jobs sequential? timeout strict? suite extra-files) (parse-args args))
-
-  ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
-  (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
-  (when (> cleaned-dirs 0)
-    (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
-            cleaned-dirs
-            (if (= cleaned-dirs 1) "y" "ies")))
-
-  (define suite-files
-    (if (pair? extra-files)
-        extra-files
-        (collect-test-files suite)))
-
-  (unless (pair? suite-files)
-    (displayln "No test files matched the selected suite.")
-    (exit 1))
-
-  ;; Per-file spawning with result tracking
-  (define timeout-ms (and timeout (* timeout 1000)))
-  (define suite-label (symbol->string suite))
-  (define n-files (length suite-files))
-
-  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a~n"
-          suite-label
-          n-files
-          jobs
-          sequential?)
-  (newline)
-
+(define (run-suite-once suite-files jobs timeout-ms strict? suite-label repeat-num repeat-total)
+  "Run the test suite once. Returns exit code or #f for success with more repeats."
   (define t0 (current-inexact-milliseconds))
 
   ;; Run mutation-sensitive files sequentially to avoid cross-test races in
   ;; parallel mode (e.g., ci-local/pre-commit touching README/info surfaces).
   (define-values (serial-files parallel-files)
-    (if (and (> jobs 1) (not sequential?))
+    (if (> jobs 1)
         (values (filter mutating-file? suite-files)
                 (filter (lambda (f) (not (mutating-file? f))) suite-files))
         (values '() suite-files)))
@@ -670,8 +653,7 @@
 
   ;; Post-serial guard: restore repo surfaces that mutation-sensitive tests
   ;; may have modified (info.rkt, README.md).  This prevents contamination
-  ;; of the parallel batch (e.g., ci-local detecting info.rkt drift from
-  ;; a pre-commit/check-deps test run in the same serial segment).
+  ;; of the parallel batch.
   (when (pair? serial-files)
     (restore-repo-surfaces! base-dir))
 
@@ -709,12 +691,66 @@
               results))
     (when (pair? suspicious)
       (newline)
-      (displayln "⛔ STRICT MODE: files with zero parsed tests:")
+      (if (> repeat-total 1)
+          (printf "⛔ STRICT MODE (run ~a/~a): files with zero parsed tests:\n"
+                  repeat-num
+                  repeat-total)
+          (displayln "⛔ STRICT MODE: files with zero parsed tests:"))
       (for ([s (in-list suspicious)])
         (printf "  ~a (exit=0 but no rackunit output parsed)~n" (test-file-result-path s)))
       (exit 4)))
 
-  (exit (summary-exit-code failed-files timeout-files)))
+  (define exit-code (summary-exit-code failed-files timeout-files))
+  (when (and (zero? exit-code) (> repeat-total 1))
+    (printf ";; Run ~a/~a: PASS~n" repeat-num repeat-total))
+  exit-code)
+
+(define (main args)
+  (define-values (jobs sequential? timeout strict? suite extra-files repeat) (parse-args args))
+
+  ;; Pre-flight: clear stale bytecode to avoid linklet mismatches
+  (define cleaned-dirs (clean-stale-bytecode! (current-directory)))
+  (when (> cleaned-dirs 0)
+    (printf ";; run-tests: cleaned ~a stale compiled/ director~a~n"
+            cleaned-dirs
+            (if (= cleaned-dirs 1) "y" "ies")))
+
+  (define suite-files
+    (if (pair? extra-files)
+        extra-files
+        (collect-test-files suite)))
+
+  (unless (pair? suite-files)
+    (displayln "No test files matched the selected suite.")
+    (exit 1))
+
+  ;; Per-file spawning with result tracking
+  (define timeout-ms (and timeout (* timeout 1000)))
+  (define suite-label (symbol->string suite))
+  (define n-files (length suite-files))
+
+  (printf ";; run-tests: suite=~a files=~a jobs=~a sequential=~a repeat=~a~n"
+          suite-label
+          n-files
+          jobs
+          sequential?
+          repeat)
+  (newline)
+
+  (when (> repeat 1)
+    (printf ";; run-tests: running suite ~a time~a for confidence gate~n"
+            repeat
+            (if (= repeat 1) "" "s")))
+
+  ;; Run suite, optionally repeating N times
+  (for ([run-num (in-range 1 (add1 repeat))])
+    (when (> repeat 1)
+      (printf "~n;; ── Run ~a/~a ──~n" run-num repeat))
+    (define exit-code (run-suite-once suite-files jobs timeout-ms strict? suite-label run-num repeat))
+    (unless (zero? exit-code)
+      (exit exit-code)))
+
+  (exit 0))
 
 ;; Entry point — only auto-run when executed directly as a script.
 ;; When dynamic-require loads this module, it won't trigger main
