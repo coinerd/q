@@ -78,6 +78,33 @@
 
     (test-case "CI mode exits 0 (non-blocking)"
       (define-values (code out) (run-hotspot-report "--ci"))
-      (check-equal? code 0 "CI mode should not fail (non-blocking)"))))
+      (check-equal? code 0 "CI mode should not fail (non-blocking)"))
+
+    (test-case "Hotspot budget: files exceeding block-threshold have risk notes"
+      ;; W26 blocking gate: files with score > 20000 must have a risk-note entry
+      ;; in the dependency policy's hotspot-budget section.
+      (define policy-path (build-path q-dir "docs" "architecture" "dependency-policy.rktd"))
+      (define policy (call-with-input-file policy-path read))
+      (define hotspot-section (let ([hb (assoc 'hotspot-budget policy)]) (and hb (cdr hb))))
+      (define block-threshold (cdr (assoc 'block-threshold hotspot-section)))
+      (define risk-notes-raw (cdr (assoc 'risk-notes hotspot-section)))
+      (define risk-note-files
+        (for/set ([entry (in-list risk-notes-raw)])
+          (car entry)))
+      ;; Get current hotspot scores
+      (define-values (code out) (run-hotspot-report "--json" "--all"))
+      (define data (string->jsexpr out))
+      (define hotspots (hash-ref data 'hotspots))
+      (define blocking-violations
+        (for/list ([h (in-list hotspots)]
+                   #:when (> (hash-ref h 'score) block-threshold))
+          (define f (hash-ref h 'file))
+          (if (set-member? risk-note-files f)
+              #f
+              (format "~a: score ~a > ~a but no risk note" f (hash-ref h 'score) block-threshold))))
+      (define actual-violations (filter identity blocking-violations))
+      (check-equal? actual-violations
+                    '()
+                    (format "Hotspot budget violations: ~a" actual-violations)))))
 
 (run-tests hotspot-tests)
