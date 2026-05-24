@@ -63,6 +63,7 @@
          ;; Context assembly hooks via adapter
          (only-in "layer-adapters.rkt" dispatch-hooks)
          (only-in "layer-adapters.rkt" make-extension-ctx)
+         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?)
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/context-assembly.rkt"
@@ -296,7 +297,8 @@
                            #:session-dir #f
                            #:event-bus bus
                            #:extension-registry ext-reg
-                           #:tool-registry tool-reg))
+                           #:tool-registry tool-reg
+                           #:gsd-ctx (current-gsd-ctx)))
      (define-values (_amended hook-res)
        (maybe-dispatch-hooks ext-reg 'register-tools (hasheq) #:ctx the-ext-ctx))
      (if (and hook-res (eq? (hook-result-action hook-res) 'amend))

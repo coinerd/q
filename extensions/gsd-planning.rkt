@@ -60,7 +60,8 @@
                   current-edit-limit
                   set-edit-limit!
                   current-gsd-event-bus
-                  set-gsd-event-bus!)
+                  set-gsd-event-bus!
+                  current-gsd-ctx)
          ;; Extracted sub-modules
          "gsd/tool-handlers.rkt"
          "gsd/command-handlers.rkt")
@@ -171,6 +172,11 @@
 
 ;; --- register-tools ---
 (define (register-gsd-tools ctx _payload)
+  ;; W8: Set current-gsd-ctx from extension context if available.
+  ;; This ensures GSD handlers use per-session ctx instead of global default.
+  (define ext-gsd-ctx (ctx-gsd-ctx ctx))
+  (when ext-gsd-ctx
+    (current-gsd-ctx ext-gsd-ctx))
   (unless (pinned-planning-dir)
     (define cwd (ctx-cwd ctx))
     (when cwd
