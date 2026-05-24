@@ -37,20 +37,32 @@
   (test-suite "architecture-boundaries"
 
     (test-case "Only known exceptions in runtime/ import from tools/ or extensions/"
-      (define runtime-files (rkt-files-in "runtime"))
+      ;; Use recursive scan to include subdirectory modules (runtime/iteration/*, etc.)
+      (define runtime-files (rkt-files-in-recursive "runtime"))
       (define runtime-exc (policy-ref 'known-exceptions 'runtime))
+      ;; Build set of known exception RELATIVE paths (e.g. "runtime/iteration/loop-config.rkt")
       (define known-exceptions
-        (map (λ (s)
-               (if (symbol? s)
-                   (symbol->string s)
-                   s))
-             (map car runtime-exc)))
+        (for/fold ([acc (set)]) ([entry (in-list runtime-exc)])
+          (define name
+            (if (symbol? (car entry))
+                (symbol->string (car entry))
+                (car entry)))
+          ;; Accept both bare filename and runtime/ prefixed path
+          (set-add (set-add acc name) (string-append "runtime/" name))))
+      ;; Also match filenames for backward compat
+      (define (known-exception? f)
+        (define rel (path->string (find-relative-path (build-path q-dir "runtime") f)))
+        (define bare (path->string (file-name-from-path f)))
+        (or (set-member? known-exceptions rel)
+            (set-member? known-exceptions bare)
+            (set-member? known-exceptions (string-append "runtime/" rel))
+            (set-member? known-exceptions (string-append "runtime/" bare))))
       (define violations
         (for/list ([f (in-list runtime-files)]
-                   #:when (not (member (path->string (file-name-from-path f)) known-exceptions)))
+                   #:when (not (known-exception? f)))
           (define reqs (extract-requires f))
           (if (imports-from? reqs '("../tools/" "../../tools/" "../extensions/" "../../extensions/"))
-              (format "~a: upward imports detected" (file-name-from-path f))
+              (format "~a: upward imports detected" (find-relative-path q-dir f))
               #f)))
       (define actual-violations (filter identity violations))
       (check-equal? actual-violations
@@ -68,6 +80,28 @@
       (define actual-violations (filter identity violations))
       (check-equal? actual-violations
                     '()
-                    (format "TUI modules importing from forbidden layers: ~a" actual-violations)))))
+                    (format "TUI modules importing from forbidden layers: ~a" actual-violations)))
+
+    (test-case "Recursive boundary scan includes subdirectory modules"
+      ;; Prove that rkt-files-in-recursive catches files in nested directories
+      ;; that rkt-files-in would miss. This is the core fix from W0.
+      (define flat-files (rkt-files-in "runtime"))
+      (define recursive-files (rkt-files-in-recursive "runtime"))
+      ;; Recursive must be a strict superset
+      (check-true (> (length recursive-files) (length flat-files))
+                  (format "Recursive scan (~a files) must find more than flat scan (~a files)"
+                          (length recursive-files)
+                          (length flat-files)))
+      ;; Specifically, runtime/iteration/ subdirectory files must be included
+      (define iteration-files
+        (filter (λ (f) (string-contains? (path->string f) "iteration/")) recursive-files))
+      (check-true (>= (length iteration-files) 10)
+                  (format "runtime/iteration/ should have 10+ files, found ~a"
+                          (length iteration-files)))
+      ;; runtime/iteration/loop-state.rkt must be in the recursive list
+      (define loop-state-file
+        (findf (λ (f) (string-suffix? (path->string f) "loop-state.rkt")) recursive-files))
+      (check-not-false loop-state-file
+                       "runtime/iteration/loop-state.rkt must be found by recursive scan"))))
 
 (run-tests boundary-tests)
