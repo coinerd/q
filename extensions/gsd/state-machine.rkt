@@ -31,7 +31,17 @@
                   gsd-state-update!
                   with-gsd-lock
                   gsd-default-ctx
-                  gsd-session-ctx-state-box))
+                  gsd-session-ctx-state-box
+                  gsd-session-ctx-history-box
+                  gsd-session-ctx?
+                  gsd-ctx-state
+                  gsd-ctx-set-state!
+                  gsd-ctx-state-snapshot
+                  gsd-ctx-state-update!
+                  gsd-ctx-history
+                  gsd-ctx-set-history!
+                  gsd-ctx-history-update!
+                  gsd-session-ctx-sem))
 
 ;; States
 ;; Struct exports (plain)
@@ -61,35 +71,42 @@
          TRANSITIONS
          TRANSITIONS-FLAT
          ;; Functions (contracted)
-         (contract-out [gsm-state? (-> any/c boolean?)]
-                       [make-initial-gsd-state (-> gsd-runtime-state?)]
-                       [gsm-current (-> symbol?)]
-                       [gsm-transition!
-                        (->* (symbol?) (#:event (or/c symbol? #f)) (or/c ok-result? err-result?))]
-                       [gsm-transition-to! (-> symbol? (or/c ok-result? err-result?))]
-                       [gsm-reset! (-> (or/c ok-result? err-result?))]
-                       [compute-next-gsm-state
-                        (->* (gsd-runtime-state? symbol?)
-                             (#:event (or/c symbol? #f))
-                             (values (or/c ok-result? err-result?) gsd-runtime-state?))]
-                       [gsm-valid-next-states (-> (listof symbol?))]
-                       [gsm-tool-allowed? (-> string? boolean?)]
-                       [gsm-snapshot (-> gsd-runtime-state?)]
-                       [reset-gsm! (-> void?)]
-                       [gsm-history (-> list?)]
-                       [gsm-wave-executor (-> (or/c any/c #f))]
-                       [gsm-set-wave-executor! (-> (or/c any/c #f) void?)]
-                       [gsm-total-waves (-> exact-nonnegative-integer?)]
-                       [gsm-set-total-waves! (-> exact-nonnegative-integer? void?)]
-                       [gsm-current-wave (-> exact-nonnegative-integer?)]
-                       [gsm-set-current-wave! (-> exact-nonnegative-integer? void?)]
-                       [gsm-completed-waves (-> (set/c exact-nonnegative-integer?))]
-                       [gsm-mark-wave-complete! (-> exact-nonnegative-integer? void?)]
-                       [gsm-wave-complete? (-> exact-nonnegative-integer? boolean?)]
-                       [gsm-next-pending-wave (-> (or/c exact-nonnegative-integer? #f))]
-                       [gsm-clear-wave-gate! (-> void?)]
-                       [gsd-wave-gate-blocked? (-> boolean?)]
-                       [gsd-invariants-hold? (-> (values boolean? (or/c string? #f)))]))
+         (contract-out
+          [gsm-state? (-> any/c boolean?)]
+          [make-initial-gsd-state (-> gsd-runtime-state?)]
+          [gsm-current (-> symbol?)]
+          [gsm-transition! (->* (symbol?) (#:event (or/c symbol? #f)) (or/c ok-result? err-result?))]
+          [gsm-transition-to! (-> symbol? (or/c ok-result? err-result?))]
+          [gsm-reset! (-> (or/c ok-result? err-result?))]
+          [compute-next-gsm-state
+           (->* (gsd-runtime-state? symbol?)
+                (#:event (or/c symbol? #f))
+                (values (or/c ok-result? err-result?) gsd-runtime-state?))]
+          [gsm-valid-next-states (-> (listof symbol?))]
+          [gsm-tool-allowed? (-> string? boolean?)]
+          [gsm-snapshot (-> gsd-runtime-state?)]
+          [reset-gsm! (-> void?)]
+          [gsm-history (-> list?)]
+          [gsm-wave-executor (-> (or/c any/c #f))]
+          [gsm-set-wave-executor! (-> (or/c any/c #f) void?)]
+          [gsm-total-waves (-> exact-nonnegative-integer?)]
+          [gsm-set-total-waves! (-> exact-nonnegative-integer? void?)]
+          [gsm-current-wave (-> exact-nonnegative-integer?)]
+          [gsm-set-current-wave! (-> exact-nonnegative-integer? void?)]
+          [gsm-completed-waves (-> (set/c exact-nonnegative-integer?))]
+          [gsm-mark-wave-complete! (-> exact-nonnegative-integer? void?)]
+          [gsm-wave-complete? (-> exact-nonnegative-integer? boolean?)]
+          [gsm-next-pending-wave (-> (or/c exact-nonnegative-integer? #f))]
+          [gsm-clear-wave-gate! (-> void?)]
+          [gsd-wave-gate-blocked? (-> boolean?)]
+          [gsd-invariants-hold? (-> (values boolean? (or/c string? #f)))]
+          ;; Context-aware API (v0.57.1 W6)
+          [gsm-ctx-current (-> gsd-session-ctx? symbol?)]
+          [gsm-ctx-transition!
+           (->* (gsd-session-ctx? symbol?) (#:event (or/c symbol? #f)) (or/c ok-result? err-result?))]
+          [gsm-ctx-reset! (-> gsd-session-ctx? (or/c ok-result? err-result?))]
+          [gsm-ctx-history (-> gsd-session-ctx? list?)]
+          [gsm-ctx-valid-next-states (-> gsd-session-ctx? (listof symbol?))]))
 
 ;; ============================================================
 ;; States and transitions
@@ -384,3 +401,61 @@
     [(and (memq mode '(executing verifying)) (> tw 0) (not exec))
      (values #f (format "in ~a with ~a waves but no wave-executor" mode tw))]
     [else (values #t #f)]))
+
+;; ============================================================
+;; Context-aware API (v0.57.1 W6)
+;; ============================================================
+
+(define (gsm-ctx-current ctx)
+  (gsd-runtime-state-mode (gsd-ctx-state-snapshot ctx)))
+
+(define (gsm-ctx-history ctx)
+  (gsd-ctx-history ctx))
+
+(define (gsm-ctx-valid-next-states ctx)
+  (valid-targets (gsm-ctx-current ctx)))
+
+(define (gsm-ctx-transition! ctx target #:event [event #f])
+  (call-with-semaphore
+   (gsd-session-ctx-sem ctx)
+   (lambda ()
+     (define state (unbox (gsd-session-ctx-state-box ctx)))
+     (define current (gsd-runtime-state-mode state))
+     (emit-gsd-event!
+      'gsd.transition.attempted
+      (make-gsd-transition-attempted-event #:session-id "" #:turn-id 0 #:from current #:to target))
+     (define-values (result new-state) (compute-next-gsm-state state target #:event event))
+     (cond
+       [(ok? result)
+        (define new-mode (gsd-runtime-state-mode new-state))
+        (set-box! (gsd-session-ctx-state-box ctx) new-state)
+        (set-box! (gsd-session-ctx-history-box ctx)
+                  (cons (list current new-mode (current-seconds))
+                        (unbox (gsd-session-ctx-history-box ctx))))
+        (emit-gsd-event! 'gsd.transition.succeeded
+                         (make-gsd-transition-succeeded-event #:session-id ""
+                                                              #:turn-id 0
+                                                              #:from current
+                                                              #:to new-mode))
+        result]
+       [else
+        (emit-gsd-event! 'gsd.transition.failed
+                         (make-gsd-transition-failed-event
+                          #:session-id ""
+                          #:turn-id 0
+                          #:from current
+                          #:to target
+                          #:reason (format "invalid: ~a -> ~a" current target)))
+        result]))))
+
+(define (gsm-ctx-reset! ctx)
+  (call-with-semaphore
+   (gsd-session-ctx-sem ctx)
+   (lambda ()
+     (define state (unbox (gsd-session-ctx-state-box ctx)))
+     (define old (gsd-runtime-state-mode state))
+     (set-box! (gsd-session-ctx-state-box ctx)
+               (struct-copy gsd-runtime-state state [mode 'idle] [wave-executor #f]))
+     (set-box! (gsd-session-ctx-history-box ctx)
+               (cons (list old 'idle (current-seconds)) (unbox (gsd-session-ctx-history-box ctx))))
+     (ok-result old 'idle))))
