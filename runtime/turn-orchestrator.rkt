@@ -137,7 +137,7 @@
           [assemble-context/pure
            (->* (list? session-config?)
                 (#:hook-dispatcher (or/c procedure? #f))
-                (values list? any/c tiered-context?))]))
+                (values list? (or/c hook-result? #f) tiered-context?))]))
 
 ;; ============================================================
 ;; Context assembly
