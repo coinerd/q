@@ -56,7 +56,18 @@
          (only-in "commands/extension.rkt"
                   handle-activate-command
                   handle-reload-command
-                  handle-deactivate-command))
+                  handle-deactivate-command)
+         ;; W19: general commands extracted
+         (only-in "commands/general.rkt"
+                  handle-help-command
+                  handle-clear-command
+                  handle-status-command)
+         ;; W19: runtime control commands extracted
+         (only-in "commands/runtime-control.rkt"
+                  handle-compact-command
+                  handle-interrupt-command
+                  handle-retry-command
+                  handle-quit-command))
 
 ;; Re-export all public APIs
 (provide cmd-ctx
@@ -261,131 +272,27 @@
        ['model (handle-model-command cctx)]
        ['history (handle-history-command cctx)]
        ['help
-        ;; Generate help from palette registry
-        (define reg (make-command-registry))
-        (define cmds (all-commands reg))
-        (define help-entries
-          (cons
-           (make-entry 'system "Commands:" 0 (hash))
-           (for/list ([c (in-list cmds)])
-             (define args-str
-               (if (null? (cmd-entry-args-spec c))
-                   ""
-                   (string-append " " (string-join (cmd-entry-args-spec c) " "))))
-             (define aliases-str
-               (if (null? (cmd-entry-aliases c))
-                   ""
-                   (format " (~a)" (string-join (cmd-entry-aliases c) ", "))))
-             (make-entry
-              'system
-              (format "  ~a~a~a  ~a" (cmd-entry-name c) args-str aliases-str (cmd-entry-summary c))
-              0
-              (hash)))))
-        (define new-state
-          (for/fold ([s state]) ([e (in-list help-entries)])
-            (add-transcript-entry s e)))
-        (set-box! (cmd-ctx-state-box cctx) new-state)
+        (set-box! (cmd-ctx-state-box cctx) (handle-help-command cctx state))
         'continue]
        ['clear
-        (set-box! (cmd-ctx-state-box cctx) (struct-copy ui-state state [transcript '()]))
+        (set-box! (cmd-ctx-state-box cctx) (handle-clear-command cctx state))
         'continue]
-       ['compact
-        ;; Compact: add status message and notify runtime
-        (define entry (make-system-entry "[compact requested]"))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-        (when (cmd-ctx-event-bus cctx)
-          (publish! (cmd-ctx-event-bus cctx)
-                    (make-event "compact.requested"
-                                (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                                (or (ui-state-session-id state) "")
-                                #f
-                                (hash))))
-        'continue]
+       ['compact (handle-compact-command cctx state)]
        ['status
-        ;; Show session and provider status
-        (define sid (ui-state-session-id state))
-        (define model-name (ui-state-model-name state))
-        (define busy (ui-state-busy? state))
-        (define status-msg (ui-state-status-message state))
-        (define sess-dir (cmd-ctx-session-dir cctx))
-        (define lines
-          (list (format "Session: ~a" (or sid "none"))
-                (format "Model: ~a" (or model-name "none"))
-                (format "Prompt running: ~a" (if busy "yes" "no"))
-                (format "Last status: ~a" (or status-msg "none"))
-                (format "Session dir: ~a" (or sess-dir "not set"))))
-        (define new-state
-          (for/fold ([s state]) ([line (in-list lines)])
-            (add-transcript-entry s (make-entry 'system (format "[STATUS] ~a" line) 0 (hash)))))
-        (set-box! (cmd-ctx-state-box cctx) new-state)
+        (set-box! (cmd-ctx-state-box cctx) (handle-status-command cctx state))
         'continue]
-       ['interrupt
-        ;; Interrupt: notify runtime
-        (when (cmd-ctx-event-bus cctx)
-          (publish! (cmd-ctx-event-bus cctx)
-                    (make-event "interrupt.requested"
-                                (inexact->exact (truncate (/ (current-inexact-milliseconds) 1000)))
-                                (or (ui-state-session-id state) "")
-                                #f
-                                (hash))))
-        (define entry (make-system-entry "[interrupt requested]"))
-        (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-        'continue]
+       ['interrupt (handle-interrupt-command cctx state)]
        ['tree (handle-tree-command cctx)]
        ['branches (handle-branches-command cctx)]
        ['leaves (handle-leaves-command cctx)]
        ['name (handle-name-command cctx)]
        ['sessions (handle-sessions-tui-command cctx #f)]
        ['retry
-        ;; /retry: resubmit last prompt, enriched with previous turn context
-        (define last-prompt (unbox (cmd-ctx-last-prompt-box cctx)))
-        (cond
-          [last-prompt
-           (define entry
-             (make-entry 'system
-                         (format "[retry: resubmitting]")
-                         (current-inexact-milliseconds)
-                         (hash)))
-           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))
-           ;; v0.14.2 Wave 2: Enrich retry with tool summary from previous turn
-           (define tool-summary (get-last-turn-tool-summary (unbox (cmd-ctx-state-box cctx))))
-           (define enriched-prompt
-             (if tool-summary
-                 (format "~a\n\n[Context from previous attempt: ~a]" last-prompt tool-summary)
-                 last-prompt))
-           (define runner (cmd-ctx-session-runner cctx))
-           (when runner
-             (thread
-              (lambda ()
-                (with-handlers ([exn:fail?
-                                 (lambda (e)
-                                   (define bus (cmd-ctx-event-bus cctx))
-                                   (define sid (ui-state-session-id (unbox (cmd-ctx-state-box cctx))))
-                                   (when (and bus sid)
-                                     (publish!
-                                      bus
-                                      (make-event
-                                       "runtime.error"
-                                       (current-inexact-milliseconds)
-                                       sid
-                                       #f
-                                       (hasheq 'error (exn-message e) 'errorType 'internal-error)))
-                                     (publish! bus
-                                               (make-event "turn.completed"
-                                                           (current-inexact-milliseconds)
-                                                           sid
-                                                           #f
-                                                           (hasheq 'reason "error")))))])
-                  (runner enriched-prompt)))))]
-          [else
-           (define entry (make-error-entry "No previous prompt to retry."))
-           (set-box! (cmd-ctx-state-box cctx) (add-transcript-entry state entry))])
-        'continue]
+        (handle-retry-command cctx state)]
        ['activate (handle-activate-command cctx)]
        ['deactivate (handle-deactivate-command cctx)]
        ['reload (handle-reload-command cctx)]
        ['quit
-        (set-box! (cmd-ctx-running-box cctx) #f)
-        'quit]
+        (handle-quit-command cctx)]
        ['unknown (process-extension-command cctx state)]
        [else 'continue])]))
