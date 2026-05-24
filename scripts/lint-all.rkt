@@ -43,7 +43,8 @@
         (list "arch" "scripts/arch-report.rkt" '("--ci") #t)
         (list "ivg" "scripts/lint-ivg.rkt" '() #f)
         (list "release-readiness" "scripts/lint-release-readiness.rkt" '() #f)
-        (list "doc-freshness" "scripts/lint-doc-freshness.rkt" '() #f)))
+        (list "doc-freshness" "scripts/lint-doc-freshness.rkt" '() #f)
+        (list "widened-ledger" "scripts/lint-widened-ledger.rkt" '() #t)))
 
 ;; ── Helpers ──
 
