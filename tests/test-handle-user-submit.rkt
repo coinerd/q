@@ -11,7 +11,7 @@
 
 (require rackunit
          rackunit/text-ui
-         "../tui/tui-render-loop.rkt"
+         "../tui/submit-handler.rkt"
          "../tui/state-types.rkt"
          "../tui/tui-keybindings.rkt"
          "../agent/queue.rkt")
