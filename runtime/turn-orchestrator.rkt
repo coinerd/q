@@ -50,8 +50,8 @@
          (only-in "../util/loop-result.rkt" loop-result?)
          (only-in "../util/cancellation.rkt" cancellation-token?)
          (only-in "../llm/provider.rkt" provider?)
-         (only-in "../tools/registry.rkt" tool-registry?)
-         (only-in "../extensions/api.rkt" extension-registry?)
+         ;; ARCH-01: tool registry + extension registry via adapter
+         (only-in "layer-adapters.rkt" tool-registry? extension-registry?)
          "../agent/loop.rkt"
          (only-in "../agent/loop-fsm.rkt" current-turn-fsm-state turn-state-blocked)
          ;; ARCH-01: tool registry queries via adapter
@@ -63,7 +63,8 @@
          ;; Context assembly hooks via adapter
          (only-in "layer-adapters.rkt" dispatch-hooks)
          (only-in "layer-adapters.rkt" make-extension-ctx)
-         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?)
+         ;; GSD session context via adapter
+         (only-in "layer-adapters.rkt" current-gsd-ctx gsd-session-ctx?)
          "../runtime/session-store.rkt"
          "../runtime/tool-coordinator.rkt"
          (only-in "../runtime/context-assembly.rkt"

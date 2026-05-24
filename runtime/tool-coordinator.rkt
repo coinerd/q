@@ -52,12 +52,12 @@
          "../agent/event-bus.rkt"
          ;; ARCH-01 upward import — runtime→tools
          (only-in "layer-adapters.rkt" make-exec-context make-error-result list-tools-jsexpr)
-         (only-in "../tools/permission-gate.rkt" permission-config? make-default-permission-config)
+         ;; Permission gate via adapter
+         (only-in "layer-adapters.rkt" permission-config? make-default-permission-config)
          ;; ARCH-01 upward import via adapter
          (only-in "layer-adapters.rkt" run-tool-batch scheduler-result scheduler-result-results)
-         ;; ARCH-01 upward import — runtime→extensions: hooks
-         (only-in "../extensions/hooks.rkt" dispatch-hooks)
-         (only-in "../extensions/api.rkt" extension-registry?)
+         ;; Hooks + extension registry via adapter
+         (only-in "layer-adapters.rkt" dispatch-hooks extension-registry?)
          (only-in "../agent/event-bus.rkt" event-bus?)
          (only-in "../runtime/session-store.rkt" append-entries!)
          (only-in "../runtime/settings.rkt" make-minimal-settings setting-ref setting-ref*)

@@ -51,8 +51,7 @@
                   hash->session-config
                   resolve-max-iterations-hard)
          (only-in "../../llm/provider.rkt" provider?)
-         (only-in "../../tools/registry.rkt" tool-registry?)
-         (only-in "../../extensions/api.rkt" extension-registry?)
+         (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
          (only-in "../../agent/event-bus.rkt" event-bus?)
          (only-in "../../util/loop-result.rkt" loop-result?)
          (only-in "counters.rkt" check-cancellation)

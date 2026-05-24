@@ -10,7 +10,7 @@
 
 ;; Layer definitions with max boundary exceptions
 ((layers (runtime
-          (max-exceptions . 16)
+          (max-exceptions . 12)
           (forbidden-from . (llm tools extensions))
           (rationale
            .
@@ -27,29 +27,20 @@
  ;; Known boundary exceptions (files that violate layer rules for documented reasons)
  ;; Format: ((filename . rationale) ...)
  (known-exceptions
-  (runtime . ((agent-session.rkt . "extension registry + DI parameter setup")
-              (iteration/loop-state.rkt . "typed require from extensions/api.rkt for opaque ExtRegistry")
-              (iteration/loop-config.rkt
-               . "typed require of tool-registry? and extension-registry? for loop config")
-              (iteration/loop-phases.rkt
-               . "typed require of extension-registry? for phase dispatch")
-              (iteration/main-loop.rkt
-               . "typed require of tool-registry? and extension-registry? for main loop")
-              (iteration/step-interpreter.rkt
-               . "typed require of permission-config? for step-level permission checks")
-              (layer-adapters.rkt
+  (runtime . ((layer-adapters.rkt
                . "explicit adapter facade routing tool/extension deps behind contained boundary")
+              (iteration/loop-state.rkt . "typed require from extensions/api.rkt for opaque ExtRegistry")
+              (agent-session.rkt . "list-extensions via adapter (re-exports extension listing)")
               (session-lifecycle.rkt
                . "injection-event-topic import (extracted from agent-session/iteration)")
-              (runtime-helpers.rkt . "hook dispatch for session events")
-              (tool-coordinator.rkt . "tool execution orchestration")
-              (turn-orchestrator.rkt . "context assembly + provider turn (sole boundary module)")
+              (runtime-helpers.rkt . "hook dispatch for session events (via adapter)")
+              (tool-coordinator.rkt . "tool execution orchestration (all imports via adapter)")
+              (turn-orchestrator.rkt . "context assembly + provider turn (imports via adapter)")
+              (session-config.rkt . "central typed config (imports via adapter)")
               (package.rkt . "package audit reads extension manifests")
               (extension-catalog.rkt . "extension loading/discovery")
               (session-switch.rkt
-               . "dynamic-require to extensions for lazy loading (avoids circular dependency)")
-              (session-config.rkt
-               . "central typed config referencing cross-layer type predicates")))
+               . "dynamic-require to extensions for lazy loading (avoids circular dependency)")))
   (extensions
    .
    ((dialog-api.rkt . "TUI dialog interface")

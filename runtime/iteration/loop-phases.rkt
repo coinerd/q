@@ -23,7 +23,7 @@
          (only-in "../../agent/queue.rkt" queue? queue-status)
          (only-in "../../runtime/runtime-helpers.rkt" maybe-dispatch-hooks emit-session-event!)
          (only-in "../../util/hook-types.rkt" hook-result-action hook-result?)
-         (only-in "../../extensions/api.rkt" extension-registry?)
+         (only-in "../../runtime/layer-adapters.rkt" extension-registry?)
          (only-in "internal.rkt" assert-payload))
 
 ;; Re-export for consumers

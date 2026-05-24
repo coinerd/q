@@ -13,8 +13,7 @@
 (require racket/contract
          (only-in "../../llm/provider.rkt" provider?)
          (only-in "../../agent/event-bus.rkt" event-bus?)
-         (only-in "../../tools/registry.rkt" tool-registry?)
-         (only-in "../../extensions/api.rkt" extension-registry?)
+         (only-in "../../runtime/layer-adapters.rkt" tool-registry? extension-registry?)
          (only-in "../../util/cancellation.rkt" cancellation-token?)
          (only-in "../../runtime/session-config.rkt" session-config? hash->session-config)
          (only-in "../../runtime/working-set.rkt" working-set?)

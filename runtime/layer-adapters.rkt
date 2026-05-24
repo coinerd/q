@@ -29,9 +29,12 @@
                   tool-registry?
                   make-exec-context
                   make-error-result)
+         (only-in "../tools/permission-gate.rkt" permission-config? make-default-permission-config)
          (only-in "../tools/scheduler.rkt" run-tool-batch scheduler-result scheduler-result-results)
          (only-in "../extensions/hooks.rkt" dispatch-hooks)
-         (only-in "../extensions/context.rkt" make-extension-ctx))
+         (only-in "../extensions/context.rkt" make-extension-ctx)
+         (only-in "../extensions/api.rkt" extension-registry? list-extensions)
+         (only-in "../extensions/gsd/session-state.rkt" current-gsd-ctx gsd-session-ctx?))
 
 ;; Tool schema assembly
 (provide list-tools-jsexpr
@@ -49,4 +52,13 @@
          ;; Extension hooks
          dispatch-hooks
          ;; Extension context factory
-         make-extension-ctx)
+         make-extension-ctx
+         ;; Extension registry + listing
+         extension-registry?
+         list-extensions
+         ;; Permission gate
+         permission-config?
+         make-default-permission-config
+         ;; GSD session context
+         current-gsd-ctx
+         gsd-session-ctx?)
