@@ -59,7 +59,8 @@
          summary-exit-code
          bytes->string*
          clean-stale-bytecode!
-         file-has-rackunit-tests?)
+         file-has-rackunit-tests?
+         parse-args)
 
 ;; ---------------------------------------------------------------------------
 ;; Struct: test-file-result
