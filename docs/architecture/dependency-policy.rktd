@@ -157,4 +157,18 @@
  (parser-modules ("extensions/gsd/command-parser.rkt" "tui/command-parse.rkt" "cli/args.rkt"))
  ;; R-20: Provide surface budget
  ;; Alert when public API of a single module exceeds this count.
- (provide-surface-budget (max-per-module . 150) (alert-threshold . 100)))
+ (provide-surface-budget (max-per-module . 150) (alert-threshold . 100))
+ ;; R-21: Hotspot budget policy
+ ;; Files with hotspot score > warn-threshold should have a risk-note entry.
+ ;; Files with score > block-threshold without a risk-note will fail CI.
+ ;; Format of risk-notes: ((file-path (risk . "description") (owner . "team")) ...)
+ (hotspot-budget
+  (warn-threshold . 5000)
+  (block-threshold . 20000)
+  (risk-notes
+   . (("runtime/agent-session.rkt"
+       (risk . "Central session orchestration; high fan-in, hard to decompose further")
+       (owner . "runtime"))
+      ("runtime/session-lifecycle.rkt"
+       (risk . "Session lifecycle FSM; high state complexity")
+       (owner . "runtime"))))))
